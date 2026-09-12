@@ -448,8 +448,10 @@ export function loadSession(id: string, homeDir?: string): StoredSession | null 
  * This is the operator's direct answer to "get this engagement off my disk", so
  * it must work on a file this module would refuse to *load*: a corrupt
  * transcript is still sensitive, and deletion deliberately does not parse.
+ * Active and pending-resume IDs are protected even when their file is corrupt.
  */
-export function deleteSession(id: string, homeDir?: string): boolean {
+export function deleteSession(id: string, homeDir?: string, opts?: { protectedIds?: ReadonlySet<string> }): boolean {
+  if (opts?.protectedIds?.has(id)) return false;
   const path = sessionFilePath(id, homeDir);
   if (path === null) return false;
   try {
@@ -463,8 +465,9 @@ export function deleteSession(id: string, homeDir?: string): boolean {
 }
 
 /**
- * Caps retained history at the newest `keep` sessions ({@link DEFAULT_PRUNE_KEEP}
- * by default) and returns how many were removed.
+ * Caps unprotected history at the newest `keep` sessions
+ * ({@link DEFAULT_PRUNE_KEEP} by default) and returns how many were removed.
+ * Protected active and pending-resume IDs do not consume the archive allowance.
  *
  * Retention is a security property here, not housekeeping: without a bound, a
  * store of plaintext engagement data grows for the life of the install, and the
@@ -477,7 +480,7 @@ export function deleteSession(id: string, homeDir?: string): boolean {
  * removing it would mean deleting something we could never show the operator
  * first. `deleteSession` remains the way to get rid of those.
  */
-export function pruneSessions(homeDir?: string, opts?: { keep?: number }): number {
+export function pruneSessions(homeDir?: string, opts?: { keep?: number; protectedIds?: ReadonlySet<string> }): number {
   const requested = opts?.keep;
   const keep =
     typeof requested === "number" && Number.isFinite(requested)
@@ -485,8 +488,11 @@ export function pruneSessions(homeDir?: string, opts?: { keep?: number }): numbe
       : DEFAULT_PRUNE_KEEP;
 
   let removed = 0;
-  for (const meta of listSessions(homeDir).slice(keep)) {
-    if (deleteSession(meta.id, homeDir)) removed += 1;
+  let archived = 0;
+  for (const meta of listSessions(homeDir)) {
+    if (opts?.protectedIds?.has(meta.id)) continue;
+    if (archived++ < keep) continue;
+    if (deleteSession(meta.id, homeDir, opts)) removed += 1;
   }
   return removed;
 }

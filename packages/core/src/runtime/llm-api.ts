@@ -3,6 +3,7 @@ import type {
   NativeRuntime,
   NativeStreamCallbacks,
   RuntimeConfig,
+  SubagentModelSelection,
   RuntimeContext,
   RuntimeResult,
   NativeMessage,
@@ -1910,7 +1911,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
   private hostedMaxOutputTokens: number | undefined;
 
   constructor(config: RuntimeConfig, inherited?: LlmApiRuntime) {
-    // Fork construction must never rediscover an account, endpoint or model.
+    // Fork construction must never rediscover an account or endpoint.
     // The inherited runtime is host-internal; no credential snapshot is exported.
     if (inherited) {
       const timeout = config.timeout ?? inherited.config.timeout ?? 120_000;
@@ -1920,31 +1921,44 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
       if (inherited.provider === "hosted" && inherited.hostedMaxOutputTokens === undefined) {
         throw new Error("Hosted model catalog must resolve before creating a subagent");
       }
+      const model = config.model ?? inherited.model;
+      const modelChanged = model !== inherited.model;
       this.config = {
         type: "api",
-        model: inherited.model,
+        model,
+        agentModels: inherited.config.agentModels,
+        singleModel: inherited.config.singleModel,
         timeout: Math.min(timeout, inherited.config.timeout || 120_000),
       };
       this.env = inherited.env;
       this.provider = inherited.provider;
       this.apiKey = inherited.apiKey;
       this.baseUrl = inherited.baseUrl;
-      this.model = inherited.model;
+      this.model = model;
       this.wireApi = inherited.wireApi;
-      this.reasoningEffort = inherited.reasoningEffort;
+      if (modelChanged) {
+        if (this.provider === "opencode") this.wireApi = opencodeWireApiForModel(model);
+        if (this.provider === "openai") this.wireApi = openAICompatibleWireApi(this.env, "OPENAI_WIRE_API");
+        if (this.provider === "azure") this.wireApi = openAICompatibleWireApi(this.env, "AZURE_OPENAI_WIRE_API", inherited.azureConfig.wireApi);
+        this.applyModelWireApi();
+      }
+      this.reasoningEffort = modelChanged ? undefined : inherited.reasoningEffort;
       this.azureConfig = { ...inherited.azureConfig };
       this.serverCompactionTokens = inherited.serverCompactionTokens;
       if (inherited.codexAuthState) this.codexAuthState = inherited.codexAuthState;
-      this.fallbackChain = inherited.provider === "hosted" ? [] : inherited.fallbackChain.map((entry) => ({
-        ...entry,
-        ...(entry.credentials ? { credentials: { ...entry.credentials } } : {}),
-      }));
-      this.fallbackIndex = inherited.provider === "hosted" ? 0 : inherited.fallbackIndex;
-      this.hostedMaxOutputTokens = inherited.hostedMaxOutputTokens;
-      this.hostedCatalogPromise = inherited.hostedCatalogPromise;
+      // Model selection never grants a child cross-account fallback authority.
+      this.fallbackChain = [];
+      this.fallbackIndex = 0;
+      if (!modelChanged) {
+        this.hostedMaxOutputTokens = inherited.hostedMaxOutputTokens;
+        this.hostedCatalogPromise = inherited.hostedCatalogPromise;
+      }
       return;
     }
-    this.config = { ...config };
+    this.config = {
+      ...config,
+      ...(config.agentModels ? { agentModels: Object.freeze({ ...config.agentModels }) } : {}),
+    };
     this.env = Object.freeze({ ...process.env, ...config.env });
     this.azureConfig = parseCodexAzureConfig(this.env);
     this.fallbackChain = getFallbackChain(this.env).map(entry => ({
@@ -1987,13 +2001,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
     // /chat/completions. The Responses endpoint supports the agent loop, so
     // upgrade only the exact provider/model pairs rather than changing every
     // OpenAI-compatible deployment's requested wire API.
-    const normalizedModel = this.model.toLowerCase();
-    const requiresResponses =
-      (this.provider === "azure" && normalizedModel === "gpt-5.6-sol") ||
-      (this.provider === "openai" && normalizedModel === "gpt-5.6-luna");
-    if (requiresResponses && this.wireApi === "chat_completions") {
-      this.wireApi = "responses";
-    }
+    this.applyModelWireApi();
 
     // Fire-and-forget startup banner. For Azure, this probes `/models`
     // once for the x-ms-region header so operators can see where their
@@ -2015,13 +2023,42 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
     }
   }
 
+  /** Exact deployments requiring Responses for tools, shared by roots and forks. */
+  private applyModelWireApi(): void {
+    const normalizedModel = this.model.toLowerCase();
+    if (this.wireApi === "chat_completions" &&
+      ((this.provider === "azure" && normalizedModel === "gpt-5.6-sol") ||
+       (this.provider === "openai" && normalizedModel === "gpt-5.6-luna"))) {
+      this.wireApi = "responses";
+    }
+  }
+
   /** Isolated child inference, bound to this runtime's resolved account and route. */
-  async forkForSubagent(timeoutMs: number): Promise<LlmApiRuntime> {
+  async forkForSubagent(timeoutMs: number, selection?: SubagentModelSelection): Promise<LlmApiRuntime> {
     if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
       throw new Error("Subagent timeout must be a positive finite number");
     }
     await this.ensureHostedModel();
-    return new LlmApiRuntime({ type: "api", timeout: timeoutMs }, this);
+    const configuredModel = selection?.role !== undefined && this.config.agentModels &&
+      Object.hasOwn(this.config.agentModels, selection.role)
+      ? this.config.agentModels[selection.role]
+      : undefined;
+    const selectedModel = this.config.singleModel
+      ? this.model
+      : selection?.model ?? configuredModel ?? this.model;
+    if (typeof selectedModel !== "string" || !selectedModel.trim()) {
+      throw new Error("Subagent model must be a non-empty model ID");
+    }
+    const model = this.provider === "opencode" ? opencodeModelId(selectedModel) : selectedModel;
+    const approved = model === this.model || Object.values(this.config.agentModels ?? {}).some(
+      id => (this.provider === "opencode" ? opencodeModelId(id) : id) === model,
+    );
+    if (!approved) {
+      throw new Error(`Subagent model "${selectedModel}" is not operator-approved. Configure agentModels before selecting it.`);
+    }
+    const child = new LlmApiRuntime({ type: "api", timeout: timeoutMs, model }, this);
+    await child.ensureHostedModel();
+    return child;
   }
 
   /** The server catalog is authoritative even when a model was selected explicitly. */

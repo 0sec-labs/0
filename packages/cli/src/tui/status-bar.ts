@@ -40,6 +40,7 @@ export type StatusSegmentKind =
   | "dirty"
   | "tokens"
   | "cost"
+  | "cloud"
   | "context"
   | "meter"
   | "plan";
@@ -117,6 +118,8 @@ export interface StatusBarInput {
   contextWindow?: number;
   /** Tokens currently held in context, for the percentage. */
   contextUsed?: number;
+  /** Last reported model-call input, not current conversation occupancy. */
+  lastModelInput?: number;
   /** Billing/plan label, e.g. "sub". Omit when unknown. */
   plan?: string;
   /**
@@ -138,6 +141,8 @@ export interface StatusBarInput {
    * not billed — the same "never invent a number" rule the context percent obeys.
    */
   showCost?: boolean;
+  /** Already formatted authoritative Cloud account state, never a quota estimate. */
+  hostedBalance?: string;
 }
 
 /**
@@ -174,6 +179,7 @@ const PRIORITY: Record<StatusSegmentKind, number> = {
   branch: 7,
   mode: 8,
   evolution: 8,
+  cloud: 9,
   model: 0,
 };
 
@@ -182,6 +188,7 @@ const ORDER: StatusSegmentKind[] = [
   "model",
   "effort",
   "mode",
+  "cloud",
   "evolution",
   "cwd",
   "branch",
@@ -194,22 +201,23 @@ const ORDER: StatusSegmentKind[] = [
 ];
 
 /**
- * Recognizable Unicode glyphs with no Nerd Font requirement. Their width is
- * included in the status-row budget alongside the label.
+ * Text glyphs that retain their labels and require no patched icon font. Their
+ * width is included in the status-row budget alongside the label.
  */
 const ICON: Record<StatusSegmentKind, string> = {
-  model: "🤖",
-  effort: "🧠",
-  mode: "🧭",
+  model: "◈",
+  effort: "✦",
+  mode: "◐",
   evolution: "",
-  cwd: "📂",
-  branch: "🔀",
+  cwd: "⌂",
+  branch: "⑂",
   dirty: "±",
-  tokens: "🔢",
-  cost: "💰",
-  context: "📊",
-  meter: "📊",
-  plan: "📋",
+  tokens: "↕",
+  cost: "$",
+  cloud: "",
+  context: "◫",
+  meter: "◫",
+  plan: "▣",
 };
 
 /** Semantic colour role per kind; the meter shares the plain percent's role. */
@@ -223,6 +231,7 @@ const COLOR_ROLE: Record<StatusSegmentKind, StatusColorRole> = {
   dirty: "dirty",
   tokens: "tokens",
   cost: "cost",
+  cloud: "cost",
   context: "context",
   meter: "context",
   plan: "plan",
@@ -380,6 +389,7 @@ function dirtyText(modified: number, untracked: number): string {
  */
 export function buildStatusSegments(input: StatusBarInput): StatusSegment[] {
   const texts = new Map<StatusSegmentKind, string>();
+  if (input.hostedBalance) texts.set("cloud", input.hostedBalance);
 
   // The model is kept for pricing regardless of where it is displayed, but it
   // only occupies a bar segment when `modelDisplay` is "statusbar" (or is
@@ -453,6 +463,13 @@ export function buildStatusSegments(input: StatusBarInput): StatusSegment[] {
     } else {
       texts.set("context", `${percent}%/${formatTokenCount(contextWindow)}`);
     }
+  } else if (input.showContextMeter) {
+    const facts = ["Context usage unavailable"];
+    if (contextWindow > 0) facts.push(`limit ${formatTokenCount(contextWindow)}`);
+    if (typeof input.lastModelInput === "number" && Number.isFinite(input.lastModelInput) && input.lastModelInput >= 0) {
+      facts.push(`last model input ${formatTokenCount(input.lastModelInput)}`);
+    }
+    texts.set("meter", facts.join(" · "));
   }
 
   const plan = label(input.plan);

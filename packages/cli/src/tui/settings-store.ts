@@ -36,11 +36,16 @@
 import { useSyncExternalStore } from "react";
 
 import {
+  SETTING_DEFS,
+  isOperatorSetting,
+  loadGlobalSettings,
   loadLayeredSettings,
   normalizeSettings,
   projectSettingsExist,
+  readProjectOverrides,
+  resolveLayeredSettings,
   saveSettings,
-  setProjectOverride,
+  saveProjectOverrides,
   type LayeredSettings,
   type SettingLayer,
   type TuiSettings,
@@ -56,6 +61,8 @@ type Subscriber = (settings: TuiSettings) => void;
  * lock-step through every swap.
  */
 let cached: LayeredSettings | null = null;
+let globalDraft: TuiSettings | null = null;
+let projectDraft: Partial<TuiSettings> | null = null;
 
 /**
  * Directories passed through to the load/save paths. Both undefined in
@@ -86,7 +93,9 @@ function notify(settings: TuiSettings): void {
 }
 
 function loadLayered(): LayeredSettings {
-  return loadLayeredSettings({ homeDir, projectDir });
+  return globalDraft === null && projectDraft === null
+    ? loadLayeredSettings({ homeDir, projectDir })
+    : resolveLayeredSettings(globalDraft ?? loadGlobalSettings(homeDir), projectDraft ?? readProjectOverrides(projectDir));
 }
 
 /**
@@ -117,37 +126,19 @@ export function getSettingSources(): Record<keyof TuiSettings, SettingLayer> {
  * disk.
  *
  * The value is normalised on the way in so the in-memory copy is as valid as one
- * freshly loaded. Note: because a project override shadows the global base on the
- * next full load, prefer `updateSetting` for per-key changes when a project layer
- * is in play; `setSettings` is the whole-object write the settings screen uses.
+ * freshly loaded. Use `updateSetting` for per-key changes: passing an effective
+ * project-layer snapshot here would promote unrelated overrides.
  */
 export function setSettings(next: TuiSettings): boolean {
   const value = normalizeSettings(next);
   const saved = saveSettings(value, homeDir);
-  // Re-derive the effective view: on a successful write the global base changed,
-  // so a fresh layered load reflects it (and keeps project provenance correct);
-  // on a failed write disk is unchanged, so mark the whole object as the global
-  // layer in memory to reflect the operator's intent for this session.
-  if (saved) {
-    cached = loadLayered();
-  } else {
-    cached = { settings: value, sources: allFromLayer(value, "global") };
-  }
+  // Retain failed global writes without promoting the project layer.
+  globalDraft = saved ? null : value;
+  cached = loadLayered();
   notify(cached.settings);
   return saved;
 }
 
-/** A provenance map that assigns every key of `settings` to one layer. */
-function allFromLayer(
-  settings: TuiSettings,
-  layer: SettingLayer,
-): Record<keyof TuiSettings, SettingLayer> {
-  const sources = {} as Record<keyof TuiSettings, SettingLayer>;
-  for (const key of Object.keys(settings) as (keyof TuiSettings)[]) {
-    sources[key] = layer;
-  }
-  return sources;
-}
 
 /**
  * Which layer a plain `updateSetting` (no explicit scope) would write to: the
@@ -173,24 +164,45 @@ export function updateSetting<K extends keyof TuiSettings>(
   value: TuiSettings[K],
   opts: { scope?: Exclude<SettingLayer, "default"> } = {},
 ): boolean {
-  const layer = opts.scope ?? defaultWriteLayer();
+  const operatorOnly = isOperatorSetting(key);
+  if (operatorOnly && opts.scope === "project") return false;
+  const layer = operatorOnly ? "global" : opts.scope ?? defaultWriteLayer();
 
   if (layer === "global") {
-    return setSettings({ ...getSettings(), [key]: value });
+    return setSettings({ ...(globalDraft ?? loadGlobalSettings(homeDir)), [key]: value });
   }
 
-  // Project layer: sparse write of the one key, preserving other overrides.
-  const saved = setProjectOverride(key, value, projectDir);
-  if (saved) {
-    cached = loadLayered();
-  } else {
-    // Reflect the intent in memory even though it did not reach disk.
-    const settings = normalizeSettings({ ...getSettings(), [key]: value });
-    const sources = { ...getSettingSources(), [key]: "project" as SettingLayer };
-    cached = { settings, sources };
-  }
+  // Keep failed sparse writes across later edits in either layer.
+  const patch = { ...(projectDraft ?? readProjectOverrides(projectDir)), [key]: value };
+  const saved = saveProjectOverrides(patch, projectDir);
+  projectDraft = saved ? null : patch;
+  cached = loadLayered();
   notify(cached.settings);
   return saved;
+}
+
+/** Reset only visible selected settings, removing their project shadows. */
+export function resetSettings(next: TuiSettings, keys: readonly (keyof TuiSettings)[]): boolean {
+  const selected = keys.filter((key) => SETTING_DEFS.some((def) => def.key === key));
+  if (selected.length === 0) return true;
+  const global: Record<string, unknown> = { ...(globalDraft ?? loadGlobalSettings(homeDir)) };
+  const project = { ...(projectDraft ?? readProjectOverrides(projectDir)) };
+  let projectChanged = false;
+  for (const key of selected) {
+    global[key] = next[key];
+    if (Object.hasOwn(project, key)) {
+      delete project[key];
+      projectChanged = true;
+    }
+  }
+  const value = normalizeSettings(global);
+  const globalSaved = saveSettings(value, homeDir);
+  globalDraft = globalSaved ? null : value;
+  const projectSaved = !projectChanged || saveProjectOverrides(project, projectDir);
+  if (projectChanged) projectDraft = projectSaved ? null : project;
+  cached = loadLayered();
+  notify(cached.settings);
+  return globalSaved && projectSaved;
 }
 
 /**
@@ -223,6 +235,8 @@ export function subscribeSettings(fn: Subscriber): () => void {
  * unconditionally, so the next `getSettings` and every subscriber see disk.
  */
 export function reloadSettings(): TuiSettings {
+  globalDraft = null;
+  projectDraft = null;
   cached = loadLayered();
   notify(cached.settings);
   return cached.settings;
@@ -247,6 +261,8 @@ export function configureSettingsStore(options: { homeDir?: string; projectDir?:
  */
 export function __resetSettingsStoreForTests(): void {
   cached = null;
+  globalDraft = null;
+  projectDraft = null;
   homeDir = undefined;
   projectDir = undefined;
   subscribers.clear();

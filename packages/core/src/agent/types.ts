@@ -341,6 +341,10 @@ export interface AgentState {
 export interface ToolContext {
   target: string;
   scanId: string;
+  /** Shared audit-owned worker lifetimes; child executors borrow this tree. */
+  workerTree?: import("./worker-tree.js").AuditWorkerTree;
+  /** Audit-level sink for detached results whose parent invocation has ended. */
+  workerFindings?: Finding[];
   findings: Finding[];
   attackResults: AttackResult[];
   targetInfo: Partial<TargetInfo>;

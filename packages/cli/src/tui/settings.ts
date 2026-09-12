@@ -89,6 +89,10 @@ export interface TuiSettings {
   density: "comfortable" | "compact";
   /** How the composer frame is drawn. */
   composerStyle: "border" | "rail" | "plain";
+  /** Whether follow-up input steers the main turn or waits for it to finish. */
+  busyInputMode: "steer" | "queue";
+  /** Internal first-use state, persisted only in the operator's global layer. */
+  onboardingCompleted: boolean;
   /** Let sibling subagents message each other directly (child↔child channel). */
   allowSubagentPeerMessaging: boolean;
   /** Let a subagent send a message to the operator's transcript (child→operator). */
@@ -212,6 +216,7 @@ type TuiSettingDef =
   | EnumSettingDef<"toolCardStyle">
   | EnumSettingDef<"transcriptDetail">
   | EnumSettingDef<"modelDisplay">
+  | EnumSettingDef<"busyInputMode">
   | EnumSettingDef<"logoAnimation">
   | EnumSettingDef<"theme">;
 
@@ -359,6 +364,15 @@ const DEFS: readonly TuiSettingDef[] = [
     kind: "enum",
     default: "border",
     choices: ["border", "rail", "plain"],
+    group: "Display",
+  },
+  {
+    key: "busyInputMode",
+    label: "Busy input",
+    description: "Steer interrupts the main turn before sending the follow-up. Queue waits for it to finish. Background workers keep running.",
+    kind: "enum",
+    default: "steer",
+    choices: ["steer", "queue"],
     group: "Display",
   },
   {
@@ -550,6 +564,8 @@ export const DEFAULT_SETTINGS: TuiSettings = {
   showScope: true,
   density: "comfortable",
   composerStyle: "border",
+  busyInputMode: "steer",
+  onboardingCompleted: false,
   allowSubagentPeerMessaging: true,
   allowSubagentOperatorMessaging: true,
   transcriptStyle: "rail",
@@ -637,6 +653,9 @@ export function projectSettingsExist(projectDir: string = process.cwd()): boolea
 function strictValueAt<K extends keyof TuiSettings>(raw: unknown, key: K): TuiSettings[K] | undefined {
   const value = rawValue(raw, key);
   if (value === undefined) return undefined;
+  if (key === "onboardingCompleted") {
+    return typeof value === "boolean" ? (value as TuiSettings[K]) : undefined;
+  }
   if (key === "theme") {
     return typeof value === "string" && isKnownTheme(value)
       ? (value as TuiSettings[K])
@@ -659,6 +678,11 @@ export interface LayeredSettings {
   sources: Record<keyof TuiSettings, SettingLayer>;
 }
 
+/** First-use completion belongs to the operator, never a project checkout. */
+export function isOperatorSetting(key: keyof TuiSettings): boolean {
+  return key === "onboardingCompleted";
+}
+
 /**
  * Resolve two raw layers (already parsed) plus the built-in defaults into the
  * effective settings and per-key provenance. Pure and total.
@@ -667,7 +691,7 @@ export function resolveLayeredSettings(globalRaw: unknown, projectRaw: unknown):
   const settings = {} as Record<string, unknown>;
   const sources = {} as Record<keyof TuiSettings, SettingLayer>;
   for (const key of Object.keys(DEFAULT_SETTINGS) as (keyof TuiSettings)[]) {
-    const projectValue = strictValueAt(projectRaw, key);
+    const projectValue = isOperatorSetting(key) ? undefined : strictValueAt(projectRaw, key);
     if (projectValue !== undefined) {
       settings[key] = projectValue;
       sources[key] = "project";
@@ -773,6 +797,8 @@ export function normalizeSettings(raw: unknown): TuiSettings {
     showScope: booleanAt(raw, "showScope"),
     density: enumAt(raw, "density"),
     composerStyle: enumAt(raw, "composerStyle"),
+    busyInputMode: enumAt(raw, "busyInputMode"),
+    onboardingCompleted: booleanAt(raw, "onboardingCompleted"),
     allowSubagentPeerMessaging: booleanAt(raw, "allowSubagentPeerMessaging"),
     allowSubagentOperatorMessaging: booleanAt(raw, "allowSubagentOperatorMessaging"),
     transcriptStyle: enumAt(raw, "transcriptStyle"),
@@ -845,6 +871,7 @@ export function saveSettings(settings: TuiSettings, homeDir?: string): boolean {
 export function sanitizeOverrides(raw: unknown): Partial<TuiSettings> {
   const out: Record<string, unknown> = {};
   for (const key of Object.keys(DEFAULT_SETTINGS) as (keyof TuiSettings)[]) {
+    if (isOperatorSetting(key)) continue;
     const value = strictValueAt(raw, key);
     if (value !== undefined) out[key] = value;
   }

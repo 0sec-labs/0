@@ -196,6 +196,8 @@ export interface NativeAgentConfig {
   maxTurns: number;
   target: string;
   scanId: string;
+  workerTree?: ToolContext["workerTree"];
+  workerFindings?: ToolContext["findings"];
   scopePath?: string;
   sessionId?: string; // Resume from existing session
   /** Which retry attempt this is (0 = first attempt). Used by early-stop logic. */
@@ -583,6 +585,8 @@ export async function runNativeAgentLoop(
     rateLimiter: config.rateLimiter,
     enforcement: config.enforcement,
     agentMessaging: config.agentMessaging,
+    workerTree: config.workerTree,
+    workerFindings: config.workerTree ? config.workerFindings : undefined,
     // WAF detection + adaptive evasion (0sec#568). Auto-enabled for
     // authorized engagements (scope/enforcement configured) unless the caller
     // passed `wafDetector: null` to opt out.
@@ -624,7 +628,7 @@ export async function runNativeAgentLoop(
     // task tree. Additive and authority-free — records only the declared plan.
     todos: new TodoTracker({
       emit: (snap) => {
-        eventBus.emit("todos", buildTodosPayload(snap));
+        eventBus.emit("todos", { ...buildTodosPayload(snap), scan_id: config.scanId });
       },
     }),
   };

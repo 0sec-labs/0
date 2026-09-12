@@ -379,13 +379,17 @@ describe("deleteSession", () => {
     expect(deleteSession("console-missing", makeHome())).toBe(false);
   });
 
-  it("deletes a corrupt transcript, which loadSession would refuse to open", () => {
+  it("protects a corrupt active transcript until its protection is released", () => {
     const home = makeHome();
     mkdirSync(sessionsDir(home), { recursive: true });
     writeFileSync(join(sessionsDir(home), "console-bad.json"), "{{{");
 
     expect(loadSession("console-bad", home)).toBeNull();
-    expect(deleteSession("console-bad", home)).toBe(true);
+    const protectedIds = new Set(["console-bad"]);
+    expect(deleteSession("console-bad", home, { protectedIds })).toBe(false);
+    expect(readFileSync(join(sessionsDir(home), "console-bad.json"), "utf8")).toBe("{{{");
+    protectedIds.clear();
+    expect(deleteSession("console-bad", home, { protectedIds })).toBe(true);
     expect(() => statSync(join(sessionsDir(home), "console-bad.json"))).toThrow();
   });
 });
@@ -427,6 +431,19 @@ describe("pruneSessions", () => {
 
     expect(pruneSessions(home, { keep: 0 })).toBe(3);
     expect(listSessions(home)).toEqual([]);
+  });
+
+  it("excludes active and pending resumes from retention, including keep zero", () => {
+    const home = makeHome();
+    seed(home, 5);
+    const protectedIds = new Set(["console-004", "console-000"]);
+
+    expect(pruneSessions(home, { keep: 2, protectedIds })).toBe(1);
+    expect(listSessions(home).map((session) => session.id)).toEqual([
+      "console-004", "console-003", "console-002", "console-000",
+    ]);
+    expect(pruneSessions(home, { keep: 0, protectedIds })).toBe(2);
+    expect(listSessions(home).map((session) => session.id)).toEqual(["console-004", "console-000"]);
   });
 
   it("treats a nonsense keep as the default rather than deleting everything", () => {

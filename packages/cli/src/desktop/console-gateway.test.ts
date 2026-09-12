@@ -39,6 +39,8 @@ function makeSession(input: GatewayFactoryInput): ConsoleSession {
     localScopePath: undefined,
     setAutonomyMode: () => undefined,
     clearConversation: () => undefined,
+    stopPersistentAgent: async () => false,
+    stopPersistentAgents: async () => undefined,
     async send(_text, callbacks?, _options?): Promise<ConsoleTurnOutcome> {
       callbacks?.onAssistantDelta?.("I inspected ");
       callbacks?.onToolStart?.(call);

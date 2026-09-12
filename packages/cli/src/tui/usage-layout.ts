@@ -291,24 +291,51 @@ function contextTone(percent: number): UsageTone {
   return "ok";
 }
 
+// ── Row markers: plain text glyphs ──────────────────────────────────────────
+// The glyphs are decorative; the adjacent text label always carries the
+// meaning on its own, so no icon font is required.
+const ICON_CONTEXT = "◫";   // context window
+const ICON_INPUT  = "↓";    // input tokens
+const ICON_OUTPUT = "↑";    // output tokens
+const ICON_CACHE  = "▦";    // cached input
+const ICON_REASON = "✦";    // reasoning tokens
+const ICON_COST   = "$";    // cost
+const ICON_MODEL  = "◈";    // model
+const ICON_HOST   = "⌨";    // provider/host
+const ICON_WARN   = "!";    // warning
+// ─────────────────────────────────────────────────────────────────────────────
+
 /**
- * The whole report as flat tone-tagged rows.
+ * The whole report as flat tone-tagged rows, in labelled sections.
  *
  * Content and colour are decided here so the report can be asserted on without
- * a renderer, exactly as `model-layout.ts` does for its detail pane. Every
- * section is present so the screen has a stable shape; a section with no data
- * says so ("— not tracked", "no tool issues") rather than vanishing, except the
- * context meter, which is only meaningful with both a window and a reading.
+ * a renderer, exactly as `model-layout.ts` does for its detail pane. The dialog
+ * reads as a short report rather than a wall of pairs: each group (CONTEXT /
+ * TOKENS / COST / MODEL / TOOL HEALTH) carries a heading and is separated by one
+ * blank row, every section is present so the screen has a stable shape, and a
+ * section with no data says so ("— not tracked", "no tool issues") rather than
+ * vanishing.
+ *
+ * The honesty rules are unchanged and load-bearing. Unknown fields render as an
+ * em-dash, never a plausible zero. The context METER — the only place a
+ * percentage is ever shown — appears if and only if BOTH `contextWindow` and
+ * `contextUsed` were supplied; with either missing the section falls back to
+ * em-dash rows that say the window was not reported, and no percentage is
+ * synthesised from anything else. Cumulative billed tokens are never
+ * substituted for context occupancy.
  */
 export function buildUsageReport(snapshot: UsageSnapshot = {}): UsageReportRow[] {
   const rows: UsageReportRow[] = [];
-  const heading = (label: string) => rows.push({ kind: "heading", label, tone: "muted" });
+  const heading = (label: string) => rows.push({ kind: "heading", label, tone: "title" });
   const kv = (label: string, value: string, tone: UsageTone = "value") =>
     rows.push({ kind: "kv", label, value, tone });
   const text = (label: string, tone: UsageTone = "muted") => rows.push({ kind: "text", label, tone });
   const blank = () => rows.push({ kind: "blank", tone: "blank" });
 
   // ── CONTEXT ──────────────────────────────────────────────────────────────
+  // The meter is shown ONLY when both halves of the reading exist. Neither half
+  // is ever inferred, and no other number (session or billed tokens) may stand
+  // in for context occupancy.
   heading("CONTEXT");
   const window = positiveCount(snapshot.contextWindow);
   const usedGiven = hasNumber(snapshot.contextUsed);
@@ -319,13 +346,13 @@ export function buildUsageReport(snapshot: UsageSnapshot = {}): UsageReportRow[]
     const caption = `${percent}% · ${formatTokenCount(used)} / ${formatTokenCount(window)}`;
     rows.push({ kind: "meter", value: caption, fraction, tone: contextTone(percent) });
   } else {
-    kv("window", tokenOrDash(snapshot.contextWindow), "muted");
-    kv("used", tokenOrDash(snapshot.contextUsed), "muted");
+    kv(`${ICON_CONTEXT} window`, tokenOrDash(snapshot.contextWindow), "muted");
+    kv(`${ICON_CONTEXT} used`, tokenOrDash(snapshot.contextUsed), "muted");
     text("context window not reported for this session", "muted");
   }
   blank();
 
-  // ── TOKENS ─────────────────────────────────────────────────────────────
+  // ── TOKENS ───────────────────────────────────────────────────────────────
   heading("TOKENS");
   const session = snapshot.session;
   const turn = snapshot.turn;
@@ -339,13 +366,13 @@ export function buildUsageReport(snapshot: UsageSnapshot = {}): UsageReportRow[]
     kv(label, `${turnText} / ${sessionText}`);
   };
   text("this turn / session", "muted");
-  both("input", (u) => u?.inputTokens);
-  both("output", (u) => u?.outputTokens);
-  both("cached", (u) => u?.cachedInputTokens);
+  both(`${ICON_INPUT} input`, (u) => u?.inputTokens);
+  both(`${ICON_OUTPUT} output`, (u) => u?.outputTokens);
+  both(`${ICON_CACHE} cached`, (u) => u?.cachedInputTokens);
   // Reasoning tokens are only shown when at least one side tracked them, so a
   // model that never reports them does not carry an em-dash row forever.
   if (hasNumber(session?.reasoningTokens) || hasNumber(turn?.reasoningTokens)) {
-    both("reasoning", (u) => u?.reasoningTokens);
+    both(`${ICON_REASON} reasoning`, (u) => u?.reasoningTokens);
   }
   if (!hasAnyTokens(session) && !hasAnyTokens(turn)) {
     text("no tokens recorded yet", "muted");
@@ -354,6 +381,7 @@ export function buildUsageReport(snapshot: UsageSnapshot = {}): UsageReportRow[]
 
   // ── COST ─────────────────────────────────────────────────────────────────
   heading("COST");
+  text("estimated, from published rates", "muted");
   const perModel = (snapshot.perModel ?? []).filter((entry) => entry && entry.model);
   if (perModel.length > 0) {
     let allPriced = true;
@@ -362,32 +390,32 @@ export function buildUsageReport(snapshot: UsageSnapshot = {}): UsageReportRow[]
       const rates = resolveRates(entry.model);
       if (rates) total += costUsd(entry, rates);
       else allPriced = false;
-      kv(entry.model, costOrDash(entry, entry.model), rates ? "value" : "muted");
+      kv(`${ICON_COST} ${entry.model}`, costOrDash(entry, entry.model), rates ? "value" : "muted");
     }
-    kv("total", allPriced ? formatCost(total) : "$—", allPriced ? "accent" : "muted");
+    kv(`${ICON_COST} total`, allPriced ? formatCost(total) : "$—", allPriced ? "accent" : "muted");
   } else if (hasAnyTokens(session)) {
     const priced = Boolean(resolveRates(snapshot.model));
-    kv("session estimate", costOrDash(session ?? {}, snapshot.model), priced ? "accent" : "muted");
+    kv(`${ICON_COST} session estimate`, costOrDash(session ?? {}, snapshot.model), priced ? "accent" : "muted");
     if (!priced) text(`no published rate for ${snapshot.model ?? "this model"}`, "muted");
   } else {
-    kv("session estimate", "$—", "muted");
+    kv(`${ICON_COST} session estimate`, "$—", "muted");
   }
   blank();
 
-  // ── MODEL ──────────────────────────────────────────────────────────────
+  // ── MODEL ────────────────────────────────────────────────────────────────
   heading("MODEL");
   const model = typeof snapshot.model === "string" ? snapshot.model.trim() : "";
   if (model) {
-    kv("active", model);
+    kv(`${ICON_MODEL} active`, model);
     const provider =
       (typeof snapshot.provider === "string" && snapshot.provider.trim()) || modelProvider(model);
-    kv("provider", provider, "muted");
+    kv(`${ICON_HOST} provider`, provider, "muted");
   } else {
-    kv("active", EM_DASH, "muted");
+    kv(`${ICON_MODEL} active`, EM_DASH, "muted");
   }
   blank();
 
-  // ── TOOL HEALTH ────────────────────────────────────────────────────────
+  // ── TOOL HEALTH ──────────────────────────────────────────────────────────
   heading("TOOL HEALTH");
   const health = snapshot.toolHealth;
   if (health && health.total > 0) {
@@ -395,7 +423,7 @@ export function buildUsageReport(snapshot: UsageSnapshot = {}): UsageReportRow[]
     // rather than paraphrasing its category grouping. Amber, not red: a missing
     // optional scanner is a degraded run, not a failed one — red is reserved for
     // an over-budget context, the one genuinely destructive state on this screen.
-    text(health.line || `${health.total} tool issue${health.total === 1 ? "" : "s"}`, "warn");
+    text(`${ICON_WARN} ${health.line || `${health.total} tool issue${health.total === 1 ? "" : "s"}`}`, "warn");
     for (const event of health.events.slice(0, 6)) {
       const suffix = event.count > 1 ? ` (x${event.count})` : "";
       kv(`${event.tool}`, `${event.category}${suffix}`, "muted");
@@ -547,6 +575,25 @@ export interface UsageMeterLayout {
 export interface UsageLayoutInput {
   width: number;
   height: number;
+  /**
+   * Rows the HOST frame spends around this screen's body, when the host is not
+   * the legacy full-screen shell. Inside a `DialogSurface` the shell renders
+   * with `dialogContent`: no outer header and no padding, and the surface
+   * dimensions are the panel interior, so the only row the host still spends is
+   * its one-row footer. Omit it and the legacy `shellChromeRows(width)` applies.
+   */
+  hostRows?: number;
+  /**
+   * Cells the HOST frame pads on EACH side. The legacy shell pads two; a dialog
+   * pads none. Omit it and the legacy padding applies.
+   */
+  hostPaddingX?: number;
+  /**
+   * Rows the host spends above the report inside the same content column — the
+   * dialog's icon+title row. Budgeted here so the pane shrinks by exactly that
+   * much and can never paint through the header.
+   */
+  headerRows?: number;
 }
 
 export interface UsageLayout {
@@ -630,11 +677,20 @@ export function computeMeterLayout(innerWidth: number): UsageMeterLayout {
  * gives up rows of content, and it is dropped entirely rather than rendered at
  * a height that would push its own border through its text.
  */
-export function computeUsageLayout({ width, height }: UsageLayoutInput): UsageLayout {
+export function computeUsageLayout({
+  width,
+  height,
+  headerRows = 0,
+  hostRows,
+  hostPaddingX,
+}: UsageLayoutInput): UsageLayout {
   const terminalWidth = cells(width);
-  // `ShellFrame` pads two cells either side of every screen.
-  const contentWidth = Math.max(0, terminalWidth - 4);
-  const bodyRows = Math.max(0, cells(height) - shellChromeRows(terminalWidth));
+  // The legacy shell pads two cells either side and spends a header; a dialog
+  // host pads none and spends only its footer row, and says so explicitly.
+  const padding = hostPaddingX === undefined ? 2 : cells(hostPaddingX);
+  const chromeRows = hostRows === undefined ? shellChromeRows(terminalWidth) : cells(hostRows);
+  const contentWidth = Math.max(0, terminalWidth - padding * 2);
+  const bodyRows = Math.max(0, cells(height) - chromeRows - cells(headerRows));
 
   const bordered = bodyRows >= BORDERED_MIN_ROWS && contentWidth >= BORDERED_MIN_WIDTH;
   const chrome = borderChrome(bordered);
@@ -678,8 +734,23 @@ export function usageTitle(): string {
   return "SESSION USAGE";
 }
 
-/** The footer hint: this screen is read-only, so the keys are few. Only the
- *  keys the screen actually handles are named. */
+/** The dialog header's column split, shared with every other console pane. */
+export { paneTitleColumns, type PaneTitleColumns } from "./pane-layout.js";
+
+/**
+ * The right-aligned meta on the dialog's title row.
+ *
+ * Names the model the snapshot actually reports and nothing else — no count,
+ * no percentage, no provider guess. With no model supplied it reads as an
+ * em-dash, the same honest placeholder the report body uses.
+ */
+export function usageDialogMeta(snapshot: UsageSnapshot = {}): string {
+  const model = typeof snapshot.model === "string" ? sanitizeTuiText(snapshot.model).trim() : "";
+  return model.length > 0 ? model : EM_DASH;
+}
+
+/** The footer hint: contextual inspector — read-only, the keys are few. Only
+ *  the keys the screen actually handles are named. */
 export function usageFooterHint(): string {
   return ["esc back", "ctrl+c exit"].join(" · ");
 }

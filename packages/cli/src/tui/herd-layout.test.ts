@@ -669,6 +669,15 @@ describe("subagentPeers + mergeSubagentRoster", () => {
 });
 
 describe("focus content — header and transcript", () => {
+  it("renders acknowledged cancellation without failure styling", () => {
+    const map = applySubagentLifecycle({}, lifecycle({ status: "failed", error: "Worker stopped by operator" }), NOW);
+    const record = { ...map["child-1"]!, operatorStopped: true };
+    const worker = subagentPeers({ [record.agentId]: record }, NOW)[0];
+    const lines = focusHeaderLines(worker, record, 80, NOW);
+    expect(lines.find((line) => line.text.startsWith("Status:"))?.tone).toBe("muted");
+    expect(lines.filter((line) => line.tone === "warn")).toEqual([]);
+  });
+
   it("renders identity + status counters, preferring the live record", () => {
     let map = applySubagentLifecycle({}, lifecycle(), NOW);
     map = applySubagentProgress(map, progress({ turn: 3, tool: "curl" }), NOW + 1);

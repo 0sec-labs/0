@@ -14,6 +14,7 @@
  */
 
 import { sanitizeTuiText, fitTuiText } from "../text.js";
+import type { TodosEventPayload, TodoStatus } from "@0sec/core";
 
 /** Default number of rows a wrapped sidebar item may span. */
 export const DEFAULT_WRAP_LINES = 2;
@@ -141,6 +142,47 @@ export function todoTextWidth(columnWidth: number): number {
   return Math.max(1, Math.floor(columnWidth) - 2);
 }
 
+// ── Shared sidebar-section idiom ────────────────────────────────────────────
+//
+// AGENTS / FINDINGS / PLAN are siblings in one narrow column and must read as
+// one set. The two helpers below are the ONLY places the shared idiom is
+// spelled out — a one-row `LABEL n` header, and a trailing status/severity
+// badge that never eats the row's primary text — so the three sections cannot
+// drift apart the way they had.
+
+/** Rows every sidebar section spends on its header line. */
+export const SIDEBAR_SECTION_HEADER_ROWS = 1;
+
+/**
+ * Cells a trailing badge (a finding's severity, an agent's status) may claim on
+ * a sidebar row. Capped so the row's primary text always keeps at least four
+ * cells, and collapsed to 0 in a column too narrow to carry both — the caller
+ * then draws the text alone. This is the arithmetic the FINDINGS section has
+ * always used; it lives here so AGENTS can use exactly the same rhythm.
+ */
+export function sidebarBadgeCells(label: string, columnWidth: number): number {
+  const width = Math.max(0, Math.floor(columnWidth));
+  const len = Math.max(0, String(label ?? "").length);
+  return Math.min(len, Math.max(0, width - 4));
+}
+
+/**
+ * The shared section header: an uppercase label followed by the count of items
+ * the section actually holds, fitted to `width`. The count is rendered only
+ * when it is a real, finite number — an unknown count shows the bare label
+ * rather than a fabricated "0".
+ */
+export function buildSidebarSectionHeader(
+  label: string,
+  count: number | undefined,
+  width: number,
+): string {
+  const name = String(label ?? "").toUpperCase();
+  const text =
+    typeof count === "number" && Number.isFinite(count) ? `${name} ${Math.max(0, Math.floor(count))}` : name;
+  return fitTuiText(text, Math.max(1, width));
+}
+
 // ── Priority ordering for sidebar ───────────────────────────────────────────
 
 /**
@@ -209,4 +251,135 @@ export function buildSidebarHeader(
   }
 
   return fitTuiText(base, Math.max(1, width));
+}
+
+/**
+ * The PLAN section's footer when the collapsed view is hiding work.
+ *
+ * Truncation here must not delete information, so the line is CHOSEN to fit
+ * rather than fitted by chopping: the richest phrasing that fits `width` wins,
+ * and each fallback drops the least load-bearing clause first.
+ *
+ *   1. `+N more · M active · expand`   everything, when the column is wide
+ *   2. `+N more · M active`            the hidden ACTIVE count outranks the
+ *                                      word "expand", because the header's
+ *                                      caret is the real affordance and is
+ *                                      visible at every width — the hint is a
+ *                                      reminder, the count is data
+ *   3. `+N more`                       the narrowest honest statement
+ *
+ * Nothing hidden ⇒ empty string; the caller then shows its own idle hint. The
+ * `M active` clause is omitted entirely when no active work is hidden rather
+ * than printing "0 active".
+ */
+export function buildPlanOverflowFooter(hidden: number, active: number, width: number): string {
+  const n = Math.max(0, Math.floor(hidden));
+  if (n <= 0) return "";
+  const a = Math.max(0, Math.floor(active));
+  const cells = Math.max(1, Math.floor(width));
+  const base = `+${n} more`;
+  const withActive = a > 0 ? `${base} · ${a} active` : base;
+  const candidates = [`${withActive} · expand`, withActive, base];
+  for (const candidate of candidates) {
+    if (candidate.length <= cells) return candidate;
+  }
+  return fitTuiText(base, cells);
+}
+
+export interface TodoTreeRow {
+  key: string;
+  prefix: string;
+  glyph: string;
+  text: string;
+  status?: TodoStatus;
+  todoId?: string;
+  first?: boolean;
+  last?: boolean;
+  group: string;
+}
+
+/** One connected tree shared by transcript and sidebar; declared order is retained. */
+export function buildTodoTreeRows(todos: TodosEventPayload["todos"], width: number, maxLines = Number.MAX_SAFE_INTEGER): TodoTreeRow[] {
+  const groups = new Map<string, TodosEventPayload["todos"]>();
+  for (const item of todos) {
+    const group = item.group ?? "";
+    const items = groups.get(group);
+    if (items) items.push(item);
+    else groups.set(group, [item]);
+  }
+  const result: TodoTreeRow[] = [];
+  let groupIndex = 0;
+  for (const [group, items] of groups) {
+    const lastGroup = ++groupIndex === groups.size;
+    const parentRail = group ? (lastGroup ? "  " : "│ ") : "";
+    if (group) {
+      const done = items.filter(item => item.status === "completed").length;
+      const lines = wrapCells(`${group} ${done}/${items.length}`, Math.max(1, width - 2), maxLines);
+      lines.forEach((text, index) => result.push({
+        key: `group-${groupIndex}-${index}`, group,
+        prefix: index === 0 ? (lastGroup ? "└─" : "├─") : parentRail,
+        glyph: "", text,
+      }));
+    }
+    items.forEach((item, itemIndex) => {
+      const lastItem = itemIndex === items.length - 1;
+      const firstPrefix = `${parentRail}${lastItem ? "└─" : "├─"}`;
+      const continuation = `${parentRail}${lastItem ? "  " : "│ "}`;
+      const lines = wrapCells(item.content, Math.max(1, width - firstPrefix.length - 2), maxLines);
+      lines.forEach((text, index) => result.push({
+        key: `${item.id}-${index}`, group, todoId: item.id, status: item.status,
+        first: index === 0, last: index === lines.length - 1,
+        prefix: index === 0 ? firstPrefix : continuation,
+        glyph: index > 0 ? " " : item.status === "completed" ? "✓" : item.status === "in_progress" ? "▶" : "·",
+        text,
+      }));
+    });
+  }
+  return result;
+}
+
+/** Keep real active tasks before nearby pending work and one completed context item. */
+export function windowTodoTree(tree: readonly TodoTreeRow[], capacity: number): { rows: readonly TodoTreeRow[]; hiddenTodos: number; hiddenActive: number } {
+  const count = Number.isFinite(capacity) ? Math.max(0, Math.floor(capacity)) : 0;
+  if (tree.length <= count) return { rows: tree, hiddenTodos: 0, hiddenActive: 0 };
+  const firstRows = tree.map((row, index) => ({ row, index })).filter(entry => entry.row.first);
+  const active = firstRows.filter(entry => entry.row.status === "in_progress");
+  const anchor = active[0]?.index ?? firstRows.find(entry => entry.row.status === "pending")?.index ?? 0;
+  const pending = firstRows.filter(entry => entry.row.status === "pending");
+  const nearby = [...pending.filter(entry => entry.index >= anchor), ...pending.filter(entry => entry.index < anchor)];
+  const completed = firstRows.filter(entry => entry.row.status === "completed");
+  const context = completed.filter(entry => entry.index < anchor).slice(-1);
+  const priority = [...active, ...context, ...nearby, ...completed.filter(entry => !context.includes(entry))];
+  const selected = new Set<number>();
+  for (const entry of active) {
+    if (selected.size >= count) break;
+    selected.add(entry.index);
+  }
+  const first = active[0] ?? nearby[0];
+  if (first && selected.size < count) {
+    let heading = first.index - 1;
+    while (heading >= 0 && tree[heading].group === first.row.group && tree[heading].todoId) heading--;
+    if (heading >= 0 && tree[heading].group === first.row.group && !tree[heading].todoId) selected.add(heading);
+  }
+  for (const entry of priority) {
+    if (selected.size >= count) break;
+    selected.add(entry.index);
+  }
+  // Use spare rows for connected wraps and group context, never at an active task's expense.
+  for (const entry of priority) {
+    if (!selected.has(entry.index)) continue;
+    for (let index = entry.index + 1; index < tree.length && tree[index].todoId === entry.row.todoId && selected.size < count; index++) selected.add(index);
+    let heading = entry.index - 1;
+    while (heading >= 0 && tree[heading].group === entry.row.group && tree[heading].todoId) heading--;
+    if (heading >= 0 && tree[heading].group === entry.row.group && !tree[heading].todoId && selected.size < count) selected.add(heading);
+  }
+  const hidden = new Set<string>();
+  const hiddenActive = new Set<string>();
+  tree.forEach((row, index) => {
+    if (row.todoId && !selected.has(index)) {
+      hidden.add(row.todoId);
+      if (row.first && row.status === "in_progress") hiddenActive.add(row.todoId);
+    }
+  });
+  return { rows: tree.filter((_row, index) => selected.has(index)), hiddenTodos: hidden.size, hiddenActive: hiddenActive.size };
 }

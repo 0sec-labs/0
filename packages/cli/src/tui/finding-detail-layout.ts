@@ -197,6 +197,19 @@ function findingCvssLine(finding: Finding, injected: string | undefined): string
   return EM_DASH;
 }
 
+// ── Row markers: plain text glyphs ──────────────────────────────────────────
+const ICON_CATEGORY  = "▦"; // nf-fa-folder-open
+const ICON_STATUS    = "●"; // nf-fa-circle
+const ICON_TRIAGE    = "◈"; // nf-fa-tags
+const ICON_CONFID    = "◐"; // nf-fa-info-circle
+const ICON_LOCATION  = "▥"; // nf-fa-folder
+const ICON_DESC      = "▤"; // nf-fa-file-text
+const ICON_EVIDENCE  = "✦"; // nf-fa-eye
+const ICON_FIX       = "✚"; // nf-fa-gavel
+const ICON_CVSS      = "◇"; // nf-fa-diamond
+const ICON_LINK      = "↗"; // nf-fa-link
+// ─────────────────────────────────────────────────────────────────────────────
+
 /**
  * The finding body as a flat, tone-tagged row list. Content is decided here and
  * colour by the component, so the body is testable without a renderer. Every
@@ -211,13 +224,15 @@ export function buildFindingRows(
   const width = cells(innerWidth);
   if (width <= 0) return [];
   if (!finding) {
-    return [{ kind: "text", text: "No finding selected.", tone: "muted" }];
+    return wrapCells("No finding selected.", width).map((text) => ({ kind: "text", text, tone: "muted" }));
   }
 
   const redact = options.redact ?? ((text: string) => text);
   const rows: FindingDetailRow[] = [];
   const blank = () => rows.push({ kind: "blank" });
-  const heading = (text: string) => rows.push({ kind: "heading", text, tone: "heading" });
+  const heading = (text: string) => {
+    for (const line of wrapCells(text, width)) rows.push({ kind: "heading", text: line, tone: "heading" });
+  };
 
   // Strong header: title + severity badge on one row. The severity lives in the
   // badge (red for critical/high only) rather than a key/value row, so the
@@ -233,22 +248,22 @@ export function buildFindingRows(
   // Meta — key/value rows the component renders in two columns.
   rows.push({
     kind: "kv",
-    label: "Category",
+    label: `${ICON_CATEGORY} Category`,
     value: finding.category ? findingText(finding.category) : EM_DASH,
     tone: "text",
   });
   rows.push({
     kind: "kv",
-    label: "Status",
+    label: `${ICON_STATUS} Status`,
     value: finding.status ? findingText(finding.status) : EM_DASH,
     tone: "text",
   });
   if (finding.triageStatus) {
-    rows.push({ kind: "kv", label: "Triage", value: findingText(finding.triageStatus), tone: "text" });
+    rows.push({ kind: "kv", label: `${ICON_TRIAGE} Triage`, value: findingText(finding.triageStatus), tone: "text" });
   }
   rows.push({
     kind: "kv",
-    label: "Confidence",
+    label: `${ICON_CONFID} Confidence`,
     value:
       typeof finding.confidence === "number" && Number.isFinite(finding.confidence)
         ? `${Math.round(clamp(finding.confidence, 0, 1) * 100)}%`
@@ -258,17 +273,17 @@ export function buildFindingRows(
 
   // Location
   blank();
-  heading("Location");
+  heading(`${ICON_LOCATION} Location`);
   pushWrapped(rows, findingLocation(finding) ?? EM_DASH, width, "text");
 
   // Description
   blank();
-  heading("Description");
+  heading(`${ICON_DESC} Description`);
   pushWrapped(rows, finding.description || EM_DASH, width, "text");
 
   // Evidence (redacted)
   blank();
-  heading("Evidence");
+  heading(`${ICON_EVIDENCE} Evidence`);
   const evidence = findingEvidence(finding, redact);
   if (evidence.length === 0) {
     rows.push({ kind: "text", text: EM_DASH, tone: "muted" });
@@ -285,7 +300,7 @@ export function buildFindingRows(
 
   // Remediation
   blank();
-  heading("Remediation");
+  heading(`${ICON_FIX} Remediation`);
   const remediation = finding.remediation;
   if (!remediation || (!remediation.summary && (remediation.steps?.length ?? 0) === 0)) {
     rows.push({ kind: "text", text: EM_DASH, tone: "muted" });
@@ -298,12 +313,12 @@ export function buildFindingRows(
 
   // CVSS
   blank();
-  heading("CVSS");
+  heading(`${ICON_CVSS} CVSS`);
   pushWrapped(rows, findingCvssLine(finding, options.cvssLine), width, "text");
 
   // References
   blank();
-  heading("References");
+  heading(`${ICON_LINK} References`);
   const refs = [...(finding.remediation?.references ?? []), ...(finding.dedupRefs ?? [])];
   if (refs.length === 0) {
     rows.push({ kind: "text", text: EM_DASH, tone: "muted" });
@@ -471,6 +486,19 @@ export interface FindingDetailLayoutInput {
   height: number;
   /** How many action buttons the footer offers. */
   actionCount?: number;
+  /**
+   * Rows the HOST frame spends around this screen's body, when the host is not
+   * the legacy full-screen shell. Inside a `DialogSurface` the shell renders
+   * with `dialogContent`: no outer header and no padding, and the surface
+   * dimensions are the panel interior, so the only row the host still spends is
+   * its one-row footer. Omit it and the legacy `shellChromeRows(width)` applies.
+   */
+  hostRows?: number;
+  /**
+   * Cells the HOST frame pads on EACH side. The legacy shell pads two; a dialog
+   * pads none. Omit it and the legacy padding applies.
+   */
+  hostPaddingX?: number;
 }
 
 export interface FindingDetailLayout {
@@ -559,11 +587,16 @@ export function computeFindingDetailLayout({
   width,
   height,
   actionCount = 0,
+  hostRows,
+  hostPaddingX,
 }: FindingDetailLayoutInput): FindingDetailLayout {
   const terminalWidth = cells(width);
-  // `ShellFrame` pads two cells either side of every screen.
-  const contentWidth = Math.max(0, terminalWidth - 4);
-  const bodyRows = Math.max(0, cells(height) - shellChromeRows(terminalWidth));
+  // The legacy shell pads two cells either side and spends a header; a dialog
+  // host pads none and spends only its footer row.
+  const padding = hostPaddingX === undefined ? 2 : cells(hostPaddingX);
+  const chromeRows = hostRows === undefined ? shellChromeRows(terminalWidth) : cells(hostRows);
+  const contentWidth = Math.max(0, terminalWidth - padding * 2);
+  const bodyRows = Math.max(0, cells(height) - chromeRows);
 
   const wantsActions = cells(actionCount) > 0;
   const actionRows =

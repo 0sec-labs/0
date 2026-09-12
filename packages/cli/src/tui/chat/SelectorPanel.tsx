@@ -53,6 +53,24 @@ export function selectorPanelHeight(itemRows: number, showContext: boolean, show
 }
 
 /**
+ * Row markers.
+ *
+ * These were Nerd Font private-use codepoints (U+F192 and friends), which draw
+ * as tofu on every terminal without a patched font — the picker's single most
+ * information-dense cell, illegible by default. They are ordinary box/geometry
+ * glyphs now, the same vocabulary the sidebar sections and the dialog list use:
+ *
+ *   ▸  the focused row
+ *   ●  the value currently in effect
+ *   ✕  a choice that is not available
+ *   ·  everything else
+ */
+const MARK_ACTIVE = "▸";
+const MARK_CURRENT = "●";
+const MARK_DISABLED = "✕";
+const MARK_IDLE = "·";
+
+/**
  * THE decision surface.
  *
  * `/model`, `/mode`, `/settings`, `/providers`, `/resume` and every
@@ -121,23 +139,27 @@ export function SelectorPanel({
   const metaWidth = Math.max(0, afterLabel - metaGap);
 
   return (
-    <box flexDirection="column" width="100%" minWidth={0} height={height} flexShrink={0} marginTop={1} border borderColor={borderColor} backgroundColor={PANEL_ALT} paddingX={1}>
-      <box flexDirection="row" width={innerWidth} flexShrink={0} minWidth={0}>
-        <box width={headerTitleWidth} flexShrink={0} minWidth={0}>
-          <text fg={titleColor} attributes={TextAttributes.BOLD}>{fitTuiText(title, headerTitleWidth)}</text>
+    // Inline, NOT a dialog: no scrim, no absolute positioning, no centring —
+    // it sits in the composer's column and shares its vertical budget. It
+    // borrows only the dialog language's rounded outline so the two surfaces
+    // read as one family.
+    <box flexDirection="column" width="100%" minWidth={0} height={height} flexShrink={0} marginTop={1} border borderStyle="rounded" borderColor={borderColor} backgroundColor={PANEL_ALT} paddingX={1}>
+      <box flexDirection="row" width={innerWidth} height={1} flexShrink={0} minWidth={0}>
+        <box width={headerTitleWidth} height={1} flexShrink={0} minWidth={0}>
+          <text width={headerTitleWidth} height={1} wrapMode="none" truncate fg={titleColor} attributes={TextAttributes.BOLD}>{fitTuiText(title, headerTitleWidth)}</text>
         </box>
         {headerSubtitleWidth > 0 ? (
-          <box width={headerSubtitleWidth} flexShrink={0} minWidth={0} marginLeft={headerGap} alignItems="flex-end">
-            <text fg={MUTED}>{fitTuiText(subtitle, headerSubtitleWidth, { mode: "middle" })}</text>
+          <box width={headerSubtitleWidth} height={1} flexShrink={0} minWidth={0} marginLeft={headerGap} alignItems="flex-end">
+            <text width={headerSubtitleWidth} height={1} wrapMode="none" truncate fg={MUTED}>{fitTuiText(subtitle, headerSubtitleWidth, { mode: "middle" })}</text>
           </box>
         ) : null}
       </box>
       {context ? (
-        <box width={innerWidth} flexShrink={0} minWidth={0}>
+        <box width={innerWidth} height={1} flexShrink={0} minWidth={0}>
           {/* Truncated, never wrapped: a wrapping line has an unpredictable
               height, and an unpredictable height is what over-subscribes the
               column in the first place. */}
-          <text fg={contextColor ?? TEXT}>{fitTuiText(context, innerWidth, { mode: "middle" })}</text>
+          <text width={innerWidth} height={1} wrapMode="none" truncate fg={contextColor ?? TEXT}>{fitTuiText(context, innerWidth, { mode: "middle" })}</text>
         </box>
       ) : null}
       {rows.length > 0 ? rows.map((item, offset) => {
@@ -150,30 +172,34 @@ export function SelectorPanel({
         const labelFg = active ? CANVAS : item.disabled ? MUTED : TEXT;
         const metaFg = active ? CANVAS : MUTED;
         return (
-          <box key={item.id} flexDirection="row" width={innerWidth} flexShrink={0} minWidth={0} backgroundColor={rowBg}>
-            <text width={1} flexShrink={0} fg={dotFg} bg={rowBg} attributes={TextAttributes.BOLD}>{item.current ? "✓" : item.disabled ? "✘" : active ? "▸" : "◯"}</text>
-            <box width={labelWidth} flexShrink={0} minWidth={0} marginLeft={1} backgroundColor={rowBg}>
-              <text fg={labelFg} bg={rowBg} attributes={active ? TextAttributes.BOLD : undefined}>{fitTuiText(item.label, labelWidth)}</text>
+          <box key={item.id} flexDirection="row" width={innerWidth} height={1} flexShrink={0} minWidth={0} backgroundColor={rowBg}>
+            <text width={1} height={1} flexShrink={0} wrapMode="none" truncate fg={dotFg} bg={rowBg} attributes={TextAttributes.BOLD}>
+              {active ? MARK_ACTIVE : item.current ? MARK_CURRENT : item.disabled ? MARK_DISABLED : MARK_IDLE}
+            </text>
+            <box width={labelWidth} height={1} flexShrink={0} minWidth={0} marginLeft={1} backgroundColor={rowBg}>
+              <text width={labelWidth} height={1} wrapMode="none" truncate fg={labelFg} bg={rowBg} attributes={active ? TextAttributes.BOLD : undefined}>{fitTuiText(item.label, labelWidth)}</text>
             </box>
             {metaWidth > 0 ? (
-              <box width={metaWidth} flexShrink={0} minWidth={0} marginLeft={metaGap} backgroundColor={rowBg}>
-                <text fg={metaFg} bg={rowBg}>{fitTuiText(item.meta ?? "", metaWidth, { mode: "middle" })}</text>
+              <box width={metaWidth} height={1} flexShrink={0} minWidth={0} marginLeft={metaGap} backgroundColor={rowBg}>
+                <text width={metaWidth} height={1} wrapMode="none" truncate fg={metaFg} bg={rowBg}>{fitTuiText(item.meta ?? "", metaWidth, { mode: "middle" })}</text>
               </box>
             ) : null}
           </box>
         );
       }) : (
-        <box width={innerWidth} flexShrink={0} minWidth={0}>
-          <text fg={ERROR}>{fitTuiText(emptyText, innerWidth)}</text>
+        <box width={innerWidth} height={1} flexShrink={0} minWidth={0}>
+          <text width={innerWidth} height={1} wrapMode="none" truncate fg={ERROR}>{fitTuiText(emptyText, innerWidth)}</text>
         </box>
       )}
       {detail ? (
-        <box width={innerWidth} flexShrink={0} minWidth={0}>
-          <text fg={MUTED}>{fitTuiText(detail, innerWidth, { mode: "middle" })}</text>
+        <box width={innerWidth} height={1} flexShrink={0} minWidth={0}>
+          <text width={innerWidth} height={1} wrapMode="none" truncate fg={MUTED}>{fitTuiText(detail, innerWidth, { mode: "middle" })}</text>
         </box>
       ) : null}
-      <box width={innerWidth} flexShrink={0} minWidth={0}>
-        <text fg={MUTED}>{fitTuiText(hint, innerWidth)}</text>
+      {/* The footer hint row — the inline equivalent of a dialog's action
+          footer, and the last row the precomputed `height` accounts for. */}
+      <box width={innerWidth} height={1} flexShrink={0} minWidth={0}>
+        <text width={innerWidth} height={1} wrapMode="none" truncate fg={MUTED}>{fitTuiText(hint, innerWidth)}</text>
       </box>
     </box>
   );

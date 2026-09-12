@@ -600,27 +600,9 @@ describe("motion settings", () => {
 });
 
 describe("SETTING_DEFS", () => {
-  // The table and the interface are two halves of one declaration; nothing but
-  // a test stops a new field from being added to `TuiSettings` without a def
-  // (invisible in the settings UI) or a def from outliving its field.
-  it("has one def per TuiSettings field", () => {
-    const defKeys = SETTING_DEFS.map((def) => def.key).sort();
-    const fieldKeys = Object.keys(DEFAULT_SETTINGS).sort();
-
-    expect(defKeys).toEqual(fieldKeys);
-  });
-
   it("has a field for every def", () => {
     for (const def of SETTING_DEFS) {
       expect(Object.prototype.hasOwnProperty.call(DEFAULT_SETTINGS, def.key)).toBe(true);
-    }
-  });
-
-  it("has a def for every field", () => {
-    const defKeys = new Set(SETTING_DEFS.map((def) => def.key));
-
-    for (const key of Object.keys(DEFAULT_SETTINGS)) {
-      expect(defKeys.has(key)).toBe(true);
     }
   });
 

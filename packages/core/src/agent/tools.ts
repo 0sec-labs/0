@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { readFileSync, statSync, existsSync, writeFileSync } from "node:fs";
 import { spawnSync, spawn } from "node:child_process";
@@ -22,7 +22,7 @@ import type {
   OperatorQuestionOption,
   OperatorQuestionRequest,
 } from "./types.js";
-import type { NativeRuntime } from "../runtime/types.js";
+import type { NativeRuntime, SubagentModelSelection } from "../runtime/types.js";
 import type { LootKind } from "./loot.js";
 import { applyPlanAction, validatePlanArgs } from "./task-ledger.js";
 import type { OastHandle } from "../oast/types.js";
@@ -167,7 +167,8 @@ import {
   type HubMessage,
 } from "../hub/mailbox.js";
 import { PRIMARY_AGENT_NAME, assignAgentName, uniquifyAgentName } from "../hub/name-generator.js";
-import { DetachedAgentSupervisor, runPersistentAgent } from "../hub/supervisor.js";
+import { runPersistentAgent } from "../hub/supervisor.js";
+import { AuditWorkerTree } from "./worker-tree.js";
 import { ProcessManager, probePort, type ReadyGate } from "./process-manager.js";
 import { MCP_TOOL_PREFIX } from "./mcp-adapt.js";
 import type { McpHost } from "./mcp-host.js";
@@ -2301,6 +2302,14 @@ export function buildSendMessageTool(rt: MessagingRuntime | undefined): ToolDefi
   };
 }
 
+/** Keep generated peer ids within the mailbox's 64-character identity limit. */
+function subagentSiblingPrefix(scanId: string): string {
+  const namespace = scanId.length <= 23 && isValidPeerId(scanId)
+    ? scanId
+    : createHash("sha256").update(scanId).digest("hex").slice(0, 23);
+  return `${namespace}-sub-`;
+}
+
 /**
  * Seed the child↔child (sibling) messaging runtimes for ONE concurrent
  * `spawn_agents` batch, BEFORE any child starts, so siblings can address each
@@ -2309,7 +2318,7 @@ export function buildSendMessageTool(rt: MessagingRuntime | undefined): ToolDefi
  * The returned array is index-aligned with `agentIds`: entry `i` is the runtime
  * for the child whose lifecycle `agent_id` is `agentIds[i]`. Each runtime:
  *   - carries that child's own `agent_id` as `selfId` (the id it sends as);
- *   - shares the scan-wide `<scanId>-sub-` `siblingPrefix` (the shape guard);
+ *   - shares the bounded scan-wide `siblingPrefix` (the shape guard);
  *   - lists the OTHER children of THIS batch as `knownPeerIds` — this is the
  *     DISCOVERY seed (a sibling can otherwise never learn a sibling's id) and,
  *     because `decideAddressing` now requires a sibling `to` to be on
@@ -2337,7 +2346,7 @@ export function buildSiblingMessagingBatch(params: {
   operatorId?: string;
   operatorChannelEnabled?: boolean;
 }): MessagingRuntime[] {
-  const siblingPrefix = `${params.scanId}-sub-`;
+  const siblingPrefix = subagentSiblingPrefix(params.scanId);
   return params.agentIds.map((selfId) => ({
     selfId,
     selfRole: "child" as const,
@@ -2413,13 +2422,18 @@ const PERSIST_IDLE_TTL_MS = 300_000;
 /** Hard cap on how many times a persistent agent may be revived. */
 const PERSIST_MAX_REVIVES = 25;
 
+const subagentModelSelectionSchema = z.object({
+  role: z.string().min(1).optional(),
+  model: z.string().min(1).optional(),
+});
+
 /**
  * `spawn_persistent_agent` argument schema — validate-then-reject before any side
  * effect, mirroring the `kernel_run` discipline (see agent/CLAUDE.md). `.strip()`
  * drops unknown keys a model might emit.
  */
-const spawnPersistentAgentArgsSchema = z
-  .object({
+const spawnPersistentAgentArgsSchema = subagentModelSelectionSchema
+  .extend({
     task: z
       .string({ required_error: "task is required", invalid_type_error: "task must be a string" })
       .min(1, "task must not be empty"),
@@ -2431,7 +2445,7 @@ const spawnPersistentAgentArgsSchema = z
 export function validateSpawnPersistentAgentArgs(
   raw: unknown,
 ):
-  | { ok: true; args: { task: string; name?: string; maxTurns: number } }
+  | { ok: true; args: { task: string; name?: string; maxTurns: number } & SubagentModelSelection }
   | { ok: false; error: string } {
   if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
     return { ok: false, error: "arguments must be an object" };
@@ -2440,10 +2454,10 @@ export function validateSpawnPersistentAgentArgs(
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues[0]?.message ?? "invalid arguments" };
   }
-  const { task, name, max_turns } = parsed.data;
+  const { task, name, max_turns, role, model } = parsed.data;
   // Clamp the turn budget to the same [1,25] band spawn_agent uses.
   const maxTurns = Math.min(25, Math.max(1, max_turns ?? 15));
-  return { ok: true, args: { task, ...(name ? { name } : {}), maxTurns } };
+  return { ok: true, args: { task, ...(name ? { name } : {}), maxTurns, ...(role !== undefined ? { role } : {}), ...(model !== undefined ? { model } : {}) } };
 }
 
 /* ------------------------------------------------------------- monitor (processes) */
@@ -2792,12 +2806,9 @@ export class ToolExecutor {
   private _playwrightAvailable: boolean | null = null;
   private _ptyManager: PtySessionManager | null = null;
   private _pyKernel: PythonKernelManager | null = null;
-  /**
-   * Owns this session's detached persistent agents (spawn_persistent_agent), so
-   * they are tracked and aborted together on cleanup. Lazily created; session-
-   * scoped like the executor. See `hub/supervisor.ts`.
-   */
-  private _detachedSupervisor: DetachedAgentSupervisor | null = null;
+  private readonly _workerTree: AuditWorkerTree;
+  private readonly _ownsWorkerTree: boolean;
+  private readonly _workerFindings: Finding[];
   /**
    * Supervises this session's background processes (the `monitor` tool). Lazily
    * created; every live process is killed in cleanup() so none outlives the
@@ -2888,7 +2899,7 @@ export class ToolExecutor {
    * Received as the fourth constructor argument. Without this capability,
    * child construction fails closed rather than rediscovering credentials.
    */
-  private _childRuntimeFactory: ((timeoutMs: number) => Promise<NativeRuntime>) | undefined;
+  private _childRuntimeFactory: NativeRuntime["forkForSubagent"];
 
   /**
    * Tool-health recorder (0sec#tool-reliability). Uses the shared tracker on
@@ -2911,12 +2922,15 @@ export class ToolExecutor {
     ctx: ToolContext,
     db: osecDB | null = null,
     idFactory: () => string = () => randomUUID(),
-    childRuntimeFactory?: (timeoutMs: number) => Promise<NativeRuntime>,
+    childRuntimeFactory?: NativeRuntime["forkForSubagent"],
   ) {
     this.ctx = ctx;
     this.db = db;
     this._idFactory = idFactory;
     this._childRuntimeFactory = childRuntimeFactory;
+    this._workerTree = ctx.workerTree ?? new AuditWorkerTree(ctx.scanId);
+    this._ownsWorkerTree = ctx.workerTree === undefined;
+    this._workerFindings = ctx.workerTree ? (ctx.workerFindings ?? ctx.findings) : ctx.findings;
     this._toolHealth =
       ctx.toolHealth ??
       new ToolHealthTracker({
@@ -2934,7 +2948,7 @@ export class ToolExecutor {
       ctx.todos ??
       new TodoTracker({
         emit: (snap) => {
-          eventBus.emit("todos", buildTodosPayload(snap));
+          eventBus.emit("todos", { ...buildTodosPayload(snap), scan_id: this.ctx.scanId });
         },
       });
   }
@@ -3061,8 +3075,19 @@ export class ToolExecutor {
     };
   }
 
+  /** Stop an owned subtree; completion means all worker cleanup has drained. */
+  async stopPersistentAgent(agentId: string): Promise<boolean> {
+    return this._workerTree.stop(agentId, this.ctx.scanId);
+  }
+
+  /** Stop owned workers while retaining the conversation and root executor. */
+  async stopPersistentAgents(): Promise<void> {
+    await this._workerTree.stopAll(this.ctx.scanId);
+  }
+
   /** Clean up browser and PTY resources. Call when the agent loop ends. */
   async cleanup(): Promise<void> {
+    if (this._ownsWorkerTree) await this._workerTree.close();
     try {
       if (this._browserPage) {
         await this._browserPage.close().catch(() => {});
@@ -3079,12 +3104,6 @@ export class ToolExecutor {
       if (this._pyKernel) {
         this._pyKernel.cleanup();
         this._pyKernel = null;
-      }
-      if (this._detachedSupervisor) {
-        // Abort every parked/running persistent agent and await them settling so
-        // no detached loop outlives the session.
-        await this._detachedSupervisor.abortAll();
-        this._detachedSupervisor = null;
       }
       if (this._processManager) {
         // Kill every background process the monitor tool started.
@@ -5833,7 +5852,7 @@ export class ToolExecutor {
           ...(this.ctx.scope.raw.out_of_scope ?? []),
         ]
       : undefined;
-    const agent_id = `${this.ctx.scanId}-sub-${randomUUID()}`;
+    const agent_id = `${subagentSiblingPrefix(this.ctx.scanId)}${randomUUID()}`;
     // A stable AdjectiveNoun name from the id, uniquified against every name this
     // executor has already handed out (which starts with the reserved "Main"), so
     // no two agents in the fleet ever share a display name.
@@ -5883,45 +5902,39 @@ export class ToolExecutor {
     base: SubagentLifecycleBase,
     deps?: SubagentDeps,
     messagingOverride?: MessagingRuntime,
+    selection?: SubagentModelSelection,
+    admittedLease?: ReturnType<AuditWorkerTree["acquire"]>,
   ): Promise<SubagentOutcome> {
     const startedAt = Date.now();
+    let lease = admittedLease;
     try {
+      lease ??= this._workerTree.acquire(base.agent_id, this.ctx.scanId);
+      const callerSignal = this._executionContext.getStore()?.signal;
+      const signal = callerSignal ? AbortSignal.any([callerSignal, lease.signal]) : lease.signal;
+      signal.throwIfAborted();
       if (!this._childRuntimeFactory) throw new Error("Parent runtime does not support subagent inference");
       // Single-child path resolves deps here (inside the try, so an import
       // failure still emits `failed`); the concurrent batch pre-resolves once
       // and passes them in to stay off the per-child first-import path.
       const { runNativeAgentLoop } = deps ?? (await this.loadSubagentDeps());
+      signal.throwIfAborted();
 
-      const rt = await this._childRuntimeFactory(60_000);
+      const rt = await this._childRuntimeFactory(60_000, selection);
+      signal.throwIfAborted();
       if (!(await rt.isAvailable())) {
-        eventBus.emit("subagent_lifecycle", {
-          ...base,
-          status: "failed" as const,
-          error: "No API key available for sub-agent",
-        });
+        eventBus.emit("subagent_lifecycle", { ...base,
+        status: "failed" as const,
+        error: "No API key available for sub-agent", });
         return { ok: false, agent_id: base.agent_id, error: "No API key available for sub-agent" };
       }
+      signal.throwIfAborted();
 
-      // DEPTH GUARD (single-level nesting): the child tool set is hardcoded to
-      // ["bash","save_finding","done"] and deliberately EXCLUDES spawn_agent /
-      // spawn_agents. A subagent therefore cannot spawn its own subagents, so
-      // fan-out is bounded to one level and can never recurse into an
-      // unbounded tree of sessions. Do NOT add any spawn tool here.
-      //
-      // `report_status` (Task 2) is appended as the sole EXCEPTION: it is a
-      // child-only, strictly NON-PRIVILEGED status channel (no filesystem, no
-      // network, no subprocess, no spawn) that only lets a child narrate what it
-      // is doing. It does NOT widen the depth guard — it cannot spawn — and it
-      // is not in the global registry, so no other loop gains it.
-      //
-      // `send_message` / `check_messages` are appended for the same reason: they
-      // are child-only, route via CHILD_LOCAL_DISPATCH, and — critically — do
-      // NOT let a child spawn. They only exchange inert prose with the parent
-      // (or an enabled sibling / the operator) over the local hub spool. The
-      // addressing policy and inbound sanitization live in `agent-messaging.ts`.
+      // Child tools retain the canonical no-spawn guard. Internally owned
+      // descendants share audit admission and lifetime ownership. Messaging
+      // remains scoped to explicit parent/operator and enabled sibling peers.
       // Thread the child's messaging identity + policy onto its context. The
       // child's stable peer id is its lifecycle `agent_id` (unique per child);
-      // its parent is always addressable; siblings share the `<scanId>-sub-`
+      // its parent is always addressable; siblings share a bounded namespace
       // prefix and the operator is a single explicit id — both of those channels
       // are operator settings, mirrored from the parent's runtime rather than
       // decided here. If this parent has no messaging runtime (messaging not
@@ -5948,7 +5961,7 @@ export class ToolExecutor {
               selfRole: "child",
               parentId: parentMessaging.selfId,
               operatorId: parentMessaging.operatorId,
-              siblingPrefix: `${this.ctx.scanId}-sub-`,
+              siblingPrefix: subagentSiblingPrefix(this.ctx.scanId),
               siblingChannelEnabled: parentMessaging.siblingChannelEnabled,
               operatorChannelEnabled: parentMessaging.operatorChannelEnabled,
               projectPath: parentMessaging.projectPath,
@@ -5962,10 +5975,8 @@ export class ToolExecutor {
         .concat(REPORT_STATUS_TOOL, buildSendMessageTool(childMessaging), CHECK_MESSAGES_TOOL);
 
       // running — immediately before the agent loop starts
-      eventBus.emit("subagent_lifecycle", {
-        ...base,
-        status: "running" as const,
-      });
+      eventBus.emit("subagent_lifecycle", { ...base,
+      status: "running" as const, });
 
       // 0sec#218 review: propagate scope + auth to the spawned loop so
       // the sub-agent's bash/http_request gates use the same policy as
@@ -5988,6 +5999,8 @@ export class ToolExecutor {
           maxTurns,
           target: this.ctx.target,
           scanId: base.agent_id,
+          workerTree: this._workerTree,
+          workerFindings: this._workerFindings,
           scope: this.ctx.scope,
           authConfig: this.ctx.authConfig,
           costLedger: this.ctx.costLedger,
@@ -6008,11 +6021,12 @@ export class ToolExecutor {
         } as Parameters<typeof runNativeAgentLoop>[0]["config"],
         runtime: rt,
         db: null,
-        signal: this._executionContext.getStore()?.signal,
+        signal,
         getPendingUserMessages: childMessaging
           ? () => renderInboundBatch(drainInbox(childMessaging.projectPath, base.agent_id, childMessaging.homeDir)).rendered.map((message) => message.text)
           : undefined,
         onToolUpdate: (turn, toolCalls, toolResults, assistantText, telemetry) => {
+          if (signal.aborted) return;
           eventBus.emit("subagent_message", buildSubagentMessage(base, turn, assistantText, toolCalls, toolResults, Date.now(), {
             ...telemetry, partial: true, durationMs: Date.now() - startedAt, model: rt.resolvedModel?.(),
           }));
@@ -6026,6 +6040,7 @@ export class ToolExecutor {
         // not in the child's own tool handlers. `buildSubagentProgress` reads
         // only tool NAMES + the report_status line — never args or output.
         onTurn: (turn, toolCalls, toolResults, assistantText, telemetry) => {
+          if (signal.aborted) return;
           eventBus.emit(
             "subagent_progress",
             buildSubagentProgress(base, turn, maxTurns, toolCalls),
@@ -6042,20 +6057,20 @@ export class ToolExecutor {
         },
       });
 
+      signal.throwIfAborted();
+
       // A finished invocation is not necessarily a fulfilled task.
-      eventBus.emit("subagent_lifecycle", {
-        ...base,
-        status: state.errorExit ? "failed" as const : "completed" as const,
-        turns: state.turnCount,
-        findings: state.findings.length,
-        summary: state.summary,
-        done: state.done,
-        completion_reason: state.errorExit ? "error" : state.costCeilingExceeded ? "cost_limit" : state.earlyStopNoProgress ? "early_stop" : state.done ? "done" : "turn_limit",
-        ...(state.errorExit ? { error: state.errorExit.error } : {}),
-        ...(state.totalUsage && (state.totalUsage.inputTokens > 0 || state.totalUsage.outputTokens > 0) ? { usage: state.totalUsage } : {}),
-        durationMs: Date.now() - startedAt,
-        model: rt.resolvedModel?.(),
-      });
+      eventBus.emit("subagent_lifecycle", { ...base,
+      status: state.errorExit ? "failed" as const : "completed" as const,
+      turns: state.turnCount,
+      findings: state.findings.length,
+      summary: state.summary,
+      done: state.done,
+      completion_reason: state.errorExit ? "error" : state.costCeilingExceeded ? "cost_limit" : state.earlyStopNoProgress ? "early_stop" : state.done ? "done" : "turn_limit",
+      ...(state.errorExit ? { error: state.errorExit.error } : {}),
+      ...(state.totalUsage && (state.totalUsage.inputTokens > 0 || state.totalUsage.outputTokens > 0) ? { usage: state.totalUsage } : {}),
+      durationMs: Date.now() - startedAt,
+      model: rt.resolvedModel?.(), });
       if (state.errorExit) {
         return { ok: false, agent_id: base.agent_id, error: state.errorExit.error, findings: state.findings, turns: state.turnCount };
       }
@@ -6071,20 +6086,15 @@ export class ToolExecutor {
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       const truncated = msg.slice(0, 500);
-      eventBus.emit("subagent_lifecycle", {
-        ...base,
-        status: "failed" as const,
-        error: truncated,
-      });
+      eventBus.emit("subagent_lifecycle", { ...base,
+      status: "failed" as const,
+      error: truncated, });
       return { ok: false, agent_id: base.agent_id, error: truncated };
+    } finally {
+      if (!admittedLease) lease?.release();
     }
   }
 
-  /** Session-scoped supervisor for detached persistent agents (lazy). */
-  private detachedSupervisor(): DetachedAgentSupervisor {
-    if (!this._detachedSupervisor) this._detachedSupervisor = new DetachedAgentSupervisor();
-    return this._detachedSupervisor;
-  }
 
   /**
    * Run ONE task/revive of a persistent agent through the native loop — the
@@ -6103,12 +6113,18 @@ export class ToolExecutor {
     task?: string,
     messages?: readonly HubMessage[],
     turnOffset = 0,
+    selection?: SubagentModelSelection,
+    signal?: AbortSignal,
   ): Promise<SubagentRunReport> {
     const startedAt = Date.now();
+    signal?.throwIfAborted();
     if (!this._childRuntimeFactory) throw new Error("Parent runtime does not support subagent inference");
     const { runNativeAgentLoop } = await this.loadSubagentDeps();
-    const rt = await this._childRuntimeFactory(60_000);
+    signal?.throwIfAborted();
+    const rt = await this._childRuntimeFactory(60_000, selection);
+    signal?.throwIfAborted();
     if (!(await rt.isAvailable())) throw new Error("No API key available for persistent agent");
+    signal?.throwIfAborted();
 
     const subTools: ToolDefinition[] = ["bash", "save_finding", "done"]
       .map((n) => TOOL_DEFINITIONS[n])
@@ -6130,6 +6146,8 @@ export class ToolExecutor {
         maxTurns,
         target: this.ctx.target,
         scanId: base.agent_id,
+        workerTree: this._workerTree,
+        workerFindings: this._workerFindings,
         scope: this.ctx.scope,
         authConfig: this.ctx.authConfig,
         costLedger: this.ctx.costLedger,
@@ -6147,16 +6165,18 @@ export class ToolExecutor {
       } as Parameters<typeof runNativeAgentLoop>[0]["config"],
       runtime: rt,
       db: null,
-      signal: this._executionContext.getStore()?.signal,
+      signal,
       getPendingUserMessages: childMessaging
         ? () => renderInboundBatch(drainInbox(childMessaging.projectPath, base.agent_id, childMessaging.homeDir)).rendered.map((message) => message.text)
         : undefined,
       onToolUpdate: (turn, toolCalls, toolResults, assistantText, telemetry) => {
+        if (signal?.aborted) return;
         eventBus.emit("subagent_message", buildSubagentMessage(base, turnOffset + turn, assistantText, toolCalls, toolResults, Date.now(), {
           ...telemetry, partial: true, durationMs: Date.now() - startedAt, model: rt.resolvedModel?.(),
         }));
       },
       onTurn: (turn, toolCalls, toolResults, assistantText, telemetry) => {
+        if (signal?.aborted) return;
         eventBus.emit("subagent_progress", buildSubagentProgress(base, turnOffset + turn, maxTurns, toolCalls));
         eventBus.emit(
           "subagent_message",
@@ -6167,7 +6187,12 @@ export class ToolExecutor {
       },
     });
 
-    if (state.findings?.length) this.ctx.findings.push(...state.findings);
+    signal?.throwIfAborted();
+    for (const finding of state.findings ?? []) {
+      if (!this._workerFindings.some(existing => existing.id === finding.id)) {
+        this._workerFindings.push(finding);
+      }
+    }
     if (state.errorExit) throw new Error(state.errorExit.error);
     return {
       turns: turnOffset + state.turnCount, summary: state.summary, done: state.done,
@@ -6180,11 +6205,9 @@ export class ToolExecutor {
   /**
    * `spawn_persistent_agent` — spawn a DETACHED long-lived agent that runs its
    * task, PARKS, and is REVIVED by messages (see `hub/supervisor.ts`). Returns
-   * immediately with the agent's id + name; the run is tracked by the session
-   * supervisor and aborted on cleanup. Deliberately separate from the synchronous
-   * `spawn_agents` fan-out — the parent does not block on it. Subagents never get
-   * this tool (the child tool set in `runOneSubagent` excludes it), so it cannot
-   * recurse.
+   * immediately with the agent's id + name. Its lifetime belongs to the audit,
+   * not a transient spawning invocation. Stops drain its owned subtree.
+   * The model-facing child tool set retains the canonical no-spawn guard.
    */
   private async spawnPersistentAgent(args: Record<string, unknown>): Promise<ToolResult> {
     const parsed = validateSpawnPersistentAgentArgs(args);
@@ -6196,7 +6219,8 @@ export class ToolExecutor {
       });
       return { success: false, output: null, error: parsed.error };
     }
-    const { task, name, maxTurns } = parsed.args;
+    const { task, name, maxTurns, role, model } = parsed.args;
+    const selection: SubagentModelSelection = { role, model };
 
     const base = this.buildSubagentLifecycleBase(task, maxTurns);
     let displayName = base.name;
@@ -6213,7 +6237,7 @@ export class ToolExecutor {
           selfRole: "child",
           parentId: parentMessaging.selfId,
           operatorId: parentMessaging.operatorId,
-          siblingPrefix: `${this.ctx.scanId}-sub-`,
+          siblingPrefix: subagentSiblingPrefix(this.ctx.scanId),
           siblingChannelEnabled: parentMessaging.siblingChannelEnabled,
           operatorChannelEnabled: parentMessaging.operatorChannelEnabled,
           projectPath: parentMessaging.projectPath,
@@ -6221,14 +6245,22 @@ export class ToolExecutor {
         }
       : undefined;
 
-    const supervisor = this.detachedSupervisor();
-    let aborted = false;
+    const lifetime = this._workerTree.acquire(base.agent_id, this.ctx.scanId);
     let lastRun: SubagentRunReport = {};
 
     const run = runPersistentAgent(task, {
       now: () => Date.now(),
-      sleep: (ms) => new Promise<void>((resolve) => setTimeout(resolve, ms)),
-      aborted: () => aborted,
+      sleep: (ms) => new Promise<void>((resolve) => {
+        if (lifetime.signal.aborted) { resolve(); return; }
+        const finish = () => {
+          clearTimeout(timer);
+          lifetime.signal.removeEventListener("abort", finish);
+          resolve();
+        };
+        const timer = setTimeout(finish, ms);
+        lifetime.signal.addEventListener("abort", finish, { once: true });
+      }),
+      aborted: () => lifetime.signal.aborted,
       park: { pollMs: PERSIST_POLL_MS, idleTtlMs: PERSIST_IDLE_TTL_MS, maxRevives: PERSIST_MAX_REVIVES },
       drain: () =>
         childMessaging ? drainInbox(childMessaging.projectPath, base.agent_id, childMessaging.homeDir) : [],
@@ -6237,7 +6269,7 @@ export class ToolExecutor {
       },
       runLoop: async ({ task: t, messages }) => {
         try {
-          lastRun = await this.runPersistentLoopOnce(persistentBase, maxTurns, childMessaging, t, messages, lastRun.turns ?? 0);
+          lastRun = await this.runPersistentLoopOnce(persistentBase, maxTurns, childMessaging, t, messages, lastRun.turns ?? 0, selection, lifetime.signal);
         } catch (error) {
           lastRun = { ...lastRun, done: false, completion_reason: "error", summary: error instanceof Error ? error.message : String(error) };
           throw error;
@@ -6253,9 +6285,7 @@ export class ToolExecutor {
         }
       },
     });
-    supervisor.register(base.agent_id, displayName, run, () => {
-      aborted = true;
-    });
+    void run.then(lifetime.release, lifetime.release);
 
     return {
       success: true,
@@ -6411,14 +6441,18 @@ export class ToolExecutor {
   private async spawnAgent(args: Record<string, unknown>): Promise<ToolResult> {
     const task = args.task as string;
     if (!task) return { success: false, output: null, error: "Task description is required" };
+    const selection = subagentModelSelectionSchema.safeParse(args);
+    if (!selection.success) return { success: false, output: null, error: selection.error.issues[0]?.message ?? "Invalid model selection" };
 
     const maxTurns = Math.min((args.max_turns as number) ?? 15, 25);
     const base = this.buildSubagentLifecycleBase(task, maxTurns);
 
+    const lease = this._workerTree.acquire(base.agent_id, this.ctx.scanId);
+    try {
     // queued — before any async setup
     eventBus.emit("subagent_lifecycle", { ...base, status: "queued" as const });
 
-    const outcome = await this.runOneSubagent(task, maxTurns, base);
+    const outcome = await this.runOneSubagent(task, maxTurns, base, undefined, undefined, selection.data, lease);
     // Preserve accepted findings even if a later model request failed.
     for (const finding of outcome.findings ?? []) this.ctx.findings.push(finding);
     if (!outcome.ok) {
@@ -6436,6 +6470,9 @@ export class ToolExecutor {
         done: outcome.done,
       },
     };
+    } finally {
+      lease.release();
+    }
   }
 
   /**
@@ -6468,7 +6505,7 @@ export class ToolExecutor {
     }
 
     // Normalize + validate each task entry before any side effect.
-    const specs: Array<{ task: string; maxTurns: number; base: SubagentLifecycleBase }> = [];
+    const specs: Array<{ task: string; maxTurns: number; base: SubagentLifecycleBase; selection: SubagentModelSelection; lease?: ReturnType<AuditWorkerTree["acquire"]> }> = [];
     for (let i = 0; i < rawTasks.length; i++) {
       const entry = rawTasks[i] as Record<string, unknown> | undefined;
       const task = entry?.task;
@@ -6479,9 +6516,17 @@ export class ToolExecutor {
           error: `tasks[${i}].task is required and must be a non-empty string`,
         };
       }
+      const selection = subagentModelSelectionSchema.safeParse(entry);
+      if (!selection.success) return { success: false, output: null, error: `tasks[${i}]: ${selection.error.issues[0]?.message ?? "Invalid model selection"}` };
       const maxTurns = Math.min((entry?.max_turns as number) ?? 15, 25);
-      specs.push({ task, maxTurns, base: this.buildSubagentLifecycleBase(task, maxTurns) });
+      specs.push({ task, maxTurns, base: this.buildSubagentLifecycleBase(task, maxTurns), selection: selection.data });
     }
+
+    // Reserve queued work too, so stop-all cannot miss later concurrency waves.
+    try {
+      for (const spec of specs) {
+        spec.lease = this._workerTree.acquire(spec.base.agent_id, this.ctx.scanId);
+      }
 
     // Resolve the shared deps ONCE before fanning out, so no child sits on the
     // concurrent first-`import()` path.
@@ -6535,11 +6580,15 @@ export class ToolExecutor {
           spec.base,
           deps,
           messagingById.get(spec.base.agent_id),
+          spec.selection,
+          spec.lease,
         ),
     );
 
     // Merge findings AFTER the pool has fully joined — single-threaded, in
     // index order — so concurrent children never race on `this.ctx.findings`.
+    // Keep admission leases until publication ends: a resolved stop must not
+    // be followed by a late merge from an already completed concurrency wave.
     const perChild = outcomes.map((outcome, index) => {
       for (const finding of outcome.findings ?? []) this.ctx.findings.push(finding);
       if (outcome.ok) {
@@ -6566,6 +6615,9 @@ export class ToolExecutor {
         agents: perChild,
       },
     };
+    } finally {
+      for (const spec of specs) spec.lease?.release();
+    }
   }
 
   private async saveFinding(args: Record<string, unknown>): Promise<ToolResult> {

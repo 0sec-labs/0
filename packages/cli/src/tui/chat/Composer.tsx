@@ -2,6 +2,7 @@
 import React from "react";
 import stringWidth from "string-width";
 import type { BorderSides } from "@opentui/core";
+import type { ConsoleAutonomyMode } from "@0sec/core";
 import type { Theme } from "../theme-context.js";
 import type { TuiSettings } from "../settings.js";
 import { fitTuiText, sanitizeComposerText } from "../text.js";
@@ -23,6 +24,22 @@ export const COMPOSER_MIN_ROWS = 3;
  * by the input renderer and the rail-rule height so the two always agree.
  */
 export const COMPOSER_MAX_ROWS = 8;
+
+/**
+ * Rows the autonomy-mode footer occupies beneath the composer frame.
+ *
+ * One row when there is a mode to report, zero when there is not — the footer
+ * renders nothing for an unknown mode rather than inventing a default, and the
+ * height ledger has to agree with that or the transcript column is reserved a
+ * row nothing paints (or, worse, one row short, and the footer paints through
+ * the row below it — opentui does not clip).
+ *
+ * Kept here beside COMPOSER_MIN_ROWS / COMPOSER_MAX_ROWS so every part of the
+ * composer's height budget is stated in one file.
+ */
+export function composerFooterRows(mode: ConsoleAutonomyMode | null | undefined): number {
+  return mode ? 1 : 0;
+}
 
 const GRAPHEMES = new Intl.Segmenter(undefined, { granularity: "grapheme" });
 

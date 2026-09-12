@@ -115,16 +115,38 @@ export const SLASH_COMMANDS: readonly SlashCommand[] = [
   },
   {
     name: "new-chat",
+    aliases: ["new"],
+    category: "navigation",
+    description: "Create an independent audit using the staged model and connection",
+    tuiOnly: true,
+  },
+  {
+    name: "audits",
     aliases: [],
     category: "navigation",
-    description: "New chat using selected model, connection and self-extension preferences",
+    description: "Switch between live audits without stopping their work",
+    tuiOnly: true,
+  },
+  {
+    name: "onboard",
+    aliases: [],
+    category: "navigation",
+    description: "Reopen guided setup without replacing the current audit",
+    tuiOnly: true,
+  },
+  {
+    name: "stop",
+    aliases: [],
+    category: "session",
+    description: "Stop this audit's work or one owned worker and its descendants",
+    usage: "/stop audit | /stop worker <exact name or id>",
     tuiOnly: true,
   },
 
   // ── session ─────────────────────────────────────────────────────────────
   {
     name: "clear",
-    aliases: ["new"],
+    aliases: [],
     category: "session",
     description: "Clear the conversation history",
   },

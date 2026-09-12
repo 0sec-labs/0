@@ -339,6 +339,24 @@ describe("store: write target", () => {
     expect(readProjectOverrides(project)).toEqual({ density: "compact" });
     expect(loadGlobalSettings(home).density).toBe(DEFAULT_SETTINGS.density);
   });
+
+  it("persists onboarding globally without promoting or trusting project state", () => {
+    const home = makeHome();
+    const project = makeProjectDir();
+    writeProjectRaw(project, { onboardingCompleted: true, density: "compact" });
+    configureSettingsStore({ homeDir: home, projectDir: project });
+
+    expect(getSettings().onboardingCompleted).toBe(false);
+    expect(updateSetting("onboardingCompleted", true, { scope: "project" })).toBe(false);
+    expect(getSettings().onboardingCompleted).toBe(false);
+    expect(updateSetting("onboardingCompleted", true)).toBe(true);
+    expect(loadGlobalSettings(home).onboardingCompleted).toBe(true);
+    expect(loadGlobalSettings(home).density).toBe(DEFAULT_SETTINGS.density);
+    expect(readProjectOverrides(project)).toEqual({ density: "compact" });
+    expect(reloadSettings().onboardingCompleted).toBe(true);
+    expect(getSettingSources().onboardingCompleted).toBe("global");
+    expect(getSettings().density).toBe("compact");
+  });
 });
 
 describe("previewSetting", () => {

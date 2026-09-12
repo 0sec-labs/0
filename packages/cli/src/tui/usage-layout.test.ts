@@ -295,6 +295,16 @@ describe("cost resolution (mirrors status-bar.ts)", () => {
 const textOf = (rows: UsageReportRow[]): string =>
   rows.map((row) => `${row.label ?? ""} ${row.value ?? ""}`).join("\n");
 
+/**
+ * A row label with its leading row marker removed.
+ *
+ * The markers are plain text glyphs (see `ICON_*` in usage-layout.ts), so the
+ * set is spelled out explicitly: a `\p{Co}` Private-Use-Area class matches none
+ * of them and would silently stop stripping.
+ */
+const labelOf = (row: UsageReportRow): string | undefined =>
+  row.label?.replace(/^[◫↓↑▦✦$◈⌨!]\s+/u, "");
+
 describe("buildUsageReport", () => {
   it("returns an empty snapshot from the lazy default and never fabricates", () => {
     const rows = buildUsageReport(readCurrentUsage());
@@ -333,19 +343,19 @@ describe("buildUsageReport", () => {
       turn: { inputTokens: 1000, outputTokens: 200 },
       session: { inputTokens: 5000, outputTokens: 900 },
     });
-    const input = rows.find((row) => row.kind === "kv" && row.label === "input");
+    const input = rows.find((row) => row.kind === "kv" && labelOf(row) === "input");
     expect(input?.value).toBe("1k / 5k");
-    const output = rows.find((row) => row.kind === "kv" && row.label === "output");
+    const output = rows.find((row) => row.kind === "kv" && labelOf(row) === "output");
     expect(output?.value).toBe("200 / 900");
   });
 
   it("only shows a reasoning row when reasoning tokens were tracked", () => {
     const without = buildUsageReport({ session: { inputTokens: 100, outputTokens: 10 } });
-    expect(without.some((row) => row.label === "reasoning")).toBe(false);
+    expect(without.some((row) => labelOf(row) === "reasoning")).toBe(false);
     const withReasoning = buildUsageReport({
       session: { inputTokens: 100, outputTokens: 10, reasoningTokens: 42 },
     });
-    expect(withReasoning.some((row) => row.label === "reasoning")).toBe(true);
+    expect(withReasoning.some((row) => labelOf(row) === "reasoning")).toBe(true);
   });
 
   it("prices the session against the active model, or says $— when unpriced", () => {
@@ -353,14 +363,14 @@ describe("buildUsageReport", () => {
       model: "claude-sonnet-4-6",
       session: { inputTokens: 1_000_000, outputTokens: 0 },
     });
-    const estimate = priced.find((row) => row.label === "session estimate");
+    const estimate = priced.find((row) => labelOf(row) === "session estimate");
     expect(estimate?.value).toMatch(/^\$\d/);
 
     const unpriced = buildUsageReport({
       model: "some-unlisted-model",
       session: { inputTokens: 1_000_000, outputTokens: 0 },
     });
-    expect(unpriced.find((row) => row.label === "session estimate")?.value).toBe("$—");
+    expect(unpriced.find((row) => labelOf(row) === "session estimate")?.value).toBe("$—");
   });
 
   it("prices per-model when the session used more than one model", () => {
@@ -370,10 +380,10 @@ describe("buildUsageReport", () => {
         { model: "some-unlisted-model", inputTokens: 1_000_000, outputTokens: 0 },
       ],
     });
-    expect(rows.find((row) => row.label === "claude-sonnet-4-6")?.value).toMatch(/^\$\d/);
-    expect(rows.find((row) => row.label === "some-unlisted-model")?.value).toBe("$—");
+    expect(rows.find((row) => labelOf(row) === "claude-sonnet-4-6")?.value).toMatch(/^\$\d/);
+    expect(rows.find((row) => labelOf(row) === "some-unlisted-model")?.value).toBe("$—");
     // With an unpriced model in the mix the total cannot be honestly summed.
-    expect(rows.find((row) => row.label === "total")?.value).toBe("$—");
+    expect(rows.find((row) => labelOf(row) === "total")?.value).toBe("$—");
   });
 
   it("sums a per-model total when every model is priced", () => {
@@ -383,15 +393,15 @@ describe("buildUsageReport", () => {
         { model: "claude-haiku-4-5", inputTokens: 1_000_000, outputTokens: 0 },
       ],
     });
-    const total = rows.find((row) => row.label === "total");
+    const total = rows.find((row) => labelOf(row) === "total");
     expect(total?.value).toMatch(/^\$\d/);
     expect(total?.value).not.toBe("$—");
   });
 
   it("names the active model and derives its provider", () => {
     const rows = buildUsageReport({ model: "claude-sonnet-4-6" });
-    expect(rows.find((row) => row.label === "active")?.value).toBe("claude-sonnet-4-6");
-    expect(rows.find((row) => row.label === "provider")?.value).toBe("anthropic");
+    expect(rows.find((row) => labelOf(row) === "active")?.value).toBe("claude-sonnet-4-6");
+    expect(rows.find((row) => labelOf(row) === "provider")?.value).toBe("anthropic");
   });
 
   it("summarises tool health, or says there are no issues", () => {

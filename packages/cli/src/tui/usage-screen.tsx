@@ -1,6 +1,6 @@
 /** @jsxImportSource @opentui/react */
 /**
- * The full-screen `/usage` report.
+ * The `/usage` report, as a pop-up dialog.
  *
  * A read-only mirror of what the bottom status bar already knows, given a whole
  * screen: the context window and how full it is, the token totals this turn and
@@ -26,20 +26,21 @@
 
 import React, { useMemo } from "react";
 import { TextAttributes } from "@opentui/core";
-import { useKeyboard, useTerminalDimensions } from "@opentui/react";
+import { useKeyboard } from "@opentui/react";
 
 import { useTheme, type Theme } from "./theme-context.js";
+import { useDialogSurface, useSurfaceDimensions } from "./dialog-surface.js";
+import { operatorIcon, operatorTitle } from "./operator-icons.js";
 import { Cells } from "./primitives.js";
 import {
   buildUsageReport,
   clipUsageRows,
   computeUsageLayout,
-  computeUsageTitleLayout,
+  paneTitleColumns,
   readCurrentUsage,
+  usageDialogMeta,
   usageFooterHint,
   usageMeterBar,
-  usageTitle,
-  usageTitleMeta,
   type UsageLayout,
   type UsagePane,
   type UsageReportRow,
@@ -113,8 +114,12 @@ function Pane({
 }: {
   pane: UsagePane;
   bordered: boolean;
-  /** The header row node, already fitted to the pane's inner width. */
-  title: React.ReactNode;
+  /**
+   * The header row node, already fitted to the pane's inner width. Optional:
+   * inside the operator dialog the icon+title row is drawn above the pane (and
+   * budgeted out of the body through `headerRows`), so the pane carries none.
+   */
+  title?: React.ReactNode;
   children: React.ReactNode;
 }) {
   const theme = useTheme();
@@ -132,35 +137,8 @@ function Pane({
       backgroundColor={bordered ? theme.PANEL : undefined}
       paddingX={bordered ? 1 : undefined}
     >
-      {pane.hasTitle ? title : null}
+      {pane.hasTitle ? (title ?? null) : null}
       {children}
-    </box>
-  );
-}
-
-/**
- * The pane header: a bold, primary-toned title on the left and a right-aligned
- * summary meta on the right (the priced session cost, else the model). Widths
- * come off `computeUsageTitleLayout`, so the row claims exactly the pane's inner
- * width and the title survives when the header is too narrow for both.
- */
-function TitleRow({ innerWidth, title, meta }: { innerWidth: number; title: string; meta: string }) {
-  const theme = useTheme();
-  const columns = computeUsageTitleLayout(innerWidth, meta.length);
-  if (columns.width <= 0) return null;
-  return (
-    <box flexDirection="row" width={columns.width} flexShrink={0} minWidth={0}>
-      <Cells width={columns.titleWidth} fg={theme.PRIMARY} attributes={TextAttributes.BOLD}>
-        {title}
-      </Cells>
-      {columns.metaWidth > 0 ? (
-        <>
-          <Cells width={columns.gap}>{""}</Cells>
-          <Cells width={columns.metaWidth} align="right" fg={theme.MUTED}>
-            {meta}
-          </Cells>
-        </>
-      ) : null}
     </box>
   );
 }
@@ -232,9 +210,20 @@ function ReportRow({
   );
 }
 
+/** Rows the dialog spends on its icon+title row, budgeted out of the body. */
+const HEADER_ROWS = 1;
+/**
+ * Rows the HOST spends around this screen inside a dialog: exactly one, the
+ * footer. `ShellFrame` renders with `dialogContent` there — no outer header, no
+ * padding — so the surface IS the panel interior and the legacy
+ * `shellChromeRows` allowance must not be subtracted from it.
+ */
+const DIALOG_HOST_ROWS = 1;
+
 export function UsageScreen({ frame, usage, onBack, onExit }: UsageScreenProps) {
   const theme = useTheme();
-  const { width, height } = useTerminalDimensions();
+  const { width, height } = useSurfaceDimensions();
+  const inDialog = useDialogSurface();
 
   // Resolved once from the injected snapshot (or the lazy default). Usage is a
   // point-in-time reading handed in by the route; it does not change under a
@@ -242,8 +231,16 @@ export function UsageScreen({ frame, usage, onBack, onExit }: UsageScreenProps) 
   const snapshot = useMemo<UsageSnapshot>(() => usage ?? readCurrentUsage(), [usage]);
   const report = useMemo(() => buildUsageReport(snapshot), [snapshot]);
 
-  const layout = computeUsageLayout({ width, height });
-  const visible = clipUsageRows(report, layout.visibleRows);
+  const layout = computeUsageLayout({
+    width,
+    height,
+    headerRows: HEADER_ROWS,
+    ...(inDialog ? { hostRows: DIALOG_HOST_ROWS, hostPaddingX: 0 } : {}),
+  });
+  const [offset, setOffset] = React.useState(0);
+  const maxOffset = Math.max(0, report.length - Math.max(1, layout.visibleRows));
+  const currentOffset = Math.min(offset, maxOffset);
+  const visible = clipUsageRows(report.slice(currentOffset), layout.visibleRows);
 
   useKeyboard((key) => {
     if (key.ctrl && key.name === "c") {
@@ -254,16 +251,36 @@ export function UsageScreen({ frame, usage, onBack, onExit }: UsageScreenProps) 
       onBack();
       return;
     }
+    if (key.ctrl || key.meta || key.option) return;
+    if (key.name === "home") return setOffset(0);
+    if (key.name === "end") return setOffset(maxOffset);
+    const step = Math.max(1, layout.visibleRows - 1);
+    if (key.name === "up" || key.name === "pageup") {
+      setOffset(Math.max(0, currentOffset - (key.name === "pageup" ? step : 1)));
+    } else if (key.name === "down" || key.name === "pagedown") {
+      setOffset(Math.min(maxOffset, currentOffset + (key.name === "pagedown" ? step : 1)));
+    }
   });
 
-  const meta = usageTitleMeta(snapshot);
-  const titleRow = (
-    <TitleRow innerWidth={layout.pane.innerWidth} title={usageTitle()} meta={meta} />
-  );
+  // Title row: `▥ Usage` bold on the left, the model the snapshot actually
+  // reports right-aligned. The two columns sum to the content width, so they
+  // can never fuse; the glyph always travels with its text label.
+  const title = `${operatorIcon("usage")} ${operatorTitle("usage")}`;
+  const meta = usageDialogMeta(snapshot);
+  const titleCols = paneTitleColumns(layout.contentWidth, meta.length);
 
   const body = (
     <box flexDirection="column" width="100%" flexGrow={1} minWidth={0}>
-      <Pane pane={layout.pane} bordered={layout.bordered} title={titleRow}>
+      <box flexDirection="row" width={layout.contentWidth} flexShrink={0} minWidth={0}>
+        <Cells width={titleCols.titleWidth} fg={theme.PRIMARY} attributes={TextAttributes.BOLD}>
+          {title}
+        </Cells>
+        <Cells width={titleCols.gap}>{""}</Cells>
+        <Cells width={titleCols.metaWidth} align="right" fg={theme.MUTED}>
+          {meta}
+        </Cells>
+      </box>
+      <Pane pane={layout.pane} bordered={layout.bordered}>
         {visible.map((row, index) => (
           <ReportRow key={`usage-${index}`} row={row} layout={layout} theme={theme} />
         ))}

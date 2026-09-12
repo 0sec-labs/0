@@ -89,11 +89,9 @@ describe("findCommand", () => {
     expect(result.command).toBe("help");
   });
 
-  it("recognises /clear by alias new", () => {
-    const result = findCommand("/new");
-    expect(result.isSlash).toBe(true);
-    expect(result.isKnown).toBe(true);
-    expect(result.command).toBe("clear");
+  it("routes /new to a fresh audit while keeping destructive /clear explicit", () => {
+    expect(findCommand("/new").command).toBe("new-chat");
+    expect(findCommand("/clear").command).toBe("clear");
   });
 
   it("recognises /capabilities by alias caps", () => {

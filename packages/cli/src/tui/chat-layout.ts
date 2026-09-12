@@ -272,6 +272,8 @@ export interface LedgerRowsInput {
    * over-subscribes and the row paints through the status bar.
    */
   hintRows?: number;
+  /** Actual rendered input, frame, and top margin rows when known. */
+  composerRows?: number;
 }
 
 /**
@@ -291,11 +293,12 @@ export function computeLedgerRows({
   subagentRows,
   approvalRows,
   hintRows = 0,
+  composerRows = COMPOSER_ROWS,
 }: LedgerRowsInput): number {
   const chrome =
     ROOT_PADDING_ROWS +
     (compact ? HEADER_ROWS_COMPACT : HEADER_ROWS_WIDE) +
-    COMPOSER_ROWS +
+    Math.max(0, Math.trunc(composerRows) || 0) +
     (menuRows > 0 ? menuRows + MENU_MARGIN_ROWS : 0) +
     subagentRows +
     approvalRows +
@@ -460,8 +463,8 @@ export interface SidebarsLayout {
  * kept and the LEFT is dropped, so the live view wins the last column. A narrow
  * terminal, a cleared toggle, or a pair that would starve the transcript all
  * collapse to fewer (or no) sidebars — the caller never special-cases the off
- * state. Each sidebar spends two cells (divider + padding) on chrome off its
- * inner width, and the transcript keeps its usual paddingX (`compact ? 2 : 4`).
+ * state. Left chrome is divider + padding; right chrome is divider + two
+ * padding cells. The transcript keeps its usual paddingX (`compact ? 2 : 4`).
  * Widths never exceed `contentWidth` — swept in the tests.
  */
 export function computeSidebarsLayout({
@@ -519,7 +522,7 @@ export function computeSidebarsLayout({
       leftWidth,
       leftInnerWidth: attempt.l ? Math.max(1, leftWidth - 2) : 0,
       rightWidth,
-      rightInnerWidth: attempt.r ? Math.max(1, rightWidth - 2) : 0,
+      rightInnerWidth: attempt.r ? Math.max(1, rightWidth - 3) : 0,
       leftGap,
       rightGap,
       transcriptWidth: Math.max(8, transcriptWidth),

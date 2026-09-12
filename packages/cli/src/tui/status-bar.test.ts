@@ -329,8 +329,11 @@ describe("context meter", () => {
   });
 
   it("still needs both window and usage to draw a meter", () => {
-    expect(textOf(buildStatusSegments({ contextUsed: 10, showContextMeter: true }), "meter")).toBeUndefined();
-    expect(textOf(buildStatusSegments({ contextWindow: 100, showContextMeter: true }), "meter")).toBeUndefined();
+    for (const input of [{ contextUsed: 10 }, { contextWindow: 100, lastModelInput: 10 }]) {
+      const text = textOf(buildStatusSegments({ ...input, showContextMeter: true }), "meter");
+      expect(text).toBeDefined();
+      expect(text).not.toMatch(/[%▱▰]/u);
+    }
   });
 });
 

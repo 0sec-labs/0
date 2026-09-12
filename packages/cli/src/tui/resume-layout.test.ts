@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { computeDialogPanel } from "./dialog-select-layout.js";
 import { buildDialogRows } from "./dialog-select-layout.js";
 import type { StoredSessionMeta } from "./session-store.js";
 import {
   CATEGORY_OTHER,
   CATEGORY_THIS,
   clipResumeDetailLines,
+  computeResumeDialogLayout,
   formatSavedAt,
   isFilterKey,
   resumeDetailLines,
@@ -14,7 +14,6 @@ import {
   sessionCategory,
   sessionLabel,
   sessionMeta,
-  shellChromeRows,
 } from "./resume-layout.js";
 
 // A fixed clock so every age string is deterministic.
@@ -221,17 +220,10 @@ describe("isFilterKey", () => {
  * green sweep here is a proof about what the screen renders.
  */
 function paneFor(width: number, height: number, totalRows: number, hasStatus: boolean) {
-  const contentWidth = Math.max(0, width - 4);
-  const bodyRows = Math.max(0, height - shellChromeRows(width) - (hasStatus ? 1 : 0));
-  const panel = computeDialogPanel({
-    width: contentWidth,
-    height,
-    size: "large",
-    totalRows,
-    withDetail: true,
-    bodyRows,
-  });
-  return { contentWidth, panel };
+  // The screen computes nothing itself: it calls exactly this, so a green
+  // sweep here is a proof about what the dialog renders.
+  const layout = computeResumeDialogLayout({ width, height, totalRows, hasStatus });
+  return { contentWidth: layout.contentWidth, panel: layout.panel, layout };
 }
 
 describe("detail-pane overflow sweep", () => {

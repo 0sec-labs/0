@@ -40,6 +40,7 @@
  * published surface without importing its in-flight `d.ts`.
  */
 
+import type { DialogItem } from "./dialog-select-layout.js";
 import { computeListWindow, computePaneSplit } from "./pane-layout.js";
 import { shellChromeRows, wrapCells } from "./settings-layout.js";
 import { sanitizeTuiText } from "./text.js";
@@ -499,6 +500,19 @@ export interface MarketLayoutInput {
   height: number;
   /** 1 when the status line under the panes is rendered. */
   noticeRows?: number;
+  /**
+   * Rows the HOST frame spends around this screen's body, when the host is not
+   * the legacy full-screen shell. Inside a `DialogSurface` the shell renders
+   * with `dialogContent`: no outer header and no padding, and the surface
+   * dimensions are the panel interior, so the only row the host still spends is
+   * its one-row footer. Omit it and the legacy `shellChromeRows(width)` applies.
+   */
+  hostRows?: number;
+  /**
+   * Cells the HOST frame pads on EACH side. The legacy shell pads two; a dialog
+   * pads none. Omit it and the legacy padding applies.
+   */
+  hostPaddingX?: number;
 }
 
 export interface MarketLayout {
@@ -612,13 +626,18 @@ export function computeMarketLayout({
   width,
   height,
   noticeRows = 0,
+  hostRows,
+  hostPaddingX,
 }: MarketLayoutInput): MarketLayout {
   const terminalWidth = cells(width);
-  // `ShellFrame` pads two cells either side of every screen.
-  const contentWidth = Math.max(0, terminalWidth - 4);
+  // The legacy shell pads two cells either side and spends a header; a dialog
+  // host pads none and spends only its footer row.
+  const padding = hostPaddingX === undefined ? 2 : cells(hostPaddingX);
+  const chromeRows = hostRows === undefined ? shellChromeRows(terminalWidth) : cells(hostRows);
+  const contentWidth = Math.max(0, terminalWidth - padding * 2);
   const bodyRows = Math.max(
     0,
-    cells(height) - shellChromeRows(terminalWidth) - Math.min(1, cells(noticeRows)),
+    cells(height) - chromeRows - Math.min(1, cells(noticeRows)),
   );
 
   const split = computePaneSplit(contentWidth, bodyRows, {
@@ -953,6 +972,71 @@ export function marketListHeading(window: MarketWindow): { title: string; meta: 
 }
 
 export { paneTitleColumns, type PaneTitleColumns } from "./pane-layout.js";
+
+// ---------------------------------------------------------------------------
+// Projection onto the shared picker
+// ---------------------------------------------------------------------------
+
+/**
+ * Project market rows onto the shared `DialogItem` shape.
+ *
+ * The marketplace list is the console's one grouped/searchable chooser for
+ * extensions, so it renders through `DialogSelectBody` like every other
+ * chooser rather than hand-rolling a second list. The projection is faithful
+ * and invents nothing: the group label becomes the category heading, the
+ * registry's own name and version are the label and meta, the install state
+ * (and only a real one) adds its tag, and an item that is present on this
+ * machine carries the current-value dot.
+ *
+ * `rowIndexOfItem[i]` is the index in `rows` of the row item `i` came from, so
+ * the caller can keep driving selection over the existing row model — headings
+ * skipped by `moveSelection` — without a second cursor to keep in sync.
+ */
+export function marketDialogItems(
+  rows: readonly MarketRow[],
+  /**
+   * The unselected row colour for one artifact, so the list keeps the
+   * install-state colouring it had before it moved onto the shared body.
+   * Pure: the caller owns the theme, this module owns the state.
+   */
+  toneFor?: (state: MarketState) => string | undefined,
+): {
+  items: DialogItem[];
+  rowIndexOfItem: number[];
+} {
+  const items: DialogItem[] = [];
+  const rowIndexOfItem: number[] = [];
+  rows.forEach((row, index) => {
+    if (row.kind !== "item") return;
+    const installed = row.state !== "available";
+    const tone = toneFor?.(row.state);
+    items.push({
+      id: `${row.item.kind}:${row.item.id}`,
+      label: row.item.name,
+      description: row.item.description,
+      meta: installed ? `${row.item.version} ${stateTag(row.state)}` : row.item.version,
+      category: row.group.label,
+      current: installed,
+      ...(tone === undefined ? {} : { tone }),
+    });
+    rowIndexOfItem.push(index);
+  });
+  return { items, rowIndexOfItem };
+}
+
+/**
+ * The right-aligned meta on the marketplace dialog's title row.
+ *
+ * Counts what is actually listed — never a registry total the screen has not
+ * seen. With a filter applied it reads `shown/total`.
+ */
+export function marketDialogMeta(shown: number, total: number): string {
+  const visible = cells(shown);
+  const all = cells(total);
+  if (all === 0) return "empty";
+  if (visible === all) return `${all} extension${all === 1 ? "" : "s"}`;
+  return `${visible}/${all}`;
+}
 
 export type MarketMode = "browse" | "filter" | "confirm";
 

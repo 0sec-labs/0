@@ -33,29 +33,35 @@
  */
 
 import React, { useMemo, useRef, useState } from "react";
-import { useKeyboard, usePaste, useTerminalDimensions } from "@opentui/react";
+import { useKeyboard, usePaste } from "@opentui/react";
 import { decodePasteBytes, TextAttributes } from "@opentui/core";
 
 import { type Theme } from "./theme-context.js";
-import { Cells } from "./primitives.js";
+import { useDialogSurface, useSurfaceDimensions } from "./dialog-surface.js";
+import { Cells, textCells } from "./primitives.js";
 import { DialogSelectBody, type DialogItem } from "./dialog-select.js";
 import {
   clampDialogSelection,
-  computeDialogPanel,
   moveDialogSelection,
 } from "./dialog-select-layout.js";
 import type { StoredSessionMeta } from "./session-store.js";
 import { sanitizeTuiText } from "./text.js";
 import {
   clipResumeDetailLines,
+  computeResumeDialogLayout,
   isFilterKey,
   resumeDetailLines,
+  resumeDialogCount,
+  resumeDialogTitle,
   resumeFooterHint,
   resumeItems,
   sessionCategory,
   CATEGORY_THIS,
   CATEGORY_OTHER,
-  shellChromeRows,
+  ICON_CWD,
+  ICON_PROTECTED,
+  ICON_SEARCH,
+  ICON_WARN,
   type ResumeDetailTone,
   type ResumeMode,
 } from "./resume-layout.js";
@@ -68,6 +74,8 @@ export interface ResumeScreenProps {
   sessions: StoredSessionMeta[];
   /** The session currently on screen, drawn with the gutter dot. */
   currentId?: string;
+  /** Live audit history cannot be deleted until its audit has closed. */
+  protectedSessionIds?: ReadonlySet<string>;
   /** Injected clock for the age strings. Never an ambient `Date.now()`. */
   now: number;
   /**
@@ -110,6 +118,7 @@ function toneColor(theme: Theme, tone: ResumeDetailTone): string | undefined {
 export function ResumeScreen({
   sessions,
   currentId,
+  protectedSessionIds,
   now,
   currentCwd: propCwd,
   onResume,
@@ -118,7 +127,8 @@ export function ResumeScreen({
   onExit,
   theme,
 }: ResumeScreenProps) {
-  const { width, height } = useTerminalDimensions();
+  const { width, height } = useSurfaceDimensions();
+  const inDialog = useDialogSurface();
 
   const [filter, setFilter] = useState("");
   const [filtering, setFilteringState] = useState(false);
@@ -176,8 +186,9 @@ export function ResumeScreen({
         currentCwd,
         now,
         filter,
+        protectedSessionIds,
       }),
-    [scopedSessions, currentId, currentCwd, now, filter],
+    [scopedSessions, currentId, currentCwd, now, filter, protectedSessionIds],
   );
   const byId = useMemo(() => {
     const map = new Map<string, StoredSessionMeta>();
@@ -226,21 +237,23 @@ export function ResumeScreen({
     ? (items.find((item) => item.id === pendingDelete)?.label ?? "this session")
     : "";
   const statusText = pendingDelete
-    ? `Delete "${pendingLabel}"? press del again to confirm · esc cancel`
+    ? `${ICON_WARN} Delete "${pendingLabel}"? press del again to confirm · esc cancel`
     : deleteError
       ? deleteError
       : "";
 
-  const contentWidth = Math.max(0, width - 4);
-  const bodyRows = Math.max(0, height - shellChromeRows(width) - (statusText ? 1 : 0));
-  const panel = computeDialogPanel({
-    width: contentWidth,
+  // Every width and row count comes off the layout module, from the surface
+  // box the dialog handed down — never from `useTerminalDimensions` and never
+  // computed here (PRIMITIVES.md: Yoga shrinks siblings rather than clipping).
+  const layout = computeResumeDialogLayout({
+    width,
     height,
-    size: "large",
     totalRows,
-    withDetail: true,
-    bodyRows,
+    inDialog,
+    hasStatus: statusText.length > 0,
   });
+  const { contentWidth, panel, stackedRows } = layout;
+  const listRows = layout.bodyRows - stackedRows;
 
   // Whether other-project sessions exist (for empty-state guidance).
   const hasOtherSessions = useMemo(() => {
@@ -259,6 +272,7 @@ export function ResumeScreen({
       currentCwd,
       now,
       filter: filterRef.current,
+      protectedSessionIds,
     });
   const selectedIndex = (visible: DialogItem[]) => {
     const index = visible.findIndex((item) => item.id === selectedIdRef.current);
@@ -293,6 +307,11 @@ export function ResumeScreen({
     const visible = currentItems();
     const item = visible[selectedIndex(visible)];
     if (!item) return;
+    if (protectedSessionIds?.has(item.id)) {
+      setPendingDelete(null);
+      setDeleteError(`${ICON_PROTECTED} Live audit must close first — its history is protected until the audit ends`);
+      return;
+    }
     setDeleteError(null);
     if (pendingDeleteRef.current !== item.id) {
       setPendingDelete(item.id);
@@ -300,7 +319,7 @@ export function ResumeScreen({
     }
     setPendingDelete(null);
     if (!onDelete(item.id)) {
-      setDeleteError("Failed to delete session — check file permissions");
+      setDeleteError(`${ICON_WARN} Failed to delete audit — it may still be live, or file permissions prevent deletion`);
       return;
     }
     deletedRef.current = new Set(deletedRef.current).add(item.id);
@@ -345,7 +364,7 @@ export function ResumeScreen({
       if (pendingDeleteRef.current) return;
       const visible = currentItems();
       const item = visible[selectedIndex(visible)];
-      if (item && !onResume(item.id)) setDeleteError("Could not load session — choose another saved conversation");
+      if (item && !onResume(item.id)) setDeleteError(`${ICON_WARN} Could not open audit — choose another saved audit`);
       return;
     }
     if (key.name === "backspace") {
@@ -374,12 +393,16 @@ export function ResumeScreen({
   });
 
   // The detail pane: what the highlighted session was about, then its metadata,
-  // fitted to the exact box the shared body hands it.
+  // then — when the record is protected — the reason the delete key will
+  // refuse. Every line is fitted to the exact box the shared body hands it.
   const renderDetail = (item: DialogItem, pane: { width: number; height: number }) => {
     const session = byId.get(item.id);
     const compact = pane.height < 12;
     const lines = clipResumeDetailLines(
-      resumeDetailLines({ session, now, compact }, pane.width),
+      resumeDetailLines(
+        { session, now, compact, isProtected: protectedSessionIds?.has(item.id) === true },
+        pane.width,
+      ),
       pane.height,
       pane.width,
     );
@@ -402,39 +425,86 @@ export function ResumeScreen({
   // Empty-state guidance text, context-aware.
   const totalAll = visibleSessions.length;
   const emptyText = (() => {
-    if (filter) return "no sessions match this filter";
+    if (filter) return `${ICON_SEARCH} no audits match this filter`;
     if (scopedSessions.length === 0 && scope === "project" && hasOtherSessions && totalAll > 0) {
-      return 'no sessions saved in this project — press Tab to browse all projects';
+      return `${ICON_CWD} no audits in this project — press Tab to browse all`;
     }
-    if (totalAll === 0 && filter.length === 0) return "no saved sessions to resume";
-    return "no sessions to show";
+    if (totalAll === 0 && filter.length === 0) return `${ICON_SEARCH} no saved audits to open`;
+    return `${ICON_SEARCH} no audits to show`;
   })();
 
+  // ── Title row: glyph + label on the left, the live counter on the right.
+  // Split explicitly so the two leaves can never be handed overlapping cells.
+  const highlightProtected = activeItem !== undefined && protectedSessionIds?.has(activeItem.id) === true;
+  const protectedOnScreen = items.reduce(
+    (count, item) => (protectedSessionIds?.has(item.id) === true ? count + 1 : count),
+    0,
+  );
+  const titleText = resumeDialogTitle(scope, currentCwd !== undefined && currentCwd.length > 0);
+  const countText = resumeDialogCount(items.length, protectedOnScreen);
+  const countWidth = Math.min(contentWidth, textCells(countText));
+  const titleWidth = Math.max(0, contentWidth - countWidth - (countWidth > 0 ? 1 : 0));
+
   const body = (
-    <box flexDirection="column" width="100%" flexGrow={1} minWidth={0}>
-      <DialogSelectBody
-        items={items}
-        cursor={cursor}
-        panel={panel}
-        query={filter}
-        placeholder="type to filter sessions"
-        gutter={items.some((item) => item.current === true)}
-        isCurrent={(item) => item.current === true}
-        renderDetail={renderDetail}
-        emptyText={emptyText}
-      />
-      {statusText ? (
-        <box flexDirection="row" width="100%" flexShrink={0} minWidth={0}>
+    <box flexDirection="column" width="100%" flexGrow={1} minWidth={0} overflow="hidden">
+      {layout.titleRows > 0 && contentWidth > 0 ? (
+        <box flexDirection="row" width={contentWidth} height={1} flexShrink={0} minWidth={0}>
+          <Cells width={titleWidth} fg={theme.PRIMARY} attributes={TextAttributes.BOLD}>
+            {titleText}
+          </Cells>
+          {countWidth > 0 ? (
+            <>
+              {titleWidth > 0 ? <Cells width={1}>{""}</Cells> : null}
+              <Cells width={countWidth} align="right" fg={theme.MUTED}>
+                {countText}
+              </Cells>
+            </>
+          ) : null}
+        </box>
+      ) : null}
+
+      {listRows < 2 || contentWidth < 1 ? null : (
+        <DialogSelectBody
+          items={items}
+          cursor={cursor}
+          panel={panel}
+          query={filter}
+          placeholder={`${ICON_SEARCH} type to filter audits`}
+          gutter={items.some((item) => item.current === true)}
+          isCurrent={(item) => item.current === true}
+          renderDetail={renderDetail}
+          emptyText={emptyText}
+        />
+      )}
+
+      {stackedRows > 0 && activeItem ? (
+        <box width={contentWidth} height={stackedRows} flexDirection="column" flexShrink={0} minWidth={0}>
+          {renderDetail(activeItem, { width: contentWidth, height: stackedRows })}
+        </box>
+      ) : null}
+
+      {layout.statusRows > 0 && contentWidth > 0 ? (
+        <box flexDirection="row" width={contentWidth} height={1} flexShrink={0} minWidth={0}>
           <Cells width={contentWidth} fg={pendingDelete ? theme.WARNING : theme.ERROR}>
             {statusText}
           </Cells>
         </box>
       ) : null}
-      <box flexDirection="row" width="100%" flexShrink={0} minWidth={0}>
-        <Cells width={contentWidth} fg={theme.MUTED}>
-          {resumeFooterHint(mode, filter.length > 0, items.length > 0, scope, scopedSessions.length)}
-        </Cells>
-      </box>
+
+      {layout.footerRows > 0 && contentWidth > 0 ? (
+        <box flexDirection="row" width={contentWidth} height={1} flexShrink={0} minWidth={0}>
+          <Cells width={contentWidth} fg={theme.MUTED}>
+            {resumeFooterHint(
+              mode,
+              filter.length > 0,
+              items.length > 0,
+              scope,
+              scopedSessions.length,
+              highlightProtected,
+            )}
+          </Cells>
+        </box>
+      ) : null}
     </box>
   );
 

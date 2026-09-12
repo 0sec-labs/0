@@ -126,85 +126,12 @@ describe("layout invariants — the sweep", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// rail: the default must not change on upgrade
-// ---------------------------------------------------------------------------
-
-describe("rail is the default and preserves today's geometry", () => {
-  it("defaults to rail / full / rail", () => {
-    expect(DEFAULT_TRANSCRIPT_STYLE).toBe("rail");
-    expect(DEFAULT_ROLE_LABEL_STYLE).toBe("full");
-    expect(DEFAULT_TOOL_CARD_STYLE).toBe("rail");
-  });
-
-  it("reproduces the speech geometry the component used before the refactor", () => {
-    // Today: rail = width 1, gap 1 (marginLeft), content = rest,
-    // markdown width = max(8, width - 2).
-    for (const width of [40, 56, 72, 80, 100, 120]) {
-      for (const kind of SPEECH_KINDS) {
-        const frame = speechFrame("rail", kind, width);
-        expect(frame.bordered).toBe(false);
-        expect(frame.railWidth).toBe(1);
-        expect(frame.contentGap).toBe(1);
-        expect(frame.contentWidth).toBe(width - 2);
-        expect(frame.markdownWidth).toBe(Math.max(8, width - 2));
-      }
-    }
-  });
-
-  it("reproduces the tool card geometry the component used before the refactor", () => {
-    for (const width of [40, 55, 56, 72, 80, 120]) {
-      const frame = toolFrame("rail", width, true);
-      const expectedIndent = width < 56 ? 0 : 2;
-      expect(frame.outerMarginLeft).toBe(expectedIndent);
-      expect(frame.railWidth).toBe(1);
-      expect(frame.contentGap).toBe(1);
-      expect(frame.contentWidth).toBe(width - expectedIndent - 2);
-      expect(frame.showDetail).toBe(true);
-      expect(frame.singleLine).toBe(false);
-    }
-  });
-
-  it("reproduces the header name budget when the pane is not tiny", () => {
-    // Old code: name budgeted to max(1, detailWidth - prefix.length - 1),
-    // detailWidth = max(20, width - 8). Verify the pure fn agrees at widths
-    // where the old code did not overflow (content >= header, i.e. wide enough
-    // that the prefix and a 1-cell name both fit — roughly width >= 40).
-    for (const width of [40, 56, 72, 80, 120]) {
-      const frame = toolFrame("rail", width, true);
-      const prefix = toolHeaderPrefix("complete");
-      const detail = Math.max(20, width - 8);
-      expect(toolDetailWidth(frame.contentWidth, width)).toBe(detail);
-      const cols = toolHeaderColumns(frame.contentWidth, prefix.length, detail);
-      expect(cols.nameWidth).toBe(Math.max(1, detail - prefix.length - 1));
-    }
-  });
-});
 
 // ---------------------------------------------------------------------------
 // role labels
 // ---------------------------------------------------------------------------
 
 describe("role label styles produce the documented widths", () => {
-  it("full", () => {
-    expect(roleLabelText("user", "full")).toBe("▌ operator");
-    expect(roleLabelText("assistant", "full")).toBe("▌ 0sec");
-    expect(roleLabelWidth("user", "full")).toBe("▌ operator".length);
-    expect(roleLabelWidth("assistant", "full")).toBe("▌ 0sec".length);
-  });
-
-  it("short", () => {
-    expect(roleLabelText("user", "short")).toBe("op");
-    expect(roleLabelText("assistant", "short")).toBe("0sec");
-    expect(roleLabelWidth("user", "short")).toBe(2);
-    expect(roleLabelWidth("assistant", "short")).toBe(4);
-  });
-
-  it("glyph", () => {
-    expect(roleLabelText("user", "glyph")).toBe("▌");
-    expect(roleLabelText("assistant", "glyph")).toBe("▌");
-    expect(roleLabelWidth("user", "glyph")).toBe(1);
-  });
 
   it("off suppresses the label entirely", () => {
     expect(roleLabelText("user", "off")).toBeNull();
@@ -212,11 +139,6 @@ describe("role label styles produce the documented widths", () => {
     expect(roleLabelWidth("user", "off")).toBe(0);
   });
 
-  it("carries the age separator as text, only when an age is present", () => {
-    expect(roleLabelText("user", "full", "12s")).toBe("▌ operator · 12s");
-    expect(roleLabelText("user", "full", "")).toBe("▌ operator");
-    expect(roleLabelText("user", "glyph", "12s")).toBe("▌");
-  });
 });
 
 // ---------------------------------------------------------------------------

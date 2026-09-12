@@ -45,7 +45,7 @@ export function OperatorQuestionCard({
   const innerWidth = Math.max(1, contentWidth - 4);
   const hintLen = keyHintsLength(hintPairs, " · ");
   return (
-    <box flexDirection="column" width="100%" minWidth={0} height={height} flexShrink={0} marginTop={1} border borderColor={BRAND} backgroundColor={PANEL_ALT} paddingX={1}>
+    <box flexDirection="column" width="100%" minWidth={0} height={height} flexShrink={0} marginTop={1} border borderStyle="rounded" borderColor={BRAND} title={innerWidth >= 8 ? " ASK " : undefined} titleColor={BRAND} titleAlignment="left" backgroundColor={PANEL_ALT} paddingX={1}>
       <box width={innerWidth} flexShrink={0} minWidth={0}>
         <text fg={BRAND} attributes={TextAttributes.BOLD}>{fitTuiText("0sec has a question for you", innerWidth)}</text>
       </box>

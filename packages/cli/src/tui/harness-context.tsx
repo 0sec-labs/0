@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 import { getWorkspaceHarnessTrust, setWorkspaceHarnessTrust } from "@0sec/core";
 import type { LiveHarnessHost } from "@0sec/core";
 import type { HarnessControl, HarnessSnapshot, HarnessUiEvent } from "@0sec/shared";
+import { useTheme } from "./theme-context.js";
 
 type ViewProps = { snapshot: HarnessSnapshot; sendPrompt: (text: string) => void };
 export interface TrustedUiContext extends ViewProps { React: typeof React }
@@ -136,6 +137,7 @@ class TrustedViewBoundary extends React.Component<{
 function TrustedView({ source, generationId, snapshot, sendPrompt, reportUiError }: ViewProps & {
   source: string; generationId: string; reportUiError: HarnessContextValue["reportUiError"];
 }) {
+  const theme = useTheme();
   const [loaded, setLoaded] = useState<{ component: React.ComponentType<ViewProps>; sendPrompt: ViewProps["sendPrompt"] } | null>(null);
   const latest = useRef({ snapshot, sendPrompt, reportUiError });
   latest.current = { snapshot, sendPrompt, reportUiError };
@@ -180,7 +182,7 @@ function TrustedView({ source, generationId, snapshot, sendPrompt, reportUiError
       queueMicrotask(() => { if (namedDispose || returnedDispose) void dispose(); });
     };
   }, [source, generationId]);
-  if (!loaded) return <text>Loading trusted view…</text>;
+  if (!loaded) return <text fg={theme.MUTED}>Loading trusted view…</text>;
   return <TrustedViewBoundary onError={message => reportUiError(generationId, message)}>
     {React.createElement(loaded.component, { snapshot, sendPrompt: loaded.sendPrompt })}
   </TrustedViewBoundary>;

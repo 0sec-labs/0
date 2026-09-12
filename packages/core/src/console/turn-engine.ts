@@ -602,6 +602,10 @@ export interface ConsoleSession {
     callbacks?: ConsoleRenderCallbacks,
     opts?: ConsoleSendOptions,
   ): Promise<ConsoleTurnOutcome>;
+  /** Stop an owned worker subtree and await cleanup without clearing history. */
+  stopPersistentAgent(agentId: string): Promise<boolean>;
+  /** Drain all owned workers without ending this conversation. */
+  stopPersistentAgents(): Promise<void>;
   /** Release tool resources (browser/PTY) held by the executor. */
   cleanup(): Promise<void>;
 }
@@ -2883,6 +2887,8 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
       messages.length = 0;
     },
     send,
+    stopPersistentAgent: (agentId) => executor.stopPersistentAgent(agentId),
+    stopPersistentAgents: () => executor.stopPersistentAgents(),
     cleanup: async () => {
       objectiveService.dispose();
       await harness?.close();

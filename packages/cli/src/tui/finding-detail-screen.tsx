@@ -1,6 +1,6 @@
 /** @jsxImportSource @opentui/react */
 /**
- * The full-screen finding-detail view.
+ * The finding-detail view, as a pop-up dialog.
  *
  * Open one finding, see its title, severity, category, location, description,
  * redacted evidence, remediation, CVSS and references — then investigate or
@@ -29,12 +29,14 @@
  */
 
 import React, { useMemo, useState } from "react";
-import { useKeyboard, useTerminalDimensions } from "@opentui/react";
+import { useKeyboard } from "@opentui/react";
 import { TextAttributes } from "@opentui/core";
 import type { Finding } from "@0sec/shared";
 import { renderPlatformReport, renderCvssSection, redactSensitiveHeaders } from "@0sec/core";
 
 import { useTheme, type Theme } from "./theme-context.js";
+import { useDialogSurface, useSurfaceDimensions } from "./dialog-surface.js";
+import { operatorIcon } from "./operator-icons.js";
 import { Cells } from "./primitives.js";
 import {
   buildFindingRows,
@@ -322,7 +324,11 @@ export function FindingDetailScreen({
   onExit,
 }: FindingDetailScreenProps) {
   const theme = useTheme();
-  const { width, height } = useTerminalDimensions();
+  const { width, height } = useSurfaceDimensions();
+  // Inside a dialog the host spends exactly one row (its footer) and no
+  // padding, and the surface is the panel interior — so the legacy shell
+  // chrome allowance must not come off it.
+  const inDialog = useDialogSurface();
   const [offset, setOffset] = useState(0);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -342,7 +348,12 @@ export function FindingDetailScreen({
     [canCopy, canInvestigate, canPlanFix, canStatus],
   );
 
-  const layout = computeFindingDetailLayout({ width, height, actionCount: actions.length });
+  const layout = computeFindingDetailLayout({
+    width,
+    height,
+    actionCount: actions.length,
+    ...(inDialog ? { hostRows: 1, hostPaddingX: 0 } : {}),
+  });
 
   const rows = useMemo(
     () =>
@@ -471,7 +482,7 @@ export function FindingDetailScreen({
       <Pane
         pane={layout.pane}
         bordered={layout.bordered}
-        title={findingDetailTitle(finding)}
+        title={`${operatorIcon("finding")} ${findingDetailTitle(finding)}`}
         titleFg={theme.PRIMARY}
         titleRight={titleRight}
         titleRightFg={titleRightFg}

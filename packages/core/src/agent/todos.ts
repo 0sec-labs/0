@@ -80,6 +80,8 @@ export interface TodoSnapshot {
 
 /** Event-bus / DB payload shape for a plan snapshot (flat, JSON-friendly). */
 export interface TodosEventPayload {
+  /** Producing agent's scan identity; consumers must not infer an absent owner. */
+  scan_id?: string;
   todos: Array<{ id: string; content: string; status: TodoStatus; group?: string }>;
   done: number;
   total: number;

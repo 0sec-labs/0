@@ -23,8 +23,10 @@ import {
   keybindingsByCategory,
   type Keybinding,
 } from "./keybindings.js";
+import type { DialogItem } from "./dialog-select-layout.js";
 import { shellChromeRows } from "./settings-layout.js";
-import { sanitizeTuiText } from "./text.js";
+import { SLASH_COMMANDS, type SlashCommand } from "./slash-commands.js";
+import { sanitizeTuiText, wrapText } from "./text.js";
 
 export { shellChromeRows };
 
@@ -178,6 +180,19 @@ export interface ShortcutsPane {
 export interface ShortcutsLayoutInput {
   width: number;
   height: number;
+  /**
+   * Rows the HOST frame spends around this screen's body, when the host is not
+   * the legacy full-screen shell. Inside a `DialogSurface` the shell renders
+   * with `dialogContent`: no outer header and no padding, and the surface
+   * dimensions are the panel interior, so the only row the host still spends is
+   * its one-row footer. Omit it and the legacy `shellChromeRows(width)` applies.
+   */
+  hostRows?: number;
+  /**
+   * Cells the HOST frame pads on EACH side. The legacy shell pads two; a dialog
+   * pads none. Omit it and the legacy padding applies.
+   */
+  hostPaddingX?: number;
 }
 
 export interface ShortcutsLayout {
@@ -218,13 +233,16 @@ function makePane(width: number, height: number, chromeH: number, chromeV: numbe
  * widest chord the caller passes so the chords align down the page.
  */
 export function computeShortcutsLayout(
-  { width, height }: ShortcutsLayoutInput,
+  { width, height, hostRows, hostPaddingX }: ShortcutsLayoutInput,
   maxKeysLength = 0,
 ): ShortcutsLayout {
   const terminalWidth = cells(width);
-  // `ShellFrame` pads two cells either side of every screen.
-  const contentWidth = Math.max(0, terminalWidth - 4);
-  const bodyRows = Math.max(0, cells(height) - shellChromeRows(terminalWidth));
+  // The legacy shell pads two cells either side and spends a header; a dialog
+  // host pads none and spends only its footer row.
+  const padding = hostPaddingX === undefined ? 2 : cells(hostPaddingX);
+  const chromeRows = hostRows === undefined ? shellChromeRows(terminalWidth) : cells(hostRows);
+  const contentWidth = Math.max(0, terminalWidth - padding * 2);
+  const bodyRows = Math.max(0, cells(height) - chromeRows);
 
   const bordered = bodyRows >= BORDERED_MIN_ROWS && contentWidth >= BORDERED_MIN_WIDTH;
   const chromeH = bordered ? 4 : 0;
@@ -268,7 +286,159 @@ export function shortcutsTitle(): string {
   return "KEYBOARD SHORTCUTS";
 }
 
-/** The footer hint: this screen is read-only, so the keys are few. */
+/** The footer hint: a read-only palette — search, move, leave. */
 export function shortcutsFooterHint(): string {
-  return ["esc back", "ctrl+c exit"].join(" · ");
+  return ["type to search", "↑/↓ move", "ctrl+u clear", "esc back", "ctrl+c exit"].join(" · ");
+}
+
+// ===========================================================================
+// COMMAND PALETTE — the searchable, grouped projection of the two registries
+// ===========================================================================
+//
+// `/shortcuts` is the route form of the console's help palette. It lists two
+// kinds of thing, and INVENTS NEITHER:
+//
+//   1. every chord in `keybindings.ts`, which is itself a hand-verified mirror
+//      of the real `useKeyboard` guards in `chat-screen.tsx`; and
+//   2. every slash command registered in `slash-commands.ts`.
+//
+// No aspirational binding, no "coming soon" row, no chord that is not in the
+// registry. A command's alias list, usage string and TUI-only flag are shown
+// only when the registry actually carries them. The palette is a REFERENCE: it
+// runs nothing, so it never implies Enter will.
+
+/** Title-case a slash-command category for a group heading. */
+function commandCategoryLabel(category: string): string {
+  const text = sanitizeTuiText(category);
+  return text.length === 0 ? "Commands" : `${text[0]?.toUpperCase() ?? ""}${text.slice(1)}`;
+}
+
+export interface PaletteInput {
+  bindings?: readonly Keybinding[];
+  commands?: readonly SlashCommand[];
+}
+
+/**
+ * The palette rows, as `DialogItem`s for the shared picker.
+ *
+ * Keybindings come first, grouped by their registry category with the chord in
+ * the right-aligned meta column; slash commands follow, grouped by their own
+ * category, with their aliases as meta. Group order and within-group order are
+ * the registries' own, so the palette reads the same way the source of truth
+ * does.
+ */
+export function buildPaletteItems({
+  bindings = KEYBINDINGS,
+  commands = SLASH_COMMANDS,
+}: PaletteInput = {}): DialogItem[] {
+  const items: DialogItem[] = [];
+  for (const [category, entries] of keybindingsByCategory(bindings)) {
+    for (const binding of entries) {
+      items.push({
+        id: `key:${binding.id}`,
+        label: sanitizeTuiText(binding.description),
+        meta: sanitizeTuiText(binding.keys),
+        category: `${category} keys`,
+      });
+    }
+  }
+  for (const command of commands) {
+    const aliases = command.aliases.map((alias) => `/${sanitizeTuiText(alias)}`).join(" ");
+    items.push({
+      id: `cmd:${command.name}`,
+      label: `/${sanitizeTuiText(command.name)}`,
+      description: sanitizeTuiText(command.description),
+      ...(aliases.length > 0 ? { meta: aliases } : {}),
+      category: `${commandCategoryLabel(command.category)} commands`,
+    });
+  }
+  return items;
+}
+
+export interface PaletteDetailLine {
+  text: string;
+  tone: ShortcutsTone;
+}
+
+/**
+ * The detail column for one palette row, wrapped to `width`.
+ *
+ * Every line is read off the registry entry the row was built from. A field the
+ * registry does not carry produces no line at all — there is no placeholder
+ * chord, no invented usage string, and the maintainer-only `handler` provenance
+ * is never shown to an operator.
+ */
+export function paletteDetailLines(
+  id: string,
+  width: number,
+  { bindings = KEYBINDINGS, commands = SLASH_COMMANDS }: PaletteInput = {},
+): PaletteDetailLine[] {
+  const room = cells(width);
+  if (room <= 0 || typeof id !== "string") return [];
+  const lines: PaletteDetailLine[] = [];
+  const push = (text: string, tone: ShortcutsTone) => {
+    for (const line of wrapText(sanitizeTuiText(text), room)) lines.push({ text: line, tone });
+  };
+
+  if (id.startsWith("key:")) {
+    const binding = bindings.find((entry) => `key:${entry.id}` === id);
+    if (!binding) return [];
+    push(binding.keys, "heading");
+    push(binding.category, "keys");
+    lines.push({ text: "", tone: "blank" });
+    push(binding.description, "description");
+    lines.push({ text: "", tone: "blank" });
+    push("Bound in the chat console.", "blank");
+    return lines;
+  }
+
+  if (id.startsWith("cmd:")) {
+    const command = commands.find((entry) => `cmd:${entry.name}` === id);
+    if (!command) return [];
+    push(`/${command.name}`, "heading");
+    if (command.aliases.length > 0) {
+      push(`Also: ${command.aliases.map((alias) => `/${alias}`).join(" ")}`, "keys");
+    }
+    lines.push({ text: "", tone: "blank" });
+    push(command.description, "description");
+    if (command.usage) {
+      lines.push({ text: "", tone: "blank" });
+      push(command.usage, "keys");
+    }
+    if (command.tuiOnly) {
+      lines.push({ text: "", tone: "blank" });
+      push("Console only: the readline client cannot run this one.", "blank");
+    }
+    lines.push({ text: "", tone: "blank" });
+    push("Type it in the chat composer to run it.", "blank");
+    return lines;
+  }
+
+  return [];
+}
+
+/**
+ * Fit detail lines to the rows the column actually has, marking the cut.
+ *
+ * Same contract as {@link clipShortcutsRows}: the overflow is cut rather than
+ * painted through the box below it, and the cut is visible rather than silent.
+ */
+export function clipPaletteLines(
+  lines: readonly PaletteDetailLine[],
+  limit: number,
+): PaletteDetailLine[] {
+  const room = cells(limit);
+  if (room <= 0) return [];
+  if (lines.length <= room) return [...lines];
+  const kept = lines.slice(0, room);
+  kept[room - 1] = { text: "…", tone: "blank" };
+  return kept;
+}
+
+/** The right-aligned count on the palette's title row. Never a rounded guess. */
+export function paletteCountMeta(shown: number, total: number): string {
+  const visible = cells(shown);
+  const all = cells(total);
+  if (visible === all) return `${all} entr${all === 1 ? "y" : "ies"}`;
+  return `${visible}/${all}`;
 }

@@ -6,7 +6,7 @@ import {
   resolveCrashKey,
   sanitizeCrashText,
   type CrashInfo,
-} from "./run.js";
+} from "./tui-crash.js";
 
 const crash: CrashInfo = {
   message: "Cannot read properties of undefined (reading 'x')",

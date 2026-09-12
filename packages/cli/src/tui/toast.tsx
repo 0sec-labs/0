@@ -1,8 +1,14 @@
 /** @jsxImportSource @opentui/react */
 /**
- * The transient "copied" toast — a small bordered pill that appears, holds for
- * ~1.5s, and fades out, driven entirely by the pure envelope in
- * `toast-logic.ts`.
+ * The transient toast — a small rounded pill that appears, holds for ~1.5s,
+ * and fades out, driven entirely by the pure envelope in `toast-logic.ts`.
+ *
+ * It wears the same chrome as the rest of the redesigned surfaces: a rounded
+ * outline (`borderStyle="rounded"`, as the dialogs and cards use), a `surface`
+ * ground, and — when the caller states one — a severity tone that colours the
+ * outline and adds the matching status glyph from the shared vocabulary
+ * (`✓` success, `!` warning, `×` error). A caller that states no tone gets a
+ * neutral pill; the component never infers a severity from the message text.
  *
  * Two exports:
  *
@@ -26,7 +32,7 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 
 import { fitTuiText } from "./text.js";
-import { useTheme } from "./theme-context.js";
+import { useTheme, type Theme } from "./theme-context.js";
 import {
   isToastDone,
   showToast as makeShow,
@@ -35,10 +41,14 @@ import {
   type ToastConfig,
   type ToastFrame,
   type ToastShow,
+  type ToastTone,
 } from "./toast-logic.js";
 
 /** How the toast is pinned to the viewport. */
 export type ToastPlacement = "bottom-right" | "bottom-left" | "top-right" | "top-left";
+
+/** Re-exported so a caller can name a tone without reaching into toast-logic. */
+export type { ToastTone } from "./toast-logic.js";
 
 export interface ToastProps {
   /** The current frame from `toastFrameAt`. Nothing renders when hidden. */
@@ -61,6 +71,24 @@ export interface ToastProps {
 const DEFAULT_MAX_WIDTH = 40;
 /** Border (2) + horizontal padding (2). */
 const CHROME_CELLS = 4;
+/** Leading glyph (1) + its gap (1), spent only when a tone was stated. */
+const GLYPH_CELLS = 2;
+
+/**
+ * Glyph + colour for a stated tone, from the same vocabulary the sidebar's
+ * status marks use, so `✓ / ! / ×` mean the same thing in a toast as they do
+ * in the agent list. An unstated tone gets NO glyph and neutral chrome: the
+ * pill says what it was given and claims nothing further.
+ */
+function toneStyle(tone: ToastTone | undefined, theme: Theme): { glyph?: string; color: string } {
+  switch (tone) {
+    case "success": return { glyph: "✓", color: theme.SUCCESS };
+    case "warning": return { glyph: "!", color: theme.WARNING };
+    case "error": return { glyph: "×", color: theme.ERROR };
+    case "info": return { glyph: "·", color: theme.ACCENT };
+    default: return { color: theme.ACCENT };
+  }
+}
 
 function edges(placement: ToastPlacement, margin: number) {
   const vertical = placement.startsWith("top") ? { top: margin } : { bottom: margin };
@@ -83,34 +111,46 @@ export function Toast({
 
   if (!frame.visible || frame.message.trim().length === 0) return null;
 
+  const tone = toneStyle(frame.tone, theme);
+
   // Budget the label against the pill's inner width so it can never overflow
-  // its border. `fitTuiText` also strips control chars from the message.
+  // its border. `fitTuiText` also strips control chars from the message. The
+  // glyph is dropped before the message is, so a very narrow clamp still
+  // carries the words rather than a bare mark.
   const innerCap = Math.max(1, maxWidth - CHROME_CELLS);
-  const label = fitTuiText(frame.message, innerCap);
-  const innerWidth = Math.max(1, Math.min(innerCap, label.length));
+  const showGlyph = Boolean(tone.glyph) && innerCap > GLYPH_CELLS + 4;
+  const labelCap = Math.max(1, showGlyph ? innerCap - GLYPH_CELLS : innerCap);
+  const label = fitTuiText(frame.message, labelCap);
+  const labelWidth = Math.max(1, Math.min(labelCap, label.length));
+  const innerWidth = labelWidth + (showGlyph ? GLYPH_CELLS : 0);
   const boxWidth = innerWidth + CHROME_CELLS;
 
   // The envelope's `progress` is available for the caller to key motion off;
   // OpenTUI has no per-cell opacity, so the fade reads through colour — a
-  // fully-in pill uses ACCENT chrome, the ramp phases dim to MUTED.
-  const chrome = frame.phase === "hold" ? theme.ACCENT : theme.MUTED;
+  // fully-in pill wears its tone's chrome, the ramp phases dim to MUTED.
+  const chrome = frame.phase === "hold" ? tone.color : theme.MUTED;
 
   return (
     <box
       position="absolute"
       {...edges(placement, margin)}
       width={boxWidth}
+      height={3}
       flexShrink={0}
       flexGrow={0}
       minWidth={0}
       border
+      borderStyle="rounded"
       borderColor={chrome}
       backgroundColor={theme.surface}
       paddingX={1}
       zIndex={zIndex}
     >
-      <box flexDirection="row" width={innerWidth} flexShrink={0} minWidth={0}>
-        <text fg={theme.TEXT}>{label}</text>
+      <box flexDirection="row" width={innerWidth} height={1} flexShrink={0} minWidth={0}>
+        {showGlyph ? (
+          <text width={GLYPH_CELLS} height={1} flexShrink={0} wrapMode="none" truncate fg={chrome}>{`${tone.glyph} `}</text>
+        ) : null}
+        <text width={labelWidth} height={1} flexShrink={0} wrapMode="none" truncate fg={theme.TEXT}>{label}</text>
       </box>
     </box>
   );
@@ -120,8 +160,11 @@ export function Toast({
 const TICK_MS = 33;
 
 export interface UseToastResult {
-  /** Raise a toast with `message`; resets the envelope if one is showing. */
-  showToast: (message: string) => void;
+  /**
+   * Raise a toast with `message`; resets the envelope if one is showing.
+   * `tone` is optional and has no default — omit it and the pill is neutral.
+   */
+  showToast: (message: string, tone?: ToastTone) => void;
   /** The current frame — feed straight to `<Toast frame={...} />`. */
   frame: ToastFrame;
 }
@@ -150,8 +193,8 @@ export function useToast(config: ToastConfig = {}): UseToastResult {
   const configRef = useRef(config);
   configRef.current = config;
 
-  const showToast = useCallback((message: string) => {
-    setShow(makeShow(message, Date.now()));
+  const showToast = useCallback((message: string, tone?: ToastTone) => {
+    setShow(makeShow(message, Date.now(), tone));
   }, []);
 
   useEffect(() => {

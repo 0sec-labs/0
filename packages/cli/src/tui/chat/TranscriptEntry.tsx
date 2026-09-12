@@ -10,26 +10,21 @@ import { formatElapsed } from "../animation.js";
 import { repeatSuffix } from "../transcript.js";
 import { panelColumns } from "../panels.js";
 import {
-  commandCardFooter,
-  commandCardFrame,
-  editCardFrame,
-  webCardFrame,
-  webSourceHost,
-  foldBodyLines,
   foldSummary,
   roleLabelText,
+  roundedCardFrame,
   speechFrame,
   toolCompactLine,
   toolDetailWidth,
   toolFrame,
-  toolGlyphState,
-  toolHeaderColumns,
-  toolHeaderPrefix,
   type TranscriptPlanItem,
 } from "../transcript-style.js";
 import { renderMarkdownBlocks } from "./markdown-blocks.js";
 import type { Theme } from "../theme-context.js";
 import type { ChatEntry, EntryDisplay } from "./types.js";
+import { ToolCard } from "./ToolCard.js";
+import { ImageCard } from "./ImageCard.js";
+import { toolState, toolStateLabel } from "./card-layout.js";
 
 /**
  * Mouse affordances for a clickable transcript row (a collapsed fold, or a
@@ -39,6 +34,8 @@ import type { ChatEntry, EntryDisplay } from "./types.js";
  * rows that participate in per-turn expand/collapse.
  */
 export interface TranscriptRowInteraction {
+  /** Explicit per-turn expansion overrides the default transcript detail. */
+  expanded?: boolean;
   /** True when this row's turn is currently hover-highlighted. */
   hovered?: boolean;
   /** Toggle this turn between folded and fully expanded. */
@@ -59,14 +56,6 @@ function normalizeReasoning(text: string): string {
   return text.replace(/\*\*\*\*/g, "**\n\n**");
 }
 
-/** Max output lines a command card shows before the middle-out fold kicks in. */
-const COMMAND_CARD_MAX_LINES = 14;
-/** Max diff lines an edit card shows before the middle-out fold kicks in. */
-const EDIT_CARD_MAX_LINES = 20;
-/** Max answer lines a web card shows before the middle-out fold kicks in. */
-const WEB_CARD_ANSWER_MAX_LINES = 6;
-/** Max source rows a web card shows before capping with a `+N more` line. */
-const WEB_CARD_MAX_SOURCES = 6;
 
 /** Compact relative age, e.g. "12s" / "4m" / "2h". */
 function relativeAge(at: number | undefined, now: number): string {
@@ -80,51 +69,6 @@ function relativeAge(at: number | undefined, now: number): string {
   return `${Math.floor(minutes / 60)}h`;
 }
 
-/**
- * Word-wrap a prose blob into at most `maxLines` lines of `width` cells, for the
- * web card's answer block. The source is sanitized first (newlines collapse to
- * spaces), then greedily packed; a word longer than the line is hard-split. When
- * the text overruns the line budget the last shown line is ellipsised so the
- * fold is visible. Every returned line is <= `width`, so the caller's per-line
- * `fitTuiText` is a no-op safety net rather than a truncation. Pure.
- */
-function wrapAnswerLines(text: string, width: number, maxLines: number): string[] {
-  const clean = sanitizeTuiText(text);
-  if (width <= 0 || maxLines <= 0 || clean.length === 0) return [];
-  const words = clean.split(" ").filter((w) => w.length > 0);
-  const lines: string[] = [];
-  let cur = "";
-  let overflowed = false;
-  for (const word of words) {
-    const next = cur ? `${cur} ${word}` : word;
-    if (next.length <= width) {
-      cur = next;
-      continue;
-    }
-    if (cur) lines.push(cur);
-    if (lines.length >= maxLines) { overflowed = true; cur = ""; break; }
-    if (word.length > width) {
-      let rest = word;
-      while (rest.length > width && lines.length < maxLines) {
-        lines.push(rest.slice(0, width));
-        rest = rest.slice(width);
-      }
-      if (lines.length >= maxLines) { overflowed = rest.length > 0; cur = ""; break; }
-      cur = rest;
-    } else {
-      cur = word;
-    }
-  }
-  if (cur) {
-    if (lines.length < maxLines) lines.push(cur);
-    else overflowed = true;
-  }
-  if (overflowed && lines.length > 0) {
-    const last = lines[lines.length - 1]!;
-    lines[lines.length - 1] = last.endsWith("…") ? last : fitTuiText(`${last} …`, width);
-  }
-  return lines;
-}
 
 /**
  * Priced rate rows by lower-cased model id, mirroring status-bar.ts. "default"
@@ -184,7 +128,7 @@ export function renderEntry(
   // disclosure gutter and shrink the content budget so the wrapped row still
   // fits its column — the 80-col invariant holds exactly as the fold's does.
   const interactive = Boolean(interaction);
-  const fullDetails = display.transcriptDetail === "expanded";
+  const fullDetails = interaction?.expanded ?? display.transcriptDetail === "expanded";
   const maxWidth = interactive ? Math.max(8, maxWidthOuter - 2) : maxWidthOuter;
   const finish = (node: React.ReactNode): React.ReactNode => {
     if (!interaction) return node;
@@ -228,63 +172,23 @@ export function renderEntry(
     const marginTop = display.spacing + frame.extraMarginTop;
     const age = display.showTimestamps ? relativeAge(entry.at, display.now) : "";
     const label = roleLabelText(isUser ? "user" : "assistant", roleLabelStyle, age);
-    // A bordered turn wraps to its inner width; the rail style frames each turn
-    // with a 1-cell spine plus a cell of padding on each side (3 cells of
-    // chrome), so its body must wrap inside the reduced width or the markdown
-    // clips against the frame. Every other unbordered style hands the whole pane
-    // to its body.
-    const RAIL_CHROME = 3;
-    const bodyWidth = frame.bordered
-      ? frame.markdownWidth
-      : transcriptStyle === "rail"
-        ? Math.max(8, maxWidth - RAIL_CHROME)
-        : Math.max(8, maxWidth);
+    const card = roundedCardFrame(maxWidth);
+    const bordered = card.render && (frame.bordered || transcriptStyle === "rail");
+    const bodyWidth = bordered ? card.innerWidth : Math.max(1, maxWidth);
     // Body: raw text for the operator, rendered markdown for the model.
     const body = isUser
       ? <text fg={TEXT} wrapMode="word">{sanitizeTuiText(entry.text)}</text>
       : renderMarkdownBlocks(renderMarkdown(entry.text, bodyWidth), entry.id, theme);
 
-    if (frame.bordered) {
-      // The grouped style: a subtle surface plus a border frames the turn,
-      // never a tall left bar. A bordered turn MUST carry an explicit numeric
-      // width plus flexShrink=0: width="100%" leaves flexShrink at 1, so under
-      // column pressure the box collapses and paints its own border through the
-      // message (PRIMITIVES.md).
-      return (
-        <box key={entry.id} flexDirection="column" width={maxWidth} flexShrink={0} minWidth={0} marginTop={marginTop} border borderColor={tone} backgroundColor={PANEL_ALT} paddingX={1}>
-          {label ? <text fg={labelTone}>{label}</text> : null}
-          {body}
-        </box>
-      );
-    }
-
-    // The clean DEFAULT look (transcriptStyle "rail"): the two voices are told
-    // apart by their frame, not by a tinted label. The OPERATOR turn is drawn
-    // like the input that produced it — a thin accent rail down the left plus a
-    // faint panel background, so it reads as "what you said" the same way the
-    // composer reads as "what you're saying". The AI turn is PLAIN body text
-    // followed by a compact muted footer (a red brand marker, then mode · model
-    // · elapsed), so the answer itself is unadorned and the provenance sits
-    // quietly beneath it.
-    if (transcriptStyle === "rail") {
-      // BOTH voices are marked the same way — a thin left SPINE plus a bold label,
-      // the body sitting flat on the canvas (no panel fill). An earlier version
-      // filled each turn with PANEL_ALT so it read as a card, but with every turn
-      // carded the transcript became a stack of heavy grey rectangles ("too much
-      // card"); OpenCode's answer is a faint left bar + label, which demarcates a
-      // turn without the weight. The SPINE TONE tells the two apart: the operator
-      // turn takes the neutral ACCENT (it reads like the composer that produced
-      // it), the AI turn takes the BRAND purple (the "0sec" voice) and carries a
-      // small brand label so the answer announces itself.
-      const spine = isUser ? ACCENT : BRAND;
+    // Labels sit above the rounded body, never alongside wrapped content.
+    // Narrow columns degrade to a plain body rather than overspending chrome.
+    if (bordered || transcriptStyle === "rail") {
       // The AI turn's footer is quiet provenance only — the per-turn telemetry
       // the operator opted into: the model when `modelDisplay` routes it here
       // (otherwise it lives in the bottom bar), tokens under `showTokenUsage`,
-      // cost under `showCost`, and the elapsed. The AUTONOMY MODE is NOT repeated
-      // here — it is session-wide state already shown in the masthead and status
-      // bar, so tagging every answer with "YOLO"/"Co-pilot" was redundant noise.
+      // cost under `showCost`, and the elapsed.
       let restFitted = "";
-      if (!isUser) {
+      if (!isUser && transcriptStyle === "rail") {
         const footerParts: string[] = [];
         if (display.modelInFooter && display.model) footerParts.push(display.model);
         if (display.showTokenUsage && entry.usageInput !== undefined) {
@@ -295,26 +199,42 @@ export function renderEntry(
         }
         const elapsed = entry.durationMs ? formatElapsed(entry.durationMs) : "";
         if (elapsed) footerParts.push(elapsed);
-        const footerBudget = Math.max(1, maxWidth - RAIL_CHROME);
+        const footerBudget = Math.max(1, maxWidth - 2);
         restFitted = footerParts.length ? fitTuiText(footerParts.join(" · "), footerBudget) : "";
       }
       return (
-        <box key={entry.id} flexDirection="row" width={maxWidth} flexShrink={0} minWidth={0} marginTop={marginTop}>
-          <box width={1} flexShrink={0} alignSelf="stretch" backgroundColor={spine} />
-          <box flexDirection="column" flexGrow={1} minWidth={0} paddingLeft={1}>
-            {label ? <text fg={labelTone} attributes={TextAttributes.BOLD}>{label}</text> : null}
-            {body}
-            {restFitted ? (
-              <box flexDirection="row" minWidth={0} marginTop={1}>
-                <box width={2} flexShrink={0} minWidth={0}>
-                  <text fg={ERROR}>▪ </text>
-                </box>
-                <box flexGrow={1} minWidth={0} flexDirection="row">
-                  <text fg={MUTED}>{restFitted}</text>
-                </box>
+        <box key={entry.id} flexDirection="column" width={maxWidth} flexShrink={0} minWidth={0} marginTop={marginTop}>
+          {/* External label row: 0sec at upper-left, You at upper-right */}
+          {label ? (
+            isUser ? (
+              // Operator: "You" right-aligned at top edge
+              <box flexDirection="row" minWidth={0}>
+                <box flexGrow={1} />
+                <text height={1} wrapMode="none" truncate fg={labelTone} attributes={TextAttributes.BOLD}>{fitTuiText(label, maxWidth)}</text>
               </box>
-            ) : null}
-          </box>
+            ) : (
+              // Assistant: "0sec" left-aligned at top edge
+              <box flexDirection="row" minWidth={0}>
+                <text height={1} wrapMode="none" truncate fg={labelTone} attributes={TextAttributes.BOLD}>{fitTuiText(label, maxWidth)}</text>
+                <box flexGrow={1} />
+              </box>
+            )
+          ) : null}
+          {bordered ? (
+            <box width={card.outerWidth} flexDirection="column" flexShrink={0} minWidth={0} border borderStyle="rounded" borderColor={tone} backgroundColor={PANEL_ALT} paddingX={1}>
+              {body}
+            </box>
+          ) : body}
+          {restFitted ? (
+            <box flexDirection="row" minWidth={0} marginTop={1}>
+              <box width={2} flexShrink={0} minWidth={0}>
+                <text fg={ERROR}>▪ </text>
+              </box>
+              <box flexGrow={1} minWidth={0} flexDirection="row">
+                <text fg={MUTED}>{restFitted}</text>
+              </box>
+            </box>
+          ) : null}
         </box>
       );
     }
@@ -344,268 +264,36 @@ export function renderEntry(
   }
 
   if (entry.kind === "tool") {
-    const failed = entry.success === false;
-    const running = entry.success === undefined;
-    const tone = failed ? ERROR : entry.success ? SUCCESS : PRIMARY;
-    const { icon, state } = toolGlyphState(entry.success);
-
-    // ── Rich cards (OMP-style): a bordered command / edit card. Gated on the
-    // richToolCards display flag (defaults ON when unset) and the presence of
-    // the meta the tool attached. `toolCardStyle: "hidden"` still drops a
-    // SUCCESSFUL card — a failure always renders. A pane too narrow for the
-    // border chrome falls through to the plain line below. ──
-    const richCards = display.richToolCards !== false;
-    const cardFailed =
-      entry.success === false ||
-      entry.timedOut === true ||
-      (typeof entry.exitCode === "number" && entry.exitCode !== 0);
-    const hideSuccessCard = toolCardStyle === "hidden" && !cardFailed;
-
-    if (richCards && entry.metaKind === "command" && typeof entry.command === "string" && !hideSuccessCard) {
-      const cardFrame = commandCardFrame(maxWidth);
-      if (cardFrame.render) {
-        const cardTone = cardFailed ? ERROR : BORDER;
-        const footer = commandCardFooter({
-          wallMs: entry.wallMs,
-          timeoutMs: entry.timeoutMs,
-          exitCode: entry.exitCode ?? undefined,
-          timedOut: entry.timedOut,
-        });
-        // The header `$ ` + command; the command is fitted to whatever the
-        // inner width can pay for after the two-cell prompt.
-        const cmdText = fullDetails ? sanitizeTuiText(entry.command) : fitTuiText(entry.command, Math.max(1, cardFrame.innerWidth - 2));
-        const body = entry.commandOutput ?? "";
-        const bodyLines = body.trim().length > 0 ? foldBodyLines(body, fullDetails ? Number.MAX_SAFE_INTEGER : COMMAND_CARD_MAX_LINES) : [];
-        return finish(
-          <box
-            key={entry.id}
-            flexDirection="column"
-            width={cardFrame.outerWidth}
-            flexShrink={0}
-            minWidth={0}
-            marginTop={display.spacing}
-            border
-            borderColor={cardTone}
-            paddingX={1}
-          >
-            <box flexDirection="row" minWidth={0}>
-              <text fg={MUTED}>$ </text>
-              <text fg={PRIMARY} attributes={TextAttributes.BOLD}>{cmdText}</text>
-            </box>
-            {bodyLines.length > 0 ? (
-              <box flexDirection="column" minWidth={0} marginTop={1}>
-                <text fg={MUTED}>Output</text>
-                {bodyLines.map((line, i) => (
-                  <text key={`o-${i}`} fg={line.startsWith("… ") ? MUTED : TEXT}>
-                    {fullDetails ? sanitizeTuiText(line) : fitTuiText(line, cardFrame.innerWidth)}
-                  </text>
-                ))}
-              </box>
-            ) : null}
-            {footer ? (
-              <box minWidth={0} marginTop={bodyLines.length > 0 ? 1 : 0}>
-                <text fg={cardFailed ? ERROR : MUTED}>{fitTuiText(footer, cardFrame.innerWidth)}</text>
-              </box>
-            ) : null}
-          </box>,
-        );
-      }
-    }
-
-    if (richCards && entry.metaKind === "edit" && typeof entry.editPath === "string" && !hideSuccessCard) {
-      const cardFrame = editCardFrame(maxWidth);
-      if (cardFrame.render) {
-        const cardTone = cardFailed ? ERROR : BORDER;
-        const added = entry.editAdded ?? 0;
-        const removed = entry.editRemoved ?? 0;
-        const header = `✎ Edit: ${entry.editPath} (+${added}/-${removed})`;
-        const diff = entry.editDiff ?? "";
-        const diffLines = diff.trim().length > 0 ? foldBodyLines(diff, fullDetails ? Number.MAX_SAFE_INTEGER : EDIT_CARD_MAX_LINES) : [];
-        return finish(
-          <box
-            key={entry.id}
-            flexDirection="column"
-            width={cardFrame.outerWidth}
-            flexShrink={0}
-            minWidth={0}
-            marginTop={display.spacing}
-            border
-            borderColor={cardTone}
-            paddingX={1}
-          >
-            <box minWidth={0}>
-              <text fg={PRIMARY} attributes={TextAttributes.BOLD}>{fitTuiText(header, cardFrame.innerWidth)}</text>
-            </box>
-            {diffLines.length > 0 ? (
-              <box flexDirection="column" minWidth={0} marginTop={1}>
-                {diffLines.map((line, i) => {
-                  const diffTone = line.startsWith("+")
-                    ? SUCCESS
-                    : line.startsWith("-")
-                      ? ERROR
-                      : line.startsWith("… ")
-                        ? MUTED
-                        : TEXT;
-                  return (
-                    <text key={`d-${i}`} fg={diffTone}>
-                      {fullDetails ? sanitizeTuiText(line) : fitTuiText(line, cardFrame.innerWidth)}
-                    </text>
-                  );
-                })}
-              </box>
-            ) : null}
-          </box>,
-        );
-      }
-    }
-
-    // ── Web-search card (OMP-style): a bordered card with the provider +
-    // source count header, the query, an optional answer/summary, and a bounded
-    // sources list (title + host + optional age). Display-only, driven by the
-    // web `meta` sidecar; a failed search carries no meta so this only fires on
-    // success. Degrades gracefully when answer/age/title are absent. ──
-    if (richCards && entry.metaKind === "web" && !hideSuccessCard) {
-      const cardFrame = webCardFrame(maxWidth);
-      if (cardFrame.render) {
-        const inner = cardFrame.innerWidth;
-        const cardTone = failed ? ERROR : BORDER;
-        const provider = entry.webProvider?.trim() || "web";
-        const sources = entry.webSources ?? [];
-        const query = entry.webQuery?.trim() ?? "";
-        const answer = entry.webAnswer?.trim() ?? "";
-        const answerLines = answer.length > 0 ? wrapAnswerLines(answer, inner, fullDetails ? Number.MAX_SAFE_INTEGER : WEB_CARD_ANSWER_MAX_LINES) : [];
-        const shownSources = fullDetails ? sources : sources.slice(0, WEB_CARD_MAX_SOURCES);
-        const hiddenSources = sources.length - shownSources.length;
-        const header = `⌕ Web Search: ${provider} · ${sources.length} source${sources.length === 1 ? "" : "s"}`;
-        const QUERY_LABEL = "Query ";
-        return finish(
-          <box
-            key={entry.id}
-            flexDirection="column"
-            width={cardFrame.outerWidth}
-            flexShrink={0}
-            minWidth={0}
-            marginTop={display.spacing}
-            border
-            borderColor={cardTone}
-            paddingX={1}
-          >
-            <box minWidth={0}>
-              <text fg={PRIMARY} attributes={TextAttributes.BOLD}>{fitTuiText(header, inner)}</text>
-            </box>
-            {query ? (
-              <box flexDirection="row" minWidth={0} marginTop={1}>
-                <text fg={MUTED}>{QUERY_LABEL}</text>
-                <text fg={TEXT}>{fitTuiText(query, Math.max(1, inner - QUERY_LABEL.length))}</text>
-              </box>
-            ) : null}
-            {answerLines.length > 0 ? (
-              <box flexDirection="column" minWidth={0} marginTop={1}>
-                <text fg={MUTED}>Answer</text>
-                {answerLines.map((line, i) => (
-                  <text key={`a-${i}`} fg={line.endsWith("…") ? MUTED : TEXT}>{fitTuiText(line, inner)}</text>
-                ))}
-              </box>
-            ) : null}
-            {shownSources.length > 0 ? (
-              <box flexDirection="column" minWidth={0} marginTop={1}>
-                <text fg={MUTED}>Sources</text>
-                {shownSources.map((source, i) => {
-                  const host = webSourceHost(source.url);
-                  const title = (source.title ?? "").trim() || host || source.url;
-                  const age = source.age?.trim() ? ` · ${source.age.trim()}` : "";
-                  const titleMax = Math.max(1, Math.ceil(inner * 0.6));
-                  const fittedTitle = fitTuiText(title, titleMax);
-                  const metaBudget = Math.max(0, inner - fittedTitle.length);
-                  const metaText = metaBudget > 0 ? fitTuiText(` · ${host}${age}`, metaBudget) : "";
-                  return (
-                    <box key={`s-${i}`} flexDirection="row" minWidth={0}>
-                      <text fg={TEXT}>{fittedTitle}</text>
-                      {metaText ? <text fg={MUTED}>{metaText}</text> : null}
-                    </box>
-                  );
-                })}
-                {hiddenSources > 0 ? (
-                  <text fg={MUTED}>{fitTuiText(`+${hiddenSources} more`, inner)}</text>
-                ) : null}
-              </box>
-            ) : null}
-            <box minWidth={0} marginTop={1}>
-              <text fg={MUTED}>{fitTuiText(`(${provider})`, inner)}</text>
-            </box>
-          </box>,
-        );
-      }
-    }
-
-    if (fullDetails) {
-      return finish(
-        <box key={entry.id} flexDirection="column" width={maxWidth} flexShrink={0} minWidth={0} marginTop={display.spacing}>
-          <text fg={tone}>{fitTuiText(`${icon} ${entry.text} · ${state}`, maxWidth)}</text>
-          {entry.toolArgs ? <text fg={MUTED} wrapMode="word">{sanitizeTuiText(entry.toolArgs)}</text> : null}
-          {(entry.detail ?? "").split("\n").map((line, index) => <text key={index} fg={failed ? ERROR : TEXT} wrapMode="word">{sanitizeTuiText(line)}</text>)}
-        </box>,
-      );
-    }
-    const frame = toolFrame(toolCardStyle, maxWidth, entry.success);
-    if (!frame.render) return null;
-    const toolDetail = toolDetailWidth(frame.contentWidth, maxWidth);
-    // A running row SHIMMERS its label (bright sweep over the muted base) while
-    // the call is in flight; the moment it settles or fails it renders static.
-    // A failed row is loud: a bold ERROR header and a READABLE (non-muted)
-    // detail line, so the reason is legible rather than dimmed into the chrome.
-    const shimmerRunning = running && typeof display.shimmerFrame === "number";
-
-    // compact / hidden: a single clean summary line — no rail, mono palette,
-    // the colour carried only by the icon. The concise args ride on the name
-    // (`run_command · npm test · complete`) so the operator sees WHAT ran, not
-    // just that something did; `toolCompactLine` drops the state first and then
-    // truncates from the tail, so the tool's identity always survives. Detail
-    // (the result summary) is shown only on failure, where the reason matters.
-    if (frame.singleLine) {
-      const compactName = entry.toolArgs
-        ? `${entry.text}${repeat} · ${entry.toolArgs}`
-        : `${entry.text}${repeat}`;
-      const compactLine = toolCompactLine(icon, compactName, state, frame.contentWidth);
-      return finish(
-        <box key={entry.id} flexDirection="column" minWidth={0} marginTop={display.spacing}>
-          {shimmerRunning ? (
-            <ShimmerText label={compactLine} frame={display.shimmerFrame!} base={MUTED} peak={TEXT}  />
-          ) : (
-            <text fg={tone} attributes={failed ? TextAttributes.BOLD : undefined}>{compactLine}</text>
-          )}
-          {frame.showDetail && entry.detail ? (
-            <text fg={failed ? TEXT : MUTED} wrapMode="word">{fitTuiText(entry.detail, frame.contentWidth)}</text>
-          ) : null}
-        </box>,
-      );
-    }
-
-    // rail / inline: icon, muted prefix and name are siblings on one row; the
-    // name is budgeted against the prefix's real length or the row overruns its
-    // container and the renderer paints the columns into each other.
-    const toolPrefix = toolHeaderPrefix(state);
-    const cols = toolHeaderColumns(frame.contentWidth, toolPrefix.length, toolDetail);
-    const toolName = fitTuiText(`${entry.text}${repeat}`, cols.nameWidth);
-    const header = (
-      <box flexDirection="column" flexGrow={1} minWidth={0} marginLeft={frame.contentGap}>
-        <box flexDirection="row" minWidth={0}>
-          <text fg={tone} attributes={failed ? TextAttributes.BOLD : undefined}>{icon}</text>
-          <text fg={MUTED}>{toolPrefix}</text>
-          {shimmerRunning ? (
-            <ShimmerText label={toolName} frame={display.shimmerFrame!} base={MUTED} peak={TEXT}  />
-          ) : (
-            <text fg={failed ? ERROR : TEXT} attributes={failed ? TextAttributes.BOLD : undefined}>{toolName}</text>
-          )}
-        </box>
-        {frame.showDetail && entry.detail ? <text fg={failed ? TEXT : MUTED} wrapMode="word">{fitTuiText(entry.detail, toolDetail)}</text> : null}
-      </box>
-    );
-    return finish(
-      <box key={entry.id} flexDirection="row" marginTop={display.spacing} marginLeft={frame.outerMarginLeft} minWidth={0}>
-        {frame.railKind === "solid" ? <box width={1} alignSelf="stretch" backgroundColor={tone} /> : null}
-        {header}
+    // State is DERIVED from what the record actually holds (see `toolState`):
+    // a missing outcome is "running", a non-zero exit or a wallclock kill is a
+    // failure regardless of an optimistic success flag, and nothing else is
+    // allowed to read as a success. The three tool-card styles that are not
+    // the rich card keep their previous rendering exactly.
+    const state = toolState(entry);
+    const failed = state === "failed";
+    const running = state === "running";
+    const { glyph, word } = toolStateLabel(state);
+    const tone = failed ? ERROR : running ? PRIMARY : MUTED;
+    if (toolCardStyle === "hidden" && !failed && !running) return null;
+    if (toolCardStyle === "compact") return finish(
+      <box key={entry.id} width={maxWidth} flexShrink={0} minWidth={0} marginTop={display.spacing}>
+        <text width={maxWidth} height={1} wrapMode="none" truncate fg={tone}>{toolCompactLine(glyph, entry.text, word, maxWidth)}{repeat}</text>
       </box>,
+    );
+    // The rich card. It owns its own geometry, sections and degradation (down
+    // to a single line when the width cannot pay for a frame, or when
+    // `richToolCards` is off), so nothing about it is decided here.
+    return finish(
+      <ToolCard
+        key={entry.id}
+        entry={entry}
+        width={maxWidth}
+        display={display}
+        theme={theme}
+        expanded={fullDetails}
+        toggleable={Boolean(interaction?.onToggle)}
+        repeat={repeat}
+      />,
     );
   }
 
@@ -799,13 +487,30 @@ export function renderEntry(
     );
   }
 
+  // An entry that carries inline images (and is not a tool call, which draws
+  // its own) renders them as standalone image cards under its line. Numbered
+  // by the attachment's own index, with the real pixel size on the bottom
+  // border when — and only when — the payload told us what it is.
+  const attachments = entry.images ?? [];
+
   return (
-    <box key={entry.id} flexDirection="row" marginTop={display.spacing} minWidth={0}>
-      <text fg={MUTED}>·</text>
-      <box flexDirection="column" flexGrow={1} minWidth={0} marginLeft={1}>
-        <text fg={MUTED} wrapMode="word">{fitTuiText(`${entry.text}${repeat}`, maxWidth - 2)}</text>
-        {entry.detail ? <text fg={MUTED} wrapMode="word">{fitTuiText(entry.detail, maxWidth - 2)}</text> : null}
+    <box key={entry.id} flexDirection="column" minWidth={0}>
+      <box flexDirection="row" marginTop={display.spacing} minWidth={0}>
+        <text fg={MUTED}>·</text>
+        <box flexDirection="column" flexGrow={1} minWidth={0} marginLeft={1}>
+          <text fg={MUTED} wrapMode="word">{fitTuiText(`${entry.text}${repeat}`, maxWidth - 2)}</text>
+          {entry.detail ? <text fg={MUTED} wrapMode="word">{fitTuiText(entry.detail, maxWidth - 2)}</text> : null}
+        </box>
       </box>
+      {attachments.map((image, index) => (
+        <ImageCard
+          key={`${entry.id}-image-${image.index ?? index}`}
+          image={image}
+          width={maxWidth}
+          theme={theme}
+          marginTop={1}
+        />
+      ))}
     </box>
   );
 }

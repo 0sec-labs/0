@@ -1,6 +1,12 @@
 /**
- * Layout, navigation and windowing arithmetic for the full-screen model
- * picker.
+ * Layout, navigation and windowing arithmetic for the `/model` pop-up dialog.
+ *
+ * The screen is a dialog body — an icon+title row, the shared grouped and
+ * searchable picker with a detail column beside it, and a status line inside a
+ * panel someone else drew. Every width and row count it renders comes out of
+ * `computeModelDialogLayout` below, measured against the *surface* box
+ * (`useSurfaceDimensions`) rather than the terminal, so the same arithmetic
+ * serves the dialog and a bare full-screen route.
  *
  * This is `settings-layout.ts` for `/model`, and it exists for the same reason
  * spelled out in `PRIMITIVES.md`: OpenTUI lays rows out with Yoga, and Yoga
@@ -56,12 +62,30 @@
  * `shell-geometry.ts`, and this import is the marker for that move.
  */
 
+import { computeDialogPanel, type DialogPanel } from "./dialog-select-layout.js";
 import { buildModelCatalog, type CatalogModel } from "./model-catalog.js";
+import { operatorIcon, operatorTitle } from "./operator-icons.js";
 import { PROVIDERS, providerStates, type ProviderState } from "./provider-status.js";
 import { shellChromeRows, wrapCells } from "./settings-layout.js";
 import { sanitizeTuiText } from "./text.js";
 
 export { shellChromeRows, wrapCells };
+
+// ---------------------------------------------------------------------------
+// Glyphs
+// ---------------------------------------------------------------------------
+//
+// The title glyph and label come from the shared `operator-icons.ts` registry
+// so every dialog in the console is stamped the same way, and the label is
+// always rendered beside the glyph — there is no icon font, and a bare glyph
+// names nothing. Field markers share the plain-text status/usage vocabulary.
+
+export const ICON_CONTEXT = "◫";
+export const ICON_PRICE = "$";
+export const ICON_PROVIDER = "⌨";
+export const ICON_MODEL = "◈";
+export const ICON_WARN = "!";
+export const ICON_SEARCH = "⌕";
 
 // ---------------------------------------------------------------------------
 // Numeric hygiene
@@ -357,6 +381,127 @@ export interface ModelDetailInput {
   configured?: readonly string[];
   /** Omit the blank separator rows. Set when the pane is short of rows. */
   compact?: boolean;
+  /**
+   * The context window in tokens, exactly as the synced catalogue reported it.
+   *
+   * `undefined` and `null` both mean "the catalogue does not say", and the pane
+   * then renders `unknown`. Nothing here derives, rounds up from a sibling
+   * model, or assumes a vendor default: a context window the operator plans a
+   * run around is the last field that may be guessed.
+   */
+  contextTokens?: number | null;
+}
+
+// ---------------------------------------------------------------------------
+// Context windows
+// ---------------------------------------------------------------------------
+
+/**
+ * The minimum shape a synced catalogue row needs to answer "what context
+ * window does this model have". Structural on purpose: the concrete row type
+ * lives in `model-catalog-sync.ts`, which this module has no business
+ * depending on, and `model-catalog.ts` is not this lane's to widen.
+ */
+export interface ContextWindowSource {
+  id: string;
+  provider: string;
+  /** Context window in tokens, when the feed reported one. */
+  contextTokens?: number;
+}
+
+/**
+ * The index key for catalogue metadata: **provider and id together**.
+ *
+ * Keying on the model id alone is unsafe. The same id is served by more than
+ * one provider (a vendor id re-exposed by an aggregator, a fork under a new
+ * roof), and those rows can carry different context windows. An id-only
+ * lookup silently returns whichever row happened to be stored first, which on
+ * this screen means reporting another provider's window as this model's — a
+ * number the operator sizes a run against. The NUL separator cannot occur in
+ * either field, so no two distinct pairs can collide into one key.
+ */
+export function catalogContextKey(provider: string, id: string): string {
+  return `${provider}\0${id}`;
+}
+
+/**
+ * A provider+id -> context-window index over a synced catalogue.
+ *
+ * A row with no reported window is not indexed at all, and two rows that claim
+ * the *same* provider and id with *different* windows cancel each other out
+ * and are removed: there is no basis for preferring one, and an arbitrary
+ * winner is exactly the silent wrong answer this key exists to prevent. Both
+ * cases surface as "unknown", which is the honest answer.
+ */
+export function buildContextWindowIndex(
+  models: readonly ContextWindowSource[],
+): ReadonlyMap<string, number> {
+  const index = new Map<string, number>();
+  const conflicted = new Set<string>();
+  for (const model of models) {
+    if (typeof model?.id !== "string" || model.id.length === 0) continue;
+    if (typeof model.provider !== "string" || model.provider.length === 0) continue;
+    const tokens = model.contextTokens;
+    if (typeof tokens !== "number" || !Number.isFinite(tokens) || tokens <= 0) continue;
+    const key = catalogContextKey(model.provider, model.id);
+    if (conflicted.has(key)) continue;
+    const seen = index.get(key);
+    if (seen !== undefined && seen !== Math.trunc(tokens)) {
+      index.delete(key);
+      conflicted.add(key);
+      continue;
+    }
+    index.set(key, Math.trunc(tokens));
+  }
+  return index;
+}
+
+/**
+ * The context window for one catalogue row, or `null` when the index cannot
+ * answer for that exact provider+id pair.
+ *
+ * `null` is returned for an unknown provider, an unindexed model, and a
+ * conflicting pair alike. Nothing falls back to an id-only lookup: a miss is
+ * "unknown", never "some other provider's number".
+ */
+export function contextWindowFor(
+  index: ReadonlyMap<string, number>,
+  provider: string | undefined,
+  id: string | undefined,
+): number | null {
+  if (typeof provider !== "string" || provider.length === 0) return null;
+  if (typeof id !== "string" || id.length === 0) return null;
+  return index.get(catalogContextKey(provider, id)) ?? null;
+}
+
+/**
+ * A token count as the catalogue reported it, abbreviated but never rounded
+ * into a different number: 200000 -> "200K", 1048576 -> "1048576" (it is not a
+ * whole number of thousands, so the exact figure is printed rather than a
+ * tidier lie).
+ */
+export function formatContextTokens(value: unknown): string {
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) return "unknown";
+  const tokens = Math.trunc(value);
+  if (tokens >= 1_000_000 && tokens % 1_000_000 === 0) return `${tokens / 1_000_000}M tokens`;
+  if (tokens >= 1_000 && tokens % 1_000 === 0) return `${tokens / 1_000}K tokens`;
+  return `${tokens} tokens`;
+}
+
+/**
+ * The catalogue's price string, with its "no rate published" sentinel spelled
+ * out.
+ *
+ * `catalogExtras` writes `"—"` for a Models.dev row the pricing table has no
+ * rates for. Rendered raw that reads as a dash-shaped price; rendered as
+ * "not published" it reads as the absence it is. `"free"` is left exactly as
+ * `formatModelPrice` produced it — that is the pricing table stating both
+ * rates are zero, not a claim this module invented.
+ */
+export function modelPriceText(price: unknown): string {
+  const text = sanitizeTuiText(price ?? "");
+  if (text.length === 0 || text === "—" || text === "-") return "not published";
+  return text;
 }
 
 /**
@@ -369,7 +514,7 @@ export interface ModelDetailInput {
  * fuse to its value.
  */
 export function modelDetailLines(
-  { row, configured = [], compact = false }: ModelDetailInput,
+  { row, configured = [], compact = false, contextTokens }: ModelDetailInput,
   width: number,
 ): ModelDetailLine[] {
   const limit = cells(width);
@@ -392,10 +537,17 @@ export function modelDetailLines(
   } else {
     push(row.model.id, "title");
     separate();
-    push(`Provider: ${group.label}`, "text");
-    push(`Price: ${row.model.price}`, "text");
+    push(`${ICON_PROVIDER} Provider: ${group.label}`, "text");
+    // Both of the next two fields are reported, never derived. A price the
+    // pricing table has no row for reads "not published"; a context window the
+    // synced catalogue never carried reads "unknown". Neither is filled in
+    // from a sibling model or a vendor default.
+    const priceText = modelPriceText(row.model.price);
+    push(`${ICON_PRICE} Price: ${priceText}`, priceText === "not published" ? "muted" : "text");
+    const contextText = formatContextTokens(contextTokens);
+    push(`${ICON_CONTEXT} Context: ${contextText}`, contextText === "unknown" ? "muted" : "text");
     if (row.active) push("Currently active", "accent");
-    else push("Enter to select for New chat", "accent");
+    else push("Enter stages this model for the next audit", "accent");
   }
 
   separate();
@@ -482,6 +634,266 @@ export function clipModelDetailLines(
     kept[limit - 1] = { text: "...", tone: "muted" };
   }
   return kept;
+}
+
+// ---------------------------------------------------------------------------
+// Hosted detail pane
+// ---------------------------------------------------------------------------
+
+/**
+ * Tone-tags and wraps the hosted service's own description of a model.
+ *
+ * The strings come from `hostedModelDetails` in `model-catalog.ts`, which is
+ * the authoritative projection of what the account's catalogue and allowance
+ * actually reported. Nothing is added here and nothing is rewritten: this
+ * function only decides which rows read as a heading, which read as an absent
+ * value, and which read as a failure, then wraps them to the pane.
+ *
+ * An absent value is muted rather than hidden, because on this screen "the
+ * hosted service did not report a context window" is itself the fact the
+ * operator needs; dropping the row would leave a gap that reads as though the
+ * field were never asked for.
+ */
+const HOSTED_ABSENT = /\b(unknown|none reported|not established|no evidence reference|unavailable)\b/i;
+
+export function hostedDetailLines(
+  details: readonly string[],
+  width: number,
+  compact = false,
+): ModelDetailLine[] {
+  const limit = cells(width);
+  if (limit <= 0) return [];
+  const lines: ModelDetailLine[] = [];
+  details.forEach((detail, index) => {
+    const value = sanitizeTuiText(detail);
+    if (value.length === 0) return;
+    const tone: ModelDetailTone =
+      index === 0
+        ? "title"
+        : /^State: available$/i.test(value)
+          ? "ok"
+          : /^State:/i.test(value)
+            ? "warn"
+            : HOSTED_ABSENT.test(value)
+              ? "muted"
+              : "text";
+    for (const text of wrapCells(value, limit)) lines.push({ text, tone });
+    if (!compact && index === 0) lines.push({ text: "", tone: "blank" });
+  });
+  return lines;
+}
+
+// ---------------------------------------------------------------------------
+// Dialog geometry
+// ---------------------------------------------------------------------------
+
+/**
+ * Rows the host frame keeps for itself *inside* the dialog panel.
+ *
+ * This is the settled host contract, not an estimate. Inside a
+ * `DialogSurface` the route renders `ShellFrame` with `dialogContent`, which
+ * draws no header, no horizontal padding and no top padding —
+ * `useSurfaceDimensions()` is then the full panel interior and no shell chrome
+ * comes off it. What the route does put in that interior alongside this
+ * screen's body is exactly two rows: the "selections apply to the next audit"
+ * staging line above it, and a `FooterBar` below it which is exactly one row
+ * in a dialog. Reserving fewer paints the list through the footer, and
+ * OpenTUI does not clip (see PRIMITIVES.md).
+ *
+ * Outside a dialog the legacy shell still draws its header and padding, so
+ * that path keeps subtracting `shellChromeRows` instead of this constant.
+ */
+export const MODEL_DIALOG_HOST_CHROME_ROWS = 2;
+
+export interface ModelDialogLayoutInput {
+  /** The surface's inner width — the dialog panel's box, or the terminal. */
+  width: number;
+  /** The surface's inner height. */
+  height: number;
+  /** Display rows (provider headings interleaved) the list would render. */
+  totalRows: number;
+  /** True when the screen is mounted inside a `DialogSurface` panel. */
+  inDialog?: boolean;
+  /** Override the rows reserved for the host frame inside a dialog panel. */
+  hostChromeRows?: number;
+}
+
+export interface ModelDialogLayout {
+  /** Cells every row of the body may occupy. */
+  contentWidth: number;
+  /** 1 when there is room for the icon+title row, else 0. */
+  titleRows: number;
+  /** 0, 1 or 2 rows of target / single-model context under the title. */
+  metaRows: number;
+  /** 1 when there is room for the notice/connection line, else 0. */
+  statusRows: number;
+  /** Rows the picker body (search line + list + detail) may occupy. */
+  bodyRows: number;
+  /** Rows of stacked detail below the list when the pane could not sit beside it. */
+  stackedRows: number;
+  /** Geometry for `DialogSelectBody`, in inline `bodyRows` mode. */
+  panel: DialogPanel;
+}
+
+/** A picker body narrower than this cannot host a stacked detail block. */
+const STACKED_MIN_WIDTH = 24;
+/** Rows the list keeps for itself before a stacked detail block is affordable. */
+const STACKED_MIN_LIST_ROWS = 6;
+/** A stacked detail block never grows past this. */
+const STACKED_MAX_ROWS = 8;
+
+/**
+ * Every width and row count the model dialog renders, from the surface box.
+ *
+ * The rows are handed out in priority order — the picker first, then the
+ * status line, the title, and the target/policy context last — so a very short
+ * surface degrades to "just the list" rather than to "chrome with no list".
+ * The parts sum to at most the rows available, which is the property that
+ * keeps the body from painting through whatever the frame drew below it.
+ */
+export function computeModelDialogLayout({
+  width,
+  height,
+  totalRows,
+  inDialog = false,
+  hostChromeRows,
+}: ModelDialogLayoutInput): ModelDialogLayout {
+  const surfaceWidth = cells(width);
+  const surfaceHeight = cells(height);
+  // Inside a dialog the panel already paid for its border and padding; on a
+  // bare terminal the shell's own horizontal padding still has to come off.
+  const contentWidth = Math.max(0, surfaceWidth - (inDialog ? 0 : 4));
+  const chrome = inDialog
+    ? cells(hostChromeRows ?? MODEL_DIALOG_HOST_CHROME_ROWS)
+    : shellChromeRows(surfaceWidth);
+  const available = Math.max(0, surfaceHeight - chrome);
+
+  const titleRows = available >= 5 ? 1 : 0;
+  const statusRows = available >= 4 ? 1 : 0;
+  const metaRows = available >= 10 ? 2 : available >= 8 ? 1 : 0;
+  const bodyRows = Math.max(0, available - titleRows - statusRows - metaRows);
+
+  const panelFor = (rows: number): DialogPanel =>
+    computeDialogPanel({
+      width: contentWidth,
+      height: surfaceHeight,
+      size: "large",
+      totalRows,
+      withDetail: true,
+      bodyRows: rows,
+    });
+
+  let panel = panelFor(bodyRows);
+  let stackedRows = 0;
+  if (
+    !panel.showDetail &&
+    contentWidth >= STACKED_MIN_WIDTH &&
+    bodyRows >= STACKED_MIN_LIST_ROWS + 3
+  ) {
+    stackedRows = Math.min(STACKED_MAX_ROWS, bodyRows - STACKED_MIN_LIST_ROWS);
+    panel = panelFor(bodyRows - stackedRows);
+  }
+
+  return { contentWidth, titleRows, metaRows, statusRows, bodyRows, stackedRows, panel };
+}
+
+// ---------------------------------------------------------------------------
+// Title, scope and hints
+// ---------------------------------------------------------------------------
+
+/** Which catalogue the screen is actually looking at. */
+export type ModelCatalogScope = "hosted" | "byok" | "unknown";
+
+export interface ModelDialogTitleInput {
+  scope: ModelCatalogScope;
+  /** The BYOK connection id, when there is one. Never invented. */
+  providerId?: string;
+  /** BYOK only: whether the full synced superset is on show. */
+  showAll?: boolean;
+}
+
+/**
+ * The dialog's title row: the shared glyph, the shared label, then which
+ * catalogue is on screen.
+ *
+ * The glyph and label come from `operator-icons.ts` so this dialog is stamped
+ * exactly like every other one, and the label is always beside the glyph —
+ * there is no icon font behind these code points.
+ */
+export function modelDialogTitle({ scope, providerId, showAll = false }: ModelDialogTitleInput): string {
+  const head = `${operatorIcon("models")} ${operatorTitle("models")}`;
+  if (scope === "hosted") return `${head} · Hosted catalog`;
+  if (scope === "unknown") return `${head} · no connection`;
+  const connection = sanitizeTuiText(providerId ?? "");
+  return `${head} · ${connection.length > 0 ? connection : "BYOK"} · ${showAll ? "all synced" : "curated"}`;
+}
+
+/**
+ * The right-aligned counter beside the title.
+ *
+ * It counts the rows actually on screen — the filtered list — and says
+ * "loading" while a refresh is in flight, so a short list during a reload is
+ * never mistaken for a short catalogue.
+ */
+export function modelDialogCount(matched: number, refreshing: boolean): string {
+  const count = cells(matched);
+  return `${count} model${count === 1 ? "" : "s"}${refreshing ? " · loading" : ""}`;
+}
+
+export interface ModelDialogHintInput {
+  scope: ModelCatalogScope;
+  /** Null when the parent model is the target; otherwise the role being set. */
+  role?: string | null;
+  hasFilter?: boolean;
+}
+
+/**
+ * The footer hints, naming only bindings this screen actually implements.
+ *
+ * `Ctrl+R` exists only on the hosted path and `Tab` only on the BYOK path, so
+ * each is named only where it works; `Ctrl+Backspace` is named only while a
+ * role is targeted, because that is the only state in which it does anything.
+ */
+export function modelDialogHint({ scope, role = null, hasFilter = false }: ModelDialogHintInput): string {
+  return [
+    "↑↓ model",
+    "enter stage",
+    "ctrl+←/→ target",
+    "ctrl+s single",
+    role !== null ? "ctrl+backspace inherit" : undefined,
+    scope === "hosted" ? "ctrl+r reload" : scope === "byok" ? "tab curated/all" : undefined,
+    hasFilter ? "ctrl+u clear" : "type to filter",
+    hasFilter ? "esc clear" : "esc back",
+  ]
+    .filter((part): part is string => part !== undefined)
+    .join(" · ");
+}
+
+/**
+ * The "what am I about to change" line under the title.
+ *
+ * It states the target (the parent model, or one role) and the model that
+ * target resolves to today, and it says outright when a role has no assignment
+ * of its own — an unconfigured role inherits, and showing the inherited id
+ * without that word would read as an assignment that was never made.
+ */
+export function modelTargetLine(
+  role: string | null,
+  activeModel: string | undefined,
+  assigned: boolean,
+): string {
+  const target = role === null ? "parent model" : sanitizeTuiText(role);
+  const model = sanitizeTuiText(activeModel ?? "");
+  const value = model.length > 0 ? model : "not selected";
+  const inherits = role !== null && !assigned ? " (inherits the parent)" : "";
+  return `${ICON_MODEL} Target: ${target} → ${value}${inherits}`;
+}
+
+/** The single-model policy line, stating the policy and how to change it. */
+export function singleModelLine(enabled: boolean): string {
+  return enabled
+    ? "Single model: on — role overrides are inactive for the next audit"
+    : "Single model: off — explicit role overrides are honoured";
 }
 
 // ---------------------------------------------------------------------------

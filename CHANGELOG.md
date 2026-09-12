@@ -12,6 +12,30 @@ on the published npm package and the GitHub Release tag.
 
 ## [Unreleased]
 
+### Fixed
+
+- Present operator screens as bounded, responsive dialogs while keeping the
+  current audit and draft mounted. Use consistent icons and palette colors.
+- Keep sidebar backgrounds and padding continuous, show live plan progress,
+  and theme transcript scrollbars without resetting their position.
+- Preserve filter text, selection, and permission-mode changes across keyboard
+  bursts. Pin marketplace confirmations and worker steering drafts to the
+  exact selected item or worker rather than a later roster or registry state.
+- Show tool activity above the composer and loading below full-width rules.
+  Render expandable tool and image cards with reported outcomes and dimensions,
+  and use audit objective events for titles without inventing context usage.
+- Keep phase-aware plan trees and rounded You/0sec transcript cards, with
+  bounded, redacted code and diff previews shared by tool result cards.
+- Keep each live audit's conversation, draft, runtime, and mailbox independent.
+  `/new` opens another audit; closing waits for cleanup and permits an explicit retry.
+  Keep generated worker addresses within the mailbox identity limit for UUID audit IDs.
+- Drain owned workers before acknowledging a stop, while retaining the parent
+  conversation. Show confirmed stops and unfinished workers as settled.
+- Pin worker model choices to the parent's provider and account. Model-picker
+  changes apply to the next audit, and hosted metadata comes from that account's catalog.
+- Keep onboarding completion in the operator's global settings. Reset selected
+  settings without promoting unrelated project overrides into global preferences.
+
 ### Added
 
 - Executable TypeScript plugins, reusable skills, and agent programs can be
