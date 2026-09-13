@@ -244,6 +244,32 @@ describe("transcript styles are genuinely distinct, not tints", () => {
     expect(speechFrame("document", "assistant", 80).extraMarginTop).toBe(1);
     expect(speechFrame("rail", "assistant", 80).extraMarginTop).toBe(0);
   });
+
+  it("minimal is the flat look: never bordered, an accent rail only on the user turn", () => {
+    // No bubble/box anywhere in minimal — not even for speech or errors.
+    expect(speechFrame("minimal", "assistant", 80).bordered).toBe(false);
+    expect(speechFrame("minimal", "user", 80).bordered).toBe(false);
+    expect(speechFrame("minimal", "error", 80).bordered).toBe(false);
+    // The operator's turn carries a 1-cell coloured accent rail + a 1-cell gap.
+    const user = speechFrame("minimal", "user", 80);
+    expect(user.railKind).toBe("solid");
+    expect(user.railWidth).toBe(1);
+    expect(user.contentGap).toBe(1);
+    expect(user.contentWidth).toBe(78);
+    // The assistant answer is flush and full-width, with no rail.
+    const bot = speechFrame("minimal", "assistant", 80);
+    expect(bot.railKind).toBe("none");
+    expect(bot.railWidth).toBe(0);
+    expect(bot.contentWidth).toBe(80);
+    // Both keep the label on its own row (it is not inlined like compact).
+    expect(user.labelOwnRow).toBe(true);
+    expect(bot.labelOwnRow).toBe(true);
+  });
+
+  it("minimal is the default transcript style", () => {
+    expect(DEFAULT_TRANSCRIPT_STYLE).toBe("minimal");
+    expect(resolveTranscriptStyleSettings({}).transcriptStyle).toBe("minimal");
+  });
 });
 
 // ---------------------------------------------------------------------------

@@ -216,6 +216,28 @@ export function renderEntry(
       );
     }
 
+    // Minimal (the default): the OpenCode / oh-my-pi flat look. NO bordered
+    // bubble, NO panel fill, NO box anywhere. The operator's turn is marked only
+    // by a thin coloured accent rail (ACCENT) down its left, with a 1-cell gap;
+    // the model's answer flows as plain body text flush against the pane,
+    // distinguished only by its brand-toned speaker label. The optional footer
+    // (model/tokens/cost/elapsed) reads as a muted, italic secondary line.
+    if (transcriptStyle === "minimal") {
+      const spine = isUser ? ACCENT : BRAND;
+      return (
+        <box key={entry.id} flexDirection="row" width={maxWidth} flexShrink={0} minWidth={0} marginTop={marginTop}>
+          {isUser && frame.railWidth > 0 ? (
+            <box width={frame.railWidth} flexShrink={0} alignSelf="stretch" backgroundColor={spine} />
+          ) : null}
+          <box flexDirection="column" flexGrow={1} minWidth={0} marginLeft={isUser ? frame.contentGap : 0}>
+            {label ? <text fg={labelTone} attributes={TextAttributes.BOLD}>{label}</text> : null}
+            {body}
+            {restFitted ? <text fg={MUTED} attributes={TextAttributes.ITALIC}>{restFitted}</text> : null}
+          </box>
+        </box>
+      );
+    }
+
     // Rail remains the opt-in left-spine layout rather than a bubble card.
     if (transcriptStyle === "rail") {
       // BOTH voices are marked the same way — a thin left SPINE plus a bold label,

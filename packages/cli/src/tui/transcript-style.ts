@@ -46,6 +46,10 @@ import { sanitizeTuiText } from "./text.js";
  * How a speaking turn (user / assistant / error / reasoning / notice) is
  * framed. These are genuinely different shapes, not tints:
  *
+ *  - `minimal`  — the OpenCode / oh-my-pi flat look and the default: NO bubble
+ *                 or box anywhere. The operator's turn is marked only by a thin
+ *                 coloured accent rail down its left; the answer flows as plain
+ *                 body text flush against the pane. Minimal chrome, maximal read.
  *  - `bubble` — right-aligned operator messages and left-aligned answers.
  *  - `rail`     — a 1-cell coloured rail down the left of each turn.
  *  - `plain`    — no rails, no borders; the role is a short coloured prefix
@@ -55,7 +59,7 @@ import { sanitizeTuiText } from "./text.js";
  *  - `document` — generous whitespace and full-width markdown so a long
  *                 analysis reads like a document rather than a chat log.
  */
-export const TRANSCRIPT_STYLES = ["bubble", "rail", "plain", "compact", "document"] as const;
+export const TRANSCRIPT_STYLES = ["minimal", "bubble", "rail", "plain", "compact", "document"] as const;
 export type TranscriptStyle = (typeof TRANSCRIPT_STYLES)[number];
 
 /**
@@ -81,7 +85,7 @@ export type RoleLabelStyle = (typeof ROLE_LABEL_STYLES)[number];
 export const TOOL_CARD_STYLES = ["rail", "inline", "compact", "hidden"] as const;
 export type ToolCardStyle = (typeof TOOL_CARD_STYLES)[number];
 
-export const DEFAULT_TRANSCRIPT_STYLE: TranscriptStyle = "bubble";
+export const DEFAULT_TRANSCRIPT_STYLE: TranscriptStyle = "minimal";
 export const DEFAULT_ROLE_LABEL_STYLE: RoleLabelStyle = "full";
 export const DEFAULT_TOOL_CARD_STYLE: ToolCardStyle = "rail";
 
@@ -402,6 +406,29 @@ export function speechFrame(
       labelOwnRow: true,
       contentWidth: inner,
       markdownWidth: Math.max(MIN_MARKDOWN_WIDTH, inner),
+    };
+  }
+
+  if (style === "minimal" && !isReasoning && !isNotice) {
+    // OpenCode / oh-my-pi flat look: NO bordered bubble or box. The operator's
+    // turn carries a 1-cell coloured accent rail (a subtle left gutter) plus a
+    // 1-cell gap so it reads as "yours"; the assistant answer — and an error —
+    // is flush and full-width, plain body text. `railKind: "solid"` on the user
+    // turn is what both the chat surface and the settings preview draw the bar
+    // from, so the two never disagree.
+    const isUser = kind === "user";
+    const railWidth = isUser && width >= 2 ? 1 : 0;
+    const contentGap = isUser && width >= 2 ? 1 : 0;
+    const content = clampWidth(width - railWidth - contentGap);
+    return {
+      bordered: false,
+      railKind: isUser ? "solid" : "none",
+      railWidth,
+      contentGap,
+      extraMarginTop: 0,
+      labelOwnRow: true,
+      contentWidth: content,
+      markdownWidth: Math.max(MIN_MARKDOWN_WIDTH, content),
     };
   }
 

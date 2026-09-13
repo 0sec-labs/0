@@ -474,6 +474,25 @@ describe("sidebar settings", () => {
     writeFileSync(settingsFilePath(home), JSON.stringify({ transcriptStyle: "messenger" }), "utf8");
     expect(loadSettings(home).transcriptStyle).toBe("bubble");
   });
+  it("defaults transcriptStyle to the flat minimal style and offers it as a choice", () => {
+    // Minimal (the OpenCode / oh-my-pi flat look) is the new default.
+    expect(DEFAULT_SETTINGS.transcriptStyle).toBe("minimal");
+    const def = SETTING_DEFS.find((d) => d.key === "transcriptStyle");
+    expect(def?.default).toBe("minimal");
+    expect(def?.choices).toContain("minimal");
+    // The prior styles all remain selectable.
+    for (const style of ["bubble", "rail", "plain", "compact", "document"]) {
+      expect(def?.choices).toContain(style);
+    }
+    // A persisted minimal round-trips through normalise + save + load.
+    const home = makeHome();
+    const saved = normalizeSettings({ transcriptStyle: "minimal" });
+    expect(saved.transcriptStyle).toBe("minimal");
+    expect(saveSettings(saved, home)).toBe(true);
+    expect(loadSettings(home).transcriptStyle).toBe("minimal");
+    // An unset transcriptStyle falls back to the minimal default.
+    expect(normalizeSettings({}).transcriptStyle).toBe("minimal");
+  });
 });
 
 describe("telemetry settings", () => {
