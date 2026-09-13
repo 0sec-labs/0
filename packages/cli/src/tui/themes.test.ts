@@ -132,8 +132,8 @@ describe("default theme", () => {
   });
 
   it("is the fallback", () => {
-    expect(DEFAULT_THEME_NAME).toBe("slate");
-    expect(getTheme(DEFAULT_THEME_NAME)).toBe(THEMES.slate.palette);
+    expect(DEFAULT_THEME_NAME).toBe("opencode");
+    expect(getTheme(DEFAULT_THEME_NAME)).toBe(THEMES.opencode.palette);
   });
 
   it("reproduces severityTone's mapping", () => {

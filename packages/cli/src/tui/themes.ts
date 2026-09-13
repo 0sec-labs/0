@@ -667,9 +667,13 @@ export const THEME_NAMES = [
 export type ThemeName = (typeof THEME_NAMES)[number];
 
 /**
- * The theme a fresh session gets. `slate` — a neutral grey dark palette with no
- * hue in the chrome — is the shipped look, and like `midnight` it clears AA on
- * every text token with no waivers, so the default carries no contrast debt.
+ * The theme a fresh session gets. `opencode` — the warm-tan-on-near-black look
+ * with a purple accent and a polychrome syntax palette — is the shipped look,
+ * because a rich, semantically-coloured transcript (the OpenCode/oh-my-pi feel
+ * the operator asked for) reads far less flat than a neutral grey. Like the
+ * other shipped darks it clears AA on every text token with no waivers, so the
+ * default carries no contrast debt. `slate` remains available for anyone who
+ * prefers hueless grey chrome.
  *
  * This is a default, not a migration: an operator who has explicitly chosen a
  * theme keeps it, because a persisted preference is read in preference to this
@@ -680,7 +684,7 @@ export type ThemeName = (typeof THEME_NAMES)[number];
  * preferred the old warm-grey look can opt back into it. That preservation — not
  * being the default — is why `dark` is the sole carrier of `CONTRAST_WAIVERS`.
  */
-export const DEFAULT_THEME_NAME: ThemeName = "slate";
+export const DEFAULT_THEME_NAME: ThemeName = "opencode";
 
 /**
  * The one palette pinned byte-for-byte to the original `ui/theme.ts`, and so the
