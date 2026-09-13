@@ -8,8 +8,15 @@ import type {
   IntelSource,
   IntelTargetHistory,
   TargetHistorySearchInput,
+  TargetMatchConfidence,
   VulnerabilityIntel,
 } from "./types.js";
+
+/** Loose free-text keywords must be at least this long to be matched (0sec#intel-advisories). */
+const MIN_LOOSE_HINT_LENGTH = 4;
+/** Structured names (repo/package/product) can be shorter (e.g. "gin"). */
+const MIN_STRONG_HINT_LENGTH = 3;
+const CONFIDENCE_RANK: Record<TargetMatchConfidence, number> = { high: 3, medium: 2, low: 1 };
 
 export interface TargetHistoryInference {
   input: TargetHistorySearchInput;
@@ -21,7 +28,16 @@ export function buildTargetHistoryResult(
   advisories: VulnerabilityIntel[],
 ): IntelTargetHistory {
   const hints = targetHistoryHints(input);
-  const filtered = mergeIntel(advisories).filter((advisory) => matchesTargetHint(advisory, hints));
+  const matcher = buildTargetMatcher(input);
+  // Score every candidate; drop advisories that match no target token at all
+  // (the old plain-substring filter let "ADR" hit "adreno" and "kraken" hit
+  // "KrakenD" — 0sec#intel-advisories), and annotate survivors with confidence.
+  const filtered = mergeIntel(advisories)
+    .flatMap((advisory) => {
+      const confidence = scoreTargetMatch(advisory, matcher);
+      return confidence ? [{ ...advisory, matchConfidence: confidence }] : [];
+    })
+    .sort((a, b) => CONFIDENCE_RANK[b.matchConfidence!] - CONFIDENCE_RANK[a.matchConfidence!]);
   const playbooks = buildPriorVulnerabilityPlaybooks(filtered, []);
   const auditGraph = buildPriorVulnerabilityAuditGraph(playbooks);
   const graph = toGraphSnapshot(filtered);
@@ -135,19 +151,48 @@ export function inferTargetHistoryInputFromRepo(repoPath: string): TargetHistory
 }
 
 export function targetHistoryHints(input: TargetHistorySearchInput): string[] {
-  const repo = normalizeRepositoryHint(input.repository ?? input.target);
-  const repoName = repo?.split("/")[1];
+  const { repository, repoName, strongTokens, looseTokens } = buildTargetMatcher(input);
+  // Display list for the summary: structured identifiers first, then loose
+  // keywords. Structured names may be short (>=3, e.g. "gin"); loose keywords
+  // must clear the higher bar to keep noise down.
   return uniqueStrings([
-    input.target,
-    repo,
+    repository,
     repoName,
-    input.packageName,
-    input.product,
-    input.vendor && input.product ? `${input.vendor} ${input.product}` : undefined,
-    ...(input.keywords ?? []),
-  ])
-    .map((hint) => hint.toLowerCase())
-    .filter((hint) => hint.length >= 3);
+    ...strongTokens,
+    ...looseTokens,
+  ]);
+}
+
+export interface TargetMatcher {
+  repository?: string;
+  repoName?: string;
+  /** Exact package/product identifiers — token or exact-field matches → high/medium. */
+  strongTokens: string[];
+  /** Loose free-text keywords + vendor/product phrase — token matches → low. */
+  looseTokens: string[];
+  /** Names an advisory's package field may equal for a high-confidence hit. */
+  exactPackageNames: string[];
+}
+
+/**
+ * Turn a target into a structured matcher (0sec#intel-advisories). Splits
+ * high-signal identifiers (repository, package name, product) from loose
+ * free-text keywords so we can score each advisory by how strongly it matches
+ * instead of doing an arbitrary substring test.
+ */
+export function buildTargetMatcher(input: TargetHistorySearchInput): TargetMatcher {
+  const repository = normalizeRepositoryHint(input.repository ?? input.target)?.toLowerCase();
+  const repoName = repository?.split("/")[1];
+  const packageName = input.packageName?.toLowerCase();
+  const unscoped = unscopedPackageName(packageName);
+  const product = input.product?.toLowerCase();
+  const strongTokens = uniqueStrings([repoName, product, unscoped].map((t) => t ?? undefined))
+    .filter((token) => token.length >= MIN_STRONG_HINT_LENGTH);
+  const vendorProduct = input.vendor && input.product ? `${input.vendor} ${input.product}`.toLowerCase() : undefined;
+  const looseTokens = uniqueStrings([vendorProduct, ...(input.keywords ?? []).map((k) => k.toLowerCase())])
+    .filter((token) => token.length >= MIN_LOOSE_HINT_LENGTH);
+  const exactPackageNames = uniqueStrings([packageName, unscoped, product].map((t) => t ?? undefined));
+  return { repository, repoName, strongTokens, looseTokens, exactPackageNames };
 }
 
 function readJsonFile(path: string, root: string): Record<string, unknown> | undefined {
@@ -224,18 +269,64 @@ export function normalizeRepositoryHint(value: string | undefined): string | und
   }
 }
 
-function matchesTargetHint(advisory: VulnerabilityIntel, hints: string[]): boolean {
-  if (hints.length === 0) return true;
+/**
+ * Score how strongly an advisory matches the target (0sec#intel-advisories):
+ *   high   — exact repository (reference URL) or package-name match
+ *   medium — a structured token (repo/package/product) appears as a whole word
+ *   low    — only a loose keyword appears as a whole word
+ *   null   — no token match; the advisory is dropped as spurious
+ * Word-boundary matching (not arbitrary `includes`) prevents "ADR" hitting
+ * "adreno" or "kraken" hitting "KrakenD".
+ */
+export function scoreTargetMatch(
+  advisory: VulnerabilityIntel,
+  matcher: TargetMatcher,
+): TargetMatchConfidence | null {
+  const hasCriteria =
+    Boolean(matcher.repository) ||
+    matcher.strongTokens.length > 0 ||
+    matcher.looseTokens.length > 0 ||
+    matcher.exactPackageNames.length > 0;
+  if (!hasCriteria) return null;
+
+  // High: exact repository (via a reference URL) or exact package-name match.
+  if (matcher.repository && advisory.references.some((ref) => referenceMatchesRepo(ref.url, matcher.repository!))) {
+    return "high";
+  }
+  const advisoryPackage = advisory.package?.name?.toLowerCase();
+  if (advisoryPackage && matcher.exactPackageNames.includes(advisoryPackage)) {
+    return "high";
+  }
+
   const haystack = [
-    advisory.id,
-    ...advisory.aliases,
     advisory.summary,
     advisory.details,
     advisory.package?.name,
-    advisory.package?.ecosystem,
-    ...advisory.references.map((ref) => ref.url),
   ].filter((value): value is string => Boolean(value)).join("\n").toLowerCase();
-  return hints.some((hint) => haystack.includes(hint));
+
+  if (matcher.strongTokens.some((token) => tokenMatch(haystack, token))) return "medium";
+  if (matcher.looseTokens.some((token) => tokenMatch(haystack, token))) return "low";
+  return null;
+}
+
+function referenceMatchesRepo(url: string, repository: string): boolean {
+  try {
+    const parsed = new URL(url);
+    if (!/github\.com$/i.test(parsed.hostname)) return false;
+    const [owner, repo] = parsed.pathname.split("/").filter(Boolean);
+    if (!owner || !repo) return false;
+    return `${owner}/${repo.replace(/\.git$/i, "")}`.toLowerCase() === repository;
+  } catch {
+    return false;
+  }
+}
+
+/** Whole-word match: `needle` bounded by non-alphanumerics (or string ends). */
+function tokenMatch(haystack: string, needle: string): boolean {
+  const trimmed = needle.trim().toLowerCase();
+  if (!trimmed) return false;
+  const escaped = trimmed.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`(^|[^a-z0-9])${escaped}(?=[^a-z0-9]|$)`, "i").test(haystack);
 }
 
 function summarizeTargetHistory(
@@ -247,6 +338,11 @@ function summarizeTargetHistory(
   const highCount = advisories.filter((advisory) => advisory.severity === "high").length;
   const kevCount = advisories.filter((advisory) => advisory.kev?.knownExploited).length;
   const cwes = uniqueStrings(advisories.flatMap((advisory) => advisory.cwes));
+  const confidenceCounts = {
+    high: advisories.filter((advisory) => advisory.matchConfidence === "high").length,
+    medium: advisories.filter((advisory) => advisory.matchConfidence === "medium").length,
+    low: advisories.filter((advisory) => advisory.matchConfidence === "low").length,
+  };
   return {
     advisoryCount: advisories.length,
     playbookCount,
@@ -256,6 +352,7 @@ function summarizeTargetHistory(
     cweCount: cwes.length,
     topSeverity: highestSeverity(advisories.map((advisory) => advisory.severity)),
     matchedHints: hints.slice(0, 10),
+    confidenceCounts,
   };
 }
 
