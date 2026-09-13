@@ -4946,20 +4946,55 @@ export function ChatScreen({
     activeTurn: focusRecord?.status === "running" ? focusedTelemetry?.turn : undefined,
     activeEntryId: focusRecord?.status === "running" ? focusEntries?.[focusEntries.length - 1]?.id : undefined,
   };
-  const renderTranscriptEntries = (transcript: readonly ChatEntry[], width: number, display: EntryDisplay) =>
-    planTranscript(transcript, display.transcriptDetail, expandedTurns).map((item) => {
+  const renderTranscriptEntries = (transcript: readonly ChatEntry[], width: number, display: EntryDisplay) => {
+    // "thinking" is a per-TURN label, not a per-entry one. Walk the plan once
+    // (it is already in transcript order) and record which turns have shown it,
+    // so both the expanded reasoning rows and the folded summaries emit it at
+    // most once per turn. O(1) per item — no rescans.
+    const thinkingShownForTurn = new Set<number>();
+    // The live "thinking…" indicator: the streaming reasoning entry is the tail
+    // of the transcript, so its turn is the one that should shimmer.
+    const tail = transcript[transcript.length - 1];
+    const liveReasoningTurn =
+      tail && tail.id === display.activeEntryId && tail.kind === "reasoning" ? tail.turn : undefined;
+    return planTranscript(transcript, display.transcriptDetail, expandedTurns).map((item) => {
       if (item.type === "fold") {
-        return renderFold(item, width, display, theme, {
-          hovered: hoveredTurn === item.turn,
-          onToggle: () => toggleTurnExpanded(item.turn),
-          onHover: (hovered) => setHoveredTurn(hovered ? item.turn : null),
-        });
+        const hasReasoning = item.entries.some((entry) => entry.kind === "reasoning");
+        let hideReasoningLabel = false;
+        if (hasReasoning) {
+          if (thinkingShownForTurn.has(item.turn)) hideReasoningLabel = true;
+          else thinkingShownForTurn.add(item.turn);
+        }
+        return renderFold(
+          item,
+          width,
+          display,
+          theme,
+          {
+            hovered: hoveredTurn === item.turn,
+            onToggle: () => toggleTurnExpanded(item.turn),
+            onHover: (hovered) => setHoveredTurn(hovered ? item.turn : null),
+          },
+          { hideReasoningLabel },
+        );
       }
       const entry = item.entry;
       const expanded = expandedTurns.has(entry.turn);
       const interactive = expanded && (
         entry.kind === "tool" || entry.kind === "subagent" || entry.kind === "reasoning"
       );
+      let reasoningLabel: "shimmer" | "static" | "none" = "static";
+      if (entry.kind === "reasoning") {
+        if (thinkingShownForTurn.has(entry.turn)) {
+          reasoningLabel = "none";
+        } else {
+          thinkingShownForTurn.add(entry.turn);
+          reasoningLabel =
+            entry.turn === liveReasoningTurn && typeof display.shimmerFrame === "number"
+              ? "shimmer"
+              : "static";
+        }
+      }
       return renderEntry(
         entry,
         width,
@@ -4971,8 +5006,10 @@ export function ChatScreen({
           onToggle: () => toggleTurnExpanded(entry.turn),
           onHover: (hovered) => setHoveredTurn(hovered ? entry.turn : null),
         } : undefined,
+        reasoningLabel,
       );
     });
+  };
   const focusHasTranscript = focused && Boolean(focusEntries?.length);
   // The coarse activity fallback is row-windowed. Rich transcripts use their
   // actual viewport and measured content extent instead of this estimate.

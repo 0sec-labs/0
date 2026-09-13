@@ -422,6 +422,21 @@ describe("transcript detail — the collapse contract", () => {
     );
   });
 
+  it("drops the reasoning token from a fold summary when asked, keeping the step count and other names", () => {
+    const entries = [
+      entry("reasoning", 1),
+      entry("tool", 1, { success: true, text: "run_command" }),
+    ];
+    expect(foldSummary(entries, { dropReasoningLabel: true })).toBe("2 steps · run_command");
+  });
+
+  it("collapses a lone suppressed reasoning fold to a bare step count, never a blank label", () => {
+    expect(foldSummary([entry("reasoning", 1)], { dropReasoningLabel: true })).toBe("");
+    expect(
+      foldSummary([entry("reasoning", 1), entry("reasoning", 1)], { dropReasoningLabel: true }),
+    ).toBe("2 steps");
+  });
+
   it("treats an expanded turn as expanded even in collapsed mode", () => {
     const entries = [
       entry("tool", 1, { success: true, text: "a" }),

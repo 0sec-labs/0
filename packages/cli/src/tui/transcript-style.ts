@@ -151,17 +151,26 @@ function foldToken(entry: CollapseEntryLike): string {
  * one, otherwise a count plus the first few distinct names ("3 steps ·
  * run_command, read_file"). Pure; the caller owns the leading glyph and colour.
  */
-export function foldSummary(entries: readonly CollapseEntryLike[]): string {
+export function foldSummary(
+  entries: readonly CollapseEntryLike[],
+  opts?: { dropReasoningLabel?: boolean },
+): string {
   if (entries.length === 0) return "";
   const names: string[] = [];
   for (const entry of entries) {
+    // When the turn has already shown its one "thinking" label, a later fold in
+    // the same turn omits the reasoning token so the label is not repeated. The
+    // step still counts toward "N steps"; only the caption word is dropped.
+    if (opts?.dropReasoningLabel && entry.kind === "reasoning") continue;
     const token = foldToken(entry);
     if (!names.includes(token)) names.push(token);
   }
   const shown = names.slice(0, 3).join(", ");
   const more = names.length > 3 ? ` +${names.length - 3}` : "";
-  if (entries.length === 1) return shown;
-  return `${entries.length} steps · ${shown}${more}`;
+  if (entries.length === 1) return shown; // may be "" for a lone suppressed reasoning fold
+  return names.length === 0
+    ? `${entries.length} steps` // pure-reasoning fold, label already shown
+    : `${entries.length} steps · ${shown}${more}`;
 }
 
 /** A planned transcript row: a normal entry, or a folded run of collapsibles. */
