@@ -525,6 +525,11 @@ export function buildStatusSegments(input: StatusBarInput): StatusSegment[] {
     } else {
       texts.set("context", `${percent}%/${formatTokenCount(contextWindow)}`);
     }
+  } else if (hasUsage && input.showContextMeter) {
+    // Window unknown (e.g. a model absent from the catalog) but we still know
+    // how many tokens the turn consumed — show that instead of a dead label.
+    const used = Math.max(0, input.contextUsed as number);
+    texts.set("meter", `Context: ${formatTokenCount(used)} used`);
   } else if (input.showContextMeter) {
     texts.set("meter", "Context usage unavailable");
   }

@@ -561,9 +561,17 @@ function ConsoleApp({
     for (const gate of legacyLaunches.current.keys()) gate.close();
     const sessionClosures = routes.filter((route) => route.type === "session")
       .map((route) => Promise.resolve().then(() => route.type === "session" ? route.onClose() : undefined));
-    void Promise.allSettled([workspace.closeAll(), ...creations.current, ...legacyLaunches.current.values(), ...sessionClosures]).then(async (results) => {
-      const failures = results.filter((result): result is PromiseRejectedResult => result.status === "rejected");
-      if (failures.length > 0) throw new AggregateError(failures.map((result) => result.reason), "Audit cleanup failed; the workspace remains open.");
+    const cleanupAll = Promise.allSettled([workspace.closeAll(), ...creations.current, ...legacyLaunches.current.values(), ...sessionClosures]);
+    // A wedged audit/session close must never trap the operator on the
+    // "Stopping audits…" screen. Bound cleanup: after 8s we exit regardless.
+    void Promise.race([
+      cleanupAll,
+      new Promise<"timeout">((resolve) => setTimeout(() => resolve("timeout"), 8000)),
+    ]).then(async (outcome) => {
+      if (outcome !== "timeout") {
+        const failures = outcome.filter((result): result is PromiseRejectedResult => result.status === "rejected");
+        if (failures.length > 0) throw new AggregateError(failures.map((result) => result.reason), "Audit cleanup failed; the workspace remains open.");
+      }
       const manager = await pluginPreparation.current?.catch(() => null);
       manager?.dispose();
       if (selection && onResolve) onResolve(selection);
