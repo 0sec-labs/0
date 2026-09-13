@@ -312,6 +312,7 @@ describe("contrast sweep", () => {
       paper: 5.16,
       "mono-dim": 4.5,
       swiss: 5.74,
+      opencode: 5.01,
     });
   });
 });
@@ -428,9 +429,12 @@ describe("semantic colours survive colour blindness", () => {
       paper: 1.162,
       "mono-dim": 1.165,
       swiss: 1.21,
+      opencode: 1.156,
     });
-    // Every theme clears the floor; paper is the tightest of the set.
-    expect(Math.min(...Object.values(achieved))).toBe(achieved.paper);
+    // Every theme clears the floor; opencode is the tightest of the set (its
+    // semantic hues are distinguished by colour rather than luminance, the
+    // OpenCode palette's own trade-off), just above paper.
+    expect(Math.min(...Object.values(achieved))).toBe(achieved.opencode);
     expect(Math.min(...Object.values(achieved))).toBeGreaterThanOrEqual(MIN_SEMANTIC_CONTRAST);
   });
 });

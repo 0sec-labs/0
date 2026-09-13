@@ -604,6 +604,52 @@ const SWISS: Theme = {
   overlay: "#301418",
 };
 
+/**
+ * `OpenCode` — the warm-tan-on-near-black look popularised by OpenCode's TUI.
+ *
+ * The signature the operator asked for: near-black stepped surfaces
+ * (#0A0A0A → #1E1E1E), a warm tan `#FAB283` PRIMARY selection bar / cursor, a
+ * purple `#B48EE8` ACCENT for headers, and near-white body text. Restrained
+ * chrome, polychrome syntax. Where OpenCode's exact hues fell short of 0sec's
+ * no-waiver AA contract (its #808080 muted and #484848 border), the values are
+ * nudged just light enough to clear AA (MUTED #9A9A9A ≥5.9:1, BORDER #6E6E6E
+ * ≥3.3:1) — every text token clears 4.5:1 on all three backgrounds with no
+ * waivers, verified by validateTheme.
+ */
+const OPENCODE: Theme = {
+  CANVAS: "#0A0A0A",
+  PANEL: "#141414",
+  PANEL_ALT: "#1E1E1E",
+  BORDER: "#6E6E6E",
+  TEXT: "#EEEEEE",
+  MUTED: "#9A9A9A",
+  PRIMARY: "#FAB283",
+  ACCENT: "#B48EE8",
+  BRAND: "#9D7CD8",
+  SUCCESS: "#7FD88F",
+  WARNING: "#F5A742",
+  ERROR: "#EB7A82",
+  INFO: "#56B6C2",
+  background: "#0A0A0A",
+  surface: "#141414",
+  surfaceAlt: "#1E1E1E",
+  overlay: "#282828",
+  // Polychrome syntax mirroring OpenCode's code hues (keyword=purple,
+  // function=tan, string=green, number=orange, type=gold, variable=red).
+  syntaxKeyword: "#B48EE8",
+  syntaxString: "#7FD88F",
+  syntaxNumber: "#F5A742",
+  syntaxComment: "#9A9A9A",
+  syntaxFunction: "#FAB283",
+  syntaxType: "#E5C07B",
+  syntaxVariable: "#EB7A82",
+  syntaxOperator: "#56B6C2",
+  syntaxPunctuation: "#9A9A9A",
+  DIFF_ADD: "#7FD88F",
+  DIFF_DEL: "#EB7A82",
+  LINK: "#7AA2F7",
+};
+
 /* ----------------------------------------------------------------- registry */
 
 export const THEME_NAMES = [
@@ -616,6 +662,7 @@ export const THEME_NAMES = [
   "paper",
   "mono-dim",
   "swiss",
+  "opencode",
 ] as const;
 export type ThemeName = (typeof THEME_NAMES)[number];
 
@@ -720,6 +767,13 @@ export const THEMES: Readonly<Record<ThemeName, ThemeEntry>> = {
     description: "Swiss-flag red on near-black, crisp white text. For the Swiss Applied AI Cybersecurity Research Lab.",
     mode: "dark",
     palette: SWISS,
+  },
+  opencode: {
+    name: "opencode",
+    label: "OpenCode",
+    description: "Warm tan highlight on near-black surfaces, purple accent. The OpenCode look.",
+    mode: "dark",
+    palette: OPENCODE,
   },
 };
 
