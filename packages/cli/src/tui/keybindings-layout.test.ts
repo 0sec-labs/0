@@ -1,11 +1,16 @@
 import { describe, expect, it } from "vitest";
 
-import { KEYBINDINGS } from "./keybindings.js";
+import { KEYBINDINGS, REBINDABLE_IDS } from "./keybindings.js";
 import {
+  buildKeybindingEditorRows,
   buildShortcutsRows,
+  chordDisplay,
   clipShortcutsRows,
   computeShortcutsColumns,
   computeShortcutsLayout,
+  effectiveKeysDisplay,
+  keybindingsEditorFooterHint,
+  rebindableRowIndices,
   shortcutsFooterHint,
   shortcutsTitle,
   widestKeys,
@@ -171,5 +176,83 @@ describe("static labels", () => {
     expect(shortcutsTitle()).toBe("KEYBOARD SHORTCUTS");
     expect(shortcutsFooterHint()).toContain("esc back");
     expect(shortcutsFooterHint()).toContain("ctrl+c exit");
+  });
+});
+
+describe("chordDisplay", () => {
+  it("renders canonical chords as display labels", () => {
+    expect(chordDisplay("ctrl+b")).toBe("Ctrl+B");
+    expect(chordDisplay("ctrl+shift+l")).toBe("Ctrl+Shift+L");
+    expect(chordDisplay("option+backspace")).toBe("Alt+Backspace");
+    expect(chordDisplay("pageup")).toBe("PageUp");
+    expect(chordDisplay("escape")).toBe("Esc");
+    expect(chordDisplay("meta+k")).toBe("Meta+K");
+  });
+
+  it("shows an unparseable chord verbatim rather than dropping it", () => {
+    expect(chordDisplay("not a chord")).toBe("not a chord");
+  });
+});
+
+describe("effectiveKeysDisplay", () => {
+  it("shows the default when there is no override", () => {
+    const binding = KEYBINDINGS.find((b) => b.id === "view.left-sidebar")!;
+    expect(effectiveKeysDisplay(binding, {})).toBe("Ctrl+B");
+  });
+
+  it("shows the override when one is set", () => {
+    const binding = KEYBINDINGS.find((b) => b.id === "view.left-sidebar")!;
+    expect(effectiveKeysDisplay(binding, { "view.left-sidebar": "ctrl+j" })).toBe("Ctrl+J");
+  });
+
+  it("joins a multi-chord protected binding's alternates", () => {
+    const binding = KEYBINDINGS.find((b) => b.id === "nav.scroll-up")!;
+    expect(effectiveKeysDisplay(binding, {})).toBe("PageUp / Ctrl+Up");
+  });
+});
+
+describe("buildKeybindingEditorRows", () => {
+  it("emits a heading per category and a binding row per registry entry", () => {
+    const rows = buildKeybindingEditorRows({});
+    const bindingRows = rows.filter((r) => r.kind === "binding");
+    expect(bindingRows.length).toBe(KEYBINDINGS.length);
+    const headings = rows.filter((r) => r.kind === "heading");
+    expect(headings.length).toBe(new Set(KEYBINDINGS.map((b) => b.category)).size);
+  });
+
+  it("marks exactly the rebindable rows editable", () => {
+    const rows = buildKeybindingEditorRows({});
+    const editableIds = rows.filter((r) => r.kind === "binding" && r.rebindable).map((r) => r.id);
+    expect(editableIds.sort()).toEqual([...REBINDABLE_IDS].sort());
+  });
+
+  it("flags an overridden row and shows its effective chord", () => {
+    const rows = buildKeybindingEditorRows({ "view.left-sidebar": "ctrl+j" });
+    const row = rows.find((r) => r.id === "view.left-sidebar")!;
+    expect(row.overridden).toBe(true);
+    expect(row.chord).toBe("Ctrl+J");
+    // A non-overridden rebindable row is not flagged.
+    const other = rows.find((r) => r.id === "view.right-sidebar")!;
+    expect(other.overridden).toBe(false);
+  });
+
+  it("rebindableRowIndices points at editable binding rows only", () => {
+    const rows = buildKeybindingEditorRows({});
+    const indices = rebindableRowIndices(rows);
+    expect(indices.length).toBe(REBINDABLE_IDS.size);
+    for (const index of indices) {
+      expect(rows[index]?.kind).toBe("binding");
+      expect(rows[index]?.rebindable).toBe(true);
+    }
+  });
+});
+
+describe("keybindingsEditorFooterHint", () => {
+  it("names the capture keys while capturing and the nav keys otherwise", () => {
+    expect(keybindingsEditorFooterHint(true)).toContain("press a chord");
+    const idle = keybindingsEditorFooterHint(false);
+    expect(idle).toContain("enter rebind");
+    expect(idle).toContain("r reset");
+    expect(idle).toContain("esc back");
   });
 });

@@ -414,3 +414,32 @@ describe("previewSetting", () => {
     unsub();
   });
 });
+
+describe("updateSetting for the keybindings map", () => {
+  it("round-trips a valid override and notifies subscribers", () => {
+    configureSettingsStore({ homeDir: makeHome() });
+    const seen: TuiSettings[] = [];
+    const unsubscribe = subscribeSettings((s) => seen.push(s));
+
+    expect(updateSetting("keybindings", { "view.left-sidebar": "ctrl+j" })).toBe(true);
+    expect(getSettings().keybindings).toEqual({ "view.left-sidebar": "ctrl+j" });
+    expect(seen.at(-1)?.keybindings).toEqual({ "view.left-sidebar": "ctrl+j" });
+
+    unsubscribe();
+    // Survives a reload from disk.
+    reloadSettings();
+    expect(getSettings().keybindings).toEqual({ "view.left-sidebar": "ctrl+j" });
+  });
+
+  it("sanitises an invalid override on the way in", () => {
+    configureSettingsStore({ homeDir: makeHome() });
+    // A protected id and a reserved chord are both dropped by the store's
+    // normalise-on-write, leaving only the valid entry.
+    updateSetting("keybindings", {
+      "view.left-sidebar": "Ctrl+J",
+      "session.quit": "ctrl+x",
+      "view.right-sidebar": "ctrl+c",
+    } as Record<string, string>);
+    expect(getSettings().keybindings).toEqual({ "view.left-sidebar": "ctrl+j" });
+  });
+});

@@ -33,6 +33,7 @@ const SCREENS: Readonly<Record<string, readonly [SymbolKey, string]>> = {
   session: ["iconAudits", "Engagement"],
   commands: ["iconHarness", "Commands"],
   shortcuts: ["iconShortcuts", "Keyboard shortcuts"],
+  keybindings: ["iconShortcuts", "Keybindings"],
 };
 
 /**

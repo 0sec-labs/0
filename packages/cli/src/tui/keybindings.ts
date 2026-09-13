@@ -445,6 +445,10 @@ export function parseChord(input: unknown): Chord | null {
     }
     // A second bare token means two key names in one chord — unparseable.
     if (name !== undefined) return null;
+    // A real key name is a single word; internal whitespace ("not a chord")
+    // is free text, not a chord, and must be reported unparseable so callers
+    // render it verbatim rather than capitalising a sentence.
+    if (/\s/.test(token)) return null;
     name = NAME_ALIASES[token] ?? token;
   }
 

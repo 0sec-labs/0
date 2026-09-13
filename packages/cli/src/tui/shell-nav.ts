@@ -22,6 +22,11 @@ export interface ShellNav {
   openFindings: () => void;
   openReplay: (scanId?: string) => void;
   openSettings: () => void;
+  /**
+   * Opens the keybinding editor: the write side of `/shortcuts`, where the
+   * rebindable View toggles can be re-captured. Persists via the settings store.
+   */
+  openKeybindings: () => void;
   openHarness: () => void;
   /** Opens the model picker above the live conversation. */
   openModels: (chatOptions?: ChatScreenOptions) => void;

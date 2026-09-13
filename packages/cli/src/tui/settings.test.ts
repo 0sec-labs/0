@@ -893,3 +893,72 @@ describe("loadGlobalSettings", () => {
     expect(loadGlobalSettings(home).showLogo).toBe(false);
   });
 });
+
+describe("keybindings overrides", () => {
+  it("defaults to an empty map", () => {
+    expect(DEFAULT_SETTINGS.keybindings).toEqual({});
+    expect(normalizeSettings({}).keybindings).toEqual({});
+    expect(normalizeSettings({ keybindings: {} }).keybindings).toEqual({});
+  });
+
+  it("keeps a valid override, canonicalised, and drops invalid ones", () => {
+    const normalized = normalizeSettings({
+      keybindings: {
+        "view.left-sidebar": "Ctrl+J", // valid, canonicalises to ctrl+j
+        "session.quit": "ctrl+x", // protected id — dropped
+        "view.right-sidebar": "k", // no modifier — dropped
+        "view.transcript-detail": "ctrl+c", // reserved chord — dropped
+      },
+    });
+    expect(normalized.keybindings).toEqual({ "view.left-sidebar": "ctrl+j" });
+  });
+
+  it("tolerates a non-object keybindings value", () => {
+    expect(normalizeSettings({ keybindings: "nope" }).keybindings).toEqual({});
+    expect(normalizeSettings({ keybindings: 42 }).keybindings).toEqual({});
+    expect(normalizeSettings({ keybindings: [] }).keybindings).toEqual({});
+    expect(normalizeSettings({ keybindings: null }).keybindings).toEqual({});
+  });
+
+  it("survives a save/normalise round-trip on disk", () => {
+    const home = makeHome();
+    saveSettings({ ...DEFAULT_SETTINGS, keybindings: { "view.left-sidebar": "ctrl+j" } }, home);
+    expect(loadSettings(home).keybindings).toEqual({ "view.left-sidebar": "ctrl+j" });
+  });
+
+  it("layers the map as a unit: a project map replaces the global one", () => {
+    const home = makeHome();
+    const project = makeProjectDir();
+    writeGlobalFull(home, { ...DEFAULT_SETTINGS, keybindings: { "view.left-sidebar": "ctrl+j" } });
+    writeProjectRaw(project, { keybindings: { "view.right-sidebar": "ctrl+shift+l" } });
+
+    const { settings, sources } = loadLayeredSettings({ homeDir: home, projectDir: project });
+    expect(settings.keybindings).toEqual({ "view.right-sidebar": "ctrl+shift+l" });
+    expect(sources.keybindings).toBe("project");
+  });
+
+  it("falls through to global when the project omits the key", () => {
+    const home = makeHome();
+    const project = makeProjectDir();
+    writeGlobalFull(home, { ...DEFAULT_SETTINGS, keybindings: { "view.left-sidebar": "ctrl+j" } });
+    writeProjectRaw(project, { showLogo: false });
+
+    const { settings, sources } = loadLayeredSettings({ homeDir: home, projectDir: project });
+    expect(settings.keybindings).toEqual({ "view.left-sidebar": "ctrl+j" });
+    expect(sources.keybindings).toBe("global");
+  });
+
+  it("defaults the map when neither layer sets it", () => {
+    const home = join(makeHome(), "empty");
+    const project = makeProjectDir();
+    const { settings, sources } = loadLayeredSettings({ homeDir: home, projectDir: project });
+    expect(settings.keybindings).toEqual({});
+    expect(sources.keybindings).toBe("default");
+  });
+
+  it("is a project-overridable setting (not operator-only)", () => {
+    const project = makeProjectDir();
+    expect(saveProjectOverrides({ keybindings: { "view.left-sidebar": "ctrl+j" } }, project)).toBe(true);
+    expect(readProjectOverrides(project).keybindings).toEqual({ "view.left-sidebar": "ctrl+j" });
+  });
+});

@@ -225,8 +225,11 @@ type BooleanKey = {
   [K in keyof TuiSettings]: TuiSettings[K] extends boolean ? K : never;
 }[keyof TuiSettings];
 
-/** Keys of `TuiSettings` whose value is one of a fixed set of strings. */
-type EnumKey = Exclude<keyof TuiSettings, BooleanKey>;
+/** Keys of `TuiSettings` whose value is one of a fixed set of strings.
+ *  `keybindings` is neither boolean nor a fixed-choice enum — it is a bespoke
+ *  chord-override map validated by its own path (see its field doc) — so it is
+ *  excluded here rather than forced into the enum contract. */
+type EnumKey = Exclude<keyof TuiSettings, BooleanKey | "keybindings">;
 
 interface BooleanSettingDef extends SettingDef<boolean> {
   key: BooleanKey;

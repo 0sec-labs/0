@@ -45,6 +45,7 @@ import { OnboardingScreen } from "./onboarding-screen.js";
 import { HerdScreen } from "./herd-screen.js";
 import { AgentsCommsScreen } from "./agents-comms-screen.js";
 import { SettingsScreen } from "./settings-screen.js";
+import { KeybindingsEditorScreen } from "./keybindings-editor-screen.js";
 import { HarnessProvider } from "./harness-context.js";
 import { HarnessControlsPanel } from "./harness-trust-controls.js";
 import { ModelScreen } from "./model-screen.js";
@@ -103,6 +104,7 @@ type ConsoleRoute = (
   | { type: "findings"; options: FindingsScreenOptions }
   | { type: "replay"; dbPath?: string; scanId?: string }
   | { type: "settings" }
+  | { type: "keybindings" }
   | { type: "harness" }
   | { type: "herd" }
   | { type: "comms" }
@@ -149,6 +151,10 @@ function SettingsRoute({ onExit, shell }: { onExit: () => void; shell?: ShellNav
   const theme = useTheme();
   useKeyboard((key) => {
     if (key.ctrl && key.name === "g") shell?.openHarness();
+    // Ctrl+K opens the keybinding editor. The keybindings map is not a scalar
+    // settings row (it is a map, not a boolean/enum the dialog can cycle), so it
+    // lives on its own capture-oriented screen rather than in the table.
+    if (key.ctrl && key.name === "k") shell?.openKeybindings();
   });
   return (
     <SettingsScreen
@@ -157,10 +163,38 @@ function SettingsRoute({ onExit, shell }: { onExit: () => void; shell?: ShellNav
       frame={({ body, hint }) => (
         <ShellFrame view="settings" dialogContent>
           {shell ? (
-            <text fg={theme.ACCENT} onMouseDown={() => shell.openHarness()}>
-              Live harness · ctrl+g
-            </text>
+            <box flexDirection="row">
+              <text fg={theme.ACCENT} onMouseDown={() => shell.openHarness()}>
+                Live harness · ctrl+g
+              </text>
+              <text fg={theme.MUTED}>{"   "}</text>
+              <text fg={theme.ACCENT} onMouseDown={() => shell.openKeybindings()}>
+                Keybindings · ctrl+k
+              </text>
+            </box>
           ) : null}
+          {body}
+          <FooterBar hint={hint} />
+        </ShellFrame>
+      )}
+    />
+  );
+}
+
+/**
+ * Routes the keybinding editor, supplying the console shell around it. Mirrors
+ * `SettingsRoute`: the editor takes the frame as a prop so it does not import
+ * this module. Like the settings screen, no command palette is mounted — the
+ * screen captures raw chords, and a second `useKeyboard` competing for them
+ * would make capture ambiguous.
+ */
+function KeybindingsRoute({ onExit, shell }: { onExit: () => void; shell?: ShellNav }) {
+  return (
+    <KeybindingsEditorScreen
+      onBack={() => leaveCurrentScreen(shell, onExit)}
+      onExit={onExit}
+      frame={({ body, hint }) => (
+        <ShellFrame view="keybindings" dialogContent>
           {body}
           <FooterBar hint={hint} />
         </ShellFrame>
@@ -811,6 +845,7 @@ function ConsoleApp({
     openFindings: () => navigate({ type: "findings", options: { dbPath: routeOwner?.options?.dbPath, limit: 50 } }),
     openReplay: (scanId) => navigate({ type: "replay", dbPath: routeOwner?.options?.dbPath, scanId }),
     openSettings: () => navigate({ type: "settings" }),
+    openKeybindings: () => navigate({ type: "keybindings" }),
     openHarness: () => navigate({ type: "harness" }),
     openModels: (chatOpts) => navigate({ type: "models", chatOptions: chatOpts ?? routeOwner?.options }),
     openResume: (chatOpts) => navigate({ type: "resume", chatOptions: chatOpts ?? routeOwner?.options }),
@@ -831,6 +866,7 @@ function ConsoleApp({
     doctor: shell.openDoctor,
     replay: shell.openReplay,
     settings: shell.openSettings,
+    keybindings: shell.openKeybindings,
     harness: shell.openHarness,
     "new-chat": openNewAudit,
     models: () => shell.openModels(selectedRecord?.options),
@@ -1176,6 +1212,8 @@ function ConsoleApp({
     overlay = <ReplayScreen dbPath={currentRoute.dbPath} scanId={currentRoute.scanId} onExit={appExit} shell={shell} />;
   } else if (routeType === "settings") {
     overlay = <SettingsRoute onExit={appExit} shell={shell} />;
+  } else if (routeType === "keybindings") {
+    overlay = <KeybindingsRoute onExit={appExit} shell={shell} />;
   } else if (routeType === "harness") {
     overlay = <HarnessRoute onBack={shell.goBack} />;
   } else if (routeType === "models") {

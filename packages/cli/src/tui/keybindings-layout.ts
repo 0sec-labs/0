@@ -478,16 +478,12 @@ const CHORD_NAME_LABELS: Readonly<Record<string, string>> = {
 };
 
 /** Human-facing labels for the chord modifiers, in canonical display order. */
-const CHORD_MODIFIER_LABELS: readonly [keyof ReturnType<typeof parseChordSafe>, string][] = [
+const CHORD_MODIFIER_LABELS: readonly ["ctrl" | "shift" | "meta" | "option", string][] = [
   ["ctrl", "Ctrl"],
   ["shift", "Shift"],
   ["meta", "Meta"],
   ["option", "Alt"],
 ];
-
-function parseChordSafe(chord: string) {
-  return parseChord(chord) ?? { ctrl: false, shift: false, meta: false, option: false, name: chord };
-}
 
 /**
  * Render a canonical chord string ("ctrl+b", "pageup") as a display label
