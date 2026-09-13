@@ -37,8 +37,84 @@ on the published npm package and the GitHub Release tag.
   changes apply to the next audit, and hosted metadata comes from that account's catalog.
 - Keep onboarding completion in the operator's global settings. Reset selected
   settings without promoting unrelated project overrides into global preferences.
+- Default fresh settings to slate and right-aligned operator bubbles. Preserve
+  saved styles, including migration from `messenger`, and place message/tool
+  labels in their top borders. Collapsed tools retain recorded command or path.
+- Keep permission mode in the bottom row, even with optional status telemetry
+  hidden. Show elapsed time for the whole active root turn.
+- Make early-stop retries opt-in through `0SEC_FEATURE_EARLY_STOP=1`.
+- Preserve unrelated host refusals during explicit target recovery and keep
+  saved credentials bound to their original origin across target/mode changes.
+- Block unanchored shared-address-space HTTP destinations, including
+  IPv4-mapped DNS answers, while retaining explicit internal targets.
+
+## [0.16.3] - 2026-09-12
+
+### Fixed
+
+- Resolve relative JavaScript bundles against the actual document URL, preserving
+  standard directory, query and fragment semantics.
+- Keep `js-recon` command tests offline through the scoped transport boundary;
+  retain scope-refusal and redacted-output checks.
 
 ### Added
+
+- Messenger conversation framing and the Agents sidebar default on while saved
+  alternatives and explicit opt-outs remain effective. Clickable sidebar controls,
+  compact worker activity and a single configured-scope display preserve chat state.
+- `/copy` (`/export`, `/dump`) saves the complete public conversation as private
+  local JSON and attempts clipboard delivery. OSC52 delivery remains unverified.
+  `/impact` loads a saved finding into the current chat for evidence-qualified analysis.
+- Finding detail prioritizes title, severity and CVSS, with distinct evidence
+  sections. Endpoint metadata uses the same redacted request as the evidence body.
+- Context meters report unavailable when runtime window data is missing. Hosted
+  Cloud credit state remains separate from estimated model cost.
+- Cloud sign-in, BYOK credentials, and provider subscriptions are separate
+  connection choices. Cancelling sign-in returns to the current conversation;
+  changing the provider or model applies to the next chat. Login alone does not
+  establish model availability or a funded account.
+- `0sec balance` displays the service-reported percentage of inference credits
+  remaining. Missing percentage data stays unavailable; JSON retains accounting
+  fields, and reservations remain distinct from settled spending. Small positive
+  balances display `<0.1%`; nearly full balances display `>99.9%`.
+- Interactive YOLO public-network tools no longer require a launch target or
+  approval for each discovered public host. Explicit configured restrictions,
+  exclusions, prior refusals, private-address checks and credential boundaries
+  remain enforced. Search results do not change target or scope.
+- Browser HTTP requests in public-network mode are bound to the current tool
+  action; cancellation prevents delayed dispatch and held-response delivery.
+- Entering a previously declined host directly in chat reopens scope approval.
+  Approval preserves the conversation and exclusions; model retries remain denied.
+- Main and worker transcripts share expandable command and output views.
+  Status rows and pickers use Nerd Font icons with retained text labels;
+  glyph appearance depends on the terminal font. Cancellation keeps partial
+  output without adding a persistent interruption notice.
+- Removed the persistent problem-reporting invitation from the chat footer.
+- Target HTTP tools check scope and resolved addresses before connecting and
+  following redirects. Requests pin destination addresses, retain TLS hostname
+  verification, and bound decoded bodies and elapsed time. WordPress advisory
+  requests use a separate service-bound transport.
+- The standalone CLI runtime includes the existing PDF report dependency.
+- Console guidance asks for useful parallel delegation on independent work and
+  evidence-backed finding summaries while retaining scope and budget limits.
+- Contextual model, session, finding, usage, worker, and marketplace views use
+  compact controls. Usage reports scroll without losing unknown-cost markers;
+  worker steering accepts pasted text, and marketplace actions retain confirmation.
+- Child runtimes inherit the parent's resolved provider configuration.
+  Scoped harness shutdown drains work before disposal and reports incomplete
+  cleanup. Restarting an engine does not reconstruct active harness state.
+- Problem reporting defaults to automatic limited diagnostics with a global
+  off/ask/automatic preference. Explicit opt-outs remain effective; project
+  settings cannot override the preference. Reports exclude prompts, tool
+  arguments, output, paths, and credentials. Delivery requires Cloud sign-in
+  or a configured HTTPS endpoint; manual feedback retains review and local capture.
+  Feedback submission rejects redirects to unreviewed destinations.
+- Update checks and automatic installation use an operator-global policy.
+  Automatic installation is opt-in and completes before interactive startup;
+  notification-only checks remain in the background. Manual upgrades retain
+  their version and destination options and report failures or interruption.
+- `/explain` and `/eli5` request a short explanation in everyday words without
+  new tool execution. The idle worker panel suggests how to request subagents.
 
 - Executable TypeScript plugins, reusable skills, and agent programs can be
   created during a session, composed through tool/model brokers, retained
@@ -63,11 +139,9 @@ on the published npm package and the GitHub Release tag.
   worker transcripts preserve their scrollable extent through detail and size
   changes without leaking layout state into the Main conversation.
 
-- Rebuilt the unreleased desktop as a dedicated project-and-session workspace,
-  separate from the operations dashboard. Adds session tabs, a command palette,
-  progressive conversation and approval views, system/light/dark appearance,
-  and native UI-preference persistence across changing sidecar ports. Desktop
-  remains a development build, not a published product release.
+- Native desktop development is paused. Root desktop launch and packaging
+  shortcuts are removed, and the macOS packaging workflow is archived.
+  Desktop source and CLI-required dashboard components are retained.
 
 - YOLO console sessions can acquire public HTTPS Git repositories for local
   review without authorizing their hosting services as testing targets.
@@ -217,6 +291,13 @@ on the published npm package and the GitHub Release tag.
 
 ### Fixed
 
+- Craft helpers pass model-provided paths as literal arguments rather than
+  shell text. Replay container launches validate image references and keep
+  mount paths and command arguments separate from shell syntax.
+
+- Windows Cloud sign-in passes the browser URL as data to a fixed launcher
+  command, so URL metacharacters are not interpreted as shell commands.
+
 - Source evolution rejects candidates that lose an already-solved case, even
   when aggregate development and held-out scores improve. The retention check
   also applies to approval and canary evaluations.
@@ -243,7 +324,7 @@ on the published npm package and the GitHub Release tag.
   multiply linked files. Deep-review also checks resolved subsystem paths
   against the prepared source tree before exposing source to a finder.
 - Foxguard integration now consumes native v1 JSON reports instead of silently
-  dropping their findings. The npm fallback is pinned to v0.12.0; provisioned
+  dropping their findings. The npm fallback is pinned to v0.13.0; provisioned
   binaries are used directly, and multi-path scans use valid CLI invocations.
 - Installers, container builds, and scanner CI provision a checksum-verified
   FoxGuard companion from a shared version/hash pin; the default installer

@@ -1,12 +1,9 @@
 /**
- * The composer's autonomy-mode footer: the single place that knows the
- * Shift+Tab cycle order, the footer's wording, and how to recognise the chord.
+ * Autonomy-mode cycling and the bottom status bar's shared mode hint.
  *
- * WHY A MODULE. Three separate things have to agree about the autonomy mode:
- * the footer text under the input, the height ledger that reserves its row,
- * and the key handler that advances it. When they disagree the footer shows a
- * mode the next Shift+Tab will not produce — which is a safety lie, because
- * "am I in an auto-approving mode" is exactly what this row exists to answer.
+ * The current mode and its shortcut must agree with the same `/mode` transition
+ * used by the keyboard handler. The mode stays visible at the bottom of both
+ * the startup and conversation surfaces, independently of optional telemetry.
  *
  * WHO OWNS THE KEY. Not this module. `chat-screen.tsx` keeps the single
  * inline Shift+Tab handler and calls {@link isAutonomyCycleKey} and
@@ -55,15 +52,14 @@ export function nextAutonomyMode(mode: ConsoleAutonomyMode): ConsoleAutonomyMode
   return AUTONOMY_CYCLE[(at + 1) % AUTONOMY_CYCLE.length] ?? AUTONOMY_CYCLE[0];
 }
 
-/** The chord as the footer spells it, matching the `keybindings.ts` entry. */
+/** The chord as the status bar spells it, matching the `keybindings.ts` entry. */
 export const AUTONOMY_CYCLE_CHORD = "Shift+Tab";
 
-/** The parenthetical half of the footer: "(Shift+Tab to cycle)". */
+/** The parenthetical mode hint: "(Shift+Tab to cycle)". */
 export const AUTONOMY_CYCLE_HINT = `(${AUTONOMY_CYCLE_CHORD} to cycle)`;
 
 /**
- * The footer as one plain string — used for width measurement and for the
- * degraded single-`text` fallback. Empty when there is no mode to report:
+ * The mode segment as one plain string. Empty when there is no mode to report:
  * an absent mode must render nothing, never a plausible-looking default.
  */
 export function autonomyFooterText(mode: ConsoleAutonomyMode | null | undefined): string {

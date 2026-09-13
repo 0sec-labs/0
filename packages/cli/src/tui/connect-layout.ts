@@ -101,6 +101,8 @@ function cells(value: unknown, fallback = 0): number {
  */
 export type AuthKind = "api-key" | "oauth";
 
+
+
 /**
  * Providers surfaced in the "Popular" group, in the order shown. Membership is
  * a curation decision, not a runtime fact, so it lives here and nowhere else.
@@ -146,7 +148,6 @@ const CLOUD_GROUP: ConnectGroup = { id: "cloud", label: "0sec Cloud" };
 /** The picker id the cloud row commits with; the runtime calls it "hosted". */
 const CLOUD_ITEM_ID = "hosted";
 const CLOUD_LABEL = "0sec Cloud";
-
 const POPULAR_GROUP: ConnectGroup = { id: "popular", label: "Use my own API key" };
 const ALL_GROUP: ConnectGroup = { id: "all", label: "Other API providers" };
 const SUBSCRIPTION_GROUP: ConnectGroup = { id: "subscription", label: "Provider subscription" };
@@ -251,15 +252,17 @@ function compareStrings(a: string, b: string): number {
  * never removed by the filter.
  */
 export function buildConnectRows({
-  states = providerStates({}),
+  states = [],
   stored,
   filter = "",
 }: ConnectRowsInput = {}): ConnectRow[] {
   const storedSet = stored instanceof Set ? stored : new Set(stored ?? []);
   const terms = sanitizeTuiText(filter).toLowerCase().split(" ").filter(Boolean);
 
+  const resolvedStates = states;
+
   const byId = new Map<string, ConnectProvider>();
-  for (const state of states) {
+  for (const state of resolvedStates) {
     if (!state || typeof state.id !== "string" || state.id.length === 0) continue;
     byId.set(state.id, connectProviderFor(state, storedSet));
   }
@@ -299,6 +302,7 @@ export function buildConnectRows({
   pushGroup(SUBSCRIPTION_GROUP, [...byId.values()].filter((provider) => provider.auth === "oauth"));
   return rows;
 }
+
 
 // ---------------------------------------------------------------------------
 // Projection onto the shared picker
@@ -529,7 +533,7 @@ export function connectDetailLines(
   separate();
 
   push(
-    provider.auth === "oauth" ? "Auth: ChatGPT Codex device OAuth" : "Auth: OpenAI-compatible API key",
+    provider.auth === "oauth" ? "Auth: ChatGPT Codex device OAuth" : "Auth: API key",
     "text",
   );
 
@@ -634,6 +638,7 @@ export function connectConnectedCounts(rows: readonly ConnectRow[]): ConnectCoun
   const seen = new Set<string>();
   let connected = 0;
   for (const row of rows) {
+    if (row.kind === "cloud") continue; // cloud is not a counted provider
     if (row.kind !== "provider") continue;
     if (seen.has(row.provider.id)) continue;
     seen.add(row.provider.id);

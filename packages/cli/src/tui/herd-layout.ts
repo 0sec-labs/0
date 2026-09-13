@@ -709,7 +709,7 @@ export function herdDetailLines(
   push(peer.id, "title");
   separate();
 
-  push(`Status: ${herdStatusLabel(status).toLowerCase()}`, statusTone(status));
+  push(`${herdRowMarker(status)} ${herdStatusLabel(status).toLowerCase()}`, statusTone(status));
   push(`Kind: ${peer.kind === "subagent" ? "subagent" : "session"}`, "muted");
   const pid = Number.isFinite(peer.pid) ? Math.trunc(peer.pid) : 0;
   push(`PID: ${pid}`, "muted");
@@ -1397,7 +1397,7 @@ export function focusHeaderLines(
     }
   } else {
     const status = herdStatusOf(peer, now);
-    push(`Status: ${herdStatusLabel(status).toLowerCase()}`, statusTone(status));
+    push(`${herdRowMarker(status)} ${herdStatusLabel(status).toLowerCase()}`, statusTone(status));
     push(`Kind: ${peer.kind === "subagent" ? "subagent" : "session"}`, "muted");
     const a = peer.activity;
     if (a && typeof a.turn === "number") {

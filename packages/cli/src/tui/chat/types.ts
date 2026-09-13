@@ -137,7 +137,7 @@ export interface EntryDisplay {
   spacing: number;
   showTimestamps: boolean;
   now: number;
-  /** Framing of a speaking turn (rail / bubble / plain / compact / document). */
+  /** Framing of a speaking turn (bubble / rail / plain / compact / document). */
   transcriptStyle: TranscriptStyle;
   /** How the "who said this" label is drawn (full / short / glyph / off). */
   roleLabelStyle: RoleLabelStyle;

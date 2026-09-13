@@ -173,11 +173,11 @@ export function badgeChip(label: string, borderCells: number): string {
 export function toolActionTitle(entry: ChatEntry): string {
   if (entry.metaKind === "command") {
     const command = sanitizeTuiText(entry.command ?? "").trim();
-    return command ? `$ ${command}` : sanitizeTuiText(entry.text);
+    if (command) return `$ ${command}`;
   }
   if (entry.metaKind === "edit") {
     const path = sanitizeTuiText(entry.editPath ?? "").trim();
-    return path ? `Edit ${path}` : sanitizeTuiText(entry.text);
+    if (path) return `Edit ${path}`;
   }
   if (entry.metaKind === "web") {
     const provider = sanitizeTuiText(entry.webProvider ?? "").trim();

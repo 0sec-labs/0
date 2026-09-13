@@ -3,9 +3,9 @@ title: Console
 description: The 0sec interactive chat console — talk to the engine, run tools, manage sessions, and navigate every surface from one terminal UI.
 ---
 
-`0sec console` is a single conversational cockpit where an operator talks to the
-engine and invokes every 0sec tool (recon, web pentest, source/package scan,
-variant hunt, verify, patch-gen) from one prompt.
+`0sec console` opens an interactive chat session with the 0sec engine. From one
+prompt the operator invokes every tool (recon, web pentest, source/package scan,
+variant hunt, verify, patch-gen).
 
 Two front-ends share the same engine session (`createConsoleSession` from
 `@0sec/core`):
@@ -30,7 +30,7 @@ available, falling back to the readline console otherwise.
 # Start with a role (tool set)
 0sec console --role discovery --target https://example.com --scope ./scope.json
 
-# Start in YOLO mode (no per-action prompts, requires configured scope)
+# Start in YOLO mode with an initial engagement scope
 0sec console --yolo --scope ./scope.json --target https://example.com
 
 # Resume the most recent saved session
@@ -66,9 +66,8 @@ available, falling back to the readline console otherwise.
 | `--print [prompt]` | One-shot non-interactive; reads from argument or piped stdin | (none) |
 
 A [`--scope` file](/scope/) is required for the Node readline fallback. Under
-the Bun TUI it is optional — the TUI can request session-only scope extensions
-interactively. YOLO mode requires a configured scope with at least one
-`in_scope` entry regardless of runtime.
+the Bun TUI it is optional. YOLO public-network tools accept absolute URLs
+without a launch target; explicit configured restrictions and exclusions still apply.
 
 ### Review previous work
 
@@ -110,11 +109,24 @@ Cycle the mode with **Shift+Tab** in the TUI, or the `/mode` command.
 | **Standard** | Runs automatically inside scope; can request a narrow session-only scope extension. |
 | **Recon** | Passive, read-only reconnaissance only. Effectful tools are refused. |
 | **Co-pilot** | Adds approval for every non-read-only tool. |
-| **YOLO** | No per-action prompts. Testing remains target/scope-anchored; public source checkout does not expand scope. |
+| **YOLO** | Public-network tools need no launch target or per-discovered-host approval. Explicit operator-configured scope, exclusions and prior refusals remain effective. |
 
 The readline fallback allows mode selection including Co-pilot and YOLO, but
 Co-pilot tool approvals always return denied — there is no approval surface in
 the text REPL. The TUI is required for interactive approval.
+
+In YOLO, the target is optional task context, not a second permission gate.
+Search results and discovered URLs do not update the target or configured scope.
+An explicitly empty configured scope remains deny-all; absent scope remains
+unconfigured. Private-network access, saved credential forwarding and workspace
+host-code trust remain separate controls. Public URLs do not grant access to
+private addresses returned by DNS.
+
+Browser HTTP requests use the scoped, address-pinned transport while a browser
+tool action is active. Cancelled or ended actions cannot dispatch delayed HTTP
+requests or deliver a held response to the page. Underlying held connections
+may remain until the existing transport deadline; this is not a full browser
+network sandbox or a WebSocket/WebRTC isolation claim.
 
 ### Acquiring a public repository in YOLO
 
@@ -127,7 +139,7 @@ cd /home/dev/coding && git clone --depth=1 https://github.com/golang/go.git gola
 ```
 
 Run inspection, builds, or other commands in subsequent tool calls. Checkout
-does **not** add GitHub to the engagement scope or authorize testing it.
+does **not** change configured engagement scope.
 Previously declined hosts and explicit exclusions still apply.
 
 This acquisition path uses standard HTTPS on port 443, public-address DNS
@@ -150,21 +162,41 @@ The console auto-detects available runtimes. The runtime is determined by
 
 ## First interaction
 
-When the TUI launches you see:
+For Cloud sign-in, your own API key, or a subscription connection, follow the
+[interactive setup guide](/getting-started/). Connection and model changes apply
+to a new chat, not the runtime of an existing conversation.
 
-- The **home screen** with the 0sec brand mark, an engagement panel, and a composer
-  (text input area) centred on the screen.
-- A **status bar** at the bottom showing the active model, mode, working directory,
-  and cost/token counters (when enabled).
-- A **header** row showing `0sec`, the engagement target, and an optional objective.
+When the TUI launches:
 
-Type a message and press **Enter** to send it to the engine. The engine streams
-its response token-by-token into the transcript. Tool calls appear as bordered
-cards showing the command or edit, its output, and the exit code (controlled by
-the `richToolCards` setting).
+- **Home screen** — 0sec brand mark, engagement panel, composer (text input)
+  centred on the screen.
+- **Status bar** — active model, mode, working directory, cost/token counters
+  (when enabled).
+- **Header** — `0sec`, configured scope, optional objective and clickable sidebar controls.
+- **Conversation** — Messenger framing by default: your messages align right,
+  answers align left. Saved alternative styles remain effective.
+- **Agents sidebar** — visible by default on wide terminals, with worker
+  activity, plan and findings. Hide it without replacing the conversation.
 
-The transcript is auto-scrolled to the newest content. **PageUp** / **PageDown**
-(or **Ctrl+Up** / **Ctrl+Down**) scroll through history.
+Type a message and press **Enter** to send it. The engine streams its response
+token-by-token. Tool calls appear as bordered cards showing the command or edit,
+output, and exit code (controlled by `richToolCards` setting). The transcript
+auto-scrolls to newest content. **PageUp** / **PageDown** (or **Ctrl+Up** /
+**Ctrl+Down**) scrolls through history.
+
+The context meter displays **unavailable** when the runtime does not report a
+usable context window; it is not a turn-budget percentage. Hosted sessions show
+the Cloud account's reported credit state separately from estimated model cost.
+
+Use `/copy` (aliases `/export` and `/dump`) while idle to export the complete
+public conversation, not just visible transcript rows. It saves private local
+JSON even when copying fails. An OSC52 notice means the content was sent to the
+terminal clipboard; it does not verify clipboard contents.
+
+Use `/impact <finding-id>` to discuss a persisted finding in the current chat.
+Without an ID, select a finding from the conversation. The analysis distinguishes
+observed impact from conditional chains and missing evidence; it does not
+execute tools or expand authorization.
 
 ## Screens
 
@@ -180,13 +212,13 @@ The transcript is auto-scrolled to the newest content. **PageUp** / **PageDown**
 | Replay | `/replay` | Event-level turn replay for a completed scan |
 | Settings | `/settings`, `/config`, `/prefs` | Console display settings (persist across sessions) |
 | Theme | `/theme`, `/themes` | Colour theme live preview |
-| Model | `/model`, `/models` | Switch the active LLM model mid-session |
+| Model | `/model`, `/models` | Select the model for a new chat |
 | Resume | `/resume`, `/sessions` | Saved chat-session list browser |
 | Herd | `/herd`, `/workers` | Active subagent worker overview |
 | Market | `/market`, `/marketplace` | Extension marketplace |
-| Connect | `/connect`, `/login`, `/auth` | Provider credential entry |
+| Connect | `/connect`, `/login`, `/auth` | Cloud sign-in, API-key and subscription connections |
 | Usage | `/usage`, `/cost`, `/tokens` | Token, cost, and context-window usage for this chat session |
-| Provider | `/providers` | Provider connection and OAuth pane |
+| Provider | `/providers` | Read-only provider connection status |
 | Scope | `/scope` | Current engagement scope view |
 | Back | `/back` | Navigate to the previous screen |
 
@@ -207,6 +239,8 @@ the command menu. The readline console supports a subset (noted below).
 | `/transcript` | `/review` | session | — |
 | `/findings` | `/finds` | session | — |
 | `/finding` | `/finding-detail` | session | — |
+| `/impact` | — | session | — |
+| `/copy` | `/export`, `/dump` | session | — |
 | `/replay` | — | session | — |
 | `/resume` | `/sessions` | session | — |
 | `/explain` | `/eli5` | session | — |
@@ -404,11 +438,11 @@ Categories: engagement, findings, verification, connect, settings, evolution, au
 
 ### Session persistence
 
-Every conversation is saved to `~/.0sec/console-sessions/<id>.json` with
-owner-only permissions (`0o600`). Each saved session includes the full message
-transcript (model and operator turns), the model and target used, a preview
-(first message, truncated to 120 chars), an optional summary, timestamp, and
-turn count.
+Saved conversations are persisted to `~/.0sec/console-sessions/<id>.json` with
+owner-only permissions (`0o600`). Each saved session includes recorded operator
+and assistant turns, the model and target used, a preview (first message,
+truncated to 120 chars), an optional summary, timestamp, and turn count.
+Interrupted partial assistant generations are not saved.
 
 ### Resume
 
@@ -468,7 +502,7 @@ a saved session's context without the TUI.
 
 ## Transcript vs replay
 
-The console distinguishes two views into past data:
+The console has two views into past data:
 
 | Aspect | **Transcript** | **Replay** |
 |--------|----------------|------------|
@@ -518,6 +552,20 @@ The feedback payload body contains: `message`, `timestamp`, `version`, `model`,
 `mode`. The body is capped at 64 KB; request timeout is 5 seconds. Failure to
 submit never blocks the session.
 
+### Automatic problem reports
+
+Problem reporting defaults to `automatic`. Tool and runtime failures can produce
+a limited diagnostic summary through the same feedback transport, independently
+of manually staged messages. The summary excludes prompts, tool arguments and
+output, paths, and credentials; it does not upload `~/.0sec/feedback.md`.
+
+Open `/feedback` → **Problem-report preferences** to choose `off`, `ask`, or
+`automatic`. This global preference cannot be overridden by a project. Explicit
+saved opt-outs and the environment opt-outs above remain effective. `ask`
+requires confirmation before sending. Without Cloud authentication or a
+configured HTTPS endpoint, automatic reports remain local and the console
+reports submission as unavailable.
+
 ### Secret scanning
 
 When entering an API key through the TUI's credential prompt (`/connect` or
@@ -563,9 +611,9 @@ confirmation. A failed save remains explicitly marked as session-only.
 ## Working feedback and live plans
 
 Working feedback distinguishes connecting, thinking, streaming, tool execution,
-and waiting for operator input. A failed startup is **unavailable**, not an
-endless connecting spinner. During a turn, the composer explains that entering
-a follow-up interrupts the current turn and sends the queued message.
+and waiting for operator input. A failed startup is **unavailable**. During a
+turn, entering a follow-up interrupts the current turn and sends the queued
+message.
 
 Enable **Reduce motion** in settings for static activity glyphs, logo, and
 highlights; elapsed time remains visible. Working highlights keep their text

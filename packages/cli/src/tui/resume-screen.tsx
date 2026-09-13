@@ -338,9 +338,10 @@ export function ResumeScreen({
     if (key.ctrl || key.meta || key.option) return;
     if (key.name === "escape") {
       if (pendingDeleteRef.current) setPendingDelete(null);
-      else if (filteringRef.current) setFiltering(false);
-      else if (filterRef.current) setQuery("");
-      else onBack();
+      else if (filteringRef.current || filterRef.current) {
+        setFiltering(false);
+        setQuery("");
+      } else onBack();
       return;
     }
     if (key.name === "up") return move(-1);

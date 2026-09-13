@@ -150,6 +150,7 @@ describe("computeConnectTitleLayout — the header sweep", () => {
 describe("pane header labels and meta", () => {
   const rows = buildConnectRows({ states: LIT });
 
+
   it("summarises the highlighted provider's connection state for the detail header", () => {
     expect(connectDetailTitleLabel()).toBe("PROVIDER");
     const connected = rows.find(

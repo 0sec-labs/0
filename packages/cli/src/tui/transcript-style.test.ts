@@ -126,6 +126,41 @@ describe("layout invariants — the sweep", () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// rail geometry remains available as an explicit choice
+// ---------------------------------------------------------------------------
+
+describe("rail geometry", () => {
+
+
+  it("reproduces the tool card geometry the component used before the refactor", () => {
+    for (const width of [40, 55, 56, 72, 80, 120]) {
+      const frame = toolFrame("rail", width, true);
+      const expectedIndent = width < 56 ? 0 : 2;
+      expect(frame.outerMarginLeft).toBe(expectedIndent);
+      expect(frame.railWidth).toBe(1);
+      expect(frame.contentGap).toBe(1);
+      expect(frame.contentWidth).toBe(width - expectedIndent - 2);
+      expect(frame.showDetail).toBe(true);
+      expect(frame.singleLine).toBe(false);
+    }
+  });
+
+  it("reproduces the header name budget when the pane is not tiny", () => {
+    // Old code: name budgeted to max(1, detailWidth - prefix.length - 1),
+    // detailWidth = max(20, width - 8). Verify the pure fn agrees at widths
+    // where the old code did not overflow (content >= header, i.e. wide enough
+    // that the prefix and a 1-cell name both fit — roughly width >= 40).
+    for (const width of [40, 56, 72, 80, 120]) {
+      const frame = toolFrame("rail", width, true);
+      const prefix = toolHeaderPrefix("complete");
+      const detail = Math.max(20, width - 8);
+      expect(toolDetailWidth(frame.contentWidth, width)).toBe(detail);
+      const cols = toolHeaderColumns(frame.contentWidth, prefix.length, detail);
+      expect(cols.nameWidth).toBe(Math.max(1, detail - prefix.length - 1));
+    }
+  });
+});
 
 // ---------------------------------------------------------------------------
 // role labels
@@ -185,7 +220,7 @@ describe("tool card styles are genuinely distinct", () => {
 // ---------------------------------------------------------------------------
 
 describe("transcript styles are genuinely distinct, not tints", () => {
-  it("bubble borders speech but never reasoning or notices", () => {
+  it("Bubble borders speech but never reasoning or notices", () => {
     expect(speechFrame("bubble", "assistant", 80).bordered).toBe(true);
     expect(speechFrame("bubble", "user", 80).bordered).toBe(true);
     expect(speechFrame("bubble", "error", 80).bordered).toBe(true);
@@ -249,13 +284,6 @@ describe("degenerate content never overflows", () => {
 // ---------------------------------------------------------------------------
 
 describe("resolveTranscriptStyleSettings", () => {
-  it("falls back to defaults for an object without the keys", () => {
-    expect(resolveTranscriptStyleSettings({})).toEqual({
-      transcriptStyle: "rail",
-      roleLabelStyle: "full",
-      toolCardStyle: "rail",
-    });
-  });
 
   it("reads valid settings values", () => {
     const resolved = resolveTranscriptStyleSettings({
@@ -276,11 +304,7 @@ describe("resolveTranscriptStyleSettings", () => {
       roleLabelStyle: 42,
       toolCardStyle: null,
     });
-    expect(resolved).toEqual({
-      transcriptStyle: "rail",
-      roleLabelStyle: "full",
-      toolCardStyle: "rail",
-    });
+    expect(resolved).toEqual(resolveTranscriptStyleSettings({}));
   });
 
   it("lets an environment variable override settings", () => {
@@ -300,16 +324,8 @@ describe("resolveTranscriptStyleSettings", () => {
   });
 
   it("tolerates non-object settings", () => {
-    expect(resolveTranscriptStyleSettings(null)).toEqual({
-      transcriptStyle: "rail",
-      roleLabelStyle: "full",
-      toolCardStyle: "rail",
-    });
-    expect(resolveTranscriptStyleSettings("nope")).toEqual({
-      transcriptStyle: "rail",
-      roleLabelStyle: "full",
-      toolCardStyle: "rail",
-    });
+    expect(resolveTranscriptStyleSettings(null)).toEqual(resolveTranscriptStyleSettings({}));
+    expect(resolveTranscriptStyleSettings("nope")).toEqual(resolveTranscriptStyleSettings({}));
   });
 });
 

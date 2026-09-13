@@ -9,6 +9,9 @@ import React, {
 import { createLocalConsoleSession } from "../console-session.js";
 import type { AuditActivity } from "./audit-workspace.js";
 import { HarnessPresentation, useHarness } from "./harness-context.js";
+import { loadFindingFocus, buildFindingChatPrompt } from "../finding-focus.js";
+import { exportChatConversation } from "./chat-export.js";
+import { hostedBalanceState, formatHostedBalance, type HostedBalanceState } from "./hosted-balance.js";
 import {
   useKeyboard,
   usePaste,
@@ -83,6 +86,7 @@ import {
 } from "./selector.js";
 import {
   appendFeedback,
+  buildDiagnosticFeedback,
   buildSubmitPreview,
   submitFeedback,
   submissionBlockedReason,
@@ -96,6 +100,7 @@ import {
   projectToolPreview,
 } from "./tool-format.js";
 import {
+
   pruneSessions,
   saveSession,
 } from "./session-store.js";
@@ -251,8 +256,8 @@ import { TranscriptReview } from "./chat/TranscriptReview.js";
 import type { TranscriptReviewRenderable } from "./transcript-review-renderable.js";
 import { Todos, TodosSidebar } from "./chat/Todos.js";
 import { FindingsSidebar, FINDINGS_SIDEBAR_HEADER_ROWS } from "./chat/FindingsSidebar.js";
-import { ComposerFrame, ComposerInput, composerContentRows, composerFooterRows } from "./chat/Composer.js";
-import { isAutonomyCycleKey, nextAutonomyMode } from "./composer-mode.js";
+import { ComposerFrame, ComposerInput, composerContentRows } from "./chat/Composer.js";
+import { autonomyFooterText, isAutonomyCycleKey, nextAutonomyMode } from "./composer-mode.js";
 import { resolveContextLimit, describeLastModelCallInput } from "./context-window.js";
 import { buildHostedModelCatalog, type HostedCatalogModel } from "./model-catalog.js";
 import { CloudHintCard, shouldOfferCloudHint } from "./chat/CloudHintCard.js";
@@ -260,7 +265,6 @@ import { textCells } from "./primitives.js";
 import { buildSidebarSectionHeader } from "./chat/todos-sidebar-layout.js";
 import {
   KeyHints,
-  ComposerFooter,
   keyHintsLength,
 } from "./chat/KeyHints.js";
 import {
@@ -287,24 +291,6 @@ import {
 } from "./chat/AgentRow.js";
 import { agentAccentFor } from "./agent-color.js";
 import { appendTuiCrash, serializeError } from "./tui-crash.js";
-
-type HostedBalanceState =
-  | { status: "loading" | "unavailable" }
-  | { status: "ready"; remainingUsd: number };
-
-function hostedBalanceState(account: { remainingUsd: number; currency: "USD" }): HostedBalanceState {
-  return account.currency === "USD" && Number.isFinite(account.remainingUsd)
-    ? { status: "ready", remainingUsd: account.remainingUsd }
-    : { status: "unavailable" };
-}
-
-function formatHostedBalance(state: HostedBalanceState): string {
-  if (state.status === "loading") return "Cloud: Loading…";
-  if (state.status !== "ready") return "Cloud: Unavailable";
-  const amount = state.remainingUsd > 0 && state.remainingUsd < 0.01
-    ? "<$0.01" : `$${state.remainingUsd.toFixed(2)}`;
-  return `Cloud: ${amount} remaining`;
-}
 
 export type ChatDestination = "launcher" | "ops" | "history" | "findings" | "doctor" | "replay" | "settings" | "harness" | "new-chat" | "models" | "market" | "usage" | "connect" | "herd" | "finding" | "resume" | "audits" | "onboard";
 
@@ -461,6 +447,7 @@ function statusRoleColor(
     case "context":
       return theme.ACCENT;
     case "effort":
+    case "elapsed":
     case "plan":
     default:
       return theme.MUTED;
@@ -759,6 +746,7 @@ export function ChatScreen({
   submitHandle,
   stagePromptHandle,
   reconnectHandle,
+
   onSessionChange,
   onWorkingChange,
   onNextChatOptions,
@@ -1015,6 +1003,7 @@ export function ChatScreen({
   const target = session?.target ?? options?.target ?? "";
   const [scopeRules, setScopeRules] = useState<string[]>(options?.scope?.raw.in_scope ?? []);
   const [busy, setBusy] = useState(false);
+  const activeTurnStartedAt = useRef<number | null>(null);
   useEffect(() => {
     onSessionChange?.(session);
     return () => onSessionChange?.(null);
@@ -1094,6 +1083,9 @@ export function ChatScreen({
     payload: FeedbackPayload;
     preview: { url: string; body: string; headers: Record<string, string>; warnings: string[] } | null;
   } | null>(null);
+  const latestProblemRef = useRef<FeedbackPayload | null>(null);
+  const reportedProblemsRef = useRef(new Set<string>());
+  const [problemReview, setProblemReview] = useState<FeedbackPayload | null>(null);
   // The OMP-style "what am I working on" objective for the bottom-bar pill.
   // Empty ("") hides the pill; the session-objective service replaces it in
   // place (heuristic first, model-refined when/if it lands).
@@ -1357,6 +1349,110 @@ export function ChatScreen({
     }));
   }, [flushStreamPatches]);
 
+  const stageFeedback = useCallback((payload: FeedbackPayload) => {
+    const written = appendFeedback(payload);
+    if (!written.ok) {
+      appendEntry({ kind: "error", text: "could not save feedback", detail: written.error, turn: turn.current });
+      return;
+    }
+    const preview = buildSubmitPreview(payload);
+    setPendingFeedback({ payload, preview });
+    if (!preview) {
+      const blocked = submissionBlockedReason();
+      appendEntry({
+        kind: "notice",
+        text: "feedback saved locally",
+        detail: blocked ? describeSkip(blocked) : "Submission is unavailable.",
+        turn: turn.current,
+      });
+      return;
+    }
+    appendEntry({
+      kind: "notice",
+      text: "review feedback",
+      detail: `Endpoint: ${preview.url}\nHeaders: ${JSON.stringify(preview.headers)}\nBody: ${preview.body}`
+        + (preview.warnings.length ? `\n\nWarnings:\n${preview.warnings.join("\n")}` : "")
+        + "\n\n/feedback send to submit · /feedback cancel to discard",
+      turn: turn.current,
+    });
+  }, [appendEntry]);
+
+  const chooseReporting = useCallback((choice: string) => {
+    if (choice !== "off" && choice !== "ask" && choice !== "automatic") return;
+    const saved = updateSetting("diagnosticReporting", choice, { scope: "global" });
+    const recorded = updateSetting("diagnosticReportingPrompted", true, { scope: "global" });
+    showToast(saved && recorded ? `Problem reports: ${choice}` : "Privacy choice changed for this session; could not save it.");
+  }, [showToast]);
+
+  const openReportingChoices = useCallback(() => {
+    const current = settingsRef.current.diagnosticReporting;
+    setPicker({
+      state: createSelectorState("Problem reports · optional", [
+        { id: "off", label: "Keep reports local", detail: "No automatic submission. You can still review and send individual reports with /feedback.", current: current === "off" },
+        { id: "ask", label: "Ask before sending", detail: "Offer to review limited diagnostics after a problem. Nothing is sent until you confirm.", current: current === "ask" },
+        { id: "automatic", label: "Send limited diagnostics automatically", detail: "Version, platform, runtime and problem category only. No prompts, tool arguments, output, paths or credentials. Uses your configured feedback endpoint; offline policies still win.", current: current === "automatic" },
+      ], current),
+      commit: chooseReporting,
+      onCancel: () => { restorePaletteDraft(); },
+    });
+  }, [chooseReporting, restorePaletteDraft]);
+
+  const recordProblem = useCallback((kind: "tool" | "runtime", error: unknown, toolName?: string) => {
+    if (!alive.current || abortRef.current?.signal.aborted) return;
+    if (error instanceof Error && error.name === "AbortError") return;
+    if (typeof error === "string" && /^(?:aborted|cancelled|canceled)\b|(?:operator|user).*(?:declined|rejected)|(?:was )?(?:already )?(?:declined|rejected) by (?:the )?(?:operator|user)\b|previously declined/i.test(error)) return;
+    const payload = buildDiagnosticFeedback({
+      kind, error, toolName, version: VERSION, platform: process.platform, arch: process.arch,
+      runtime: process.versions.bun ? "bun" : "node",
+      runtimeVersion: process.versions.bun ?? process.versions.node,
+    });
+    latestProblemRef.current = payload;
+    const policy = settingsRef.current.diagnosticReporting;
+    if (policy === "off" || submissionBlockedReason(process.env, { allowCloud: false }) === "opt-out") return;
+    const key = `${policy}:${payload.message}`;
+    const seen = reportedProblemsRef.current;
+    if (seen.has(key)) return;
+    if (seen.size >= 64) seen.delete(seen.values().next().value!);
+    seen.add(key);
+    if (policy === "ask") {
+      setProblemReview(payload);
+      return;
+    }
+    const written = appendFeedback(payload);
+    if (!written.ok) {
+      showToast("Could not save the diagnostic report.");
+      return;
+    }
+    void submitFeedback(payload).then((result) => {
+      if (alive.current) showToast(result.ok ? "Problem report submitted" : "Problem report saved locally; submission unavailable.");
+    });
+  }, [showToast]);
+
+  useEffect(() => {
+    if (!problemReview) return;
+    if (settings.diagnosticReporting !== "ask") {
+      setProblemReview(null);
+      return;
+    }
+    if (busy || picker || pendingScope || pendingLocalScope || pendingToolApproval || pendingOperatorQuestion) return;
+    const payload = problemReview;
+    setProblemReview(null);
+    setPicker({
+      state: createSelectorState("Report this problem?", [
+        { id: "review", label: "Review report", detail: "Inspect the limited diagnostics and destination before deciding whether to send." },
+        { id: "local", label: "Keep it local", detail: "Save this diagnostic report locally without sending it." },
+        { id: "off", label: "Stop asking", detail: "Turn off automatic problem-report prompts in your user settings." },
+      ]),
+      commit: (id) => {
+        if (id === "review") stageFeedback(payload);
+        else if (id === "off") chooseReporting("off");
+        else if (id === "local") {
+          const saved = appendFeedback(payload);
+          showToast(saved.ok ? "Problem report saved locally" : "Could not save the problem report.");
+        }
+      },
+    });
+  }, [problemReview, settings.diagnosticReporting, busy, picker, pendingScope, pendingLocalScope, pendingToolApproval, pendingOperatorQuestion, stageFeedback, chooseReporting, showToast]);
   /** Construct only at initial startup, explicit new chat, or failed-start recovery. */
   const buildSession = useCallback((
     opts: { model?: string; providerId?: RuntimeConfig["provider"]; initialMessages?: NativeMessage[] } = {},
@@ -1507,6 +1603,7 @@ export function ChatScreen({
         setEntries(entriesFromStoredMessages(resumeMessages));
       }
     } catch (error) {
+      recordProblem("runtime", error);
       const detail = error instanceof Error ? error.message : String(error);
       setStartupError(startupRecoveryText(detail));
       const recovery = connectionRecoveryForError(detail);
@@ -1575,7 +1672,6 @@ export function ChatScreen({
     const interval = setInterval(() => { void refresh(); }, 30_000);
     return () => { active = false; clearInterval(interval); };
   }, [session, busy, interactive, settings.showContextMeter]);
-
   // Marketplace changes never replace this session's runtime or live harness.
   // Its leased host remains usable until cleanup; new chats acquire the new set.
   useEffect(() => {
@@ -1664,6 +1760,7 @@ export function ChatScreen({
       });
     }
   }, [appendEntry, buildSession, options?.initialMessages, onNextChatOptions]);
+
 
 
 
@@ -1856,6 +1953,7 @@ export function ChatScreen({
             });
           }
           (p.tools ?? []).forEach((t, i) => {
+            if (!t.running && !t.result.success) recordProblem("tool", t.result.error, t.call.name);
             fresh.push({
               id: `${p.agent_id}-t${p.turn}-x${i}`,
               kind: "tool",
@@ -1890,7 +1988,7 @@ export function ChatScreen({
       },
     });
     return unsub;
-  }, [session, setHerdAgents]);
+  }, [session, setHerdAgents, recordProblem]);
 
 
   // A focused agent that leaves the live map (never observed, or the session
@@ -2355,7 +2453,6 @@ export function ChatScreen({
     throw error;
   });
 
-
   const routeSlashCommand = useCallback((raw: string): boolean => {
     const parsed = findCommand(raw);
     if (!parsed.isSlash) return false;
@@ -2420,8 +2517,9 @@ export function ChatScreen({
           kind: "panel",
           text: "scope",
           panel: buildScopePanel({
-            target: target || undefined,
-            scopeRules,
+            scopeRules: scopeIncludes,
+            outOfScope: scopeExcludes,
+            scopeConfigured: displayedScope !== undefined,
             mode: modeLabel(mode),
           }),
           turn: turn.current,
@@ -2483,11 +2581,27 @@ export function ChatScreen({
       case "feedback": {
         const feedbackCommand = parseFeedbackCommand(args);
         if (feedbackCommand.kind === "usage") {
-          appendEntry({
-            kind: "notice",
-            text: "usage: /feedback <message> | /feedback submit <message> | /feedback send | /feedback cancel",
-            detail: "Feedback is written to a local file. /feedback submit persists locally and shows a preview; /feedback send transmits it; /feedback cancel clears the pending message.",
-            turn: turn.current,
+          setPicker({
+            state: createSelectorState("Feedback", [
+              { id: "write", label: "Write feedback", detail: "Save locally and review the exact message and destination before sending." },
+              { id: "problem", label: "Review latest problem", detail: "Limited diagnostics only; no prompt or tool output.", disabled: latestProblemRef.current === null },
+              { id: "privacy", label: "Problem-report preferences", meta: settingsRef.current.diagnosticReporting, detail: "Choose local-only, ask before sending, or automatic limited diagnostics." },
+            ]),
+            commit: (id) => {
+              if (id === "privacy") openReportingChoices();
+              else if (id === "problem" && latestProblemRef.current) stageFeedback(latestProblemRef.current);
+              else if (id === "write") {
+                restorePaletteDraft();
+                if (composerRef.current.trim()) {
+                  showToast("Draft kept · use /feedback submit <message> when ready.");
+                } else {
+                  setComposerText("/feedback submit ");
+                  composingRef.current = true;
+                  setComposing(true);
+                }
+              }
+            },
+            onCancel: () => { restorePaletteDraft(); },
           });
           return true;
         }
@@ -2512,46 +2626,7 @@ export function ChatScreen({
             mode: modeLabel(mode),
           };
 
-          // Persist locally first — always, regardless of submission state
-          const written = appendFeedback(payload);
-          if (!written.ok) {
-            appendEntry({
-              kind: "error",
-              text: "could not write feedback",
-              detail: written.error,
-              turn: turn.current,
-            });
-            return true;
-          }
-
-          const preview = buildSubmitPreview(payload);
-          setPendingFeedback({ payload, preview });
-
-          if (preview !== null) {
-            const warningBlock =
-              preview.warnings.length > 0
-                ? `\n\nWarnings:\n${preview.warnings.map((w) => `  • ${w}`).join("\n")}`
-                : "";
-
-            appendEntry({
-              kind: "notice",
-              text: "feedback staged for sending",
-              detail:
-                `Endpoint: ${preview.url}\n` +
-                `Headers: ${JSON.stringify(preview.headers)}\n` +
-                `Body: ${preview.body}${warningBlock}\n\n` +
-                `Run /feedback send to transmit, or /feedback cancel to discard.`,
-              turn: turn.current,
-            });
-          } else {
-            const blocked = submissionBlockedReason();
-            appendEntry({
-              kind: "notice",
-              text: "feedback saved locally, submission unavailable",
-              detail: `${blocked ? describeSkip(blocked) : "Submission is not available."}\nSaved to ${written.path}. Use /feedback cancel to clear.`,
-              turn: turn.current,
-            });
-          }
+          stageFeedback(payload);
           return true;
         }
 
@@ -2588,7 +2663,7 @@ export function ChatScreen({
             turn: turn.current,
           });
 
-          submitFeedback(payload).then((result) => {
+          submitFeedback(payload, process.env, { expectedPreview: preview }).then((result) => {
             appendEntry({
               kind: result.ok ? "notice" : "error",
               text: result.ok ? "feedback sent" : "feedback not sent",
@@ -2639,6 +2714,61 @@ export function ChatScreen({
         });
         return true;
       }
+      case "copy": {
+        if (!session || busy) {
+          showToast(busy ? "Wait for the active turn before exporting the complete conversation." : "No conversation is available to export.");
+          return true;
+        }
+        try {
+          const exported = exportChatConversation(session.messages);
+          void copySelection(exported.text, { spawn: defaultSpawn, which: defaultWhich }).then((result) => {
+            appendEntry({
+              kind: result.ok ? "notice" : "error",
+              text: result.ok
+                ? result.method === "osc52" ? "Conversation sent to terminal clipboard; clipboard contents are not verified." : "Conversation copied."
+                : "Clipboard unavailable; conversation JSON was saved.",
+              detail: `Private JSON: ${exported.path}`,
+              turn: turn.current,
+            });
+          }).catch(() => {
+            appendEntry({ kind: "error", text: "Clipboard failed; conversation JSON was saved.", detail: exported.path, turn: turn.current });
+          });
+        } catch (error) {
+          appendEntry({ kind: "error", text: "Could not export the conversation.", detail: error instanceof Error ? error.message : String(error), turn: turn.current });
+        }
+        return true;
+      }
+      case "impact": {
+        if (!session || busy) {
+          showToast(busy ? "Wait for the active turn before requesting an impact analysis." : "Connect a provider before requesting an impact analysis.");
+          return true;
+        }
+        const explainImpact = (id: string) => {
+          try {
+            const focus = loadFindingFocus(id, { dbPath: options?.dbPath });
+            void submitRef.current?.(buildFindingChatPrompt(focus, "impact"));
+          } catch (error) {
+            appendEntry({ kind: "error", text: "Could not load that finding.", detail: error instanceof Error ? error.message : String(error), turn: turn.current });
+          }
+        };
+        if (args.trim()) {
+          explainImpact(args.trim());
+        } else {
+          const findings = runFindingsFromEntries(entries).filter((finding) => finding.id);
+          if (!findings.length) {
+            appendEntry({ kind: "notice", text: "No saved findings in this conversation.", detail: "Use /impact <finding-id> for a saved finding, or /findings to choose one.", turn: turn.current });
+          } else {
+            setPicker({
+              state: createSelectorState("Explain finding impact", findings.map((finding) => ({
+                id: finding.id!, label: finding.title, detail: finding.severity,
+              }))),
+              commit: explainImpact,
+              onCancel: restorePaletteDraft,
+            });
+          }
+        }
+        return true;
+      }
       case "explain": {
         if (!session) {
           appendEntry({ kind: "notice", text: "runtime is not ready", turn: turn.current });
@@ -2661,8 +2791,8 @@ export function ChatScreen({
         // Sent as a normal turn so the explanation is a real model answer
         // grounded in this conversation, not a canned local string.
         const prompt = topic
-          ? `Explain "${topic}" in plain language for a non-technical reader. Avoid jargon; when a security term is unavoidable, define it in one short clause. Be concrete about impact and what someone should actually do.`
-          : `Explain your previous result in plain language for a non-technical reader. Avoid jargon; when a security term is unavoidable, define it in one short clause. Cover what was found, why it matters, and what to do next. Do not overstate certainty — say plainly if something is unconfirmed.`;
+          ? `Explain "${topic}" like I am five years old. Use 3–5 very short sentences, mostly under 12 words each. Use familiar everyday words and one simple comparison. No jargon, acronyms, code, headings, or baby talk. Say what happened, why it matters, and one thing to do next. Keep the facts accurate and say plainly what is not yet confirmed. Explain only; do not run new tests or tools.`
+          : `Explain your previous result like I am five years old. Use 3–5 very short sentences, mostly under 12 words each. Use familiar everyday words and one simple comparison. No jargon, acronyms, code, headings, or baby talk. Say what happened, why it matters, and one thing to do next. Keep the facts accurate and say plainly what is not yet confirmed. Explain only; do not run new tests or tools.`;
         void submitRef.current?.(prompt);
         return true;
       }
@@ -2951,9 +3081,11 @@ export function ChatScreen({
     onExit,
     onGoBack,
     onNavigate,
+    openReportingChoices,
     restorePaletteDraft,
     setComposerText,
     showToast,
+    stageFeedback,
     pendingFeedback,
     scopeLabel,
     scopeRules,
@@ -2978,6 +3110,7 @@ export function ChatScreen({
 
     const currentTurn = ++turn.current;
     const turnStartedAt = Date.now();
+    activeTurnStartedAt.current = turnStartedAt;
     setBusy(true);
     appendEntry({ kind: "user", text, turn: currentTurn });
     let assistantText = "";
@@ -3036,6 +3169,7 @@ export function ChatScreen({
         onToolResult: (call, result) => {
           flushStreamPatches();
           setRunningTool(null);
+          if (!result.success) recordProblem("tool", result.error, call.name);
           // SETTLE the running row `onToolStart` appended IN PLACE rather than
           // appending a second row. Without this, the running row (success
           // undefined) never resolved, so it kept SHIMMERING until the turn
@@ -3109,6 +3243,7 @@ export function ChatScreen({
           setScopeRules(session.scope?.raw.in_scope ?? []);
           appendEntry({ kind: "notice", text: notice, turn: currentTurn });
         },
+
       }, { signal: controller.signal });
       onAuditActivity({
         outcome: outcome.stopReason === "cancelled" ? "stopped"
@@ -3134,6 +3269,7 @@ export function ChatScreen({
       const producedText = Boolean(assistantText || outcome.assistantText);
       if (outcome.stopReason === "error") {
         const detail = outcome.error ?? "The runtime reported an error but gave no message.";
+        recordProblem("runtime", outcome.error);
         appendEntry({
           kind: "error",
           text: "turn failed",
@@ -3182,6 +3318,7 @@ export function ChatScreen({
       }
     } catch (error) {
       onAuditActivity({ outcome: controller.signal.aborted ? "stopped" : "failed" });
+      recordProblem("runtime", error);
       const detail = error instanceof Error ? error.message : String(error);
       appendEntry({
         kind: "error",
@@ -3198,6 +3335,7 @@ export function ChatScreen({
       // turn that has already returned.
       if (abortRef.current === controller) abortRef.current = null;
       flushStreamPatches();
+      activeTurnStartedAt.current = null;
       setBusy(false);
       // The turn is over: stop the tool spinner and SETTLE any tool/subagent
       // rows still in flight when it ended (interrupt, error, or a budget stop).
@@ -3286,6 +3424,7 @@ export function ChatScreen({
     onConnectionFailure,
     onAuditActivity,
     protectedSessionIds,
+    recordProblem,
     routeSlashCommand,
     session,
     settings.showTurnSummary,
@@ -3978,7 +4117,9 @@ export function ChatScreen({
     : null, [focusAgentId, settings.showContextMeter, activeModel, activeProvider, currentHostedCatalog]);
   const statusSegments = buildStatusSegments({
     model: focusAgentId ? focusedTelemetry?.model : modelId ?? undefined,
-    // The permission mode and its cycle shortcut live beside the composer.
+    mode: autonomyFooterText(mode),
+    turnElapsedMs: !focusAgentId && busy && activeTurnStartedAt.current !== null
+      ? Date.now() - activeTurnStartedAt.current : undefined,
     evolution: evolutionStatus,
     cwd: process.cwd(),
     home: homedir(),
@@ -4180,11 +4321,13 @@ export function ChatScreen({
         motion: !settings.reduceMotion && animationKind !== "awaiting-operator",
       })
     : null;
-  const loadingLabel = animation ? `${animation.glyph}${animation.elapsedLabel ? ` ${animation.elapsedLabel}` : ""}` : "";
+  const loadingLabel = animation?.glyph ?? "";
   const loadingWidth = loadingLabel ? textCells(loadingLabel) + 3 : 0;
   const statusContentWidth = Math.max(0, controlsWidth - loadingWidth);
-  const statusPills = fitStatusPills(statusSegments, statusContentWidth);
-  const statusBarText = fitStatusSegments(statusSegments, statusContentWidth);
+  const visibleStatusSegments = settings.showStatusBar ? statusSegments
+    : statusSegments.filter((segment) => segment.kind === "mode" || segment.kind === "elapsed");
+  const statusPills = fitStatusPills(visibleStatusSegments, statusContentWidth);
+  const statusBarText = fitStatusSegments(visibleStatusSegments, statusContentWidth);
 
   // Drive the animation at the kind's own interval; stop entirely when
   // nothing is animating so an idle console costs no repaints.
@@ -4277,8 +4420,7 @@ export function ChatScreen({
       + (secretPrompt ? SECRET_PANEL_HEIGHT + 1 : 0)
       + (operatorQuestionOpen ? operatorBoxHeight + 1 : 0),
     // The agent-nav hint row (+ its marginTop) below the composer.
-    hintRows: (showAgentNavHint ? 2 : 0) + (settings.showStatusBar || animation ? 1 : 0)
-      + composerFooterRows(mode) + (animation ? 2 : 0),
+    hintRows: (showAgentNavHint ? 2 : 0) + 1 + (animation ? 2 : 0),
   });
   // Optional empty-state lines are dropped from the bottom up rather than
   // overprinted. The mark needs the most room, so it goes first.
@@ -4289,16 +4431,8 @@ export function ChatScreen({
     settings.showLogo && empty && ledgerRows >= LEDGER_MARK_ROWS && contentWidth >= TERMINAL_BLOCK_LOGO_WIDTH;
   const showEmptyStateTagline = empty && ledgerRows >= 3;
   const sessionState = startupError ? "unavailable" : busy ? "working" : session ? "ready" : "connecting";
-  // The header's engagement summary is assembled from opt-out segments so a
-  // hidden one leaves no dangling " · ": target and scope are each gated on
-  // their setting, and the session state (connecting/working/ready) always
-  // rides along — it is status, not scope, and stays visible even when both
-  // labels are off.
-  const targetSummary = target ? `target: ${target}` : "target: none";
-  const scopeSummary = `scope: ${scopeLabel}`;
   const headerSegments: string[] = [];
-  if (settings.showTarget) headerSegments.push(targetSummary);
-  if (settings.showScope) headerSegments.push(scopeSummary);
+  if (settings.showScope) headerSegments.push(`Scope: ${scopeLabel}`);
   headerSegments.push(sessionState);
   // Version rides at the far left of the top bar, like the startup masthead.
   const headerEngagement = [`v${VERSION}`, ...headerSegments].join(" · ");
@@ -4865,7 +4999,7 @@ export function ChatScreen({
         </box>
       )}
       <text fg={MUTED} marginTop={1}>
-        {fitTuiText(`ctrl+o transcript · ctrl+r ${workerDisplay.transcriptDetail === "expanded" ? "collapse" : "expand"} details · esc Main`, focusInner)}
+        {fitTuiText(`ctrl+o transcript · ctrl+r ${workerDisplay.transcriptDetail === "expanded" ? "collapse" : "expand"} details · esc/← Main`, focusInner)}
       </text>
     </box>
   );
@@ -5081,7 +5215,6 @@ export function ChatScreen({
             </box>
             <box flexDirection="column" width={heroComposerWidth} minWidth={0} flexShrink={0}>
               {heroComposerNode}
-              <ComposerFooter mode={mode} width={heroComposerWidth} theme={theme} />
             </box>
             <box flexShrink={0} minWidth={0} marginTop={1}>
               {keyHintsLength(heroHintPairs, " · ") <= heroContentWidth ? (
@@ -5109,7 +5242,6 @@ export function ChatScreen({
           {stickyNode}
           {workingIndicator}
           {composerNode}
-          <ComposerFooter mode={mode} width={controlsWidth} theme={theme} />
           {/*
             * The inline ACTIVE SUBAGENTS list sits directly BELOW the composer,
             * so pressing Down FROM the composer reads as moving DOWN into the
@@ -5126,15 +5258,13 @@ export function ChatScreen({
       )}
 
       {/*
-        * The bottom bar is its own row BELOW the composer, not a second
-        * line inside it. It carries environmental state the header does not:
-        * model, working tree, and counters. Autonomy mode is intentionally
-        * header-only; repeating it here made the idle screen noisy.
+        * The shared bottom row keeps permission mode visible in both hero and
+        * conversation layouts. showStatusBar controls the extra environmental
+        * telemetry, not the only indicator of the operator's approval mode.
         */}
-      {settings.showStatusBar || animation ? (
         <box flexDirection="row" width={controlsWidth} height={1} flexShrink={0} minWidth={0} overflow="hidden">
-          {loadingLabel ? <text fg={animationKind === "awaiting-operator" ? WARNING : ACCENT}>{`${loadingLabel}${settings.showStatusBar ? " · " : ""}`}</text> : null}
-          {settings.showStatusBar ? statusPills.length > 0 ? (
+          {loadingLabel ? <text fg={animationKind === "awaiting-operator" ? WARNING : ACCENT}>{`${loadingLabel} · `}</text> : null}
+          {statusPills.length > 0 ? (
             <box flexDirection="row" flexShrink={0} minWidth={0}>
               {statusPills.map((segment, index) => (
                 <React.Fragment key={segment.kind}>
@@ -5143,9 +5273,8 @@ export function ChatScreen({
                 </React.Fragment>
               ))}
             </box>
-          ) : <text fg={MUTED}>{fitTuiText(statusBarText, statusContentWidth)}</text> : null}
+          ) : <text fg={MUTED}>{fitTuiText(statusBarText, statusContentWidth)}</text>}
         </box>
-      ) : null}
       {/*
         * The copy-on-highlight toast. Positioned absolutely with a high
         * zIndex (see toast.tsx), so it floats over the transcript without

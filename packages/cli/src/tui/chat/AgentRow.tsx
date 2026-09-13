@@ -57,7 +57,7 @@ export function shortAgentName(id: string): string {
   return n || "agent";
 }
 
-/** Bullet glyph + colour for a lifecycle status. Failures keep a red "×". */
+/** Lifecycle mark: only active work animates; settled outcomes remain distinct. */
 function statusMark(status: string, theme: Theme, animationFrame?: number): { glyph: string; color: string } {
   if (status === "failed") return { glyph: "×", color: theme.ERROR };
   if (status === "cancelled" || status === "canceled") return { glyph: "■", color: theme.MUTED };
@@ -65,6 +65,7 @@ function statusMark(status: string, theme: Theme, animationFrame?: number): { gl
   if (status === "running" || status === "working") {
     return { glyph: animationFrame === undefined ? "▶" : "▖▘▝▗"[animationFrame % 4], color: theme.ACCENT };
   }
+  // Parked: finished its task but still alive, ready to be revived.
   if (status === "parked") return { glyph: "◌", color: theme.MUTED };
   return { glyph: "·", color: theme.MUTED };
 }
@@ -193,8 +194,7 @@ export function AgentSidebarRow({
   const mark = statusMark(view.status, theme, view.animationFrame);
   const bg = selected ? PANEL_ALT : undefined;
   const meta = agentStatusLabel(view.status);
-  // Identical trailing-badge budget to the FINDINGS severity badge, so the two
-  // sections' right edges line up in the same column.
+  // Share the findings badge budget, keeping both sidebar sections aligned.
   const metaCells = sidebarBadgeCells(meta, width);
   const nameCells = Math.max(1, width - 2 - (metaCells > 0 ? metaCells + 1 : 0));
   const taskCells = Math.max(1, width - 2);

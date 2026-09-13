@@ -34,6 +34,7 @@ export type StatusSegmentKind =
   | "model"
   | "effort"
   | "mode"
+  | "elapsed"
   | "evolution"
   | "cwd"
   | "branch"
@@ -62,6 +63,7 @@ export type StatusColorRole =
   | "model"
   | "effort"
   | "mode"
+  | "elapsed"
   | "evolution"
   | "cwd"
   | "branch"
@@ -96,6 +98,8 @@ export interface StatusBarInput {
   effort?: string;
   /** Autonomy mode label already humanized, e.g. "Standard". */
   mode?: string;
+  /** Wall-clock elapsed for the active turn; omitted while idle or unknown. */
+  turnElapsedMs?: number;
   cwd?: string;
   /** TUI-owned self-evolution state; omitted when the watcher is disabled. */
   evolution?: string;
@@ -148,13 +152,10 @@ export interface StatusBarInput {
 /**
  * Drop order, lowest first. 0 is reserved for "never drop".
  *
- * The ranking answers one question: at 40 columns, what is still worth a
- * cell? The model and the autonomy mode are the two facts that change what
- * happens when the user presses enter, so they survive longest — mode
- * especially, because not knowing you are in an auto-approving mode is a
- * safety problem, not an inconvenience. The identity of the model is the
- * single thing the bar exists to show, so it alone is undroppable and is
- * truncated instead.
+ * The permission mode is the last surviving fact: this bar is its only
+ * persistent indicator. When no mode is supplied, the model remains the
+ * undroppable fallback. Exactly one segment is undroppable so the fitting
+ * functions can truncate it safely on narrow terminals.
  *
  * At the other end, the cwd is the cheapest thing to lose: it is the
  * longest segment by far and the user's terminal title, shell prompt and
@@ -177,7 +178,8 @@ const PRIORITY: Record<StatusSegmentKind, number> = {
   context: 6,
   meter: 6,
   branch: 7,
-  mode: 8,
+  mode: 0,
+  elapsed: 11,
   evolution: 8,
   cloud: 9,
   model: 0,
@@ -188,6 +190,7 @@ const ORDER: StatusSegmentKind[] = [
   "model",
   "effort",
   "mode",
+  "elapsed",
   "cloud",
   "evolution",
   "cwd",
@@ -208,6 +211,7 @@ const ICON: Record<StatusSegmentKind, string> = {
   model: "◈",
   effort: "✦",
   mode: "◐",
+  elapsed: "",
   evolution: "",
   cwd: "⌂",
   branch: "⑂",
@@ -225,6 +229,7 @@ const COLOR_ROLE: Record<StatusSegmentKind, StatusColorRole> = {
   model: "model",
   effort: "effort",
   mode: "mode",
+  elapsed: "elapsed",
   evolution: "evolution",
   cwd: "cwd",
   branch: "branch",
@@ -404,6 +409,14 @@ export function buildStatusSegments(input: StatusBarInput): StatusSegment[] {
   const mode = label(input.mode);
   if (mode) texts.set("mode", mode);
 
+  if (typeof input.turnElapsedMs === "number" && Number.isFinite(input.turnElapsedMs) && input.turnElapsedMs >= 0) {
+    const seconds = Math.floor(input.turnElapsedMs / 1000);
+    const elapsed = seconds < 60 ? `${seconds}s`
+      : seconds < 3600 ? `${Math.floor(seconds / 60)}m`
+      : `${Math.floor(seconds / 3600)}h`;
+    texts.set("elapsed", `running for ${elapsed}`);
+  }
+
   const evolution = label(input.evolution);
   if (evolution) texts.set("evolution", evolution);
 
@@ -459,7 +472,7 @@ export function buildStatusSegments(input: StatusBarInput): StatusSegment[] {
     const used = Math.max(0, input.contextUsed as number);
     const percent = roundForDisplay((used / contextWindow) * 100);
     if (input.showContextMeter) {
-      texts.set("meter", contextMeter(percent, contextWindow));
+      texts.set("meter", `Context: ${contextMeter(percent, contextWindow)}`);
     } else {
       texts.set("context", `${percent}%/${formatTokenCount(contextWindow)}`);
     }
@@ -482,7 +495,7 @@ export function buildStatusSegments(input: StatusBarInput): StatusSegment[] {
       segments.push({
         kind,
         text,
-        priority: PRIORITY[kind],
+        priority: kind === "model" && mode ? 10 : PRIORITY[kind],
         colorRole: COLOR_ROLE[kind],
         icon: ICON[kind],
       });

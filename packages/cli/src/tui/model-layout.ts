@@ -909,7 +909,6 @@ export function modelFooterHint(mode: ModelMode, hasFilter = false): string {
     "enter select for new chat",
     "tab curated/all",
     mode === "filter" || hasFilter ? "esc clear" : "esc back",
-    "ctrl+u clear",
   ].join(" · ");
 }
 

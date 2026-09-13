@@ -81,8 +81,6 @@ export interface TuiSettings {
    * from the session's first message (chat-screen gates the pill on this).
    */
   showObjective: boolean;
-  /** Header "target: …" segment (chat-screen gates the header target on this). */
-  showTarget: boolean;
   /** Header "scope: …" segment (chat-screen gates the header scope on this). */
   showScope: boolean;
   /** Density of the transcript: "comfortable" adds blank lines. */
@@ -183,6 +181,12 @@ export interface TuiSettings {
    * disables decorative animations (logo intro, shimmers, sweeps).
    */
   reduceMotion: boolean;
+  /** Operator-global consent; a project must never enable diagnostic egress. */
+  diagnosticReporting: "off" | "ask" | "automatic";
+  /** Internal first-use state, not a grant of reporting consent. */
+  diagnosticReportingPrompted: boolean;
+  /** Operator-global update policy; unset installations remain opted out. */
+  updatePolicy: "off" | "notify" | "automatic";
 }
 
 /** Keys of `TuiSettings` whose value is a boolean. */
@@ -217,6 +221,8 @@ type TuiSettingDef =
   | EnumSettingDef<"transcriptDetail">
   | EnumSettingDef<"modelDisplay">
   | EnumSettingDef<"busyInputMode">
+  | EnumSettingDef<"diagnosticReporting">
+  | EnumSettingDef<"updatePolicy">
   | EnumSettingDef<"logoAnimation">
   | EnumSettingDef<"theme">;
 
@@ -252,7 +258,7 @@ const DEFS: readonly TuiSettingDef[] = [
   {
     key: "showStatusBar",
     label: "Status bar",
-    description: "Bottom bar with model, working directory, git state and token counters.",
+    description: "Optional bottom-bar telemetry: model, working directory, git state and token counters. Permission mode and the turn timer share that row and stay visible with this off.",
     kind: "boolean",
     default: true,
     group: "Display",
@@ -310,9 +316,9 @@ const DEFS: readonly TuiSettingDef[] = [
     key: "showRightSidebar",
     label: "Right sidebar",
     description:
-      "Right sidebar in the chat view: live agents (task, status, turns, findings) plus a context strip. Hidden on narrow terminals.",
+      "Right sidebar: live agents, their activity, the current plan and findings. Hidden on narrow terminals.",
     kind: "boolean",
-    default: false,
+    default: true,
     group: "Display",
   },
   {
@@ -333,17 +339,9 @@ const DEFS: readonly TuiSettingDef[] = [
     group: "Display",
   },
   {
-    key: "showTarget",
-    label: "Target",
-    description: 'Header "target: …" segment naming the host or app under assessment.',
-    kind: "boolean",
-    default: true,
-    group: "Display",
-  },
-  {
     key: "showScope",
     label: "Scope",
-    description: 'Header "scope: …" segment showing the boundary the run is confined to.',
+    description: "Show the configured multi-host scope and exclusions. An absent scope is distinct from an explicit empty scope.",
     kind: "boolean",
     default: true,
     group: "Display",
@@ -396,16 +394,16 @@ const DEFS: readonly TuiSettingDef[] = [
   {
     key: "transcriptStyle",
     label: "Transcript style",
-    description: "How a conversation turn is framed: rail, bubble, plain, compact or document.",
+    description: "Bubble right-aligns your messages against left-aligned answers and titles each card on its border. Rail, plain, compact and document offer alternative transcript layouts.",
     kind: "enum",
-    default: "rail",
+    default: "bubble",
     choices: ["rail", "bubble", "plain", "compact", "document"],
     group: "Display",
   },
   {
     key: "roleLabelStyle",
     label: "Role label",
-    description: 'How the speaker label is drawn: full ("\u258c operator"), short ("op"), glyph ("\u258c") or off.',
+    description: 'Speaker name on each message: "You" for your turns, "0sec" for answers. Full and short add the elapsed age when one is known; glyph shows the name alone; off omits the label entirely. Bubble cards carry it top-left on the card border, with your messages right-aligned and answers left.',
     kind: "enum",
     default: "full",
     choices: ["full", "short", "glyph", "off"],
@@ -443,7 +441,7 @@ const DEFS: readonly TuiSettingDef[] = [
     key: "theme",
     label: "Theme",
     description:
-      "Colour palette. Midnight (deep blue-black, default) and Carbon (warm dark), Standard/Paper (light), plus Contrast, Slate, Mono Dim and ANSI 16 for 16-colour terminals. Drop validated palettes in ~/.0sec/themes to add your own.",
+      "Colour palette. Slate (neutral grey, default) and Midnight (deep blue-black) and Carbon (warm dark), Standard/Paper (light), plus Contrast, Mono Dim and ANSI 16 for 16-colour terminals. Drop validated palettes in ~/.0sec/themes to add your own.",
     kind: "enum",
     default: DEFAULT_THEME_NAME,
     choices: THEME_CHOICES,
@@ -481,7 +479,7 @@ const DEFS: readonly TuiSettingDef[] = [
     label: "Token usage",
     description: 'Per-turn "in→out tok" line under each answer.',
     kind: "boolean",
-    default: false,
+    default: true,
     group: "Telemetry",
   },
   {
@@ -489,7 +487,7 @@ const DEFS: readonly TuiSettingDef[] = [
     label: "Cost",
     description: "Estimated dollar cost, per turn and in the status bar.",
     kind: "boolean",
-    default: false,
+    default: true,
     group: "Telemetry",
   },
   {
@@ -497,7 +495,7 @@ const DEFS: readonly TuiSettingDef[] = [
     label: "Context meter",
     description: "Visual context-usage bar in the status bar.",
     kind: "boolean",
-    default: false,
+    default: true,
     group: "Telemetry",
   },
   {
@@ -543,6 +541,24 @@ const DEFS: readonly TuiSettingDef[] = [
     default: false,
     group: "Motion",
   },
+  {
+    key: "diagnosticReporting",
+    label: "Problem reports",
+    description: "Send limited diagnostics automatically by default, ask first, or turn reporting off. Uses Cloud sign-in or a configured HTTPS feedback endpoint. Never includes prompts, tool arguments or output. Applies to this computer, not this project.",
+    kind: "enum",
+    default: "automatic",
+    choices: ["off", "ask", "automatic"],
+    group: "Privacy",
+  },
+  {
+    key: "updatePolicy",
+    label: "Updates",
+    description: "Off, notify about releases, or install updates before the console starts. Applies to this computer; project settings cannot enable installation.",
+    kind: "enum",
+    default: "off",
+    choices: ["off", "notify", "automatic"],
+    group: "Updates",
+  },
 ];
 
 export const SETTING_DEFS: readonly SettingDef[] = DEFS;
@@ -557,10 +573,9 @@ export const DEFAULT_SETTINGS: TuiSettings = {
   showTurnSummary: false,
   showSubagents: true,
   showLeftSidebar: false,
-  showRightSidebar: false,
+  showRightSidebar: true,
   showTimestamps: false,
   showObjective: true,
-  showTarget: true,
   showScope: true,
   density: "comfortable",
   composerStyle: "border",
@@ -568,7 +583,7 @@ export const DEFAULT_SETTINGS: TuiSettings = {
   onboardingCompleted: false,
   allowSubagentPeerMessaging: true,
   allowSubagentOperatorMessaging: true,
-  transcriptStyle: "rail",
+  transcriptStyle: "bubble",
   roleLabelStyle: "full",
   toolCardStyle: "compact",
   richToolCards: true,
@@ -577,12 +592,15 @@ export const DEFAULT_SETTINGS: TuiSettings = {
   allowModelSelfExtension: DEFAULT_ALLOW_MODEL_SELF_EXTENSION,
   autoEvolveFinderLenses: false,
   autoPromoteFinderLenses: false,
-  showTokenUsage: false,
-  showCost: false,
-  showContextMeter: false,
+  showTokenUsage: true,
+  showCost: true,
+  showContextMeter: true,
   modelDisplay: "statusbar",
   logoAnimation: "glitch",
   reduceMotion: false,
+  diagnosticReporting: "automatic",
+  diagnosticReportingPrompted: false,
+  updatePolicy: "off",
 };
 
 /** Basename of the settings file inside the 0sec state directory. */
@@ -653,8 +671,11 @@ export function projectSettingsExist(projectDir: string = process.cwd()): boolea
 function strictValueAt<K extends keyof TuiSettings>(raw: unknown, key: K): TuiSettings[K] | undefined {
   const value = rawValue(raw, key);
   if (value === undefined) return undefined;
-  if (key === "onboardingCompleted") {
+  if (key === "onboardingCompleted" || key === "diagnosticReportingPrompted") {
     return typeof value === "boolean" ? (value as TuiSettings[K]) : undefined;
+  }
+  if (value === false && (key === "diagnosticReporting" || key === "updatePolicy")) {
+    return "off" as TuiSettings[K];
   }
   if (key === "theme") {
     return typeof value === "string" && isKnownTheme(value)
@@ -678,9 +699,23 @@ export interface LayeredSettings {
   sources: Record<keyof TuiSettings, SettingLayer>;
 }
 
-/** First-use completion belongs to the operator, never a project checkout. */
+/**
+ * Settings a repository checkout may never set on the operator's behalf.
+ *
+ * Both halves of this list are load-bearing and neither side's list is
+ * sufficient alone. A project-level settings file that could set
+ * `diagnosticReporting` or `updatePolicy` would let a checked-in file turn on
+ * telemetry egress or automatic update installation for anyone who opens that
+ * repository — a privilege the repository does not have. One that could set
+ * `onboardingCompleted` would suppress first-use consent the operator has not
+ * actually given. Both are the same class of escalation: the project claiming
+ * a decision that belongs to the person at the keyboard.
+ */
 export function isOperatorSetting(key: keyof TuiSettings): boolean {
-  return key === "onboardingCompleted";
+  return key === "onboardingCompleted"
+    || key === "diagnosticReporting"
+    || key === "diagnosticReportingPrompted"
+    || key === "updatePolicy";
 }
 
 /**
@@ -727,7 +762,13 @@ function rawValue(raw: unknown, key: string): unknown {
   // treating them as an empty bag is exactly the "fall back to defaults"
   // behaviour we want rather than a special case.
   if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return undefined;
-  return (raw as Record<string, unknown>)[key];
+  const value = (raw as Record<string, unknown>)[key];
+  // A persisted `messenger` comes from installed 0.16.3, whose default it was.
+  // The canonical union does not carry that name, so the value is migrated to
+  // its equivalent rather than failing validation: dropping it would silently
+  // reset a preference every 0.16.3 operator currently has written to disk,
+  // and rejecting it would invalidate the whole settings layer over one key.
+  return key === "transcriptStyle" && value === "messenger" ? "bubble" : value;
 }
 
 function booleanAt(raw: unknown, key: BooleanKey): boolean {
@@ -793,7 +834,6 @@ export function normalizeSettings(raw: unknown): TuiSettings {
     showRightSidebar: booleanWithLegacy(raw, "showRightSidebar", "showAgentRail"),
     showTimestamps: booleanAt(raw, "showTimestamps"),
     showObjective: booleanAt(raw, "showObjective"),
-    showTarget: booleanAt(raw, "showTarget"),
     showScope: booleanAt(raw, "showScope"),
     density: enumAt(raw, "density"),
     composerStyle: enumAt(raw, "composerStyle"),
@@ -816,6 +856,9 @@ export function normalizeSettings(raw: unknown): TuiSettings {
     modelDisplay: enumAt(raw, "modelDisplay"),
     logoAnimation: enumAt(raw, "logoAnimation"),
     reduceMotion: booleanAt(raw, "reduceMotion"),
+    diagnosticReporting: strictValueAt(raw, "diagnosticReporting") ?? DEFAULT_SETTINGS.diagnosticReporting,
+    diagnosticReportingPrompted: booleanAt(raw, "diagnosticReportingPrompted"),
+    updatePolicy: strictValueAt(raw, "updatePolicy") ?? DEFAULT_SETTINGS.updatePolicy,
   };
 }
 
@@ -909,6 +952,7 @@ export function setProjectOverride<K extends keyof TuiSettings>(
   value: TuiSettings[K],
   projectDir?: string,
 ): boolean {
+  if (isOperatorSetting(key)) return false;
   const current = readProjectOverrides(projectDir);
   return saveProjectOverrides({ ...current, [key]: value }, projectDir);
 }

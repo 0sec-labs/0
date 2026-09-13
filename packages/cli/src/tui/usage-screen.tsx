@@ -109,17 +109,10 @@ function toneColor(theme: Theme, tone: UsageTone | undefined): string | undefine
 function Pane({
   pane,
   bordered,
-  title,
   children,
 }: {
   pane: UsagePane;
   bordered: boolean;
-  /**
-   * The header row node, already fitted to the pane's inner width. Optional:
-   * inside the operator dialog the icon+title row is drawn above the pane (and
-   * budgeted out of the body through `headerRows`), so the pane carries none.
-   */
-  title?: React.ReactNode;
   children: React.ReactNode;
 }) {
   const theme = useTheme();
@@ -137,7 +130,6 @@ function Pane({
       backgroundColor={bordered ? theme.PANEL : undefined}
       paddingX={bordered ? 1 : undefined}
     >
-      {pane.hasTitle ? (title ?? null) : null}
       {children}
     </box>
   );
@@ -288,5 +280,5 @@ export function UsageScreen({ frame, usage, onBack, onExit }: UsageScreenProps) 
     </box>
   );
 
-  return <>{frame({ body, hint: usageFooterHint() })}</>;
+  return <>{frame({ body, hint: `${maxOffset > 0 ? "↑↓ scroll · " : ""}${usageFooterHint()}` })}</>;
 }

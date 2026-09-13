@@ -172,18 +172,6 @@ function findingLocation(finding: Finding): string | undefined {
   return undefined;
 }
 
-/** The evidence blob, joined from the finding's request/response/analysis. */
-function findingEvidence(finding: Finding, redact: (text: string) => string): string {
-  const evidence = finding.evidence;
-  if (!evidence) return "";
-  const parts: string[] = [];
-  if (evidence.request) parts.push(`Request:\n${evidence.request}`);
-  if (evidence.response) parts.push(`Response:\n${evidence.response}`);
-  if (evidence.analysis) parts.push(`Analysis:\n${evidence.analysis}`);
-  const joined = parts.join("\n\n");
-  return joined.length > 0 ? redact(joined) : "";
-}
-
 /** The CVSS line, from the injected pre-rendered string or the finding itself. */
 function findingCvssLine(finding: Finding, injected: string | undefined): string {
   if (injected && injected.trim().length > 0) return injected.trim();
@@ -211,10 +199,13 @@ const ICON_LINK      = "↗"; // nf-fa-link
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * The finding body as a flat, tone-tagged row list. Content is decided here and
- * colour by the component, so the body is testable without a renderer. Every
- * missing field renders as `—` rather than a fabricated value, and evidence is
- * only ever shown through the injected redactor.
+ * The finding body as a flat, tone-tagged row list.
+ *
+ * Information hierarchy: Title (wrapped) → Severity → Status → CVSS →
+ * Category → Triage → Confidence → Location → Endpoint+method (from
+ * evidence) → Description → Evidence (subsections visibly distinct) →
+ * Remediation → References.  Every missing field renders as `—`, and evidence
+ * is only ever shown through the injected redactor.
  */
 export function buildFindingRows(
   finding: Finding | undefined,
@@ -229,38 +220,44 @@ export function buildFindingRows(
 
   const redact = options.redact ?? ((text: string) => text);
   const rows: FindingDetailRow[] = [];
-  const blank = () => rows.push({ kind: "blank" });
-  const heading = (text: string) => {
-    for (const line of wrapCells(text, width)) rows.push({ kind: "heading", text: line, tone: "heading" });
-  };
 
-  // Strong header: title + severity badge on one row. The severity lives in the
-  // badge (red for critical/high only) rather than a key/value row, so the
-  // finding leads with its headline and severity instead of a meta table.
-  rows.push({
-    kind: "header",
-    title: findingText(finding.title || EM_DASH),
-    badge: finding.severity ? String(finding.severity).toUpperCase() : EM_DASH,
-    badgeTone: severityDetailTone(finding.severity),
-  });
-  blank();
 
-  // Meta — key/value rows the component renders in two columns.
+  // 1. Title — wrapped so long titles stay readable, severity carried below.
+  pushWrapped(rows, findingText(finding.title || EM_DASH), width, "title");
+
+  // 2. Severity — explicit kv row (coloured badge tone for critical/high).
   rows.push({
     kind: "kv",
-    label: `${ICON_CATEGORY} Category`,
-    value: finding.category ? findingText(finding.category) : EM_DASH,
-    tone: "text",
+    label: `${ICON_STATUS} Severity`,
+    value: finding.severity ? String(finding.severity).toUpperCase() : EM_DASH,
+    tone: severityDetailTone(finding.severity),
   });
+
+  // 3. Status
   rows.push({
     kind: "kv",
     label: `${ICON_STATUS} Status`,
     value: finding.status ? findingText(finding.status) : EM_DASH,
     tone: "text",
   });
+
+  // 4. CVSS — near top alongside severity/status.
+  pushWrapped(rows, `${ICON_CVSS} CVSS: ${findingCvssLine(finding, options.cvssLine)}`, width, "text");
+
+  // 5. Category
+  rows.push({
+    kind: "kv",
+    label: `${ICON_CATEGORY} Category`,
+    value: finding.category ? findingText(finding.category) : EM_DASH,
+    tone: "text",
+  });
+
+  // 6. Triage (if present)
   if (finding.triageStatus) {
     rows.push({ kind: "kv", label: `${ICON_TRIAGE} Triage`, value: findingText(finding.triageStatus), tone: "text" });
   }
+
+  // 7. Confidence
   rows.push({
     kind: "kv",
     label: `${ICON_CONFID} Confidence`,
@@ -271,58 +268,75 @@ export function buildFindingRows(
     tone: "text",
   });
 
-  // Location
-  blank();
-  heading(`${ICON_LOCATION} Location`);
-  pushWrapped(rows, findingLocation(finding) ?? EM_DASH, width, "text");
+  // 8. Location — compact section label inline with wrapped text.
+  pushWrapped(rows, `${ICON_LOCATION} Location: ${findingLocation(finding) ?? EM_DASH}`, width, "text");
 
-  // Description
-  blank();
-  heading(`${ICON_DESC} Description`);
-  pushWrapped(rows, finding.description || EM_DASH, width, "text");
-
-  // Evidence (redacted)
-  blank();
-  heading(`${ICON_EVIDENCE} Evidence`);
-  const evidence = findingEvidence(finding, redact);
-  if (evidence.length === 0) {
-    rows.push({ kind: "text", text: EM_DASH, tone: "muted" });
-  } else {
-    for (const rawLine of evidence.split("\n")) {
-      const wrapped = wrapCells(rawLine, width);
-      if (wrapped.length === 0) {
-        rows.push({ kind: "blank" });
-        continue;
-      }
-      for (const line of wrapped) rows.push({ kind: "text", text: line, tone: "muted" });
+  // 9. Endpoint+method — only from actual evidence.request first line.
+  const redactedRequest = finding.evidence?.request ? redact(finding.evidence.request) : "";
+  if (redactedRequest) {
+    const firstReqLine = redactedRequest.split("\n", 1)[0].trim();
+    if (firstReqLine) {
+      pushWrapped(rows, `Endpoint: ${findingText(firstReqLine)}`, width, "accent");
     }
   }
 
-  // Remediation
-  blank();
-  heading(`${ICON_FIX} Remediation`);
+  // 10. Description
+  pushWrapped(rows, `${ICON_DESC} Description: ${finding.description || EM_DASH}`, width, "text");
+
+  // 11. Evidence — subsections (Request / Response / Analysis) visibly distinct.
+  const ev = finding.evidence;
+  if (ev && (ev.request || ev.response || ev.analysis)) {
+    rows.push({ kind: "text", text: `${ICON_EVIDENCE} Evidence`, tone: "heading" });
+
+    if (ev.request) {
+      const reqText = `Request:\n${redactedRequest}`;
+      for (const rawLine of reqText.split("\n")) {
+        const wrapped = wrapCells(rawLine, width);
+        if (wrapped.length === 0) { rows.push({ kind: "blank" }); continue; }
+        for (const line of wrapped) rows.push({ kind: "text", text: line, tone: "muted" });
+      }
+    }
+
+    if (ev.response) {
+      if (ev.request) rows.push({ kind: "blank" });
+      const respText = redact(`Response:\n${ev.response}`);
+      for (const rawLine of respText.split("\n")) {
+        const wrapped = wrapCells(rawLine, width);
+        if (wrapped.length === 0) { rows.push({ kind: "blank" }); continue; }
+        for (const line of wrapped) rows.push({ kind: "text", text: line, tone: "muted" });
+      }
+    }
+
+    if (ev.analysis) {
+      if (ev.request || ev.response) rows.push({ kind: "blank" });
+      const analysisText = redact(`Analysis:\n${ev.analysis}`);
+      for (const rawLine of analysisText.split("\n")) {
+        const wrapped = wrapCells(rawLine, width);
+        if (wrapped.length === 0) { rows.push({ kind: "blank" }); continue; }
+        for (const line of wrapped) rows.push({ kind: "text", text: line, tone: "muted" });
+      }
+    }
+  } else {
+    pushWrapped(rows, `${ICON_EVIDENCE} Evidence: ${EM_DASH}`, width, "muted");
+  }
+
+  // 12. Remediation
   const remediation = finding.remediation;
   if (!remediation || (!remediation.summary && (remediation.steps?.length ?? 0) === 0)) {
-    rows.push({ kind: "text", text: EM_DASH, tone: "muted" });
+    pushWrapped(rows, `${ICON_FIX} Remediation: ${EM_DASH}`, width, "muted");
   } else {
-    if (remediation.summary) pushWrapped(rows, remediation.summary, width, "text");
+    pushWrapped(rows, `${ICON_FIX} Remediation${remediation.summary ? `: ${remediation.summary}` : ""}`, width, "text");
     for (const step of remediation.steps ?? []) {
-      pushWrapped(rows, `- ${step}`, width, "text");
+      pushWrapped(rows, `${step}`, width, "text");
     }
   }
 
-  // CVSS
-  blank();
-  heading(`${ICON_CVSS} CVSS`);
-  pushWrapped(rows, findingCvssLine(finding, options.cvssLine), width, "text");
-
-  // References
-  blank();
-  heading(`${ICON_LINK} References`);
+  // 13. References
   const refs = [...(finding.remediation?.references ?? []), ...(finding.dedupRefs ?? [])];
   if (refs.length === 0) {
-    rows.push({ kind: "text", text: EM_DASH, tone: "muted" });
+    pushWrapped(rows, `${ICON_LINK} References: ${EM_DASH}`, width, "muted");
   } else {
+    rows.push({ kind: "text", text: `${ICON_LINK} References`, tone: "heading" });
     for (const ref of refs) pushWrapped(rows, ref, width, "accent");
   }
 

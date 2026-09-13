@@ -229,34 +229,39 @@ function speechTurnBlock(
   roleStyle: TuiSettings["roleLabelStyle"],
   width: number,
 ): PreviewBlock {
-  const frame = speechFrame(style, kind, width);
+  const messageWidth = style === "bubble" && kind === "user" && width >= 32
+    ? Math.floor(width * 0.85)
+    : width;
+  const frame = speechFrame(style, kind, messageWidth);
   const label = roleLabelText(kind, roleStyle);
   const body = kind === "user" ? OPERATOR_LINE : ASSISTANT_LINE;
   const toneOf = (t: Theme) => (kind === "user" ? t.ACCENT : t.PRIMARY);
 
   if (frame.bordered) {
-    const rows = 2 + (label ? 1 : 0) + 1;
+    // Bubble cards carry the speaker label on the top-left border as a title,
+    // matching the chat surface. No separate heading row is needed.
     return {
       key,
-      rows,
+      rows: 3,
       render: (theme) => (
+        <box width={width} flexDirection="row" justifyContent={kind === "user" ? "flex-end" : "flex-start"} flexShrink={0}>
         <box
           flexDirection="column"
-          width={width}
+          width={messageWidth}
           flexShrink={0}
           minWidth={0}
           border
+          borderStyle="rounded"
           borderColor={toneOf(theme)}
           paddingX={1}
+          title={label ? ` ${label} ` : undefined}
+          titleColor={toneOf(theme)}
+          titleAlignment="left"
         >
-          {label ? (
-            <Cells width={frame.contentWidth} fg={toneOf(theme)}>
-              {label}
-            </Cells>
-          ) : null}
           <Cells width={frame.contentWidth} fg={theme.TEXT}>
             {body}
           </Cells>
+        </box>
         </box>
       ),
     };

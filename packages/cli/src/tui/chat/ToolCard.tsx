@@ -7,6 +7,7 @@ import { commandCardFrame, toolCompactLine } from "../transcript-style.js";
 import { projectToolPreview, type ToolPreview } from "../tool-format.js";
 import { codeTokenStyle, highlightCode } from "../syntax-style.js";
 import type { Theme } from "../theme-context.js";
+import { KEYBINDINGS } from "../keybindings.js";
 import { ShimmerText } from "./shimmer.js";
 import { renderMarkdownBlocks } from "./markdown-blocks.js";
 import { ImageCard } from "./ImageCard.js";
@@ -27,8 +28,7 @@ import {
 /**
  * A tool call, drawn as a titled rounded card.
  *
- *   ╭ SH ──────────────────────────────────────╮
- *   │ ✓ $ npm test -- --silent                 │
+ *   ╭ $ npm test -- --silent · SH ──────────────╮
  *   │ COMMAND ─────────────────────────────────│
  *   │ npm test -- --silent      (highlighted)  │
  *   │ OUTPUT ──────────────────────────────────│
@@ -41,11 +41,10 @@ import {
  *
  * What the card is allowed to say:
  *
- *   - The BADGE on the top border is the body's real language, or the real
- *     tool kind when the body has no language. See `toolBadgeLabel`.
- *   - The TITLE is the operation that actually ran — the command string, the
- *     edited path, the search provider, or the tool name plus its own
- *     formatted arguments. There is no generic stand-in title.
+ *   - The top-border TITLE is the operation that actually ran — the command
+ *     string, edited path, search provider, or tool name with its recorded
+ *     argument summary. Its language/kind chip comes from retained metadata.
+ *     There is no generic stand-in title and no second heading in the body.
  *   - STATUS is derived, never assumed: a call with no recorded outcome reads
  *     "running", a non-zero exit or a wallclock kill reads "failed" in the
  *     error tone, and only `success === true` reads "complete". Finishing is
@@ -56,7 +55,7 @@ import {
  * Behaviour carried over unchanged from the previous inline implementation:
  * the collapsed/expanded line budget (10 vs 128 retained lines), the
  * `<scrollbox>` that lets an expanded body scroll inside a fixed height, the
- * "N more preview lines · click or Ctrl+R to expand" hint, the
+ * expansion hint drawn from the actual keybinding registry, the
  * "Preview capped" notice, and the fact that every body line is a real
  * selectable `<text>` node so the transcript's copy-on-highlight
  * (`useSelectionCopy` in chat-screen) keeps working over the card.
@@ -71,6 +70,8 @@ const MAX_INPUT_ROWS = 8;
 
 /** Images from one result that we will draw as cards beneath it. */
 const MAX_CARD_IMAGES = 4;
+
+const TOOL_EXPAND_KEY = KEYBINDINGS.find((binding) => binding.id === "view.transcript-detail")?.keys;
 
 export interface ToolCardProps {
   entry: ChatEntry;
@@ -96,7 +97,6 @@ function stateTone(state: ToolState, theme: Theme): string {
 /** Border colour. Only a real failure repaints the whole outline. */
 function stateBorder(state: ToolState, theme: Theme): string {
   if (state === "failed") return theme.ERROR;
-  if (state === "running") return theme.PRIMARY;
   return theme.BORDER;
 }
 
@@ -272,7 +272,8 @@ export function ToolCard({
   const allImages: readonly ChatImageAttachment[] = entry.toolPreview?.images ?? preview.images ?? entry.images ?? [];
   const images = allImages.slice(0, MAX_CARD_IMAGES);
 
-  const headline = fitTuiText(`${glyph} ${title}${repeat}`, inner);
+  const headerGlyph = failed ? `${glyph} ` : !running && entry.metaKind === "edit" ? "✎ " : "";
+  const headline = fitTuiText(`${headerGlyph}${title}${repeat}${badge ? ` · ${badgeChip(badge, inner)}` : ""}`, inner);
   const shimmer = running && typeof display.shimmerFrame === "number";
 
   return (
@@ -285,20 +286,12 @@ export function ToolCard({
       border
       borderStyle="rounded"
       borderColor={stateBorder(state, theme)}
-      title={badgeChip(badge, inner) || undefined}
+      title={headline || undefined}
       titleColor={failed ? ERROR : BRAND}
       titleAlignment="left"
       backgroundColor={PANEL}
       paddingX={1}
     >
-      {/* The true action title. Bold, in the state's tone, one row, always fitted. */}
-      {shimmer ? (
-        <ShimmerText label={headline} frame={display.shimmerFrame!} base={MUTED} peak={TEXT} attributes={TextAttributes.BOLD} />
-      ) : (
-        <text width={inner} height={1} wrapMode="none" truncate fg={tone} attributes={TextAttributes.BOLD}>
-          {headline}
-        </text>
-      )}
 
       {input ? (
         <box flexDirection="column" width={inner} flexShrink={0} minWidth={0} marginTop={1}>
@@ -348,7 +341,7 @@ export function ToolCard({
         )}
         {hiddenLines > 0 ? (
           <text width={inner} height={1} wrapMode="none" truncate fg={MUTED}>
-            {fitTuiText(`${hiddenLines} more preview lines${toggleable ? " · click or Ctrl+R to expand" : ""}`, inner)}
+            {fitTuiText(`${hiddenLines} more preview lines${toggleable ? ` · click${TOOL_EXPAND_KEY ? ` or ${TOOL_EXPAND_KEY}` : ""} to expand` : ""}`, inner)}
           </text>
         ) : null}
         {capped ? (
@@ -413,6 +406,10 @@ export function ToolCard({
           marginTop={1}
         />
       ))}
+      {running ? (
+        shimmer ? <ShimmerText label={`${glyph} running`} frame={display.shimmerFrame!} base={MUTED} peak={TEXT} />
+          : <text fg={MUTED}>{`${glyph} running`}</text>
+      ) : null}
     </box>
   );
 }

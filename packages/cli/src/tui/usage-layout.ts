@@ -330,7 +330,6 @@ export function buildUsageReport(snapshot: UsageSnapshot = {}): UsageReportRow[]
   const kv = (label: string, value: string, tone: UsageTone = "value") =>
     rows.push({ kind: "kv", label, value, tone });
   const text = (label: string, tone: UsageTone = "muted") => rows.push({ kind: "text", label, tone });
-  const blank = () => rows.push({ kind: "blank", tone: "blank" });
 
   // ── CONTEXT ──────────────────────────────────────────────────────────────
   // The meter is shown ONLY when both halves of the reading exist. Neither half
@@ -350,7 +349,6 @@ export function buildUsageReport(snapshot: UsageSnapshot = {}): UsageReportRow[]
     kv(`${ICON_CONTEXT} used`, tokenOrDash(snapshot.contextUsed), "muted");
     text("context window not reported for this session", "muted");
   }
-  blank();
 
   // ── TOKENS ───────────────────────────────────────────────────────────────
   heading("TOKENS");
@@ -374,10 +372,6 @@ export function buildUsageReport(snapshot: UsageSnapshot = {}): UsageReportRow[]
   if (hasNumber(session?.reasoningTokens) || hasNumber(turn?.reasoningTokens)) {
     both(`${ICON_REASON} reasoning`, (u) => u?.reasoningTokens);
   }
-  if (!hasAnyTokens(session) && !hasAnyTokens(turn)) {
-    text("no tokens recorded yet", "muted");
-  }
-  blank();
 
   // ── COST ─────────────────────────────────────────────────────────────────
   heading("COST");
@@ -400,7 +394,6 @@ export function buildUsageReport(snapshot: UsageSnapshot = {}): UsageReportRow[]
   } else {
     kv(`${ICON_COST} session estimate`, "$—", "muted");
   }
-  blank();
 
   // ── MODEL ────────────────────────────────────────────────────────────────
   heading("MODEL");
@@ -413,7 +406,6 @@ export function buildUsageReport(snapshot: UsageSnapshot = {}): UsageReportRow[]
   } else {
     kv(`${ICON_MODEL} active`, EM_DASH, "muted");
   }
-  blank();
 
   // ── TOOL HEALTH ──────────────────────────────────────────────────────────
   heading("TOOL HEALTH");
@@ -428,8 +420,6 @@ export function buildUsageReport(snapshot: UsageSnapshot = {}): UsageReportRow[]
       const suffix = event.count > 1 ? ` (x${event.count})` : "";
       kv(`${event.tool}`, `${event.category}${suffix}`, "muted");
     }
-  } else {
-    text("no tool issues", "ok");
   }
 
   return rows;
@@ -458,64 +448,6 @@ export function usageMeterBar(fraction: number, cellCount: number): string {
   return METER_FILLED.repeat(filled) + METER_EMPTY.repeat(width - filled);
 }
 
-// ---------------------------------------------------------------------------
-// Title row (pane header: bold title left, right-aligned summary meta)
-// ---------------------------------------------------------------------------
-
-/** The title never shrinks below this; the meta gives way first. */
-const TITLE_MIN_WIDTH = 6;
-
-/** A pane header split into a left title and a right-aligned meta column. */
-export interface UsageTitleLayout {
-  /** Total cells the header row occupies; equals the pane's inner width. */
-  width: number;
-  titleWidth: number;
-  gap: number;
-  /** Right-aligned summary column. 0 when the row cannot spare it. */
-  metaWidth: number;
-}
-
-/**
- * Splits the pane's header into "SESSION USAGE" and a right-aligned summary
- * (e.g. "$4.12 session"). The title outranks the meta: on a narrow header the
- * meta gives way whole rather than crushing the title, and the two columns
- * always sum to exactly the pane's inner width so the header claims every cell
- * it was given and never one more. The separator is a real gap, never a padded
- * literal — `sanitizeTuiText` trims, so a literal space would fuse the two.
- */
-export function computeUsageTitleLayout(innerWidth: number, metaLength: number): UsageTitleLayout {
-  const width = cells(innerWidth);
-  if (width <= 0) return { width: 0, titleWidth: 0, gap: 0, metaWidth: 0 };
-  const wanted = cells(metaLength);
-  const metaWidth = Math.min(wanted, Math.max(0, width - TITLE_MIN_WIDTH - 1));
-  const gap = metaWidth > 0 ? 1 : 0;
-  const titleWidth = Math.max(0, width - metaWidth - gap);
-  return { width, titleWidth, gap, metaWidth };
-}
-
-/**
- * The right-aligned header summary: the priced session cost when it is known,
- * else the active model, else nothing. Honest by construction — it reuses the
- * same cost resolution as the COST section, so an unpriced model contributes no
- * fabricated figure and the meta falls back to the model name (or empty).
- */
-export function usageTitleMeta(snapshot: UsageSnapshot = {}): string {
-  const perModel = (snapshot.perModel ?? []).filter((entry) => entry && entry.model);
-  if (perModel.length > 0) {
-    let total = 0;
-    let allPriced = true;
-    for (const entry of perModel) {
-      const rates = resolveRates(entry.model);
-      if (rates) total += costUsd(entry, rates);
-      else allPriced = false;
-    }
-    if (allPriced) return `${formatCost(total)} session`;
-  } else if (hasAnyTokens(snapshot.session)) {
-    const rates = resolveRates(snapshot.model);
-    if (rates) return `${formatCost(costUsd(snapshot.session ?? {}, rates))} session`;
-  }
-  return typeof snapshot.model === "string" ? snapshot.model.trim() : "";
-}
 
 // ---------------------------------------------------------------------------
 // Geometry
@@ -547,10 +479,8 @@ export interface UsagePane {
   innerWidth: number;
   /** Outer rows, borders included. 0 when the pane is not rendered. */
   height: number;
-  /** Rows available to content, below the title row. */
+  /** Rows available to report content inside the border. */
   bodyRows: number;
-  /** The pane spends a row on a title. */
-  hasTitle: boolean;
 }
 
 export interface UsageKvLayout {
@@ -618,16 +548,14 @@ function borderChrome(bordered: boolean): { horizontal: number; vertical: number
 function makePane(width: number, height: number, chromeH: number, chromeV: number): UsagePane {
   const outerWidth = cells(width);
   const outerHeight = cells(height);
-  const verticalChrome = chromeV + 1; // always a title row
-  if (outerWidth <= chromeH || outerHeight <= verticalChrome) {
-    return { width: 0, innerWidth: 0, height: 0, bodyRows: 0, hasTitle: true };
+  if (outerWidth <= chromeH || outerHeight <= chromeV) {
+    return { width: 0, innerWidth: 0, height: 0, bodyRows: 0 };
   }
   return {
     width: outerWidth,
     innerWidth: outerWidth - chromeH,
     height: outerHeight,
-    bodyRows: outerHeight - verticalChrome,
-    hasTitle: true,
+    bodyRows: outerHeight - chromeV,
   };
 }
 
@@ -708,7 +636,7 @@ export function computeUsageLayout({
 }
 
 // ---------------------------------------------------------------------------
-// Clipping, titles and hints
+// Clipping and hints
 // ---------------------------------------------------------------------------
 
 /**

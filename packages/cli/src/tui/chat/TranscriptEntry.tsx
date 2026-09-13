@@ -24,7 +24,7 @@ import type { Theme } from "../theme-context.js";
 import type { ChatEntry, EntryDisplay } from "./types.js";
 import { ToolCard } from "./ToolCard.js";
 import { ImageCard } from "./ImageCard.js";
-import { toolState, toolStateLabel } from "./card-layout.js";
+import { toolActionTitle, toolState, toolStateLabel } from "./card-layout.js";
 
 /**
  * Mouse affordances for a clickable transcript row (a collapsed fold, or a
@@ -161,14 +161,13 @@ export function renderEntry(
 
   if (entry.kind === "user" || entry.kind === "assistant") {
     const isUser = entry.kind === "user";
-    // Frame accents (a bubble border, the inline label gap) stay in the
-    // speaker's own tone. The LABEL, however, carries the brand: the assistant
-    // "0sec" label renders in the brand purple (theme.BRAND); the operator label
-    // stays the neutral accent. Body text is never tinted by this — it keeps
-    // TEXT / PRIMARY via renderMarkdownBlocks below.
+    // Keep speaker labels distinct without tinting the message body.
     const tone = isUser ? ACCENT : PRIMARY;
     const labelTone = isUser ? ACCENT : BRAND;
-    const frame = speechFrame(transcriptStyle, entry.kind, maxWidth);
+    const messageWidth = transcriptStyle === "bubble" && isUser && maxWidth >= 32
+      ? Math.floor(maxWidth * 0.85)
+      : maxWidth;
+    const frame = speechFrame(transcriptStyle, entry.kind, messageWidth);
     const marginTop = display.spacing + frame.extraMarginTop;
     const age = display.showTimestamps ? relativeAge(entry.at, display.now) : "";
     const label = roleLabelText(isUser ? "user" : "assistant", roleLabelStyle, age);
@@ -179,29 +178,57 @@ export function renderEntry(
     const body = isUser
       ? <text fg={TEXT} wrapMode="word">{sanitizeTuiText(entry.text)}</text>
       : renderMarkdownBlocks(renderMarkdown(entry.text, bodyWidth), entry.id, theme);
+    const footerParts: string[] = [];
+    if (!isUser) {
+      if (display.modelInFooter && display.model) footerParts.push(display.model);
+      if (display.showTokenUsage && entry.usageInput !== undefined) {
+        footerParts.push(`${entry.usageInput}→${entry.usageOutput ?? 0} tok`);
+      }
+      if (display.showCost && entry.usageInput !== undefined) {
+        footerParts.push(formatTurnCost(display.model, entry.usageInput, entry.usageOutput ?? 0));
+      }
+      if (entry.durationMs) footerParts.push(formatElapsed(entry.durationMs));
+    }
+    const restFitted = footerParts.length ? fitTuiText(footerParts.join(" · "), bodyWidth) : "";
 
-    // Labels sit above the rounded body, never alongside wrapped content.
-    // Narrow columns degrade to a plain body rather than overspending chrome.
-    if (bordered || transcriptStyle === "rail") {
+    if (frame.bordered) {
+      // Bubble cards: the speaker label rides on the top-left of the rounded
+      // card border as a title, not as a separate heading row. The operator's
+      // own messages right-align and take ~85% of the pane width (matching
+      // iMessage / chat app convention); AI answers sit flush left and fill the
+      // pane. The user's card gets a subtle panel fill so it reads as "yours".
+      return (
+        <box key={entry.id} width={maxWidth} flexDirection="row" justifyContent={isUser ? "flex-end" : "flex-start"} flexShrink={0} minWidth={0} marginTop={marginTop}>
+          <box flexDirection="column" width={messageWidth} flexShrink={0} minWidth={0} border borderStyle="rounded" borderColor={tone} backgroundColor={isUser ? PANEL_ALT : undefined} paddingX={1}
+            title={label ? ` ${label} ` : undefined}
+            titleColor={labelTone}
+            titleAlignment="left"
+          >
+            {body}
+            {restFitted ? <text fg={MUTED}>{restFitted}</text> : null}
+          </box>
+        </box>
+      );
+    }
+
+    // Rail remains the opt-in left-spine layout rather than a bubble card.
+    if (transcriptStyle === "rail") {
+      // BOTH voices are marked the same way — a thin left SPINE plus a bold label,
+      // the body sitting flat on the canvas (no panel fill). An earlier version
+      // filled each turn with PANEL_ALT so it read as a card, but with every turn
+      // carded the transcript became a stack of heavy grey rectangles ("too much
+      // card"); OpenCode's answer is a faint left bar + label, which demarcates a
+      // turn without the weight. The SPINE TONE tells the two apart: the operator
+      // turn takes the neutral ACCENT (it reads like the composer that produced
+      // it), the AI turn takes the BRAND purple (the "0sec" voice) and carries a
+      // small brand label so the answer announces itself.
+      const spine = isUser ? ACCENT : BRAND;
       // The AI turn's footer is quiet provenance only — the per-turn telemetry
       // the operator opted into: the model when `modelDisplay` routes it here
       // (otherwise it lives in the bottom bar), tokens under `showTokenUsage`,
-      // cost under `showCost`, and the elapsed.
-      let restFitted = "";
-      if (!isUser && transcriptStyle === "rail") {
-        const footerParts: string[] = [];
-        if (display.modelInFooter && display.model) footerParts.push(display.model);
-        if (display.showTokenUsage && entry.usageInput !== undefined) {
-          footerParts.push(`${entry.usageInput}→${entry.usageOutput ?? 0} tok`);
-        }
-        if (display.showCost && entry.usageInput !== undefined) {
-          footerParts.push(formatTurnCost(display.model, entry.usageInput, entry.usageOutput ?? 0));
-        }
-        const elapsed = entry.durationMs ? formatElapsed(entry.durationMs) : "";
-        if (elapsed) footerParts.push(elapsed);
-        const footerBudget = Math.max(1, maxWidth - 2);
-        restFitted = footerParts.length ? fitTuiText(footerParts.join(" · "), footerBudget) : "";
-      }
+      // cost under `showCost`, and the elapsed. The AUTONOMY MODE is NOT repeated
+      // here — it is session-wide state already shown in the masthead and status
+      // bar, so tagging every answer with "YOLO"/"Co-pilot" was redundant noise.
       return (
         <box key={entry.id} flexDirection="column" width={maxWidth} flexShrink={0} minWidth={0} marginTop={marginTop}>
           {/* External label row: 0sec at upper-left, You at upper-right */}
@@ -277,7 +304,7 @@ export function renderEntry(
     if (toolCardStyle === "hidden" && !failed && !running) return null;
     if (toolCardStyle === "compact") return finish(
       <box key={entry.id} width={maxWidth} flexShrink={0} minWidth={0} marginTop={display.spacing}>
-        <text width={maxWidth} height={1} wrapMode="none" truncate fg={tone}>{toolCompactLine(glyph, entry.text, word, maxWidth)}{repeat}</text>
+        <text width={maxWidth} height={1} wrapMode="none" truncate fg={tone}>{toolCompactLine(glyph, toolActionTitle(entry), word, maxWidth)}{repeat}</text>
       </box>,
     );
     // The rich card. It owns its own geometry, sections and degradation (down
@@ -357,7 +384,7 @@ export function renderEntry(
   if (entry.kind === "error") {
     // Failures get the same rail treatment as speech, in the error tone: an
     // operator must be able to see at a glance that the turn did not produce an
-    // answer, and why. `bubble` frames it as a bordered ERROR block instead.
+    // answer, and why. Messenger frames it as a bordered ERROR block instead.
     const frame = speechFrame(transcriptStyle, "error", maxWidth);
     const marginTop = display.spacing + frame.extraMarginTop;
     if (frame.bordered) {
@@ -546,7 +573,7 @@ export function renderFold(
   // (its turn is not `activeTurn`) stays static muted, exactly as before. Gated
   // on BOTH the turn match and a numeric `shimmerFrame`, so reduceMotion /
   // settled turns keep the flat summary.
-  const summaryFitted = fitTuiText(summary, Math.max(1, maxWidth - 2));
+  const summaryFitted = fitTuiText(`${summary} · ${interaction?.onToggle ? "click or " : ""}ctrl+r to expand`, Math.max(1, maxWidth - 2));
   const shimmerFold =
     item.turn === display.activeTurn && typeof display.shimmerFrame === "number";
   // A collapsed fold is clickable: mousing down toggles its turn into the

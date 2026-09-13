@@ -180,6 +180,22 @@ export const SLASH_COMMANDS: readonly SlashCommand[] = [
     tuiOnly: true,
   },
   {
+    name: "impact",
+    aliases: [],
+    category: "session",
+    description: "Explain a finding's business impact and evidence-qualified potential chains",
+    usage: "/impact [finding-id]",
+    tuiOnly: true,
+  },
+  {
+    name: "copy",
+    aliases: ["export", "dump"],
+    category: "session",
+    description: "Copy the complete public conversation and save private local JSON",
+    usage: "/copy",
+    tuiOnly: true,
+  },
+  {
     name: "replay",
     aliases: [],
     category: "session",
@@ -192,7 +208,7 @@ export const SLASH_COMMANDS: readonly SlashCommand[] = [
     name: "mode",
     aliases: [],
     category: "mode",
-    description: "Set Standard (approve actions), Co-pilot (autonomous in scope), YOLO (full autonomy; approve new targets), or Recon (passive)",
+    description: "Set Standard (approve actions), Co-pilot (in scope), YOLO (public-network autonomy), or Recon (passive)",
     usage: "/mode [standard|copilot|yolo|recon]",
   },
   {
@@ -214,7 +230,7 @@ export const SLASH_COMMANDS: readonly SlashCommand[] = [
     name: "explain",
     aliases: ["eli5"],
     category: "session",
-    description: "Explain the last result in plain language, without jargon",
+    description: "Explain like I'm five: short sentences and everyday words",
     usage: "/explain [topic]",
   },
   {

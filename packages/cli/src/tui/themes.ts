@@ -522,15 +522,20 @@ export const THEME_NAMES = [
 export type ThemeName = (typeof THEME_NAMES)[number];
 
 /**
- * The theme a fresh session gets. `midnight` — a deep blue-black dark palette
- * that clears AA on every text token with no waivers — is the shipped look.
+ * The theme a fresh session gets. `slate` — a neutral grey dark palette with no
+ * hue in the chrome — is the shipped look, and like `midnight` it clears AA on
+ * every text token with no waivers, so the default carries no contrast debt.
+ *
+ * This is a default, not a migration: an operator who has explicitly chosen a
+ * theme keeps it, because a persisted preference is read in preference to this
+ * value rather than compared against it.
  *
  * `dark` ("Carbon") is *not* the default but is still shipped and is the one
  * palette kept byte-for-byte from the original `ui/theme.ts`, so an operator who
  * preferred the old warm-grey look can opt back into it. That preservation — not
  * being the default — is why `dark` is the sole carrier of `CONTRAST_WAIVERS`.
  */
-export const DEFAULT_THEME_NAME: ThemeName = "midnight";
+export const DEFAULT_THEME_NAME: ThemeName = "slate";
 
 /**
  * The one palette pinned byte-for-byte to the original `ui/theme.ts`, and so the

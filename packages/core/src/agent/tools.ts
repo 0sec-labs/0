@@ -3,7 +3,7 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import { readFileSync, statSync, existsSync, writeFileSync } from "node:fs";
 import { spawnSync, spawn } from "node:child_process";
 import { isAbsolute, resolve, join } from "node:path";
-import { BlockList, isIP } from "node:net";
+
 import type {
   Finding,
   AttackResult,
@@ -46,7 +46,7 @@ import { detectScannerBinary } from "../scope/scanner-binaries.js";
 import { describeScopeGuards, scopeRequiredRefusal } from "../scope/scope-guard.js";
 import { isWafEvasionLadderEnabled } from "../scope/engagement-profile.js";
 import { applyAttribution, formatUserAgent } from "../scope/attribution.js";
-import { sendPrompt, extractResponseText } from "../http.js";
+import { sendPrompt, extractResponseText, fetchScoped, isPrivateAddress } from "../http.js";
 import { buildAuthHeaders } from "./prompts.js";
 import {
   authSecretValues,
@@ -1346,22 +1346,7 @@ function validateScopedCommand(tokens: string[], scopePath?: string): string[] {
   });
 }
 
-const privateNetworks = new BlockList();
-for (const [address, prefix] of [
-  ["10.0.0.0", 8], ["127.0.0.0", 8], ["169.254.0.0", 16],
-  ["172.16.0.0", 12], ["192.168.0.0", 16],
-] as const) privateNetworks.addSubnet(address, prefix, "ipv4");
-privateNetworks.addAddress("::", "ipv6");
-privateNetworks.addAddress("::1", "ipv6");
-privateNetworks.addSubnet("fc00::", 7, "ipv6");
-privateNetworks.addSubnet("fe80::", 10, "ipv6");
 
-function isPrivateAddress(hostname: string): boolean {
-  const address = hostname.startsWith("[") && hostname.endsWith("]") ? hostname.slice(1, -1) : hostname;
-  const family = isIP(address);
-  // BlockList also matches IPv4-mapped IPv6 against the IPv4 subnets.
-  return family !== 0 && privateNetworks.check(address, family === 4 ? "ipv4" : "ipv6");
-}
 
 function isLocalHostname(hostname: string): boolean {
   const normalized = normalizeScopeHostname(hostname);
@@ -1373,8 +1358,17 @@ function validateTargetUrl(
   requestedUrl: string,
   scope?: ScopePolicy,
   enforcement?: EnforcementTracker,
+  publicNetwork?: ToolContext["publicNetwork"],
 ): string {
-  const base = new URL(baseUrl);
+  let base: URL | undefined;
+  if (publicNetwork) {
+    try {
+      const parsed = new URL(baseUrl);
+      if (parsed.protocol === "http:" || parsed.protocol === "https:") base = parsed;
+    } catch { /* A task path is not a network or private-access grant. */ }
+  } else {
+    base = new URL(baseUrl);
+  }
   const candidate = new URL(requestedUrl, base);
 
   if (!["http:", "https:"].includes(candidate.protocol)) {
@@ -1382,8 +1376,8 @@ function validateTargetUrl(
   }
 
   const hostname = normalizeScopeHostname(candidate.hostname);
-  const baseHostname = normalizeScopeHostname(base.hostname);
-  const baseIsLocal = isLocalHostname(baseHostname) || isPrivateAddress(baseHostname);
+  const baseHostname = base ? normalizeScopeHostname(base.hostname) : "";
+  const baseIsLocal = !!base && (isLocalHostname(baseHostname) || isPrivateAddress(baseHostname));
   const candidateIsLocal = isLocalHostname(hostname) || isPrivateAddress(hostname);
 
   // Absolute private/internal-network guard (SSRF rail). This is the ONE
@@ -1397,6 +1391,10 @@ function validateTargetUrl(
   }
 
   const candidateUrl = candidate.toString();
+  if (publicNetwork?.deniedHosts?.has(hostname)) {
+    throw new Error(`Operator-denied HTTP host: ${hostname}`);
+  }
+  const effectiveScope = publicNetwork ? publicNetwork.scope : scope;
 
   // Cross-origin / scope authorization (0sec#215, cross-origin-in-scope fix).
   //
@@ -1415,15 +1413,15 @@ function validateTargetUrl(
   //      their tests are unchanged.
   // The private-network guard above already ran, so scope can never
   // authorize an SSRF target.
-  if (scope) {
-    const verdict = scope.match(candidateUrl);
+  if (effectiveScope) {
+    const verdict = effectiveScope.match(candidateUrl);
     if (!verdict.allowed) {
       enforcement?.noteOutOfScopeBlocked();
       throw new Error(`Scope violation blocked: ${verdict.reason}`);
     }
     // In scope → the scope check is the authority; the same-origin rail
     // does not override an explicitly-approved in-scope host.
-  } else if (candidate.origin !== base.origin) {
+  } else if (!publicNetwork && candidate.origin !== base!.origin) {
     // Scopeless default: same-origin only. Identical error/message/caller
     // contract as before the fix.
     throw new Error(`Cross-origin http_request blocked: ${candidate.origin}`);
@@ -2799,8 +2797,14 @@ export function buildOperatorQuestionRequest(
 export class ToolExecutor {
   private db: osecDB | null;
   private ctx: ToolContext;
+  private readonly _credentialTarget: string;
   private _browser: any = null;
   private _browserPage: any = null;
+  private _browserActionContext: {
+    active: boolean;
+    signal?: AbortSignal;
+    assertAuthority?: () => void;
+  } | undefined;
   private _browserDialogs: string[] = [];
   private _browserConsole: string[] = [];
   private _playwrightAvailable: boolean | null = null;
@@ -2925,6 +2929,7 @@ export class ToolExecutor {
     childRuntimeFactory?: NativeRuntime["forkForSubagent"],
   ) {
     this.ctx = ctx;
+    this._credentialTarget = ctx.target;
     this.db = db;
     this._idFactory = idFactory;
     this._childRuntimeFactory = childRuntimeFactory;
@@ -3025,20 +3030,29 @@ export class ToolExecutor {
     return this._playwrightAvailable;
   }
 
+  private usesTargetIdentity(url: string): boolean {
+    try {
+      return new URL(url, this._credentialTarget).origin === new URL(this._credentialTarget).origin;
+    } catch {
+      return false;
+    }
+  }
+
   /**
    * Outbound auth headers for the CURRENTLY ACTIVE identity (0sec#564).
    *
    * When a stateful `SessionEngine` is wired into the context, this returns the
    * active identity's static credential merged with any cookies its jar has
    * captured this scan. With no session it falls back to the legacy stateless
-   * `buildAuthHeaders(authConfig)` path — byte-identical for single-credential
-   * scans. The target host keys the jar (every tool request is same-origin per
-   * `validateTargetUrl`, so the target host is always the right jar key).
+   * `buildAuthHeaders(authConfig)` path. Credentials and cookie jars remain
+   * bound to the executor's original target origin, even after a target or
+   * autonomy-mode change; scope grants never authorize credential forwarding.
    */
-  private activeAuthHeaders(): Record<string, string> {
+  private activeAuthHeaders(url = this.ctx.target): Record<string, string> {
+    if (!this.usesTargetIdentity(url)) return {};
     const session = this.ctx.session;
     if (session) {
-      return session.headersFor(session.activeLabel, this.ctx.target);
+      return session.headersFor(session.activeLabel, this._credentialTarget);
     }
     return buildAuthHeaders(this.ctx.authConfig);
   }
@@ -3047,11 +3061,13 @@ export class ToolExecutor {
    * Capture `Set-Cookie` from a response into the active identity's jar and
    * run the 401/403 re-auth handler (0sec#564). No-op without a session.
    */
-  private captureActiveCookies(res: Response): void {
+  private captureActiveCookies(res: Response, url = this.ctx.target): void {
+    if (!this.usesTargetIdentity(url)) return;
     const session = this.ctx.session;
     if (!session) return;
-    session.capture(session.activeLabel, res.headers, this.ctx.target);
-    session.handleAuthStatus(session.activeLabel, res.status, this.ctx.target);
+    const identityTarget = this._credentialTarget;
+    session.capture(session.activeLabel, res.headers, identityTarget);
+    session.handleAuthStatus(session.activeLabel, res.status, identityTarget);
   }
 
   /**
@@ -3060,7 +3076,7 @@ export class ToolExecutor {
    */
   private buildAuthEnvVars(): Record<string, string> {
     const auth = this.ctx.authConfig;
-    if (!auth) return {};
+    if (!auth || !this.usesTargetIdentity(this.ctx.target)) return {};
 
     const headers = buildAuthHeaders(auth);
     const entries = Object.entries(headers);
@@ -3441,11 +3457,49 @@ export class ToolExecutor {
     return manager.execute(call.name, call.arguments ?? {}, this._executableContext(call.name));
   }
 
+  private fetchTarget(
+    url: string,
+    init: RequestInit,
+    beforeRequest?: (url: string) => void | Promise<void>,
+  ): Promise<Response> {
+    const execution = this._executionContext.getStore();
+    const signal = execution?.signal && init.signal
+      ? AbortSignal.any([execution.signal, init.signal])
+      : execution?.signal ?? init.signal;
+    return fetchScoped(url, { ...init, signal }, {
+      baseUrl: this.ctx.target,
+      scope: this.ctx.publicNetwork ? this.ctx.publicNetwork.scope : this.ctx.scope,
+      allowPublicNetwork: this.ctx.publicNetwork !== undefined,
+      deniedHosts: this.ctx.publicNetwork?.deniedHosts,
+      beforeRequest,
+      validateUrl: candidate => {
+        execution?.assertAuthority?.();
+        validateTargetUrl(this.ctx.target, candidate, this.ctx.scope, undefined, this.ctx.publicNetwork);
+        if (!this.usesTargetIdentity(candidate)) {
+          const secrets = [
+            ...authSecretValues(this.ctx.authConfig),
+            ...this.resolveProbeIdentities().flatMap(identity => sensitiveHeaderValues(identity.headers())),
+          ];
+          for (const value of new Headers(init.headers).values()) {
+            if (secrets.some(secret => secret.length > 0 && value.includes(secret))) {
+              throw new Error("Saved target credentials cannot be forwarded to another origin.");
+            }
+          }
+        }
+        const path = this.ctx.enforcement?.pathPolicy.match(candidate);
+        if (path && !path.allowed) {
+          this.ctx.enforcement?.noteOutOfScopeBlocked();
+          throw new Error(`Scope violation blocked: ${path.reason}`);
+        }
+      },
+    });
+  }
+
   private async httpRequest(args: Record<string, unknown>): Promise<ToolResult> {
-    const url = validateTargetUrl(this.ctx.target, args.url as string, this.ctx.scope, this.ctx.enforcement);
+    const url = validateTargetUrl(this.ctx.target, args.url as string, this.ctx.scope, this.ctx.enforcement, this.ctx.publicNetwork);
     const method = (args.method as string) ?? "POST";
     const body = args.body as string | undefined;
-    const authHeaders = this.activeAuthHeaders();
+    const authHeaders = this.activeAuthHeaders(url);
     const headers = { ...authHeaders, ...(args.headers as Record<string, string>) ?? {} };
 
     // One in-scope HTTP round-trip for a given (possibly evasion-mutated)
@@ -3465,7 +3519,7 @@ export class ToolExecutor {
       // origin (and feeds an allowlisted URL into `fetch`, not a raw param).
       // `enforcement` is omitted so this re-check does NOT double-count the
       // request — the baseline was already tallied by the pre-flight call.
-      const safeUrl = validateTargetUrl(this.ctx.target, parts.url, this.ctx.scope);
+      const safeUrl = validateTargetUrl(this.ctx.target, parts.url, this.ctx.scope, undefined, this.ctx.publicNetwork);
       // Acquire token BEFORE the network call; park the host bucket on 429
       // via `noteResponse` AFTER the response.
       if (this.ctx.rateLimiter) await this.ctx.rateLimiter.acquire(safeUrl);
@@ -3483,7 +3537,7 @@ export class ToolExecutor {
               : controller.signal,
             redirect: "manual",
           },
-          this.ctx.attribution,
+          this.usesTargetIdentity(safeUrl) ? this.ctx.attribution : undefined,
           this.ctx.scope,
         )!;
         // js/no-ssrf FP: `safeUrl` is the return of validateTargetUrl() just
@@ -3492,12 +3546,12 @@ export class ToolExecutor {
         // variant before egress. Fetching the in-scope authorized target is
         // intended 0sec behaviour.
         // foxguard:ignore
-        const res = await fetch(safeUrl, fetchInit);
+        const res = await this.fetchTarget(safeUrl, fetchInit);
         if (this.ctx.rateLimiter) this.ctx.rateLimiter.noteResponse(safeUrl, res);
         // Persist session state (0sec#564): capture Set-Cookie for the active
         // identity. No-op when no SessionEngine is wired. Runs for the baseline
         // AND every evasion variant so session cookies stay current.
-        this.captureActiveCookies(res);
+        this.captureActiveCookies(res, safeUrl);
         const text = await res.text();
         return { res, body: text, sentHeaders: fetchInit.headers as Record<string, string> };
       } finally {
@@ -3625,7 +3679,12 @@ export class ToolExecutor {
     const prompt = args.prompt as string;
 
     try {
-      const res = await sendPrompt(this.ctx.target, prompt, { timeout: 30_000 });
+      const res = await sendPrompt(this.ctx.target, prompt, {
+        timeout: 30_000,
+        baseUrl: this.ctx.target,
+        scope: this.ctx.scope,
+        signal: this._executionContext.getStore()?.signal,
+      });
       const text = extractResponseText(res.body);
 
       // Persist as run artifact
@@ -3789,7 +3848,7 @@ export class ToolExecutor {
     // Validate the URL scheme and resolve against target origin for relative URLs
     let resolved: URL;
     try {
-      resolved = new URL(startUrl, this.ctx.target);
+      resolved = new URL(validateTargetUrl(this.ctx.target, startUrl, this.ctx.scope, undefined, this.ctx.publicNetwork));
     } catch {
       return { success: false, output: null, error: `Invalid URL: ${startUrl}` };
     }
@@ -3798,8 +3857,9 @@ export class ToolExecutor {
       return { success: false, output: null, error: `Unsupported protocol: ${resolved.protocol}` };
     }
 
-    if (this.ctx.scope) {
-      const verdict = this.ctx.scope.match(resolved.toString());
+    const crawlScope = this.ctx.publicNetwork ? this.ctx.publicNetwork.scope : this.ctx.scope;
+    if (crawlScope) {
+      const verdict = crawlScope.match(resolved.toString());
       if (!verdict.allowed) {
         this.ctx.enforcement?.noteOutOfScopeBlocked();
         return { success: false, output: null, error: `crawl refused: ${verdict.reason}` };
@@ -3845,8 +3905,8 @@ export class ToolExecutor {
       // crawl to one host, but if that host is out of scope we still must
       // refuse — operators sometimes scan dev.example.com against a scope
       // that only allows prod.example.com.
-      if (this.ctx.scope) {
-        const verdict = this.ctx.scope.match(normalizedUrl);
+      if (crawlScope) {
+        const verdict = crawlScope.match(normalizedUrl);
         if (!verdict.allowed) {
           this.ctx.enforcement?.noteOutOfScopeBlocked();
           continue;
@@ -3868,7 +3928,7 @@ export class ToolExecutor {
       const timer = setTimeout(() => controller.abort(), 10_000);
 
       try {
-        const crawlAuthHeaders = this.activeAuthHeaders();
+        const crawlAuthHeaders = this.activeAuthHeaders(normalizedUrl);
         // Attribution-header injection (0sec#216). Crawler hits every
         // discovered link, so this is the highest-volume fetch site —
         // attribution here is what most defenders will see in their logs.
@@ -3887,16 +3947,16 @@ export class ToolExecutor {
               method: "GET",
               signal: controller.signal,
               redirect: "manual",
-              headers: { "User-Agent": "0sec-crawler/1.0", ...crawlAuthHeaders },
+              headers: { "User-Agent": "0sec-crawler/1.0", ...this.activeAuthHeaders(urlForAttribution) },
             },
-            this.ctx.attribution,
-            this.ctx.scope,
+            this.usesTargetIdentity(urlForAttribution) ? this.ctx.attribution : undefined,
+            crawlScope,
           )!;
           // crawl explicitly wants the engagement-tagged UA (not the
           // generic crawler one) when attribution is configured. We
           // overwrite here because the attribution path keeps caller UA
           // for principle-of-least-surprise in other call sites.
-          if (this.ctx.attribution?.userAgentToken) {
+          if (this.usesTargetIdentity(urlForAttribution) && this.ctx.attribution?.userAgentToken) {
             (init.headers as Record<string, string>)["User-Agent"] =
               formatUserAgent(this.ctx.attribution.userAgentToken);
           }
@@ -3917,11 +3977,11 @@ export class ToolExecutor {
           // cross-origin / out-of-scope / private-IP hops are refused. Crawling
           // the in-scope target is intended 0sec behaviour.
           // foxguard:ignore
-          res = await fetch(currentUrl, buildCrawlInit(currentUrl));
+          res = await this.fetchTarget(currentUrl, buildCrawlInit(currentUrl));
           if (this.ctx.rateLimiter) this.ctx.rateLimiter.noteResponse(currentUrl, res);
           // Capture cookies on every hop so authenticated crawls persist
           // session state across pages (0sec#564).
-          this.captureActiveCookies(res);
+          this.captureActiveCookies(res, currentUrl);
 
           if (res.status < 300 || res.status >= 400) break;
           const location = res.headers.get("location");
@@ -3943,12 +4003,12 @@ export class ToolExecutor {
             redirectBailReason = "non-http redirect target";
             break;
           }
-          if (next.hostname !== originHost) {
+          if (!this.ctx.publicNetwork && next.hostname !== originHost) {
             redirectBailReason = "cross-origin redirect target";
             break;
           }
-          if (this.ctx.scope) {
-            const verdict = this.ctx.scope.match(next.toString());
+          if (crawlScope) {
+            const verdict = crawlScope.match(next.toString());
             if (!verdict.allowed) {
               redirectBailReason = `out-of-scope redirect target: ${verdict.reason}`;
               break;
@@ -4057,13 +4117,13 @@ export class ToolExecutor {
     const rawUrl = args.url as string;
     const method = ((args.method as string) ?? "POST").toUpperCase();
     const fields = (args.fields as Record<string, string>) ?? {};
-    const formAuthHeaders = this.activeAuthHeaders();
+    const formAuthHeaders = this.activeAuthHeaders(rawUrl);
     const extraHeaders = { ...formAuthHeaders, ...(args.headers as Record<string, string>) ?? {} };
 
     // Validate URL against same-origin policy (same as http_request)
     let resolved: URL;
     try {
-      const validated = validateTargetUrl(this.ctx.target, rawUrl, this.ctx.scope, this.ctx.enforcement);
+      const validated = validateTargetUrl(this.ctx.target, rawUrl, this.ctx.scope, this.ctx.enforcement, this.ctx.publicNetwork);
       resolved = new URL(validated);
     } catch (err) {
       return { success: false, output: null, error: err instanceof Error ? err.message : `Invalid URL: ${rawUrl}` };
@@ -4101,18 +4161,18 @@ export class ToolExecutor {
       // Attribution-header injection (0sec#216). submit_form is one
       // of the noisier fetch sites in pen-test contexts (login attempts,
       // CSRF probes), so attribution here is critical for deconfliction.
-      const submitInit = applyAttribution(fetchUrl, fetchOpts, this.ctx.attribution, this.ctx.scope)!;
+      const submitInit = applyAttribution(fetchUrl, fetchOpts, this.usesTargetIdentity(fetchUrl) ? this.ctx.attribution : undefined, this.ctx.scope)!;
       // #214: rate-limit the form submission before dispatching.
       if (this.ctx.rateLimiter) await this.ctx.rateLimiter.acquire(fetchUrl);
       // js/no-ssrf FP: `fetchUrl` derives from validateTargetUrl() above
       // (same-origin + scope + private-IP/localhost block). Submitting forms to
       // the in-scope target is intended 0sec behaviour.
       // foxguard:ignore
-      const res = await fetch(fetchUrl, submitInit);
+      const res = await this.fetchTarget(fetchUrl, submitInit);
       if (this.ctx.rateLimiter) this.ctx.rateLimiter.noteResponse(fetchUrl, res);
       // Capture the session cookie a login form sets, so the very next
       // request is authenticated without manual `curl -c/-b` jars (0sec#564).
-      this.captureActiveCookies(res);
+      this.captureActiveCookies(res, fetchUrl);
       clearTimeout(timer);
       const text = await res.text();
       const sentHeaders = submitInit.headers as Record<string, string>;
@@ -4181,7 +4241,7 @@ export class ToolExecutor {
     extraHeaders: Record<string, string>,
   ): Promise<ProbeResponse> {
     // Same-origin / scope / path-allowlist enforcement as every other tool.
-    const url = validateTargetUrl(this.ctx.target, rawUrl, this.ctx.scope, this.ctx.enforcement);
+    const url = validateTargetUrl(this.ctx.target, rawUrl, this.ctx.scope, this.ctx.enforcement, this.ctx.publicNetwork);
     const headers = { "Content-Type": "application/json", ...principal.headers(), ...extraHeaders };
 
     const controller = new AbortController();
@@ -4199,7 +4259,7 @@ export class ToolExecutor {
       // block + path allowlist). The access-control probe replays requests to
       // the in-scope target as different identities — intended behaviour.
       // foxguard:ignore
-      const res = await fetch(url, fetchInit);
+      const res = await this.fetchTarget(url, fetchInit);
       if (this.ctx.rateLimiter) this.ctx.rateLimiter.noteResponse(url, res);
       principal.capture(res);
       const text = await res.text();
@@ -4375,9 +4435,9 @@ export class ToolExecutor {
     collectSecrets(actorHeaders);
     const safe = (value: string) => redactAuthValues(value, secrets);
     try {
-      validateTargetUrl(this.ctx.target, args.observation_url, this.ctx.scope, this.ctx.enforcement);
+      validateTargetUrl(this.ctx.target, args.observation_url, this.ctx.scope, this.ctx.enforcement, this.ctx.publicNetwork);
       for (const step of args.steps) {
-        validateTargetUrl(this.ctx.target, step.url, this.ctx.scope, this.ctx.enforcement);
+        validateTargetUrl(this.ctx.target, step.url, this.ctx.scope, this.ctx.enforcement, this.ctx.publicNetwork);
         if (step.method === "GET" && step.body !== undefined) throw new Error("GET steps cannot have a request body");
         // Headers validates HTTP names/values before any earlier step can mutate.
         const headers = new Headers(step.headers);
@@ -4473,7 +4533,7 @@ export class ToolExecutor {
     body: string | undefined,
     headers: Record<string, string>,
   ): Promise<{ status: number; text: string }> {
-    const url = validateTargetUrl(this.ctx.target, rawUrl, this.ctx.scope, this.ctx.enforcement);
+    const url = validateTargetUrl(this.ctx.target, rawUrl, this.ctx.scope, this.ctx.enforcement, this.ctx.publicNetwork);
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 30_000);
     try {
@@ -4486,7 +4546,7 @@ export class ToolExecutor {
       if (this.ctx.rateLimiter) await this.ctx.rateLimiter.acquire(url);
       // foxguard:ignore — `url` validated by validateTargetUrl above
       // (same-origin + scope + private-IP/localhost block + path allowlist).
-      const res = await fetch(url, fetchInit);
+      const res = await this.fetchTarget(url, fetchInit);
       if (this.ctx.rateLimiter) this.ctx.rateLimiter.noteResponse(url, res);
       const text = await res.text();
       return { status: res.status, text };
@@ -4642,7 +4702,7 @@ export class ToolExecutor {
     // Scope-validated FetchLike — the prober owns the authed/unauthed diff
     // logic; this only enforces scope/SSRF/attribution and shapes the response.
     const fetchImpl: AuthBoundaryFetchLike = async (rawUrl, init) => {
-      const url = validateTargetUrl(this.ctx.target, rawUrl, this.ctx.scope, this.ctx.enforcement);
+      const url = validateTargetUrl(this.ctx.target, rawUrl, this.ctx.scope, this.ctx.enforcement, this.ctx.publicNetwork);
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), 15_000);
       try {
@@ -4660,7 +4720,7 @@ export class ToolExecutor {
         )!;
         if (this.ctx.rateLimiter) await this.ctx.rateLimiter.acquire(url);
         // foxguard:ignore — `url` validated by validateTargetUrl above.
-        const res = await fetch(url, fetchInit);
+        const res = await this.fetchTarget(url, fetchInit);
         if (this.ctx.rateLimiter) this.ctx.rateLimiter.noteResponse(url, res);
         const bodyText = await res.text();
         return {
@@ -4740,7 +4800,7 @@ export class ToolExecutor {
     const scopedFetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
       const rawUrl =
         typeof input === "string" ? input : input instanceof URL ? input.href : String(input);
-      const url = validateTargetUrl(this.ctx.target, rawUrl, this.ctx.scope, this.ctx.enforcement);
+      const url = validateTargetUrl(this.ctx.target, rawUrl, this.ctx.scope, this.ctx.enforcement, this.ctx.publicNetwork);
       const fetchInit = applyAttribution(
         url,
         { ...init, redirect: "manual" },
@@ -4749,7 +4809,7 @@ export class ToolExecutor {
       )!;
       if (this.ctx.rateLimiter) await this.ctx.rateLimiter.acquire(url);
       // foxguard:ignore — `url` validated by validateTargetUrl above.
-      const res = await fetch(url, fetchInit);
+      const res = await this.fetchTarget(url, fetchInit);
       if (this.ctx.rateLimiter) this.ctx.rateLimiter.noteResponse(url, res);
       return res;
     }) as typeof fetch;
@@ -4810,7 +4870,7 @@ export class ToolExecutor {
     const scopedFetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
       const rawUrl =
         typeof input === "string" ? input : input instanceof URL ? input.href : String(input);
-      const url = validateTargetUrl(this.ctx.target, rawUrl, this.ctx.scope, this.ctx.enforcement);
+      const url = validateTargetUrl(this.ctx.target, rawUrl, this.ctx.scope, this.ctx.enforcement, this.ctx.publicNetwork);
       const fetchInit = applyAttribution(
         url,
         { ...init, redirect: "manual" },
@@ -4819,7 +4879,7 @@ export class ToolExecutor {
       )!;
       if (this.ctx.rateLimiter) await this.ctx.rateLimiter.acquire(url);
       // foxguard:ignore — `url` validated by validateTargetUrl above.
-      const res = await fetch(url, fetchInit);
+      const res = await this.fetchTarget(url, fetchInit);
       if (this.ctx.rateLimiter) this.ctx.rateLimiter.noteResponse(url, res);
       return res;
     }) as typeof fetch;
@@ -4868,7 +4928,7 @@ export class ToolExecutor {
 
     // Scope-validated FetchLike for the boundary leg.
     const fetchLike: AuthBoundaryFetchLike = async (rawUrl, init) => {
-      const url = validateTargetUrl(this.ctx.target, rawUrl, this.ctx.scope, this.ctx.enforcement);
+      const url = validateTargetUrl(this.ctx.target, rawUrl, this.ctx.scope, this.ctx.enforcement, this.ctx.publicNetwork);
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), 15_000);
       try {
@@ -4880,7 +4940,7 @@ export class ToolExecutor {
         )!;
         if (this.ctx.rateLimiter) await this.ctx.rateLimiter.acquire(url);
         // foxguard:ignore — `url` validated by validateTargetUrl above.
-        const res = await fetch(url, fetchInit);
+        const res = await this.fetchTarget(url, fetchInit);
         if (this.ctx.rateLimiter) this.ctx.rateLimiter.noteResponse(url, res);
         const bodyText = await res.text();
         return { ok: res.ok, status: res.status, headers: res.headers, text: async () => bodyText };
@@ -4983,7 +5043,7 @@ export class ToolExecutor {
     const fetchText = async (rawUrl: string): Promise<{ status: number; body: string }> => {
       let url: string;
       try {
-        url = validateTargetUrl(this.ctx.target, rawUrl, this.ctx.scope, this.ctx.enforcement);
+        url = validateTargetUrl(this.ctx.target, rawUrl, this.ctx.scope, this.ctx.enforcement, this.ctx.publicNetwork);
       } catch {
         return { status: 0, body: "" };
       }
@@ -4998,7 +5058,7 @@ export class ToolExecutor {
         )!;
         if (this.ctx.rateLimiter) await this.ctx.rateLimiter.acquire(url);
         // foxguard:ignore — `url` validated by validateTargetUrl above.
-        const res = await fetch(url, fetchInit);
+        const res = await this.fetchTarget(url, fetchInit);
         if (this.ctx.rateLimiter) this.ctx.rateLimiter.noteResponse(url, res);
         const body = await res.text();
         return { status: res.status, body };
@@ -5054,7 +5114,7 @@ export class ToolExecutor {
       });
 
       const fetchLike: AuthBoundaryFetchLike = async (rawUrl, init) => {
-        const url = validateTargetUrl(this.ctx.target, rawUrl, this.ctx.scope, this.ctx.enforcement);
+        const url = validateTargetUrl(this.ctx.target, rawUrl, this.ctx.scope, this.ctx.enforcement, this.ctx.publicNetwork);
         const controller = new AbortController();
         const timer = setTimeout(() => controller.abort(), 15_000);
         try {
@@ -5066,7 +5126,7 @@ export class ToolExecutor {
           )!;
           if (this.ctx.rateLimiter) await this.ctx.rateLimiter.acquire(url);
           // foxguard:ignore — `url` validated by validateTargetUrl above.
-          const res = await fetch(url, fetchInit);
+          const res = await this.fetchTarget(url, fetchInit);
           if (this.ctx.rateLimiter) this.ctx.rateLimiter.noteResponse(url, res);
           const bodyText = await res.text();
           return { ok: res.ok, status: res.status, headers: res.headers, text: async () => bodyText };
@@ -5361,17 +5421,18 @@ export class ToolExecutor {
     if (!command) {
       return { success: false, output: null, error: "Command is required" };
     }
+    const networkScope = this.ctx.publicNetwork ? this.ctx.publicNetwork.scope : this.ctx.scope;
 
     if (this.ctx.autonomyMode === "yolo" && !this.ctx.enforcement) {
       const acquisition = parseRepositoryAcquisition(command);
-      if (acquisition && !this.ctx.scope?.match(acquisition.url).allowed) {
-        if (!repositoryAcquisitionAllowed(acquisition, this.ctx.scope)) {
+      if (acquisition && !networkScope?.match(acquisition.url).allowed) {
+        if (!repositoryAcquisitionAllowed(acquisition, networkScope)) {
           return { success: false, output: null, error: "Repository source is explicitly excluded by the engagement scope" };
         }
         const ceilingMs = resolveBashWallclockCeilingMs();
         const requested = typeof args.timeout === "number" && Number.isFinite(args.timeout) ? args.timeout : 90;
         const timeoutMs = Math.min(ceilingMs, Math.max(1, requested) * 1000);
-        const result = await runRepositoryAcquisition(acquisition, command, timeoutMs, ceilingMs, this.ctx.scope);
+        const result = await runRepositoryAcquisition(acquisition, command, timeoutMs, ceilingMs, networkScope);
         this.persistToolArtifact("bash", {
           command: command.slice(0, 500),
           output: String(result.output ?? result.error ?? "").slice(0, 2_000),
@@ -5388,10 +5449,10 @@ export class ToolExecutor {
     // catches the common case (`curl https://evil.com/x`); a cleverer
     // agent that hides the URL behind base64 / DNS / a temp file is NOT
     // caught here, and that gap is documented as a follow-up.
-    if (this.ctx.scope) {
+    if (networkScope) {
       const urls = extractUrls(command);
       for (const url of urls) {
-        const verdict = this.ctx.scope.match(url);
+        const verdict = networkScope.match(url);
         if (!verdict.allowed) {
           this.ctx.enforcement?.noteOutOfScopeBlocked();
           return {
@@ -5648,16 +5709,54 @@ export class ToolExecutor {
     // here is bounded to in-scope traffic in the same way as the fetch
     // sites. Same UA-override rule: when an engagement token is set, it
     // replaces the default `0sec-browser/1.0`.
-    const attribution = this.ctx.attribution;
+    const attribution = this.ctx.publicNetwork ? undefined : this.ctx.attribution;
     const browserUa = attribution?.userAgentToken
       ? formatUserAgent(attribution.userAgentToken)
       : "0sec-browser/1.0";
     const context = await this._browser.newContext({
       ignoreHTTPSErrors: true,
+      ...(this.ctx.publicNetwork ? { serviceWorkers: "block" } : {}),
       userAgent: browserUa,
       ...(attribution && Object.keys(attribution.headers).length > 0
         ? { extraHTTPHeaders: attribution.headers }
         : {}),
+    });
+    // Opted-in browsing uses the same pinned transport for every page resource,
+    // including redirects. Never let Chromium resolve an unchecked destination.
+    await context.route("**/*", async (route: any) => {
+      if (!this.ctx.publicNetwork) return route.continue();
+      const authority = this._browserActionContext;
+      const assertRouteAuthority = () => {
+        if (!authority?.active || this._browserActionContext !== authority) {
+          throw new Error("Browser action authority has ended.");
+        }
+        authority.signal?.throwIfAborted();
+        authority.assertAuthority?.();
+      };
+      const abortRoute = () => { void route.abort("blockedbyclient").catch(() => {}); };
+      authority?.signal?.addEventListener("abort", abortRoute, { once: true });
+      try {
+        assertRouteAuthority();
+        const request = route.request();
+        const requestHeaders = await request.allHeaders();
+        assertRouteAuthority();
+        const response = await this._executionContext.run({
+          signal: authority!.signal, assertAuthority: assertRouteAuthority,
+        }, () => this.fetchTarget(request.url(), {
+          method: request.method(), headers: requestHeaders, signal: authority!.signal,
+          body: request.postDataBuffer() ?? undefined, redirect: "manual",
+        }));
+        const headers = Object.fromEntries(response.headers.entries());
+        delete headers["content-encoding"];
+        delete headers["content-length"];
+        const body = Buffer.from(await response.arrayBuffer());
+        assertRouteAuthority();
+        await route.fulfill({ status: response.status, headers, body });
+      } catch {
+        await route.abort("blockedbyclient").catch(() => {});
+      } finally {
+        authority?.signal?.removeEventListener("abort", abortRoute);
+      }
     });
     this._browserPage = await context.newPage();
 
@@ -5696,6 +5795,11 @@ export class ToolExecutor {
     this._browserConsole = [];
 
     const ACTION_TIMEOUT = 10_000;
+    const execution = this._executionContext.getStore();
+    const actionContext = {
+      active: true, signal: execution?.signal, assertAuthority: execution?.assertAuthority,
+    };
+    this._browserActionContext = actionContext;
 
     try {
       const { page } = await this.ensureBrowser();
@@ -5709,7 +5813,7 @@ export class ToolExecutor {
           // Validate against same-origin policy (same as http_request/submit_form)
           let url: string;
           try {
-            url = validateTargetUrl(this.ctx.target, rawNavUrl, this.ctx.scope, this.ctx.enforcement);
+            url = validateTargetUrl(this.ctx.target, rawNavUrl, this.ctx.scope, this.ctx.enforcement, this.ctx.publicNetwork);
           } catch (err) {
             return { success: false, output: null, error: err instanceof Error ? err.message : `Invalid URL: ${rawNavUrl}` };
           }
@@ -5722,8 +5826,9 @@ export class ToolExecutor {
           // the post-navigation URL against scope and refuse if it
           // drifted off-host before returning success.
           const finalUrl = page.url();
-          if (this.ctx.scope && finalUrl) {
-            const verdict = this.ctx.scope.match(finalUrl);
+          const browserScope = this.ctx.publicNetwork ? this.ctx.publicNetwork.scope : this.ctx.scope;
+          if (browserScope && finalUrl) {
+            const verdict = browserScope.match(finalUrl);
             if (!verdict.allowed) {
               return {
                 success: false,
@@ -5832,6 +5937,9 @@ export class ToolExecutor {
         output: { dialogs: [...this._browserDialogs], console: this._browserConsole.slice(0, 10) },
         error: msg.slice(0, 2_000),
       };
+    } finally {
+      actionContext.active = false;
+      if (this._browserActionContext === actionContext) this._browserActionContext = undefined;
     }
   }
 
@@ -6002,7 +6110,7 @@ export class ToolExecutor {
           workerTree: this._workerTree,
           workerFindings: this._workerFindings,
           scope: this.ctx.scope,
-          authConfig: this.ctx.authConfig,
+          authConfig: this.usesTargetIdentity(this.ctx.target) ? this.ctx.authConfig : undefined,
           costLedger: this.ctx.costLedger,
           costCeilingUsd: this.ctx.costCeilingUsd,
           costModel: rt.resolvedModel?.() ?? this.ctx.costModel,
@@ -6149,7 +6257,7 @@ export class ToolExecutor {
         workerTree: this._workerTree,
         workerFindings: this._workerFindings,
         scope: this.ctx.scope,
-        authConfig: this.ctx.authConfig,
+        authConfig: this.usesTargetIdentity(this.ctx.target) ? this.ctx.authConfig : undefined,
         costLedger: this.ctx.costLedger,
         costCeilingUsd: this.ctx.costCeilingUsd,
         costModel: rt.resolvedModel?.() ?? this.ctx.costModel,
@@ -7940,9 +8048,15 @@ export class ToolExecutor {
       // #214: rate-limit DDG search; share a bucket with any other
       // duckduckgo.com requests this scan happens to make.
       if (this.ctx.rateLimiter) await this.ctx.rateLimiter.acquire(url);
-      const res = await fetch(url, {
+      const execution = this._executionContext.getStore();
+      const res = await fetchScoped(url, {
         headers: { "User-Agent": "0sec/1.0" },
-        signal: controller.signal,
+        signal: execution?.signal ? AbortSignal.any([controller.signal, execution.signal]) : controller.signal,
+        redirect: "follow",
+      }, {
+        baseUrl: "https://html.duckduckgo.com",
+        timeoutMs: 15_000,
+        validateUrl: () => execution?.assertAuthority?.(),
       });
       if (this.ctx.rateLimiter) this.ctx.rateLimiter.noteResponse(url, res);
       clearTimeout(timer);
@@ -8056,7 +8170,7 @@ export class ToolExecutor {
     }
 
     // Same-origin enforcement: only probe the scan target.
-    const base = validateTargetUrl(this.ctx.target, this.ctx.target, this.ctx.scope);
+    const base = validateTargetUrl(this.ctx.target, this.ctx.target, this.ctx.scope, undefined, this.ctx.publicNetwork);
 
     // Build an auth-aware fetch wrapper that reuses the active identity's
     // credentials + captured session cookies (0sec#564).
@@ -8090,26 +8204,13 @@ export class ToolExecutor {
         attribution,
         scope,
       )!;
-      // #214: each plugin/version probe goes through the per-host bucket.
-      // wp_fingerprint can fan out to dozens of probes against a single
-      // host — exactly the workload the limiter exists to pace.
-      if (rateLimiter) await rateLimiter.acquire(url);
-      const res = await fetch(url, fetchInit);
-      // Post-redirect scope check (0sec#218 review). `fetch` follows
-      // redirects by default, so an in-scope WordPress endpoint that
-      // 302s to a foreign host would otherwise complete against the
-      // foreign target and the body would be returned to the caller.
-      // Re-validate the final `res.url` against scope and refuse if it
-      // drifted off-host.
-      if (scope && res.url && res.url !== url) {
-        const verdict = scope.match(res.url);
-        if (!verdict.allowed) {
-          throw new Error(
-            `wp_fingerprint refused: redirect to out-of-scope URL '${res.url}' (${verdict.reason})`,
-          );
-        }
-      }
-      if (rateLimiter) rateLimiter.noteResponse(url, res);
+      // Every hop is authorized and DNS-pinned before acquiring its socket.
+      const res = await this.fetchTarget(
+        url,
+        { ...fetchInit, redirect: "follow" },
+        rateLimiter ? hop => rateLimiter.acquire(hop) : undefined,
+      );
+      if (rateLimiter) rateLimiter.noteResponse(res.url, res);
       return {
         ok: res.ok,
         status: res.status,
@@ -8117,11 +8218,32 @@ export class ToolExecutor {
         json: () => res.json(),
       };
     };
+    const advisoryFetch: FetchLike = async (url, init) => {
+      const origin = new URL(url).origin;
+      if (origin !== "https://api.osv.dev" && origin !== "https://wpscan.com" &&
+          origin !== "https://www.wpvulnerability.net") {
+        throw new Error("Unknown WordPress advisory service");
+      }
+      const execution = this._executionContext.getStore();
+      // Advisory credentials belong only to their fixed service. Target auth,
+      // attribution and target allow rules never flow into this transport.
+      const response = await fetchScoped(url, {
+        ...init, signal: execution?.signal, redirect: "follow",
+      }, {
+        baseUrl: origin,
+        timeoutMs: 10_000,
+        validateUrl: () => execution?.assertAuthority?.(),
+        beforeRequest: rateLimiter ? hop => rateLimiter.acquire(hop) : undefined,
+      });
+      rateLimiter?.noteResponse(response.url, response);
+      return response;
+    };
 
     try {
       const result = await runWpFingerprint({
         target: base,
         fetchImpl: wrappedFetch,
+        advisoryFetchImpl: advisoryFetch,
         maxPluginProbes: (args.max_plugin_probes as number) ?? 40,
         maxVulnerablePluginProbes: (args.max_vulnerable_plugin_probes as number) ?? 40,
         skipOsv: (args.skip_osv as boolean) ?? false,

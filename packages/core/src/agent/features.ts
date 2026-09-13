@@ -3,8 +3,10 @@
  * Set via environment variables: 0SEC_FEATURE_<NAME>=0 to disable.
  *
  * NOTE on defaults:
- *   - "stable" features (early stop, loop detection, context compaction,
- *     script templates, progress handoff) default ON.
+ *   - "stable" features (loop detection, context compaction, script templates,
+ *     progress handoff) default ON.
+ *   - `earlyStopRetry` is OPT-IN (default OFF): it cut short real audits that
+ *     had simply not saved a finding yet. See its own comment below.
  *   - "experimental" features (playbooks, memory, web search) default OFF.
  *   - "v0.6.0 FP moat layers" (povGate, reachabilityGate, multiModal,
  *     selfConsistencyVerify) ALSO default OFF — they need explicit enablement
@@ -39,8 +41,21 @@
 import { FEATURE_PRESETS, resolveFeaturePreset } from "./feature-presets.js";
 
 export const features = {
-  /** Early-stop at 50% budget if no findings, retry with different strategy */
-  get earlyStopRetry(): boolean { return env("0SEC_FEATURE_EARLY_STOP", true); },
+  /**
+   * Early-stop at 50% budget if no findings, retry with a different strategy.
+   *
+   * OPT-IN (default OFF). It reads "no finding saved by the halfway turn" as
+   * "making no progress", which is wrong for the analysis it most often
+   * interrupts: a deep source audit legitimately spends its first half reading
+   * and narrowing before it has anything worth saving. Stopping there discards
+   * that work and reports it as a failure to the operator.
+   *
+   * Turn count is also a cost PROXY, and cost is already bounded directly by
+   * the token budget, so this never was the control that kept spend in check.
+   * Enable with `0SEC_FEATURE_EARLY_STOP=1` for benchmark or A/B runs where a
+   * fixed turn budget per attempt is the point.
+   */
+  get earlyStopRetry(): boolean { return env("0SEC_FEATURE_EARLY_STOP", false); },
   /** Detect A-A-A and A-B-A-B loop patterns, inject warning */
   get loopDetection(): boolean { return env("0SEC_FEATURE_LOOP_DETECTION", true); },
   /** Compress middle messages when context exceeds 30k tokens */

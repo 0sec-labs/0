@@ -116,11 +116,11 @@ type ConsoleRoute = (
 ) & { auditId?: string };
 
 
-
 const SCREENS_WITH_LOCAL_PALETTE: Partial<Record<ConsoleRoute["type"], true>> = {
   chat: true, launcher: true, ops: true, doctor: true,
   history: true, findings: true, replay: true, session: true,
 };
+
 
 function ConsoleSessionRoute({ route, shell }: { route: Extract<ConsoleRoute, { type: "session" }>; shell: ShellNav }) {
   const [state, setState] = useState(route.initialState);
@@ -683,7 +683,6 @@ function ConsoleApp({
     owner.stagePrompt.current(text);
     showChat(owner.id);
   };
-
   // Marketplace hosts belong to the shell; each session leases its initial
   // approved tool set. Refresh prepares the next chat without rebuilding this one.
   const [pluginHostManager, setPluginHostManager] = useState<SessionPluginHostManager | null>(null);
@@ -720,6 +719,7 @@ function ConsoleApp({
       created?.dispose();
     };
   }, []);
+
 
   const navigate = (route: ConsoleRoute) => {
     if (exitRequested.current) return;

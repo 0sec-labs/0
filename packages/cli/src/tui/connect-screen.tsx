@@ -90,6 +90,7 @@ import {
   connectInputMask,
   connectRowForId,
   connectStatusLine,
+
   isFilterKey,
   pastableChars,
   shellChromeRows,
@@ -121,7 +122,7 @@ export interface ConnectScreenProps {
   onExit: () => void;
   /** Provider/authentication failure that opened this screen, if any. */
   recovery?: ConnectionRecovery;
-  /** Called after a provider is persisted so the chat can rebuild in place. */
+  /** Called after credentials are persisted; caller applies selection to a new chat. */
   onConnected?: (providerId: string) => void;
   /** Environment to read credentials from. Defaults to the real one; injected for tests. */
   env?: Record<string, string | undefined>;
@@ -388,6 +389,7 @@ export function ConnectScreen({ frame, onBack, onExit, recovery, onConnected, en
     activeRow?.kind === "provider" ? activeRow.provider : undefined;
   const isCloudRow = activeRow?.kind === "cloud";
 
+
   // Inside a dialog the surface IS the panel's inner box — the shell renders
   // with `dialogContent`, so it has no header and no padding — and the only
   // row the host still spends is its single footer, drawn from the `hint`
@@ -492,7 +494,7 @@ export function ConnectScreen({ frame, onBack, onExit, recovery, onConnected, en
     });
     hostedSessionRef.current = startHostedDeviceAuth({
       homeDir,
-      host: (env ?? process.env)["0SEC_HOST"] ?? cloudState.host,
+      host: (env ?? process.env)["0SEC_CLOUD_HOST"] ?? cloudState.host,
       onUpdate: (update) => {
         applyHosted({ ...update, providerId: "hosted" });
         if (["cancelled", "timeout", "failed"].includes(update.phase)) {

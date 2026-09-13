@@ -575,6 +575,7 @@ export function MarketScreen({
       )
     : [];
 
+
   const statusText =
     mode === "confirm" && pendingIntent
       ? confirmPrompt(
@@ -648,5 +649,8 @@ export function MarketScreen({
   );
 
   const hasFilter = filter.length > 0;
-  return <>{frame({ body, hint: marketFooterHint(mode, hasFilter, activeAction) })}</>;
+  const hint = rows.length === 0 && !hasFilter && mode === "browse"
+    ? "esc back · ctrl+c exit"
+    : marketFooterHint(mode, hasFilter, activeAction);
+  return <>{frame({ body, hint })}</>;
 }

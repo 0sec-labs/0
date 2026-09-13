@@ -551,10 +551,9 @@ export function resumeFooterHint(
         hasSessions ? "enter open" : undefined,
         highlightProtected ? `${ICON_PROTECTED} del protected` : "del delete",
         "/ filter",
-        `tab ${scope === "project" ? "all projects" : "project scope"}`,
+        `tab ${scope === "project" ? "all" : "project"}`,
         count,
-        hasFilter ? "esc clear filter" : "esc back",
-        "ctrl+c exit",
+        hasFilter ? "esc clear" : "esc back",
       ]
         .filter((part): part is string => part !== undefined)
         .join(" · ");
