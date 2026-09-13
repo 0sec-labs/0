@@ -1046,10 +1046,42 @@ function ConsoleApp({
       key={`${onboardingOwner}:${onboardingIndex}`}
       interactive={routeType === "onboard" && !closingAll}
       frame={({ body, hint }) => <ShellFrame view="onboarding" dialogContent>{body}<FooterBar hint={hint} /></ShellFrame>}
-      onNavigate={(screen) => {
-        if (screen === "connect") navigate({ type: "connect", auditId: onboardingOwner });
-        else if (screen === "models") navigate({ type: "models", auditId: onboardingOwner });
-        else if (screen === "settings") navigate({ type: "settings", auditId: onboardingOwner });
+      renderConnect={(nav) => (
+        <ConnectScreen
+          onConnected={(providerId) => {
+            const owner = ownerForAction();
+            if (owner) owner.onNextOptions({ providerId: providerId as ChatScreenOptions["providerId"] });
+            nav.onDone();
+          }}
+          onBack={nav.onSkip}
+          onExit={nav.onCancel}
+          frame={({ body, hint }) => (
+            <ShellFrame view="connect" dialogContent>{body}<FooterBar hint={hint} /></ShellFrame>
+          )}
+        />
+      )}
+      renderModels={(nav) => {
+        const sel = routeOwner;
+        return (
+          <ModelScreen
+            currentModel={sel?.nextOptions.model ?? sel?.runtimeInfo.current?.model() ?? sel?.options?.model}
+            providerId={sel?.nextOptions.providerId ?? sel?.runtimeInfo.current?.providerId() ?? sel?.options?.providerId}
+            agentModels={sel?.nextOptions.agentModels ?? sel?.options?.agentModels}
+            singleModel={sel?.nextOptions.singleModel ?? sel?.options?.singleModel}
+            onAgentModelsChange={(map) => { stageNext({ agentModels: map }); }}
+            onSingleModelChange={(enabled) => { stageNext({ singleModel: enabled }); }}
+            onSelect={(id) => { stageNext({ model: id }); nav.onDone(); }}
+            onBack={nav.onSkip}
+            onExit={nav.onCancel}
+            frame={({ body, hint }) => (
+              <ShellFrame view="models" dialogContent>
+                <text fg={theme.MUTED}>Selections apply to the next audit; the current runtime stays unchanged.</text>
+                {body}
+                <FooterBar hint={hint} />
+              </ShellFrame>
+            )}
+          />
+        );
       }}
       onComplete={() => { if (firstRun) finishSetup(); else showChat(onboardingOwner); }}
       onCancel={() => { if (firstRun) appExit(); else showChat(onboardingOwner); }}
