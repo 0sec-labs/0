@@ -72,8 +72,11 @@ export interface ToolResult {
  * can render a rich card. NOT seen by the model (see {@link ToolResult.meta}).
  */
 export interface ToolResultMeta {
-  /** Which card the UI should draw. `command` → bash/run_command; `edit` → apply_patch; `web` → web_search. */
-  kind?: "command" | "edit" | "web";
+  /**
+   * Which card the UI should draw. `command` → bash/run_command; `edit` →
+   * apply_patch; `web` → web_search; `task` → subagent launch (spawn_agents).
+   */
+  kind?: "command" | "edit" | "web" | "task";
   // ── command card ──
   /** The command that was executed (header line `$ <command>`). */
   command?: string;
@@ -105,6 +108,51 @@ export interface ToolResultMeta {
   answer?: string;
   /** The result sources: title (optional), url, and an optional relative age. */
   sources?: Array<{ title?: string; url: string; age?: string }>;
+  // ── task card (subagent launch: spawn_agents) ──
+  /**
+   * Card title suffix — e.g. the batch label or single agent name. Rendered
+   * after the `Task` headline as `Task • <label>`.
+   */
+  taskLabel?: string;
+  /**
+   * Batch shared-context Markdown — the model-authored `# Goal / # Constraints
+   * / # Contract` headings (mirrors OMP's freeform `context` string). Stored
+   * verbatim; the renderer splits it on those H1 headings into sections.
+   */
+  taskContext?: string;
+  /**
+   * Optional pre-split sections when a producer already parsed them out. When
+   * present the renderer draws these instead of re-parsing {@link taskContext}.
+   */
+  goal?: string;
+  constraints?: string;
+  contract?: string;
+  /**
+   * Per-agent assignment brief Markdown (single-agent `# Target / # Change /
+   * # Acceptance`). Mirrors OMP's freeform `task` string.
+   */
+  assignment?: string;
+  /** The dispatched sub-reports — one bullet each (mirrors OMP's task item rows). */
+  subReports?: Array<{
+    /** e.g. "ExtensionReadiness" — rendered bold/accent. */
+    name: string;
+    /** e.g. "scout" — rendered as a `(…)` badge. */
+    agent?: string;
+    /** Task first line, rendered muted after the name. */
+    brief?: string;
+    /** True → `[isolated]` suffix (dedicated worktree). */
+    isolated?: boolean;
+  }>;
+  /**
+   * Phase/checkbox plan snapshot, reusing the todos model verbatim so the CLI
+   * can pass it straight into `buildTodoTreeRows` with no adaptation.
+   */
+  todos?: Array<{
+    id: string;
+    content: string;
+    status: "pending" | "in_progress" | "completed";
+    group?: string;
+  }>;
 }
 
 // ── Console autonomy (scoped source-audit gate) ──

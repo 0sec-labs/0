@@ -121,6 +121,10 @@ export function renderEntry(
   display: EntryDisplay,
   theme: Theme,
   interaction?: TranscriptRowInteraction,
+  reasoningLabel: "shimmer" | "static" | "none" =
+    entry.id === display.activeEntryId && typeof display.shimmerFrame === "number"
+      ? "shimmer"
+      : "static",
 ) {
   const { ACCENT, PRIMARY, TEXT, MUTED, ERROR, SUCCESS, BORDER, PANEL_ALT, BRAND } = theme;
   // Interaction is only ever handed to the collapsible kinds (tool / subagent /
@@ -419,16 +423,17 @@ export function renderEntry(
     // reduceMotion / settled turns keep the flat label.
     // Only the LIVE TAIL reasoning shimmers — not every past thinking block in
     // the working turn — so a turn shows one shimmering "thinking", not many.
-    const shimmerThinking =
-      entry.id === display.activeEntryId && typeof display.shimmerFrame === "number";
+    // The label word itself is deduped per turn by the caller (which resolves
+    // "shimmer" | "static" | "none"); "none" drops the repeat while keeping the
+    // reasoning body, so the one shown label — live or settled — stands alone.
     return finish(
       <box key={entry.id} flexDirection="row" marginTop={display.spacing} minWidth={0}>
         <box width={1} flexShrink={0} alignSelf="stretch">
           <text fg={MUTED}>┊</text>
         </box>
         <box flexDirection="column" flexGrow={1} minWidth={0} marginLeft={1}>
-          {shimmerThinking ? (
-            <ShimmerText label="thinking" frame={display.shimmerFrame!} base={MUTED} peak={TEXT}  />
+          {reasoningLabel === "none" ? null : reasoningLabel === "shimmer" ? (
+            <ShimmerText label="thinking" frame={display.shimmerFrame!} base={MUTED} peak={TEXT} />
           ) : (
             <text fg={MUTED}>thinking</text>
           )}
@@ -554,6 +559,7 @@ export function renderFold(
   display: EntryDisplay,
   theme: Theme,
   interaction?: TranscriptRowInteraction,
+  options?: { hideReasoningLabel?: boolean },
 ) {
   const { MUTED, TEXT, PANEL_ALT, ERROR } = theme;
   const key = `fold-${item.entries[0]?.id ?? item.turn}`;
@@ -565,7 +571,14 @@ export function renderFold(
       ? item.entries.filter((entry) => entry.kind !== "tool" && entry.kind !== "subagent")
       : item.entries;
   if (shown.length === 0) return null;
-  const summary = shown.length === item.entries.length ? item.summary : foldSummary(shown);
+  // When the turn has already shown its one "thinking" label, recompute the
+  // summary from `shown` with the reasoning token dropped (never reuse the
+  // precomputed `item.summary`, which still contains "thinking").
+  const summary = options?.hideReasoningLabel
+    ? foldSummary(shown, { dropReasoningLabel: true })
+    : shown.length === item.entries.length
+      ? item.summary
+      : foldSummary(shown);
   // A fold standing for the turn STILL IN FLIGHT must read as active even though
   // its steps are collapsed to one line: shimmer the summary (bright sweep over
   // the muted base) so a working-but-collapsed turn — e.g. "▸ 12 steps ·

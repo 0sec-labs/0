@@ -309,7 +309,7 @@ export type ChatDestination = "launcher" | "ops" | "history" | "findings" | "doc
  * Typed structurally so this module needs no extra core-type import.
  */
 interface ToolCardMeta {
-  kind?: "command" | "edit" | "web";
+  kind?: "command" | "edit" | "web" | "task";
   command?: string;
   exitCode?: number | null;
   durationMs?: number;
@@ -324,6 +324,15 @@ interface ToolCardMeta {
   query?: string;
   answer?: string;
   sources?: Array<{ title?: string; url: string; age?: string }>;
+  // task card
+  taskLabel?: string;
+  taskContext?: string;
+  goal?: string;
+  constraints?: string;
+  contract?: string;
+  assignment?: string;
+  subReports?: Array<{ name: string; agent?: string; brief?: string; isolated?: boolean }>;
+  todos?: Array<{ id: string; content: string; status: "pending" | "in_progress" | "completed"; group?: string }>;
 }
 
 /**
@@ -332,7 +341,20 @@ interface ToolCardMeta {
  * object when there is no card to draw, so a spread leaves the entry untouched.
  */
 function toolCardFieldsFromMeta(meta: ToolCardMeta | undefined): Partial<ChatEntry> {
-  if (!meta || (meta.kind !== "command" && meta.kind !== "edit" && meta.kind !== "web")) return {};
+  if (!meta || (meta.kind !== "command" && meta.kind !== "edit" && meta.kind !== "web" && meta.kind !== "task")) return {};
+  if (meta.kind === "task") {
+    return {
+      metaKind: "task",
+      taskLabel: meta.taskLabel,
+      taskContext: meta.taskContext,
+      taskGoal: meta.goal,
+      taskConstraints: meta.constraints,
+      taskContract: meta.contract,
+      taskAssignment: meta.assignment,
+      subReports: meta.subReports,
+      taskTodos: meta.todos,
+    };
+  }
   if (meta.kind === "command") {
     return {
       metaKind: "command",
@@ -376,6 +398,29 @@ function restoredToolCardFields(
   success: boolean,
 ): Partial<ChatEntry> {
   const args = input && typeof input === "object" ? (input as Record<string, unknown>) : {};
+  if (name === "spawn_agents") {
+    // The live plan/TODO snapshot and per-agent names were carried on the
+    // (now-gone) meta; from the serialized args we can still recover the shared
+    // context and each task's brief so the launch card survives a restore.
+    const rawTasks = Array.isArray(args.tasks) ? (args.tasks as Array<Record<string, unknown>>) : [];
+    const subReports = rawTasks.map((entry, i) => {
+      const task = typeof entry?.task === "string" ? entry.task.trim() : "";
+      const brief = task ? task.split("\n")[0].slice(0, 64) : "";
+      const agent = typeof entry?.role === "string" ? entry.role : undefined;
+      return {
+        name: typeof entry?.name === "string" && entry.name.trim() ? entry.name.trim() : `#${i + 1}`,
+        ...(agent ? { agent } : {}),
+        ...(brief ? { brief } : {}),
+      };
+    });
+    if (subReports.length === 0) return {};
+    return {
+      metaKind: "task",
+      taskLabel: `${subReports.length} ${subReports.length === 1 ? "agent" : "agents"}`,
+      taskContext: typeof args.context === "string" && args.context.trim() ? args.context : undefined,
+      subReports,
+    };
+  }
   if (name === "bash" || name === "run_command") {
     const command = typeof args.command === "string" ? args.command.trim() : undefined;
     if (!command) return {};
@@ -4901,20 +4946,55 @@ export function ChatScreen({
     activeTurn: focusRecord?.status === "running" ? focusedTelemetry?.turn : undefined,
     activeEntryId: focusRecord?.status === "running" ? focusEntries?.[focusEntries.length - 1]?.id : undefined,
   };
-  const renderTranscriptEntries = (transcript: readonly ChatEntry[], width: number, display: EntryDisplay) =>
-    planTranscript(transcript, display.transcriptDetail, expandedTurns).map((item) => {
+  const renderTranscriptEntries = (transcript: readonly ChatEntry[], width: number, display: EntryDisplay) => {
+    // "thinking" is a per-TURN label, not a per-entry one. Walk the plan once
+    // (it is already in transcript order) and record which turns have shown it,
+    // so both the expanded reasoning rows and the folded summaries emit it at
+    // most once per turn. O(1) per item — no rescans.
+    const thinkingShownForTurn = new Set<number>();
+    // The live "thinking…" indicator: the streaming reasoning entry is the tail
+    // of the transcript, so its turn is the one that should shimmer.
+    const tail = transcript[transcript.length - 1];
+    const liveReasoningTurn =
+      tail && tail.id === display.activeEntryId && tail.kind === "reasoning" ? tail.turn : undefined;
+    return planTranscript(transcript, display.transcriptDetail, expandedTurns).map((item) => {
       if (item.type === "fold") {
-        return renderFold(item, width, display, theme, {
-          hovered: hoveredTurn === item.turn,
-          onToggle: () => toggleTurnExpanded(item.turn),
-          onHover: (hovered) => setHoveredTurn(hovered ? item.turn : null),
-        });
+        const hasReasoning = item.entries.some((entry) => entry.kind === "reasoning");
+        let hideReasoningLabel = false;
+        if (hasReasoning) {
+          if (thinkingShownForTurn.has(item.turn)) hideReasoningLabel = true;
+          else thinkingShownForTurn.add(item.turn);
+        }
+        return renderFold(
+          item,
+          width,
+          display,
+          theme,
+          {
+            hovered: hoveredTurn === item.turn,
+            onToggle: () => toggleTurnExpanded(item.turn),
+            onHover: (hovered) => setHoveredTurn(hovered ? item.turn : null),
+          },
+          { hideReasoningLabel },
+        );
       }
       const entry = item.entry;
       const expanded = expandedTurns.has(entry.turn);
       const interactive = expanded && (
         entry.kind === "tool" || entry.kind === "subagent" || entry.kind === "reasoning"
       );
+      let reasoningLabel: "shimmer" | "static" | "none" = "static";
+      if (entry.kind === "reasoning") {
+        if (thinkingShownForTurn.has(entry.turn)) {
+          reasoningLabel = "none";
+        } else {
+          thinkingShownForTurn.add(entry.turn);
+          reasoningLabel =
+            entry.turn === liveReasoningTurn && typeof display.shimmerFrame === "number"
+              ? "shimmer"
+              : "static";
+        }
+      }
       return renderEntry(
         entry,
         width,
@@ -4926,8 +5006,10 @@ export function ChatScreen({
           onToggle: () => toggleTurnExpanded(entry.turn),
           onHover: (hovered) => setHoveredTurn(hovered ? entry.turn : null),
         } : undefined,
+        reasoningLabel,
       );
     });
+  };
   const focusHasTranscript = focused && Boolean(focusEntries?.length);
   // The coarse activity fallback is row-windowed. Rich transcripts use their
   // actual viewport and measured content extent instead of this estimate.

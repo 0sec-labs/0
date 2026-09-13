@@ -2426,6 +2426,18 @@ const subagentModelSelectionSchema = z.object({
 });
 
 /**
+ * First non-empty trimmed line of a subagent `task` brief, clipped to ~64 chars
+ * for the Task card's sub-report bullet (mirrors OMP's `taskFirstLine`). Used
+ * only for the display-only meta sidecar.
+ */
+function subagentTaskFirstLine(task: string): string {
+  const trimmed = task.trim();
+  const newline = trimmed.indexOf("\n");
+  const firstLine = newline === -1 ? trimmed : trimmed.slice(0, newline);
+  return firstLine.length > 64 ? `${firstLine.slice(0, 63)}…` : firstLine;
+}
+
+/**
  * `spawn_persistent_agent` argument schema — validate-then-reject before any side
  * effect, mirroring the `kernel_run` discipline (see agent/CLAUDE.md). `.strip()`
  * drops unknown keys a model might emit.
@@ -6012,6 +6024,7 @@ export class ToolExecutor {
     messagingOverride?: MessagingRuntime,
     selection?: SubagentModelSelection,
     admittedLease?: ReturnType<AuditWorkerTree["acquire"]>,
+    sharedContext?: string,
   ): Promise<SubagentOutcome> {
     const startedAt = Date.now();
     let lease = admittedLease;
@@ -6099,10 +6112,15 @@ export class ToolExecutor {
       // state — so header building stays stateless per child (matching the
       // single-child path). `db: null` keeps children out of the SQLite writer
       // (no concurrent writers); findings merge-back is the sole durability sink.
+      // The batch's shared context (`spawn_agents` `# Goal / # Constraints /
+      // # Contract`) is prepended to THIS child's job so the promise made in the
+      // tool description — that it applies to every agent — is actually honoured
+      // in child-visible input, not merely echoed onto the display card.
+      const jobText = sharedContext ? `${sharedContext}\n\n${task}` : task;
       const state = await runNativeAgentLoop({
         config: {
           role: "attack",
-          systemPrompt: `You are a focused exploitation agent. Your ONLY job:\n\n${task}\n\nUse bash to run curl, python3, or any command. Save findings with save_finding. Call done when finished.${renderSubagentMessagingPrompt(childMessaging)}`,
+          systemPrompt: `You are a focused exploitation agent. Your ONLY job:\n\n${jobText}\n\nUse bash to run curl, python3, or any command. Save findings with save_finding. Call done when finished.${renderSubagentMessagingPrompt(childMessaging)}`,
           tools: subTools,
           maxTurns,
           target: this.ctx.target,
@@ -6612,6 +6630,10 @@ export class ToolExecutor {
       };
     }
 
+    // Batch shared-context Markdown (`# Goal / # Constraints / # Contract`),
+    // mirrored onto the display-only Task card. Never touches execution.
+    const batchContext = typeof args.context === "string" && args.context.trim() ? args.context : undefined;
+
     // Normalize + validate each task entry before any side effect.
     const specs: Array<{ task: string; maxTurns: number; base: SubagentLifecycleBase; selection: SubagentModelSelection; lease?: ReturnType<AuditWorkerTree["acquire"]> }> = [];
     for (let i = 0; i < rawTasks.length; i++) {
@@ -6690,6 +6712,7 @@ export class ToolExecutor {
           messagingById.get(spec.base.agent_id),
           spec.selection,
           spec.lease,
+          batchContext,
         ),
     );
 
@@ -6714,6 +6737,25 @@ export class ToolExecutor {
     });
 
     const succeeded = perChild.filter((c) => c.ok).length;
+    // Display-only Task card sidecar (never serialized to the model — see
+    // ToolResult.meta). Sub-report bullets come from the dispatched specs; the
+    // TODO tree reuses the live plan snapshot verbatim so the CLI can feed it
+    // straight into `buildTodoTreeRows`.
+    const todosPayload = buildTodosPayload(this._todos.snapshot()).todos;
+    const meta: ToolResultMeta = {
+      kind: "task",
+      taskLabel: `${specs.length} ${specs.length === 1 ? "agent" : "agents"}`,
+      ...(batchContext !== undefined ? { taskContext: batchContext } : {}),
+      subReports: specs.map((s) => {
+        const brief = subagentTaskFirstLine(s.task);
+        return {
+          name: s.base.name,
+          ...(s.selection.role ? { agent: s.selection.role } : {}),
+          ...(brief ? { brief } : {}),
+        };
+      }),
+      ...(todosPayload.length > 0 ? { todos: todosPayload } : {}),
+    };
     return {
       success: true,
       output: {
@@ -6722,6 +6764,7 @@ export class ToolExecutor {
         failed: specs.length - succeeded,
         agents: perChild,
       },
+      meta,
     };
     } finally {
       for (const spec of specs) spec.lease?.release();

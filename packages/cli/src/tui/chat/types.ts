@@ -1,3 +1,4 @@
+import type { TodoStatus } from "@0sec/core";
 import type { PanelData } from "../panels.js";
 import type { ToolPreview, ToolPreviewImage } from "../tool-format.js";
 import type {
@@ -95,10 +96,12 @@ export type ChatEntry = {
    * entry without them renders as the existing rail/compact line.
    *
    * `metaKind` selects the card: "command" (a `$ cmd` + output + wall/exit
-   * footer), "edit" (a `✎ Edit: path (+A/-R)` header + diff), or "web" (a
-   * `⌕ Web Search` header + query + answer + sources list).
+   * footer), "edit" (a `✎ Edit: path (+A/-R)` header + diff), "web" (a
+   * `⌕ Web Search` header + query + answer + sources list), or "task" (a
+   * subagent-launch card: Goal/Constraints/Contract sections + sub-report
+   * bullets + the phase/checkbox TODO tree).
    */
-  metaKind?: "command" | "edit" | "web";
+  metaKind?: "command" | "edit" | "web" | "task";
   // ── command card ──
   /** The command that was run (header `$ <command>`). */
   command?: string;
@@ -130,6 +133,26 @@ export type ChatEntry = {
   webAnswer?: string;
   /** The result sources: title (optional), url, and an optional relative age. */
   webSources?: Array<{ title?: string; url: string; age?: string }>;
+  // ── task card (subagent launch: spawn_agents) ──
+  /** Card title suffix (`Task • <label>`) — e.g. the batch agent count. */
+  taskLabel?: string;
+  /**
+   * Batch shared-context Markdown (the model-authored `# Goal / # Constraints /
+   * # Contract`). The card splits it on those H1 headings into sections.
+   */
+  taskContext?: string;
+  /** Pre-split `# Goal` section (core `goal`), when a producer parsed it out. */
+  taskGoal?: string;
+  /** Pre-split `# Constraints` section (core `constraints`). */
+  taskConstraints?: string;
+  /** Pre-split `# Contract` section (core `contract`). */
+  taskContract?: string;
+  /** Per-agent assignment brief Markdown (single-agent, core `assignment`). */
+  taskAssignment?: string;
+  /** The dispatched sub-report bullets (one row each). */
+  subReports?: Array<{ name: string; agent?: string; brief?: string; isolated?: boolean }>;
+  /** Phase/checkbox plan snapshot, fed straight into `buildTodoTreeRows`. */
+  taskTodos?: Array<{ id: string; content: string; status: TodoStatus; group?: string }>;
 };
 
 export interface EntryDisplay {
