@@ -26,6 +26,7 @@ import { pythonDispatch } from "./python.js";
 import { binaryDispatch } from "./binary.js";
 import { askOperatorDispatch } from "./ask-operator.js";
 import { todosDispatch } from "./todos.js";
+import { evalDispatch } from "./eval.js";
 
 export const TOOL_DISPATCH: Record<string, string> = {
   ...reconDispatch,
@@ -44,4 +45,5 @@ export const TOOL_DISPATCH: Record<string, string> = {
   ...binaryDispatch,
   ...askOperatorDispatch,
   ...todosDispatch,
+  ...evalDispatch,
 };

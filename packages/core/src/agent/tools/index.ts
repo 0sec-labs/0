@@ -31,6 +31,7 @@ import { pythonToolDefinitions } from "./python.js";
 import { binaryToolDefinitions, BINARY_TOOL_NAMES } from "./binary.js";
 import { askOperatorToolDefinitions } from "./ask-operator.js";
 import { todosToolDefinitions } from "./todos.js";
+import { evalToolDefinitions } from "./eval.js";
 
 export {
   SCANNER_TOOL_NAMES,
@@ -59,6 +60,7 @@ const DOMAIN_DEFINITIONS: Record<string, ToolDefinition> = {
   ...binaryToolDefinitions,
   ...askOperatorToolDefinitions,
   ...todosToolDefinitions,
+  ...evalToolDefinitions,
 };
 
 // Canonical registry order. getToolsForRole("audit"/"review") enumerates
@@ -110,6 +112,8 @@ const TOOL_REGISTRY_ORDER = [
   "oast_register",
   "oast_poll",
   "python_exec",
+  "js_eval",
+  "python_eval",
   "analyze_binary",
   "ask_operator",
   "update_todos",

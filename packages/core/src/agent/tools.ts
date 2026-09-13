@@ -190,6 +190,7 @@ import { mapWithConcurrency } from "../concurrency.js";
 import { executeIntel } from "./tools/intel.js";
 import { resolveScopedPath } from "./tools/scope-path.js";
 import { windowFileContent } from "./tools/read-file-window.js";
+import { buildEvalCommand, parseEvalArgs, type EvalLanguage } from "./tools/eval.js";
 import { executeOverseScan, validateOverseArgs } from "./tools/0verse.js";
 
 
@@ -5705,6 +5706,53 @@ export class ToolExecutor {
     };
   }
 
+  // ── Code eval (js_eval / python_eval) ──
+
+  /** `js_eval` handler — evaluate a JavaScript snippet with Node.js. */
+  private async jsEval(args: Record<string, unknown>): Promise<ToolResult> {
+    return this.codeEval("javascript", args);
+  }
+
+  /** `python_eval` handler — evaluate a Python 3 snippet. */
+  private async pythonEval(args: Record<string, unknown>): Promise<ToolResult> {
+    return this.codeEval("python", args);
+  }
+
+  /**
+   * Shared runtime for the two eval tools. It is a THIN WRAPPER over
+   * {@link shellExec}: it builds a quoted-heredoc `node` / `python3` command and
+   * delegates, so every scope / egress / auth-header / rate-limit guard and the
+   * wallclock ceiling that protect `bash` apply here unchanged — this adds NO
+   * new execution or sandbox-escape path. It then re-labels the result's
+   * display-only `meta` from a `command` card to a `code` card carrying the
+   * language, source, output, exit code, and duration; the model-facing
+   * `output` / `error` are passed through untouched.
+   */
+  private async codeEval(language: EvalLanguage, args: Record<string, unknown>): Promise<ToolResult> {
+    const parsed = parseEvalArgs(args);
+    if (!parsed.ok) return { success: false, output: null, error: parsed.error };
+    const { code, timeout } = parsed.value;
+
+    const command = buildEvalCommand(language, code);
+    const result = await this.shellExec({ command, ...(timeout != null ? { timeout } : {}) });
+
+    // shellExec attaches a `command`-kind meta (durationMs / exitCode / stdout).
+    // Reuse its measurements but present a `code` card instead.
+    const cmdMeta = result.meta && result.meta.kind === "command" ? result.meta : undefined;
+    const output = cmdMeta?.stdout ?? (typeof result.output === "string" ? result.output : "");
+    return {
+      ...result,
+      meta: {
+        kind: "code",
+        language,
+        code,
+        output,
+        exitCode: cmdMeta?.exitCode ?? null,
+        ...(cmdMeta?.durationMs != null ? { durationMs: cmdMeta.durationMs } : {}),
+      },
+    };
+  }
+
   // ── Browser automation (Playwright) ──
 
   private async ensureBrowser(): Promise<{ page: any }> {
@@ -9125,6 +9173,11 @@ export function getToolsForRole(role: string, opts?: { hasScope?: boolean; webMo
     "access_control_probe",
     "access_control_workflow",
     "bash",
+    // js_eval / python_eval are thin, effectful wrappers over the same guarded
+    // shellExec path as bash — advertised to the network roles alongside it,
+    // and (like bash) NOT part of the read-only scoped-source-audit set.
+    "js_eval",
+    "python_eval",
     ...browserTools,
     ...webSearchTools,
     ...ptyTools,

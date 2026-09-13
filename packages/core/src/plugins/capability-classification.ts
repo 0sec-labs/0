@@ -17,6 +17,8 @@ export const NETWORK_CAPABLE_TOOLS: Readonly<Record<string, true>> = Object.free
   run_command: true,
   pty_session: true,
   python_exec: true,
+  js_eval: true,
+  python_eval: true,
   spawn_agent: true,
   spawn_agents: true,
   spawn_persistent_agent: true,
