@@ -33,6 +33,7 @@ import {
   toolBadgeLabel,
   toolInputSection,
   toolKindIdentity,
+  toolResultLine,
   toolState,
   toolStateLabel,
   toolStatusRows,
@@ -775,14 +776,20 @@ export function ToolCard({
   const preview = previewFor(entry, failed);
   const title = toolActionTitle(entry);
   const badge = toolBadgeLabel(entry, preview);
+  // The RESULT summary (OMP-style): the "what it found" line a settled call
+  // carries. Absent while running, and for the metaKind cards that render their
+  // own result region. See `toolResultLine`.
+  const resultLine = toolResultLine(entry);
 
   const frame = commandCardFrame(width);
   const useCard = frame.render && display.richToolCards !== false;
 
   // Below the chrome budget (or with rich cards switched off) the row degrades
-  // to the single honest line it always had — never a half-drawn frame.
+  // to the single honest line it always had — never a half-drawn frame. The
+  // result summary rides where the state word used to (glyph + colour already
+  // carry the state), falling back to the state word while a call runs.
   if (!useCard) {
-    const line = toolCompactLine(glyph, title, toolStateLabel(state).word, Math.max(1, width), formatDurationMs(entry.wallMs));
+    const line = toolCompactLine(glyph, title, resultLine ?? toolStateLabel(state).word, Math.max(1, width), formatDurationMs(entry.wallMs));
     return (
       <box flexDirection="column" width={Math.max(1, width)} flexShrink={0} minWidth={0} marginTop={display.spacing}>
         <text width={Math.max(1, width)} height={1} wrapMode="none" truncate fg={tone}>{line}{repeat}</text>
@@ -873,8 +880,12 @@ export function ToolCard({
   // old bottom "Duration" STATUS row is gone (see `toolStatusRows`).
   const durText = formatDurationMs(entry.wallMs);
   const durSuffix = durText ? ` · (${durText})` : "";
+  // OMP row shape: `<glyph> <Verb inputs> · <result summary> · <badge> · (dur)`.
+  // The summary sits right after the title so the headline reads as a complete
+  // sentence — what ran, then what it found — before the language/kind chip.
+  const summarySuffix = resultLine ? ` · ${resultLine}` : "";
   const headline = fitTuiText(
-    `${headerGlyph}${title}${repeat}${badge ? ` · ${badgeChip(badge, inner)}` : ""}${durSuffix}`,
+    `${headerGlyph}${title}${repeat}${summarySuffix}${badge ? ` · ${badgeChip(badge, inner)}` : ""}${durSuffix}`,
     inner,
   );
   const shimmer = running && typeof display.shimmerFrame === "number";

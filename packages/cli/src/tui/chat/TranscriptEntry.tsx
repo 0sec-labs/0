@@ -25,7 +25,7 @@ import type { Theme } from "../theme-context.js";
 import type { ChatEntry, EntryDisplay } from "./types.js";
 import { ToolCard } from "./ToolCard.js";
 import { ImageCard } from "./ImageCard.js";
-import { toolActionTitle, toolState, toolStateLabel } from "./card-layout.js";
+import { toolActionTitle, toolResultLine, toolState, toolStateLabel } from "./card-layout.js";
 
 /**
  * Mouse affordances for a clickable transcript row (a collapsed fold, or a
@@ -309,7 +309,7 @@ export function renderEntry(
     if (toolCardStyle === "hidden" && !failed && !running) return null;
     if (toolCardStyle === "compact") return finish(
       <box key={entry.id} width={maxWidth} flexShrink={0} minWidth={0} marginTop={display.spacing}>
-        <text width={maxWidth} height={1} wrapMode="none" truncate fg={tone}>{toolCompactLine(glyph, toolActionTitle(entry), word, maxWidth)}{repeat}</text>
+        <text width={maxWidth} height={1} wrapMode="none" truncate fg={tone}>{toolCompactLine(glyph, toolActionTitle(entry), toolResultLine(entry) ?? word, maxWidth)}{repeat}</text>
       </box>,
     );
     // The rich card. It owns its own geometry, sections and degradation (down

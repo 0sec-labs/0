@@ -20,6 +20,7 @@
  */
 
 import { fitTuiText, fitTuiUrl, sanitizeTuiText } from "./text.js";
+import { toolResultSummary } from "./tool-summary.js";
 
 export interface ToolCallLike {
   name: string;
@@ -321,6 +322,113 @@ export function formatToolArgs(call: ToolCallLike): string {
       return line(bugClass ? `${path} (${bugClass})` : path);
     }
 
+    // query_findings — args { limit?, severity?, category?, status?,
+    // all_sessions?, scan_id? } (packages/core/src/agent/tools/findings.ts).
+    case "query_findings": {
+      const filters = [str(a.severity), str(a.category), str(a.status)].filter(Boolean);
+      if (a.all_sessions === true) filters.push("all sessions");
+      const scan = str(a.scan_id);
+      if (scan) filters.push(`scan ${scan}`);
+      const limit = num(a.limit);
+      const lim = limit !== undefined ? `(limit ${limit})` : "";
+      return line([filters.join(" "), lim].filter(Boolean).join(" "));
+    }
+
+    // update_todos / write_todos — args { todos: Array<{ content, status? }> }
+    // (packages/core/src/agent/tools/todos.ts).
+    case "update_todos":
+    case "write_todos": {
+      const todos = arr(a.todos) ?? [];
+      return line(plural(todos.length, "task"));
+    }
+
+    // intel — one tool discriminated by `action`; the action leads the summary
+    // so the card can promote it to the title verb (see `toolActionTitle`).
+    // args { action, cve_id?, ghsa_id?, ecosystem?, package_name?, version?,
+    // repository?, terms?, cwe?, keywords? } (agent/tools/intel.ts).
+    case "intel": {
+      const action = str(a.action) ?? "";
+      const inputs: string[] = [];
+      const pkg = str(a.package_name);
+      if (pkg) {
+        const eco = str(a.ecosystem);
+        const ver = str(a.version);
+        inputs.push(`${eco ? `${eco}:` : ""}${pkg}${ver ? `@${ver}` : ""}`);
+      }
+      const repo = str(a.repository);
+      if (repo) inputs.push(repo);
+      const cve = str(a.cve_id);
+      if (cve) inputs.push(cve);
+      const ghsa = str(a.ghsa_id);
+      if (ghsa) inputs.push(ghsa);
+      const terms = str(a.terms);
+      if (terms) inputs.push(`"${terms}"`);
+      const cwe = str(a.cwe);
+      if (cwe) inputs.push(cwe);
+      const keywords = str(a.keywords);
+      if (keywords && !cwe) inputs.push(keywords);
+      return line([action, frag(inputs.join(" "), 80)].filter(Boolean).join(" "));
+    }
+
+    // run_scanner — one tool discriminated by `tool` (sqlmap/nmap/ffuf/nuclei);
+    // the scanner name leads so the card can promote it to the title verb.
+    // args { tool, url?, target?, ports?, ... } (agent/tools/scanner.ts).
+    case "run_scanner": {
+      const tool = str(a.tool) ?? "";
+      const target = str(a.url) ?? str(a.target);
+      return line([tool, target ? frag(target, 70) : ""].filter(Boolean).join(" "));
+    }
+
+    // crawl — args { url, depth? } (packages/core/src/agent/tools/recon.ts).
+    case "crawl": {
+      const url = frag(str(a.url) ?? "", 80);
+      const depth = num(a.depth);
+      return line(depth !== undefined ? `${url} (depth ${depth})` : url);
+    }
+
+    // web_search — args { query } (packages/core/src/agent/tools/recon.ts).
+    case "web_search": {
+      const query = str(a.query) ?? "";
+      return line(`"${query}"`);
+    }
+
+    // browser — one tool discriminated by `action`; the action leads so the
+    // card can promote it to the title verb. args { action, url?, selector?,
+    // value? } (packages/core/src/agent/tools/browser.ts).
+    case "browser": {
+      const action = str(a.action) ?? "";
+      const what = str(a.url) ?? str(a.selector);
+      return line([action, what ? frag(what, 70) : ""].filter(Boolean).join(" "));
+    }
+
+    // use_loot — args { kind?, search?, id? }
+    // (packages/core/src/agent/tools/findings.ts).
+    case "use_loot": {
+      const parts = [str(a.kind), str(a.id), str(a.search)].filter(Boolean);
+      return line(parts.length > 0 ? parts.join(" ") : "(all loot)");
+    }
+
+    // plan — args { action, title?, id?, detail? }
+    // (packages/core/src/agent/tools/findings.ts).
+    case "plan": {
+      const action = str(a.action) ?? "";
+      const title = str(a.title) ?? str(a.id);
+      return line([action, title ? frag(title, 70) : ""].filter(Boolean).join(" "));
+    }
+
+    // start_scan — args { target, ecosystem?, mode? }
+    // (packages/core/src/agent/tools/orchestrator.ts).
+    case "start_scan": {
+      const target = frag(str(a.target) ?? "", 70);
+      const eco = str(a.ecosystem);
+      return line(eco ? `${target} (${eco})` : target);
+    }
+
+    // str_replace — args { path, old_string, new_string, replace_all? }.
+    case "str_replace": {
+      return line(frag(str(a.path) ?? "", 90));
+    }
+
     default: {
       // Unknown tool: fall back to the generic key=value summary. A bare/JSON
       // string that did not parse to a record is shown directly (bounded),
@@ -459,8 +567,13 @@ export function formatToolResult(call: ToolCallLike, result: ToolResultLike): st
       return genericResult(out);
     }
 
-    default:
-      return genericResult(out);
+    default: {
+      // The domain tools (findings ledger, intel lookups, scanner fan-out,
+      // crawler, …) carry their own bespoke one-liner; fall back to the
+      // generic count only when even that has nothing truthful to say.
+      const summary = toolResultSummary(name, out);
+      return summary || genericResult(out);
+    }
   }
 }
 

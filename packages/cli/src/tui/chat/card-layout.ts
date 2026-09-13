@@ -183,6 +183,7 @@ export interface ToolIdentity {
  * mislabelled.
  */
 export const TOOL_IDENTITY: Record<string, ToolIdentity> = {
+  // Filesystem / source
   read_file: { verb: "Read", glyph: "▤" },
   read: { verb: "Read", glyph: "▤" },
   list_files: { verb: "List", glyph: "☰" },
@@ -193,10 +194,70 @@ export const TOOL_IDENTITY: Record<string, ToolIdentity> = {
   write_file: { verb: "Write", glyph: "✎" },
   write: { verb: "Write", glyph: "✎" },
   str_replace: { verb: "Edit", glyph: "✎" },
+  apply_patch: { verb: "Patch", glyph: "✎" },
+  run_command: { verb: "Run", glyph: "▷" },
+  bash: { verb: "Run", glyph: "▷" },
+  python_exec: { verb: "Python", glyph: "⚙" },
+  // Network / recon
   fetch: { verb: "Fetch", glyph: "⚓" },
   http_request: { verb: "HTTP", glyph: "⚓" },
+  crawl: { verb: "Crawl", glyph: "⌘" },
+  submit_form: { verb: "Submit", glyph: "⏎" },
+  browser: { verb: "Browser", glyph: "◈" },
+  web_search: { verb: "Search", glyph: "⌕" },
+  // Findings ledger / planning
   save_finding: { verb: "Finding", glyph: "⚑" },
+  update_finding: { verb: "Finding", glyph: "⚑" },
+  query_findings: { verb: "Findings", glyph: "⚑" },
+  use_loot: { verb: "Loot", glyph: "❖" },
+  plan: { verb: "Plan", glyph: "☑" },
+  update_todos: { verb: "Plan", glyph: "☑" },
+  write_todos: { verb: "Plan", glyph: "☑" },
+  done: { verb: "Done", glyph: "✓" },
+  update_target: { verb: "Target", glyph: "◇" },
+  // Intelligence
+  intel: { verb: "Intel", glyph: "❋" },
+  // Scanners / orchestration
+  run_scanner: { verb: "Scan", glyph: "◎" },
+  start_scan: { verb: "Scan", glyph: "◎" },
   analyze_binary: { verb: "Analyze", glyph: "⚙" },
+  spawn_agent: { verb: "Spawn", glyph: "⚉" },
+  spawn_agents: { verb: "Spawn", glyph: "⚉" },
+  ask_operator: { verb: "Ask", glyph: "?" },
+};
+
+/**
+ * Verb maps for the tools whose REAL operation lives in a discriminator
+ * argument (`action` / `tool`) rather than the tool name. `formatToolArgs`
+ * leads these tools' argument summary with the raw discriminator token, and
+ * `toolActionTitle` promotes it to a proper verb here — so `intel
+ * search_advisories go:…` reads as `Advisories go:…`, matching OMP's
+ * per-operation titles rather than a single flat `Intel …`.
+ */
+const DISCRIMINATED_VERBS: Record<string, Record<string, string>> = {
+  intel: {
+    search_advisories: "Advisories",
+    advisory_sweep: "Sweep",
+    search_public_reports: "Reports",
+    lookup_cve: "CVE",
+    search_similar: "Similar",
+    build_dossier: "Dossier",
+    search_target_history: "History",
+  },
+  run_scanner: {
+    nmap: "Nmap",
+    nuclei: "Nuclei",
+    sqlmap: "SQLMap",
+    ffuf: "Ffuf",
+  },
+  browser: {
+    navigate: "Navigate",
+    click: "Click",
+    fill: "Fill",
+    evaluate: "Evaluate",
+    content: "Content",
+    screenshot: "Screenshot",
+  },
 };
 
 /** The display identity for a tool name, or `undefined` when it has none. */
@@ -240,10 +301,49 @@ export function toolActionTitle(entry: ChatEntry): string {
   // honest `name · args` form; nothing renders as a bare tool name alone.
   const identity = toolKindIdentity(name);
   if (identity) {
+    // Discriminated tools (`intel`, `run_scanner`, `browser`) carry the real
+    // operation in the FIRST argument token; promote it to the verb so the
+    // title reads `Advisories go:…` / `Nmap host` rather than `Intel
+    // search_advisories …`. When the token is unknown, the identity verb + the
+    // whole (still leading-token) args is an honest fallback.
+    const verbs = DISCRIMINATED_VERBS[name.toLowerCase()];
+    if (verbs && args) {
+      const sp = args.indexOf(" ");
+      const token = sp === -1 ? args : args.slice(0, sp);
+      const rest = sp === -1 ? "" : args.slice(sp + 1);
+      const verb = verbs[token];
+      if (verb) return rest ? `${verb} ${rest}` : verb;
+    }
     return args ? `${identity.verb} ${args}` : identity.verb;
   }
   if (name && args) return `${name} · ${args}`;
   return name || args;
+}
+
+// ---------------------------------------------------------------------------
+// The result summary
+// ---------------------------------------------------------------------------
+
+/**
+ * The completed call's RESULT summary — the "what it found" line an OMP tool
+ * row carries after its title (`Findings (limit 20) · 20 findings · (1.2s)`).
+ *
+ * It is `entry.detail` — but ONLY once the call has settled. While a call is
+ * still running, `detail` holds the ARGUMENT summary (the producer stamps
+ * `formatToolArgs` there so the running row still says what it is doing), which
+ * is emphatically not a result. So a summary is offered only when an outcome
+ * has actually been recorded (`success` is no longer undefined), and never for
+ * the metaKind cards that render their own result region and would only be
+ * duplicating it in the headline (command output, edit diff, web answer). Every
+ * other completed tool row gets its one bounded, already-redacted line.
+ */
+export function toolResultLine(entry: ChatEntry): string | undefined {
+  if (entry.success === undefined) return undefined;
+  if (entry.metaKind === "command" || entry.metaKind === "edit" || entry.metaKind === "web") {
+    return undefined;
+  }
+  const detail = sanitizeTuiText(entry.detail ?? "").trim();
+  return detail || undefined;
 }
 
 // ---------------------------------------------------------------------------
