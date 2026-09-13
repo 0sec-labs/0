@@ -13,9 +13,12 @@
  */
 import type { ToolDefinition, ToolContext, ToolResult } from "../types.js";
 import {
+  advisorySweep,
   buildIntelDossier,
+  lookupAdvisory,
   lookupCve,
   searchAdvisories,
+  searchPublicReports,
   searchSimilar,
   searchTargetHistory,
 } from "../../intel/index.js";
@@ -29,14 +32,19 @@ export const intelToolDefinitions: Record<string, ToolDefinition> = {
   intel: {
     name: "intel",
     description:
-      "Live vulnerability-intelligence lookups. Set `action`: 'lookup_cve' (a CVE from NVD + CISA KEV — use instead of citing from memory), 'search_advisories' (advisories affecting a package/version), 'search_similar' (related CVEs by CWE/keywords, for variant hunting), 'build_dossier' (a package-level intel dossier: prioritized advisories + prior-vuln playbooks + variant leads), 'search_target_history' (CVEs/GHSAs already reported against this exact target/repo/product). Results are sourced leads; verify local reachability before reporting a new vulnerability.",
+      "Live vulnerability-intelligence lookups. Set `action`: 'lookup_cve' (a CVE from NVD + CISA KEV — use instead of citing from memory; also accepts `ghsa_id` to fetch a specific GitHub advisory directly), 'search_advisories' (advisories affecting a package/version), 'search_similar' (related CVEs by CWE/keywords, for variant hunting), 'build_dossier' (a package-level intel dossier: prioritized advisories + prior-vuln playbooks + variant leads), 'search_target_history' (CVEs/GHSAs already reported against this exact target/repo/product), 'search_public_reports' (LEADS: GitHub issues/PRs matching code `terms` in a `repository` — catches public reports that never became advisories; results are UNVERIFIED), 'advisory_sweep' (LEADS: one call that fans out over direct GHSA-id lookups + package advisories + repo issue/PR search + optional target history, then returns a merged, de-duped, confidence-ranked lead list). Results are sourced leads; verify local reachability before reporting a new vulnerability. Note: 'no public duplicate found' is NOT proof of uniqueness — private/embargoed advisories, bug-bounty (HackerOne) reports, and internal tickets are invisible here.",
     parameters: {
       action: {
         type: "string",
         description: "Which lookup to run.",
-        enum: ["lookup_cve", "search_advisories", "search_similar", "build_dossier", "search_target_history"],
+        enum: ["lookup_cve", "search_advisories", "search_similar", "build_dossier", "search_target_history", "search_public_reports", "advisory_sweep"],
       },
       cve_id: { type: "string", description: "lookup_cve: CVE identifier, e.g. CVE-2024-1086." },
+      ghsa_id: { type: "string", description: "lookup_cve: fetch a specific GitHub advisory directly, e.g. GHSA-xxxx-xxxx-xxxx (reliable — unlike free-text advisory search)." },
+      terms: { type: "string", description: "search_public_reports: free-text code terms, e.g. 'ReplicateToRemote remote blob replicate'." },
+      report_type: { type: "string", description: "search_public_reports: restrict to 'issue', 'pr', or 'any' (default any).", enum: ["issue", "pr", "any"] },
+      ghsa_ids: { type: "array", items: { type: "string" }, description: "advisory_sweep: specific GHSA ids to resolve directly." },
+      include_target_history: { type: "boolean", description: "advisory_sweep: also fold in target-history results (default false)." },
       ecosystem: { type: "string", description: "Package ecosystem: npm, PyPI, crates.io, Go, Maven (search_advisories/build_dossier; optional hint elsewhere)." },
       package_name: { type: "string", description: "Package name, e.g. formidable or requests." },
       version: { type: "string", description: "Optional resolved package version." },
@@ -48,7 +56,7 @@ export const intelToolDefinitions: Record<string, ToolDefinition> = {
       include_similar: { type: "boolean", description: "build_dossier: include similar historical advisories (default true)." },
       target: { type: "string", description: "search_target_history: target name, URL, or repository URL." },
       repo_path: { type: "string", description: "search_target_history: local repo/package path (defaults to the agent scope path)." },
-      repository: { type: "string", description: "search_target_history: GitHub repository, e.g. expressjs/express." },
+      repository: { type: "string", description: "GitHub repository, e.g. expressjs/express (search_target_history / search_public_reports / advisory_sweep; accepts owner/repo or a repo URL)." },
       product: { type: "string", description: "search_target_history: optional product/project name." },
       vendor: { type: "string", description: "search_target_history: optional vendor/organization name." },
     },
@@ -86,13 +94,17 @@ export async function executeIntel(
       return executeIntelBuildDossier(args);
     case "search_target_history":
       return executeIntelSearchTargetHistory(ctx, args);
+    case "search_public_reports":
+      return executeIntelSearchPublicReports(args);
+    case "advisory_sweep":
+      return executeIntelAdvisorySweep(args);
     default:
       return {
         success: false,
         output: null,
         error:
           `intel: unknown action "${action}" — use one of ` +
-          "lookup_cve, search_advisories, search_similar, build_dossier, search_target_history",
+          "lookup_cve, search_advisories, search_similar, build_dossier, search_target_history, search_public_reports, advisory_sweep",
       };
   }
 }
@@ -133,11 +145,94 @@ export async function executeIntelSearchAdvisories(
 export async function executeIntelLookupCve(
   args: Record<string, unknown>,
 ): Promise<ToolResult> {
+  // Direct GHSA lookup (0sec#intel-advisories): GET /advisories/{ghsa_id} is
+  // reliable, so prefer it when a GHSA id is supplied.
+  const ghsaId = String(args.ghsa_id ?? args.ghsaId ?? "").trim();
+  if (ghsaId) {
+    let advisory;
+    try {
+      advisory = await lookupAdvisory({ ghsaId });
+    } catch (error) {
+      return { success: false, output: null, error: error instanceof Error ? error.message : String(error) };
+    }
+    if (!advisory) return { success: true, output: { ghsa_id: ghsaId.toUpperCase(), found: false } };
+    return { success: true, output: { found: true, advisory } };
+  }
   const cveId = String(args.cve_id ?? args.cveId ?? "").trim();
-  if (!cveId) return { success: false, output: null, error: "cve_id is required" };
+  if (!cveId) return { success: false, output: null, error: "cve_id or ghsa_id is required" };
   const intel = await lookupCve({ cveId });
   if (!intel) return { success: true, output: { cve_id: cveId.toUpperCase(), found: false } };
   return { success: true, output: { found: true, advisory: intel } };
+}
+
+export async function executeIntelSearchPublicReports(
+  args: Record<string, unknown>,
+): Promise<ToolResult> {
+  const repository = typeof args.repository === "string" && args.repository.trim() ? args.repository.trim() : undefined;
+  const terms = typeof args.terms === "string" && args.terms.trim() ? args.terms.trim() : undefined;
+  if (!repository && !terms) {
+    return { success: false, output: null, error: "provide repository and/or terms" };
+  }
+  const type = args.report_type === "issue" || args.report_type === "pr" ? args.report_type : "any";
+  const limit = typeof args.limit === "number" ? Math.min(Math.max(Math.trunc(args.limit), 1), 30) : undefined;
+  let result;
+  try {
+    result = await searchPublicReports({ repository, terms, type, limit });
+  } catch (error) {
+    return { success: false, output: null, error: error instanceof Error ? error.message : String(error) };
+  }
+  return {
+    success: true,
+    output: {
+      query: result.query,
+      totalCount: result.totalCount,
+      count: result.reports.length,
+      reports: result.reports,
+      // LEADS tool: every hit is an unverified public report, not an advisory.
+      note: "UNVERIFIED public reports (GitHub issues/PRs), not confirmed vulnerabilities — verify before acting.",
+    },
+  };
+}
+
+export async function executeIntelAdvisorySweep(
+  args: Record<string, unknown>,
+): Promise<ToolResult> {
+  const repository = typeof args.repository === "string" && args.repository.trim() ? args.repository.trim() : undefined;
+  const ecosystem = typeof args.ecosystem === "string" && args.ecosystem.trim() ? args.ecosystem.trim() : undefined;
+  const packageName = String(args.package_name ?? args.packageName ?? "").trim() || undefined;
+  const keywords = parseStringList(args.keywords);
+  const ghsaIds = parseStringList(args.ghsa_ids ?? args.ghsaIds);
+  const includeTargetHistory = typeof args.include_target_history === "boolean" ? args.include_target_history : undefined;
+  const limit = typeof args.limit === "number" ? Math.min(Math.max(Math.trunc(args.limit), 1), 50) : undefined;
+  if (!repository && !(ecosystem && packageName) && ghsaIds.length === 0) {
+    return { success: false, output: null, error: "provide repository, ecosystem+package_name, and/or ghsa_ids" };
+  }
+  const result = await advisorySweep({
+    repository,
+    ecosystem,
+    packageName,
+    keywords,
+    ghsaIds,
+    includeTargetHistory,
+    limit,
+  });
+  return {
+    success: true,
+    output: {
+      ...result,
+      leads: result.leads.slice(0, 40),
+    },
+  };
+}
+
+function parseStringList(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value.map((item) => String(item).trim()).filter(Boolean);
+  }
+  if (typeof value === "string") {
+    return value.split(",").map((item) => item.trim()).filter(Boolean);
+  }
+  return [];
 }
 
 export async function executeIntelSearchSimilar(

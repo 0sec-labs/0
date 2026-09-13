@@ -1155,6 +1155,13 @@ export {
   resolveTargetHistoryInput,
   toGraphSnapshot,
   toOsvEcosystem,
+  advisorySweep,
+  lookupAdvisory,
+  searchPublicReports,
+  searchGitHubIssues,
+  lookupGitHubAdvisory,
+  buildPublicReportQuery,
+  normalizeGhsaId,
 } from "./intel/index.js";
 export type {
   AdvisorySearchInput,
@@ -1183,6 +1190,14 @@ export type {
   SimilarSearchInput,
   TargetHistorySearchInput,
   VulnerabilityIntel,
+  AdvisoryLead,
+  AdvisorySweepInput,
+  AdvisorySweepResult,
+  GhsaLookupInput,
+  PublicReport,
+  PublicReportSearchInput,
+  PublicReportSearchResult,
+  TargetMatchConfidence,
 } from "./intel/index.js";
 
 // Structured verification pipeline — `verify()` is the unified entrypoint;
