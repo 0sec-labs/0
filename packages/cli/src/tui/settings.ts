@@ -56,6 +56,12 @@ export interface TuiSettings {
   showStatusBar: boolean;
   /** Keyboard-hint line under the composer input. */
   showComposerHints: boolean;
+  /**
+   * fish-style inline autosuggestion in the composer: a dimmed continuation of
+   * the most recent submitted message that begins with what you have typed,
+   * accepted with the Right arrow at end-of-input.
+   */
+  composerSuggestions: boolean;
   /** Block "0SEC" mark on the empty transcript. */
   showLogo: boolean;
   /** Surface runtime stdout/stderr as transcript notices. */
@@ -303,6 +309,15 @@ const DEFS: readonly TuiSettingDef[] = [
     key: "showComposerHints",
     label: "Composer hints",
     description: "Keyboard-hint line under the input box.",
+    kind: "boolean",
+    default: true,
+    group: "Display",
+  },
+  {
+    key: "composerSuggestions",
+    label: "Composer autosuggestions",
+    description:
+      "Inline ghost-text continuation from your submitted-message history, accepted with the Right arrow at end-of-input.",
     kind: "boolean",
     default: true,
     group: "Display",
@@ -631,6 +646,7 @@ const DEF_BY_KEY = new Map<string, TuiSettingDef>(DEFS.map((def) => [def.key, de
 export const DEFAULT_SETTINGS: TuiSettings = {
   showStatusBar: true,
   showComposerHints: true,
+  composerSuggestions: true,
   showLogo: true,
   showRuntimeNotices: true,
   showTurnSummary: false,
@@ -917,6 +933,7 @@ export function normalizeSettings(raw: unknown): TuiSettings {
   return {
     showStatusBar: booleanAt(raw, "showStatusBar"),
     showComposerHints: booleanAt(raw, "showComposerHints"),
+    composerSuggestions: booleanAt(raw, "composerSuggestions"),
     showLogo: booleanAt(raw, "showLogo"),
     showRuntimeNotices: booleanAt(raw, "showRuntimeNotices"),
     showTurnSummary: booleanAt(raw, "showTurnSummary"),

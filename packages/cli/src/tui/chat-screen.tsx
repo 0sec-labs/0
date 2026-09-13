@@ -137,6 +137,7 @@ import {
   recallNext,
   recallPrev,
 } from "./composer-history.js";
+import { suggestCompletion } from "./composer-suggest.js";
 import {
   buildCapabilityPanel,
   buildHelpPanel,
@@ -4152,6 +4153,26 @@ export function ChatScreen({
         recallComposerHistory("down");
         return;
       }
+      // Right arrow accepts the inline autosuggestion (fish / Claude Code
+      // style). The composer is append-only, so the caret is ALWAYS at
+      // end-of-input while composing — the precondition for accepting — and →
+      // fills the ghost suffix into the draft WITHOUT submitting, then leaves
+      // the caret at the new end (setComposerText re-bases it there). With the
+      // feature off, a slash draft, or no matching suggestion, → falls through
+      // to its previous behaviour: a no-op, since the append-only composer has
+      // no caret to move right. Arrows are protected (non-rebindable) keys, so
+      // this is a literal key.name check like the Up/Down/Left handlers, not a
+      // matchesBinding lookup.
+      if (key.name === "right") {
+        const suffix = settingsRef.current.composerSuggestions
+          && !composerRef.current.trimStart().startsWith("/")
+          ? suggestCompletion(composerRef.current, historyRef.current)
+          : null;
+        if (suffix) {
+          setComposerText(`${composerRef.current}${suffix}`);
+          return;
+        }
+      }
       // Shift+Enter inserts a newline; plain Enter submits. Terminals that
       // cannot distinguish the two (no kitty keyboard protocol) fall through to
       // submit, which is the safe default. The multi-line composer renders the
@@ -4654,6 +4675,13 @@ export function ChatScreen({
   // cells and grows downward up to COMPOSER_MAX_ROWS, then scrolls the oldest
   // rows out to keep the tail cursor in view. The block cursor is FILLED when
   // the composer is focused (`composerActive`) and HOLLOW when it is not.
+  // The inline autosuggestion shown as dimmed ghost text after the caret. Only
+  // while composing a non-slash draft with the feature enabled; the pure prefix
+  // match over submitted-message history lives in composer-suggest.ts. `null`
+  // (empty draft, no match, or a draft equal to a full entry) shows nothing.
+  const composerSuggestion = settings.composerSuggestions && composing && !isSlashComposer
+    ? suggestCompletion(composer, historyRef.current)
+    : null;
   const composerInput = (textWidth: number) => {
     const placeholder = startupError
       ? "type / for setup and commands"
@@ -4675,6 +4703,7 @@ export function ChatScreen({
         placeholder={placeholder}
         placeholderTone={startupError ? ERROR : MUTED}
         theme={theme}
+        suggestion={composerSuggestion}
       />
     );
   };

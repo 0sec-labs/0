@@ -28,6 +28,26 @@ export const COMPOSER_MAX_ROWS = 8;
 const GRAPHEMES = new Intl.Segmenter(undefined, { granularity: "grapheme" });
 
 /**
+ * Clamp ghost (autosuggestion) text to at most `cells` display columns, cutting
+ * only between graphemes so a CJK glyph or joined emoji is never split down the
+ * middle. Returns "" when there is no room. The user's own text is NEVER passed
+ * here — only the suggested suffix is truncated, so the real input can never be
+ * clipped or shifted by a suggestion that does not fit.
+ */
+export function truncateGhostText(text: string, cells: number): string {
+  if (cells <= 0 || text.length === 0) return "";
+  let out = "";
+  let used = 0;
+  for (const { segment } of GRAPHEMES.segment(text)) {
+    const w = stringWidth(segment);
+    if (used + w > cells) break;
+    out += segment;
+    used += w;
+  }
+  return out;
+}
+
+/**
  * The block-cursor glyph. Standard terminal behaviour: a FILLED block when the
  * composer is focused/active, a HOLLOW outline when it is not — so an operator
  * can tell at a glance whether keystrokes land in the composer or elsewhere.
@@ -134,6 +154,7 @@ export function ComposerInput({
   placeholder,
   placeholderTone,
   theme,
+  suggestion,
 }: {
   composing: boolean;
   /** Focused/active — drives the filled vs hollow cursor block. */
@@ -145,6 +166,14 @@ export function ComposerInput({
   /** Colour for the placeholder (e.g. ERROR for a startup failure). */
   placeholderTone?: string;
   theme: Theme;
+  /**
+   * fish-style inline autosuggestion: the dimmed continuation drawn after the
+   * cursor on the last row. Only the tail — never the operator's text — and
+   * only when the caret sits at end-of-input (which the append-only composer
+   * guarantees while composing). Truncated to the row's remaining width so it
+   * can never wrap or shift the real input; `null`/empty shows nothing.
+   */
+  suggestion?: string | null;
 }) {
   const { TEXT, MUTED } = theme;
   if (composing) {
@@ -156,9 +185,22 @@ export function ComposerInput({
           const isLast = i === rows.length - 1;
           // Sanitize before wrapping, and expand tabs for display only. The
           // submitted draft retains its original whitespace.
+          if (!isLast) {
+            return (
+              <text key={`composer-line-${i}`} fg={TEXT}>
+                {line}
+              </text>
+            );
+          }
+          // The last row carries the block cursor and, when present, the ghost
+          // suggestion after it. The ghost is clamped to whatever cells remain
+          // on the row so the real input is never clipped or wrapped.
+          const remaining = textWidth - stringWidth(line) - stringWidth(cursor);
+          const ghost = suggestion ? truncateGhostText(suggestion, remaining) : "";
           return (
-            <text key={`composer-line-${i}`} fg={TEXT}>
-              {isLast ? `${line}${cursor}` : line}
+            <text key={`composer-line-${i}`} fg={TEXT} wrapMode="none">
+              {`${line}${cursor}`}
+              {ghost ? <span fg={MUTED}>{ghost}</span> : null}
             </text>
           );
         })}
