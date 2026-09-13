@@ -3233,7 +3233,12 @@ export function ChatScreen({
                   e.text === call.name
                 ) {
                   const next = [...current];
-                  next[i] = { ...settled, id: e.id, at: e.at };
+                  // Give every settled tool an honest measured wall span so the
+                  // duration can ride the top of its card (command cards keep
+                  // their precise meta.durationMs via `settled`; every other tool
+                  // gets Date.now() - start). The append-fallback below has no
+                  // start stamp and legitimately stays duration-less.
+                  next[i] = { ...settled, id: e.id, at: e.at, wallMs: settled.wallMs ?? (Date.now() - e.at) };
                   return next;
                 }
               }

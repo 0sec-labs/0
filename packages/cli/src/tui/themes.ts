@@ -111,13 +111,48 @@ export const CHROME_TOKENS = ["BORDER"] as const;
  */
 export const LAYER_TOKENS = ["background", "surface", "surfaceAlt", "overlay"] as const;
 
+/**
+ * The syntax / diff sub-palette — an ADDITIVE, OPTIONAL group.
+ *
+ * These tokens colour highlighted code, diffs and links. They are deliberately
+ * kept OUT of the strict `THEME_TOKENS` union: `validateTheme` requires every
+ * member of that union and rejects anything outside it, so promoting these to
+ * required tokens would invalidate every on-disk user theme that predates them
+ * (and every built-in that hasn't filled all nine). Instead they are optional
+ * on `Theme` and resolved through {@link resolveSyntaxColors}, which derives a
+ * sensible value from an existing semantic token whenever a palette omits one.
+ * A palette therefore *may* define a bespoke syntax palette (the `slate`
+ * default does) but is never *required* to, and a theme with none renders code
+ * exactly as it did before this group existed.
+ *
+ *   - `syntaxKeyword/String/Number/Comment/Function/Type/Variable/Operator/`
+ *     `Punctuation` — the nine code-token hues, mirroring `CodeTokenKind`.
+ *   - `DIFF_ADD` / `DIFF_DEL` — the added / removed line colours for diffs.
+ *   - `LINK` — url / hyperlink colour.
+ */
+export const SYNTAX_TOKENS = [
+  "syntaxKeyword",
+  "syntaxString",
+  "syntaxNumber",
+  "syntaxComment",
+  "syntaxFunction",
+  "syntaxType",
+  "syntaxVariable",
+  "syntaxOperator",
+  "syntaxPunctuation",
+  "DIFF_ADD",
+  "DIFF_DEL",
+  "LINK",
+] as const;
+
 export type BackgroundToken = (typeof BACKGROUND_TOKENS)[number];
 export type TextToken = (typeof TEXT_TOKENS)[number];
 export type ChromeToken = (typeof CHROME_TOKENS)[number];
 export type LayerToken = (typeof LAYER_TOKENS)[number];
+export type SyntaxToken = (typeof SYNTAX_TOKENS)[number];
 export type ThemeToken = BackgroundToken | TextToken | ChromeToken | LayerToken;
 
-/** Every token, in a stable order, for iteration and validation. */
+/** Every REQUIRED token, in a stable order, for iteration and validation. */
 export const THEME_TOKENS: readonly ThemeToken[] = [
   ...BACKGROUND_TOKENS,
   ...TEXT_TOKENS,
@@ -126,12 +161,58 @@ export const THEME_TOKENS: readonly ThemeToken[] = [
 ];
 
 /**
- * A complete palette. Mapped over `ThemeToken` on purpose: adding a token to
- * the union makes every theme literal below fail to compile until it is
- * filled in, which is the "no gaps" guarantee the tests then re-check at
- * runtime for anything typed loosely.
+ * A complete palette. The required tokens are mapped over `ThemeToken` on
+ * purpose: adding a required token to the union makes every theme literal below
+ * fail to compile until it is filled in, which is the "no gaps" guarantee the
+ * tests then re-check at runtime for anything typed loosely. The syntax group
+ * is intersected in as OPTIONAL, so a palette may carry a bespoke code/diff
+ * palette without being forced to — see {@link SYNTAX_TOKENS}.
  */
-export type Theme = { readonly [K in ThemeToken]: string };
+export type Theme = { readonly [K in ThemeToken]: string } & {
+  readonly [K in SyntaxToken]?: string;
+};
+
+/** The resolved (fully-populated) syntax / diff colours for a palette. */
+export interface SyntaxColors {
+  readonly keyword: string;
+  readonly string: string;
+  readonly number: string;
+  readonly comment: string;
+  readonly function: string;
+  readonly type: string;
+  readonly variable: string;
+  readonly operator: string;
+  readonly punctuation: string;
+  readonly diffAdd: string;
+  readonly diffDel: string;
+  readonly link: string;
+}
+
+/**
+ * Resolve a palette's syntax / diff colours, filling any the palette omits from
+ * an existing semantic token. The fallbacks reproduce the historical
+ * `codeTokenStyle` mapping exactly, so a theme that defines no `syntax*` tokens
+ * highlights code identically to how it did before the group existed; a theme
+ * that does (like `slate`) gets its bespoke, polychrome palette. Total: never
+ * throws, always returns a full set of hex strings.
+ */
+export function resolveSyntaxColors(theme: Theme): SyntaxColors {
+  const t = theme as Partial<Record<SyntaxToken, string>> & Theme;
+  return {
+    keyword: t.syntaxKeyword ?? theme.PRIMARY,
+    string: t.syntaxString ?? theme.SUCCESS,
+    number: t.syntaxNumber ?? theme.WARNING,
+    comment: t.syntaxComment ?? theme.MUTED,
+    function: t.syntaxFunction ?? theme.INFO,
+    type: t.syntaxType ?? theme.BRAND,
+    variable: t.syntaxVariable ?? theme.TEXT,
+    operator: t.syntaxOperator ?? theme.MUTED,
+    punctuation: t.syntaxPunctuation ?? theme.MUTED,
+    diffAdd: t.DIFF_ADD ?? theme.SUCCESS,
+    diffDel: t.DIFF_DEL ?? theme.ERROR,
+    link: t.LINK ?? theme.INFO,
+  };
+}
 
 /* ---------------------------------------------------------- colour numbers */
 
@@ -411,6 +492,23 @@ const SLATE: Theme = {
   surface: "#1D1F21",
   surfaceAlt: "#26292C",
   overlay: "#303438",
+  // Bespoke syntax palette — a real 9-hue code palette so highlighted code and
+  // diffs are polychrome even though the chrome stays a restrained grey. Every
+  // value is a light-band hue that reads clearly on the grey surfaces; none is
+  // the ERROR red (reserved for failures). DIFF_ADD/DIFF_DEL mirror
+  // SUCCESS/ERROR so diff semantics stay consistent with the rest of the TUI.
+  syntaxKeyword: "#7AA2F7",
+  syntaxString: "#9ECE6A",
+  syntaxNumber: "#E0AF68",
+  syntaxComment: "#7C828C",
+  syntaxFunction: "#E5C07B",
+  syntaxType: "#4EC9B0",
+  syntaxVariable: "#D4D8DE",
+  syntaxOperator: "#ABB2BF",
+  syntaxPunctuation: "#ABB2BF",
+  DIFF_ADD: "#5BC088",
+  DIFF_DEL: "#EB767A",
+  LINK: "#7AA2F7",
 };
 
 /**
@@ -821,8 +919,25 @@ export function validateTheme(palette: unknown, options: ValidateThemeOptions = 
       });
     }
   }
+  // The syntax / diff group is optional: a palette need not define it, but if
+  // it does, each value it supplies must still be a well-formed colour. This is
+  // what keeps the group ADDITIVE — existing user themes that predate it stay
+  // valid, and a theme may opt into a bespoke code palette without the strict
+  // union rejecting the extra keys.
+  for (const token of SYNTAX_TOKENS) {
+    if (token in record && !isHexColor(record[token])) {
+      issues.push({
+        kind: "malformed",
+        token,
+        message: `token ${token} is not a #RRGGBB colour: ${JSON.stringify(record[token])}`,
+      });
+    }
+  }
   for (const key of Object.keys(record)) {
-    if (!(THEME_TOKENS as readonly string[]).includes(key)) {
+    if (
+      !(THEME_TOKENS as readonly string[]).includes(key) &&
+      !(SYNTAX_TOKENS as readonly string[]).includes(key)
+    ) {
       issues.push({ kind: "extra", token: key, message: `unknown token ${key}` });
     }
   }
@@ -1066,9 +1181,19 @@ export function detectColorDepth(env: Record<string, string | undefined> = {}): 
 export function degradePalette(palette: Theme, depth: ColorDepth): Theme {
   if (depth === "truecolor" || depth === "none") return palette;
   const map = depth === "ansi16" ? nearestAnsi16 : nearestAnsi256;
-  const out = {} as Record<ThemeToken, string>;
+  const snap = (hex: string): string =>
+    depth === "ansi16" ? ANSI_16[map(hex)]!.hex : ansi256Hex(map(hex));
+  const out = {} as Record<string, string>;
   for (const token of THEME_TOKENS) {
-    out[token] = depth === "ansi16" ? ANSI_16[map(palette[token])]!.hex : ansi256Hex(map(palette[token]));
+    out[token] = snap(palette[token]);
+  }
+  // Carry the optional syntax group through the same snap, so highlighted code
+  // keeps its palette on a 16/256-colour terminal instead of silently falling
+  // back to the degraded semantic tokens. Tokens the palette omits stay omitted.
+  const source = palette as Partial<Record<SyntaxToken, string>>;
+  for (const token of SYNTAX_TOKENS) {
+    const value = source[token];
+    if (typeof value === "string") out[token] = snap(value);
   }
   return out as Theme;
 }

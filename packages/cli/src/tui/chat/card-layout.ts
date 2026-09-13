@@ -140,6 +140,10 @@ export function toolBadgeLabel(entry: ChatEntry, preview?: ToolPreview): string 
   }
   const language = preview?.language;
   if (language) return LANG_BADGE[language.toLowerCase()] ?? language.toUpperCase();
+  // A recognised tool's badge is its verb ("READ", "GREP") rather than the raw
+  // snake_case name ("READ_FILE"), matching the identity carried in the title.
+  const identity = toolKindIdentity(entry.text);
+  if (identity) return identity.verb.toUpperCase();
   const name = sanitizeTuiText(entry.text).trim();
   return name ? name.toUpperCase() : "TOOL";
 }
@@ -155,6 +159,50 @@ export function badgeChip(label: string, borderCells: number): string {
   if (room < 4) return "";
   const text = fitTuiText(label, room - 2);
   return text ? ` ${text} ` : "";
+}
+
+// ---------------------------------------------------------------------------
+// Per-tool identity (verb + glyph)
+// ---------------------------------------------------------------------------
+
+/** A tool kind's display identity: an imperative verb and a header glyph. */
+export interface ToolIdentity {
+  /** The imperative verb the title leads with ("Read", "Grep", "Write"). */
+  verb: string;
+  /** A single glyph drawn in the card headline, distinct per kind. */
+  glyph: string;
+}
+
+/**
+ * Verb + glyph for the tools that have no dedicated `metaKind` card
+ * (command / edit / web / task each have their own branch and glyph). This is
+ * what turns the old flat `read_file · path=…` line into a real operation —
+ * "Read <path>", "Grep <query>", "Write <path>" — the way OMP gives every tool
+ * its own identity. Keyed by the canonical tool name and common aliases; a name
+ * outside the table keeps the generic `name · args` fallback rather than being
+ * mislabelled.
+ */
+export const TOOL_IDENTITY: Record<string, ToolIdentity> = {
+  read_file: { verb: "Read", glyph: "▤" },
+  read: { verb: "Read", glyph: "▤" },
+  list_files: { verb: "List", glyph: "☰" },
+  list: { verb: "List", glyph: "☰" },
+  search_files: { verb: "Grep", glyph: "⌕" },
+  grep: { verb: "Grep", glyph: "⌕" },
+  glob: { verb: "Glob", glyph: "⌕" },
+  write_file: { verb: "Write", glyph: "✎" },
+  write: { verb: "Write", glyph: "✎" },
+  str_replace: { verb: "Edit", glyph: "✎" },
+  fetch: { verb: "Fetch", glyph: "⚓" },
+  http_request: { verb: "HTTP", glyph: "⚓" },
+  save_finding: { verb: "Finding", glyph: "⚑" },
+  analyze_binary: { verb: "Analyze", glyph: "⚙" },
+};
+
+/** The display identity for a tool name, or `undefined` when it has none. */
+export function toolKindIdentity(name: string | undefined): ToolIdentity | undefined {
+  const key = sanitizeTuiText(name ?? "").trim().toLowerCase();
+  return key ? TOOL_IDENTITY[key] : undefined;
 }
 
 // ---------------------------------------------------------------------------
@@ -185,6 +233,15 @@ export function toolActionTitle(entry: ChatEntry): string {
   }
   const name = sanitizeTuiText(entry.text).trim();
   const args = sanitizeTuiText(entry.toolArgs ?? "").trim();
+  // A recognised tool reads as its operation: verb + the already-formatted
+  // primary argument summary — "Read a/b.ts @120", "Grep \"foo\" in src". The
+  // arg string `formatToolArgs` produces is already a clean one-liner, so it is
+  // appended whole rather than re-parsed. A tool with no identity keeps the
+  // honest `name · args` form; nothing renders as a bare tool name alone.
+  const identity = toolKindIdentity(name);
+  if (identity) {
+    return args ? `${identity.verb} ${args}` : identity.verb;
+  }
   if (name && args) return `${name} · ${args}`;
   return name || args;
 }
@@ -284,8 +341,9 @@ export function toolStatusRows(
       tone: entry.exitCode === 0 ? "muted" : "error",
     });
   }
-  const duration = formatDurationMs(entry.wallMs);
-  if (duration) rows.push({ label: "Duration", value: duration, tone: "muted" });
+  // Duration is NOT a status row: it rides the top border headline (OMP-style,
+  // ` · (<dur>)` after the title). See `formatDurationMs` — still exported and
+  // used by `ToolCard`'s headline — and the headline construction in ToolCard.
   if (typeof entry.timeoutMs === "number" && Number.isFinite(entry.timeoutMs)) {
     rows.push({ label: "Ceiling", value: `${Math.round(entry.timeoutMs / 1000)}s`, tone: "muted" });
   }
