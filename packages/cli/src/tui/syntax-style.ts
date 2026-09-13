@@ -30,6 +30,7 @@
  * so a pathological line stays linear and can never hang the render loop.
  */
 
+import { resolveSyntaxColors } from "./themes.js";
 import type { Theme } from "./theme-context.js";
 
 /**
@@ -61,7 +62,12 @@ export type CodeTokenKind =
   | "variable"
   | "operator"
   | "punctuation"
-  | "property";
+  | "property"
+  // Diff line classes. `inserted`/`deleted` colour an added/removed diff line;
+  // `meta` is a hunk header (`@@ … @@`) or file marker (`--- a/x`, `+++ b/x`).
+  | "inserted"
+  | "deleted"
+  | "meta";
 
 /** How a token kind paints: a theme colour plus optional real attributes. */
 export interface CodeTokenStyle {
@@ -72,7 +78,7 @@ export interface CodeTokenStyle {
 }
 
 /** Language families the lexer knows. Everything else renders as `plain`. */
-export type CodeLang = "bash" | "js" | "ts" | "json" | "plain";
+export type CodeLang = "bash" | "js" | "ts" | "json" | "python" | "diff" | "plain";
 
 // ---------------------------------------------------------------------------
 // Theme mapping
@@ -81,32 +87,52 @@ export type CodeLang = "bash" | "js" | "ts" | "json" | "plain";
 /**
  * Map a token kind onto the active theme.
  *
- * `ERROR` (red) is never used: red means an error everywhere else in the TUI,
- * and a red keyword would read as a failure. Every colour here is a swept text
- * token, so each has adequate contrast on the code surface.
+ * Code colours now come from the theme's dedicated syntax sub-palette via
+ * {@link resolveSyntaxColors}, so a theme that defines a bespoke `syntax*` set
+ * (the `slate` default does) renders code polychrome, while a theme that
+ * defines none degrades to exactly the historical semantic-token mapping
+ * (keyword→PRIMARY, string→SUCCESS, …) — the fallbacks in `resolveSyntaxColors`
+ * reproduce it byte-for-byte, so no existing theme changes.
+ *
+ * `ERROR` (red) is never used for a *code* token: red means an error everywhere
+ * else in the TUI, and a red keyword would read as a failure. The `deleted`
+ * diff class is the sole exception — a removed line legitimately reads red — and
+ * it is not a code token but a line class.
  */
 export function codeTokenStyle(kind: CodeTokenKind, theme: Theme): CodeTokenStyle {
+  const syntax = resolveSyntaxColors(theme);
   switch (kind) {
     case "keyword":
-      return { fg: theme.PRIMARY, bold: true };
+      return { fg: syntax.keyword, bold: true };
     case "string":
-      return { fg: theme.SUCCESS };
+      return { fg: syntax.string };
     case "comment":
-      return { fg: theme.MUTED, dim: true, italic: true };
+      return { fg: syntax.comment, dim: true, italic: true };
     case "number":
-      return { fg: theme.WARNING };
+      return { fg: syntax.number };
     case "function":
-      return { fg: theme.INFO };
+      return { fg: syntax.function };
     case "type":
-      return { fg: theme.BRAND };
+      return { fg: syntax.type };
     case "constant":
+      // No dedicated `syntaxConstant` token; ACCENT keeps the historical look.
       return { fg: theme.ACCENT };
     case "property":
-      return { fg: theme.INFO };
+      // Object / JSON keys — the function hue reads them as distinct from
+      // plain string values (historically INFO; the fallback preserves that).
+      return { fg: syntax.function };
     case "operator":
+      return { fg: syntax.operator };
     case "punctuation":
-      return { fg: theme.MUTED };
+      return { fg: syntax.punctuation };
+    case "inserted":
+      return { fg: syntax.diffAdd };
+    case "deleted":
+      return { fg: syntax.diffDel };
+    case "meta":
+      return { fg: theme.MUTED, dim: true };
     case "variable":
+      return { fg: syntax.variable };
     case "plain":
     default:
       return { fg: theme.TEXT };
@@ -136,6 +162,11 @@ const LANG_ALIASES: Record<string, CodeLang> = {
   json: "json",
   jsonc: "json",
   json5: "json",
+  py: "python",
+  python: "python",
+  python3: "python",
+  diff: "diff",
+  patch: "diff",
 };
 
 /** Fold a fence's info string onto a known family, or `plain`. */
@@ -171,6 +202,17 @@ const BASH_KEYWORDS = new Set([
   "export", "readonly", "declare", "set", "unset", "shift", "eval", "exec",
   "source", "alias", "trap", "test",
 ]);
+
+const PYTHON_KEYWORDS = new Set([
+  "def", "return", "if", "elif", "else", "for", "while", "break", "continue",
+  "pass", "import", "from", "as", "class", "try", "except", "finally", "raise",
+  "with", "lambda", "yield", "global", "nonlocal", "assert", "del", "in", "is",
+  "not", "and", "or", "async", "await", "match", "case",
+]);
+
+const PYTHON_CONSTANTS = new Set(["True", "False", "None", "self", "cls", "__name__"]);
+
+const PYTHON_OP_CHARS = "+-*/%=<>!&|^~@:";
 
 function isDigit(ch: string): boolean {
   return ch >= "0" && ch <= "9";
@@ -388,6 +430,118 @@ function lexJson(line: string): CodeToken[] {
   return out;
 }
 
+function lexPython(line: string): CodeToken[] {
+  const out: CodeToken[] = [];
+  let i = 0;
+  while (i < line.length) {
+    const ch = line[i] as string;
+    // A comment: an unquoted # (Python has no block comments).
+    if (ch === "#") {
+      push(out, line.slice(i), "comment");
+      break;
+    }
+    if (ch === '"' || ch === "'") {
+      i = scanString(line, i, ch, out);
+      continue;
+    }
+    if (isDigit(ch) || (ch === "." && isDigit(line[i + 1] ?? ""))) {
+      i = scanNumber(line, i, out);
+      continue;
+    }
+    if (isIdentStart(ch)) {
+      let j = i + 1;
+      while (j < line.length && isIdentChar(line[j] as string)) j += 1;
+      const word = line.slice(i, j);
+      let k = j;
+      while (k < line.length && line[k] === " ") k += 1;
+      if (PYTHON_KEYWORDS.has(word)) push(out, word, "keyword");
+      else if (PYTHON_CONSTANTS.has(word)) push(out, word, "constant");
+      else if (line[k] === "(") push(out, word, "function");
+      // A decorator target (`@name`) reads as a type-ish annotation.
+      else if (i > 0 && line[i - 1] === "@") push(out, word, "type");
+      else push(out, word, "plain");
+      i = j;
+      continue;
+    }
+    if (PYTHON_OP_CHARS.includes(ch)) {
+      let j = i + 1;
+      while (j < line.length && PYTHON_OP_CHARS.includes(line[j] as string)) j += 1;
+      push(out, line.slice(i, j), "operator");
+      i = j;
+      continue;
+    }
+    if ("()[]{},;.".includes(ch)) {
+      push(out, ch, "punctuation");
+      i += 1;
+      continue;
+    }
+    push(out, ch, "plain");
+    i += 1;
+  }
+  return out;
+}
+
+// ---------------------------------------------------------------------------
+// Diff parsing
+// ---------------------------------------------------------------------------
+
+/** A diff line split into its 1-char sign class and the payload after it. */
+export interface DiffLineParts {
+  /**
+   * The line class:
+   *   - `"+"` an added line, `"-"` a removed line, `" "` a context line,
+   *   - `"@"` a hunk header (`@@ … @@`),
+   *   - `"meta"` a file marker (`--- a/x`, `+++ b/x`, `diff --git …`, `*** …`),
+   *   - `""` when the line carries no diff sign at all (treated as context).
+   */
+  sign: "+" | "-" | " " | "@" | "meta" | "";
+  /** The content after the leading sign character (for `+`/`-`/` `). */
+  content: string;
+  /** The full original line, unchanged. */
+  raw: string;
+}
+
+/**
+ * Classify one diff line. Pure and total. File markers (`+++`/`---`/`***`) and
+ * `diff --git` headers are `meta`, not add/remove, so they are not painted as
+ * changed content; a bare `@@` hunk header is `"@"`. Everything else keys off
+ * the first character.
+ */
+export function parseDiffLine(line: string): DiffLineParts {
+  const raw = String(line ?? "");
+  if (raw.startsWith("+++") || raw.startsWith("---") || raw.startsWith("diff ") || raw.startsWith("*** ") || raw.startsWith("index ")) {
+    return { sign: "meta", content: raw, raw };
+  }
+  if (raw.startsWith("@@")) return { sign: "@", content: raw, raw };
+  const head = raw[0];
+  if (head === "+") return { sign: "+", content: raw.slice(1), raw };
+  if (head === "-") return { sign: "-", content: raw.slice(1), raw };
+  if (head === " ") return { sign: " ", content: raw.slice(1), raw };
+  return { sign: "", content: raw, raw };
+}
+
+/**
+ * Lex a diff line into a single line-class token. This is the coarse, standalone
+ * mode: the whole line is one `inserted`/`deleted`/`meta`/`plain` token, so a
+ * caller with no per-file language can still colour a diff by line class. The
+ * rich diff card composes finer highlighting itself (`parseDiffLine` +
+ * `highlightCode` on the context payload with the file's own language).
+ */
+function lexDiff(line: string): CodeToken[] {
+  const parsed = parseDiffLine(line);
+  switch (parsed.sign) {
+    case "+":
+      return [{ text: line, kind: "inserted" }];
+    case "-":
+      return [{ text: line, kind: "deleted" }];
+    case "@":
+    case "meta":
+      return [{ text: line, kind: "meta" }];
+    default:
+      return [{ text: line, kind: "plain" }];
+  }
+}
+
 /**
  * Tokenise one line of code for highlighting.
  *
@@ -416,6 +570,10 @@ export function highlightCode(line: string, language?: string): CodeToken[] {
       return lexJsLike(text, TS_KEYWORDS);
     case "json":
       return lexJson(text);
+    case "python":
+      return lexPython(text);
+    case "diff":
+      return lexDiff(text);
     case "plain":
     default:
       return [{ text, kind: "plain" }];

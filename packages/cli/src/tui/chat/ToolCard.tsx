@@ -5,7 +5,8 @@ import { TextAttributes } from "@opentui/core";
 import { fitTuiText, sanitizeTuiText } from "../text.js";
 import { commandCardFrame, toolCompactLine } from "../transcript-style.js";
 import { projectToolPreview, type ToolPreview } from "../tool-format.js";
-import { codeTokenStyle, highlightCode } from "../syntax-style.js";
+import { codeTokenStyle, highlightCode, parseDiffLine } from "../syntax-style.js";
+import { resolveSyntaxColors } from "../themes.js";
 import type { Theme } from "../theme-context.js";
 import { KEYBINDINGS } from "../keybindings.js";
 import { ShimmerText } from "./shimmer.js";
@@ -25,10 +26,13 @@ import type { ChatEntry, ChatImageAttachment, EntryDisplay } from "./types.js";
 import {
   MAX_OUTPUT_ROWS,
   badgeChip,
+  formatDurationMs,
+  pathExtension,
   statusColumns,
   toolActionTitle,
   toolBadgeLabel,
   toolInputSection,
+  toolKindIdentity,
   toolState,
   toolStateLabel,
   toolStatusRows,
@@ -38,7 +42,7 @@ import {
 /**
  * A tool call, drawn as a titled rounded card.
  *
- *   ╭ $ npm test -- --silent · SH ──────────────╮
+ *   ╭ $ npm test -- --silent · SH · (1.24s) ─────╮
  *   │ COMMAND ─────────────────────────────────│
  *   │ npm test -- --silent      (highlighted)  │
  *   │ OUTPUT ──────────────────────────────────│
@@ -46,21 +50,22 @@ import {
  *   │ STATUS ──────────────────────────────────│
  *   │ State    complete                        │
  *   │ Exit     0                               │
- *   │ Duration 1.24s                           │
  *   ╰──────────────────────────────────────────╯
  *
  * What the card is allowed to say:
  *
  *   - The top-border TITLE is the operation that actually ran — the command
  *     string, edited path, search provider, or tool name with its recorded
- *     argument summary. Its language/kind chip comes from retained metadata.
- *     There is no generic stand-in title and no second heading in the body.
+ *     argument summary, led by a kind glyph and closed by the execution time.
+ *     Its language/kind chip comes from retained metadata. There is no generic
+ *     stand-in title and no second heading in the body.
  *   - STATUS is derived, never assumed: a call with no recorded outcome reads
  *     "running", a non-zero exit or a wallclock kill reads "failed" in the
  *     error tone, and only `success === true` reads "complete". Finishing is
  *     not succeeding.
- *   - DURATION is printed only from a measured `wallMs`. An entry that carries
- *     no measurement gets no Duration row — never an estimate.
+ *   - DURATION rides the TOP border (` · (<dur>)` after the title), OMP-style,
+ *     and is printed only from a measured `wallMs` — an entry that carries no
+ *     measurement gets no duration anywhere, never an estimate.
  *
  * Behaviour carried over unchanged from the previous inline implementation:
  * the collapsed/expanded line budget (10 vs 128 retained lines), the
@@ -170,6 +175,80 @@ function CodeLine({
 }
 
 /**
+ * One diff line, OMP-style: the changed lines keep a flat add/removed colour so
+ * the edit reads unambiguously, and the unchanged CONTEXT lines are
+ * syntax-highlighted in the edited file's own language so the surrounding code
+ * is polychrome. Hunk headers and file markers are drawn dim. `language` is the
+ * file's extension (e.g. "ts", "py") — `highlightCode` normalises it — and is
+ * `undefined` when the diff carries no path, in which case context lines render
+ * as plain text (still correct, just uncoloured).
+ */
+function DiffLine({
+  line,
+  language,
+  width,
+  theme,
+  keyPrefix,
+}: {
+  line: string;
+  language?: string;
+  width: number;
+  theme: Theme;
+  keyPrefix: string;
+}) {
+  const w = Math.max(1, width);
+  const fitted = fitTuiText(line, w);
+  const parsed = parseDiffLine(fitted);
+  const syntax = resolveSyntaxColors(theme);
+
+  // Added / removed lines: one flat colour (green / red), gutter sign included.
+  if (parsed.sign === "+") {
+    return <text width={w} height={1} wrapMode="none" truncate fg={syntax.diffAdd}>{fitted}</text>;
+  }
+  if (parsed.sign === "-") {
+    return <text width={w} height={1} wrapMode="none" truncate fg={syntax.diffDel}>{fitted}</text>;
+  }
+  // Hunk headers (@@) and file markers (--- / +++ / diff --git): dim chrome.
+  if (parsed.sign === "@" || parsed.sign === "meta") {
+    return (
+      <text width={w} height={1} wrapMode="none" truncate fg={theme.MUTED} attributes={TextAttributes.DIM}>
+        {fitted}
+      </text>
+    );
+  }
+
+  // Context line: draw the leading space gutter (when present) then the payload
+  // tokenised in the file's language.
+  const signChar = parsed.sign === " " ? " " : "";
+  const tokens = highlightCode(parsed.content, language);
+  if (tokens.length === 0) {
+    return <text width={w} height={1} wrapMode="none" truncate fg={theme.TEXT}>{fitted}</text>;
+  }
+  return (
+    <box flexDirection="row" width={w} height={1} flexShrink={0} minWidth={0}>
+      {signChar ? <text flexShrink={0} fg={theme.MUTED}>{signChar}</text> : null}
+      {tokens.map((token, index) => {
+        const style = codeTokenStyle(token.kind, theme);
+        let attributes = 0;
+        if (style.bold) attributes |= TextAttributes.BOLD;
+        if (style.italic) attributes |= TextAttributes.ITALIC;
+        if (style.dim) attributes |= TextAttributes.DIM;
+        return (
+          <text
+            key={`${keyPrefix}-${index}`}
+            flexShrink={0}
+            fg={style.fg}
+            attributes={attributes === 0 ? undefined : attributes}
+          >
+            {token.text}
+          </text>
+        );
+      })}
+    </box>
+  );
+}
+
+/**
  * Use rich retained metadata when available, otherwise the stored bounded
  * projection. Restored entries without either fall back to their detail text
  * through the same bounded, redacted projector.
@@ -223,7 +302,7 @@ function TaskCard({
   const title = `Task${entry.taskLabel ? ` • ${entry.taskLabel}` : ""}`;
 
   if (!useCard) {
-    const line = toolCompactLine(glyph, title, toolStateLabel(state).word, Math.max(1, width));
+    const line = toolCompactLine(glyph, title, toolStateLabel(state).word, Math.max(1, width), formatDurationMs(entry.wallMs));
     return (
       <box flexDirection="column" width={Math.max(1, width)} flexShrink={0} minWidth={0} marginTop={display.spacing}>
         <text width={Math.max(1, width)} height={1} wrapMode="none" truncate fg={tone}>{line}{repeat}</text>
@@ -325,7 +404,12 @@ function TaskCard({
   );
 
   const headerGlyph = failed ? `${glyph} ` : "";
-  const headline = fitTuiText(`${headerGlyph}${title}${repeat ?? ""}`, inner);
+  // Execution time at the top, matching the tool card (OMP-style ` · (<dur>)`).
+  // A subagent row's `wallMs` is stamped at settle time (see the chat-screen
+  // WIRING TODO); absent it, no duration prints.
+  const durText = formatDurationMs(entry.wallMs);
+  const durSuffix = durText ? ` · (${durText})` : "";
+  const headline = fitTuiText(`${headerGlyph}${title}${repeat ?? ""}${durSuffix}`, inner);
   const shimmer = running && typeof display.shimmerFrame === "number";
 
   return (
@@ -471,7 +555,7 @@ export function ToolCard({
       />
     );
   }
-  const { TEXT, MUTED, ERROR, SUCCESS, BRAND, PANEL } = theme;
+  const { TEXT, MUTED, ERROR, BRAND, PANEL } = theme;
   const state = toolState(entry);
   const failed = state === "failed";
   const running = state === "running";
@@ -488,7 +572,7 @@ export function ToolCard({
   // Below the chrome budget (or with rich cards switched off) the row degrades
   // to the single honest line it always had — never a half-drawn frame.
   if (!useCard) {
-    const line = toolCompactLine(glyph, title, toolStateLabel(state).word, Math.max(1, width));
+    const line = toolCompactLine(glyph, title, toolStateLabel(state).word, Math.max(1, width), formatDurationMs(entry.wallMs));
     return (
       <box flexDirection="column" width={Math.max(1, width)} flexShrink={0} minWidth={0} marginTop={display.spacing}>
         <text width={Math.max(1, width)} height={1} wrapMode="none" truncate fg={tone}>{line}{repeat}</text>
@@ -508,6 +592,12 @@ export function ToolCard({
   const hiddenLines = retained.length - visible.length;
   const capped = preview.truncated || preview.lines.length > retained.length;
 
+  // A diff body (edit card, or any preview the projector tagged `diff`) is
+  // rendered through `DiffLine`: flat green/red on changed lines plus
+  // syntax-highlighted context lines in the edited file's language.
+  const isDiff = entry.metaKind === "edit" || preview.language === "diff";
+  const diffLang = entry.metaKind === "edit" ? (pathExtension(entry.editPath) || undefined) : undefined;
+
   const outputBody = preview.kind === "code" && bodyWidth >= 3
     ? renderMarkdownBlocks(
         [{
@@ -518,22 +608,29 @@ export function ToolCard({
         `${entry.id}-preview`,
         theme,
       )
-    : visible.map((line, index) => (
-        <text
-          key={`${entry.id}-output-${index}`}
-          width={bodyWidth}
-          height={1}
-          wrapMode="none"
-          truncate
-          fg={
-            (entry.metaKind === "edit" || preview.language === "diff") && line.startsWith("+") ? SUCCESS
-              : (entry.metaKind === "edit" || preview.language === "diff") && line.startsWith("-") ? ERROR
-                : TEXT
-          }
-        >
-          {fitTuiText(line, bodyWidth)}
-        </text>
-      ));
+    : visible.map((line, index) =>
+        isDiff ? (
+          <DiffLine
+            key={`${entry.id}-output-${index}`}
+            line={line}
+            language={diffLang}
+            width={bodyWidth}
+            theme={theme}
+            keyPrefix={`${entry.id}-diff-${index}`}
+          />
+        ) : (
+          <text
+            key={`${entry.id}-output-${index}`}
+            width={bodyWidth}
+            height={1}
+            wrapMode="none"
+            truncate
+            fg={TEXT}
+          >
+            {fitTuiText(line, bodyWidth)}
+          </text>
+        ),
+      );
 
   const outputRows = Math.min(
     MAX_OUTPUT_ROWS,
@@ -550,8 +647,25 @@ export function ToolCard({
   const allImages: readonly ChatImageAttachment[] = entry.toolPreview?.images ?? preview.images ?? entry.images ?? [];
   const images = allImages.slice(0, MAX_CARD_IMAGES);
 
-  const headerGlyph = failed ? `${glyph} ` : !running && entry.metaKind === "edit" ? "✎ " : "";
-  const headline = fitTuiText(`${headerGlyph}${title}${repeat}${badge ? ` · ${badgeChip(badge, inner)}` : ""}`, inner);
+  // The headline glyph is kind-aware: a failure always shows ×; otherwise each
+  // kind carries its own identity glyph (edit ✎, web ⌕, or the per-tool glyph
+  // from TOOL_IDENTITY). A command title already begins with "$ ", so its glyph
+  // is left empty to avoid doubling the marker.
+  const kindGlyph =
+    entry.metaKind === "command" ? ""
+      : entry.metaKind === "edit" ? "✎"
+        : entry.metaKind === "web" ? "⌕"
+          : toolKindIdentity(entry.text)?.glyph ?? "";
+  const headerGlyph = failed ? `${glyph} ` : running ? "" : kindGlyph ? `${kindGlyph} ` : "";
+  // Execution time rides the TOP of the card, OMP-style: ` · (<dur>)` appended
+  // to the headline. Only a measured `wallMs` prints — never an estimate. The
+  // old bottom "Duration" STATUS row is gone (see `toolStatusRows`).
+  const durText = formatDurationMs(entry.wallMs);
+  const durSuffix = durText ? ` · (${durText})` : "";
+  const headline = fitTuiText(
+    `${headerGlyph}${title}${repeat}${badge ? ` · ${badgeChip(badge, inner)}` : ""}${durSuffix}`,
+    inner,
+  );
   const shimmer = running && typeof display.shimmerFrame === "number";
 
   return (

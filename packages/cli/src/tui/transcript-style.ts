@@ -654,13 +654,22 @@ export function toolCompactLine(
   name: string,
   state: string,
   width: number,
+  duration?: string,
 ): string {
   const w = clampWidth(width);
   if (w <= 0) return "";
   const cleanName = sanitizeTuiText(name);
   const cleanState = sanitizeTuiText(state);
-  const full = `${icon} ${cleanName} · ${cleanState}`;
+  // The execution time rides the end of the one-liner too, for parity with the
+  // card's top-of-border duration. It is the FIRST thing dropped under width
+  // pressure (before the state, then the name), so the identity always survives.
+  // Omitting `duration` reproduces the historical `icon name · state` exactly.
+  const cleanDur = duration ? sanitizeTuiText(duration) : "";
+  const durPart = cleanDur ? ` · (${cleanDur})` : "";
+  const full = `${icon} ${cleanName} · ${cleanState}${durPart}`;
   if (full.length <= w) return full;
+  const withoutDur = `${icon} ${cleanName} · ${cleanState}`;
+  if (withoutDur.length <= w) return withoutDur;
   // Drop the state first, then truncate the name, so the identity survives.
   const withoutState = `${icon} ${cleanName}`;
   if (withoutState.length <= w) return withoutState;
