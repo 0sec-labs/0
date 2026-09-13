@@ -261,10 +261,10 @@ describe("context meter", () => {
   });
 
   it("still needs both window and usage to draw a meter", () => {
-    for (const input of [{ contextUsed: 10 }, { contextWindow: 100, lastModelInput: 10 }]) {
+    for (const input of [{ contextUsed: 10 }, { contextWindow: 100 }]) {
       const text = textOf(buildStatusSegments({ ...input, showContextMeter: true }), "meter");
       expect(text).toBeDefined();
-      expect(text).not.toMatch(/[%▱▰]/u);
+      expect(text).not.toMatch(/[0-9%▱▰]/u);
     }
   });
 });

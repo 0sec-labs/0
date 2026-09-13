@@ -122,8 +122,6 @@ export interface StatusBarInput {
   contextWindow?: number;
   /** Tokens currently held in context, for the percentage. */
   contextUsed?: number;
-  /** Last reported model-call input, not current conversation occupancy. */
-  lastModelInput?: number;
   /** Billing/plan label, e.g. "sub". Omit when unknown. */
   plan?: string;
   /**
@@ -477,12 +475,7 @@ export function buildStatusSegments(input: StatusBarInput): StatusSegment[] {
       texts.set("context", `${percent}%/${formatTokenCount(contextWindow)}`);
     }
   } else if (input.showContextMeter) {
-    const facts = ["Context usage unavailable"];
-    if (contextWindow > 0) facts.push(`limit ${formatTokenCount(contextWindow)}`);
-    if (typeof input.lastModelInput === "number" && Number.isFinite(input.lastModelInput) && input.lastModelInput >= 0) {
-      facts.push(`last model input ${formatTokenCount(input.lastModelInput)}`);
-    }
-    texts.set("meter", facts.join(" · "));
+    texts.set("meter", "Context usage unavailable");
   }
 
   const plan = label(input.plan);

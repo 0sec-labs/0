@@ -10,7 +10,6 @@
  * Missing metadata or a missing/invalid planner sample remains unknown.
  *
  * @see resolveContextLimit — the only window authority.
- * @see describeLastModelCallInput — an honestly labelled fact, never occupancy.
  */
 
 import { loadCatalogModels, type CatalogSyncOptions, type SyncedModel } from "./model-catalog-sync.js";
@@ -156,20 +155,3 @@ export function resolveContextLimit(
   return { tokens, source: cache.source === "offline" ? "offline-catalog" : "synced-catalog" };
 }
 
-/**
- * One honestly-labelled fact about the most recent model call, or `null`.
- *
- * This helper only validates a reported input count. The caller must establish
- * its provenance: chat-screen passes the last planner sample, never plugin
- * input or cumulative turn usage.
- *
- * It is already a whole-prompt figure on both normalized runtime paths — the
- * Anthropic reader folds cache reads and cache writes back into `inputTokens`,
- * and the Responses API counts cached tokens inside `input_tokens` — so a
- * caller must NOT add a cached-token count on top. Doing so would double count.
- */
-export function describeLastModelCallInput(lastContext: number | undefined): number | null {
-  return typeof lastContext === "number" && Number.isFinite(lastContext) && lastContext > 0
-    ? Math.trunc(lastContext)
-    : null;
-}

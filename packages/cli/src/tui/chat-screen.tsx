@@ -258,7 +258,7 @@ import { Todos, TodosSidebar } from "./chat/Todos.js";
 import { FindingsSidebar, FINDINGS_SIDEBAR_HEADER_ROWS } from "./chat/FindingsSidebar.js";
 import { ComposerFrame, ComposerInput, composerContentRows } from "./chat/Composer.js";
 import { autonomyFooterText, isAutonomyCycleKey, nextAutonomyMode } from "./composer-mode.js";
-import { resolveContextLimit, describeLastModelCallInput } from "./context-window.js";
+import { resolveContextLimit } from "./context-window.js";
 import { buildHostedModelCatalog, type HostedCatalogModel } from "./model-catalog.js";
 import { CloudHintCard, shouldOfferCloudHint } from "./chat/CloudHintCard.js";
 import { textCells } from "./primitives.js";
@@ -4138,7 +4138,6 @@ export function ChatScreen({
     showContextMeter: settings.showContextMeter,
     contextWindow: contextLimit?.tokens,
     contextUsed: !focusAgentId ? lastContext : undefined,
-    lastModelInput: !focusAgentId ? describeLastModelCallInput(lastContext) ?? undefined : undefined,
     showCost: settings.showCost,
     hostedBalance: !focusAgentId && cloudBalance && cloudBalance.owner === session && cloudSource.current?.isHosted()
       ? formatHostedBalance(cloudBalance.state) : undefined,
