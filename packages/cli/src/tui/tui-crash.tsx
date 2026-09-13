@@ -52,6 +52,73 @@ export function serializeError(error: unknown): Record<string, unknown> {
   return { value: String(error) };
 }
 
+/** The always-on log path {@link appendTuiEvent} writes to (env-overridable). */
+export function tuiLogPath(): string {
+  return process.env["0SEC_TUI_LOG"] ?? "/tmp/0sec-tui.log";
+}
+
+/** First `at …` frame of a stack (trimmed, without the leading `at `), if any. */
+export function firstStackFrame(stack: string | undefined): string | undefined {
+  if (!stack) return undefined;
+  for (const raw of stack.split("\n")) {
+    const line = raw.trim();
+    if (line.startsWith("at ")) return line.slice(3).trim();
+  }
+  return undefined;
+}
+
+/**
+ * One-line, operator-facing description of an error that NEVER renders as a
+ * bare "unknown". A present message is used verbatim. An `Error` whose
+ * `.message` is empty falls back to its name plus the first stack frame (so the
+ * surfaced line still points at code) and a hint to the always-on log where the
+ * FULL stack was written. Non-Errors use a bounded `String()`. The surfaced
+ * text is bounded; the complete detail always lands in the log via
+ * {@link logProblem}.
+ */
+export function describeErrorForSurface(error: unknown, maxLen = 400): string {
+  const hint = `see ${tuiLogPath()}`;
+  let text: string;
+  if (error instanceof Error) {
+    const message = (error.message ?? "").trim();
+    if (message) {
+      text = message;
+    } else {
+      const name = error.name || "Error";
+      const frame = firstStackFrame(error.stack);
+      text = frame ? `${name} at ${frame} — ${hint}` : `${name} (no message) — ${hint}`;
+    }
+  } else if (typeof error === "string") {
+    text = error.trim() || `error with no message — ${hint}`;
+  } else if (error === null || error === undefined) {
+    text = `error with no message — ${hint}`;
+  } else {
+    let raw: string;
+    try {
+      raw = String(error);
+    } catch {
+      raw = "";
+    }
+    text = raw && raw !== "[object Object]" ? raw : `error with no message — ${hint}`;
+  }
+  return text.length > maxLen ? `${text.slice(0, maxLen - 1)}…` : text;
+}
+
+/**
+ * Capture a runtime/tool problem to the always-on log BY DEFAULT — no env flag.
+ * The full stack (via {@link serializeError}) is written locally so every
+ * failure is learnable, even when the surfaced one-liner is bounded. Local
+ * capture only — this writes nothing to any network wire. Never throws.
+ */
+export function logProblem(kind: string, error: unknown, toolName?: string): void {
+  appendTuiEvent({
+    kind: "problem",
+    problemKind: kind,
+    ...(toolName ? { toolName } : {}),
+    error: serializeError(error),
+  });
+}
+
 export function appendTuiCrash(record: Record<string, unknown>): void {
   const file = process.env["0SEC_TRACE_TUI_EVENTS"] ?? "/tmp/0sec-tui-crashes.ndjson";
   try {

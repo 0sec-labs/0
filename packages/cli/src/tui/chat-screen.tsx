@@ -297,7 +297,7 @@ import {
   type AgentRowView,
 } from "./chat/AgentRow.js";
 import { agentAccentFor } from "./agent-color.js";
-import { appendTuiCrash, appendTuiEvent, serializeError } from "./tui-crash.js";
+import { appendTuiCrash, appendTuiEvent, serializeError, logProblem, describeErrorForSurface, tuiLogPath } from "./tui-crash.js";
 
 export type ChatDestination = "launcher" | "ops" | "history" | "findings" | "doctor" | "replay" | "settings" | "keybindings" | "harness" | "new-chat" | "models" | "market" | "usage" | "connect" | "herd" | "comms" | "finding" | "resume" | "audits" | "onboard";
 
@@ -1525,6 +1525,11 @@ export function ChatScreen({
     if (!alive.current || abortRef.current?.signal.aborted) return;
     if (error instanceof Error && error.name === "AbortError") return;
     if (typeof error === "string" && /^(?:aborted|cancelled|canceled)\b|(?:operator|user).*(?:declined|rejected)|(?:was )?(?:already )?(?:declined|rejected) by (?:the )?(?:operator|user)\b|previously declined/i.test(error)) return;
+    // Always capture the FULL error (stack included) to the always-on local log
+    // by default — no env flag — so a failure is learnable even when the
+    // surfaced line and the transmitted diagnostic are both bounded/coarse.
+    // Local only; nothing here crosses a network wire.
+    logProblem(kind, error, toolName);
     const payload = buildDiagnosticFeedback({
       kind, error, toolName, version: VERSION, platform: process.platform, arch: process.arch,
       runtime: process.versions.bun ? "bun" : "node",
@@ -3437,7 +3442,10 @@ export function ChatScreen({
       // which reads as the agent having simply ignored the operator.
       const producedText = Boolean(assistantText || outcome.assistantText);
       if (outcome.stopReason === "error") {
-        const detail = outcome.error ?? "The runtime reported an error but gave no message.";
+        const trimmed = outcome.error?.trim();
+        const detail = trimmed
+          ? trimmed
+          : `The runtime reported an error but gave no message — see ${tuiLogPath()}.`;
         recordProblem("runtime", outcome.error);
         appendEntry({
           kind: "error",
@@ -3488,7 +3496,10 @@ export function ChatScreen({
     } catch (error) {
       onAuditActivity({ outcome: controller.signal.aborted ? "stopped" : "failed" });
       recordProblem("runtime", error);
-      const detail = error instanceof Error ? error.message : String(error);
+      // Never surface a bare "unknown"/empty: an Error with no message falls
+      // back to its name + first stack frame and a pointer to the always-on log
+      // (where recordProblem just wrote the full stack).
+      const detail = describeErrorForSurface(error);
       appendEntry({
         kind: "error",
         text: "turn failed",

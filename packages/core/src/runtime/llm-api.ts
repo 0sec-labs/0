@@ -237,6 +237,82 @@ export function isRetryableHttpStatus(status: number): boolean {
   );
 }
 
+// ── Transient empty-stream retry (streaming ended with NO final response) ───
+//
+// Distinct from the HTTP-status retry above. Some providers — the ChatGPT
+// (Codex) backend especially — occasionally accept the request, open the SSE
+// stream, and then close it WITHOUT ever sending the terminal
+// `response.completed` frame (or send a bare `response.failed`). The wire
+// returned HTTP 200, so `isRetryableHttpStatus` never fired; `consumeResponsesStream`
+// surfaced `stopReason:"error"` with "stream completed without final response"
+// (or, for OpenRouter, "response stream failed"). That is a transient empty
+// stream, not a real API rejection: nothing usable was produced, so the whole
+// request is safe to re-issue. A genuine 4xx/auth/validation error, a timeout,
+// an operator cancellation, or ANY outcome that already produced tool calls is
+// NOT retried here.
+
+/**
+ * Substrings that identify a transient "the stream ended without a usable final
+ * response" outcome — the ONLY error class {@link shouldRetryNativeStream}
+ * retries. These are produced verbatim by {@link LlmApiRuntime.consumeResponsesStream}.
+ */
+export const TRANSIENT_STREAM_ERROR_PATTERNS: readonly string[] = [
+  "stream completed without final response",
+  "response stream failed",
+];
+
+/** Total attempts for a transient empty stream (1 initial + retries). `0SEC_LLM_STREAM_MAX_ATTEMPTS` (default 3). */
+export function llmStreamMaxAttempts(): number {
+  const raw = process.env["0SEC_LLM_STREAM_MAX_ATTEMPTS"];
+  if (raw == null || raw.trim() === "") return 3;
+  const n = Number.parseInt(raw, 10);
+  // At least 1 (a value of 1 disables retrying); cap at 5 so a misconfig can't
+  // wedge a turn behind a long retry chain.
+  return Number.isFinite(n) && n >= 1 ? Math.min(n, 5) : 3;
+}
+
+/** Backoff before the Nth retry (1-based): ~500ms, then ~1s, then ~1s… */
+export function streamRetryBackoffMs(retry: number): number {
+  return retry <= 1 ? 500 : 1000;
+}
+
+/** Sleep `ms`, resolving early (never rejecting) if `signal` aborts first. */
+function delayWithAbort(ms: number, signal?: AbortSignal): Promise<void> {
+  if (signal?.aborted) return Promise.resolve();
+  return new Promise<void>((resolve) => {
+    const timer = setTimeout(() => {
+      signal?.removeEventListener("abort", onAbort);
+      resolve();
+    }, ms);
+    const onAbort = (): void => {
+      clearTimeout(timer);
+      resolve();
+    };
+    signal?.addEventListener("abort", onAbort, { once: true });
+  });
+}
+
+/**
+ * Pure decision: should this native result be retried as a transient empty
+ * stream? True ONLY when the runtime reported `stopReason:"error"`, the error
+ * message matches a {@link TRANSIENT_STREAM_ERROR_PATTERNS} substring, the call
+ * was NOT an operator cancellation, and nothing usable was produced (no
+ * tool_use blocks). A 4xx/auth/validation error ("API error 400: …"), a
+ * timeout, a stall, a quota exhaustion, or an outcome carrying tool calls all
+ * return false so genuine failures fail fast and useful work is never repeated.
+ */
+export function shouldRetryNativeStream(result: NativeRuntimeResult): boolean {
+  if (result.stopReason !== "error") return false;
+  if (result.cancelled) return false;
+  const error = result.error ?? "";
+  if (!TRANSIENT_STREAM_ERROR_PATTERNS.some((pattern) => error.includes(pattern))) return false;
+  // Defensive: a partial stream that still yielded tool calls is usable work —
+  // never repeat it. (The transient returns carry no tool_use today, but this
+  // keeps the predicate correct regardless of how the return is shaped.)
+  if (result.content.some((block) => block.type === "tool_use")) return false;
+  return true;
+}
+
 /** Network errors that can clear after DNS/proxy/TCP backoff. */
 function isRetryableTransportCode(code: string): boolean {
   return [
@@ -3040,7 +3116,51 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
     };
   }
 
+  /**
+   * Public entry point. Runs {@link executeNativeAttempt} and, ONLY for a
+   * transient empty stream (see {@link shouldRetryNativeStream}), re-issues the
+   * whole request up to {@link llmStreamMaxAttempts} times with a short backoff.
+   * Every other outcome — success, a real API error, a timeout, an operator
+   * cancellation — is returned from the first attempt untouched, preserving the
+   * existing behaviour exactly.
+   */
   async executeNative(
+    system: string,
+    messages: NativeMessage[],
+    tools: NativeToolDef[],
+    callbacks?: NativeStreamCallbacks,
+    signal?: AbortSignal,
+  ): Promise<NativeRuntimeResult> {
+    const maxAttempts = llmStreamMaxAttempts();
+    let result!: NativeRuntimeResult;
+    let attempt = 0;
+    for (attempt = 1; attempt <= maxAttempts; attempt++) {
+      result = await this.executeNativeAttempt(system, messages, tools, callbacks, signal);
+      // Last attempt, a non-transient outcome, or an operator cancel arrived
+      // between attempts: stop and return whatever we have.
+      if (attempt >= maxAttempts || !shouldRetryNativeStream(result) || signal?.aborted) break;
+
+      const backoff = streamRetryBackoffMs(attempt);
+      diag.warn(
+        "stream_retry",
+        `${this.providerLabel} stream ended without a final response — retrying (attempt ${attempt + 1}/${maxAttempts}) after ${backoff}ms`,
+        { provider: this.providerLabel, attempt: attempt + 1, max_attempts: maxAttempts, backoff_ms: backoff },
+      );
+      await delayWithAbort(backoff, signal);
+      if (signal?.aborted) break;
+    }
+
+    // Genuinely exhausted the retry budget on a still-transient outcome (as
+    // opposed to breaking early for an abort): keep failing the turn but make
+    // the message say it retried, so the operator (and the logs) can tell a
+    // persistent empty stream from a one-off blip.
+    if (attempt >= maxAttempts && maxAttempts > 1 && shouldRetryNativeStream(result)) {
+      return { ...result, error: `${result.error} (retried ${maxAttempts} times)` };
+    }
+    return result;
+  }
+
+  private async executeNativeAttempt(
     system: string,
     messages: NativeMessage[],
     tools: NativeToolDef[],

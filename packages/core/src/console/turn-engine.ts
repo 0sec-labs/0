@@ -4,6 +4,7 @@ import { homedir } from "node:os";
 import { basename, dirname, isAbsolute, resolve, sep } from "node:path";
 
 import { LlmApiRuntime } from "../runtime/llm-api.js";
+import { diag } from "../diagnostics/channel.js";
 import { DEFAULT_AUTONOMY_MODE, DEFAULT_ALLOW_MODEL_SELF_EXTENSION, homeStateDir, type HarnessSnapshot } from "@0sec/shared";
 import type {
   NativeContentBlock,
@@ -807,6 +808,43 @@ export function createConsoleRuntime(config?: Partial<RuntimeConfig>): LlmApiRun
     );
   }
   return runtime;
+}
+
+/**
+ * Turn a caught error into a NON-EMPTY, bounded message for the turn outcome.
+ *
+ * A thrown `Error` with an empty `.message` used to reduce to `""`, which the
+ * TUI then rendered as a bare "unknown" / blank "turn failed" with nothing to
+ * debug. Here the empty-message case falls back to the error name plus its
+ * first stack frame, so the surfaced string always points at code. The FULL
+ * stack is emitted separately to the diagnostics channel (see the catch site)
+ * — it is not spliced into this bounded string.
+ */
+export function describeCaughtError(error: unknown, maxLen = 400): string {
+  let text: string;
+  if (error instanceof Error) {
+    const message = (error.message ?? "").trim();
+    if (message) {
+      text = message;
+    } else {
+      const name = error.name || "Error";
+      const frame = error.stack
+        ?.split("\n")
+        .map((line) => line.trim())
+        .find((line) => line.startsWith("at "))
+        ?.slice(3)
+        .trim();
+      text = frame ? `${name} at ${frame}` : `${name} (no message)`;
+    }
+  } else {
+    try {
+      text = String(error);
+    } catch {
+      text = "";
+    }
+    if (!text || text === "[object Object]") text = "runtime error with no message";
+  }
+  return text.length > maxLen ? `${text.slice(0, maxLen - 1)}…` : text;
 }
 
 /** Serialize a tool result into the string content of a `tool_result` block. */
@@ -2882,8 +2920,23 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
           recordModelUsage("planner", result.usage ?? streamedUsage);
         }
       } catch (error) {
+        // Capture the FULL stack to the diagnostics channel by default (no env
+        // flag) so a runtime failure is learnable even though the outcome's
+        // `error` string below is deliberately bounded. Not emitted for an
+        // operator cancel (that is not a failure). Local-only; the channel
+        // never crosses a network wire.
+        if (!signal?.aborted) {
+          diag.error(
+            "turn_runtime_error",
+            `${describeCaughtError(error)}`,
+            error instanceof Error
+              ? { name: error.name, stack: error.stack ?? "" }
+              : { value: String(error) },
+          );
+        }
         return { assistantText, toolCalls: runCalls, usage, budget: budgetSnapshot(),
-          stopReason: signal?.aborted ? "cancelled" : "error", error: error instanceof Error ? error.message : String(error) };
+          stopReason: signal?.aborted ? "cancelled" : "error",
+          error: signal?.aborted ? "turn cancelled by operator" : describeCaughtError(error) };
       } finally { directDriver = false; }
 
       if (result.stopReason === "error") {
