@@ -127,6 +127,11 @@ export interface TuiSettings {
   /** Let the model add tools to its own session (off by default). */
   allowModelSelfExtension: boolean;
   /**
+   * Dev-only: rebuild the engine from own source and hand off the live console
+   * session. Separate from sandboxed tool extension; requires trusted host code.
+   */
+  allowDevSourceUpdates: boolean;
+  /**
    * Start the TUI-owned lens-synthesis watcher against the curated inbox. This
    * can invoke a model after an inbox revision, so it remains off by default.
    */
@@ -468,9 +473,18 @@ const DEFS: readonly TuiSettingDef[] = [
     key: "allowModelSelfExtension",
     label: "Model self-extension",
     description:
-      "Allow new sessions to add sandboxed tools and live harness generations. Existing disabled sessions stay disabled; trusted host execution requires a separate workspace grant.",
+      "Allow new sessions to add sandboxed tools and live harness generations. Existing disabled sessions stay disabled. Trusted harness code requires separate workspace trust; development engine updates are controlled independently.",
     kind: "boolean",
     default: DEFAULT_ALLOW_MODEL_SELF_EXTENSION,
+    group: "Security",
+  },
+  {
+    key: "allowDevSourceUpdates",
+    label: "Development engine updates",
+    description:
+      "0dev only. Reload changed core engine code between turns without losing the session. Runs with host privileges, including credential access; independent of sandboxed tool extension.",
+    kind: "boolean",
+    default: false,
     group: "Security",
   },
   {
@@ -625,6 +639,7 @@ export const DEFAULT_SETTINGS: TuiSettings = {
   transcriptDetail: "expanded",
   theme: DEFAULT_THEME_NAME,
   allowModelSelfExtension: DEFAULT_ALLOW_MODEL_SELF_EXTENSION,
+  allowDevSourceUpdates: false,
   autoEvolveFinderLenses: false,
   autoPromoteFinderLenses: false,
   showTokenUsage: true,
@@ -747,12 +762,17 @@ export interface LayeredSettings {
  * `onboardingCompleted` would suppress first-use consent the operator has not
  * actually given. Both are the same class of escalation: the project claiming
  * a decision that belongs to the person at the keyboard.
+ *
+ * `allowDevSourceUpdates` is operator-only because it gates loading and
+ * executing user-owned source code from disk, which a project checkout must
+ * never enable on the operator's behalf without explicit consent.
  */
 export function isOperatorSetting(key: keyof TuiSettings): boolean {
   return key === "onboardingCompleted"
     || key === "diagnosticReporting"
     || key === "diagnosticReportingPrompted"
-    || key === "updatePolicy";
+    || key === "updatePolicy"
+    || key === "allowDevSourceUpdates";
 }
 
 /**
@@ -885,6 +905,7 @@ export function normalizeSettings(raw: unknown): TuiSettings {
     transcriptDetail: enumAt(raw, "transcriptDetail"),
     theme: themeAt(raw),
     allowModelSelfExtension: booleanAt(raw, "allowModelSelfExtension"),
+    allowDevSourceUpdates: booleanAt(raw, "allowDevSourceUpdates"),
     autoEvolveFinderLenses: booleanAt(raw, "autoEvolveFinderLenses"),
     autoPromoteFinderLenses: booleanAt(raw, "autoPromoteFinderLenses"),
     showTokenUsage: booleanAt(raw, "showTokenUsage"),

@@ -159,6 +159,38 @@ describe("vulnerability intel", () => {
     expect(result.advisories[0]?.summary).toContain("Path traversal");
   });
 
+  it("falls back to NVD keyword search for Go standard-library advisory lookups", async () => {
+    const fetchMock = vi.fn(async (input: string | URL | Request) => {
+      const url = String(input);
+      if (url.startsWith("https://api.osv.dev/")) return json({ vulns: [] });
+      if (url.startsWith("https://api.github.com/advisories")) return json([]);
+      if (url.startsWith("https://services.nvd.nist.gov/")) {
+        const parsed = new URL(url);
+        expect(parsed.searchParams.get("keywordSearch")).toContain("golang");
+        expect(parsed.searchParams.get("keywordSearch")).toContain("standard library");
+        expect(parsed.searchParams.get("resultsPerPage")).toBe("20");
+        return json({
+          vulnerabilities: [{
+            cve: {
+              ...NVD_RESPONSE.vulnerabilities[0]!.cve,
+              descriptions: [{ lang: "en", value: "Vulnerability in the Go standard library net/http package" }],
+              references: [{ url: "https://groups.google.com/g/golang-announce/c/example", tags: ["Vendor Advisory"] }],
+            },
+          }],
+        });
+      }
+      throw new Error(`unexpected URL ${url}`);
+    }) as unknown as typeof fetch;
+
+    const result = await searchAdvisories(
+      { ecosystem: "Go", packageName: "stdlib", version: "1.28.0", enrich: false, cacheDir },
+      { fetchImpl: fetchMock },
+    );
+
+    expect(result.advisories[0]?.id).toBe("CVE-2024-0001");
+    expect(result.advisories[0]?.sources).toContain("nvd");
+  });
+
   it("warns and returns partial advisory data when one package source fails", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     const fetchMock = vi.fn(async (input: string | URL | Request) => {

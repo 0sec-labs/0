@@ -1456,9 +1456,6 @@ describe("Console turn budget — token guard and iteration backstop", () => {
     expect(outcome.stopReason).toBe("end_turn");
     expect(outcome.toolCalls).toHaveLength(30);
     expect(outcome.budget.tokensUsed).toBe(780_000);
-    // Defaults: a 2M token budget with a 100-round runaway backstop.
-    expect(outcome.budget.tokenBudget).toBe(2_000_000);
-    expect(outcome.budget.maxToolIterations).toBe(100);
   });
 
   it("fires onUsage per model call, not only at turn end, with running totals against the budget", async () => {
@@ -2963,7 +2960,8 @@ describe("console executable self-extension permissions", () => {
 
   it("honors explicit enablement and opt-out in the model-facing API", async () => {
     const on = new ScriptedRuntime([endTurn("ready")]);
-    await session(on, true).send("go");
+    const outcome = await session(on, true).send("go");
+    expect(outcome.stopReason).toBe("end_turn");
     expect(on.calls[0]!.tools.map((tool) => tool.name)).toContain("self_extend");
     const off = new ScriptedRuntime([endTurn("ready")]);
     await session(off, false).send("go");

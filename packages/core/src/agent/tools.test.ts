@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { ToolExecutor, getToolsForRole, TOOL_DEFINITIONS, SCANNER_TOOL_NAMES, detectHttpEgressSegments, evaluateDoneCoverageGate, containsUnquotedShellChars, sanitizedEnv } from "./tools.js";
+import { ToolExecutor, getToolsForRole, TOOL_DEFINITIONS, SCANNER_TOOL_NAMES, detectHttpEgressSegments, evaluateDoneCoverageGate, containsUnquotedShellChars, sanitizedEnv, toolExecutorCheckpointSchema } from "./tools.js";
 import { parseFindingsFromCliOutput } from "../findings-parser.js";
 import type { ToolContext, ToolCall } from "./types.js";
 import {
@@ -4445,5 +4445,103 @@ describe("sanitizedEnv — child-process credential filtering (0sec#134)", () =>
       if (previous === undefined) delete process.env[envName];
       else process.env[envName] = previous;
     }
+  });
+});
+
+// ── Checkpoint / Engine Replacement ────────────────────────────────────
+
+describe("ToolExecutor engine handoff", () => {
+  const context = (): ToolContext => ({
+    target: "https://target.invalid/", scanId: "checkpoint-behavior",
+    findings: [], attackResults: [], targetInfo: {},
+  });
+
+  it.each([false, true])("retains an operator's scoped execution decision (%s) without prompting again", async (approved) => {
+    const root = mkdtempSync(join(tmpdir(), "0sec-handoff-permission-"));
+    const approve = vi.fn(async () => approved);
+    const reconsider = vi.fn(async () => !approved);
+    const ctx: ToolContext = { ...context(), role: "audit", scopePath: root, autonomyMode: "standard", escalateScopedAudit: approve };
+    const original = new ToolExecutor(ctx);
+    let replacement: ToolExecutor | undefined;
+    const call: ToolCall = { name: "bash", arguments: { command: "printf checkpoint-permission" } };
+    try {
+      expect((await original.execute(call)).success).toBe(approved);
+      replacement = new ToolExecutor(
+        { ...ctx, escalateScopedAudit: reconsider }, null, undefined, undefined,
+        toolExecutorCheckpointSchema.parse(original.exportCheckpoint()),
+      );
+      const result = await replacement.execute(call);
+      expect(result.success).toBe(approved);
+      if (approved) expect(result.output).toBe("checkpoint-permission");
+      expect(approve).toHaveBeenCalledTimes(1);
+      expect(reconsider).not.toHaveBeenCalled();
+    } finally {
+      await original.cleanup();
+      await replacement?.cleanup();
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("does not rebind original credentials to a changed target after replacement", async () => {
+    const ctx: ToolContext = {
+      ...context(), target: "https://original.invalid/", publicNetwork: {},
+      authConfig: { type: "bearer", token: "checkpoint-auth-canary" },
+    };
+    const original = new ToolExecutor(ctx);
+    let replacement: ToolExecutor | undefined;
+    const sent: Array<[string, string | null]> = [];
+    mockFetchScoped.mockImplementation(async (url, init) => {
+      sent.push([url, new Headers(init?.headers).get("authorization")]);
+      return new Response("fixture");
+    });
+    try {
+      ctx.target = "https://foreign.invalid/";
+      replacement = new ToolExecutor(
+        { ...ctx }, null, undefined, undefined,
+        toolExecutorCheckpointSchema.parse(original.exportCheckpoint()),
+      );
+      expect((await replacement.execute({ name: "http_request", arguments: { url: ctx.target } })).success).toBe(true);
+      expect((await replacement.execute({ name: "http_request", arguments: { url: "https://original.invalid/" } })).success).toBe(true);
+      expect(sent).toEqual([
+        ["https://foreign.invalid/", null],
+        ["https://original.invalid/", "Bearer checkpoint-auth-canary"],
+      ]);
+    } finally {
+      await original.cleanup();
+      await replacement?.cleanup();
+    }
+  });
+
+  it("continues an existing plan without resetting its revision or progress", async () => {
+    const original = new ToolExecutor(context());
+    let replacement: ToolExecutor | undefined;
+    const plan = [{ content: "Preserve refusal decisions", status: "in_progress" }];
+    try {
+      await original.execute({ name: "update_todos", arguments: { todos: [{ ...plan[0], status: "pending" }] } });
+      await original.execute({ name: "update_todos", arguments: { todos: plan } });
+      const revision = original.todosSnapshot().revision;
+      replacement = new ToolExecutor(
+        context(), null, undefined, undefined,
+        toolExecutorCheckpointSchema.parse(original.exportCheckpoint()),
+      );
+      expect((await replacement.execute({ name: "update_todos", arguments: { todos: plan } })).success).toBe(true);
+      expect(replacement.todosSnapshot().revision).toBe(revision);
+      expect((await replacement.execute({ name: "update_todos", arguments: { todos: [{ ...plan[0], status: "completed" }] } })).success).toBe(true);
+      expect(replacement.todosSnapshot()).toMatchObject({
+        revision: revision + 1, progress: { done: 1, total: 1 },
+        todos: [{ content: "Preserve refusal decisions", status: "completed" }],
+      });
+    } finally {
+      await original.cleanup();
+      await replacement?.cleanup();
+    }
+  });
+
+  it("rejects checkpoints that omit refusal memory", async () => {
+    const original = new ToolExecutor(context());
+    try {
+      const { scopedAuditDenials: _denials, ...incomplete } = original.exportCheckpoint();
+      expect(() => toolExecutorCheckpointSchema.parse(incomplete)).toThrow();
+    } finally { await original.cleanup(); }
   });
 });

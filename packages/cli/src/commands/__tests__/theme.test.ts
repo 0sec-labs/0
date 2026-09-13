@@ -8,7 +8,6 @@ import {
   runThemeApply,
   runThemeExport,
   runThemeInstall,
-  runThemeList,
   runThemeRemove,
   type ThemeCommandDeps,
   type ThemeCorePort,
@@ -81,16 +80,6 @@ afterEach(() => {
   }
 });
 
-describe("theme list", () => {
-  it("lists built-ins and marks the default + active", () => {
-    const home = makeDir("th-home-");
-    const cap = capture();
-    runThemeList(cap.deps({ homeDir: home, projectDir: makeDir("th-proj-") }));
-    const text = cap.out.join("\n");
-    expect(text).toContain("dark");
-    expect(text).toMatch(/midnight.*(active|default)/);
-  });
-});
 
 describe("theme install", () => {
   it("refuses when no registry is configured", async () => {

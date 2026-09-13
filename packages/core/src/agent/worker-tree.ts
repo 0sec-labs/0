@@ -91,6 +91,15 @@ export class AuditWorkerTree {
     await this.stopAll();
   }
 
+  /**
+   * True when at least one worker acquired through this tree is still alive.
+   * Used by ToolExecutor.exportCheckpoint() to reject checkpoint serialisation
+   * while owned background workers may still mutate findings or authority state.
+   */
+  hasLiveWorkers(): boolean {
+    return this.active > 0;
+  }
+
   private belongsTo(node: WorkerNode, ownerId: string): boolean {
     for (let current: WorkerNode | undefined = node; current;
       current = current.parentId === undefined ? undefined : this.nodes.get(current.parentId)) {

@@ -1,36 +1,7 @@
 /**
- * Next-gen headless-browser tool (SCAFFOLD — browser-tool-20260913).
- *
- * Modeled on oh-my-pi's `browser` tool (multi-tab, one explicit action surface),
- * but adapted to 0sec's evidence-first / scope-gated pentest posture:
- *
- *  - ONE `browser` tool with an `action` enum
- *    (navigate | click | type | screenshot | get_content | eval | list_tabs | close),
- *    replacing the terse recon.ts `browser` def (navigate/click/fill/evaluate/content/screenshot).
- *  - A MULTI-TAB model keyed by `tab` name (OMP's tab-supervisor idea, trimmed to
- *    what a pentest needs): several pages held open across turns so the agent can
- *    juggle an authed session and a victim frame at once.
- *  - The real browser lives behind a lazy, guarded {@link BrowserDriver} seam.
- *    The factory dynamically imports the backend and, when it is not installed,
- *    returns a clear "backend not installed — run <cmd>" error instead of throwing
- *    at import time. This module therefore TYPECHECKS with no browser dep present:
- *    there is no top-level `playwright`/`puppeteer` import, and the dynamic import
- *    uses a non-literal specifier so tsc cannot try to resolve the module.
- *
- * DEPENDENCY DECISION: we drive the backend through **playwright**, NOT
- * puppeteer-core (OMP's choice). 0sec already standardizes on playwright — it is
- * declared as an `optionalDependency` in packages/core/package.json ("^1.52.0")
- * and is already used via dynamic `import("playwright")` in agent/tools.ts
- * (`ensureBrowser`), triage/oracles.ts, agent/egats.ts, and racing.ts. Reusing it
- * (a) adds no new dependency, (b) reuses the proven scope-pinned `context.route`
- * interception already shipping in tools.ts, and (c) keeps one browser stack.
- *
- * This file is PURE next-gen module code + its guarded driver seam. It is not yet
- * imported by ./index.ts or ./dispatch.ts — see the WIRING TODOs at the bottom —
- * because `browser` is presently owned by recon.ts + `ToolExecutor.browserAction`,
- * and swapping ownership touches the monolithic executor + the shared registry
- * barrels. Keeping this module standalone lets it compile and be unit-tested in
- * isolation while the swap is reviewed.
+ * Scope-gated, multi-tab browser tool backed by optional Playwright.
+ * Required arguments are checked before backend acquisition. ToolExecutor owns
+ * the driver lifecycle and the scope-pinned network interceptor.
  */
 import type { ScopePolicy } from "../../scope/scope.js";
 import type { ToolDefinition, ToolResult } from "../types.js";
@@ -161,10 +132,8 @@ export interface BrowserDriverOptions {
   /** When true, treat like public-network browsing (serviceWorkers blocked, etc.). */
   publicNetwork?: boolean;
   /**
-   * Optional scope-pinned request sink. When supplied, the backend routes EVERY
-   * page resource through it (mirrors tools.ts `context.route("**\/*") →
-   * fetchTarget`) so no resource ever escapes scope. When omitted, the driver
-   * falls back to pre-`goto` validation + a per-request scope check.
+   * Optional scope-pinned request sink supplied by ToolExecutor. It mediates
+   * page requests. Without it, handler URL checks do not isolate subresources.
    */
   interceptor?: (req: {
     url: string;
@@ -234,10 +203,7 @@ export const createBrowserDriver: BrowserDriverFactory = async (opts) => {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Concrete backend (playwright). Guarded behind the factory; never imported at
-// module top level. Kept intentionally small — the scope-pinned `context.route`
-// interception is stubbed to the `opts.interceptor` seam so the full transport
-// wiring can be lifted from tools.ts during integration (WIRING TODO).
+// Optional Playwright backend; ToolExecutor supplies the scope-pinned interceptor.
 // ─────────────────────────────────────────────────────────────────────────────
 
 class PlaywrightPage implements BrowserPage {
@@ -410,9 +376,7 @@ class PlaywrightDriver implements BrowserDriver {
 
 /**
  * Narrow slice of {@link import("../types.js").ToolContext} the browser handler
- * needs. A real `ToolContext` is assignable to this, so the eventual
- * `ToolExecutor.browserAction` can call `executeBrowser(this.ctx, args, ...)`
- * without adaptation.
+ * needs. ToolExecutor passes its context directly.
  */
 export interface BrowserToolContext {
   target: string;
@@ -460,11 +424,8 @@ function effectiveScope(ctx: BrowserToolContext): ScopePolicy | undefined {
 }
 
 /**
- * Gate a candidate navigation URL. Mirrors http_request/crawl: reject anything
- * scope refuses. (Full parity uses tools.ts `validateTargetUrl`, which also
- * pins same-origin for non-public scans; the scaffold uses `scope.match` — the
- * same primitive `validateTargetUrl` ends in — and leaves the same-origin
- * refinement as a WIRING TODO when this replaces browserAction.)
+ * Check the effective engagement scope. ToolExecutor's interceptor separately
+ * validates and pins each network request.
  */
 function gateUrl(ctx: BrowserToolContext, url: string): { ok: true } | { ok: false; reason: string } {
   const scope = effectiveScope(ctx);
@@ -475,10 +436,8 @@ function gateUrl(ctx: BrowserToolContext, url: string): { ok: true } | { ok: fal
 }
 
 /**
- * The browser tool handler. Routes the `action` enum, gates navigation targets,
- * and returns a plain {@link ToolResult}. Screenshots ride in `output` as base64
- * (rendering a real image card is a WIRING TODO — ToolResultMeta has no image
- * kind yet).
+ * Route browser actions and gate navigation targets. Screenshot results retain
+ * PNG base64 together with image metadata.
  */
 export async function executeBrowser(
   ctx: BrowserToolContext,
@@ -489,6 +448,23 @@ export async function executeBrowser(
   if (!action) return fail("action is required");
   if (!(BROWSER_ACTIONS as readonly string[]).includes(action)) {
     return fail(`Unknown browser action: ${action}. Valid: ${BROWSER_ACTIONS.join(", ")}`);
+  }
+
+  switch (action as BrowserAction) {
+    case "navigate": {
+      if (typeof args.url !== "string" || !args.url) return fail("url is required for navigate");
+      const gate = gateUrl(ctx, args.url);
+      if (!gate.ok) return fail(`navigate refused: out-of-scope URL '${args.url}' (${gate.reason})`);
+      break;
+    }
+    case "click":
+    case "type":
+      if (typeof args.selector !== "string" || !args.selector) return fail(`selector is required for ${action}`);
+      if (action === "type" && typeof args.text !== "string") return fail("text is required for type");
+      break;
+    case "eval":
+      if (typeof args.value !== "string" || !args.value) return fail("value (JavaScript) is required for eval");
+      break;
   }
 
   const timeoutMs = deps.actionTimeoutMs ?? DEFAULT_ACTION_TIMEOUT_MS;
@@ -526,10 +502,7 @@ export async function executeBrowser(
       }
 
       case "navigate": {
-        const rawUrl = args.url as string | undefined;
-        if (!rawUrl) return fail("url is required for navigate");
-        const gate = gateUrl(ctx, rawUrl);
-        if (!gate.ok) return fail(`navigate refused: out-of-scope URL '${rawUrl}' (${gate.reason})`);
+        const rawUrl = args.url as string;
         const page = await driver.tab(tabName);
         const nav = await page.goto(rawUrl, { timeoutMs });
         // Post-navigation redirect re-check (0sec#218): goto follows redirects,
@@ -553,8 +526,7 @@ export async function executeBrowser(
       }
 
       case "click": {
-        const selector = args.selector as string | undefined;
-        if (!selector) return fail("selector is required for click");
+        const selector = args.selector as string;
         const page = await driver.tab(tabName);
         await page.click(selector, { timeoutMs });
         return {
@@ -570,18 +542,15 @@ export async function executeBrowser(
       }
 
       case "type": {
-        const selector = args.selector as string | undefined;
-        const text = args.text as string | undefined;
-        if (!selector) return fail("selector is required for type");
-        if (text === undefined) return fail("text is required for type");
+        const selector = args.selector as string;
+        const text = args.text as string;
         const page = await driver.tab(tabName);
         await page.type(selector, text, { timeoutMs });
         return { success: true, output: { tab: tabName, filled: selector, dialogs: page.drainDialogs() } };
       }
 
       case "eval": {
-        const expression = args.value as string | undefined;
-        if (!expression) return fail("value (JavaScript) is required for eval");
+        const expression = args.value as string;
         const page = await driver.tab(tabName);
         const raw = await page.evaluate(expression).catch((e: Error) => `Error: ${e.message}`);
         const result = typeof raw === "object" ? safeStringify(raw) : String(raw);
@@ -673,34 +642,3 @@ function pngDimensions(base64: string): { width: number; height: number } | unde
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// WIRING TODOs (registration requires editing shared / not-owned files):
-//
-// 1. REGISTRY (packages/core/src/agent/tools/index.ts + dispatch.ts — editable):
-//    - remove `browser` from reconToolDefinitions (recon.ts) and reconDispatch,
-//    - add `...browserToolDefinitions` to DOMAIN_DEFINITIONS and
-//      `import { browserToolDefinitions, browserDispatch } from "./browser.js"`,
-//    - add `...browserDispatch` to TOOL_DISPATCH in dispatch.ts.
-//    NOTE: dispatch.test.ts asserts registry⇄dispatch⇄method symmetry, so this
-//    must land together with step 2 or the suite fails.
-//
-// 2. EXECUTOR (packages/core/src/agent/tools.ts — shared monolith, NOT owned by
-//    this task): rewire `ToolExecutor.browserAction(args)` to delegate:
-//        return executeBrowser(this.ctx, args, { host: this._browserHost });
-//    holding a `_browserHost: BrowserDriverHost = {}` field and disposing
-//    `this._browserHost.driver` in `cleanup()`. Pass the scope-pinned interceptor
-//    (the existing `context.route → fetchTarget` block) into `createBrowserDriver`
-//    via BrowserDriverOptions.interceptor, and pass userAgent/extraHeaders from
-//    `this.ctx.attribution`. The old inline playwright `ensureBrowser`/switch is
-//    then deleted.
-//
-// 3. package.json: NO CHANGE NEEDED — `playwright: "^1.52.0"` is already an
-//    optionalDependency. (If puppeteer-core were chosen instead it would be
-//    `puppeteer-core: "^24"` — but see the DEPENDENCY DECISION header.)
-//
-// 4. CARD RENDERING (chat-screen.tsx / ToolCard.tsx — NOT owned): to draw a
-//    screenshot as an image card, add a `browser`/`image` kind to
-//    ToolResultMeta (types.ts) and populate `meta` from the screenshot result;
-//    ToolCard then renders the base64 PNG. Until then screenshots ride in
-//    `output.screenshot_base64` as they do today.
-// ─────────────────────────────────────────────────────────────────────────────

@@ -3,6 +3,8 @@ title: Configuration
 description: Runtime modes, scan modes, depth settings, state paths, env vars, feature flags, and diagnostics.
 ---
 
+> Status: 2026-09-13. Living document.
+
 Configure command options, provider credentials, console settings and run storage
 separately. Each section below gives its precedence rules.
 
@@ -300,9 +302,9 @@ explicit off settings remain effective.
 
 ### Security-gated import
 
-`0sec config import` refuses to change any security-sensitive setting
-(`allowModelSelfExtension`, `allowSubagentPeerMessaging`,
-`allowSubagentOperatorMessaging`) unless `--yes` is passed. The specific
+`0sec config import` refuses to change security-sensitive settings, including
+`allowModelSelfExtension`, `allowDevSourceUpdates`, `allowSubagentPeerMessaging`
+and `allowSubagentOperatorMessaging`, unless `--yes` is passed. The specific
 changes are printed so you know what was rejected.
 
 ### Settings reference
@@ -330,6 +332,7 @@ changes are printed so you know what was rejected.
 | `allowSubagentPeerMessaging` | boolean | `true` | Allow direct sibling-subagent messages |
 | `allowSubagentOperatorMessaging` | boolean | `true` | Allow sanitized child-to-operator transcript messages |
 | `allowModelSelfExtension` | boolean | `true` | Enable sandboxed model self-extension for new sessions, subject to role and capability gates |
+| `allowDevSourceUpdates` | boolean | `false` | Globally authorize trusted development-engine replacement between turns; requires `0SEC_DEV_SOURCE_ROOT` |
 | `theme` | built-in or installed theme ID | `slate` | Colour palette; installed themes live in `~/.0sec/themes` |
 | `showTokenUsage` | boolean | `true` | Per-turn input/output token line |
 | `showCost` | boolean | `true` | Estimated dollar cost, per turn and in the status bar |
@@ -347,6 +350,32 @@ acknowledged grant scoped to the canonical workspace.
 Autonomy, self-extension and host trust are separate controls. Desktop retains
 unscoped-standard and scoped-YOLO authorization.
 See [self-evolution](/improvement-plane/) for details.
+
+### Development engine updates
+
+This is separate from sandboxed self-extension. Enable **Development engine
+updates** in global settings only for a trusted source checkout. Project settings
+cannot grant it. Loading that code runs with the console process's host
+permissions, including credential access.
+
+Start a new development console from the built checkout:
+
+```bash
+env 0SEC_DEV_SOURCE_ROOT="$PWD" bun packages/cli/dist/index.js console
+```
+
+A configured `0dev` launcher can set the same variable. Existing sessions that
+started without this source-update wrapper cannot acquire it retroactively.
+
+When enabled, changed Core source is built into an immutable generation and
+activated at an idle boundary. Conversation, scope decisions, task progress and
+usage survive the handoff. A build or checkpoint rejection leaves the current
+engine active. Disabling the setting stops later replacements; it does not
+revert an already-active generation.
+
+The terminal/UI shell, injected provider and MCP clients, and shared package
+dependencies are not reloaded. Changes to those still require a rebuild and a
+new process. See [development engine replacement](/improvement-plane/#development-engine-replacement).
 
 ## Console credential store
 

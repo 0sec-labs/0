@@ -157,7 +157,7 @@ import type {
 } from "../events/bus.js";
 import { ToolHealthTracker } from "./tool-health.js";
 import type { ToolHealthRecordInput, ToolHealthSummary } from "./tool-health.js";
-import { TodoTracker, validateUpdateTodosArgs, buildTodosPayload } from "./todos.js";
+import { TodoTracker, validateUpdateTodosArgs, buildTodosPayload, todoInputSchema, MAX_TODOS } from "./todos.js";
 import type { TodoSnapshot } from "./todos.js";
 import {
   drainInbox,
@@ -2808,6 +2808,63 @@ export function buildOperatorQuestionRequest(
   return { ok: true, request: { requestId: idFactory(), questions } };
 }
 
+const oastProtocolCheckpointSchema = z.enum(["dns", "http", "smtp", "ldap"]);
+const oastInteractionCheckpointSchema = z.object({
+  protocol: oastProtocolCheckpointSchema,
+  timestamp: z.string(),
+  queryName: z.string(),
+  path: z.string().optional(),
+  method: z.string().optional(),
+  remoteAddress: z.string().optional(),
+  raw: z.string().optional(),
+}).strict();
+
+/** Data-only handoff ABI. Authority fields are required, never defaulted. */
+export const toolExecutorCheckpointSchema = z.object({
+  credentialTarget: z.string(),
+  rejectedDecoyFlags: z.array(z.string()),
+  scopedAuditGrants: z.array(z.string()),
+  scopedAuditDenials: z.array(z.string()),
+  assignedAgentNames: z.array(z.string()),
+  oastHandles: z.array(z.object({
+    id: z.string(),
+    handle: z.object({
+      id: z.string(), token: z.string(), host: z.string(),
+      httpUrl: z.string(), dnsHost: z.string(), createdAt: z.string(),
+    }).strict(),
+  }).strict()),
+  oastCandidates: z.array(z.object({ id: z.string(), candidate: z.string() }).strict()),
+  oastVerified: z.array(z.object({
+    id: z.string(),
+    oastClass: z.enum(["blind-ssrf", "blind-xss", "jndi", "oob-rce", "oob-sqli", "xxe-oob"]),
+    verdict: z.object({
+      verified: z.boolean(), confidence: z.number().min(0).max(1),
+      protocol: oastProtocolCheckpointSchema.nullable(),
+      evidence: z.string(), reason: z.string(),
+      interaction: oastInteractionCheckpointSchema.nullable(),
+    }).strict(),
+  }).strict()),
+  startedAt: z.number().finite().nonnegative(),
+  sourceFilesRead: z.array(z.string()),
+  totalNonDoneToolCalls: z.number().int().nonnegative(),
+  doneRejections: z.number().int().nonnegative(),
+  msgDrainTurn: z.number().int().min(-1),
+  msgDrainCount: z.number().int().nonnegative(),
+  todos: z.object({
+    items: z.array(todoInputSchema.required({ status: true }).extend({ id: z.string() }).strict()).max(MAX_TODOS),
+    revision: z.number().int().nonnegative(),
+  }).strict(),
+  toolHealth: z.array(z.object({
+    tool: z.string(),
+    category: z.enum(["missing-binary", "buffer-limit", "wrong-lockfile", "policy-denied", "scope-denied", "error"]),
+    message: z.string(), remedy: z.string().optional(),
+    count: z.number().int().positive(),
+    firstSeen: z.number().finite(), lastSeen: z.number().finite(),
+  }).strict()),
+}).strict();
+
+export type ToolExecutorCheckpoint = z.infer<typeof toolExecutorCheckpointSchema>;
+
 export class ToolExecutor {
   private db: osecDB | null;
   private ctx: ToolContext;
@@ -2837,7 +2894,7 @@ export class ToolExecutor {
    * — the anti-honeypot heuristic is a speed bump, not a hard wall.
    * See GitHub issue #82.
    */
-  private _rejectedDecoyFlags: Set<string> = new Set();
+  private _rejectedDecoyFlags: Set<string>;
 
   /**
    * Per-session memory for the scoped-source-audit escalation gate
@@ -2849,8 +2906,8 @@ export class ToolExecutor {
    * In-memory only; the executor is constructed once per console session and
    * discarded with it, so these are session-scoped and never persisted.
    */
-  private _scopedAuditGrants: Set<string> = new Set();
-  private _scopedAuditDenials: Set<string> = new Set();
+  private _scopedAuditGrants: Set<string>;
+  private _scopedAuditDenials: Set<string>;
 
   /**
    * Per-turn `check_messages` drain accounting. A child must not be able to
@@ -2867,7 +2924,7 @@ export class ToolExecutor {
    * reserved primary name "Main". Used to uniquify each spawned agent's
    * AdjectiveNoun name so no two agents in the fleet collide. Session-scoped.
    */
-  private _assignedAgentNames = new Set<string>([PRIMARY_AGENT_NAME]);
+  private _assignedAgentNames: Set<string>;
 
   /**
    * OAST interaction handles minted this scan, plus verified callback verdicts
@@ -2883,8 +2940,8 @@ export class ToolExecutor {
   // Populated incrementally inside `execute()` so `markDone` can refuse
   // calls from audit / review sub-agents that haven't inspected any
   // source. See `evaluateDoneCoverageGate` above.
-  private _startedAt: number = Date.now();
-  private _sourceFilesRead: Set<string> = new Set();
+  private _startedAt: number;
+  private _sourceFilesRead: Set<string>;
   private _totalNonDoneToolCalls: number = 0;
   private _doneRejections: number = 0;
 
@@ -2939,9 +2996,16 @@ export class ToolExecutor {
     db: osecDB | null = null,
     idFactory: () => string = () => randomUUID(),
     childRuntimeFactory?: NativeRuntime["forkForSubagent"],
+    initialCheckpoint?: ToolExecutorCheckpoint,
   ) {
     this.ctx = ctx;
-    this._credentialTarget = ctx.target;
+    this._credentialTarget = initialCheckpoint?.credentialTarget ?? ctx.target;
+    this._rejectedDecoyFlags = new Set(initialCheckpoint?.rejectedDecoyFlags);
+    this._scopedAuditGrants = new Set(initialCheckpoint?.scopedAuditGrants);
+    this._scopedAuditDenials = new Set(initialCheckpoint?.scopedAuditDenials);
+    this._assignedAgentNames = new Set(initialCheckpoint?.assignedAgentNames ?? [PRIMARY_AGENT_NAME]);
+    this._sourceFilesRead = new Set(initialCheckpoint?.sourceFilesRead);
+    this._startedAt = initialCheckpoint?.startedAt ?? Date.now();
     this.db = db;
     this._idFactory = idFactory;
     this._childRuntimeFactory = childRuntimeFactory;
@@ -2951,6 +3015,7 @@ export class ToolExecutor {
     this._toolHealth =
       ctx.toolHealth ??
       new ToolHealthTracker({
+        seed: initialCheckpoint?.toolHealth,
         emit: (event) => {
           eventBus.emit("tool_health", {
             tool: event.tool,
@@ -2964,10 +3029,80 @@ export class ToolExecutor {
     this._todos =
       ctx.todos ??
       new TodoTracker({
+        seed: initialCheckpoint?.todos,
         emit: (snap) => {
           eventBus.emit("todos", { ...buildTodosPayload(snap), scan_id: this.ctx.scanId });
         },
       });
+
+    if (initialCheckpoint) {
+      for (const { id, handle } of initialCheckpoint.oastHandles) this._oastHandles.set(id, structuredClone(handle));
+      for (const { id, candidate } of initialCheckpoint.oastCandidates) this._oastCandidates.set(id, candidate);
+      for (const { id, oastClass, verdict } of initialCheckpoint.oastVerified) {
+        this._oastVerified.set(id, { oastClass, verdict: structuredClone(verdict) });
+      }
+      this._totalNonDoneToolCalls = initialCheckpoint.totalNonDoneToolCalls;
+      this._doneRejections = initialCheckpoint.doneRejections;
+      this._msgDrainTurn = initialCheckpoint.msgDrainTurn;
+      this._msgDrainCount = initialCheckpoint.msgDrainCount;
+    }
+  }
+
+  // ── Checkpoint export (engine replacement boundary) ──────────────────
+
+  /**
+   * Produce a defensively-copied snapshot of this executor's memory state,
+   * suitable for JSON-serialization and later restoration into a new executor
+   * via the fifth constructor argument.
+   *
+   * **Explicitly excluded** (live resources drained by the caller / old engine):
+   *   - `_browserHost` (BrowserDriverHost — live browser tabs)
+   *   - `_playwrightAvailable` (lazily recomputed on the new instance)
+   *   - `_ptyManager` / `_pyKernel` (live PTY / Python kernel sessions)
+   *   - `_workerTree` / `_ownsWorkerTree` / `_workerFindings` (worker subprocesses)
+   *   - `_processManager` (ProcessManager — supervised monitor processes)
+   *   - `_executionContext` (AsyncLocalStorage — per-execution, not per-session)
+   *   - `db` / `ctx` (caller-provided, re-passed to the new constructor)
+   *   - `_idFactory` / `_childRuntimeFactory` (caller-provided, re-passed)
+   *
+   * The returned data is a plain struct — Set/Map fields are flattened to
+   * JSON-safe arrays. Callers should pass it through
+   * `toolExecutorCheckpointSchema` for structural validation.
+   */
+  exportCheckpoint(): ToolExecutorCheckpoint {
+    // Background agents/workers can mutate findings, authority memory, and
+    // identifier state after the snapshot is taken but before the old engine
+    // retires. Reject the checkpoint while owned workers are still live so
+    // callers (turn-engine) wait for worker completion or operator intervention
+    // before the handoff. Borrowed trees (owned by a parent executor) are not
+    // checked — the parent is responsible for its own liveness gate.
+    if (this._ownsWorkerTree && this._workerTree.hasLiveWorkers()) {
+      throw new Error(
+        "Cannot export checkpoint while owned background agents are still running. " +
+        "Wait for workers to complete or stop them before the engine replacement.",
+      );
+    }
+    return {
+      credentialTarget: this._credentialTarget,
+      rejectedDecoyFlags: [...this._rejectedDecoyFlags],
+      scopedAuditGrants: [...this._scopedAuditGrants],
+      scopedAuditDenials: [...this._scopedAuditDenials],
+      assignedAgentNames: [...this._assignedAgentNames],
+      oastHandles: [...this._oastHandles.entries()].map(([id, handle]) => ({ id, handle: structuredClone(handle) })),
+      oastCandidates: [...this._oastCandidates.entries()].map(([id, candidate]) => ({ id, candidate })),
+      oastVerified: [...this._oastVerified.entries()].map(([id, value]) => ({ id, oastClass: value.oastClass, verdict: structuredClone(value.verdict) })),
+      startedAt: this._startedAt,
+      sourceFilesRead: [...this._sourceFilesRead],
+      totalNonDoneToolCalls: this._totalNonDoneToolCalls,
+      doneRejections: this._doneRejections,
+      msgDrainTurn: this._msgDrainTurn,
+      msgDrainCount: this._msgDrainCount,
+      todos: {
+        items: this._todos.list(),
+        revision: this._todos.revision,
+      },
+      toolHealth: this._toolHealth.list().map(event => ({ ...event })),
+    };
   }
 
   /**

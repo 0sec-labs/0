@@ -6,7 +6,7 @@ import type { HarnessGenerationSpec } from "@0sec/shared";
 import { ExecutablePluginManager, type PluginVersionRecord } from "./executable.js";
 import { SelfExtensionRegistry } from "./self-extension.js";
 import { BUILTIN_GUARDS } from "./guards.js";
-import { LiveHarnessHost } from "./live-harness.js";
+import { LiveHarnessHost, type LiveHarnessCheckpoint } from "./live-harness.js";
 
 const request = { system: "regression", messages: [], tools: [] };
 const input = { sessionId: "regression", phase: "idle" as const, iterations: 0, tokensUsed: 0, tokenBudget: 1000 };
@@ -409,5 +409,90 @@ describe("retained live harness", () => {
     }] };
     expect((await host.drive(original))?.content).toEqual([{ type: "text", text: "false:provider-local edit" }]);
     expect(original.messages[0]?.content[0]?.text).toBe("original request");
+  });
+
+  it("exports checkpoint with active state and pending, then restores on a fresh host preserving generation id, provider state, pending, and rollback", async () => {
+    // Establish active generation with non-null provider state
+    const id = await activate(generation("checkpoint-restore"));
+    await host.drive(request); // count becomes 1
+    expect(host.snapshot().generationId).toBe(id);
+    // Submit a pending replacement without committing it
+    const pendingSpec = generation("replacement");
+    const pendingResult = await host.control({ action: "submit", generation: pendingSpec });
+    const pendingId = pendingResult.pendingGenerationId!;
+    expect(host.snapshot().status).toBe("pending");
+    // Export checkpoint
+    const checkpoint = host.exportCheckpoint();
+    await host.close();
+    // Fresh host sharing the same retained generation store
+    const host2 = new LiveHarnessHost({ executablePlugins: manager, root: join(root, "harness"), workspaceRoot: root, allowTrusted: () => trusted });
+    try {
+      await host2.restoreCheckpoint(checkpoint);
+      // Generation id and pending survive
+      expect(host2.snapshot().generationId).toBe(id);
+      expect(host2.snapshot().pendingGenerationId).toBe(pendingId);
+      expect(host2.snapshot().status).toBe("pending");
+      // Provider state carried over — activation receives {count:1}, next drive increments to 2
+      expect((await host2.drive(request))?.content).toEqual([{ type: "text", text: "checkpoint-restore:2" }]);
+      // Commit the pending replacement through normal checkpoint
+      await host2.checkpoint(input);
+      expect(host2.snapshot().generationId).toBe(pendingId);
+      // Rollback to original generation works
+      await host2.control({ action: "rollback", generationId: id });
+      await host2.checkpoint(input);
+      expect(host2.snapshot().generationId).toBe(id);
+      expect(host2.snapshot().previousGenerationId).toBe(pendingId);
+      expect((await host2.drive(request))?.content).toEqual([{ type: "text", text: "checkpoint-restore:3" }]);
+    } finally {
+      await host2.close();
+    }
+  });
+
+  it("rejects export when closing, outstanding leases, serialized work, or queued controls exist", async () => {
+    // Closing
+    host.close();
+    expect(() => host.exportCheckpoint()).toThrow("closing");
+    // Leases, controls, and gates check on a fresh host
+    const host2 = new LiveHarnessHost({ executablePlugins: manager, root: join(root, "harness"), workspaceRoot: root, allowTrusted: () => trusted });
+    try {
+      // Activate a generation on host2 directly
+      await host2.control({ action: "submit", generation: generation("export-guard") });
+      await host2.checkpoint(input);
+      // Outstanding leases
+      const driving = host2.drive(request);
+      expect(() => host2.exportCheckpoint()).toThrow("leases");
+      await driving;
+      // Queued controls
+      const pendingCtrl = host2.control({ action: "submit", generation: generation("guard-pending") });
+      expect(() => host2.exportCheckpoint()).toThrow("control");
+      await pendingCtrl;
+      // Serialized work (gates > 0)
+      const serialized = host2.refreshViews(input);
+      expect(() => host2.exportCheckpoint()).toThrow("work");
+      await serialized;
+    } finally {
+      await host2.close();
+    }
+  });
+
+  it("rejects restore with missing retained generation references", async () => {
+    const host2 = new LiveHarnessHost({ executablePlugins: manager, root: join(root, "harness"), workspaceRoot: root, allowTrusted: () => trusted });
+    try {
+      const bad: LiveHarnessCheckpoint = {
+        activeId: "00000000-0000-4000-8000-000000000000", previousId: null, pending: undefined,
+        providerStates: {}, lastInput: { sessionId: "", phase: "idle", iterations: 0, tokensUsed: 0, tokenBudget: 0 },
+        failedUiGenerations: [],
+      };
+      await expect(host2.restoreCheckpoint(bad)).rejects.toThrow("not found in retained history");
+      // Pending reference also validated
+      const badPending: LiveHarnessCheckpoint = {
+        activeId: null, previousId: null, pending: "00000000-0000-4000-8000-000000000001",
+        providerStates: {}, lastInput: { sessionId: "", phase: "idle", iterations: 0, tokensUsed: 0, tokenBudget: 0 },
+        failedUiGenerations: [],
+      };
+      await expect(host2.restoreCheckpoint(badPending)).rejects.toThrow("not found in retained history");
+    } finally {
+      await host2.close();
+    }
   });
 });

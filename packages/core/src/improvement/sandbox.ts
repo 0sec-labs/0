@@ -1,5 +1,9 @@
 import { execFile, spawn } from "node:child_process";
+import type { ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
+import { stat } from "node:fs/promises";
+import { userInfo } from "node:os";
+import { promisify } from "node:util";
 import { StringDecoder } from "node:string_decoder";
 import { canonicalEvolutionJson, parseEvolutionConfig } from "./config.js";
 import { verifyEvolutionSnapshot } from "./registry.js";
@@ -9,6 +13,54 @@ import type { EvolutionConfig, EvolutionExecution, EvolutionSandbox } from "./ty
 
 const IMAGE_ID = /^sha256:[a-f0-9]{64}$/;
 const CONTROL_TIMEOUT_MS = 5000;
+
+const probeDockerAccess = promisify(execFile);
+
+/** Refresh an already-granted Linux group only for the default local socket.
+ * Never use a Docker failure as permission to execute generated code on host.
+ * Recheck each invocation: account membership and Docker context can change
+ * while the console remains open.
+ */
+async function withDockerRecovery(binary: string, args: string[], signal?: AbortSignal): Promise<{ binary: string; args: string[] }> {
+  signal?.throwIfAborted();
+  const direct = { binary, args };
+  if (binary !== "docker" || process.platform !== "linux") return direct;
+  const host = process.env.DOCKER_HOST;
+  if (process.env.DOCKER_CONTEXT || (host && host !== "unix:///var/run/docker.sock" && host !== "unix:///run/docker.sock")) return direct;
+  if (!process.getuid || !process.getgid || !process.getgroups || process.getuid() === 0) return direct;
+  const socketPath = host?.slice(7) || "/var/run/docker.sock";
+  const options = { env: dockerEnvironment(), timeout: CONTROL_TIMEOUT_MS, encoding: "utf8" as const, maxBuffer: 65536, signal };
+  let group: string;
+  try {
+    const socket = await stat(socketPath);
+    if (!socket.isSocket() || socket.uid === process.getuid() || !(socket.mode & 0o020) || (socket.mode & 0o002)) return direct;
+    if (process.getgid() === socket.gid || process.getgroups().includes(socket.gid)) return direct;
+    const membership = await probeDockerAccess("id", ["-G", "--", userInfo().username], options);
+    if (!membership.stdout.trim().split(/\s+/).includes(String(socket.gid))) return direct;
+    // A persisted currentContext can select a remote daemon even without an
+    // environment override. Inspecting context metadata never opens the socket.
+    const context = await probeDockerAccess("docker", ["context", "inspect", "--format", "{{.Endpoints.docker.Host}}"], options);
+    if (!["unix:///var/run/docker.sock", "unix:///run/docker.sock"].includes(context.stdout.trim())) return direct;
+    const record = await probeDockerAccess("getent", ["group", String(socket.gid)], options);
+    const [name, , gid] = record.stdout.trim().split(":");
+    if (!name || gid !== String(socket.gid) || !/^[A-Za-z_][A-Za-z0-9_.-]*\$?$/.test(name)) return direct;
+    group = name;
+  } catch {
+    signal?.throwIfAborted();
+    // Inconclusive identity probes do not grant anything; let Docker report
+    // its real connection failure through the ordinary control path.
+    return direct;
+  }
+  let sg: string;
+  try {
+    sg = (await probeDockerAccess("which", ["sg"], options)).stdout.trim();
+    if (!sg) throw new Error("sg unavailable");
+  } catch {
+    signal?.throwIfAborted();
+    throw new Error(`Docker socket access is granted to your account but absent from this process. Install sg (shadow-utils), or launch 0dev from a shell with the ${group} group active. No host-execution fallback was used.`);
+  }
+  return { binary: sg, args: [group, "-c", `exec ${quoteCommand([binary, ...args])}`] };
+}
 
 // Node >=24 supplies this API; the repository's ES2022 lib omits its type.
 const deferredPromise = Promise as PromiseConstructor & {
@@ -23,14 +75,67 @@ function dockerEnvironment(): NodeJS.ProcessEnv {
   return env;
 }
 
-function control(binary: string, args: string[], timeout: number, signal?: AbortSignal): Promise<string> {
+function killDockerProcessTree(child: ChildProcess): void {
+  try {
+    if (process.platform !== "win32" && child.pid) process.kill(-child.pid, "SIGKILL");
+    else child.kill("SIGKILL");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ESRCH") throw error;
+  }
+}
+
+async function control(binary: string, args: string[], timeout: number, signal?: AbortSignal): Promise<string> {
+  const deadline = AbortSignal.timeout(timeout);
+  const operationSignal = signal ? AbortSignal.any([signal, deadline]) : deadline;
+  const { binary: actualBinary, args: actualArgs } = await withDockerRecovery(binary, args, operationSignal);
+  operationSignal.throwIfAborted();
   const { promise, resolve, reject } = deferredPromise.withResolvers<string>();
-  execFile(binary, args, { env: dockerEnvironment(), encoding: "utf8", timeout, killSignal: "SIGKILL", maxBuffer: 65536, signal },
-    (error, stdout, stderr) => {
-      if (error) reject(new Error(`Docker ${args[0]} failed: ${stderr.trim() || error.message}`));
-      else resolve(stdout.trim());
-    });
-  return promise;
+  // execFile does not forward detached to spawn. Use a real process-group
+  // leader so a supervising sg process cannot leave descendants holding pipes.
+  const child = spawn(actualBinary, actualArgs, {
+    env: dockerEnvironment(), detached: process.platform !== "win32",
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  let stdout = "";
+  let stderr = "";
+  let outputBytes = 0;
+  let failure: Error | undefined;
+  const stop = () => {
+    try { killDockerProcessTree(child); }
+    catch (error) { reject(error); }
+  };
+  const collect = (chunk: string, errorStream: boolean) => {
+    if (failure) return;
+    outputBytes += Buffer.byteLength(chunk);
+    if (outputBytes > 65536) {
+      failure = new Error(`Docker ${args[0]} exceeded the control output limit`);
+      stop();
+      return;
+    }
+    if (errorStream) stderr += chunk;
+    else stdout += chunk;
+  };
+  child.stdout.setEncoding("utf8").on("data", (chunk: string) => collect(chunk, false));
+  child.stderr.setEncoding("utf8").on("data", (chunk: string) => collect(chunk, true));
+  child.once("error", reject);
+  child.once("exit", stop);
+  child.once("close", (code, exitSignal) => {
+    if (failure) reject(failure);
+    else if (code !== 0) reject(new Error(`Docker ${args[0]} failed: ${stderr.trim() || exitSignal || `exit ${code}`}`));
+    else resolve(stdout.trim());
+  });
+  const abort = () => {
+    failure ??= new Error(`Docker ${args[0]} cancelled: ${String(operationSignal.reason)}`);
+    stop();
+  };
+  operationSignal.addEventListener("abort", abort, { once: true });
+  if (operationSignal.aborted) abort();
+  try {
+    return await promise;
+  } finally {
+    operationSignal.removeEventListener("abort", abort);
+    child.removeListener("exit", stop);
+  }
 }
 
 /** Resolve a locally installed image; never pull or substitute a mutable image. */
@@ -103,12 +208,18 @@ async function runDockerSnapshot(
       ], Math.min(config.timeoutMs, 30000), signal);
       created = true;
       signal?.throwIfAborted();
+      const recoveryBudget = config.timeoutMs - (performance.now() - start);
+      if (recoveryBudget <= 0) throw new Error("sandbox timeout during container creation");
+      const recoveryDeadline = AbortSignal.timeout(Math.ceil(recoveryBudget));
+      const recoverySignal = signal ? AbortSignal.any([signal, recoveryDeadline]) : recoveryDeadline;
+      const startInv = await withDockerRecovery(dockerBinary, ["start", "--attach", "--interactive", name], recoverySignal);
       const remainingMs = config.timeoutMs - (performance.now() - start);
       if (remainingMs <= 0) throw new Error("sandbox timeout during container creation");
       const pending = deferredPromise.withResolvers<EvolutionExecution>();
-      const child = spawn(dockerBinary, ["start", "--attach", "--interactive", name], {
-        env: dockerEnvironment(), stdio: ["pipe", "pipe", "pipe"],
+      const child = spawn(startInv.binary, startInv.args, {
+        env: dockerEnvironment(), stdio: ["pipe", "pipe", "pipe"], detached: process.platform !== "win32",
       });
+      child.once("exit", () => killDockerProcessTree(child));
       const stdout: Buffer[] = [];
       const stderr: Buffer[] = [];
       let stdoutBytes = 0;
@@ -119,7 +230,7 @@ async function runDockerSnapshot(
       let settled = false;
       const stop = (reason: string) => {
         failure ??= reason;
-        child.kill("SIGKILL");
+        killDockerProcessTree(child);
       };
       const onAbort = () => stop("sandbox cancelled by operator");
       const timer = setTimeout(() => { timedOut = true; stop("sandbox execution timed out"); }, remainingMs);

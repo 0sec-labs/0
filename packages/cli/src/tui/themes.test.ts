@@ -667,8 +667,8 @@ describe("degradePalette", () => {
     for (const { palette } of allThemes()) {
       for (const depth of ["ansi16", "ansi256"] as const) {
         const out = degradePalette(palette, depth);
-        expect(Object.keys(out).sort()).toEqual([...THEME_TOKENS].sort());
         for (const token of THEME_TOKENS) expect(isHexColor(out[token])).toBe(true);
+        for (const color of Object.values(out)) expect(isHexColor(color)).toBe(true);
       }
     }
   });

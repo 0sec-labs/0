@@ -66,6 +66,15 @@ describe("normalizeSettings", () => {
     expect(loadSettings(home).allowModelSelfExtension).toBe(false);
   });
 
+  it("defaults allowDevSourceUpdates off and round-trips a global toggle", () => {
+    const home = makeHome();
+    expect(loadSettings(home).allowDevSourceUpdates).toBe(false);
+    saveSettings({ ...loadSettings(home), allowDevSourceUpdates: true }, home);
+    expect(loadSettings(home).allowDevSourceUpdates).toBe(true);
+    saveSettings({ ...loadSettings(home), allowDevSourceUpdates: false }, home);
+    expect(loadSettings(home).allowDevSourceUpdates).toBe(false);
+  });
+
   it("falls back per key when every value has the wrong type", () => {
     const raw = {
       showStatusBar: "yes",
@@ -128,20 +137,25 @@ describe("normalizeSettings", () => {
     expect(normalizeSettings({ transcriptDetail: "folded" }).transcriptDetail).toBe("expanded");
   });
 
-  it("keeps self-evolution disabled by default and accepts only explicit boolean gates", () => {
+  it("keeps security booleans disabled by default and accepts only explicit boolean gates", () => {
+    expect(DEFAULT_SETTINGS.allowDevSourceUpdates).toBe(false);
     expect(DEFAULT_SETTINGS.autoEvolveFinderLenses).toBe(false);
     expect(DEFAULT_SETTINGS.autoPromoteFinderLenses).toBe(false);
     expect(normalizeSettings({
+      allowDevSourceUpdates: true,
       autoEvolveFinderLenses: true,
       autoPromoteFinderLenses: true,
     })).toMatchObject({
+      allowDevSourceUpdates: true,
       autoEvolveFinderLenses: true,
       autoPromoteFinderLenses: true,
     });
     expect(normalizeSettings({
+      allowDevSourceUpdates: "yes",
       autoEvolveFinderLenses: "yes",
       autoPromoteFinderLenses: 1,
     })).toMatchObject({
+      allowDevSourceUpdates: false,
       autoEvolveFinderLenses: false,
       autoPromoteFinderLenses: false,
     });
@@ -676,14 +690,17 @@ describe("operator-only privacy and updates", () => {
       diagnosticReporting: "off",
       diagnosticReportingPrompted: true,
       updatePolicy: "off",
+      allowDevSourceUpdates: true,
       showLogo: false,
     });
     const { settings, sources } = loadLayeredSettings({ homeDir: home, projectDir: project });
     expect(settings.diagnosticReporting).toBe("automatic");
     expect(settings.diagnosticReportingPrompted).toBe(false);
     expect(settings.updatePolicy).toBe("automatic");
+    expect(settings.allowDevSourceUpdates).toBe(false);
     expect(sources.diagnosticReporting).toBe("default");
     expect(sources.updatePolicy).toBe("default");
+    expect(sources.allowDevSourceUpdates).toBe("default");
     expect(settings.showLogo).toBe(false);
   });
 
@@ -695,18 +712,22 @@ describe("operator-only privacy and updates", () => {
       diagnosticReporting: choice,
       diagnosticReportingPrompted: false,
       updatePolicy: false,
+      allowDevSourceUpdates: true,
     }));
     writeProjectRaw(project, {
       diagnosticReporting: "automatic",
       diagnosticReportingPrompted: true,
       updatePolicy: "automatic",
+      allowDevSourceUpdates: false,
     });
     const { settings, sources } = loadLayeredSettings({ homeDir: home, projectDir: project });
     expect(settings.diagnosticReporting).toBe("off");
     expect(settings.diagnosticReportingPrompted).toBe(false);
     expect(settings.updatePolicy).toBe("off");
+    expect(settings.allowDevSourceUpdates).toBe(true);
     expect(sources.diagnosticReporting).toBe("global");
     expect(sources.updatePolicy).toBe("global");
+    expect(sources.allowDevSourceUpdates).toBe("global");
   });
 
   it("persists an operator choice without allowing project consent overrides", () => {
@@ -714,6 +735,7 @@ describe("operator-only privacy and updates", () => {
     const project = makeProjectDir();
     saveSettings({
       ...DEFAULT_SETTINGS,
+      allowDevSourceUpdates: true,
       diagnosticReporting: "ask",
       diagnosticReportingPrompted: true,
       updatePolicy: "notify",
@@ -722,13 +744,16 @@ describe("operator-only privacy and updates", () => {
       diagnosticReporting: "automatic",
       diagnosticReportingPrompted: false,
       updatePolicy: "automatic",
+      allowDevSourceUpdates: false,
     });
     const settings = loadSettings(home, project);
+    expect(settings.allowDevSourceUpdates).toBe(true);
     expect(settings.diagnosticReporting).toBe("ask");
     expect(settings.diagnosticReportingPrompted).toBe(true);
     expect(settings.updatePolicy).toBe("notify");
-    saveSettings({ ...settings, diagnosticReporting: "automatic", updatePolicy: "automatic" }, home);
-    writeProjectRaw(project, { diagnosticReporting: "off", updatePolicy: "off" });
+    saveSettings({ ...settings, allowDevSourceUpdates: false, diagnosticReporting: "automatic", updatePolicy: "automatic" }, home);
+    writeProjectRaw(project, { allowDevSourceUpdates: true, diagnosticReporting: "off", updatePolicy: "off" });
+    expect(loadSettings(home, project).allowDevSourceUpdates).toBe(false);
     expect(loadSettings(home, project).diagnosticReporting).toBe("automatic");
     expect(loadSettings(home, project).updatePolicy).toBe("automatic");
   });
@@ -740,6 +765,7 @@ describe("operator-only privacy and updates", () => {
     expect(setProjectOverride("diagnosticReporting", "automatic", project)).toBe(false);
     expect(setProjectOverride("diagnosticReportingPrompted", true, project)).toBe(false);
     expect(setProjectOverride("updatePolicy", "automatic", project)).toBe(false);
+    expect(setProjectOverride("allowDevSourceUpdates", true, project)).toBe(false);
     expect(readProjectOverrides(project)).toEqual({ showLogo: false });
   });
 });
@@ -823,6 +849,11 @@ describe("project override writes", () => {
   it("sanitizeOverrides keeps known valid keys and drops the rest, sparsely", () => {
     const patch = sanitizeOverrides({ showLogo: false, density: "compact", nope: 1, showStatusBar: "x" });
     expect(patch).toEqual({ showLogo: false, density: "compact" });
+  });
+
+  it("drops operator-only allowDevSourceUpdates from project overrides", () => {
+    const patch = sanitizeOverrides({ allowDevSourceUpdates: true, showLogo: false });
+    expect(patch).toEqual({ showLogo: false });
   });
 
   it("round-trips a sparse project override", () => {

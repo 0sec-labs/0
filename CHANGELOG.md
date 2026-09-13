@@ -17,6 +17,10 @@ on the published npm package and the GitHub Release tag.
 - Add explicit Unicode, Nerd Font, and ASCII symbol choices to migrated operator
   dialogs and sidebar components, with Unicode as the default. This migration
   does not yet cover all chat, transcript, approval, and composer glyphs.
+- Add opt-in development-engine replacement between turns, preserving the live
+  conversation, scope decisions, task state and accounting. Failed candidates
+  retain the active engine. This trusted host-code path is separate from
+  sandboxed self-extension and does not reload the terminal shell or injected clients.
 
 ### Changed
 
@@ -27,6 +31,14 @@ on the published npm package and the GitHub Release tag.
 
 ### Fixed
 
+- Keep unlimited turn budgets out of finite-JSON harness checkpoints without
+  weakening snapshot validation.
+- Preserve contained source-file aliases in immutable engine generations and
+  reject directory aliases or links outside the selected Core source.
+- Terminate sandbox controller process groups on cancellation, deadlines and
+  output overflow. Reuse already-approved Docker group access without host
+  execution fallback or privilege elevation.
+- Validate browser arguments and initial URL scope before acquiring a backend.
 - Show shared batch instructions and worker briefs in bounded, expandable Task
   cards without hiding the tool result. Pass shared instructions to every
   `spawn_agents` child alongside its own task.
@@ -64,6 +76,11 @@ on the published npm package and the GitHub Release tag.
   saved credentials bound to their original origin across target/mode changes.
 - Block unanchored shared-address-space HTTP destinations, including
   IPv4-mapped DNS answers, while retaining explicit internal targets.
+- Commit each work-plan transition and its audit records atomically, reducing
+  repeated synchronous database flushes and rolling back partial transitions
+  when audit artifact storage fails.
+- Reuse isolated empty database schemas in pipeline fixtures and load hunt
+  orchestration before timing ledger behavior.
 
 ## [0.16.3] - 2026-09-12
 

@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { createConsoleSession, type ConsoleSession, type ConsoleSessionConfig } from "@0sec/core";
 import { osecDB } from "@0sec/db";
 import { createConversationHistory } from "./conversation-history.js";
+import { withDevEngineUpdates } from "./dev-engine-updates.js";
 
 /** Local frontends share the findings store with history and own its connection. */
 export function createLocalConsoleSession(
@@ -21,23 +22,20 @@ export function createLocalConsoleSession(
       }, scanId);
       ownsScan = true;
     }
-    const session = createConsoleSession({
+    const engineConfig: ConsoleSessionConfig = {
       ...config,
       scanId,
       db,
       conversationHistory: config.conversationHistory ?? createConversationHistory(),
-    });
-    const cleanup = session.cleanup;
-    let closing: Promise<void> | undefined;
-    session.cleanup = () => closing ??= (async () => {
+    };
+    const session = createConsoleSession(engineConfig);
+    return withDevEngineUpdates(session, engineConfig, (completed) => {
       try {
-        await cleanup();
-        if (ownsScan) db.completeScan(scanId, { source: "console" });
+        if (completed && ownsScan) db.completeScan(scanId, { source: "console" });
       } finally {
         db.close();
       }
-    })();
-    return session;
+    });
   } catch (error) {
     try {
       if (ownsScan) db.failScan(scanId, error instanceof Error ? error.message : String(error));

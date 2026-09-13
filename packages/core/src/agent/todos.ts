@@ -177,6 +177,18 @@ export function validateUpdateTodosArgs(raw: unknown): UpdateTodosValidation {
 
 // ── Tracker ──────────────────────────────────────────────────────────────
 
+/**
+ * Seed data to restore a TodoTracker's state without emitting fake events.
+ * Used by ToolExecutor.checkpoint to reconstruct the plan across engine
+ * replacement boundaries.
+ */
+export interface TodoSeedData {
+  /** Restored plan items (defensive copy is taken). */
+  items: TodoItem[];
+  /** Monotonic revision from the prior instance. */
+  revision: number;
+}
+
 export interface TodoTrackerOptions {
   /**
    * Sink invoked once per CHANGE (a `set` that actually alters the plan), never
@@ -186,6 +198,12 @@ export interface TodoTrackerOptions {
   emit?: (snapshot: TodoSnapshot) => void;
   /** Injectable id factory (0-based index → id). Defaults to `todo-${i+1}`. */
   idFactory?: (index: number) => string;
+  /**
+   * Optional seed to restore tracked state without emitting fake events.
+   * When provided, `items` and `revision` are loaded directly into private
+   * fields; the emit callback is NOT invoked.
+   */
+  seed?: TodoSeedData;
 }
 
 function defaultId(index: number): string {
@@ -215,6 +233,10 @@ export class TodoTracker {
   constructor(opts: TodoTrackerOptions = {}) {
     this.emit = opts.emit;
     this.idFactory = opts.idFactory ?? defaultId;
+    if (opts.seed) {
+      this.items = opts.seed.items.map((t) => ({ ...t }));
+      this._revision = opts.seed.revision;
+    }
   }
 
   /**

@@ -376,7 +376,7 @@ export function webPentestPrompt(target: string, opts?: { hasBrowser?: boolean; 
 
 You have a **browser** tool for JavaScript-rendered pages and XSS confirmation.
 Actions: navigate, click, type, eval, get_content, screenshot, list_tabs, close.
-- Multi-tab: pass `tab` (e.g. tab:"authed", tab:"victim") to keep several pages open across turns; list_tabs shows them and close releases one (or all:true for every tab).
+- Multi-tab: pass \`tab\` (e.g. tab:"authed", tab:"victim") to keep several pages open across turns; list_tabs shows them and close releases one (or all:true for every tab).
 - For XSS: use browser to navigate to a page with an injected payload, then check the "dialogs" array — if alert/confirm/prompt fires, XSS is confirmed
 - Use for pages that require JavaScript rendering (SPAs, dynamic forms)
 - Use eval to run arbitrary JS in the page context; type fills a field, get_content returns HTML + visible text
@@ -920,7 +920,7 @@ Use read_file and run_command to analyze the code BEFORE attacking.${FILE_EDIT_T
 You have a **browser** tool for JavaScript-rendered pages and XSS confirmation.
 Actions: navigate, click, type, eval, get_content, screenshot, list_tabs, close.
 - Use browser to navigate to pages that require JS rendering
-- Multi-tab: pass `tab` to keep several pages open across turns; list_tabs / close manage them
+- Multi-tab: pass \`tab\` to keep several pages open across turns; list_tabs / close manage them
 - For XSS: use bash/curl to find reflection points, then use browser to navigate to the injected page and check the dialogs array in the response — if alert/confirm/prompt fires, XSS is confirmed
 - Use eval to run arbitrary JS in the page context
 - Combine with bash for complex attack chains (e.g., bash to find injection points, browser to confirm XSS fires)

@@ -49,6 +49,8 @@ import { classifyToolRisk } from "../agent/destructive-classifier.js";
 import { normalizeScopeHostname, ScopePolicy } from "../scope/scope.js";
 import { eventBus } from "../events/bus.js";
 import { createSessionObjectiveService } from "./session-objective.js";
+import { consoleSessionCheckpointSchema } from "./session-checkpoint.js";
+import type { ConsoleSessionCheckpoint } from "./session-checkpoint.js";
 import { shellTokens } from "../agent/shell-tokens.js";
 import { drainInbox } from "../hub/mailbox.js";
 import { renderInboundBatch } from "../agent/agent-messaging.js";
@@ -564,11 +566,34 @@ export interface ConsoleSessionConfig {
    * conversation-history tools are advertised and the model never sees them.
    */
   conversationHistory?: ConsoleConversationHistory;
+  /**
+   * A checkpoint from a prior console session. When provided, the session is
+   * seeded from this checkpoint's state (messages, scope, denied sets,
+   * self-extension registrations, etc.) instead of starting fresh. The caller
+   * MUST construct the candidate session with this checkpoint BEFORE calling
+   * {@link ConsoleSession.prepareHandoff} on the old session, so a candidate
+   * construction failure leaves the old engine fully usable.
+   *
+   * Version is validated at construction time before any resources are acquired;
+   * an incompatible version causes a synchronous throw with a clear message.
+   */
+  initialCheckpoint?: ConsoleSessionCheckpoint;
+  /**
+   * Developer-mode source root for 0dev live updates. When provided, the
+   * default system prompt includes brief guidance that the core engine source
+   * at this path can be edited with authorized file tools and that engine
+   * handoff happens after the current turn. Only set when the operator has
+   * explicitly opted in via `allowDevSourceUpdates`. The new factory always
+   * rebuilds the default prompt from fresh source on engine replacement.
+   */
+  developmentSourceRoot?: string;
 }
 
 /** A live console session: persistent history + a `send()` per operator line. */
 export interface ConsoleSession {
   readonly scanId: string;
+  /** Restored executable tools and harness providers are usable after this resolves. */
+  readonly ready: Promise<void>;
   readonly harness?: LiveHarnessHost;
   readonly systemPrompt: string;
   readonly tools: ToolDefinition[];
@@ -609,9 +634,17 @@ export interface ConsoleSession {
   stopPersistentAgent(agentId: string): Promise<boolean>;
   /** Drain all owned workers without ending this conversation. */
   stopPersistentAgents(): Promise<void>;
+  /** Copy quiescent state; rejects pending initialization, turns, workers or harness actions. */
+  exportCheckpoint(): ConsoleSessionCheckpoint;
+  /**
+   * Retire engine resources without closing caller-owned MCP clients. Preconditions
+   * fail before retirement; subsequent cleanup failures are returned as warnings.
+   */
+  prepareHandoff(): Promise<{ warnings?: string[] }>;
   /** Release tool resources (browser/PTY) held by the executor. */
   cleanup(): Promise<void>;
 }
+
 
 /**
  * Runaway backstop for tool-call rounds in one turn.
@@ -655,6 +688,11 @@ export function buildConsoleSystemPrompt(opts: {
   target?: string;
   scanId: string;
   autonomyMode?: ConsoleAutonomyMode;
+  /** Developer-mode source root for 0dev live updates. When provided, brief
+   * guidance is appended explaining that the engine source can be edited and
+   * that handoff preserves conversation/scope/refusals. Only set when the
+   * operator has opted in via allowDevSourceUpdates. */
+  developmentSourceRoot?: string;
 }): string {
   const mode = opts.autonomyMode ?? DEFAULT_AUTONOMY_MODE;
   const autonomyInstruction = mode === "yolo"
@@ -712,6 +750,17 @@ export function buildConsoleSystemPrompt(opts: {
       : "No target is set yet; ask the operator for one when a tool needs it.",
     "An operator message consisting only of an HTTP(S) URL or hostname selects the current target without resetting the session. update_target records discovered profile information; it does not authorize new targets.",
     `Session id: ${opts.scanId}`,
+    ...(opts.developmentSourceRoot
+      ? [
+          "",
+          "DEVELOPER MODE — the core engine source at",
+          `${opts.developmentSourceRoot}/packages/core/src/ can be edited with authorized file tools;`,
+          "source build and engine handoff happen after the current user turn,",
+          "preserving conversation, scope, and refusals. Sandboxed self_extend is",
+          "independent. CLI/UI shell and shared dependencies are not reloaded.",
+          "Active executable tools survive reload.",
+        ]
+      : []),
   ].join("\n");
 }
 
@@ -1550,54 +1599,65 @@ async function dispatchConversationHistoryTool(call: ToolCall, history: ConsoleC
  * runs the model and its tool calls to a natural stop and returns control.
  */
 export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSession {
-  const scanId = config.scanId ?? `console-${randomUUID()}`;
-  const workspaceRoot = resolve(config.workspaceRoot ?? process.cwd());
-  const role: AgentRole = config.role ?? "audit";
-  let autonomyMode: ConsoleAutonomyMode = config.autonomyMode ?? DEFAULT_AUTONOMY_MODE;
+  const cp = config.initialCheckpoint === undefined
+    ? undefined
+    : consoleSessionCheckpointSchema.parse(config.initialCheckpoint);
+
+  const scanId = cp?.scanId ?? config.scanId ?? `console-${randomUUID()}`;
+  const workspaceRoot = cp?.workspaceRoot ?? resolve(config.workspaceRoot ?? process.cwd());
+  const role: AgentRole = cp?.role ?? config.role ?? "audit";
+  let autonomyMode: ConsoleAutonomyMode = cp?.autonomyMode ?? config.autonomyMode ?? DEFAULT_AUTONOMY_MODE;
 
   // In-memory mutable scope state — updated by requestScope, NEVER written
-  // to disk.
-  let sessionTarget = config.target ?? "";
-  let sessionScope: ScopePolicy | undefined = config.scope;
-  // Explicit restrictions are distinct from target-derived grants. Only an
-  // operator scope resolution replaces them; discovery/auto-expansion cannot.
-  let configuredScope: ScopePolicy | undefined = config.scope;
+  // to disk. Seeded from checkpoint when provided.
+  let sessionTarget = cp?.target ?? config.target ?? "";
+  // An unset checkpoint scope stays unset; it must never resurrect config grants.
+  let sessionScope = cp
+    ? cp.grantedScope === null ? undefined : new ScopePolicy(cp.grantedScope)
+    : config.scope;
+  let configuredScope = cp
+    ? cp.configuredScope === null ? undefined : new ScopePolicy(cp.configuredScope)
+    : config.scope;
 
   // Session-scoped memory of hosts the operator explicitly DECLINED via
   // requestScope. In-memory only, per session — NEVER persisted to a scope
   // file. Once a host is recorded here, further tool calls that touch it are
   // denied outright without re-prompting, so a single rejection can't turn
   // into an unbounded re-prompt loop when the model retries the same target.
-  const deniedHosts = new Set<string>();
+  // Seeded from checkpoint when provided.
+  const deniedHosts = new Set<string>(cp?.deniedHosts);
 
   // Session-scoped memory of SHELL PAYLOADS the operator declined when this
   // gate could not resolve their destination. An unresolved destination has no
   // hostname, so `deniedHosts` cannot hold it; keying on the exact command text
   // is what stops a retried `curl "$H"` from re-prompting on every round.
-  // In-memory only, per session — never persisted.
-  const deniedShellPayloads = new Set<string>();
+  // In-memory only, per session — never persisted. Seeded from checkpoint.
+  const deniedShellPayloads = new Set<string>(cp?.deniedShellPayloads);
 
   // In-memory, session-only local filesystem scope — the directory subtree the
   // operator authorized via requestLocalScope. Starts unset (the console never
-  // grants a scope implicitly); NEVER written to disk.
-  let sessionScopePath: string | undefined;
+  // grants a scope implicitly); NEVER written to disk. Seeded from checkpoint.
+  let sessionScopePath: string | undefined = cp?.localScopePath ?? undefined;
 
   // Session-scoped memory of local paths the operator explicitly DECLINED via
   // requestLocalScope. In-memory only, per session. Once a path is recorded
   // here, a later tool call whose requested path falls inside that declined
   // directory is denied outright without re-prompting — the filesystem mirror
   // of `deniedHosts`, guarding against the same re-prompt loop when the model
-  // retries the same (or a covered) path.
-  const deniedLocalPaths = new Set<string>();
+  // retries the same (or a covered) path. Seeded from checkpoint.
+  const deniedLocalPaths = new Set<string>(cp?.deniedLocalPaths);
 
   const toolContext: ToolContext = {
     target: sessionTarget,
     scanId,
     role,
     costModel: config.costModel,
-    findings: [],
-    attackResults: [],
-    targetInfo: {},
+    findings: cp ? structuredClone(cp.sessionData.findings) : [],
+    attackResults: cp ? structuredClone(cp.sessionData.attackResults) : [],
+    targetInfo: cp ? structuredClone(cp.sessionData.targetInfo) : {},
+    loadedSkills: new Set(cp?.sessionData.loadedSkills),
+    recentToolResultTexts: cp ? [...cp.sessionData.recentToolResultTexts] : [],
+    scopePath: sessionScopePath,
     allowScanners: config.allowScanners,
     scope: sessionScope,
     // The executor re-reads these per call, so a mid-session /mode switch
@@ -1615,7 +1675,8 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
   // Audit notifications are routed to the active turn's renderer.
   let activeNotify: ((message: string) => void) | undefined;
 
-  const selfExtensionEnabled = (config.allowModelSelfExtension ?? DEFAULT_ALLOW_MODEL_SELF_EXTENSION) && role !== "verify";
+  const selfExtensionEnabled = cp?.selfExtensionEnabled ??
+    ((config.allowModelSelfExtension ?? DEFAULT_ALLOW_MODEL_SELF_EXTENSION) && role !== "verify");
   const selfExtension = selfExtensionEnabled
     ? new SelfExtensionRegistry({
         enabled: true,
@@ -1644,11 +1705,17 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
         },
       })
     : undefined;
+  if (cp?.selfExtensionSnapshot && selfExtension) {
+    selfExtension.restore(cp.selfExtensionSnapshot);
+  }
   const executablePlugins = selfExtension
     ? createExecutablePlugins(selfExtension, config.executablePlugins)
     : undefined;
-  const harness = executablePlugins ? new LiveHarnessHost({
-    executablePlugins, root: resolve(homeStateDir(), "live-harness", randomUUID()), workspaceRoot,
+  const harnessRoot = selfExtensionEnabled
+    ? cp?.harnessRoot ?? resolve(homeStateDir(), "live-harness", randomUUID())
+    : undefined;
+  const harness = executablePlugins && harnessRoot ? new LiveHarnessHost({
+    executablePlugins, root: harnessRoot, workspaceRoot,
     allowTrusted: () => getWorkspaceHarnessTrust(workspaceRoot), onChange: config.onHarnessUpdate,
   }) : undefined;
   toolContext.liveHarness = harness;
@@ -1659,6 +1726,13 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
   toolContext.executableEvolutionProfiles = selfExtensionEnabled
     ? resolveExecutableEvolutionProfiles(config.executableEvolutionProfiles)
     : {};
+
+
+  /** Guard against export/operations during teardown or handoff. */
+  let closing = false;
+  let retirement: Promise<{ warnings?: string[] }> | undefined;
+  let cleanupPromise: Promise<void> | undefined;
+
   if (config.mcpHost) {
     // Same cast pattern: the executor's _dispatch resolves mcp__ tool calls to
     // THIS session's connected host.
@@ -1678,7 +1752,7 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
   // this pass (findings live in `toolContext.findings` for the session). When
   // the CLI/TUI provides a DB handle, save_finding persists there and
   // query_findings can read current, prior, or all sessions.
-  const executor = new ToolExecutor(toolContext, config.db ?? null, undefined, config.runtime.forkForSubagent?.bind(config.runtime));
+  const executor = new ToolExecutor(toolContext, config.db ?? null, undefined, config.runtime.forkForSubagent?.bind(config.runtime), cp?.executor);
 
   const tools =
     config.tools ?? getToolsForRole(role, { allowScanners: config.allowScanners });
@@ -1808,10 +1882,16 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
   // boundary (see `refreshInjectedTools`). Seed it once so it is never undefined.
   let nativeTools: NativeToolDef[] = baseNativeTools;
   if (injectableToolsPresent) refreshInjectedTools();
+  if (cp?.loadedMcpTools.length) {
+    if (!deferredTools) throw new Error("Checkpoint requires its caller-owned MCP host");
+    deferredTools.seed(config.mcpHost!.registeredTools());
+    const restored = deferredTools.load(cp.loadedMcpTools);
+    if (restored.unknown.length) throw new Error(`Previously loaded MCP tools are unavailable: ${restored.unknown.join(", ")}`);
+    refreshInjectedTools();
+  }
 
-  const customSystemPrompt = config.systemPrompt;
-  let systemPrompt = customSystemPrompt ??
-    buildConsoleSystemPrompt({ target: sessionTarget, scanId, autonomyMode });
+  const customSystemPrompt = cp ? cp.systemPrompt ?? undefined : config.systemPrompt;
+  let systemPrompt = customSystemPrompt ?? buildConsoleSystemPrompt({ target: sessionTarget, scanId, autonomyMode, developmentSourceRoot: config.developmentSourceRoot });
   // Both guards are resolved with `??` only: an explicitly supplied value —
   // including a deliberately tiny one — is honoured EXACTLY and never clamped
   // or overridden. They are independent; whichever is reached first stops the
@@ -1823,16 +1903,15 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
   // rather than print "of Infinity".
   const hasTurnTokenCap = Number.isFinite(maxTurnTokens);
 
-  // Seed conversation history. A caller rebuilding the session (e.g. an
-  // in-place `/model` switch) passes the prior `messages` here; we take a
-  // defensive deep copy so the session owns its own history and later `send()`
-  // mutations never leak back into the array the caller still holds. Absent
-  // seed → empty history, identical to the original behaviour. The seeded
-  // turns are treated as ordinary prior conversation — never re-validated or
-  // filtered beyond whatever `send()` already does.
-  const messages: NativeMessage[] = config.initialMessages
-    ? structuredClone(config.initialMessages)
-    : [];
+  // Seed conversation history from checkpoint or caller-supplied initialMessages.
+  // Checkpoint takes precedence: the caller constructing a candidate from a
+  // prior export passes the checkpoint, not a separate messages array.
+  // Defensive structuredClone so later send() mutations never leak back.
+  const messages: NativeMessage[] = cp
+    ? structuredClone(cp.messages)
+    : config.initialMessages
+      ? structuredClone(config.initialMessages)
+      : [];
 
   // Session objective ("what am I working on" pill). DISPLAY-ONLY: it never
   // enters model-facing context. The heuristic is emitted synchronously on the
@@ -1848,6 +1927,18 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
     },
   });
 
+  if (cp) objectiveService.seed(cp.objective.value, cp.objective.refined);
+
+  let initialized = !executablePlugins;
+  const ready = (async () => {
+    await executablePlugins?.ready;
+    if (cp?.harness) await harness!.restoreCheckpoint(cp.harness);
+    if (injectableToolsPresent) refreshInjectedTools();
+    initialized = true;
+  })();
+  // Consumers observe the original rejecting promise through send() or the loader.
+  void ready.catch(() => {});
+
   function applySessionScope(target: string, scope: ScopePolicy, configured = false): void {
     sessionTarget = target;
     sessionScope = scope;
@@ -1857,8 +1948,8 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
       configuredScope = scope;
       if (autonomyMode === "yolo") toolContext.publicNetwork = { scope: configuredScope, deniedHosts };
     }
-    if (!customSystemPrompt) {
-      systemPrompt = buildConsoleSystemPrompt({ target: sessionTarget, scanId, autonomyMode });
+    if (customSystemPrompt === undefined) {
+      systemPrompt = buildConsoleSystemPrompt({ target: sessionTarget, scanId, autonomyMode, developmentSourceRoot: config.developmentSourceRoot });
     }
   }
 
@@ -1957,8 +2048,8 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
     }
     sessionScope = expanded;
     toolContext.scope = expanded;
-    if (!customSystemPrompt) {
-      systemPrompt = buildConsoleSystemPrompt({ target: sessionTarget, scanId, autonomyMode });
+    if (customSystemPrompt === undefined) {
+      systemPrompt = buildConsoleSystemPrompt({ target: sessionTarget, scanId, autonomyMode, developmentSourceRoot: config.developmentSourceRoot });
     }
     notify?.(
       `${modeLabel} mode: auto-expanded engagement scope to ${hosts.join(", ")} without prompting (in-engagement target).`,
@@ -2544,7 +2635,7 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
         stopReason: "cancelled",
       };
     }
-    if (turnInProgress) throw new Error("This console session already has an active turn.");
+    if (closing || turnInProgress) throw new Error("This console session already has an active turn or is closing.");
     turnInProgress = true;
     let turnActive = true;
     let directDriver = false;
@@ -2554,6 +2645,7 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
     let assistantText = "";
     let iterations = 0;
     try {
+    await ready;
     if (callbacks?.onHarnessUpdate) unsubscribeHarness = harness?.subscribe(callbacks.onHarnessUpdate);
     // Only the direct operator input can authorize a target. Keep this after
     // admission/abort checks and before any model, peer, or tool content.
@@ -2711,7 +2803,6 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
     objectiveService.turnStarted();
     // Route self-extension audit lines to THIS turn's operator notify hook.
     activeNotify = callbacks?.onNotice;
-    await executablePlugins?.ready;
     for (;;) {
       // ── Turn-boundary refresh of injected tools (self-extension + plugins) ──
       // Rebuild the model-facing tool set and gate maps HERE, at the top of each
@@ -2754,7 +2845,7 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
       driverResult = undefined;
       try {
         await harness?.checkpoint({ sessionId: scanId, phase: "working", iterations,
-          tokensUsed: usage.inputTokens + usage.outputTokens, tokenBudget: maxTurnTokens });
+          tokensUsed: usage.inputTokens + usage.outputTokens, tokenBudget: hasTurnTokenCap ? maxTurnTokens : 0 });
         directDriver = true;
         const supplied = await harness?.drive({ system: systemPrompt, messages, tools: nativeTools }, toolContext.pluginExecutionContext?.());
         directDriver = false;
@@ -2927,7 +3018,7 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
     } finally {
       try {
         await harness?.refreshViews({ sessionId: scanId, phase: "idle", iterations,
-          tokensUsed: usage.inputTokens + usage.outputTokens, tokenBudget: maxTurnTokens });
+          tokensUsed: usage.inputTokens + usage.outputTokens, tokenBudget: hasTurnTokenCap ? maxTurnTokens : 0 });
       } catch (error) {
         callbacks?.onNotice?.(`Live harness view: ${error instanceof Error ? error.message : String(error)}`);
       } finally {
@@ -2945,8 +3036,32 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
     }
   }
 
+  const retire = (): Promise<{ warnings?: string[] }> => {
+    if (retirement) return retirement;
+    closing = true;
+    objectiveService.dispose();
+    const warnings: string[] = [];
+    // Fence harness controls synchronously, before any resource drain awaits.
+    const harnessClosed = (async () => {
+      try { await harness?.close(); }
+      catch (error) { warnings.push(`Harness close: ${String(error)}`); }
+    })();
+    retirement = (async () => {
+      await harnessClosed;
+      try { await executor.stopPersistentAgents(); }
+      catch (error) { warnings.push(`Worker drain: ${String(error)}`); }
+      try { await executablePlugins?.close(); }
+      catch (error) { warnings.push(`Executable plugins close: ${String(error)}`); }
+      try { await executor.cleanup(); }
+      catch (error) { warnings.push(`Executor cleanup: ${String(error)}`); }
+      return warnings.length ? { warnings } : {};
+    })();
+    return retirement;
+  };
+
   return {
     scanId,
+    ready,
     harness,
     get systemPrompt(): string { return systemPrompt; },
     tools,
@@ -2961,8 +3076,8 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
       // is what makes `/mode yolo` take effect without a restart.
       toolContext.autonomyMode = mode;
       toolContext.publicNetwork = mode === "yolo" ? { scope: configuredScope, deniedHosts } : undefined;
-      if (!customSystemPrompt) {
-        systemPrompt = buildConsoleSystemPrompt({ target: sessionTarget, scanId, autonomyMode });
+      if (customSystemPrompt === undefined) {
+        systemPrompt = buildConsoleSystemPrompt({ target: sessionTarget, scanId, autonomyMode, developmentSourceRoot: config.developmentSourceRoot });
       }
     },
     clearConversation: () => {
@@ -2971,12 +3086,51 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
     send,
     stopPersistentAgent: (agentId) => executor.stopPersistentAgent(agentId),
     stopPersistentAgents: () => executor.stopPersistentAgents(),
-    cleanup: async () => {
-      objectiveService.dispose();
-      await harness?.close();
-      await config.mcpHost?.closeAll();
-      await executablePlugins?.close();
-      return executor.cleanup();
+    exportCheckpoint: () => {
+      if (!initialized || turnInProgress || closing) {
+        throw new Error("Cannot export checkpoint before readiness, during a turn, or after retirement.");
+      }
+      return Object.freeze<ConsoleSessionCheckpoint>({
+        version: 1,
+        scanId,
+        workspaceRoot,
+        role,
+        messages: structuredClone(messages),
+        autonomyMode,
+        target: sessionTarget,
+        configuredScope: configuredScope ? structuredClone(configuredScope.raw) : null,
+        grantedScope: sessionScope ? structuredClone(sessionScope.raw) : null,
+        localScopePath: sessionScopePath ?? null,
+        deniedHosts: [...deniedHosts],
+        deniedShellPayloads: [...deniedShellPayloads],
+        deniedLocalPaths: [...deniedLocalPaths],
+        systemPrompt: customSystemPrompt ?? null,
+        objective: objectiveService.snapshot(),
+        sessionData: {
+          findings: structuredClone(toolContext.findings),
+          attackResults: structuredClone(toolContext.attackResults),
+          targetInfo: structuredClone(toolContext.targetInfo),
+          loadedSkills: [...(toolContext.loadedSkills ?? [])],
+          recentToolResultTexts: [...(toolContext.recentToolResultTexts ?? [])],
+        },
+        executor: executor.exportCheckpoint(),
+        loadedMcpTools: deferredTools?.loadedDefinitions().map(tool => tool.name) ?? [],
+        selfExtensionEnabled,
+        selfExtensionSnapshot: selfExtension?.snapshot() ?? null,
+        harnessRoot: harnessRoot ?? null,
+        harness: harness?.exportCheckpoint() ?? null,
+      });
     },
+    prepareHandoff: () => {
+      if (turnInProgress) return Promise.reject(new Error("Cannot retire an engine during an active turn"));
+      return retire();
+    },
+    cleanup: () => cleanupPromise ??= (async () => {
+      const { warnings = [] } = await retire();
+      const errors: unknown[] = warnings.map(message => new Error(message));
+      try { await config.mcpHost?.closeAll(); }
+      catch (error) { errors.push(error); }
+      if (errors.length) throw new AggregateError(errors, "Console resource cleanup failed");
+    })(),
   };
 }

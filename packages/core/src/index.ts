@@ -2318,6 +2318,7 @@ export {
 export type {
   ConsoleConversationHistory,
   ConsoleSession,
+  ConsoleSessionCheckpoint,
   ConsoleSessionConfig,
   ConsoleRenderCallbacks,
   ConsoleTurnOutcome,

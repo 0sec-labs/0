@@ -247,6 +247,16 @@ export interface SessionObjectiveService {
    */
   noteUserMessage(text: string): void;
   /**
+   * Seed the objective from a persisted value (checkpoint restore). Sets the
+   * cached objective, marks the service as seeded, and emits the value through
+   * the configured callback. The one-shot refinement is NOT triggered — the
+   * objective is treated as already-final. Safe to call before or after a turn;
+   * a no-op when the service is already seeded or disposed.
+   */
+  seed(objective: string, refined: boolean): void;
+  /** Display state only; a restored value never starts another refinement request. */
+  snapshot(): { value: string; refined: boolean };
+  /**
    * Mark that an operator turn has started. Must be called synchronously at the
    * top of a turn (before any await) so the refinement knows a turn is in
    * flight and never runs its model call concurrently with the turn's own.
@@ -274,6 +284,7 @@ export function createSessionObjectiveService(
   config: SessionObjectiveServiceConfig,
 ): SessionObjectiveService {
   let objective = "";
+  let objectiveRefined = false;
   let seeded = false;
   let disposed = false;
   let activeTurns = 0;
@@ -283,6 +294,7 @@ export function createSessionObjectiveService(
   let refineController: AbortController | undefined;
 
   const safeEmit = (value: string, refined: boolean): void => {
+    objectiveRefined = refined;
     try {
       config.emit(value, refined);
     } catch {
@@ -373,11 +385,22 @@ export function createSessionObjectiveService(
     scheduleRefinement();
   };
 
+  const seed = (value: string, refined: boolean): void => {
+    if (seeded || disposed || !value) return;
+    seeded = true;
+    objective = value;
+    // Refinement is skipped: the persisted value is treated as final.
+    pending = undefined;
+    safeEmit(value, refined);
+  };
+
   return {
     noteUserMessage,
+    seed,
     turnStarted,
     turnEnded,
     current: () => objective,
+    snapshot: () => ({ value: objective, refined: objectiveRefined }),
     dispose: () => {
       disposed = true;
       if (kickoffTimer !== undefined) {

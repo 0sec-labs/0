@@ -3,6 +3,8 @@ title: Improvement Plane
 description: Source evolution, executable plugins, and the live self-evolving harness contract.
 ---
 
+> Status: 2026-09-13. Living document.
+
 0sec retains codebase notes, evaluates source changes, and runs versioned
 executable plugins. The live-harness candidate extends these mechanisms to
 reasoning and presentation components during a session.
@@ -48,6 +50,34 @@ separate authorization and executes with host permissions.
 - Do not automatically replay already-issued tool effects after a driver fails.
 - An automatic-promotion policy or self-extension setting is not a grant of
   trusted host execution.
+
+### Development engine replacement
+
+The development console can reload trusted `packages/core/src` changes without
+discarding its conversation. This host-code path is not the sandboxed source
+evaluator or executable-plugin admission path.
+
+It requires a console started with `0SEC_DEV_SOURCE_ROOT` and the global
+`allowDevSourceUpdates` setting. The setting defaults off, cannot be granted by
+a project override, and is independent of `allowModelSelfExtension`.
+
+Before the next turn, the wrapper snapshots changed source, builds an immutable
+generation, checks its session checkpoint, and drains engine-owned resources
+before activation. History, scope decisions, task state and accounting survive.
+Contained regular-file aliases are copied into the snapshot; directory aliases
+and aliases escaping Core source are rejected. Failed builds or incompatible
+checkpoints retain the current engine. Turning the setting off prevents later
+replacement without reverting the active generation.
+
+The UI shell, injected provider/MCP clients and shared dependencies stay pinned.
+Rebuild and restart for changes to those components. A development engine runs
+with the host process's permissions; source replacement is not a sandbox grant.
+
+Local qualification exercised a continuing session across source activation,
+broken-source rollback and flag disablement, with retained scope metadata and
+rejection of an escaping source alias. The provider was deterministic and
+local; this does not qualify hosted inference, desktop installation or
+provider-generated improvements.
 
 Upstream aliases, serving changes, and runtime fallbacks can change model
 behavior. Retain observed outcomes and re-evaluate version-pinned candidates.
@@ -482,6 +512,7 @@ replacement for the stock target-facing 0sec process.
 | Source finder deployment | `deep-review --evolution-config` selects the active source snapshot for each new review. | Every finder call in that review inherits the parent pin; verification and host policy are not rewritten. |
 | Skill/router installation | Training loops install exact authorized artifact bytes. | Authorization does not hot-swap a model already loaded by another process. |
 | Executable plugin | An enabled agent submits or evolves actual code; later calls select the active retained version. | An invocation pins its version and declared capabilities; structural admission is not measured improvement. |
+| Development engine replacement | An explicitly enabled development console loads changed Core source between turns without losing the session. | Trusted host execution; UI shell, injected clients and shared dependencies stay pinned. Build and checkpoint failures retain the current engine. |
 | Live harness generation (integration in progress) | Replace `agent.driver` and `ui.view`, including namespaced UI commands/settings, in the same session. | Session history and accounting survive; generation changes wait for a defined checkpoint. |
 
 Observation capture is not independent truth: source consent and operator-curated
@@ -1162,8 +1193,9 @@ for the routing, pricing, and qualification boundaries. Self-Harness's
 model-specific results establish neither universal gains nor launched billing.
 
 If the account already has approved Docker group membership but a persistent
-agent process predates it, restart the session and its broker. A single check
-can use the existing group without changing socket permissions:
+process predates it, the Docker backend can use that existing group through
+`sg`. It does not grant membership, elevate privileges, or fall back to host
+execution. A manual check can use the same existing group:
 
 ```bash
 sg docker -c 'node scripts/smoke-executable-plugins.mjs'

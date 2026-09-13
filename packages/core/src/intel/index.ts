@@ -91,9 +91,13 @@ export async function searchAdvisories(
     queryGitHubAdvisories(input, opts),
   ]);
   warnRejectedSources(sources, results, { ecosystem: input.ecosystem, packageName: input.packageName });
-  const advisories = mergeIntel(
+  const packageAdvisories = mergeIntel(
     results.flatMap((result) => result.status === "fulfilled" ? result.value : []),
   );
+  const advisoryLeads = packageAdvisories.length === 0
+    ? await goStdlibNvdFallback(input, opts)
+    : [];
+  const advisories = mergeIntel([...packageAdvisories, ...advisoryLeads]);
 
   if (input.enrich !== false) {
     const enriched = await enrichCveAliases(advisories, input, opts);
@@ -375,6 +379,52 @@ function rankConfidence(confidence: AdvisoryLead["confidence"]): number {
 
 function severityRank(severity: IntelSeverity | undefined): number {
   return { critical: 5, high: 4, medium: 3, low: 2, info: 1 }[severity ?? "info"];
+}
+
+async function goStdlibNvdFallback(
+  input: AdvisorySearchInput,
+  opts: FetchOptions,
+): Promise<VulnerabilityIntel[]> {
+  if (!isGoStdlibSearch(input)) return [];
+  const keywords = goStdlibKeywords(input.packageName);
+  if (keywords.length === 0) return [];
+  const advisories = await searchNvdSimilar({
+    keywords,
+    limit: 20,
+    cacheDir: input.cacheDir,
+    offline: input.offline,
+    ttlMs: input.ttlMs,
+  }, opts);
+  return advisories.filter(isGoStdlibIntel);
+}
+
+function isGoStdlibSearch(input: AdvisorySearchInput): boolean {
+  const ecosystem = input.ecosystem.trim().toLowerCase();
+  if (ecosystem !== "go" && ecosystem !== "golang") return false;
+  const name = input.packageName.trim().toLowerCase();
+  return name === "stdlib" || name === "std" || name === "go" || name === "golang" ||
+    name === "github.com/golang/go" || name === "golang/go" || name.startsWith("std/") || name.startsWith("stdlib/");
+}
+
+function goStdlibKeywords(packageName: string): string[] {
+  const normalized = packageName.trim().toLowerCase();
+  const pkg = normalized.replace(/^stdlib\//, "").replace(/^std\//, "");
+  if (pkg && pkg !== normalized) return ["golang", pkg];
+  return ["golang", "standard library"];
+}
+
+function isGoStdlibIntel(advisory: VulnerabilityIntel): boolean {
+  const haystack = [
+    advisory.summary,
+    ...advisory.references.map((reference) => reference.url),
+  ].join("\n").toLowerCase();
+  return /\b(go|golang)\b/.test(haystack) && (
+    haystack.includes("standard library") ||
+    haystack.includes("pkg.go.dev/std") ||
+    haystack.includes("github.com/golang/go") ||
+    haystack.includes("go.dev/issue") ||
+    haystack.includes("groups.google.com/g/golang-announce")
+  );
 }
 
 async function enrichCveAliases(
