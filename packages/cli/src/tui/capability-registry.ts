@@ -128,6 +128,15 @@ const CAPABILITIES: readonly CapabilityEntry[] = [
     safetyTier: "automatic",
     description: "Browse the roster of active subagent workers.",
   },
+  {
+    id: "comms",
+    label: "Agent Comms",
+    category: "engagement",
+    route: "comms",
+    outboundOrMutating: false,
+    safetyTier: "automatic",
+    description: "Watch the agent fleet and the messages flowing between agents.",
+  },
 
   // ── Findings / History / Replay ───────────────────────────────────────────
   {

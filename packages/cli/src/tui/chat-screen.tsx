@@ -296,7 +296,7 @@ import {
 import { agentAccentFor } from "./agent-color.js";
 import { appendTuiCrash, serializeError } from "./tui-crash.js";
 
-export type ChatDestination = "launcher" | "ops" | "history" | "findings" | "doctor" | "replay" | "settings" | "harness" | "new-chat" | "models" | "market" | "usage" | "connect" | "herd" | "finding" | "resume" | "audits" | "onboard";
+export type ChatDestination = "launcher" | "ops" | "history" | "findings" | "doctor" | "replay" | "settings" | "harness" | "new-chat" | "models" | "market" | "usage" | "connect" | "herd" | "comms" | "finding" | "resume" | "audits" | "onboard";
 
 /**
  * Map a status pill's semantic colour role onto the live palette. Kept theme-
@@ -3150,6 +3150,12 @@ export function ChatScreen({
         return true;
       case "herd":
         onNavigate("herd");
+        return true;
+      case "comms":
+        // run.tsx routes the "comms" destination to the Agents Comms view (the
+        // live fleet + inter-agent message stream); chat just needs the nav
+        // entry (mirrors "/herd"/"/ops").
+        onNavigate("comms");
         return true;
       case "ops":
         onNavigate("ops");

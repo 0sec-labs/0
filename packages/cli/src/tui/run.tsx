@@ -43,6 +43,7 @@ import type { HerdSubagentMap } from "./herd-layout.js";
 import { AuditSwitcher } from "./audit-switcher.js";
 import { OnboardingScreen } from "./onboarding-screen.js";
 import { HerdScreen } from "./herd-screen.js";
+import { AgentsCommsScreen } from "./agents-comms-screen.js";
 import { SettingsScreen } from "./settings-screen.js";
 import { HarnessProvider } from "./harness-context.js";
 import { HarnessControlsPanel } from "./harness-trust-controls.js";
@@ -104,6 +105,7 @@ type ConsoleRoute = (
   | { type: "settings" }
   | { type: "harness" }
   | { type: "herd" }
+  | { type: "comms" }
   | { type: "audits" }
   | { type: "onboard" }
   | { type: "market" }
@@ -202,6 +204,35 @@ function HerdRoute({ onExit, shell, parentScanId, readAgents, messagingHomeDir }
       parentScanId={parentScanId}
       readAgents={readAgents}
       messagingHomeDir={messagingHomeDir}
+    />
+  );
+}
+
+/**
+ * Routes the Agents Comms view — the live fleet of sub-agents plus the stream
+ * of inter-agent messages — supplying the console shell around it.
+ *
+ * The active audit's mounted ChatScreen owns the live subagent map, handed here
+ * through the SAME `readAgents` handle the herd overview reads. The message
+ * stream and measured telemetry come off the event bus, which the screen
+ * subscribes to itself, so nothing extra has to be threaded down.
+ */
+function AgentsCommsRoute({ onExit, shell, readAgents }: {
+  onExit: () => void;
+  shell?: ShellNav;
+  readAgents?: () => Readonly<HerdSubagentMap>;
+}) {
+  return (
+    <AgentsCommsScreen
+      onBack={() => leaveCurrentScreen(shell, onExit)}
+      onExit={onExit}
+      frame={({ body, hint }) => (
+        <ShellFrame view="comms" dialogContent>
+          {body}
+          <FooterBar hint={hint} />
+        </ShellFrame>
+      )}
+      readAgents={readAgents}
     />
   );
 }
@@ -784,6 +815,7 @@ function ConsoleApp({
     openModels: (chatOpts) => navigate({ type: "models", chatOptions: chatOpts ?? routeOwner?.options }),
     openResume: (chatOpts) => navigate({ type: "resume", chatOptions: chatOpts ?? routeOwner?.options }),
     openHerd: () => navigate({ type: "herd" }),
+    openComms: () => navigate({ type: "comms" }),
     openMarket: () => navigate({ type: "market" }),
     openConnect: () => navigate({ type: "connect", recovery: routeOwner?.recovery }),
     openOnboarding: () => navigate({ type: "onboard" }),
@@ -806,6 +838,7 @@ function ConsoleApp({
     usage: () => shell.openUsage(selectedRecord?.options),
     connect: shell.openConnect,
     herd: shell.openHerd,
+    comms: shell.openComms,
     resume: () => shell.openResume(selectedRecord?.options),
     audits: () => navigate({ type: "audits" }),
     onboard: () => navigate({ type: "onboard" }),
@@ -1169,6 +1202,9 @@ function ConsoleApp({
     const sel = routeOwner;
     overlay = <HerdRoute onExit={appExit} shell={shell} parentScanId={sel?.session?.scanId ?? ""}
       readAgents={sel?.herd.current ?? undefined} messagingHomeDir={sel?.messagingHomeDir} />;
+  } else if (routeType === "comms") {
+    const sel = routeOwner;
+    overlay = <AgentsCommsRoute onExit={appExit} shell={shell} readAgents={sel?.herd.current ?? undefined} />;
   } else if (routeType === "market") {
     overlay = <MarketRoute onExit={appExit} shell={shell} pluginHostManager={pluginHostManager ?? undefined} />;
   } else if (routeType === "connect") {

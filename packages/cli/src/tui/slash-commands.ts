@@ -293,6 +293,13 @@ export const SLASH_COMMANDS: readonly SlashCommand[] = [
     tuiOnly: true,
   },
   {
+    name: "comms",
+    aliases: ["messages"],
+    category: "navigation",
+    description: "Watch the agent fleet and the messages flowing between agents",
+    tuiOnly: true,
+  },
+  {
     name: "market",
     aliases: ["marketplace"],
     category: "navigation",

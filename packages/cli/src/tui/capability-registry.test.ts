@@ -23,6 +23,7 @@ const KNOWN_PANE_ROUTE_RECORD: Record<string, true> = {
   usage: true,
   connect: true,
   herd: true,
+  comms: true,
   finding: true,
   resume: true,
 };

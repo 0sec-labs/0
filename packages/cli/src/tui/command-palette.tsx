@@ -135,6 +135,13 @@ export function createShellCommands(shell?: ShellNav): PaletteCommand[] {
       action: shell.openHerd,
     },
     {
+      id: "nav-comms",
+      title: "Open agent comms",
+      category: "Navigate",
+      description: "Live fleet of sub-agents and the messages flowing between them",
+      action: shell.openComms,
+    },
+    {
       id: "nav-connect",
       title: "Connect a provider",
       category: "Navigate",

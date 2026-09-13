@@ -33,6 +33,12 @@ export interface ShellNav {
    */
   openHerd: () => void;
   /**
+   * Opens the Agents Comms view: the live fleet of sub-agents plus the stream
+   * of messages flowing between them (agent↔agent, agent↔operator). Empty by
+   * default until an audit with delegated subagents is mounted.
+   */
+  openComms: () => void;
+  /**
    * Opens the full-screen marketplace browser: plugins and themes from the
    * configured registry. No endpoint ships by default, so it opens on an honest
    * empty state until `$0SEC_REGISTRY_URL` points at a registry the operator trusts.
