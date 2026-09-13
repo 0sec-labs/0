@@ -151,8 +151,38 @@ export type ChatEntry = {
   taskContract?: string;
   /** Per-agent assignment brief Markdown (single-agent, core `assignment`). */
   taskAssignment?: string;
-  /** The dispatched sub-report bullets (one row each). */
-  subReports?: Array<{ name: string; agent?: string; brief?: string; isolated?: boolean }>;
+  /**
+   * The dispatched sub-report bullets (one row each). `name`/`agent`/`brief`/
+   * `isolated` come from the spawn spec (present at launch). The remaining
+   * fields are OPTIONAL live telemetry joined at render time from the CLI's own
+   * `herdAgents` + `workerTelemetry` (by fleet-unique `name`); every one is
+   * omitted when its truthful producer has not reported it, so a row without a
+   * join renders exactly as the static launch record. NOTHING here is estimated
+   * — per-agent cost / request-count / tool-count / context-window% have no
+   * per-agent producer yet and are deliberately absent (see task-card-layout).
+   */
+  subReports?: Array<{
+    name: string;
+    agent?: string;
+    brief?: string;
+    isolated?: boolean;
+    /** Stable per-agent id (`agent_id`) for the accent rail; falls back to `name`. */
+    id?: string;
+    /** Lifecycle status word (running/completed/failed/…), from the live herd. */
+    status?: string;
+    /** Cumulative tokens (in+out+cached) from `workerTelemetry.usage`. */
+    tokens?: number;
+    /** Latest measured per-turn context tokens from `workerTelemetry`. */
+    contextTokens?: number;
+    /** Final/last measured wallclock (ms) from `workerTelemetry.durationMs`. */
+    durationMs?: number;
+    /** Resolved model id from `workerTelemetry.model`. */
+    model?: string;
+    /** Latest non-`report_status` tool name (the live "what am I doing" verb). */
+    tool?: string;
+    /** Latest `report_status` note (the live intent sentence). */
+    note?: string;
+  }>;
   /** Phase/checkbox plan snapshot, fed straight into `buildTodoTreeRows`. */
   taskTodos?: Array<{ id: string; content: string; status: TodoStatus; group?: string }>;
   // ── code card (js_eval / python_eval) ──

@@ -5063,6 +5063,46 @@ export function ChatScreen({
     activeTurn: focusRecord?.status === "running" ? focusedTelemetry?.turn : undefined,
     activeEntryId: focusRecord?.status === "running" ? focusEntries?.[focusEntries.length - 1]?.id : undefined,
   };
+  // Per-agent LIVE telemetry for the Task launch card's sub-report rows, keyed
+  // by the fleet-unique agent NAME (the card's `subReports` carry `name`, not an
+  // `agent_id`). Every value is the SAME truthful producer the AGENTS rail reads
+  // — final/last tokens (usage in+out+cached) and durationMs from
+  // `workerTelemetry`, status + latest tool/report_status note from
+  // `herdAgents`. It NEVER reads the whole-turn timer. Missing fields stay
+  // undefined so the card shows only what is real.
+  const taskAgentTelemetryByName = useMemo(() => {
+    const byName = new Map<
+      string,
+      {
+        id: string;
+        status: string;
+        tokens?: number;
+        contextTokens?: number;
+        durationMs?: number;
+        model?: string;
+        tool?: string;
+        note?: string;
+      }
+    >();
+    for (const id in herdAgents) {
+      const rec = herdAgents[id];
+      const name = rec.name ?? agentNamesRef.current.get(id);
+      if (!name) continue;
+      const tel = workerTelemetry[id];
+      const usage = tel?.usage;
+      byName.set(name, {
+        id,
+        status: operatorStopped.has(id) ? "cancelled" : rec.status,
+        tokens: usage ? usage.inputTokens + usage.outputTokens + usage.cachedInputTokens : undefined,
+        contextTokens: tel?.contextTokens,
+        durationMs: tel?.durationMs,
+        model: tel?.model,
+        tool: rec.tool,
+        note: rec.note,
+      });
+    }
+    return byName;
+  }, [herdAgents, workerTelemetry, operatorStopped]);
   const renderTranscriptEntries = (transcript: readonly ChatEntry[], width: number, display: EntryDisplay) => {
     // "thinking" is a per-TURN label, not a per-entry one. Walk the plan once
     // (it is already in transcript order) and record which turns have shown it,
@@ -5095,7 +5135,22 @@ export function ChatScreen({
           { hideReasoningLabel },
         );
       }
-      const entry = item.entry;
+      const rawEntry = item.entry;
+      // Join the live per-agent telemetry onto a Task card's sub-report rows so
+      // the launch card shows each child's real tokens / duration / model +
+      // status + intent (matching the AGENTS rail). Additive and lossless: an
+      // agent with no telemetry (or a restored session with none) keeps its
+      // static launch row untouched.
+      const entry =
+        rawEntry.kind === "tool" && rawEntry.metaKind === "task" && rawEntry.subReports?.length
+          ? {
+              ...rawEntry,
+              subReports: rawEntry.subReports.map((sr) => {
+                const tel = taskAgentTelemetryByName.get(sr.name);
+                return tel ? { ...sr, ...tel } : sr;
+              }),
+            }
+          : rawEntry;
       const expanded = expandedTurns.has(entry.turn);
       const interactive = expanded && (
         entry.kind === "tool" || entry.kind === "subagent" || entry.kind === "reasoning"

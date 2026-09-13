@@ -3,7 +3,10 @@ import { describe, expect, it } from "vitest";
 import {
   COLLAPSED_SUBREPORT_LIMIT,
   EXPANDED_SUBREPORT_LIMIT,
+  agentIntentLine,
+  agentStatsParts,
   capTaskBodyLines,
+  composeSubReportRow,
   splitTaskContext,
   subReportRows,
   taskBodyLines,
@@ -90,14 +93,34 @@ describe("subReportRows", () => {
     expect(hidden).toBe(0);
   });
 
-  it("formats badge, brief, and isolated affixes", () => {
+  it("formats badge, brief, and isolated affixes with an empty (unjoined) status line", () => {
     const { rows } = subReportRows([{ name: "A", agent: "scout", brief: "probe", isolated: true }], false);
-    expect(rows[0]).toEqual({ name: "A", badge: " (scout)", brief: ": probe", isolated: " [isolated]" });
+    expect(rows[0]).toEqual({
+      name: "A",
+      badge: " (scout)",
+      brief: ": probe",
+      isolated: " [isolated]",
+      accentId: "A",
+      status: "",
+      running: false,
+      stats: [],
+      intent: "",
+    });
   });
 
   it("falls back to a generic name and empty affixes", () => {
     const { rows } = subReportRows([{ name: "" }], false);
-    expect(rows[0]).toEqual({ name: "agent", badge: "", brief: "", isolated: "" });
+    expect(rows[0]).toEqual({
+      name: "agent",
+      badge: "",
+      brief: "",
+      isolated: "",
+      accentId: "agent",
+      status: "",
+      running: false,
+      stats: [],
+      intent: "",
+    });
   });
 
   it("bounds the expanded list at the given ceiling instead of growing forever", () => {
@@ -151,5 +174,85 @@ describe("capTaskBodyLines", () => {
   it("treats a zero or negative budget as everything hidden", () => {
     expect(capTaskBodyLines(lines, 0)).toEqual({ visible: [], hidden: 40 });
     expect(capTaskBodyLines(lines, -5)).toEqual({ visible: [], hidden: 40 });
+  });
+});
+
+describe("agentStatsParts", () => {
+  it("emits tokens · context · duration · model in OMP order, compacted", () => {
+    expect(
+      agentStatsParts({ tokens: 12_400, contextTokens: 3100, durationMs: 8200, model: "sonnet" }),
+    ).toEqual(["12.4k tok", "3.1k ctx", "8.20s", "sonnet"]);
+  });
+
+  it("omits every field that is missing or non-positive (no fabrication)", () => {
+    expect(agentStatsParts({})).toEqual([]);
+    expect(agentStatsParts({ tokens: 0, contextTokens: 0, durationMs: -1, model: "   " })).toEqual([]);
+  });
+
+  it("shows tokens alone when only tokens are present", () => {
+    expect(agentStatsParts({ tokens: 842 })).toEqual(["842 tok"]);
+  });
+
+  it("truncates an over-long model id to 30 cells", () => {
+    const [part] = agentStatsParts({ model: "anthropic/claude-opus-4-8:high-effort-xxx" });
+    expect(part).toHaveLength(30);
+    expect(part.endsWith("…")).toBe(true);
+  });
+});
+
+describe("agentIntentLine", () => {
+  it("joins tool and note for a running agent, capping the note at 40", () => {
+    expect(agentIntentLine({ status: "running", tool: "shell", note: "probing /api/v2 for IDOR" })).toBe(
+      "shell: probing /api/v2 for IDOR",
+    );
+    const long = "x".repeat(60);
+    expect(agentIntentLine({ status: "working", tool: "shell", note: long })).toBe(`shell: ${"x".repeat(39)}…`);
+  });
+
+  it("shows the tool or the note alone when only one is present", () => {
+    expect(agentIntentLine({ status: "running", tool: "read_file" })).toBe("read_file");
+    expect(agentIntentLine({ status: "running", note: "reading the users table" })).toBe("reading the users table");
+  });
+
+  it("is empty for a settled or unknown status, even with a stale intent", () => {
+    expect(agentIntentLine({ status: "completed", tool: "shell", note: "done" })).toBe("");
+    expect(agentIntentLine({ status: undefined, tool: "shell", note: "x" })).toBe("");
+  });
+});
+
+describe("composeSubReportRow", () => {
+  it("assembles a full OMP-style running row with a stable accent id and stats", () => {
+    expect(
+      composeSubReportRow({
+        name: "Explorer",
+        agent: "scout",
+        brief: "enumerate the users table",
+        id: "agent-7f",
+        status: "running",
+        tokens: 12_400,
+        durationMs: 8200,
+        model: "sonnet",
+        tool: "shell",
+        note: "probing for IDOR",
+      }),
+    ).toEqual({
+      name: "Explorer",
+      badge: " (scout)",
+      brief: ": enumerate the users table",
+      isolated: "",
+      accentId: "agent-7f",
+      status: "running",
+      running: true,
+      stats: ["12.4k tok", "8.20s", "sonnet"],
+      intent: "shell: probing for IDOR",
+    });
+  });
+
+  it("opens an underscored status word and falls back to name for the accent id", () => {
+    const row = composeSubReportRow({ name: "Prober", status: "in_progress" });
+    expect(row.status).toBe("in progress");
+    expect(row.accentId).toBe("Prober");
+    // "in_progress" is not the running/working live state, so no intent shows.
+    expect(row.running).toBe(false);
   });
 });

@@ -418,6 +418,21 @@ export function formatDurationMs(ms: number | undefined): string | undefined {
 }
 
 /**
+ * Compact a count for a per-agent status line: `842`, `12.4k`, `3.1M`. Mirrors
+ * OMP's `formatNumber` compaction (there is no such helper in the TUI yet). A
+ * non-finite or negative input reads `0` rather than throwing — the caller only
+ * ever prints this for a value it has already confirmed is present.
+ */
+export function formatCompact(n: number | undefined): string {
+  if (typeof n !== "number" || !Number.isFinite(n) || n < 0) return "0";
+  if (n < 1000) return String(Math.round(n));
+  // One decimal in the k / M range (`12.4k`, `3.1M`), trailing `.0` stripped
+  // so a round thousand reads `12k`, not `12.0k`.
+  if (n < 1_000_000) return `${(n / 1000).toFixed(1).replace(/\.0$/, "")}k`;
+  return `${(n / 1_000_000).toFixed(1).replace(/\.0$/, "")}M`;
+}
+
+/**
  * The structured Status block. The state row is always present (it is always
  * known); every other row appears only when its field was recorded.
  */

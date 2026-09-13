@@ -1,3 +1,4 @@
+import { formatCompact, formatDurationMs } from "./card-layout.js";
 import type { ChatEntry } from "./types.js";
 
 /**
@@ -168,20 +169,110 @@ export const COLLAPSED_SUBREPORT_LIMIT = 4;
  */
 export const EXPANDED_SUBREPORT_LIMIT = 32;
 
+/** One element of `ChatEntry["subReports"]` (the launch spec + joined telemetry). */
+type SubReport = NonNullable<ChatEntry["subReports"]>[number];
+
+/**
+ * The `running`/`working` words are the only statuses that mean an agent is
+ * still live and so may carry an in-flight intent line. Everything else is a
+ * settled or queued state (its intent, if any, is stale and not shown).
+ */
+function isRunningStatus(status: string | undefined): boolean {
+  const s = (status ?? "").toLowerCase();
+  return s === "running" || s === "working";
+}
+
+/**
+ * The truthful per-agent stat tokens, in OMP `appendAgentStats` order:
+ * `tokens · context · duration · model`. Every token is emitted ONLY when its
+ * field is genuinely present and positive — there is no estimation and no
+ * placeholder. The stats OMP also shows but for which 0sec has no per-agent
+ * producer yet — cost (`$`), request count (`req`), tool count (`🛠`), and the
+ * context-window percentage (`pct%/window`) — are deliberately omitted rather
+ * than faked; raw `contextTokens` stands in for the window ratio until a
+ * `contextWindow` producer lands. See the deferred-producers note in the spec.
+ */
+export function agentStatsParts(sr: Pick<SubReport, "tokens" | "contextTokens" | "durationMs" | "model">): string[] {
+  const parts: string[] = [];
+  if (typeof sr.tokens === "number" && sr.tokens > 0) parts.push(`${formatCompact(sr.tokens)} tok`);
+  if (typeof sr.contextTokens === "number" && sr.contextTokens > 0) parts.push(`${formatCompact(sr.contextTokens)} ctx`);
+  const dur = formatDurationMs(sr.durationMs);
+  if (dur) parts.push(dur);
+  const model = sr.model?.trim();
+  if (model) parts.push(model.length > 30 ? `${model.slice(0, 29)}…` : model);
+  return parts;
+}
+
+/**
+ * The live "what am I doing now" line for a running agent: `tool: note`, the
+ * `currentTool` + `lastIntent` idiom (OMP `render.ts:967`). Empty unless the
+ * agent is genuinely running AND a producer reported a tool and/or a
+ * `report_status` note — a settled agent (the usual state once `spawn_agents`
+ * has returned and the card exists) shows nothing here. The note is capped to
+ * 40 cells like OMP's `previewLine`.
+ */
+export function agentIntentLine(sr: Pick<SubReport, "status" | "tool" | "note">): string {
+  if (!isRunningStatus(sr.status)) return "";
+  const tool = sr.tool?.trim();
+  const note = sr.note?.trim();
+  const cappedNote = note ? (note.length > 40 ? `${note.slice(0, 39)}…` : note) : "";
+  if (tool && cappedNote) return `${tool}: ${cappedNote}`;
+  if (tool) return tool;
+  return cappedNote;
+}
+
 export interface SubReportRow {
   /** Bold-accent identifier, e.g. `ExtensionReadiness`. */
   name: string;
-  /** `(scout)`-style badge suffix, empty for the generic worker. */
+  /** `(scout)`-style agent-TYPE badge suffix, empty for the generic worker. */
   badge: string;
   /** Muted task first line, empty when none. */
   brief: string;
   /** ` [isolated]` suffix, empty otherwise. */
   isolated: string;
+  /**
+   * Stable per-agent identity for the accent rail + name hue (`agentAccentFor`).
+   * Prefers the joined `agent_id`, falling back to the fleet-unique `name` so a
+   * row still gets its own stable colour before any telemetry has joined.
+   */
+  accentId: string;
+  /** Lifecycle status word (`running`, `completed`, …); empty when unknown. */
+  status: string;
+  /** True while the agent is live — drives whether the intent line shows. */
+  running: boolean;
+  /** OMP-order truthful stat tokens (already formatted); empty when none. */
+  stats: string[];
+  /** Live-intent line (`tool: note`); empty unless running with an intent. */
+  intent: string;
+}
+
+/**
+ * Compose ONE OMP-style status-line row from a sub-report. Pure and theme-free:
+ * it assembles the textual parts (badge, `[status]` word, truthful stat tokens,
+ * live-intent line) and the accent identity; the card paints the colours. This
+ * is the single place the row's shape is decided, so it is unit-tested in
+ * isolation from the React card.
+ */
+export function composeSubReportRow(sr: SubReport): SubReportRow {
+  return {
+    name: sr.name?.trim() || "agent",
+    badge: sr.agent?.trim() ? ` (${sr.agent.trim()})` : "",
+    brief: sr.brief?.trim() ? `: ${sr.brief.trim()}` : "",
+    isolated: sr.isolated ? " [isolated]" : "",
+    accentId: sr.id?.trim() || sr.name?.trim() || "agent",
+    status: sr.status?.trim().toLowerCase().replace(/_/g, " ") ?? "",
+    running: isRunningStatus(sr.status),
+    stats: agentStatsParts(sr),
+    intent: agentIntentLine(sr),
+  };
 }
 
 /**
  * Project the sub-report bullets a collapsed/expanded card draws, plus the count
- * of agents folded into the overflow line. `expanded` uncaps the list.
+ * of agents folded into the overflow line. `expanded` uncaps the list. Each row
+ * is an OMP-style status line (see {@link composeSubReportRow}); rows without a
+ * telemetry join collapse to the same static `name (agent): brief` they always
+ * were, since every enriched field is optional.
  */
 export function subReportRows(
   subReports: ChatEntry["subReports"],
@@ -193,11 +284,6 @@ export function subReportRows(
   const cap = expanded
     ? Math.min(list.length, Math.max(0, Math.floor(expandedLimit)))
     : Math.min(list.length, COLLAPSED_SUBREPORT_LIMIT);
-  const rows = list.slice(0, cap).map((sr) => ({
-    name: sr.name?.trim() || "agent",
-    badge: sr.agent?.trim() ? ` (${sr.agent.trim()})` : "",
-    brief: sr.brief?.trim() ? `: ${sr.brief.trim()}` : "",
-    isolated: sr.isolated ? " [isolated]" : "",
-  }));
+  const rows = list.slice(0, cap).map(composeSubReportRow);
   return { rows, hidden: list.length - cap };
 }

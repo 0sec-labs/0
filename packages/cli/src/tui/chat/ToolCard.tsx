@@ -7,6 +7,7 @@ import { commandCardFrame, toolCompactLine } from "../transcript-style.js";
 import { projectToolPreview, type ToolPreview } from "../tool-format.js";
 import { codeTokenStyle, highlightCode, parseDiffLine } from "../syntax-style.js";
 import { resolveSyntaxColors } from "../themes.js";
+import { agentAccentFor } from "../agent-color.js";
 import type { Theme } from "../theme-context.js";
 import { KEYBINDINGS } from "../keybindings.js";
 import { ShimmerText } from "./shimmer.js";
@@ -114,6 +115,21 @@ function stateTone(state: ToolState, theme: Theme): string {
 function stateBorder(state: ToolState, theme: Theme): string {
   if (state === "failed") return theme.ERROR;
   return theme.BORDER;
+}
+
+/**
+ * Tone for a per-agent status word on a Task-card sub-report row. Mirrors OMP's
+ * `iconColor`: red ONLY for a genuine failure, green on success, accent while
+ * live, muted for everything else (queued / unknown / no status). Red is never
+ * spent on a label that is not an actual failure — the same invariant as the
+ * AGENTS rail.
+ */
+function agentStatusTone(status: string, theme: Theme): string {
+  const s = status.toLowerCase();
+  if (s === "failed" || s === "error" || s === "aborted") return theme.ERROR;
+  if (s === "completed" || s === "done") return theme.SUCCESS;
+  if (s === "running" || s === "working") return theme.ACCENT;
+  return theme.MUTED;
 }
 
 /**
@@ -291,7 +307,7 @@ function TaskCard({
   toggleable,
   repeat,
 }: ToolCardProps): React.ReactNode {
-  const { TEXT, MUTED, ERROR, BRAND, ACCENT, PANEL } = theme;
+  const { TEXT, MUTED, ERROR, BRAND, PANEL, PANEL_ALT, CANVAS } = theme;
   const state = toolState(entry);
   const failed = state === "failed";
   const running = state === "running";
@@ -462,19 +478,76 @@ function TaskCard({
       ) : null}
 
       {subRows.length > 0 ? (
-        <box flexDirection="column" width={inner} flexShrink={0} minWidth={0} marginTop={1}>
+        // The dispatched agents, as OMP-style per-agent status lines inside a
+        // PANEL_ALT inset ("background difference" from the card's context /
+        // output): each row carries a stable per-agent accent LEFT RAIL, a bold
+        // accent name, the `(type)` badge, a `[status]` word tinted by outcome,
+        // and a truthful ` · stat` tail (tokens / context / duration / model —
+        // ONLY what the CLI actually has; cost / requests / tool-count are
+        // deferred). A genuinely running agent draws a second `└ tool: note`
+        // intent line. Height stays bounded: ≤ cap rows, each ≤ 2 lines.
+        <box
+          flexDirection="column"
+          width={inner}
+          flexShrink={0}
+          minWidth={0}
+          marginTop={1}
+          backgroundColor={PANEL_ALT}
+        >
           <SectionRule label="Agents" width={inner} theme={theme} />
-          {subRows.map((row, index) => (
-            <box key={`${entry.id}-agent-${index}`} flexDirection="row" width={inner} height={1} flexShrink={0} minWidth={0}>
-              <text flexShrink={0} fg={MUTED}>{"• "}</text>
-              <text flexShrink={0} fg={ACCENT} attributes={TextAttributes.BOLD} wrapMode="none">{row.name}</text>
-              {row.badge ? <text flexShrink={0} fg={MUTED} wrapMode="none">{row.badge}</text> : null}
-              {row.brief ? <text flexShrink={1} fg={MUTED} wrapMode="none" truncate>{fitTuiText(row.brief, Math.max(1, inner - 2 - row.name.length - row.badge.length - row.isolated.length))}</text> : null}
-              {row.isolated ? <text flexShrink={0} fg={MUTED} wrapMode="none">{row.isolated}</text> : null}
-            </box>
-          ))}
+          {subRows.map((row, index) => {
+            const accent = agentAccentFor(row.accentId, CANVAS);
+            const statusTone = agentStatusTone(row.status, theme);
+            const statusText = row.status ? ` [${row.status}]` : "";
+            const showIntent = row.running && row.intent.length > 0;
+            const rowHeight = 1 + (showIntent ? 1 : 0);
+            // Content column sits right of the 1-cell accent rail. Widths sum to
+            // `cw` so the row can never overflow the card's inner width.
+            const cw = Math.max(1, inner - 1);
+            // Stats are the first thing to go when the row is narrow, so the
+            // name + status word always survive rather than the row overflowing.
+            const baseFixed = 2 + row.badge.length + row.isolated.length + statusText.length;
+            const statsText =
+              row.stats.length > 0 && baseFixed + row.stats.join(" · ").length + 9 <= cw
+                ? ` · ${row.stats.join(" · ")}`
+                : "";
+            const trailing = statusText.length + statsText.length;
+            const nonName = 2 + row.badge.length + row.isolated.length + trailing;
+            let nameCells = Math.min(row.name.length, Math.max(4, Math.floor(cw * 0.4)));
+            if (nonName + nameCells > cw) nameCells = Math.max(1, cw - nonName);
+            const briefCells = Math.max(0, cw - nonName - nameCells);
+            return (
+              <box
+                key={`${entry.id}-agent-${index}`}
+                flexDirection="row"
+                width={inner}
+                height={rowHeight}
+                flexShrink={0}
+                minWidth={0}
+                backgroundColor={PANEL_ALT}
+              >
+                <box width={1} height={rowHeight} flexShrink={0} backgroundColor={accent} />
+                <box flexDirection="column" width={cw} height={rowHeight} flexShrink={0} minWidth={0} backgroundColor={PANEL_ALT}>
+                  <box flexDirection="row" width={cw} height={1} flexShrink={0} minWidth={0} backgroundColor={PANEL_ALT}>
+                    <text width={2} height={1} flexShrink={0} wrapMode="none" truncate fg={statusTone} bg={PANEL_ALT}>{"• "}</text>
+                    <text width={nameCells} height={1} flexShrink={0} wrapMode="none" truncate fg={accent} attributes={TextAttributes.BOLD} bg={PANEL_ALT}>{fitTuiText(row.name, nameCells)}</text>
+                    {row.badge ? <text width={row.badge.length} height={1} flexShrink={0} wrapMode="none" truncate fg={MUTED} bg={PANEL_ALT}>{row.badge}</text> : null}
+                    {briefCells > 0 && row.brief ? <text width={briefCells} height={1} flexShrink={0} wrapMode="none" truncate fg={MUTED} bg={PANEL_ALT}>{fitTuiText(row.brief, briefCells)}</text> : null}
+                    {row.isolated ? <text width={row.isolated.length} height={1} flexShrink={0} wrapMode="none" truncate fg={MUTED} bg={PANEL_ALT}>{row.isolated}</text> : null}
+                    {statusText ? <text width={statusText.length} height={1} flexShrink={0} wrapMode="none" truncate fg={statusTone} bg={PANEL_ALT}>{statusText}</text> : null}
+                    {statsText ? <text width={statsText.length} height={1} flexShrink={0} wrapMode="none" truncate fg={MUTED} bg={PANEL_ALT}>{statsText}</text> : null}
+                  </box>
+                  {showIntent ? (
+                    <box flexDirection="row" width={cw} height={1} flexShrink={0} minWidth={0} backgroundColor={PANEL_ALT}>
+                      <text width={cw} height={1} wrapMode="none" truncate fg={MUTED} bg={PANEL_ALT}>{fitTuiText(`└ ${row.intent}`, cw)}</text>
+                    </box>
+                  ) : null}
+                </box>
+              </box>
+            );
+          })}
           {hiddenAgents > 0 ? (
-            <text width={inner} height={1} wrapMode="none" truncate fg={MUTED}>
+            <text width={inner} height={1} wrapMode="none" truncate fg={MUTED} bg={PANEL_ALT}>
               {fitTuiText(`… ${hiddenAgents} more agent${hiddenAgents === 1 ? "" : "s"}${expandHint}`, inner)}
             </text>
           ) : null}
