@@ -6,6 +6,7 @@ import {
   dropOldestMessages,
   isContextWindowError,
   computeBudgetWarningTurns,
+  toolFailureText,
   BUDGET_WARNING_SOFT,
   BUDGET_WARNING_HARD,
 } from "./native-loop.js";
@@ -2822,5 +2823,62 @@ describe("runNativeAgentLoop — coordinator rails enforcement", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+// ── toolFailureText: never a bare "unknown" ──
+
+describe("toolFailureText", () => {
+  it("prefers the real error message", () => {
+    expect(toolFailureText("http_request", { success: false, output: null, error: "url is required" }))
+      .toBe("url is required");
+  });
+
+  it("folds an exit-code + output tail from the display sidecar into the reason", () => {
+    const text = toolFailureText("run_command", {
+      success: false,
+      output: null,
+      error: "command failed",
+      meta: { kind: "command", exitCode: 1, stdout: "configure: error: no C compiler found" },
+    });
+    expect(text).toContain("command failed");
+    expect(text).toContain("exited 1");
+    expect(text).toContain("no C compiler found");
+  });
+
+  it("uses the exit summary alone when the error string is blank", () => {
+    const text = toolFailureText("run_command", {
+      success: false,
+      output: null,
+      error: "",
+      meta: { kind: "command", exitCode: 127, stdout: "sh: gcc: not found" },
+    });
+    expect(text).toContain("exited 127");
+    expect(text).toContain("gcc: not found");
+  });
+
+  it("reports a timeout with the ceiling when timed out", () => {
+    const text = toolFailureText("run_command", {
+      success: false,
+      output: null,
+      meta: { kind: "command", exitCode: null, timedOut: true, timeoutMs: 30000 },
+    });
+    expect(text).toContain("timed out after 30000ms");
+  });
+
+  it("falls back to a NAMED generic string when there is truly nothing — never bare 'unknown'", () => {
+    const text = toolFailureText("self_extend", { success: false, output: null });
+    expect(text).toBe("self_extend failed without an error message");
+    expect(text).not.toBe("unknown");
+  });
+
+  it("does not duplicate an exit summary already present in the error", () => {
+    const text = toolFailureText("run_command", {
+      success: false,
+      output: null,
+      error: "exited 2: boom",
+      meta: { kind: "command", exitCode: 2, stdout: "boom" },
+    });
+    expect(text.match(/exited 2/g)).toHaveLength(1);
   });
 });

@@ -557,8 +557,21 @@ export interface DiagnosticInfo {
   runtime: string;
   runtimeVersion: string;
   toolName?: string;
-  /** Used only for a finite error category, never message/stack/output. */
+  /**
+   * The failure. Two uses, kept strictly apart:
+   *   - On the WIRE ({@link buildDiagnosticFeedback}) only its finite *category*
+   *     is read (via {@link diagnosticError}) — never the message/stack/output.
+   *   - LOCALLY ({@link buildDiagnosticReview}) its real text is shown to the
+   *     operator so they can see what actually failed, and decide.
+   */
   error?: unknown;
+  /**
+   * Optional captured process output (stdout/stderr/exit notice) for the
+   * LOCAL review only. Never transmitted. Usually redundant now that the core
+   * loop already folds an `exited N: <tail>` summary into the `error` string,
+   * but accepted for callers that carry it separately.
+   */
+  exitOutput?: string;
   timestamp?: string;
 }
 
@@ -608,4 +621,90 @@ export function buildDiagnosticFeedback(info: DiagnosticInfo): FeedbackPayload {
     timestamp,
     version,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Operator-facing local detail (never transmitted)
+// ---------------------------------------------------------------------------
+//
+// The wire body above is deliberately coarse: it reports a finite error
+// *category* and nothing else, because engagement data must not leave the
+// boundary. But the operator sitting at the console needs the opposite — the
+// REAL reason a tool failed, or they are back to reading "Error: unknown".
+//
+// These helpers resolve that tension: they produce the full, unredacted detail
+// for the human's REVIEW only. They perform no I/O, and nothing here is ever
+// fed to {@link serializePayload} / {@link buildSubmitPreview} — the wire
+// payload is still built solely by {@link buildDiagnosticFeedback}, so the
+// privacy guarantee (and its tests) are untouched.
+
+/** Longest local detail we render; local-only, so generous but still bounded. */
+export const MAX_LOCAL_DETAIL_CHARS = 4000;
+
+/**
+ * Header the UI should show above {@link DiagnosticReview.localDetail} so the
+ * operator understands the detail stays on their machine.
+ */
+export const LOCAL_DETAIL_NOTICE = "Shown to you locally; not transmitted.";
+
+/**
+ * The REAL error text, for LOCAL display.
+ *
+ * Unlike {@link diagnosticError} — which maps to a finite category label for
+ * the wire and (by design) returns "unknown" for a plain string — this returns
+ * the actual message so the operator can read what failed. A thrown Error's
+ * empty `.message` falls back to its `.name`; returns "" only when there is
+ * genuinely no text to show. Never regex-classifies and never touches the wire.
+ */
+export function diagnosticErrorText(error: unknown): string {
+  if (typeof error === "string") return error.trim();
+  if (error instanceof Error) return (error.message || error.name || "Error").trim();
+  if (error === null || error === undefined) return "";
+  try {
+    const text = String(error).trim();
+    return text === "[object Object]" ? "" : text;
+  } catch {
+    // A hostile proxy must not break the review.
+    return "";
+  }
+}
+
+export interface DiagnosticReview {
+  /**
+   * The privacy-bounded payload that would go on the wire — byte-identical to
+   * {@link buildDiagnosticFeedback}. Finite labels only; safe to transmit.
+   */
+  payload: FeedbackPayload;
+  /**
+   * The FULL failure detail for the operator's review ONLY. Carries the real
+   * error message and any captured exit output. NEVER transmitted. Empty only
+   * when there is genuinely no detail to show.
+   */
+  localDetail: string;
+}
+
+/**
+ * Build both halves of a diagnostic report in one call: the coarse,
+ * transmit-safe {@link FeedbackPayload} AND the full local-only detail the
+ * operator reviews before deciding whether to send. This is what a review
+ * surface should render so the operator sees the real reason instead of a bare
+ * "Error: unknown". The `localDetail` must never be handed to the transport.
+ */
+export function buildDiagnosticReview(info: DiagnosticInfo): DiagnosticReview {
+  const payload = buildDiagnosticFeedback(info);
+  const message = diagnosticErrorText(info.error);
+  const lines: string[] = [];
+  if (info.toolName) lines.push(`Tool: ${info.toolName}`);
+  // Show the real message when one exists; only fall back to an honest,
+  // named line when there is truly nothing — never a bare "unknown".
+  lines.push(message ? `Error: ${message}` : `Error: ${info.kind} failed without an error message`);
+  const exitOutput = typeof info.exitOutput === "string" ? info.exitOutput.trim() : "";
+  // The core loop already folds an `exited N: <tail>` summary into the error
+  // string; append separately-carried output only when it is not already there.
+  if (exitOutput && !message.includes(exitOutput)) lines.push(exitOutput);
+  let localDetail = lines.join("\n");
+  if (localDetail.length > MAX_LOCAL_DETAIL_CHARS) {
+    localDetail = localDetail.slice(0, MAX_LOCAL_DETAIL_CHARS - 1) + "…";
+  }
+  return { payload, localDetail };
 }

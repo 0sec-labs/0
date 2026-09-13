@@ -13,7 +13,7 @@ import type { AuthConfig, HarnessUiInput, HarnessSnapshot } from "@0sec/shared";
 import { resolveIdentities, DEFAULT_AUTONOMY_MODE, DEFAULT_ALLOW_MODEL_SELF_EXTENSION, homeStateDir } from "@0sec/shared";
 import { LiveHarnessHost } from "../plugins/live-harness.js";
 import { getWorkspaceHarnessTrust } from "../plugins/harness-trust.js";
-import type { ToolDefinition, ToolCall, ToolResult, ToolContext, AgentRole } from "./types.js";
+import type { ToolDefinition, ToolCall, ToolResult, ToolResultMeta, ToolContext, AgentRole } from "./types.js";
 import { toNativeToolDef, toNativeExtensionToolDef } from "./native-tooldef.js";
 import { SessionEngine } from "./session.js";
 import type { ScopePolicy } from "../scope/scope.js";
@@ -179,6 +179,53 @@ export function isContextWindowError(errorMsg: string): boolean {
   return /context.{0,40}(?:window|length|limit)|(?:maximum|max).{0,20}context|too many tokens|prompt.{0,30}(?:too long|too large)|input.{0,30}(?:too long|too large)/i.test(
     errorMsg,
   );
+}
+
+/**
+ * Fold a command-tool's captured exit status + output tail into a single
+ * concise line, e.g. `exited 1: <last lines of stdout/stderr>`. Used to
+ * enrich a failure string when the display sidecar {@link ToolResultMeta}
+ * carries process detail (exit code / timeout / combined stdout+stderr) that
+ * the bare `error` string would otherwise drop. Returns "" when the meta has
+ * nothing worth reporting.
+ */
+function formatExitSummary(meta: ToolResultMeta | undefined): string {
+  if (!meta) return "";
+  let prefix = "";
+  if (meta.timedOut) prefix = meta.timeoutMs ? `timed out after ${meta.timeoutMs}ms` : "timed out";
+  else if (typeof meta.exitCode === "number") prefix = `exited ${meta.exitCode}`;
+  else if (meta.exitCode === null) prefix = "killed before exit";
+  // Tail of the combined stdout/stderr: the operator/model wants the END of
+  // the output (where the failure message usually is), not the head.
+  const out = (meta.stdout ?? "").trim();
+  let tail = "";
+  if (out) {
+    const lines = out.split("\n").slice(-8);
+    tail = lines.join("\n");
+    if (tail.length > 600) tail = "…" + tail.slice(tail.length - 600);
+  }
+  if (prefix && tail) return `${prefix}: ${tail}`;
+  return prefix || tail;
+}
+
+/**
+ * Guarantee a NON-EMPTY, informative failure string for a `success:false`
+ * {@link ToolResult}. Never returns a bare "unknown". Precedence:
+ *   1. the real `error` message (the thrown Error's message survives here);
+ *   2. a command-meta exit summary folded in when the sidecar carries process
+ *      detail the bare string dropped (`exited N: <output tail>`);
+ *   3. a generic-but-named fallback that at least says WHICH tool failed, so
+ *      the operator never sees a context-free word again.
+ *
+ * Exported for tests.
+ */
+export function toolFailureText(toolName: string, result: ToolResult): string {
+  const base = typeof result.error === "string" ? result.error.trim() : "";
+  const exitSummary = formatExitSummary(result.meta);
+  if (base && exitSummary && !base.includes(exitSummary)) return `${base} (${exitSummary})`;
+  if (base) return base;
+  if (exitSummary) return exitSummary;
+  return `${toolName} failed without an error message`;
 }
 
 // ── Native Agent Loop Config ──
@@ -999,6 +1046,12 @@ export async function runNativeAgentLoop(
       let result: ToolResult;
       try { result = await executor.execute(call, { correlationId, signal: effectiveSignal, assertAuthority }); }
       catch (error) { result = { success: false, output: null, error: error instanceof Error ? error.message : String(error) }; }
+      // Normalize a failed result to a NON-EMPTY, informative reason at the
+      // source, so every downstream consumer (model-facing content below, the
+      // action log, the shadow journal, the bus event, and the TUI card) sees
+      // the real detail instead of an empty/`unknown` placeholder. Folds any
+      // captured exit code / stdout tail (ToolResultMeta) into the string.
+      if (!result.success) result.error = toolFailureText(name, result);
       if (driverCallId) {
         let content = result.success ? JSON.stringify(result.output) ?? "" : `Error: ${result.error}`;
         if (result.success && isUntrustedSourceTool(name)) content = sanitizeUntrustedToolResult(content).content;
@@ -1024,7 +1077,9 @@ export async function runNativeAgentLoop(
       eventBus.emit("tool_call_completed", {
         tool: name, turn: state.turnCount, duration_ms: Date.now() - startedAt,
         status: result.success ? "ok" : "error", ts: Date.now(),
-        ...(result.success ? {} : { error: result.error ?? "unknown" }),
+        // `result.error` is normalized non-empty on failure above; this `??`
+        // is now purely defensive and says something honest, never "unknown".
+        ...(result.success ? {} : { error: result.error ?? `${name} failed without an error message` }),
       });
       await publishSavedFinding(call, result, validationNotes);
       return result;
@@ -2266,6 +2321,12 @@ export async function runNativeAgentLoop(
       });
 
       const toolResult = await executor.execute(call, { correlationId, signal: executionSignal, assertAuthority });
+      // Normalize a failed result to a NON-EMPTY, informative reason at the
+      // source (see the direct-driver path above): folds any captured exit
+      // code / stdout tail into `error` so the model, the action log, the
+      // shadow journal, the bus event, and the operator's TUI card all carry
+      // the real failure detail instead of an empty/`unknown` placeholder.
+      if (!toolResult.success) toolResult.error = toolFailureText(block.name, toolResult);
       const toolEndedAt = Date.now();
       toolResults.push(toolResult);
       onToolUpdate?.(state.turnCount, toolCalls, toolResults, textContent, turnTelemetry);
@@ -2297,7 +2358,9 @@ export async function runNativeAgentLoop(
         turn: state.turnCount,
         duration_ms: toolEndedAt - toolStartedAt,
         status: toolResult.success ? "ok" : "error",
-        ...(toolResult.success ? {} : { error: toolResult.error ?? "unknown" }),
+        // `toolResult.error` is normalized non-empty on failure above; this
+        // `??` is now purely defensive and stays honest, never "unknown".
+        ...(toolResult.success ? {} : { error: toolResult.error ?? `${block.name} failed without an error message` }),
         ts: toolEndedAt,
       });
 
