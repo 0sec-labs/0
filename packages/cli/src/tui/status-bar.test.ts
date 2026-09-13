@@ -300,15 +300,13 @@ describe("context meter", () => {
     ).toContain("▱▱▱▱▱▱ 0% of 100");
   });
 
-  it("never draws a percent/bar meter without both window and usage", () => {
-    // A bar/percent implies an occupancy fraction, which needs both numbers.
-    // The count-only fallback (usage known, window unknown) is not a meter and
-    // is asserted separately below.
-    for (const input of [{ contextUsed: 10 }, { contextWindow: 100 }]) {
-      const text = textOf(buildStatusSegments({ ...input, showContextMeter: true }), "meter");
-      expect(text).toBeDefined();
-      expect(text).not.toMatch(/[%▱▰]/u);
-    }
+  it("never draws a percent/bar meter without a known window", () => {
+    // A bar/percent implies an occupancy fraction of a window. Usage alone (no
+    // window) gets the count-only fallback, asserted separately below; a KNOWN
+    // window without usage does draw a 0% bar, also asserted below.
+    const text = textOf(buildStatusSegments({ contextUsed: 10, showContextMeter: true }), "meter");
+    expect(text).toBeDefined();
+    expect(text).not.toMatch(/[%▱▰]/u);
   });
 
   it("shows a truthful token count when usage is known but the window is not", () => {
@@ -320,8 +318,16 @@ describe("context meter", () => {
     expect(text).not.toMatch(/[%▱▰]/u);
   });
 
-  it("shows unavailable when the window is known but no usage exists yet", () => {
+  it("shows the window at 0% when it is known but no usage exists yet", () => {
+    // A fresh session with a known window: the capacity is real before the
+    // first token is spent, so show it at 0% rather than "unavailable".
     const text = textOf(buildStatusSegments({ contextWindow: 100, showContextMeter: true }), "meter");
+    expect(text).not.toBe("Context usage unavailable");
+    expect(text).toMatch(/0%|▱/u);
+  });
+
+  it("still shows unavailable when neither window nor usage is known", () => {
+    const text = textOf(buildStatusSegments({ showContextMeter: true }), "meter");
     expect(text).toBe("Context usage unavailable");
   });
 });

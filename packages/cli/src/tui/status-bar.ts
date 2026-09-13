@@ -525,6 +525,12 @@ export function buildStatusSegments(input: StatusBarInput): StatusSegment[] {
     } else {
       texts.set("context", `${percent}%/${formatTokenCount(contextWindow)}`);
     }
+  } else if (contextWindow > 0 && input.showContextMeter) {
+    // Window known but no turn has reported usage yet (a fresh session). Show
+    // the meter at 0% rather than "unavailable" — the capacity is real and
+    // known even before the first token is spent. (The compact non-meter
+    // percentage still waits for real usage; a bare "0%" there reads as noise.)
+    texts.set("meter", `Context: ${contextMeter(0, contextWindow, symbols)}`);
   } else if (hasUsage && input.showContextMeter) {
     // Window unknown (e.g. a model absent from the catalog) but we still know
     // how many tokens the turn consumed — show that instead of a dead label.

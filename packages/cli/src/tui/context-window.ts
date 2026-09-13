@@ -25,7 +25,45 @@ import type { HostedCatalogModel } from "./model-catalog.js";
  */
 export interface ContextLimit {
   tokens: number;
-  source: "hosted-catalog" | "synced-catalog" | "offline-catalog";
+  source: "hosted-catalog" | "synced-catalog" | "offline-catalog" | "known-family";
+}
+
+/**
+ * Last-resort context windows for well-known model FAMILIES, consulted only
+ * when neither catalog carries the running model. These are published,
+ * documented numbers (not a guess or a floor) — e.g. the gpt-5.x family's
+ * 272k input window, recorded in the runtime's own notes — so the meter reads
+ * an honest figure instead of "unavailable" for a model the catalog sync has
+ * not (yet) enumerated. Matched by longest id prefix; the `source` on the
+ * result labels the figure truthfully as a family default.
+ */
+const KNOWN_FAMILY_WINDOWS: ReadonlyArray<readonly [prefix: string, tokens: number]> = [
+  ["gpt-5", 272_000],
+  ["gpt-4.1", 1_047_576],
+  ["gpt-4o", 128_000],
+  ["o3", 200_000],
+  ["o4", 200_000],
+  ["claude", 200_000],
+  ["glm-5", 200_000],
+  ["glm-4", 128_000],
+  ["gemini-2.5", 1_048_576],
+  ["gemini-2", 1_000_000],
+  ["deepseek", 128_000],
+  ["qwen", 128_000],
+];
+
+/** The documented window for a model's FAMILY, by longest-prefix match, or null. */
+function knownFamilyWindow(modelId: string): number | null {
+  const id = modelId.toLowerCase();
+  let best: number | null = null;
+  let bestLen = -1;
+  for (const [prefix, tokens] of KNOWN_FAMILY_WINDOWS) {
+    if (id.startsWith(prefix) && prefix.length > bestLen) {
+      best = tokens;
+      bestLen = prefix.length;
+    }
+  }
+  return best;
 }
 
 /** The running model an audit is bound to. Staged next-turn selections are not this. */
@@ -149,9 +187,14 @@ export function resolveContextLimit(
   const load = opts.loadModels ?? loadCatalogModels;
   const cache = load(opts.sync ?? {});
   const row = cache.models.find((model) => sameByokModel(model, identity));
-  if (!row) return null;
-  const tokens = positiveTokens(row.contextTokens);
-  if (tokens === null) return null;
-  return { tokens, source: cache.source === "offline" ? "offline-catalog" : "synced-catalog" };
+  const tokens = row ? positiveTokens(row.contextTokens) : null;
+  if (tokens !== null) {
+    return { tokens, source: cache.source === "offline" ? "offline-catalog" : "synced-catalog" };
+  }
+  // The catalog does not carry this model (or carries no usable window for it).
+  // Fall back to the model family's published window rather than reporting
+  // "unavailable" for a model whose window is publicly known.
+  const family = knownFamilyWindow(identity.modelId);
+  return family === null ? null : { tokens: family, source: "known-family" };
 }
 
