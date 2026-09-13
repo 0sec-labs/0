@@ -4,6 +4,7 @@ import {
   formatToolArgs,
   formatToolResult,
   toolResultDetail,
+  projectToolPreview,
   MAX_SUMMARY_CHARS,
   type ToolCallLike,
   type ToolResultLike,
@@ -496,5 +497,28 @@ describe("toolResultDetail", () => {
       { success: true, output: { files: ["x/".repeat(500), "y\nz", "ok.ts"], truncated: false } },
     );
     for (const l of detail) assertBounded(l);
+  });
+});
+
+describe("actual tool output previews — undefined vs null", () => {
+  it("omits a field explicitly set to undefined but preserves a real null", () => {
+    const output = { mode: null, madeExecutable: undefined, name: "run.sh" };
+    const text = projectToolPreview({ name: "chmod" }, { success: true, output }).lines.join("\n");
+    expect(text).not.toContain("undefined");
+    expect(text).not.toContain("madeExecutable");
+    expect(text).toContain("mode: null"); // meaningful null is kept
+    expect(text).toContain("name: run.sh");
+  });
+
+  it("keeps tree branch connectors correct when the last key is undefined-valued", () => {
+    // `gone` filters out entirely, so `mode` becomes the last visible child and
+    // must render with the └─ connector, not a dangling ├─.
+    const output = { name: "run.sh", mode: null, gone: undefined };
+    const text = projectToolPreview({ name: "chmod" }, { success: true, output }).lines.join("\n");
+    expect(text).not.toContain("undefined");
+    expect(text).not.toContain("gone");
+    expect(text).toContain("├─ name: run.sh");
+    expect(text).toContain("└─ mode: null");
+    expect(text).not.toContain("├─ mode: null");
   });
 });

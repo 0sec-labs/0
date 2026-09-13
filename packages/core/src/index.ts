@@ -1090,6 +1090,9 @@ export type {
   ToolDefinition,
   ToolCall,
   ToolResult,
+  ToolRisk,
+  ToolRiskLevel,
+  DestructiveCategory,
   ToolContext,
   ScopedAuditEscalationRequest,
   OperatorQuestion,
@@ -1102,6 +1105,7 @@ export type {
   NativeAgentLoopOptions,
   NativeAgentState,
 } from "./agent/index.js";
+export { classifyToolRisk, classifyBashCommand, describeDestructiveCategory } from "./agent/index.js";
 
 // Strategy racing (best-of-N)
 export { raceStrategies, raceWithDefaults, DEFAULT_STRATEGIES } from "./racing.js";
