@@ -638,6 +638,14 @@ export function MarketScreen({
           placeholder="type to filter extensions"
           emptyText="No extensions match this filter."
           renderDetail={renderDetail}
+          onActivateRow={(itemIndex) => {
+            // Click SELECTS (highlights) a row, exactly as keyboard navigation
+            // does; install/enable/run stay behind Enter. Map the clicked item
+            // back into selection space the way the cursor→display map runs.
+            const rowIndex = rowIndexOfItem[itemIndex];
+            if (rowIndex !== undefined) applySelected(rowIndex);
+          }}
+          onScroll={move}
         />
       )}
       {rows.length > 0 || notice || mode !== "browse" ? (

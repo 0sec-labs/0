@@ -187,6 +187,7 @@ import {
   HERD_FOCUS_EMPTY_TEXT,
   type HerdSubagentMap,
 } from "./herd-layout.js";
+import { clampScrollOffset, wheelOffsetStep } from "./mouse.js";
 import {
   computeLogoFrame,
   logoAnimationFrameCount,
@@ -5287,7 +5288,16 @@ export function ChatScreen({
           </scrollbox>
         </box>
       ) : (
-        <box flexDirection="column" flexGrow={1} minHeight={0} minWidth={0} marginTop={1}>
+        <box
+          flexDirection="column"
+          flexGrow={1}
+          minHeight={0}
+          minWidth={0}
+          marginTop={1}
+          onMouseScroll={(event) =>
+            setFocusScrollOffset((offset) => clampScrollOffset(offset + wheelOffsetStep(event.scroll)))
+          }
+        >
           <text fg={MUTED}>{fitTuiText(herdFocusTranscriptTitle(focusActivityLines.length), focusInner)}</text>
           {focusVisibleActivity.length === 0 ? (
             <text fg={MUTED}>{fitTuiText(HERD_FOCUS_EMPTY_TEXT, focusInner)}</text>

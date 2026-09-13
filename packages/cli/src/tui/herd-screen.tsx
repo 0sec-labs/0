@@ -950,6 +950,7 @@ export function HerdScreen({
         emptyText={HERD_EMPTY_TEXT}
         renderDetail={renderDetail}
         onActivateRow={selectRow}
+        onScroll={move}
       />
       {overlayBody}
     </box>

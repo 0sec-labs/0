@@ -830,6 +830,8 @@ export function ModelScreen({
           gutter
           isCurrent={(item) => item.current === true}
           renderDetail={renderDetail}
+          onActivateRow={(index) => highlight(items[index]?.id)}
+          onScroll={move}
           emptyText={isHosted
             ? refreshing
               ? "Loading the hosted catalog"

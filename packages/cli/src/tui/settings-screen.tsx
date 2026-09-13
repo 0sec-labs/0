@@ -582,6 +582,8 @@ export function SettingsScreen({ frame, onBack, onExit }: SettingsScreenProps) {
             isCurrent={(item) => item.current === true}
             renderDetail={renderDetail}
             emptyText="No matching settings · ctrl+u clears search"
+            onActivateRow={(itemIndex) => highlight(itemIndex)}
+            onScroll={move}
           />
         ) : null}
         {layout.stackedRows > 0 && selectedItem ? (

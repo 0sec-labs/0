@@ -26,6 +26,7 @@ import { TextAttributes, decodePasteBytes, RGBA } from "@opentui/core";
 import { useTheme } from "./theme-context.js";
 import { useSymbols } from "./symbol-context.js";
 import { Cells, textCells } from "./primitives.js";
+import { wheelRowDelta } from "./mouse.js";
 import { sanitizeTuiText } from "./text.js";
 import { useSurfaceDimensions } from "./dialog-surface.js";
 import { operatorIcon } from "./operator-icons.js";
@@ -148,6 +149,15 @@ export interface DialogSelectBodyProps {
   emptyText?: string;
   /** Clicked selectable index in `items`; the caller retains activation authority. */
   onActivateRow?: (itemIndex: number) => void;
+  /**
+   * Wheel-scroll over the list. The windowed list has no scroll position of its
+   * own — its highlight IS its position — so a wheel notch moves the cursor
+   * exactly as the arrow keys do. `rowDelta` is signed: positive advances
+   * toward later rows (wheel-down), negative retreats (wheel-up). The caller
+   * reuses its own keyboard move handler, so a filter burst / clamp stays in
+   * one place.
+   */
+  onScroll?: (rowDelta: number) => void;
 }
 
 /**
@@ -180,6 +190,7 @@ export function DialogSelectBody({
   renderDetail,
   emptyText = "no matches",
   onActivateRow,
+  onScroll,
 }: DialogSelectBodyProps) {
   const theme = useTheme();
 
@@ -311,6 +322,10 @@ export function DialogSelectBody({
           height={panel.visibleRows}
           flexShrink={0}
           minWidth={0}
+          onMouseScroll={onScroll ? (event) => {
+            const delta = wheelRowDelta(event.scroll);
+            if (delta !== 0) onScroll(delta);
+          } : undefined}
         >
           {rows.length === 0 ? (
             <Cells width={panel.rowWidth} fg={theme.MUTED}>
@@ -521,7 +536,7 @@ export function DialogSelect({
           <Cells width={titleWidth} fg={theme.PRIMARY} attributes={TextAttributes.BOLD}>
             {`${operatorIcon(title.toLowerCase().includes("command") ? "commands" : title, symbols)} ${title}`}
           </Cells>
-          <Cells width={escWidth} align="right" fg={theme.MUTED}>
+          <Cells width={escWidth} align="right" fg={theme.MUTED} onMouseDown={onCancel}>
             {escLabel}
           </Cells>
         </box>
@@ -537,6 +552,7 @@ export function DialogSelect({
           isCurrent={isCurrent}
           renderDetail={renderDetail}
           onActivateRow={moveTo}
+          onScroll={move}
         />
 
         {/* Footer hint */}

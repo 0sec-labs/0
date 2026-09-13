@@ -62,6 +62,14 @@ export interface TuiSettings {
    * accepted with the Right arrow at end-of-input.
    */
   composerSuggestions: boolean;
+  /**
+   * Mouse interactivity: scroll-wheel scrolling of the transcript and long
+   * lists, click-to-focus/select on list rows, and clickable hint affordances.
+   * When off, the TUI puts the terminal back into keyboard-only mode
+   * (`renderer.useMouse = false`) so text selection with the native terminal
+   * works again; every keyboard path is unaffected either way.
+   */
+  mouseSupport: boolean;
   /** Block "0SEC" mark on the empty transcript. */
   showLogo: boolean;
   /** Surface runtime stdout/stderr as transcript notices. */
@@ -318,6 +326,15 @@ const DEFS: readonly TuiSettingDef[] = [
     label: "Composer autosuggestions",
     description:
       "Inline ghost-text continuation from your submitted-message history, accepted with the Right arrow at end-of-input.",
+    kind: "boolean",
+    default: true,
+    group: "Display",
+  },
+  {
+    key: "mouseSupport",
+    label: "Mouse support",
+    description:
+      "Scroll-wheel scrolling, click-to-select on list rows, and clickable hints. Turn off for a keyboard-only console where the terminal's own text selection works.",
     kind: "boolean",
     default: true,
     group: "Display",
@@ -647,6 +664,7 @@ export const DEFAULT_SETTINGS: TuiSettings = {
   showStatusBar: true,
   showComposerHints: true,
   composerSuggestions: true,
+  mouseSupport: true,
   showLogo: true,
   showRuntimeNotices: true,
   showTurnSummary: false,
@@ -934,6 +952,7 @@ export function normalizeSettings(raw: unknown): TuiSettings {
     showStatusBar: booleanAt(raw, "showStatusBar"),
     showComposerHints: booleanAt(raw, "showComposerHints"),
     composerSuggestions: booleanAt(raw, "composerSuggestions"),
+    mouseSupport: booleanAt(raw, "mouseSupport"),
     showLogo: booleanAt(raw, "showLogo"),
     showRuntimeNotices: booleanAt(raw, "showRuntimeNotices"),
     showTurnSummary: booleanAt(raw, "showTurnSummary"),

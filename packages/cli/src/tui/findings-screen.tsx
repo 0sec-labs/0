@@ -670,6 +670,8 @@ export function FindingsScreen({ options, onExit, shell }: { options: FindingsSc
           emptyText="No findings match this filter."
           gutter
           renderDetail={renderFindingsDetail}
+          onActivateRow={(itemIndex) => applyIndex(itemIndex)}
+          onScroll={moveFindingsCursor}
         />
         <Cells width={width} fg={findingsStatusTone}>
           {findingsStatusLine}

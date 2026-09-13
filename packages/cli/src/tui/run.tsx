@@ -10,6 +10,7 @@ import { buildFindingChatPrompt, loadFindingFocus } from "../finding-focus.js";
 import { runUnified } from "../commands/run.js";
 import { useTheme } from "./theme-context.js";
 import { useSettings } from "./settings-store.js";
+import { useMouseSupport } from "./mouse.js";
 import {
   SHELL_HORIZONTAL_PADDING,
   getShellChromeHeight,
@@ -1385,6 +1386,10 @@ function UnifiedApp({
   mode: AppMode;
   lensEvolution?: TuiLensEvolutionController;
 }) {
+  // Global mouse gate: mirror the `mouseSupport` setting onto the renderer so a
+  // single toggle enables/disables all wheel/click behaviour (see mouse.ts).
+  // First hook, before any branch, so its order is stable across renders.
+  useMouseSupport();
   if (mode.type === "console") return <ConsoleApp initialRoute={mode.initialRoute} onResolve={mode.onResolve} onExit={mode.onExit} lensEvolution={lensEvolution} />;
 
   const [state, setState] = useState(mode.initialState);
