@@ -45,7 +45,7 @@ export interface ShellNav {
   openComms: () => void;
   /**
    * Opens the full-screen marketplace browser: plugins and themes from the
-   * configured registry. No endpoint ships by default, so it opens on an honest
+   * configured registry. The Hackstore community index ships as the default, so it opens on
    * empty state until `$0SEC_REGISTRY_URL` points at a registry the operator trusts.
    */
   openMarket: () => void;

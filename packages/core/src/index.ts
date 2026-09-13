@@ -1994,7 +1994,8 @@ export type {
 } from "./plugins/loader.js";
 // Marketplace registry client. Fetches + validates an index (HTTPS only) and
 // applies the signature policy; the index is DATA, never code — nothing here
-// executes anything. No endpoint ships (`DEFAULT_REGISTRY_URL` is empty).
+// executes anything. The Hackstore community index ships as the default
+// (`DEFAULT_REGISTRY_URL`); an operator can override or disable it.
 export {
   DEFAULT_REGISTRY_URL,
   unconfiguredVerifier,

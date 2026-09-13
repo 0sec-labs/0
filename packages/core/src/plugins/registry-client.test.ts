@@ -69,7 +69,7 @@ describe("fetchRegistryIndex", () => {
     const res = await fetchRegistryIndex("", { fetchImpl: f });
     expect(res.ok).toBe(false);
     if (res.ok) return;
-    expect(res.error).toMatch(/no registry endpoint is configured/);
+    expect(res.error).toMatch(/Hackstore is disabled/);
     expect(f).not.toHaveBeenCalled();
   });
 

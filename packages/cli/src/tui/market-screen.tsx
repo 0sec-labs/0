@@ -22,10 +22,10 @@
  *    anything. The action is confirmed before it runs, and the detail pane names
  *    the separate, explicit step an operator must take to enable a plugin.
  *
- * 3. **No endpoint ships.** The registry URL comes from `$0SEC_REGISTRY_URL` or
- *    the (empty) core `DEFAULT_REGISTRY_URL`. When none is configured, or the
- *    fetch fails, the screen renders an honest empty state — guidance, not a
- *    crash — and remains a fully functional UI scaffold.
+ * 3. **Default endpoint = the Hackstore.** The registry URL comes from
+ *    `$0SEC_REGISTRY_URL` or the core `DEFAULT_REGISTRY_URL` (the community
+ *    Hackstore index). When it is explicitly disabled, or the fetch fails, the
+ *    screen renders an honest empty state — guidance, not a crash.
  *
  * The registry fetch, the install action and the installed-state read are all
  * INJECTED (`load`, `installItem`, `readInstalled`) with real defaults that
