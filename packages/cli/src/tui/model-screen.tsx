@@ -73,9 +73,8 @@ import {
   type ModelMode,
   type ModelRow,
 } from "./model-layout.js";
-import { buildFullModelCatalog } from "./model-catalog.js";
+import { buildFullModelCatalog, scopeModelCatalog } from "./model-catalog.js";
 import { syncModelCatalog } from "./model-catalog-sync.js";
-import { OFFLINE_MODEL_CATALOG } from "./model-catalog.offline.js";
 import { providerStates } from "./provider-status.js";
 import { sanitizeTuiText } from "./text.js";
 
@@ -83,9 +82,6 @@ import { sanitizeTuiText } from "./text.js";
 const PAGE_STEP = 5;
 /** One scope row above the list and one credential row below it. */
 const STATUS_ROWS = 2;
-const CURATED_MODEL_IDS: Readonly<Record<string, true>> = Object.fromEntries(
-  OFFLINE_MODEL_CATALOG.map((model) => [model.id, true]),
-);
 
 export interface ModelFrameInput {
   /** The screen body, already sized to the rows the frame left it. */
@@ -198,8 +194,8 @@ export function ModelScreen({
     [currentModel, catalogNonce],
   );
   const scopedCatalog = useMemo(
-    () => showAll ? catalog : catalog.filter((model) => Object.hasOwn(CURATED_MODEL_IDS, model.id) || model.id === currentModel),
-    [catalog, currentModel, showAll],
+    () => scopeModelCatalog(catalog, { showAll, filter, currentModel }),
+    [catalog, currentModel, filter, showAll],
   );
 
   // `buildModelRows` does all the domain work — grouping by provider, credential
@@ -212,14 +208,19 @@ export function ModelScreen({
     () => buildModelRows({ catalog: scopedCatalog, states, filter, activeModel: currentModel }),
     [scopedCatalog, states, filter, currentModel],
   );
-  const items = useMemo(() => modelDialogItems(modelRows), [modelRows]);
-  // id -> ModelRow, so the detail renderer can reach the full provider/credential
-  // facts the flat `DialogItem` does not carry.
-  const rowById = useMemo(() => {
-    const map = new Map<string, ModelRow>();
-    for (const row of modelRows) if (row.kind === "model") map.set(row.model.id, row);
-    return map;
-  }, [modelRows]);
+  const modelOnlyRows = useMemo(
+    () =>
+      modelRows.filter(
+        (row): row is Extract<ModelRow, { kind: "model" }> => row.kind === "model",
+      ),
+    [modelRows],
+  );
+  const items = useMemo(() => modelDialogItems(modelOnlyRows), [modelOnlyRows]);
+  // Keyed by item, not model id: ids repeat across providers.
+  const rowByItem = useMemo(
+    () => new Map(items.map((item, index) => [item, modelOnlyRows[index]] as const)),
+    [items, modelOnlyRows],
+  );
   // Display rows (headings interleaved) drive the panel's scroll/height math.
   const totalRows = useMemo(() => {
     let count = 0;
@@ -234,10 +235,13 @@ export function ModelScreen({
     return count;
   }, [items]);
 
-  // Keep the highlight on the same model when the background catalog refreshes.
-  const [selectedId, setSelectedId] = useState(currentModel);
-  const selectedIdRef = useRef(selectedId);
-  const cursor = clampDialogSelection(items, items.findIndex((item) => item.id === selectedId));
+  // Index into `items`, not a model id: ids repeat across providers, and an
+  // id lookup snaps the highlight back to the first duplicate.
+  const [selected, setSelected] = useState(() =>
+    Math.max(0, modelOnlyRows.findIndex((row) => row.model.id === currentModel)),
+  );
+  const selectedRef = useRef(selected);
+  const cursor = clampDialogSelection(items, selected);
 
   const contentWidth = Math.max(0, width - 4);
   const bodyRows = Math.max(0, height - shellChromeRows(width) - STATUS_ROWS);
@@ -260,31 +264,33 @@ export function ModelScreen({
   const currentItems = () => filterRef.current === filter && showAllRef.current === showAll
     ? items
     : modelDialogItems(buildModelRows({
-      catalog: showAllRef.current
-        ? catalog
-        : catalog.filter((model) => Object.hasOwn(CURATED_MODEL_IDS, model.id) || model.id === currentModel),
+      catalog: scopeModelCatalog(catalog, {
+        showAll: showAllRef.current,
+        filter: filterRef.current,
+        currentModel,
+      }),
       states,
       filter: filterRef.current,
       activeModel: currentModel,
     }));
-  const highlight = (id: string | undefined) => {
-    selectedIdRef.current = id;
-    setSelectedId(id);
+  const highlight = (index: number) => {
+    selectedRef.current = index;
+    setSelected(index);
   };
 
   const move = (delta: number) => {
     const visible = currentItems();
     if (visible.length === 0) return;
     const dir: 1 | -1 = delta >= 0 ? 1 : -1;
-    let next = clampDialogSelection(visible, visible.findIndex((item) => item.id === selectedIdRef.current));
+    let next = clampDialogSelection(visible, selectedRef.current);
     for (let i = 0; i < Math.abs(delta); i += 1) next = moveDialogSelection(visible, next, dir);
-    highlight(visible[next]?.id);
+    highlight(next);
   };
 
   const setQuery = (next: SetStateAction<string>) => {
     filterRef.current = typeof next === "function" ? next(filterRef.current) : next;
     setFilter(filterRef.current);
-    highlight(undefined);
+    highlight(0);
   };
 
   usePaste((event) => {
@@ -306,8 +312,8 @@ export function ModelScreen({
     if (key.name === "down") return move(1);
     if (key.name === "pageup") return move(-PAGE_STEP);
     if (key.name === "pagedown") return move(PAGE_STEP);
-    if (key.name === "home") return highlight(currentItems()[0]?.id);
-    if (key.name === "end") return highlight(currentItems().at(-1)?.id);
+    if (key.name === "home") return highlight(0);
+    if (key.name === "end") return highlight(Math.max(0, currentItems().length - 1));
     if (key.name === "tab") {
       showAllRef.current = !showAllRef.current;
       setShowAll(showAllRef.current);
@@ -315,7 +321,7 @@ export function ModelScreen({
     }
     if (key.name === "return") {
       const visible = currentItems();
-      const activeItem = visible[clampDialogSelection(visible, visible.findIndex((item) => item.id === selectedIdRef.current))];
+      const activeItem = visible[clampDialogSelection(visible, selectedRef.current)];
       if (activeItem) onSelect(activeItem.id);
       return;
     }
@@ -338,7 +344,7 @@ export function ModelScreen({
   // The detail pane shows the highlighted model's full provider/credential
   // story, fitted to the exact box the shared body hands it.
   const renderDetail = (item: DialogItem, pane: { width: number; height: number }) => {
-    const row = rowById.get(item.id);
+    const row = rowByItem.get(item);
     const compact = pane.height < 12;
     const lines = clipModelDetailLines(
       modelDetailLines({ row, configured, compact }, pane.width),
@@ -359,7 +365,7 @@ export function ModelScreen({
   const body = (
     <box flexDirection="column" width="100%" flexGrow={1} minWidth={0}>
       <Cells width={contentWidth} fg={theme.ACCENT}>
-        {`\uec19 New chat model · ${showAll ? "All" : "Curated"} · ${items.length}/${scopedCatalog.length}${refreshing ? " ⟳" : ""}`}
+        {`\uec19 New chat model · ${showAll || filter.trim() ? "All" : "Curated"} · ${items.length}/${scopedCatalog.length}${refreshing ? " ⟳" : ""}`}
       </Cells>
       <DialogSelectBody
         items={items}
@@ -370,7 +376,7 @@ export function ModelScreen({
         gutter
         isCurrent={(item) => item.current === true}
         renderDetail={renderDetail}
-        emptyText={showAll ? "\uf002 No matches — Ctrl+U clears" : "\uf002 No matches — Tab to browse all models"}
+        emptyText={showAll || filter ? "\uf002 No matches — Ctrl+U clears" : "\uf002 No matches — Tab to browse all models"}
       />
       <box flexDirection="row" width="100%" flexShrink={0} minWidth={0}>
         <Cells width={contentWidth} fg={theme.MUTED}>

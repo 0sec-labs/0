@@ -83,8 +83,7 @@ export function modelSelectorItems(currentModel?: string): SelectorItem[] {
 // has rates for, in a stable order. The functions below widen the picker to
 // every model the operator's provider offers by folding in the Models.dev
 // catalog (cached, with a bundled offline floor — see model-catalog-sync.ts).
-// Synced rows the pricing table already covers are dropped so a priced row is
-// never shadowed by a rate-less duplicate.
+// Drop a synced row only when the priced core shows that exact row already.
 
 /** Byte-order-stable sort used by both the priced and full catalogs. */
 function compareCatalogRows(currentModel?: string) {
@@ -96,20 +95,18 @@ function compareCatalogRows(currentModel?: string) {
 }
 
 /**
- * Models present in the cached/offline Models.dev catalog but NOT already in
- * the pricing table. Price is shown only when the feed carried one; otherwise
+ * Models present in the cached/offline Models.dev catalog beyond the priced
+ * core's own rows. Price is shown only when the feed carried one; otherwise
  * a neutral placeholder, so the operator can still select the model (cost
  * accounting falls back to the `default` rate row, exactly as it does today
  * for any unrecognised id).
  */
 export function catalogExtras(opts: CatalogSyncOptions = {}): CatalogModel[] {
   const priced = new Set(Object.keys(MODEL_PRICING).map((k) => k.toLowerCase()));
-  const seen = new Set<string>();
   const out: CatalogModel[] = [];
   for (const m of loadCatalogModels(opts).models) {
-    const key = m.id.toLowerCase();
-    if (priced.has(key) || seen.has(key)) continue;
-    seen.add(key);
+    // Skip only the priced core's own rows (same id, same provider).
+    if (priced.has(m.id.toLowerCase()) && m.provider === modelProvider(m.id)) continue;
     const price =
       typeof m.input === "number" && typeof m.output === "number"
         ? formatModelPrice(m.input, m.output)
@@ -137,3 +134,21 @@ export function buildFullModelCatalog(
   return models.sort(compareCatalogRows(currentModel));
 }
 
+/**
+ * Which rows the picker shows before any filter narrows them. Curated
+ * (default) is the priced core; `tab` shows all, and any filter searches all.
+ */
+export function scopeModelCatalog(
+  catalog: CatalogModel[],
+  opts: { showAll?: boolean; filter?: string; currentModel?: string } = {},
+): CatalogModel[] {
+  if (opts.showAll || (opts.filter ?? "").trim().length > 0) return catalog;
+  const current = opts.currentModel;
+  const curated = buildModelCatalog(current);
+  if (current && !curated.some((model) => model.id === current)) {
+    const row = catalog.find((model) => model.id === current);
+    curated.push(row ?? { id: current, provider: modelProvider(current), price: "—" });
+    curated.sort(compareCatalogRows(current));
+  }
+  return curated;
+}

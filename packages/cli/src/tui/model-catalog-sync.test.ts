@@ -52,6 +52,15 @@ describe("normalizeModelsDev", () => {
     expect(bare.contextTokens).toBeUndefined();
   });
 
+  it("keeps the same id listed by several providers (no cross-provider collapse)", () => {
+    const rows = normalizeModelsDev({
+      kilo: { models: { "openrouter/auto": { cost: { input: 1, output: 2 } } } },
+      openrouter: { models: { "openrouter/auto": { cost: { input: 0, output: 0 } } } },
+    });
+    expect(rows).toHaveLength(2);
+    expect(new Set(rows.map((r) => r.provider))).toEqual(new Set(["kilo", "openrouter"]));
+  });
+
   it("returns [] for non-object / malformed input rather than throwing", () => {
     expect(normalizeModelsDev(null)).toEqual([]);
     expect(normalizeModelsDev("nope")).toEqual([]);
@@ -182,6 +191,23 @@ describe("catalog merge (priced core + synced extras)", () => {
     expect(ids).toContain("totally-new-model");
     expect(ids).not.toContain("claude-opus-4-7");
     expect(extras.find((e) => e.id === "totally-new-model")!.price).toBe("$1/2 per M");
+  });
+
+  it("keeps a priced id offered by another provider, drops the canonical duplicate", () => {
+    // A priced id listed by another provider stays; the canonical duplicate goes.
+    writeFileSync(
+      cachePath,
+      JSON.stringify({
+        fetchedAt: 0,
+        source: "test",
+        models: [
+          { id: "qwen3.7-max", provider: "opencode-go", input: 2.5, output: 7.5 },
+          { id: "qwen3.7-max", provider: "qwen", input: 2.5, output: 7.5 },
+        ],
+      }),
+    );
+    const extras = catalogExtras({ cachePath });
+    expect(extras.map((e) => e.provider)).toEqual(["opencode-go"]);
   });
 
   it("full catalog is a superset of the priced catalog", () => {
