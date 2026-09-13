@@ -666,9 +666,9 @@ describe("the detail pane", () => {
 describe("the empty / error state", () => {
   const textOf = (lines: { text: string }[]): string => lines.map((line) => line.text).join("\n");
 
-  it("guides an unconfigured registry rather than reading as a crash", () => {
+  it("guides a disabled (empty-URL) Hackstore rather than reading as a crash", () => {
     const text = textOf(marketEmptyLines({ registryUrl: "" }, 60));
-    expect(text).toContain("No marketplace registry configured");
+    expect(text).toContain("Hackstore disabled");
     expect(text).toContain("0SEC_REGISTRY_URL");
     expect(text).toContain("runs nothing");
   });
@@ -684,7 +684,7 @@ describe("the empty / error state", () => {
     const text = textOf(
       marketEmptyLines({ registryUrl: "https://x", reachableButEmpty: true }, 60),
     );
-    expect(text).toContain("no plugins or themes");
+    expect(text).toContain("no extensions or themes");
   });
 
   it("keeps every empty-state line inside its pane", () => {

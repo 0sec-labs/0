@@ -22,7 +22,7 @@ const SCREENS: Readonly<Record<string, readonly [SymbolKey, string]>> = {
   herd: ["iconAgents", "Agents"],
   agents: ["iconAgents", "Agents"],
   audits: ["iconAudits", "Active audits"],
-  market: ["iconMarket", "Marketplace"],
+  market: ["iconMarket", "Hackstore"],
   connect: ["iconConnect", "Connections"],
   onboard: ["iconOnboard", "Getting started"],
   onboarding: ["iconOnboard", "Getting started"],

@@ -55,7 +55,7 @@ import { listSessions, loadSession, deleteSession } from "./session-store.js";
 import { MarketScreen } from "./market-screen.js";
 import { createPluginService } from "./plugin-service.js";
 import { createSessionPluginHostManager, type SessionPluginHostManager } from "./session-plugin-host.js";
-import { connectMcpServers, parseMcpConfig, TOOL_DEFINITIONS } from "@0sec/core";
+import { connectMcpServers, parseMcpConfig, DEFAULT_REGISTRY_URL, TOOL_DEFINITIONS } from "@0sec/core";
 import { ConnectScreen } from "./connect-screen.js";
 import type { ConnectionRecovery } from "./connection-recovery.js";
 import { UsageScreen } from "./usage-screen.js";
@@ -369,7 +369,13 @@ function MarketRoute({ onExit, shell, pluginHostManager }: { onExit: () => void;
   // host, and a theme activate hands off to the theme setting. Built once so a
   // load host persists for the life of the overlay.
   const registryUrl = React.useMemo(
-    () => (process.env["0SEC_REGISTRY_URL"] ?? "").trim(),
+    // Unset → the default Hackstore index. An explicitly-set value (even empty)
+    // is honoured verbatim, so `0SEC_REGISTRY_URL=` stays a deliberate "no
+    // store" rather than silently reverting to the default.
+    () => {
+      const override = process.env["0SEC_REGISTRY_URL"];
+      return (override !== undefined ? override : DEFAULT_REGISTRY_URL).trim();
+    },
     [],
   );
   const service = React.useMemo(

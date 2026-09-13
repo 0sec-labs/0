@@ -914,7 +914,7 @@ export function marketEmptyLines(
   const configured = registryUrl.trim().length > 0;
 
   if (error) {
-    push("Could not reach the marketplace registry.", "warn");
+    push("Could not reach the Hackstore index.", "warn");
     blank();
     push(`Registry: ${registryUrl}`, "muted");
     push(error, "muted");
@@ -924,23 +924,23 @@ export function marketEmptyLines(
   }
 
   if (!configured) {
-    push("No marketplace registry configured.", "title");
+    push("Hackstore disabled.", "title");
     blank();
-    push("Set 0SEC_REGISTRY_URL to a registry index URL you trust, then reopen this screen.", "text");
+    push("0SEC_REGISTRY_URL is set to an empty value, so no index is fetched.", "text");
+    push("Unset it to use the default community Hackstore, or point it at an index URL you trust.", "text");
     blank();
-    push("No endpoint ships by default — the marketplace is opt-in.", "muted");
     push("Installing writes files and runs nothing; it never enables a plugin.", "muted");
     return lines;
   }
 
   if (reachableButEmpty) {
-    push("The configured registry has no plugins or themes to install.", "text");
+    push("The Hackstore index has no extensions or themes to install yet.", "text");
     blank();
     push(`Registry: ${registryUrl}`, "muted");
     return lines;
   }
 
-  push("Loading the marketplace registry…", "muted");
+  push("Loading the Hackstore index…", "muted");
   return lines;
 }
 

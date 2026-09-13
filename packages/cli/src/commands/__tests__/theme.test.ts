@@ -86,7 +86,7 @@ describe("theme install", () => {
     const cap = capture();
     await runThemeInstall("acme.midnight", cap.deps({ homeDir: makeDir("th-home-"), core: fakeCore(), registryUrl: "" }));
     expect(process.exitCode).toBe(1);
-    expect(cap.err.join("\n")).toMatch(/No registry is configured/);
+    expect(cap.err.join("\n")).toMatch(/Hackstore is disabled/);
   });
 
   it("fetches, validates and writes a theme, then it is installable", async () => {

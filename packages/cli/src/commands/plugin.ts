@@ -349,9 +349,9 @@ export function runList(deps: PluginCommandDeps): void {
 export async function runSearch(query: string, deps: PluginCommandDeps): Promise<void> {
   const d = resolve(deps);
   if (d.registryUrl.trim().length === 0) {
-    d.out("No registry is configured, so there is nothing to search.");
-    d.out("  Point --registry at a marketplace index URL you trust to browse plugins.");
-    d.out("  (No marketplace endpoint ships by default — DEFAULT_REGISTRY_URL is empty.)");
+    d.out("The Hackstore is disabled (registry URL is empty), so there is nothing to search.");
+    d.out("  The default community Hackstore lives at github.com/0sec-labs/hackstore.");
+    d.out("  Unset 0SEC_REGISTRY_URL to use it, or point --registry at an index URL you trust.");
     process.exitCode = EXIT_OK;
     return;
   }
@@ -397,8 +397,8 @@ export async function runInstall(id: string, deps: PluginCommandDeps): Promise<v
     return;
   }
   if (d.registryUrl.trim().length === 0) {
-    d.err(chalk.red("No registry is configured, so nothing can be installed."));
-    d.err("  Point --registry at a marketplace index URL you trust.");
+    d.err(chalk.red("The Hackstore is disabled (registry URL is empty), so nothing can be installed."));
+    d.err("  Unset 0SEC_REGISTRY_URL for the default community Hackstore, or point --registry at an index URL you trust.");
     process.exitCode = EXIT_USER_ERROR;
     return;
   }

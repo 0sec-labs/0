@@ -308,10 +308,10 @@ export const SLASH_COMMANDS: readonly SlashCommand[] = [
     tuiOnly: true,
   },
   {
-    name: "market",
-    aliases: ["marketplace"],
+    name: "hackstore",
+    aliases: ["store", "market", "marketplace"],
     category: "navigation",
-    description: "Browse the extension marketplace",
+    description: "Browse the Hackstore — install community extensions and themes",
     tuiOnly: true,
   },
   {

@@ -52,15 +52,20 @@ import {
 import { aggregateCapabilities } from "./enablement.js";
 
 /**
- * Default marketplace endpoint.
+ * Default Hackstore endpoint — the community extension index.
  *
- * INTENTIONALLY EMPTY — there is no confirmed registry host. Leaving this blank
- * (rather than inventing a URL) means every code path that would fetch is a
- * clear no-op until an operator supplies a URL they trust.
- *
- * TODO: confirm registry endpoint.
+ * Points at the public, community-curated index hosted in the `0sec-labs/
+ * hackstore` GitHub repo: authors add an extension by opening a PR against that
+ * repo's `index.json`, so the store grows through the same review-in-the-open
+ * flow as a Homebrew tap — no server to run, and every entry has a public,
+ * auditable history. It is fetched read-only over https (http is refused, see
+ * below); the index carries only MANIFESTS a human reviews before installing —
+ * nothing here executes code. An operator who wants a different or private
+ * index overrides this with `0SEC_REGISTRY_URL` (or `--registry`); an empty
+ * override is still honoured as an explicit "no store", so the fetch stays a
+ * clear no-op rather than silently falling back to this default.
  */
-export const DEFAULT_REGISTRY_URL = "";
+export const DEFAULT_REGISTRY_URL = "https://raw.githubusercontent.com/0sec-labs/hackstore/main/index.json";
 
 /** Hard cap on a fetched registry index body. The registry is the most
  * untrusted input in this subsystem — bound it like every sibling layer

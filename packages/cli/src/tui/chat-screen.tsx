@@ -3176,9 +3176,10 @@ export function ChatScreen({
       case "ops":
         onNavigate("ops");
         return true;
-      case "market":
-        // run.tsx already routes the "market" destination to the marketplace
-        // screen; chat just needs the nav entry (mirrors "/ops"/"/settings").
+      case "hackstore":
+        // run.tsx routes the "market" destination to the Hackstore screen
+        // (kept as the internal route id); chat just needs the nav entry
+        // (mirrors "/ops"/"/settings").
         onNavigate("market");
         return true;
       case "usage":

@@ -252,12 +252,12 @@ const CAPABILITIES: readonly CapabilityEntry[] = [
   },
   {
     id: "market",
-    label: "Marketplace",
+    label: "Hackstore",
     category: "settings",
     route: "market",
     outboundOrMutating: true,
     safetyTier: "operator-confirmed",
-    description: "Browse and install plugins and themes.",
+    description: "Browse and install community extensions and themes from the Hackstore.",
   },
   {
     id: "doctor",
