@@ -113,9 +113,10 @@ export interface ToolResult {
 export interface ToolResultMeta {
   /**
    * Which card the UI should draw. `command` → bash/run_command; `edit` →
-   * apply_patch; `web` → web_search; `task` → subagent launch (spawn_agents).
+   * apply_patch; `web` → web_search; `task` → subagent launch (spawn_agents);
+   * `image` → an inline screenshot (browser tool).
    */
-  kind?: "command" | "edit" | "web" | "task";
+  kind?: "command" | "edit" | "web" | "task" | "image";
   // ── command card ──
   /** The command that was executed (header line `$ <command>`). */
   command?: string;
@@ -138,6 +139,27 @@ export interface ToolResultMeta {
   removed?: number;
   /** A diff body (hunk lines) for the card, when available. */
   diff?: string;
+  // ── image card (kind: "image") ──
+  /**
+   * An inline image the tool captured — a browser screenshot, chiefly. The
+   * base64 payload is display-only (like the whole `meta` sidecar) and is
+   * NEVER serialized into the model's tool_result, so the full-resolution PNG
+   * can ride here without inflating the model-facing string. The TUI renders
+   * it as an ImageCard (dimensions + inline draw where the terminal supports
+   * it, a compact caption placeholder otherwise).
+   */
+  image?: {
+    /** Base64 PNG/image bytes, no `data:` prefix. */
+    imageBase64: string;
+    /** Media type, e.g. "image/png". */
+    mimeType: string;
+    /** Pixel width, decoded from the image header. */
+    width: number;
+    /** Pixel height, decoded from the image header. */
+    height: number;
+    /** Optional caption (e.g. the page URL the shot was taken on). */
+    caption?: string;
+  };
   // ── web card ──
   /** Search provider name (header line `⌕ Web Search: <provider>`). */
   provider?: string;

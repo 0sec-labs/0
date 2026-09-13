@@ -16,6 +16,7 @@ import {
   executeBrowser,
   type BrowserDriver,
   type BrowserDriverFactory,
+  type BrowserDriverOptions,
   type BrowserPage,
   type BrowserToolContext,
 } from "./browser.js";
@@ -201,5 +202,61 @@ describe("executeBrowser multi-tab", () => {
 
     const closeAll = await executeBrowser(unscopedCtx, { action: "close", all: true }, deps);
     expect((closeAll.output as { closed: number }).closed).toBe(1);
+  });
+});
+
+// ── Screenshot image meta (rendered as an ImageCard by the TUI) ───────────────
+
+// A real 1×1 PNG so `pngDimensions` can decode the IHDR width/height.
+const ONE_BY_ONE_PNG_B64 =
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+
+function pngDriver(): BrowserDriver {
+  const page: BrowserPage = { ...fakePage(), async screenshot() { return ONE_BY_ONE_PNG_B64; } };
+  return {
+    async tab() { return page; },
+    listTabs: () => [{ name: "main", url: page.currentUrl() }],
+    async closeTab() { return true; },
+    async closeAll() { return 1; },
+    async dispose() {},
+  };
+}
+
+describe("executeBrowser screenshot image meta", () => {
+  const deps = { createDriver: async () => ({ driver: pngDriver() }) };
+
+  it("attaches an image meta kind with the full base64 + decoded PNG dimensions", async () => {
+    const r = await executeBrowser(unscopedCtx, { action: "screenshot" }, deps);
+    expect(r.success).toBe(true);
+    expect(r.meta?.kind).toBe("image");
+    expect(r.meta?.image?.mimeType).toBe("image/png");
+    // Full, untruncated base64 rides in meta for the display-only image card.
+    expect(r.meta?.image?.imageBase64).toBe(ONE_BY_ONE_PNG_B64);
+    expect(r.meta?.image?.width).toBe(1);
+    expect(r.meta?.image?.height).toBe(1);
+    // The model-facing output still carries the (bounded) base64 as before.
+    expect((r.output as { screenshot_base64: string }).screenshot_base64).toBe(ONE_BY_ONE_PNG_B64);
+  });
+});
+
+// ── Driver options threading (attribution + scope-pinned interceptor) ─────────
+
+describe("executeBrowser driver options", () => {
+  it("forwards userAgent / extraHeaders / interceptor into the backend factory", async () => {
+    let seen: BrowserDriverOptions | undefined;
+    const capturingFactory: BrowserDriverFactory = async (opts) => {
+      seen = opts;
+      return { driver: fakeDriver() };
+    };
+    const interceptor: BrowserDriverOptions["interceptor"] = async () => null;
+    await executeBrowser(unscopedCtx, { action: "list_tabs" }, {
+      createDriver: capturingFactory,
+      userAgent: "0sec-browser/1.0",
+      extraHeaders: { "X-0sec": "engagement" },
+      interceptor,
+    });
+    expect(seen?.userAgent).toBe("0sec-browser/1.0");
+    expect(seen?.extraHeaders).toEqual({ "X-0sec": "engagement" });
+    expect(seen?.interceptor).toBe(interceptor);
   });
 });

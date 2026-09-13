@@ -188,6 +188,7 @@ import {
 } from "./agent-messaging.js";
 import { mapWithConcurrency } from "../concurrency.js";
 import { executeIntel } from "./tools/intel.js";
+import { executeBrowser, type BrowserDriverHost } from "./tools/browser.js";
 import { resolveScopedPath } from "./tools/scope-path.js";
 import { windowFileContent } from "./tools/read-file-window.js";
 import { executeOverseScan, validateOverseArgs } from "./tools/0verse.js";
@@ -2810,15 +2811,13 @@ export class ToolExecutor {
   private db: osecDB | null;
   private ctx: ToolContext;
   private readonly _credentialTarget: string;
-  private _browser: any = null;
-  private _browserPage: any = null;
-  private _browserActionContext: {
-    active: boolean;
-    signal?: AbortSignal;
-    assertAuthority?: () => void;
-  } | undefined;
-  private _browserDialogs: string[] = [];
-  private _browserConsole: string[] = [];
+  /**
+   * Cross-call holder for the next-gen browser driver (tools/browser.ts). The
+   * multi-tab driver is created lazily on the first `browser` call and cached
+   * here so tabs live across turns; disposed in {@link cleanup}. Replaces the
+   * old single-page `_browser`/`_browserPage`/`_browserActionContext` fields.
+   */
+  private _browserHost: BrowserDriverHost = {};
   private _playwrightAvailable: boolean | null = null;
   private _ptyManager: PtySessionManager | null = null;
   private _pyKernel: PythonKernelManager | null = null;
@@ -3117,13 +3116,9 @@ export class ToolExecutor {
   async cleanup(): Promise<void> {
     if (this._ownsWorkerTree) await this._workerTree.close();
     try {
-      if (this._browserPage) {
-        await this._browserPage.close().catch(() => {});
-        this._browserPage = null;
-      }
-      if (this._browser) {
-        await this._browser.close().catch(() => {});
-        this._browser = null;
+      if (this._browserHost.driver) {
+        await this._browserHost.driver.dispose().catch(() => {});
+        this._browserHost.driver = null;
       }
       if (this._ptyManager) {
         this._ptyManager.cleanup();
@@ -5705,254 +5700,78 @@ export class ToolExecutor {
     };
   }
 
-  // ── Browser automation (Playwright) ──
+  // ── Browser automation (multi-tab, tools/browser.ts) ──
 
-  private async ensureBrowser(): Promise<{ page: any }> {
-    if (this._browserPage) return { page: this._browserPage };
+  /**
+   * Scope-pinned request transport handed to the browser driver as its
+   * `interceptor`. Mirrors the old `context.route("**\/*") -> fetchTarget`
+   * block: for a public-network scan it fetches every page resource through
+   * the scope-checked `fetchTarget` sink (so no sub-resource escapes scope and
+   * attribution is applied) and hands the fulfilled response back to the
+   * driver; for a normal scoped/unscoped scan it returns `null`, letting the
+   * request continue directly (Chromium reaches only the in-scope host that
+   * `executeBrowser`'s pre-`goto` + post-redirect scope gate already vetted).
+   */
+  private _browserInterceptor = async (req: {
+    url: string;
+    method: string;
+    headers: Record<string, string>;
+    body?: Uint8Array;
+  }): Promise<{ status: number; headers: Record<string, string>; body: Uint8Array } | null> => {
+    // Only the public-network path pins the transport, exactly as before.
+    if (!this.ctx.publicNetwork) return null;
+    const execution = this._executionContext.getStore();
+    const response = await this.fetchTarget(req.url, {
+      method: req.method,
+      headers: req.headers,
+      body: req.body ? Buffer.from(req.body) : undefined,
+      redirect: "manual",
+      signal: execution?.signal,
+    });
+    const headers = Object.fromEntries(response.headers.entries());
+    delete headers["content-encoding"];
+    delete headers["content-length"];
+    const body = new Uint8Array(await response.arrayBuffer());
+    return { status: response.status, headers, body };
+  };
 
-    // @ts-ignore — playwright is an optional dependency
-    const { chromium } = await import("playwright");
-    this._browser = await chromium.launch({ headless: true });
-    // Attribution-header injection (0sec#216). Playwright doesn't run
-    // through `applyAttribution` — it has its own request pipeline — so
-    // we set `extraHTTPHeaders` on the context, which Chrome attaches to
-    // every outgoing request. The browser only navigates to in-scope
-    // hosts (validateTargetUrl is enforced before goto), so attribution
-    // here is bounded to in-scope traffic in the same way as the fetch
-    // sites. Same UA-override rule: when an engagement token is set, it
-    // replaces the default `0sec-browser/1.0`.
+  /**
+   * The `browser` tool handler. Delegates to the next-gen multi-tab driver in
+   * tools/browser.ts (`executeBrowser`), holding the driver across calls in
+   * `_browserHost` and passing the scope-pinned interceptor + attribution
+   * UA/headers. The method name is unchanged so dispatch (`browser ->
+   * browserAction`) is untouched. Scope gating (pre-`goto` + post-redirect
+   * re-check, 0sec#218) lives inside `executeBrowser`, and a missing backend
+   * degrades to a clear install hint there rather than throwing here.
+   */
+  private async browserAction(args: Record<string, unknown>): Promise<ToolResult> {
+    // Attribution: Playwright has its own request pipeline (not applyAttribution),
+    // so the UA + headers are pinned on the browser context. Out-of-scope hosts
+    // are never reached (scope gate + interceptor), so this stays in-scope-only —
+    // and public-network browsing carries no attribution, as before.
     const attribution = this.ctx.publicNetwork ? undefined : this.ctx.attribution;
-    const browserUa = attribution?.userAgentToken
+    const userAgent = attribution?.userAgentToken
       ? formatUserAgent(attribution.userAgentToken)
       : "0sec-browser/1.0";
-    const context = await this._browser.newContext({
-      ignoreHTTPSErrors: true,
-      ...(this.ctx.publicNetwork ? { serviceWorkers: "block" } : {}),
-      userAgent: browserUa,
-      ...(attribution && Object.keys(attribution.headers).length > 0
-        ? { extraHTTPHeaders: attribution.headers }
-        : {}),
-    });
-    // Opted-in browsing uses the same pinned transport for every page resource,
-    // including redirects. Never let Chromium resolve an unchecked destination.
-    await context.route("**/*", async (route: any) => {
-      if (!this.ctx.publicNetwork) return route.continue();
-      const authority = this._browserActionContext;
-      const assertRouteAuthority = () => {
-        if (!authority?.active || this._browserActionContext !== authority) {
-          throw new Error("Browser action authority has ended.");
-        }
-        authority.signal?.throwIfAborted();
-        authority.assertAuthority?.();
-      };
-      const abortRoute = () => { void route.abort("blockedbyclient").catch(() => {}); };
-      authority?.signal?.addEventListener("abort", abortRoute, { once: true });
-      try {
-        assertRouteAuthority();
-        const request = route.request();
-        const requestHeaders = await request.allHeaders();
-        assertRouteAuthority();
-        const response = await this._executionContext.run({
-          signal: authority!.signal, assertAuthority: assertRouteAuthority,
-        }, () => this.fetchTarget(request.url(), {
-          method: request.method(), headers: requestHeaders, signal: authority!.signal,
-          body: request.postDataBuffer() ?? undefined, redirect: "manual",
-        }));
-        const headers = Object.fromEntries(response.headers.entries());
-        delete headers["content-encoding"];
-        delete headers["content-length"];
-        const body = Buffer.from(await response.arrayBuffer());
-        assertRouteAuthority();
-        await route.fulfill({ status: response.status, headers, body });
-      } catch {
-        await route.abort("blockedbyclient").catch(() => {});
-      } finally {
-        authority?.signal?.removeEventListener("abort", abortRoute);
-      }
-    });
-    this._browserPage = await context.newPage();
+    const extraHeaders =
+      attribution && Object.keys(attribution.headers).length > 0 ? attribution.headers : undefined;
 
-    // Capture dialogs (alert/confirm/prompt) — key XSS signal
-    this._browserPage.on("dialog", async (dialog: any) => {
-      this._browserDialogs.push(`${dialog.type()}: ${dialog.message()}`);
-      await dialog.dismiss().catch(() => {});
+    const result = await executeBrowser(this.ctx, args, {
+      host: this._browserHost,
+      userAgent,
+      extraHeaders,
+      interceptor: this._browserInterceptor,
     });
 
-    // Capture console messages
-    this._browserPage.on("console", (msg: any) => {
-      if (this._browserConsole.length < 50) {
-        this._browserConsole.push(`[${msg.type()}] ${msg.text()}`);
-      }
-    });
-
-    return { page: this._browserPage };
-  }
-
-  private async browserAction(args: Record<string, unknown>): Promise<ToolResult> {
-    const action = args.action as string;
-    if (!action) {
-      return { success: false, output: null, error: "action is required" };
-    }
-
-    if (!(await this.isPlaywrightAvailable())) {
-      return {
-        success: false,
-        output: null,
-        error: "playwright is not installed. Install it with: npm i playwright && npx playwright install chromium",
-      };
-    }
-
-    // Clear per-action dialog/console buffers
-    this._browserDialogs = [];
-    this._browserConsole = [];
-
-    const ACTION_TIMEOUT = 10_000;
-    const execution = this._executionContext.getStore();
-    const actionContext = {
-      active: true, signal: execution?.signal, assertAuthority: execution?.assertAuthority,
-    };
-    this._browserActionContext = actionContext;
-
-    try {
-      const { page } = await this.ensureBrowser();
-
-      let result: unknown;
-
-      switch (action) {
-        case "navigate": {
-          const rawNavUrl = args.url as string;
-          if (!rawNavUrl) return { success: false, output: null, error: "url is required for navigate" };
-          // Validate against same-origin policy (same as http_request/submit_form)
-          let url: string;
-          try {
-            url = validateTargetUrl(this.ctx.target, rawNavUrl, this.ctx.scope, this.ctx.enforcement, this.ctx.publicNetwork);
-          } catch (err) {
-            return { success: false, output: null, error: err instanceof Error ? err.message : `Invalid URL: ${rawNavUrl}` };
-          }
-          const response = await page.goto(url, { timeout: ACTION_TIMEOUT, waitUntil: "domcontentloaded" });
-          // Post-navigation scope re-check (0sec#218 review).
-          // `validateTargetUrl` only vets the requested URL; `page.goto`
-          // follows redirects, so an in-scope URL that 302s off-origin
-          // leaves the browser sitting on a foreign page that subsequent
-          // click/content/evaluate calls would then operate on. Compare
-          // the post-navigation URL against scope and refuse if it
-          // drifted off-host before returning success.
-          const finalUrl = page.url();
-          const browserScope = this.ctx.publicNetwork ? this.ctx.publicNetwork.scope : this.ctx.scope;
-          if (browserScope && finalUrl) {
-            const verdict = browserScope.match(finalUrl);
-            if (!verdict.allowed) {
-              return {
-                success: false,
-                output: null,
-                error: `navigate refused: redirected to out-of-scope URL '${finalUrl}' (${verdict.reason})`,
-              };
-            }
-          }
-          result = {
-            url: finalUrl,
-            status: response?.status() ?? null,
-            title: await page.title(),
-            dialogs: [...this._browserDialogs],
-            console: this._browserConsole.slice(0, 20),
-          };
-          break;
-        }
-
-        case "click": {
-          const selector = args.selector as string;
-          if (!selector) return { success: false, output: null, error: "selector is required for click" };
-          await page.click(selector, { timeout: ACTION_TIMEOUT });
-          // Wait briefly for any navigation or DOM updates
-          await page.waitForTimeout(500);
-          result = {
-            clicked: selector,
-            url: page.url(),
-            title: await page.title(),
-            dialogs: [...this._browserDialogs],
-            console: this._browserConsole.slice(0, 20),
-          };
-          break;
-        }
-
-        case "fill": {
-          const selector = args.selector as string;
-          const value = args.value as string;
-          if (!selector) return { success: false, output: null, error: "selector is required for fill" };
-          if (value === undefined) return { success: false, output: null, error: "value is required for fill" };
-          await page.fill(selector, value, { timeout: ACTION_TIMEOUT });
-          result = {
-            filled: selector,
-            value,
-            dialogs: [...this._browserDialogs],
-          };
-          break;
-        }
-
-        case "evaluate": {
-          const expression = args.value as string;
-          if (!expression) return { success: false, output: null, error: "value (JavaScript) is required for evaluate" };
-          const evalResult = await page.evaluate(expression).catch((e: Error) => `Error: ${e.message}`);
-          result = {
-            result: typeof evalResult === "object" ? JSON.stringify(evalResult) : String(evalResult),
-            dialogs: [...this._browserDialogs],
-            console: this._browserConsole.slice(0, 20),
-          };
-          break;
-        }
-
-        case "content": {
-          const html = await page.content();
-          // Extract visible text for readability
-          const text = await page.evaluate(() => document.body?.innerText?.slice(0, 5000) ?? "").catch(() => "");
-          result = {
-            url: page.url(),
-            title: await page.title(),
-            html: html.slice(0, 10_000),
-            text: (text as string).slice(0, 5_000),
-            dialogs: [...this._browserDialogs],
-          };
-          break;
-        }
-
-        case "screenshot": {
-          const buffer = await page.screenshot({ type: "png", fullPage: false });
-          const base64 = buffer.toString("base64").slice(0, 50_000); // cap at ~37KB image
-          result = {
-            url: page.url(),
-            title: await page.title(),
-            screenshot_base64: base64,
-            dialogs: [...this._browserDialogs],
-          };
-          break;
-        }
-
-        default:
-          return {
-            success: false,
-            output: null,
-            error: `Unknown browser action: ${action}. Valid: navigate, click, fill, evaluate, content, screenshot`,
-          };
-      }
-
+    // Evidence trail: persist the action + resulting URL, as the old handler did.
+    if (result.success) {
+      const out = result.output as { url?: string } | null;
       this.persistToolArtifact("browser", {
-        action,
-        url: (args.url as string) ?? page.url(),
-        dialogs: [...this._browserDialogs],
+        action: (args.action as string) ?? "",
+        url: (args.url as string) ?? out?.url ?? this.ctx.target,
       });
-
-      return { success: true, output: result };
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      return {
-        success: false,
-        output: { dialogs: [...this._browserDialogs], console: this._browserConsole.slice(0, 10) },
-        error: msg.slice(0, 2_000),
-      };
-    } finally {
-      actionContext.active = false;
-      if (this._browserActionContext === actionContext) this._browserActionContext = undefined;
     }
+    return result;
   }
 
   /**

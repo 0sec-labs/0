@@ -97,6 +97,7 @@ import {
   type FeedbackPayload,
 } from "./feedback.js";
 import {
+  base64ByteLength,
   formatToolArgs,
   formatToolResult,
   projectToolPreview,
@@ -234,6 +235,7 @@ import {
 } from "./clipboard.js";
 import type {
   ChatEntry,
+  ChatImageAttachment,
   EntryDisplay,
   KeyHint,
 } from "./chat/types.js";
@@ -311,7 +313,7 @@ export type ChatDestination = "launcher" | "ops" | "history" | "findings" | "doc
  * Typed structurally so this module needs no extra core-type import.
  */
 interface ToolCardMeta {
-  kind?: "command" | "edit" | "web" | "task";
+  kind?: "command" | "edit" | "web" | "task" | "image";
   command?: string;
   exitCode?: number | null;
   durationMs?: number;
@@ -335,6 +337,14 @@ interface ToolCardMeta {
   assignment?: string;
   subReports?: Array<{ name: string; agent?: string; brief?: string; isolated?: boolean }>;
   todos?: Array<{ id: string; content: string; status: "pending" | "in_progress" | "completed"; group?: string }>;
+  // image card (browser screenshot)
+  image?: {
+    imageBase64: string;
+    mimeType: string;
+    width: number;
+    height: number;
+    caption?: string;
+  };
 }
 
 /**
@@ -343,7 +353,38 @@ interface ToolCardMeta {
  * object when there is no card to draw, so a spread leaves the entry untouched.
  */
 function toolCardFieldsFromMeta(meta: ToolCardMeta | undefined): Partial<ChatEntry> {
-  if (!meta || (meta.kind !== "command" && meta.kind !== "edit" && meta.kind !== "web" && meta.kind !== "task")) return {};
+  if (
+    !meta ||
+    (meta.kind !== "command" &&
+      meta.kind !== "edit" &&
+      meta.kind !== "web" &&
+      meta.kind !== "task" &&
+      meta.kind !== "image")
+  ) {
+    return {};
+  }
+  if (meta.kind === "image") {
+    // Reuse the existing inline-image path: an ImageCard is drawn from
+    // `entry.images` (ChatImageAttachment = ToolPreviewImage + origin). The
+    // pixel size + media type come straight from the meta the tool decoded, so
+    // OpenTUI can draw the PNG where the terminal supports it and falls back to
+    // a captioned dimensions placeholder otherwise.
+    const img = meta.image;
+    if (!img) return { metaKind: "image" };
+    const byteSize = base64ByteLength(img.imageBase64);
+    const attachment: ChatImageAttachment = {
+      index: 1,
+      data: img.imageBase64,
+      mimeType: img.mimeType,
+      format: img.mimeType.split("/")[1],
+      pixelWidth: img.width > 0 ? img.width : undefined,
+      pixelHeight: img.height > 0 ? img.height : undefined,
+      byteSize,
+      alt: img.caption,
+      origin: "browser",
+    };
+    return { metaKind: "image", images: [attachment] };
+  }
   if (meta.kind === "task") {
     return {
       metaKind: "task",

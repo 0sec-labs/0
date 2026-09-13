@@ -81,22 +81,10 @@ export const reconToolDefinitions: Record<string, ToolDefinition> = {
     required: ["url", "fields"],
   },
 
-  browser: {
-    name: "browser",
-    description:
-      "Control a headless browser. Navigate to URLs, fill forms, click elements, execute JavaScript, and read page content. Use for XSS testing and pages that need JavaScript rendering.",
-    parameters: {
-      action: {
-        type: "string",
-        description: "Browser action",
-        enum: ["navigate", "click", "fill", "evaluate", "content", "screenshot"],
-      },
-      url: { type: "string", description: "URL to navigate to (for navigate action)" },
-      selector: { type: "string", description: "CSS selector (for click/fill actions)" },
-      value: { type: "string", description: "Value to fill or JavaScript to evaluate" },
-    },
-    required: ["action"],
-  },
+  // NOTE: the `browser` tool moved to its own domain module (tools/browser.ts —
+  // next-gen multi-tab driver behind a guarded seam). It is registered via
+  // `browserToolDefinitions`/`browserDispatch` in tools/index.ts + dispatch.ts,
+  // and still routes to `ToolExecutor.browserAction`.
 
   web_search: {
     name: "web_search",
@@ -185,7 +173,7 @@ export const reconDispatch: Record<string, string> = {
   send_prompt: "sendPromptTool",
   crawl: "crawl",
   submit_form: "submitForm",
-  browser: "browserAction",
+  // `browser` moved to tools/browser.ts (browserDispatch) — still → browserAction.
   web_search: "webSearch",
   wp_fingerprint: "wpFingerprint",
   discover_api_surface: "discoverApiSurface",

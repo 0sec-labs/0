@@ -655,7 +655,8 @@ export function ToolCard({
     entry.metaKind === "command" ? ""
       : entry.metaKind === "edit" ? "✎"
         : entry.metaKind === "web" ? "⌕"
-          : toolKindIdentity(entry.text)?.glyph ?? "";
+          : entry.metaKind === "image" ? "❏"
+            : toolKindIdentity(entry.text)?.glyph ?? "";
   const headerGlyph = failed ? `${glyph} ` : running ? "" : kindGlyph ? `${kindGlyph} ` : "";
   // Execution time rides the TOP of the card, OMP-style: ` · (<dur>)` appended
   // to the headline. Only a measured `wallMs` prints — never an estimate. The
