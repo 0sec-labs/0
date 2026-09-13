@@ -300,12 +300,29 @@ describe("context meter", () => {
     ).toContain("▱▱▱▱▱▱ 0% of 100");
   });
 
-  it("still needs both window and usage to draw a meter", () => {
+  it("never draws a percent/bar meter without both window and usage", () => {
+    // A bar/percent implies an occupancy fraction, which needs both numbers.
+    // The count-only fallback (usage known, window unknown) is not a meter and
+    // is asserted separately below.
     for (const input of [{ contextUsed: 10 }, { contextWindow: 100 }]) {
       const text = textOf(buildStatusSegments({ ...input, showContextMeter: true }), "meter");
       expect(text).toBeDefined();
-      expect(text).not.toMatch(/[0-9%▱▰]/u);
+      expect(text).not.toMatch(/[%▱▰]/u);
     }
+  });
+
+  it("shows a truthful token count when usage is known but the window is not", () => {
+    // A model absent from the context-window catalog (e.g. gpt-5.5) still
+    // reports how many tokens the turn used — surface that rather than a dead
+    // "unavailable" label, without inventing a percentage.
+    const text = textOf(buildStatusSegments({ contextUsed: 10, showContextMeter: true }), "meter");
+    expect(text).toMatch(/used/);
+    expect(text).not.toMatch(/[%▱▰]/u);
+  });
+
+  it("shows unavailable when the window is known but no usage exists yet", () => {
+    const text = textOf(buildStatusSegments({ contextWindow: 100, showContextMeter: true }), "meter");
+    expect(text).toBe("Context usage unavailable");
   });
 });
 
