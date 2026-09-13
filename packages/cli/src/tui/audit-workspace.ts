@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { rm } from "node:fs/promises";
 import { join } from "node:path";
 import { homeStateDir } from "@0sec/shared";
+import { appendTuiEvent } from "./tui-crash.js";
 import type { ConsoleSession } from "@0sec/core";
 import type { ChatScreenOptions, ChatScreenProps } from "./chat-screen.js";
 import type { ConnectionRecovery } from "./connection-recovery.js";
@@ -226,14 +227,20 @@ export class AuditWorkspace {
     // Defer execution until closing/status are published, including synchronous
     // close callbacks. The record and its history stay protected until settled.
     record.closing = Promise.resolve().then(async () => {
+      const t0 = Date.now();
+      const via = record.closeHandle.current ? "closeHandle" : record.session ? "session" : "mcp";
+      appendTuiEvent({ kind: "audit-close", stage: "begin", id, via });
       if (record.closeHandle.current) await record.closeHandle.current();
       else if (record.session) {
         await record.session.stopPersistentAgents();
+        appendTuiEvent({ kind: "audit-close", stage: "agents-stopped", id, ms: Date.now() - t0 });
         await record.session.cleanup();
       } else {
         await record.options?.mcpHost?.closeAll();
       }
+      appendTuiEvent({ kind: "audit-close", stage: "session-closed", id, via, ms: Date.now() - t0 });
       await rm(record.messagingHomeDir, { recursive: true, force: true });
+      appendTuiEvent({ kind: "audit-close", stage: "done", id, ms: Date.now() - t0 });
       this.#records = this.#records.filter((entry) => entry !== record);
       this.#releaseProtection(record.sourceSessionId);
       this.#releaseProtection(record.session?.scanId);

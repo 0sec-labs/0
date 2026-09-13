@@ -3063,19 +3063,48 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
     closing = true;
     objectiveService.dispose();
     const warnings: string[] = [];
-    // Fence harness controls synchronously, before any resource drain awaits.
-    const harnessClosed = (async () => {
-      try { await harness?.close(); }
-      catch (error) { warnings.push(`Harness close: ${String(error)}`); }
-    })();
-    retirement = (async () => {
-      await harnessClosed;
+    // Each drain step is bounded: a resource whose close never resolves (a live
+    // self-extension harness mid-checkpoint, a persistent worker that never
+    // acknowledges a stop, an MCP host with a wedged transport) must not trap
+    // retirement — and through it the operator's quit — forever. A step that
+    // exceeds its deadline is abandoned with a warning rather than awaited to
+    // infinity. Only a genuinely stuck step spends its full budget; healthy
+    // closes resolve immediately, so a normal quit stays instant.
+    const CLEANUP_STEP_MS = 2000;
+    const settleWithin = async (label: string, op: Promise<unknown> | undefined): Promise<void> => {
+      if (!op) return;
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      try {
+        const outcome = await Promise.race([
+          op.then(() => "done" as const),
+          new Promise<"timeout">((resolve) => { timer = setTimeout(() => resolve("timeout"), CLEANUP_STEP_MS); }),
+        ]);
+        if (outcome === "timeout") warnings.push(`${label} did not settle within ${CLEANUP_STEP_MS}ms; abandoned on exit`);
+      } catch (error) {
+        warnings.push(`${label}: ${String(error)}`);
+      } finally {
+        if (timer) clearTimeout(timer);
+      }
+    };
+    // Two independent drain tracks run CONCURRENTLY, each bounded, so total
+    // retirement is capped at the slower track (~2s if one is wedged) rather
+    // than the SUM of every step's deadline — a sum that could exceed the
+    // caller's own exit budget and re-trap the operator on the "Stopping
+    // audits…" screen. Track A is the self-extension harness (fenced first,
+    // as before). Track B is the executor resource drain, whose steps keep
+    // their original ORDER (stop workers → close plugins → cleanup) because
+    // they touch the same executor; the whole ordered chain shares one
+    // deadline so a wedge anywhere in it cannot outlast the budget.
+    const harnessTrack = settleWithin("Harness close", harness?.close());
+    const executorTrack = settleWithin("Executor drain", (async () => {
       try { await executor.stopPersistentAgents(); }
       catch (error) { warnings.push(`Worker drain: ${String(error)}`); }
       try { await executablePlugins?.close(); }
       catch (error) { warnings.push(`Executable plugins close: ${String(error)}`); }
-      try { await executor.cleanup(); }
-      catch (error) { warnings.push(`Executor cleanup: ${String(error)}`); }
+      await executor.cleanup();
+    })());
+    retirement = (async () => {
+      await Promise.all([harnessTrack, executorTrack]);
       return warnings.length ? { warnings } : {};
     })();
     return retirement;
@@ -3150,7 +3179,20 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
     cleanup: () => cleanupPromise ??= (async () => {
       const { warnings = [] } = await retire();
       const errors: unknown[] = warnings.map(message => new Error(message));
-      try { await config.mcpHost?.closeAll(); }
+      // Bound the MCP host close too: a wedged transport must not outlast the
+      // rest of retirement (which is already bounded above).
+      try {
+        const closeAll = config.mcpHost?.closeAll();
+        if (closeAll) {
+          let timer: ReturnType<typeof setTimeout> | undefined;
+          const outcome = await Promise.race([
+            closeAll.then(() => "done" as const),
+            new Promise<"timeout">((resolve) => { timer = setTimeout(() => resolve("timeout"), 2500); }),
+          ]);
+          if (timer) clearTimeout(timer);
+          if (outcome === "timeout") errors.push(new Error("MCP host close did not settle within 2500ms; abandoned on exit"));
+        }
+      }
       catch (error) { errors.push(error); }
       if (errors.length) throw new AggregateError(errors, "Console resource cleanup failed");
     })(),

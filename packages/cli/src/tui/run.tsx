@@ -18,6 +18,7 @@ import { FooterBar, ShellFrame } from "./shell-frame.js";
 import {
   TuiErrorBoundary,
   appendTuiCrash,
+  appendTuiEvent,
   appendTuiTrace,
   installTuiCrashHandlers,
   serializeError,
@@ -623,28 +624,71 @@ function ConsoleApp({
     if (exitRequested.current) return;
     exitRequested.current = true;
     setClosingAll(true);
+    appendTuiEvent({ kind: "shutdown", stage: "requested", audits: creations.current.size });
     for (const gate of legacyLaunches.current.keys()) gate.close();
     const sessionClosures = routes.filter((route) => route.type === "session")
       .map((route) => Promise.resolve().then(() => route.type === "session" ? route.onClose() : undefined));
+
+    // Absolute guarantee the operator is never trapped on the "Stopping
+    // audits…" screen: a wedged close, a plugin dispose that hangs, or a
+    // lingering open handle (herdr child, browser/proxy server, a timer) that
+    // keeps the event loop alive after teardown can all defeat a graceful
+    // exit. This watchdog force-terminates the process after a hard deadline,
+    // restoring the terminal first (leave the alternate screen, show the
+    // cursor). `unref()` means it never keeps a healthy process alive — it only
+    // fires if we are still running when the deadline hits.
+    const HARD_EXIT_MS = 12000;
+    const watchdog = setTimeout(() => {
+      appendTuiEvent({ kind: "shutdown", stage: "watchdog-force-exit", afterMs: HARD_EXIT_MS });
+      try { process.stdout.write("\x1b[?1049l\x1b[?25h"); } catch { /* best-effort terminal restore */ }
+      process.exit(0);
+    }, HARD_EXIT_MS);
+    if (typeof watchdog.unref === "function") watchdog.unref();
+
+    const withTimeout = <T,>(p: Promise<T>, ms: number, tag: string): Promise<T | "timeout"> =>
+      Promise.race([p, new Promise<"timeout">((r) => setTimeout(() => r("timeout"), ms))])
+        .then((v) => { if (v === "timeout") appendTuiEvent({ kind: "shutdown", stage: `${tag}-timeout`, ms }); return v; });
+
     const cleanupAll = Promise.allSettled([workspace.closeAll(), ...creations.current, ...legacyLaunches.current.values(), ...sessionClosures]);
-    // A wedged audit/session close must never trap the operator on the
-    // "Stopping audits…" screen. Bound cleanup: after 8s we exit regardless.
-    void Promise.race([
-      cleanupAll,
-      new Promise<"timeout">((resolve) => setTimeout(() => resolve("timeout"), 8000)),
-    ]).then(async (outcome) => {
+    void withTimeout(cleanupAll, 8000, "cleanup").then(async (outcome) => {
+      appendTuiEvent({ kind: "shutdown", stage: "cleanup-settled", timedOut: outcome === "timeout" });
       if (outcome !== "timeout") {
         const failures = outcome.filter((result): result is PromiseRejectedResult => result.status === "rejected");
-        if (failures.length > 0) throw new AggregateError(failures.map((result) => result.reason), "Audit cleanup failed; the workspace remains open.");
+        // A failed audit close is logged, not fatal: the operator asked to
+        // leave, so a broken teardown must not cancel the exit and re-trap them.
+        if (failures.length > 0) {
+          appendTuiEvent({ kind: "shutdown", stage: "cleanup-failures", count: failures.length, reasons: failures.map((f) => String(f.reason)).slice(0, 5) });
+        }
       }
-      const manager = await pluginPreparation.current?.catch(() => null);
-      manager?.dispose();
+      // Plugin dispose is bounded too — never `await` an unresolved prep
+      // forever (that was a real trap: the cleanup timeout did not cover it).
+      try {
+        const prep = pluginPreparation.current?.catch(() => null) ?? Promise.resolve(null);
+        const manager = await withTimeout(prep, 2000, "plugin-dispose");
+        if (manager && manager !== "timeout") manager.dispose();
+      } catch { /* dispose is best-effort on the way out */ }
+      appendTuiEvent({ kind: "shutdown", stage: "onExit" });
       if (selection && onResolve) onResolve(selection);
       onExit();
+      appendTuiEvent({ kind: "shutdown", stage: "onExit-returned" });
+      clearTimeout(watchdog);
+      // The terminal is restored and every reachable resource is drained. A
+      // deliberately-abandoned cleanup (a wedged engine candidate we timed out
+      // on) can still hold an open handle that keeps Node alive well past the
+      // point the operator's shell should be back. Force a prompt exit; unref
+      // so a genuinely-clean process still exits on its own first.
+      const promptExit = setTimeout(() => {
+        appendTuiEvent({ kind: "shutdown", stage: "prompt-exit" });
+        process.exit(0);
+      }, 400);
+      if (typeof promptExit.unref === "function") promptExit.unref();
     }).catch((error) => {
-      exitRequested.current = false;
-      setClosingAll(false);
-      reportError(error);
+      // Even an unexpected error in the shutdown chain must not strand the
+      // operator: log it and force the exit rather than re-arming the screen.
+      appendTuiEvent({ kind: "shutdown", stage: "error-forcing-exit", error: String(error) });
+      try { process.stdout.write("\x1b[?1049l\x1b[?25h"); } catch { /* best-effort */ }
+      clearTimeout(watchdog);
+      process.exit(0);
     });
   };
   const appExit = () => requestExit();
@@ -1387,6 +1431,7 @@ async function mountApp(mode: AppMode): Promise<void> {
     const close = () => {
       if (closed) return;
       closed = true;
+      appendTuiEvent({ kind: "shutdown", stage: "close-begin" });
       lensEvolution.stop();
       mode.onExit?.();
       if (traceRender) {
@@ -1401,8 +1446,11 @@ async function mountApp(mode: AppMode): Promise<void> {
         });
         renderer.off(CliRenderEvents.FRAME, traceFrame);
       }
+      appendTuiEvent({ kind: "shutdown", stage: "unmount" });
       root.unmount();
+      appendTuiEvent({ kind: "shutdown", stage: "destroy" });
       renderer.destroy();
+      appendTuiEvent({ kind: "shutdown", stage: "destroyed" });
       // Released after destroy(): opentui resets the stream itself, and
       // the guard only reinstalls originals it still owns.
       outputGuard.restore();
@@ -1424,6 +1472,7 @@ async function mountApp(mode: AppMode): Promise<void> {
         const stream = line.stream === "stderr" ? process.stderr : process.stdout;
         stream.write(`${line.text}\n`);
       }
+      appendTuiEvent({ kind: "shutdown", stage: "close-complete" });
       resolve();
     };
     try {

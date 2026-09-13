@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
-import { readFileSync, readdirSync, realpathSync, statSync } from "node:fs";
+import { appendFileSync, readFileSync, readdirSync, realpathSync, statSync } from "node:fs";
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { isAbsolute, join, relative, sep } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -196,20 +196,40 @@ export function withDevEngineUpdates(
     try { return await activeSend; }
     finally { busy = false; activeSend = undefined; }
   };
+  const devlog = (o: Record<string, unknown>) => {
+    try { appendFileSync(process.env["0SEC_TUI_LOG"] ?? "/tmp/0sec-tui.log", JSON.stringify({ ts: new Date().toISOString(), kind: "dev-engine", ...o }) + "\n"); } catch { /* best-effort */ }
+  };
+  // A cleanup step must never be able to trap the operator's exit. A live
+  // engine hot-swap can leave `current` pointing at a candidate whose own
+  // close depends on resources (a persistent worker, an in-flight send, a
+  // handoff mid-flight) that never settle. Bound each await: a step that
+  // exceeds its deadline is abandoned rather than awaited forever.
+  const bounded = async (label: string, op: Promise<unknown> | undefined, ms: number): Promise<void> => {
+    if (!op) return;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      const outcome = await Promise.race([op.then(() => "done" as const), new Promise<"timeout">((r) => { timer = setTimeout(() => r("timeout"), ms); })]);
+      devlog({ stage: label, outcome });
+    } catch (error) { devlog({ stage: label, error: String(error) }); }
+    finally { if (timer) clearTimeout(timer); }
+  };
   const cleanup = (): Promise<void> => closing ??= (async () => {
     closingStarted = true;
     let completed = false;
+    devlog({ stage: "cleanup-begin", busy });
     try {
-      await activeSend?.catch(() => {});
-      await current.cleanup();
+      await bounded("await-active-send", activeSend?.catch(() => {}), 2000);
+      await bounded("core-cleanup", current.cleanup(), 3000);
       completed = true;
     }
     finally {
+      devlog({ stage: "cleanup-drain", completed });
       try { disconnectEvents?.(); }
       finally {
         try { closeStore(completed); }
-        finally { await Promise.all(generations.map(directory => rm(directory, { recursive: true, force: true }))); }
+        finally { await bounded("rm-generations", Promise.all(generations.map(directory => rm(directory, { recursive: true, force: true }))), 2000); }
       }
+      devlog({ stage: "cleanup-done", completed });
     }
   })();
 

@@ -24,6 +24,23 @@ export function appendTuiTrace(record: Record<string, unknown>): void {
   }
 }
 
+/**
+ * Always-on lifecycle log. Unlike {@link appendTuiTrace} (gated behind a trace
+ * env var), this writes unconditionally to a known file so an operator who hits
+ * a wedged shutdown — the "Stopping audits and awaiting cleanup…" freeze — has a
+ * timestamped record of exactly which stage stalled, without having to
+ * reproduce it under tracing. Best-effort and never throws; the path is
+ * overridable with `0SEC_TUI_LOG`.
+ */
+export function appendTuiEvent(record: Record<string, unknown>): void {
+  const file = process.env["0SEC_TUI_LOG"] ?? "/tmp/0sec-tui.log";
+  try {
+    appendFileSync(file, `${JSON.stringify({ ts: new Date().toISOString(), ...record })}\n`, "utf8");
+  } catch {
+    // best-effort only
+  }
+}
+
 export function serializeError(error: unknown): Record<string, unknown> {
   if (error instanceof Error) {
     return {

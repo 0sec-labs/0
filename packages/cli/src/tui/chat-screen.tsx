@@ -295,7 +295,7 @@ import {
   type AgentRowView,
 } from "./chat/AgentRow.js";
 import { agentAccentFor } from "./agent-color.js";
-import { appendTuiCrash, serializeError } from "./tui-crash.js";
+import { appendTuiCrash, appendTuiEvent, serializeError } from "./tui-crash.js";
 
 export type ChatDestination = "launcher" | "ops" | "history" | "findings" | "doctor" | "replay" | "settings" | "keybindings" | "harness" | "new-chat" | "models" | "market" | "usage" | "connect" | "herd" | "comms" | "finding" | "resume" | "audits" | "onboard";
 
@@ -1687,7 +1687,9 @@ export function ChatScreen({
     const cleanup = created.cleanup;
     let cleanupPromise: Promise<void> | undefined;
     created.cleanup = () => cleanupPromise ??= (async () => {
-      try { await cleanup(); } finally { pluginLease?.release(); }
+      appendTuiEvent({ kind: "wrap-cleanup", stage: "enter", cached: Boolean(cleanupPromise) });
+      try { await cleanup(); appendTuiEvent({ kind: "wrap-cleanup", stage: "core-done" }); }
+      finally { pluginLease?.release(); appendTuiEvent({ kind: "wrap-cleanup", stage: "lease-released" }); }
     })().catch((error: unknown) => {
       cleanupPromise = undefined;
       throw error;
@@ -2568,8 +2570,12 @@ export function ChatScreen({
     setPendingToolApproval(null);
     setPendingOperatorQuestion(null);
     const stopping = Promise.resolve().then(async () => {
+      const t0 = Date.now();
+      appendTuiEvent({ kind: "stop-audit", stage: "await-turn" });
       await activeTurn;
+      appendTuiEvent({ kind: "stop-audit", stage: "turn-settled", ms: Date.now() - t0 });
       await ownedSession?.stopPersistentAgents();
+      appendTuiEvent({ kind: "stop-audit", stage: "agents-stopped", ms: Date.now() - t0 });
       confirmStopped(captured);
       onAuditActivity({ outcome: "stopped", workers: 0, waiting: false });
     }).finally(() => {
@@ -2584,9 +2590,13 @@ export function ChatScreen({
   closeHandle.current = () => closePromiseRef.current ??= (async () => {
     closingRef.current = true;
     alive.current = false;
+    const t0 = Date.now();
+    appendTuiEvent({ kind: "close-handle", stage: "stop-audit" });
     await stopAudit();
+    appendTuiEvent({ kind: "close-handle", stage: "audit-stopped", ms: Date.now() - t0, hasSession: Boolean(sessionRef.current) });
     if (sessionRef.current) await sessionRef.current.cleanup();
     else await options?.mcpHost?.closeAll();
+    appendTuiEvent({ kind: "close-handle", stage: "cleaned-up", ms: Date.now() - t0 });
   })().catch((error: unknown) => {
     // Failed cleanup keeps the audit visible for the existing explicit retry.
     closePromiseRef.current = null;
