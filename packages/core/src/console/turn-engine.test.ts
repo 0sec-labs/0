@@ -3,7 +3,7 @@ import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, realpathSyn
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { createConsoleSession } from "./turn-engine.js";
+import { buildConsoleSystemPrompt, createConsoleSession } from "./turn-engine.js";
 import type {
   ConsoleLocalScopeRequest,
   ConsoleScopeRequest,
@@ -3151,5 +3151,35 @@ describe("console live driver authority", () => {
       expect(session.scope?.match("https://denied.test./").allowed ?? false).toBe(false);
       expect(requestScope).toHaveBeenCalledTimes(2);
     } finally { await session.cleanup(); }
+  });
+});
+
+describe("buildConsoleSystemPrompt — Voice (register only, never facts)", () => {
+  it("carries a bounded pragmatic Voice block", () => {
+    const prompt = buildConsoleSystemPrompt({ scanId: "s1", autonomyMode: "standard" });
+    expect(prompt).toContain("Voice: talk like a sharp teammate");
+    // Pragmatic register markers: blunt, no cheerleading, no dumbing down.
+    expect(prompt).toMatch(/never cheerlead/i);
+    expect(prompt).toMatch(/never dumb things down/i);
+    expect(prompt).toMatch(/Bad news stays blunt/i);
+  });
+
+  it("hard-guards that voice governs tone only, never the evidence", () => {
+    const prompt = buildConsoleSystemPrompt({ scanId: "s1" });
+    // The Voice block must explicitly subordinate itself to the facts.
+    expect(prompt).toContain("Findings, severities, CVSS, scores, evidence, and tool output stay strictly");
+    expect(prompt).toMatch(/personality is in how you talk to the operator,\s*\n?\s*never in the evidence/);
+  });
+
+  it("keeps the factual findings-discipline block intact alongside the voice", () => {
+    const prompt = buildConsoleSystemPrompt({ scanId: "s1" });
+    // Voice must not have displaced the existing accuracy guards.
+    expect(prompt).toContain("Separate observations from inference");
+    expect(prompt).toContain("Leave unsupported values unknown rather than");
+    expect(prompt).toContain("Keep CVSS vectors and 0–10 scores distinct from 0–100 workflow scores");
+    // The voice block is placed before the findings-discipline block.
+    expect(prompt.indexOf("Voice: talk like a sharp teammate")).toBeLessThan(
+      prompt.indexOf("For finding summaries"),
+    );
   });
 });

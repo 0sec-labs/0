@@ -283,12 +283,12 @@ function formatLiveActivity(theme: Theme, state: SessionState, runningStage: Ses
   const liveTool = formatActiveToolLabel(theme, latestRunningAction);
   return {
     label: liveTool.label,
-    detail: latestRunningAction ? liveTool.detail : (runningStage?.detail ?? "waiting for the next tool result"),
+    detail: latestRunningAction ? liveTool.detail : (runningStage?.detail ?? "waiting on the next tool…"),
   };
 }
 
 function formatActiveToolLabel(theme: Theme, action?: string): { label: string; detail?: string } {
-  if (!action) return { label: "agent working", detail: "waiting for the next tool result" };
+  if (!action) return { label: "on it", detail: "waiting on the next tool…" };
 
   const parsed = parseToolAction(theme, action);
   switch (parsed.kind) {
