@@ -195,16 +195,56 @@ describe("buildStatusSegments", () => {
 });
 
 describe("active turn elapsed", () => {
-  it("uses whole seconds, minutes and hours at unit boundaries", () => {
-    expect(textOf(buildStatusSegments({ turnElapsedMs: 59_999 }), "elapsed")).toBe("running for 59s");
-    expect(textOf(buildStatusSegments({ turnElapsedMs: 60_000 }), "elapsed")).toBe("running for 1m");
-    expect(textOf(buildStatusSegments({ turnElapsedMs: 3_600_000 }), "elapsed")).toBe("running for 1h");
+  it("is time-only (no 'running for ' prefix) at unit boundaries", () => {
+    expect(textOf(buildStatusSegments({ turnElapsedMs: 59_999 }), "elapsed")).toBe("59s");
+    expect(textOf(buildStatusSegments({ turnElapsedMs: 60_000 }), "elapsed")).toBe("1m");
+    expect(textOf(buildStatusSegments({ turnElapsedMs: 3_600_000 }), "elapsed")).toBe("1h");
   });
 
   it("does not invent elapsed time when idle or the reading is invalid", () => {
     for (const turnElapsedMs of [undefined, -1, Number.NaN, Number.POSITIVE_INFINITY]) {
       expect(textOf(buildStatusSegments({ turnElapsedMs }), "elapsed")).toBeUndefined();
     }
+  });
+
+  it("leads the segment order and carries a single-cell clock glyph", () => {
+    // The timer pill sits right after the bottom-left spinner icon, so it must
+    // be the first data segment and read as its own glyphed pill.
+    const segments = buildStatusSegments({ turnElapsedMs: 4_000, model: "m", mode: "Standard" });
+    expect(kinds(segments)[0]).toBe("elapsed");
+    const elapsed = segments.find((s) => s.kind === "elapsed")!;
+    expect(elapsed.icon).toBe("◷");
+    expect(elapsed.icon.length).toBe(1);
+    expect(elapsed.text).toBe("4s");
+  });
+});
+
+describe("live activity segment", () => {
+  it("surfaces a caller-composed activity line and trails the order", () => {
+    const segments = buildStatusSegments({
+      model: "m",
+      turnElapsedMs: 1_000,
+      activity: "read · packages/cli/src/tui/status-bar.ts",
+    });
+    expect(textOf(segments, "activity")).toBe("read · packages/cli/src/tui/status-bar.ts");
+    // Rightmost pill: the live line reads at the end of the row.
+    expect(kinds(segments).at(-1)).toBe("activity");
+  });
+
+  it("invents nothing: an absent or blank activity emits no segment", () => {
+    expect(textOf(buildStatusSegments({ model: "m" }), "activity")).toBeUndefined();
+    expect(textOf(buildStatusSegments({ model: "m", activity: "   " }), "activity")).toBeUndefined();
+  });
+
+  it("sheds early under width pressure, before mode or model", () => {
+    const segments = buildStatusSegments({
+      model: "a-model",
+      mode: "YOLO",
+      activity: "running some long tool call with a big argument preview",
+    });
+    const kept = fitStatusPills(segments, 14).map((s) => s.kind);
+    expect(kept).not.toContain("activity");
+    expect(kept).toContain("mode");
   });
 });
 
