@@ -9,6 +9,23 @@ export const APPROVAL_GRANT_ID = "grant";
 export const APPROVAL_DENY_ID = "deny";
 
 /**
+ * The glyph a DANGER-tier approval prepends to its title, so the tier reads as
+ * dangerous WITHOUT colour being the only cue — the same colour-blind-safety
+ * rule `themes.ts` states for `SUCCESS`/`WARNING`/`ERROR`. A single-cell literal
+ * so it never widens the title row; kept as one exported constant so the future
+ * symbol-preset system (Unicode/Nerd/ASCII) has a single place to swap it and
+ * the producer can reference the exact same mark.
+ *
+ * This is presentation only. Prepending it does NOT make an approval dangerous
+ * and grants no protection on its own: a call is DANGER only when a producer
+ * that holds an authoritative destructive classification says so and passes
+ * `severity: "danger"` in the {@link ApprovalPrompt}. No such producer signal
+ * exists yet (see the note on {@link ApprovalPrompt.severity}), so nothing in
+ * the shipped tree sets this tier today.
+ */
+export const APPROVAL_DANGER_GLYPH = "▲";
+
+/**
  * Turn a tool call's arguments into readable `key: value` lines — one per row,
  * so the approval card can show WHAT is being authorized instead of a truncated
  * one-line JSON blob. A scalar becomes its own line; a nested object/array is
@@ -59,6 +76,21 @@ export type ApprovalPrompt = {
   items: SelectorItem[];
   borderColor: string;
   titleColor: string;
+  /**
+   * Tier of the decision, driving the danger presentation. Absent (the only
+   * value any shipped producer sets today) is the calm WARNING/INFO framing.
+   *
+   * `"danger"` is reserved for a DESTRUCTIVE action — one that can mutate or
+   * destroy state the operator would not want taken without a deliberate look.
+   * It MUST be set from an authoritative, producer-assigned classification, not
+   * from parsing the tool name or its arguments in the UI: `ToolCall` carries
+   * only `{ name, arguments }` and `ToolDefinition` carries no destructiveness
+   * field, so there is no signal to read yet. Until a producer supplies one,
+   * this field stays unset and the danger path is inert — the card can render
+   * the tier, but no live approval reaches it, and the tier is NOT
+   * destructive-command protection on its own.
+   */
+  severity?: "danger";
   /** Applies the chosen item. Guarded to run at most once per `owner`. */
   decide: (id: string) => void;
   /**
@@ -104,7 +136,19 @@ export function approvalCardRows({
  * and the two choices read as clean rows with a single accent on the selected
  * one, its consequence aligned to the right. The framing is the same thin
  * accent rail + faint panel background as the composer and the operator's own
- * turns, not a heavy four-sided box; `red` stays reserved for errors.
+ * turns, not a heavy four-sided box.
+ *
+ * TONE. The rail and title take whatever `accent` the producer chose: WARNING
+ * for scope gates, INFO for the co-pilot gate. Red (`ERROR`) is reserved for
+ * errors AND for the one deliberate exception — a DANGER-tier destructive
+ * approval — where the producer passes `ERROR` as the accent and `danger` as
+ * the tier. Because colour alone must never carry meaning (themes.ts keeps
+ * SUCCESS/WARNING/ERROR distinguishable without hue), the DANGER tier also
+ * prepends {@link APPROVAL_DANGER_GLYPH} to the title. This is presentation
+ * only: it neither auto-approves nor changes which choice is pre-selected (the
+ * caller owns the selector's default, and for a danger prompt that default is
+ * the declining one — never grant). The card renders the tier it is told; no
+ * shipped producer sets `danger` yet.
  */
 export function ApprovalCard({
   title,
@@ -115,6 +159,7 @@ export function ApprovalCard({
   activeIndex,
   hint,
   accent,
+  severity,
   contentWidth,
   height,
   theme,
@@ -127,13 +172,26 @@ export function ApprovalCard({
   choices: SelectorItem[];
   activeIndex: number;
   hint: string;
-  /** The card's tone — WARNING for scope gates, INFO for the co-pilot gate. */
+  /**
+   * The card's tone colour — WARNING for scope gates, INFO for the co-pilot
+   * gate, ERROR for a DANGER-tier destructive approval. Chosen by the producer.
+   */
   accent: string;
+  /**
+   * DANGER tier, from a producer's authoritative destructive classification.
+   * When `"danger"`, the title is marked with {@link APPROVAL_DANGER_GLYPH} so
+   * the tier does not rely on colour alone. Absent for every calm approval.
+   */
+  severity?: "danger";
   contentWidth: number;
   height: number;
   theme: Theme;
 }) {
   const { PANEL_ALT, MUTED, TEXT, PRIMARY } = theme;
+  // A DANGER approval marks its title with a glyph so the tier is legible
+  // without colour. Prepended into the same title string (not a separate cell)
+  // so the row layout and the `fitTuiText` truncation below are unchanged.
+  const displayTitle = severity === "danger" ? `${APPROVAL_DANGER_GLYPH} ${title}` : title;
   // Conservative inner width: rail (1) + paddingX (1 each side) = 3 cells of
   // chrome, rounded up to 4 so every explicit allocation clears the edge.
   const innerWidth = Math.max(1, contentWidth - 4);
@@ -151,7 +209,7 @@ export function ApprovalCard({
       <box flexDirection="column" flexGrow={1} minWidth={0} paddingX={1}>
         <box flexDirection="row" width={innerWidth} flexShrink={0} minWidth={0}>
           <box width={titleWidth} flexShrink={0} minWidth={0}>
-            <text fg={accent}>{fitTuiText(title, titleWidth)}</text>
+            <text fg={accent}>{fitTuiText(displayTitle, titleWidth)}</text>
           </box>
           {progressWidth > 0 ? (
             <box width={progressWidth} flexShrink={0} minWidth={0} marginLeft={titleGap}>
