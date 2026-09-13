@@ -319,13 +319,45 @@ class PlaywrightDriver implements BrowserDriver {
         ? { extraHTTPHeaders: this.opts.extraHeaders }
         : {}),
     });
-    // WIRING TODO: lift the full scope-pinned `context.route("**\/*")` handler
-    // from tools.ts `ensureBrowser` (route → ctx.fetchTarget → route.fulfill)
-    // and drive it off `this.opts.interceptor`. Left as a no-op registration
-    // here so the seam exists without depending on the executor's transport.
-    if (this.opts.interceptor) {
-      await this.context.route("**/*", () => {
-        /* interceptor wiring lifted from tools.ts during integration */
+    // Scope-pinned transport (lifted from tools.ts `ensureBrowser`): route EVERY
+    // page resource — the top document and every sub-resource, redirects included
+    // — through the executor's `fetchTarget` sink so Chromium never resolves an
+    // unchecked destination. The interceptor returns the fulfilled response, or
+    // `null` to let the request continue directly (the executor returns null for
+    // non-public scans, mirroring the old `if (!publicNetwork) route.continue()`).
+    // A throw / missing response aborts the request (`blockedbyclient`).
+    const interceptor = this.opts.interceptor;
+    if (interceptor) {
+      await this.context.route("**/*", async (route: unknown) => {
+        const r = route as {
+          request(): {
+            url(): string;
+            method(): string;
+            allHeaders(): Promise<Record<string, string>>;
+            postDataBuffer(): Buffer | null;
+          };
+          continue(): Promise<void>;
+          abort(errorCode?: string): Promise<void>;
+          fulfill(opts: { status: number; headers: Record<string, string>; body: Buffer }): Promise<void>;
+        };
+        try {
+          const request = r.request();
+          const headers = await request.allHeaders();
+          const post = request.postDataBuffer();
+          const result = await interceptor({
+            url: request.url(),
+            method: request.method(),
+            headers,
+            body: post ? new Uint8Array(post) : undefined,
+          });
+          if (!result) {
+            await r.continue();
+            return;
+          }
+          await r.fulfill({ status: result.status, headers: result.headers, body: Buffer.from(result.body) });
+        } catch {
+          await r.abort("blockedbyclient").catch(() => {});
+        }
       });
     }
     return this.context;
@@ -400,6 +432,20 @@ export interface BrowserToolDeps {
   host?: BrowserDriverHost;
   /** Per-action timeout in ms (default 10s, matching browserAction today). */
   actionTimeoutMs?: number;
+  /**
+   * UA to pin on the browser context (attribution token, or the executor's
+   * `0sec-browser/1.0` default). Threaded straight into
+   * {@link BrowserDriverOptions.userAgent} on the first driver acquisition.
+   */
+  userAgent?: string;
+  /** Attribution headers Chrome attaches to every in-scope request. */
+  extraHeaders?: Record<string, string>;
+  /**
+   * The executor's scope-pinned request transport (the `context.route →
+   * fetchTarget` mechanism). When supplied, every page sub-resource is routed
+   * through it so nothing escapes scope; see {@link BrowserDriverOptions.interceptor}.
+   */
+  interceptor?: BrowserDriverOptions["interceptor"];
 }
 
 const DEFAULT_ACTION_TIMEOUT_MS = 10_000;
@@ -454,7 +500,12 @@ export async function executeBrowser(
   // actionable error — never an import-time throw.
   let driver = host?.driver ?? null;
   if (!driver) {
-    const made = await factory({ publicNetwork: !!ctx.publicNetwork });
+    const made = await factory({
+      publicNetwork: !!ctx.publicNetwork,
+      userAgent: deps.userAgent,
+      extraHeaders: deps.extraHeaders,
+      interceptor: deps.interceptor,
+    });
     if ("error" in made) return fail(made.error);
     driver = made.driver;
     if (host) host.driver = driver;
@@ -557,10 +608,29 @@ export async function executeBrowser(
 
       case "screenshot": {
         const page = await driver.tab(tabName);
-        const base64 = (await page.screenshot()).slice(0, 50_000);
+        const url = page.currentUrl();
+        // Full base64 for the display-only image card (never sent to the model);
+        // a bounded copy rides `output` for the model-facing string, as before.
+        const fullBase64 = await page.screenshot();
+        const dims = pngDimensions(fullBase64);
         return {
           success: true,
-          output: { tab: tabName, url: page.currentUrl(), screenshot_base64: base64, dialogs: page.drainDialogs() },
+          output: {
+            tab: tabName,
+            url,
+            screenshot_base64: fullBase64.slice(0, 50_000),
+            dialogs: page.drainDialogs(),
+          },
+          meta: {
+            kind: "image",
+            image: {
+              imageBase64: fullBase64,
+              mimeType: "image/png",
+              width: dims?.width ?? 0,
+              height: dims?.height ?? 0,
+              caption: url,
+            },
+          },
         };
       }
     }
@@ -577,6 +647,29 @@ function safeStringify(value: unknown): string {
     return JSON.stringify(value) ?? String(value);
   } catch {
     return String(value);
+  }
+}
+
+/**
+ * Decode a PNG's pixel dimensions from the IHDR chunk of its base64 payload.
+ * A PNG begins with an 8-byte signature, then the IHDR chunk whose width and
+ * height are big-endian uint32s at byte offsets 16 and 20. Only the first ~24
+ * bytes are decoded; returns undefined for anything that isn't a PNG. Kept
+ * local so the module needs no image lib and still typechecks with no browser.
+ */
+function pngDimensions(base64: string): { width: number; height: number } | undefined {
+  try {
+    // 32 base64 chars → 24 bytes, enough to reach the end of the IHDR fields.
+    const head = Buffer.from(base64.slice(0, 32), "base64");
+    if (head.length < 24) return undefined;
+    // PNG signature: 89 50 4E 47 0D 0A 1A 0A.
+    if (head[0] !== 0x89 || head[1] !== 0x50 || head[2] !== 0x4e || head[3] !== 0x47) return undefined;
+    const width = head.readUInt32BE(16);
+    const height = head.readUInt32BE(20);
+    if (width <= 0 || height <= 0) return undefined;
+    return { width, height };
+  } catch {
+    return undefined;
   }
 }
 

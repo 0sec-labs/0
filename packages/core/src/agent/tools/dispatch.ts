@@ -11,6 +11,7 @@
  * This barrel changes only when a NEW DOMAIN is added, not per-tool.
  */
 import { reconDispatch } from "./recon.js";
+import { browserDispatch } from "./browser.js";
 import { findingsDispatch } from "./findings.js";
 import { systemDispatch } from "./system.js";
 import { accessControlDispatch } from "./access-control.js";
@@ -30,6 +31,7 @@ import { evalDispatch } from "./eval.js";
 
 export const TOOL_DISPATCH: Record<string, string> = {
   ...reconDispatch,
+  ...browserDispatch,
   ...findingsDispatch,
   ...systemDispatch,
   ...accessControlDispatch,

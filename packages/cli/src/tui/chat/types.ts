@@ -97,11 +97,13 @@ export type ChatEntry = {
    *
    * `metaKind` selects the card: "command" (a `$ cmd` + output + wall/exit
    * footer), "edit" (a `✎ Edit: path (+A/-R)` header + diff), "web" (a
-   * `⌕ Web Search` header + query + answer + sources list), or "task" (a
+   * `⌕ Web Search` header + query + answer + sources list), "task" (a
    * subagent-launch card: Goal/Constraints/Contract sections + sub-report
-   * bullets + the phase/checkbox TODO tree).
+   * bullets + the phase/checkbox TODO tree), or "image" (an inline screenshot
+   * — the browser tool: the actual bytes ride on {@link images}, so the card
+   * renders it via `ImageCard` beneath the usual tool header).
    */
-  metaKind?: "command" | "edit" | "web" | "task" | "code";
+  metaKind?: "command" | "edit" | "web" | "task" | "code" | "image";
   // ── command card ──
   /** The command that was run (header `$ <command>`). */
   command?: string;

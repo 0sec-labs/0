@@ -13,6 +13,7 @@
  */
 import type { ToolDefinition } from "../types.js";
 import { reconToolDefinitions } from "./recon.js";
+import { browserToolDefinitions } from "./browser.js";
 import { findingsToolDefinitions } from "./findings.js";
 import { systemToolDefinitions } from "./system.js";
 import { accessControlToolDefinitions } from "./access-control.js";
@@ -45,6 +46,7 @@ export {
 // each tool name is owned by exactly one domain module.
 const DOMAIN_DEFINITIONS: Record<string, ToolDefinition> = {
   ...reconToolDefinitions,
+  ...browserToolDefinitions,
   ...findingsToolDefinitions,
   ...systemToolDefinitions,
   ...accessControlToolDefinitions,
