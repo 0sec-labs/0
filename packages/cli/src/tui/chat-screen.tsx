@@ -3101,7 +3101,9 @@ export function ChatScreen({
           setTurnBudget(Number.isFinite(usage.turnTokenBudget)
             ? { used: usage.turnTokensUsed, limit: usage.turnTokenBudget }
             : null);
-          setLastContext(usage.inputTokens > 0 ? usage.inputTokens : undefined);
+          if (usage.kind === "planner") {
+            setLastContext(Number.isFinite(usage.inputTokens) && usage.inputTokens > 0 ? usage.inputTokens : undefined);
+          }
         },
         onNotice: (notice) => {
           setScopeRules(session.scope?.raw.in_scope ?? []);
@@ -3994,6 +3996,7 @@ export function ChatScreen({
     modelDisplay: settings.modelDisplay,
     showContextMeter: settings.showContextMeter,
     contextWindow: contextLimit?.tokens,
+    contextUsed: !focusAgentId ? lastContext : undefined,
     lastModelInput: !focusAgentId ? describeLastModelCallInput(lastContext) ?? undefined : undefined,
     showCost: settings.showCost,
     hostedBalance: !focusAgentId && cloudBalance && cloudBalance.owner === session && cloudSource.current?.isHosted()

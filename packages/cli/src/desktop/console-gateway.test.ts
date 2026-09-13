@@ -53,6 +53,7 @@ function makeSession(input: GatewayFactoryInput): ConsoleSession {
       );
       callbacks?.onAssistantDelta?.("the requested file.");
       callbacks?.onUsage?.({
+        kind: "planner",
         inputTokens: 10,
         outputTokens: 5,
         turnTokensUsed: 15,

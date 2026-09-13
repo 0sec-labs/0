@@ -131,6 +131,9 @@ export interface ConsoleUsageReport {
   iterations: number;
   /** The runaway iteration backstop in force (`maxToolIterations`). */
   maxToolIterations: number;
+  /** Only planner input describes conversation occupancy. Plugin input belongs
+   * to a separate prompt; compaction is reserved for a future console emitter. */
+  kind: "planner" | "plugin" | "compaction";
 }
 
 // ── Console autonomy / scope resolution (0sec console) ──
@@ -2531,7 +2534,10 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
       },
     };
 
-    const recordModelUsage = (delta?: { inputTokens: number; outputTokens: number }): void => {
+    const recordModelUsage = (
+      kind: ConsoleUsageReport["kind"],
+      delta?: { inputTokens: number; outputTokens: number },
+    ): void => {
       if (delta) {
         usage.inputTokens += delta.inputTokens;
         usage.outputTokens += delta.outputTokens;
@@ -2544,6 +2550,7 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
         turnTokenBudget: maxTurnTokens,
         iterations,
         maxToolIterations,
+        kind,
       });
     };
     const invokePluginModel = async (request: unknown, requestSignal?: AbortSignal) => {
@@ -2562,7 +2569,7 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
         parsed.system, parsed.messages, parsed.tools,
         { onUsage: (value) => { delta = value; } }, effectiveSignal,
       );
-      recordModelUsage(response.usage ?? delta);
+      recordModelUsage("plugin", response.usage ?? delta);
       return executableModelResult(response);
     };
     let driverResult: NativeRuntimeResult | undefined;
@@ -2685,7 +2692,7 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
           // Actual SDK model calls already recorded their usage through invokePluginModel.
         } else {
           result = await config.runtime.executeNative(systemPrompt, messages, nativeTools, streamCallbacks, signal);
-          recordModelUsage(result.usage ?? streamedUsage);
+          recordModelUsage("planner", result.usage ?? streamedUsage);
         }
       } catch (error) {
         return { assistantText, toolCalls: runCalls, usage, budget: budgetSnapshot(),

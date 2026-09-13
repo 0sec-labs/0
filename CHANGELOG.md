@@ -29,6 +29,8 @@ on the published npm package and the GitHub Release tag.
 - Keep each live audit's conversation, draft, runtime, and mailbox independent.
   `/new` opens another audit; closing waits for cleanup and permits an explicit retry.
   Keep generated worker addresses within the mailbox identity limit for UUID audit IDs.
+- Report context occupancy from planner input only; plugin usage still updates
+  turn budgets. Missing samples, unknown limits, and worker focus stay unknown.
 - Drain owned workers before acknowledging a stop, while retaining the parent
   conversation. Show confirmed stops and unfinished workers as settled.
 - Pin worker model choices to the parent's provider and account. Model-picker

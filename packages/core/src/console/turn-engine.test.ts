@@ -1454,7 +1454,7 @@ describe("Console turn budget — token guard and iteration backstop", () => {
 
     // One sample per model call — a UI can watch the number climb mid-turn.
     expect(samples).toHaveLength(3);
-    expect(samples.length).toBeGreaterThan(1);
+    expect(samples.map((sample) => sample.kind)).toEqual(["planner", "planner", "planner"]);
     // Per-call deltas.
     expect(samples.map((s) => s.inputTokens)).toEqual([10, 20, 30]);
     // Running turn totals, monotonically increasing, measured against the budget.
@@ -2965,6 +2965,7 @@ describe("console live driver authority", () => {
       autonomyMode: point === "tool-start" ? "yolo" : "standard",
       approveTool: async () => { await Promise.resolve(); setWorkspaceHarnessTrust(root, false); return true; },
     });
+    const usageSamples: ConsoleUsageReport[] = [];
     try {
       setWorkspaceHarnessTrust(root, true);
       const args = { command: `printf x > ${JSON.stringify(marker)}` };
@@ -2979,11 +2980,13 @@ describe("console live driver authority", () => {
         } },
       }] } });
       const result = await session.send("continue", {
+        onUsage: (usage) => usageSamples.push(usage),
         onToolStart: () => { if (point === "tool-start") setWorkspaceHarnessTrust(root, false); },
       });
       expect(result.stopReason).toBe("error");
       expect(result.error).toMatch(/trust.*revoked/i);
       expect(result.usage).toEqual({ inputTokens: 10, outputTokens: 3 });
+      expect(usageSamples.filter((usage) => usage.inputTokens > 0).map((usage) => usage.kind)).toEqual(["plugin"]);
       expect(runtime.calls).toHaveLength(1);
       expect(existsSync(marker)).toBe(false);
       expect(result.toolCalls).toHaveLength(1);

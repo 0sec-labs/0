@@ -1,25 +1,13 @@
 /**
  * Resolve the verified context window of the model an audit is actually running.
  *
- * The status bar renders a context reading only when it is handed BOTH a window
- * and an occupancy figure (see `status-bar.ts`). This module answers the window
- * half, and only the window half, because the two halves have different
- * provenance and only one of them is currently trustworthy:
+ * The status bar needs both an exact-provider catalog window and a reported
+ * planner input sample. This module resolves only the window; the chat screen
+ * selects `ConsoleUsageReport.kind === "planner"` for occupancy and keeps
+ * plugin samples separate. Canonical console usage currently has planner and
+ * plugin emitters; compaction is a reserved kind, not a console emitter.
  *
- *  - A **window** is catalog metadata. It is either reported by an authoritative
- *    catalog for this exact model, or it is unknown. There is no third state.
- *  - An **occupancy** figure would have to come from `onUsage`, and the console
- *    turn engine fires that callback for the planner's own model call, for
- *    plugin/SDK model invocations and for LLM compaction alike, with nothing on
- *    the payload distinguishing them. A compaction call fires precisely when
- *    occupancy peaks, so its prompt size is both the most misleading number
- *    available and the most likely one to be latched.
- *
- * This module therefore deliberately exposes NO percentage and NO occupancy
- * ratio. It exposes the verified limit, and — separately and explicitly
- * labelled — the size of the last model call's input. Those two facts are true.
- * Dividing one by the other would not be, and the false reading would be worst
- * exactly when an operator most needs a real one.
+ * Missing metadata or a missing/invalid planner sample remains unknown.
  *
  * @see resolveContextLimit — the only window authority.
  * @see describeLastModelCallInput — an honestly labelled fact, never occupancy.
@@ -171,11 +159,9 @@ export function resolveContextLimit(
 /**
  * One honestly-labelled fact about the most recent model call, or `null`.
  *
- * This is NOT context occupancy and must never be presented as such. The
- * console turn engine reports input tokens per model call, and the planner's
- * call, a plugin's call and a compaction pass all arrive through the same
- * callback with no discriminator. So the only claim this value supports is the
- * literal one: the last model call sent this many input tokens.
+ * This helper only validates a reported input count. The caller must establish
+ * its provenance: chat-screen passes the last planner sample, never plugin
+ * input or cumulative turn usage.
  *
  * It is already a whole-prompt figure on both normalized runtime paths — the
  * Anthropic reader folds cache reads and cache writes back into `inputTokens`,
