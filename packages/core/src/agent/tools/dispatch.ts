@@ -28,6 +28,7 @@ import { binaryDispatch } from "./binary.js";
 import { askOperatorDispatch } from "./ask-operator.js";
 import { todosDispatch } from "./todos.js";
 import { evalDispatch } from "./eval.js";
+import { proxyDispatch } from "./proxy.js";
 
 export const TOOL_DISPATCH: Record<string, string> = {
   ...reconDispatch,
@@ -48,4 +49,5 @@ export const TOOL_DISPATCH: Record<string, string> = {
   ...askOperatorDispatch,
   ...todosDispatch,
   ...evalDispatch,
+  ...proxyDispatch,
 };

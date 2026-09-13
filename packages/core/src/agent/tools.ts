@@ -221,6 +221,7 @@ export {
   BINARY_TOOL_NAMES,
 };
 import { executeStartScan } from "./tools/orchestrator.js";
+import { executeProxy, type ProxyHost } from "./tools/proxy.js";
 
 // Tool-name → handler-method-name routing table (0sec#614), assembled from
 // per-domain `*Dispatch` maps. `ToolExecutor._dispatch` resolves the handler
@@ -2889,6 +2890,13 @@ export class ToolExecutor {
    */
   private _processManager: ProcessManager | null = null;
   /**
+   * Per-session intercepting-proxy state (burp-network-20260913). Holds the
+   * running ProxyDriver, the in-memory HTTP-history store, the bound port, and
+   * installed match/replace rules across turns. The driver's listener is torn
+   * down in cleanup() so no proxy outlives the session. See `tools/proxy.ts`.
+   */
+  private _proxyHost: ProxyHost = {};
+  /**
    * Set of proposed flag strings that the `done` tool rejected once as
    * likely decoys. A second `done` call with the same flag passes through
    * — the anti-honeypot heuristic is a speed bump, not a hard wall.
@@ -3268,6 +3276,12 @@ export class ToolExecutor {
         // Kill every background process the monitor tool started.
         this._processManager.killAll();
         this._processManager = null;
+      }
+      if (this._proxyHost.driver) {
+        // Tear down the intercepting proxy listener so no port outlives the
+        // session (captured history is discarded with the executor).
+        await this._proxyHost.driver.stop().catch(() => {});
+        this._proxyHost.driver = null;
       }
     } catch {
       // Best-effort cleanup
@@ -5355,6 +5369,19 @@ export class ToolExecutor {
     args: Record<string, unknown>,
   ): Promise<ToolResult> {
     return executeStartScan(args);
+  }
+
+  /**
+   * burp-network-20260913 — Burp-style intercepting HTTP(S) proxy. Thin
+   * delegate to executeProxy (agent/tools/proxy.ts), threading this session's
+   * cross-turn {@link ProxyHost} (running driver + in-memory HTTP-history store
+   * + installed match/replace rules). The real proxy server lives behind a
+   * lazy, guarded ProxyDriver seam; egress is scope-gated through
+   * `this.ctx` exactly like http_request. The listener is torn down in
+   * cleanup().
+   */
+  private async proxyAction(args: Record<string, unknown>): Promise<ToolResult> {
+    return executeProxy(this.ctx, args, { host: this._proxyHost });
   }
 
   /**
@@ -9190,7 +9217,15 @@ export function getToolsForRole(role: string, opts?: { hasScope?: boolean; webMo
     // role. It is a runtime-gated capability (`allowModelSelfExtension`, default
     // OFF), not a feature flag, so native-loop injects it into the model-facing
     // tool set explicitly when enabled — it must never leak in by omission here.
-    && name !== "self_extend" && name !== "remember_codebase",
+    && name !== "self_extend" && name !== "remember_codebase"
+    // burp-network-20260913 — the intercepting `proxy` tool is registered +
+    // dispatchable + unit-tested, but NOT YET advertised by any role. It is a
+    // powerful effectful capability (a local MITM proxy + a generated CA); like
+    // OAST/cloud/fan-out it must reach the model behind an explicit opt-in
+    // feature flag once the transport backend lands (WIRING TODO: add a
+    // `featureFlags.proxy` gate + `"proxy"` to networkTools). Excluded by
+    // omission here so it never leaks into the audit/review "everything" set.
+    && name !== "proxy",
   );
   const scopedSourceTools = Object.keys(SCOPED_SOURCE_AUDIT_TOOLS).filter((name) =>
     name !== "remember_codebase" && (featureFlags.zeroverse || name !== "analyze_binary"),

@@ -33,6 +33,7 @@ import { binaryToolDefinitions, BINARY_TOOL_NAMES } from "./binary.js";
 import { askOperatorToolDefinitions } from "./ask-operator.js";
 import { todosToolDefinitions } from "./todos.js";
 import { evalToolDefinitions } from "./eval.js";
+import { proxyToolDefinitions } from "./proxy.js";
 
 export {
   SCANNER_TOOL_NAMES,
@@ -63,6 +64,7 @@ const DOMAIN_DEFINITIONS: Record<string, ToolDefinition> = {
   ...askOperatorToolDefinitions,
   ...todosToolDefinitions,
   ...evalToolDefinitions,
+  ...proxyToolDefinitions,
 };
 
 // Canonical registry order. getToolsForRole("audit"/"review") enumerates
@@ -126,6 +128,9 @@ const TOOL_REGISTRY_ORDER = [
   // set only when the operator enabled `allowModelSelfExtension` (default OFF).
   "self_extend",
   "remember_codebase",
+  // Burp-style intercepting HTTP(S) proxy (burp-network-20260913). Behind a
+  // lazy ProxyDriver seam; scope-gated like http_request/browser.
+  "proxy",
 ] as const;
 
 export const TOOL_DEFINITIONS: Record<string, ToolDefinition> = Object.fromEntries(
