@@ -109,7 +109,12 @@ function shouldHarvestLoot(toolName: string): boolean {
   return (
     isUntrustedSourceTool(toolName) ||
     toolName === "bash" ||
-    toolName === "run_command"
+    toolName === "run_command" ||
+    // js_eval / python_eval shell out to node / python3 (which routinely curl,
+    // read files, and print tokens/paths), exactly like bash — mine their
+    // output for footholds too.
+    toolName === "js_eval" ||
+    toolName === "python_eval"
   );
 }
 

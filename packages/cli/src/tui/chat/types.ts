@@ -101,7 +101,7 @@ export type ChatEntry = {
    * subagent-launch card: Goal/Constraints/Contract sections + sub-report
    * bullets + the phase/checkbox TODO tree).
    */
-  metaKind?: "command" | "edit" | "web" | "task";
+  metaKind?: "command" | "edit" | "web" | "task" | "code";
   // ── command card ──
   /** The command that was run (header `$ <command>`). */
   command?: string;
@@ -153,6 +153,13 @@ export type ChatEntry = {
   subReports?: Array<{ name: string; agent?: string; brief?: string; isolated?: boolean }>;
   /** Phase/checkbox plan snapshot, fed straight into `buildTodoTreeRows`. */
   taskTodos?: Array<{ id: string; content: string; status: TodoStatus; group?: string }>;
+  // ── code card (js_eval / python_eval) ──
+  /** Highlighter language for the code block (core `language`). */
+  codeLanguage?: "javascript" | "python";
+  /** The source that was evaluated, rendered as a highlighted block (core `code`). */
+  codeSource?: string;
+  /** The evaluated program's combined stdout/stderr (core `output`). */
+  codeOutput?: string;
 };
 
 export interface EntryDisplay {

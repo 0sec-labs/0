@@ -311,7 +311,7 @@ export type ChatDestination = "launcher" | "ops" | "history" | "findings" | "doc
  * Typed structurally so this module needs no extra core-type import.
  */
 interface ToolCardMeta {
-  kind?: "command" | "edit" | "web" | "task";
+  kind?: "command" | "edit" | "web" | "task" | "code";
   command?: string;
   exitCode?: number | null;
   durationMs?: number;
@@ -335,6 +335,10 @@ interface ToolCardMeta {
   assignment?: string;
   subReports?: Array<{ name: string; agent?: string; brief?: string; isolated?: boolean }>;
   todos?: Array<{ id: string; content: string; status: "pending" | "in_progress" | "completed"; group?: string }>;
+  // code card
+  language?: "javascript" | "python";
+  code?: string;
+  output?: string;
 }
 
 /**
@@ -343,7 +347,26 @@ interface ToolCardMeta {
  * object when there is no card to draw, so a spread leaves the entry untouched.
  */
 function toolCardFieldsFromMeta(meta: ToolCardMeta | undefined): Partial<ChatEntry> {
-  if (!meta || (meta.kind !== "command" && meta.kind !== "edit" && meta.kind !== "web" && meta.kind !== "task")) return {};
+  if (
+    !meta ||
+    (meta.kind !== "command" &&
+      meta.kind !== "edit" &&
+      meta.kind !== "web" &&
+      meta.kind !== "task" &&
+      meta.kind !== "code")
+  ) {
+    return {};
+  }
+  if (meta.kind === "code") {
+    return {
+      metaKind: "code",
+      codeLanguage: meta.language,
+      codeSource: meta.code,
+      codeOutput: meta.output,
+      exitCode: meta.exitCode ?? null,
+      wallMs: meta.durationMs,
+    };
+  }
   if (meta.kind === "task") {
     return {
       metaKind: "task",
@@ -421,6 +444,20 @@ function restoredToolCardFields(
       taskLabel: `${subReports.length} ${subReports.length === 1 ? "agent" : "agents"}`,
       taskContext: typeof args.context === "string" && args.context.trim() ? args.context : undefined,
       subReports,
+    };
+  }
+  if (name === "js_eval" || name === "python_eval") {
+    // The display-only meta (language / code / output / duration) is gone on a
+    // restore; recover the source from args and the output from the serialized
+    // result text so the code card still draws.
+    const code = typeof args.code === "string" ? args.code : undefined;
+    if (!code) return {};
+    return {
+      metaKind: "code",
+      codeLanguage: name === "python_eval" ? "python" : "javascript",
+      codeSource: code,
+      codeOutput: typeof content === "string" ? content : undefined,
+      exitCode: success ? 0 : 1,
     };
   }
   if (name === "bash" || name === "run_command") {

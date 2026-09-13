@@ -113,9 +113,10 @@ export interface ToolResult {
 export interface ToolResultMeta {
   /**
    * Which card the UI should draw. `command` → bash/run_command; `edit` →
-   * apply_patch; `web` → web_search; `task` → subagent launch (spawn_agents).
+   * apply_patch; `web` → web_search; `task` → subagent launch (spawn_agents);
+   * `code` → js_eval / python_eval (the code block + its output).
    */
-  kind?: "command" | "edit" | "web" | "task";
+  kind?: "command" | "edit" | "web" | "task" | "code";
   // ── command card ──
   /** The command that was executed (header line `$ <command>`). */
   command?: string;
@@ -192,6 +193,14 @@ export interface ToolResultMeta {
     status: "pending" | "in_progress" | "completed";
     group?: string;
   }>;
+  // ── code card (js_eval / python_eval) ──
+  /** Highlighter language for the code block. */
+  language?: "javascript" | "python";
+  /** The source that was evaluated (rendered as a syntax-highlighted block). */
+  code?: string;
+  /** The evaluated program's combined stdout/stderr (the Output section). */
+  output?: string;
+  // `durationMs` (execution time, header badge) and `exitCode` above are reused.
 }
 
 // ── Console autonomy (scoped source-audit gate) ──

@@ -533,6 +533,203 @@ function TaskCard({
   );
 }
 
+/**
+ * A `js_eval` / `python_eval` "Code" card, mirroring oh-my-pi's eval card: the
+ * syntax-highlighted source that ran, then its captured Output — both inside the
+ * same bordered box + `SectionRule` idiom as the command card, with the
+ * execution time riding the TOP border (OMP-style `· (<dur>)`) and the same
+ * collapsed/expanded line budget + `<scrollbox>` as the normal Output block.
+ */
+function CodeCard({
+  entry,
+  width,
+  display,
+  theme,
+  expanded,
+  toggleable,
+  repeat,
+}: ToolCardProps): React.ReactNode {
+  const { TEXT, MUTED, ERROR, BRAND, PANEL } = theme;
+  const state = toolState(entry);
+  const failed = state === "failed";
+  const running = state === "running";
+  const { glyph } = toolStateLabel(state);
+  const tone = stateTone(state, theme);
+
+  const language = entry.codeLanguage ?? "javascript";
+  const langLabel = language === "python" ? "Python" : "JS";
+  const title = langLabel;
+
+  const frame = commandCardFrame(width);
+  const useCard = frame.render && display.richToolCards !== false;
+  if (!useCard) {
+    const line = toolCompactLine(glyph, title, toolStateLabel(state).word, Math.max(1, width), formatDurationMs(entry.wallMs));
+    return (
+      <box flexDirection="column" width={Math.max(1, width)} flexShrink={0} minWidth={0} marginTop={display.spacing}>
+        <text width={Math.max(1, width)} height={1} wrapMode="none" truncate fg={tone}>{line}{repeat}</text>
+      </box>
+    );
+  }
+
+  const inner = frame.innerWidth;
+  const bodyWidth = Math.max(1, inner - (expanded ? 1 : 0));
+  const expandHint = toggleable
+    ? ` · click${TOOL_EXPAND_KEY ? ` or ${TOOL_EXPAND_KEY}` : ""} to expand`
+    : "";
+  const scrollbarOptions = {
+    trackOptions: { backgroundColor: PANEL, foregroundColor: MUTED },
+    arrowOptions: { foregroundColor: MUTED, backgroundColor: PANEL },
+  };
+
+  // ── code (the source that ran) — syntax-highlighted, bounded, collapsible ──
+  const codeLinesAll = (entry.codeSource ?? "").split("\n");
+  const codeRetained = codeLinesAll.slice(0, EXPANDED_OUTPUT_LINES);
+  const codeVisible = codeRetained.slice(0, expanded ? EXPANDED_OUTPUT_LINES : COLLAPSED_OUTPUT_LINES);
+  const codeHidden = codeRetained.length - codeVisible.length;
+  const codeCapped = codeLinesAll.length > codeRetained.length;
+  const codeRows = Math.max(1, Math.min(MAX_OUTPUT_ROWS, codeVisible.length));
+
+  // ── output (captured stdout/stderr) — same bounded/scrollbox idiom ──
+  const outLinesAll = (entry.codeOutput ?? "")
+    .split("\n")
+    .map((line) => sanitizeTuiText(line.slice(0, 512)));
+  const outRetained = outLinesAll.slice(0, EXPANDED_OUTPUT_LINES);
+  const outVisible = outRetained.slice(0, expanded ? EXPANDED_OUTPUT_LINES : COLLAPSED_OUTPUT_LINES);
+  const outHidden = outRetained.length - outVisible.length;
+  const outCapped = outLinesAll.length > outRetained.length;
+  const hasOutput = (entry.codeOutput ?? "").length > 0;
+  const outRows = Math.max(1, Math.min(MAX_OUTPUT_ROWS, outVisible.length));
+
+  const statusRows = toolStatusRows(entry, state, outRetained.length, outCapped);
+  const columns = statusColumns(statusRows, inner);
+
+  const durText = formatDurationMs(entry.wallMs);
+  const durSuffix = durText ? ` · (${durText})` : "";
+  const headerGlyph = failed ? `${glyph} ` : "";
+  const headline = fitTuiText(`${headerGlyph}${title}${repeat ?? ""}${durSuffix}`, inner);
+  const shimmer = running && typeof display.shimmerFrame === "number";
+
+  const codeBody = codeVisible.map((line, index) => (
+    <CodeLine
+      key={`${entry.id}-code-${index}`}
+      line={line}
+      language={language}
+      width={bodyWidth}
+      theme={theme}
+      keyPrefix={`${entry.id}-code-${index}`}
+    />
+  ));
+
+  return (
+    <box
+      flexDirection="column"
+      width={frame.outerWidth}
+      flexShrink={0}
+      minWidth={0}
+      marginTop={display.spacing}
+      border
+      borderStyle="rounded"
+      borderColor={stateBorder(state, theme)}
+      title={headline || undefined}
+      titleColor={failed ? ERROR : BRAND}
+      titleAlignment="left"
+      backgroundColor={PANEL}
+      paddingX={1}
+    >
+      <box flexDirection="column" width={inner} flexShrink={0} minWidth={0} marginTop={1}>
+        <SectionRule label={langLabel} width={inner} theme={theme} />
+        {codeVisible.length > 0 ? (
+          expanded ? (
+            <scrollbox width={inner} height={Math.max(1, codeRows)} flexShrink={0} scrollX={false} verticalScrollbarOptions={scrollbarOptions}>
+              <box width={bodyWidth} flexDirection="column" flexShrink={0} minWidth={0}>{codeBody}</box>
+            </scrollbox>
+          ) : (
+            <box width={inner} flexDirection="column" flexShrink={0} minWidth={0}>{codeBody}</box>
+          )
+        ) : (
+          <text width={inner} height={1} wrapMode="none" truncate fg={MUTED}>{fitTuiText("(no source)", inner)}</text>
+        )}
+        {codeHidden > 0 ? (
+          <text width={inner} height={1} wrapMode="none" truncate fg={MUTED}>
+            {fitTuiText(`… ${codeHidden} more line${codeHidden === 1 ? "" : "s"}${expandHint}`, inner)}
+          </text>
+        ) : null}
+        {codeCapped ? (
+          <text width={inner} height={1} wrapMode="none" truncate fg={MUTED}>
+            {fitTuiText("Source capped; additional lines are not retained here", inner)}
+          </text>
+        ) : null}
+      </box>
+
+      <box flexDirection="column" width={inner} flexShrink={0} minWidth={0} marginTop={1}>
+        <SectionRule label="Output" width={inner} theme={theme} />
+        {hasOutput && outVisible.length > 0 ? (
+          expanded ? (
+            <scrollbox width={inner} height={Math.max(1, outRows)} flexShrink={0} scrollX={false} verticalScrollbarOptions={scrollbarOptions}>
+              <box width={bodyWidth} flexDirection="column" flexShrink={0} minWidth={0}>
+                {outVisible.map((line, index) => (
+                  <text key={`${entry.id}-out-${index}`} width={bodyWidth} height={1} wrapMode="none" truncate fg={failed ? ERROR : TEXT}>
+                    {fitTuiText(line, bodyWidth)}
+                  </text>
+                ))}
+              </box>
+            </scrollbox>
+          ) : (
+            <box width={inner} flexDirection="column" flexShrink={0} minWidth={0}>
+              {outVisible.map((line, index) => (
+                <text key={`${entry.id}-out-${index}`} width={bodyWidth} height={1} wrapMode="none" truncate fg={failed ? ERROR : TEXT}>
+                  {fitTuiText(line, bodyWidth)}
+                </text>
+              ))}
+            </box>
+          )
+        ) : (
+          <text width={inner} height={1} wrapMode="none" truncate fg={MUTED}>
+            {fitTuiText(running ? "Awaiting output" : "No output", inner)}
+          </text>
+        )}
+        {outHidden > 0 ? (
+          <text width={inner} height={1} wrapMode="none" truncate fg={MUTED}>
+            {fitTuiText(`${outHidden} more preview line${outHidden === 1 ? "" : "s"}${expandHint}`, inner)}
+          </text>
+        ) : null}
+        {outCapped ? (
+          <text width={inner} height={1} wrapMode="none" truncate fg={MUTED}>
+            {fitTuiText("Preview capped; additional output is not retained here", inner)}
+          </text>
+        ) : null}
+      </box>
+
+      <box flexDirection="column" width={inner} flexShrink={0} minWidth={0} marginTop={1}>
+        <SectionRule label="Status" width={inner} theme={theme} />
+        {statusRows.map((row, index) =>
+          columns.labelWidth > 0 ? (
+            <box key={`${entry.id}-status-${index}`} flexDirection="row" width={inner} height={1} flexShrink={0} minWidth={0} gap={columns.gap}>
+              <box width={columns.labelWidth} flexShrink={0} minWidth={0}>
+                <text width={columns.labelWidth} height={1} wrapMode="none" truncate fg={MUTED}>{fitTuiText(row.label, columns.labelWidth)}</text>
+              </box>
+              <box width={columns.valueWidth} flexShrink={0} minWidth={0}>
+                <text width={columns.valueWidth} height={1} wrapMode="none" truncate fg={row.tone === "error" ? ERROR : row.tone === "state" ? tone : MUTED} attributes={row.tone === "error" ? TextAttributes.BOLD : undefined}>
+                  {fitTuiText(row.value, columns.valueWidth)}
+                </text>
+              </box>
+            </box>
+          ) : (
+            <text key={`${entry.id}-status-${index}`} width={inner} height={1} wrapMode="none" truncate fg={row.tone === "error" ? ERROR : MUTED}>
+              {fitTuiText(`${row.label} ${row.value}`, inner)}
+            </text>
+          ),
+        )}
+      </box>
+
+      {running ? (
+        shimmer ? <ShimmerText label={`${glyph} running`} frame={display.shimmerFrame!} base={MUTED} peak={TEXT} />
+          : <text fg={MUTED}>{`${glyph} running`}</text>
+      ) : null}
+    </box>
+  );
+}
+
 export function ToolCard({
   entry,
   width,
@@ -542,6 +739,19 @@ export function ToolCard({
   toggleable = false,
   repeat = "",
 }: ToolCardProps): React.ReactNode {
+  if (entry.metaKind === "code") {
+    return (
+      <CodeCard
+        entry={entry}
+        width={width}
+        display={display}
+        theme={theme}
+        expanded={expanded}
+        toggleable={toggleable}
+        repeat={repeat}
+      />
+    );
+  }
   if (entry.metaKind === "task") {
     return (
       <TaskCard
