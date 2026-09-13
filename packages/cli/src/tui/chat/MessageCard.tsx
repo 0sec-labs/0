@@ -1,3 +1,4 @@
+/** @jsxImportSource @opentui/react */
 /**
  * MessageCard — the OMP-style directional card for an inter-agent message.
  *

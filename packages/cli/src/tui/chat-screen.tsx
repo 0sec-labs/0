@@ -3262,7 +3262,7 @@ export function ChatScreen({
                   // their precise meta.durationMs via `settled`; every other tool
                   // gets Date.now() - start). The append-fallback below has no
                   // start stamp and legitimately stays duration-less.
-                  next[i] = { ...settled, id: e.id, at: e.at, wallMs: settled.wallMs ?? (Date.now() - e.at) };
+                  next[i] = { ...settled, id: e.id, at: e.at, wallMs: settled.wallMs ?? (e.at != null ? Date.now() - e.at : undefined) };
                   return next;
                 }
               }
