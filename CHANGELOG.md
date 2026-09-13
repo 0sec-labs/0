@@ -12,6 +12,13 @@ on the published npm package and the GitHub Release tag.
 
 ## [Unreleased]
 
+### Changed
+
+- Default automatic updates on for profiles without an explicit update policy,
+  including existing profiles with that setting unset. Eligible startup checks
+  may download and install remote code. Explicit `off` and `notify` preferences,
+  project-setting restrictions, and existing updater safety checks remain intact.
+
 ### Fixed
 
 - Present operator screens as bounded, responsive dialogs while keeping the
