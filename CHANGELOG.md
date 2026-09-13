@@ -18,6 +18,13 @@ on the published npm package and the GitHub Release tag.
   dialogs and sidebar components, with Unicode as the default. This migration
   does not yet cover all chat, transcript, approval, and composer glyphs.
 
+### Changed
+
+- Default automatic updates on for profiles without an explicit update policy,
+  including existing profiles with that setting unset. Eligible startup checks
+  may download and install remote code. Explicit `off` and `notify` preferences,
+  project-setting restrictions, and existing updater safety checks remain intact.
+
 ### Fixed
 
 - Show shared batch instructions and worker briefs in bounded, expandable Task

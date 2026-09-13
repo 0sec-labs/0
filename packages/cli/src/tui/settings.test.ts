@@ -675,13 +675,13 @@ describe("operator-only privacy and updates", () => {
     writeProjectRaw(project, {
       diagnosticReporting: "off",
       diagnosticReportingPrompted: true,
-      updatePolicy: "automatic",
+      updatePolicy: "off",
       showLogo: false,
     });
     const { settings, sources } = loadLayeredSettings({ homeDir: home, projectDir: project });
     expect(settings.diagnosticReporting).toBe("automatic");
     expect(settings.diagnosticReportingPrompted).toBe(false);
-    expect(settings.updatePolicy).toBe("off");
+    expect(settings.updatePolicy).toBe("automatic");
     expect(sources.diagnosticReporting).toBe("default");
     expect(sources.updatePolicy).toBe("default");
     expect(settings.showLogo).toBe(false);

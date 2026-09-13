@@ -185,7 +185,7 @@ export interface TuiSettings {
   diagnosticReporting: "off" | "ask" | "automatic";
   /** Internal first-use state, not a grant of reporting consent. */
   diagnosticReportingPrompted: boolean;
-  /** Operator-global update policy; unset installations remain opted out. */
+  /** Operator-global update policy; unset installations use automatic updates. */
   updatePolicy: "off" | "notify" | "automatic";
   /**
    * Symbol/glyph preset for status marks, row icons, checkboxes and spinners.
@@ -564,7 +564,7 @@ const DEFS: readonly TuiSettingDef[] = [
     label: "Updates",
     description: "Off, notify about releases, or install updates before the console starts. Applies to this computer; project settings cannot enable installation.",
     kind: "enum",
-    default: "off",
+    default: "automatic",
     choices: ["off", "notify", "automatic"],
     group: "Updates",
   },
@@ -618,7 +618,7 @@ export const DEFAULT_SETTINGS: TuiSettings = {
   reduceMotion: false,
   diagnosticReporting: "automatic",
   diagnosticReportingPrompted: false,
-  updatePolicy: "off",
+  updatePolicy: "automatic",
   symbolPreset: "unicode",
 };
 
