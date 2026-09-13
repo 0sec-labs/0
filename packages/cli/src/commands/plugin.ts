@@ -14,10 +14,11 @@
 //                at scan time, and only for ids the enablement store reports as
 //                cleanly enabled. This command never spawns a plugin.
 //
-// No real marketplace ships: the registry endpoint (DEFAULT_REGISTRY_URL) is
-// intentionally empty and the signature crypto is a stub (see registry-client).
-// `search` / `browse` / `install` are a clear no-op until an operator points
-// --registry at a URL they trust.
+// The Hackstore ships as the default registry (DEFAULT_REGISTRY_URL → the
+// community index in github.com/0sec-labs/hackstore); the signature crypto is
+// still a stub, so entries install as `unverified` (see registry-client).
+// `0SEC_REGISTRY_URL`/`--registry` overrides it; an explicit empty value makes
+// `search` / `browse` / `install` a clear no-op ("Hackstore disabled").
 //
 // DEPENDENCY NOTE
 // ───────────────
@@ -788,7 +789,7 @@ export function registerPluginCommand(program: Command): void {
   plugin
     .command("search <query>")
     .description("Search the configured registry for plugins")
-    .option("--registry <url>", "Marketplace index URL (https)")
+    .option("--registry <url>", "Hackstore index URL (https)")
     .action(async (query: string, opts: { registry?: string }) => {
       await runSearch(query, await withDeps(opts));
     });
@@ -796,7 +797,7 @@ export function registerPluginCommand(program: Command): void {
   plugin
     .command("browse")
     .description("List everything in the configured registry")
-    .option("--registry <url>", "Marketplace index URL (https)")
+    .option("--registry <url>", "Hackstore index URL (https)")
     .action(async (opts: { registry?: string }) => {
       await runSearch("", await withDeps(opts));
     });
@@ -804,7 +805,7 @@ export function registerPluginCommand(program: Command): void {
   plugin
     .command("install <id>")
     .description("Fetch + validate + write a plugin's files (installs; does NOT enable, runs no code)")
-    .option("--registry <url>", "Marketplace index URL (https)")
+    .option("--registry <url>", "Hackstore index URL (https)")
     .action(async (id: string, opts: { registry?: string }) => {
       await runInstall(id, await withDeps(opts));
     });
