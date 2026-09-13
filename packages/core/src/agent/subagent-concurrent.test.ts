@@ -112,6 +112,29 @@ describe("spawn_agents — concurrent subagent dispatch", () => {
     }
   });
 
+  it("delivers shared batch instructions to both children without mixing their tasks", async () => {
+    const prompts: string[] = [];
+    const shared = "# Constraints\nBATCH_CONTEXT_SENTINEL: keep the target unchanged.";
+    const tasks = ["PRIVATE_TASK_ALPHA", "PRIVATE_TASK_BETA"];
+    h.impl = async (opts) => {
+      prompts.push(opts.config.systemPrompt);
+      return fakeState([]);
+    };
+    const executor = new ToolExecutor(toolContext(), undefined, undefined, fakeRuntime);
+    const result = await executor.execute({
+      name: "spawn_agents",
+      arguments: { context: shared, tasks: tasks.map((task) => ({ task })) },
+    });
+
+    expect(result.output).toMatchObject({ spawned: 2, succeeded: 2, failed: 0 });
+    expect(prompts).toHaveLength(2);
+    for (const task of tasks) {
+      const prompt = prompts.find((value) => value.includes(task));
+      expect(prompt).toContain(shared);
+      expect(prompt).not.toContain(tasks.find((value) => value !== task));
+    }
+  });
+
   it("(2) isolates failure: one child throws, the other still returns its finding", async () => {
     h.impl = async (opts) => {
       if ((opts.config.systemPrompt as string).includes("BOOM")) {

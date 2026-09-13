@@ -11,6 +11,16 @@ import { KEYBINDINGS } from "../keybindings.js";
 import { ShimmerText } from "./shimmer.js";
 import { renderMarkdownBlocks } from "./markdown-blocks.js";
 import { ImageCard } from "./ImageCard.js";
+import { TodoTree } from "./Todos.js";
+import { buildTodoTreeRows } from "./todos-sidebar-layout.js";
+import {
+  EXPANDED_SUBREPORT_LIMIT,
+  capTaskBodyLines,
+  subReportRows,
+  taskBodyLines,
+  taskMarkdownSections,
+  type TaskBodyLine,
+} from "./task-card-layout.js";
 import type { ChatEntry, ChatImageAttachment, EntryDisplay } from "./types.js";
 import {
   MAX_OUTPUT_ROWS,
@@ -184,6 +194,261 @@ function previewFor(entry: ChatEntry, failed: boolean): ToolPreview {
   return entry.toolPreview ?? projectToolPreview({ name: entry.text }, { success: !failed, output: entry.detail });
 }
 
+/**
+ * A subagent-launch "Task" card, mirroring OMP's `task/render.ts`: the
+ * model-authored Goal / Constraints / Contract Markdown sections, then the
+ * dispatched sub-report bullets (`• Name (agent): brief`), then the
+ * phase/checkbox TODO tree — all inside the same bordered box + `SectionRule`
+ * idiom as the command/edit/web cards, and honouring the same `expanded`
+ * collapse affordance.
+ */
+function TaskCard({
+  entry,
+  width,
+  display,
+  theme,
+  expanded,
+  toggleable,
+  repeat,
+}: ToolCardProps): React.ReactNode {
+  const { TEXT, MUTED, ERROR, BRAND, ACCENT, PANEL } = theme;
+  const state = toolState(entry);
+  const failed = state === "failed";
+  const running = state === "running";
+  const { glyph } = toolStateLabel(state);
+  const tone = stateTone(state, theme);
+
+  const frame = commandCardFrame(width);
+  const useCard = frame.render && display.richToolCards !== false;
+  const title = `Task${entry.taskLabel ? ` • ${entry.taskLabel}` : ""}`;
+
+  if (!useCard) {
+    const line = toolCompactLine(glyph, title, toolStateLabel(state).word, Math.max(1, width));
+    return (
+      <box flexDirection="column" width={Math.max(1, width)} flexShrink={0} minWidth={0} marginTop={display.spacing}>
+        <text width={Math.max(1, width)} height={1} wrapMode="none" truncate fg={tone}>{line}{repeat}</text>
+      </box>
+    );
+  }
+
+  const inner = frame.innerWidth;
+  // One cell is surrendered to the scrollbar when a body region can scroll.
+  const bodyWidth = Math.max(1, inner - (expanded ? 1 : 0));
+
+  const sections = taskMarkdownSections(entry);
+  const { rows: subRows, hidden: hiddenAgents } = subReportRows(
+    entry.subReports,
+    expanded,
+    EXPANDED_SUBREPORT_LIMIT,
+  );
+  const todos = entry.taskTodos ?? [];
+  const expandHint = toggleable
+    ? ` · click${TOOL_EXPAND_KEY ? ` or ${TOOL_EXPAND_KEY}` : ""} to expand`
+    : "";
+  const scrollbarOptions = {
+    trackOptions: { backgroundColor: PANEL, foregroundColor: MUTED },
+    arrowOptions: { foregroundColor: MUTED, backgroundColor: PANEL },
+  };
+
+  // ── context (Goal / Constraints / Contract / Assignment) ────────────────────
+  // Flattened to one countable line list and bounded exactly like the normal
+  // card's Output: a collapsed taste, the fuller lot inside a fixed-height,
+  // CLIPPING <scrollbox> when expanded. This is what stops a 40-line Goal from
+  // painting an 88-row card straight over the transcript below it.
+  const allBodyLines = taskBodyLines(sections);
+  const retainedBody = allBodyLines.slice(0, EXPANDED_OUTPUT_LINES);
+  const { visible: visibleBody, hidden: hiddenBody } = capTaskBodyLines(
+    retainedBody,
+    expanded ? EXPANDED_OUTPUT_LINES : COLLAPSED_OUTPUT_LINES,
+  );
+  const bodyCapped = allBodyLines.length > retainedBody.length;
+  const bodyScrollRows = Math.max(1, Math.min(MAX_OUTPUT_ROWS, visibleBody.length));
+  const renderBodyLine = (line: TaskBodyLine, index: number): React.ReactNode =>
+    line.kind === "rule" ? (
+      <SectionRule key={`${entry.id}-body-${index}`} label={line.label} width={bodyWidth} theme={theme} />
+    ) : (
+      <text
+        key={`${entry.id}-body-${index}`}
+        width={bodyWidth}
+        height={1}
+        wrapMode="none"
+        truncate
+        fg={TEXT}
+      >
+        {fitTuiText(sanitizeTuiText(line.text.slice(0, 512)), bodyWidth)}
+      </text>
+    );
+
+  // ── plan (reused TodoTree), capped to a deterministic row ceiling ───────────
+  const planCap = expanded ? MAX_OUTPUT_ROWS : COLLAPSED_OUTPUT_LINES;
+  const allTodoRows = buildTodoTreeRows(todos, inner);
+  const todoRows = allTodoRows.slice(0, planCap);
+  const hiddenTodo = allTodoRows.length - todoRows.length;
+
+  // ── output (the actual worker findings / summary / errors) ──────────────────
+  // spawn_agents returns the real result on the entry; surface it through the
+  // shared previewFor + the same bounded-lines / scrollbox block the normal
+  // card uses for its Output, so it is never dropped — a taste collapsed,
+  // scrollable inside a fixed height when expanded.
+  const preview = previewFor(entry, failed);
+  const outRetained = preview.lines
+    .slice(0, EXPANDED_OUTPUT_LINES)
+    .map((line) => sanitizeTuiText(line.slice(0, 512)));
+  const outVisible = outRetained.slice(0, expanded ? EXPANDED_OUTPUT_LINES : COLLAPSED_OUTPUT_LINES);
+  const outHidden = outRetained.length - outVisible.length;
+  const outCapped = preview.truncated || preview.lines.length > outRetained.length;
+  const outBody = preview.kind === "code" && bodyWidth >= 3
+    ? renderMarkdownBlocks(
+        [{
+          kind: "code",
+          language: preview.language,
+          lines: outVisible.map((line) => fitTuiText(line, Math.max(1, bodyWidth - 2))),
+        }],
+        `${entry.id}-task-output`,
+        theme,
+      )
+    : outVisible.map((line, index) => (
+        <text
+          key={`${entry.id}-task-output-${index}`}
+          width={bodyWidth}
+          height={1}
+          wrapMode="none"
+          truncate
+          fg={failed ? ERROR : TEXT}
+        >
+          {fitTuiText(line, bodyWidth)}
+        </text>
+      ));
+  const outRows = Math.min(
+    MAX_OUTPUT_ROWS,
+    Math.max(1, outVisible.length + (preview.kind === "code" && preview.language ? 1 : 0)),
+  );
+
+  const headerGlyph = failed ? `${glyph} ` : "";
+  const headline = fitTuiText(`${headerGlyph}${title}${repeat ?? ""}`, inner);
+  const shimmer = running && typeof display.shimmerFrame === "number";
+
+  return (
+    <box
+      flexDirection="column"
+      width={frame.outerWidth}
+      flexShrink={0}
+      minWidth={0}
+      marginTop={display.spacing}
+      border
+      borderStyle="rounded"
+      borderColor={stateBorder(state, theme)}
+      title={headline || undefined}
+      titleColor={failed ? ERROR : BRAND}
+      titleAlignment="left"
+      backgroundColor={PANEL}
+      paddingX={1}
+    >
+      {visibleBody.length > 0 ? (
+        <box flexDirection="column" width={inner} flexShrink={0} minWidth={0} marginTop={1}>
+          {expanded ? (
+            <scrollbox
+              width={inner}
+              height={bodyScrollRows}
+              flexShrink={0}
+              scrollX={false}
+              verticalScrollbarOptions={scrollbarOptions}
+            >
+              <box width={bodyWidth} flexDirection="column" flexShrink={0} minWidth={0}>
+                {visibleBody.map(renderBodyLine)}
+              </box>
+            </scrollbox>
+          ) : (
+            <box width={inner} flexDirection="column" flexShrink={0} minWidth={0}>
+              {visibleBody.map(renderBodyLine)}
+            </box>
+          )}
+          {hiddenBody > 0 ? (
+            <text width={inner} height={1} wrapMode="none" truncate fg={MUTED}>
+              {fitTuiText(`… ${hiddenBody} more line${hiddenBody === 1 ? "" : "s"}${expandHint}`, inner)}
+            </text>
+          ) : null}
+          {bodyCapped ? (
+            <text width={inner} height={1} wrapMode="none" truncate fg={MUTED}>
+              {fitTuiText("Context capped; additional lines are not retained here", inner)}
+            </text>
+          ) : null}
+        </box>
+      ) : null}
+
+      {subRows.length > 0 ? (
+        <box flexDirection="column" width={inner} flexShrink={0} minWidth={0} marginTop={1}>
+          <SectionRule label="Agents" width={inner} theme={theme} />
+          {subRows.map((row, index) => (
+            <box key={`${entry.id}-agent-${index}`} flexDirection="row" width={inner} height={1} flexShrink={0} minWidth={0}>
+              <text flexShrink={0} fg={MUTED}>{"• "}</text>
+              <text flexShrink={0} fg={ACCENT} attributes={TextAttributes.BOLD} wrapMode="none">{row.name}</text>
+              {row.badge ? <text flexShrink={0} fg={MUTED} wrapMode="none">{row.badge}</text> : null}
+              {row.brief ? <text flexShrink={1} fg={MUTED} wrapMode="none" truncate>{fitTuiText(row.brief, Math.max(1, inner - 2 - row.name.length - row.badge.length - row.isolated.length))}</text> : null}
+              {row.isolated ? <text flexShrink={0} fg={MUTED} wrapMode="none">{row.isolated}</text> : null}
+            </box>
+          ))}
+          {hiddenAgents > 0 ? (
+            <text width={inner} height={1} wrapMode="none" truncate fg={MUTED}>
+              {fitTuiText(`… ${hiddenAgents} more agent${hiddenAgents === 1 ? "" : "s"}${expandHint}`, inner)}
+            </text>
+          ) : null}
+        </box>
+      ) : null}
+
+      {todoRows.length > 0 ? (
+        <box flexDirection="column" width={inner} flexShrink={0} minWidth={0} marginTop={1}>
+          <SectionRule label="Plan" width={inner} theme={theme} />
+          <TodoTree rows={todoRows} width={inner} theme={theme} />
+          {hiddenTodo > 0 ? (
+            <text width={inner} height={1} wrapMode="none" truncate fg={MUTED}>
+              {fitTuiText(`… ${hiddenTodo} more plan line${hiddenTodo === 1 ? "" : "s"}${expandHint}`, inner)}
+            </text>
+          ) : null}
+        </box>
+      ) : null}
+
+      <box flexDirection="column" width={inner} flexShrink={0} minWidth={0} marginTop={1}>
+        <SectionRule label="Output" width={inner} theme={theme} />
+        {outVisible.length > 0 ? (
+          expanded ? (
+            <scrollbox
+              width={inner}
+              height={Math.max(1, outRows)}
+              flexShrink={0}
+              scrollX={false}
+              verticalScrollbarOptions={scrollbarOptions}
+            >
+              <box width={bodyWidth} flexDirection="column" flexShrink={0} minWidth={0}>{outBody}</box>
+            </scrollbox>
+          ) : (
+            <box width={inner} flexDirection="column" flexShrink={0} minWidth={0}>{outBody}</box>
+          )
+        ) : (
+          <text width={inner} height={1} wrapMode="none" truncate fg={MUTED}>
+            {fitTuiText(running ? "Awaiting output" : "No output retained", inner)}
+          </text>
+        )}
+        {outHidden > 0 ? (
+          <text width={inner} height={1} wrapMode="none" truncate fg={MUTED}>
+            {fitTuiText(`${outHidden} more preview line${outHidden === 1 ? "" : "s"}${expandHint}`, inner)}
+          </text>
+        ) : null}
+        {outCapped ? (
+          <text width={inner} height={1} wrapMode="none" truncate fg={MUTED}>
+            {fitTuiText("Preview capped; additional output is not retained here", inner)}
+          </text>
+        ) : null}
+      </box>
+
+      {running ? (
+        shimmer ? <ShimmerText label={`${glyph} running`} frame={display.shimmerFrame!} base={MUTED} peak={TEXT} />
+          : <text fg={MUTED}>{`${glyph} running`}</text>
+      ) : null}
+    </box>
+  );
+}
+
 export function ToolCard({
   entry,
   width,
@@ -193,6 +458,19 @@ export function ToolCard({
   toggleable = false,
   repeat = "",
 }: ToolCardProps): React.ReactNode {
+  if (entry.metaKind === "task") {
+    return (
+      <TaskCard
+        entry={entry}
+        width={width}
+        display={display}
+        theme={theme}
+        expanded={expanded}
+        toggleable={toggleable}
+        repeat={repeat}
+      />
+    );
+  }
   const { TEXT, MUTED, ERROR, SUCCESS, BRAND, PANEL } = theme;
   const state = toolState(entry);
   const failed = state === "failed";

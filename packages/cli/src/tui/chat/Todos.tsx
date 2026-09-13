@@ -14,7 +14,7 @@ import {
 } from "./todos-sidebar-layout.js";
 
 /** One phase-aware tree shared by the transcript and bounded sidebar. */
-function TodoTree({ rows, width, theme }: { rows: readonly TodoTreeRow[]; width: number; theme: Theme }) {
+export function TodoTree({ rows, width, theme }: { rows: readonly TodoTreeRow[]; width: number; theme: Theme }) {
   return <>{rows.map(row => {
     const active = row.status === "in_progress";
     const prefixWidth = Math.min(width, row.prefix.length);

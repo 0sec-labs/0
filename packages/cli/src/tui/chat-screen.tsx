@@ -309,7 +309,7 @@ export type ChatDestination = "launcher" | "ops" | "history" | "findings" | "doc
  * Typed structurally so this module needs no extra core-type import.
  */
 interface ToolCardMeta {
-  kind?: "command" | "edit" | "web";
+  kind?: "command" | "edit" | "web" | "task";
   command?: string;
   exitCode?: number | null;
   durationMs?: number;
@@ -324,6 +324,15 @@ interface ToolCardMeta {
   query?: string;
   answer?: string;
   sources?: Array<{ title?: string; url: string; age?: string }>;
+  // task card
+  taskLabel?: string;
+  taskContext?: string;
+  goal?: string;
+  constraints?: string;
+  contract?: string;
+  assignment?: string;
+  subReports?: Array<{ name: string; agent?: string; brief?: string; isolated?: boolean }>;
+  todos?: Array<{ id: string; content: string; status: "pending" | "in_progress" | "completed"; group?: string }>;
 }
 
 /**
@@ -332,7 +341,20 @@ interface ToolCardMeta {
  * object when there is no card to draw, so a spread leaves the entry untouched.
  */
 function toolCardFieldsFromMeta(meta: ToolCardMeta | undefined): Partial<ChatEntry> {
-  if (!meta || (meta.kind !== "command" && meta.kind !== "edit" && meta.kind !== "web")) return {};
+  if (!meta || (meta.kind !== "command" && meta.kind !== "edit" && meta.kind !== "web" && meta.kind !== "task")) return {};
+  if (meta.kind === "task") {
+    return {
+      metaKind: "task",
+      taskLabel: meta.taskLabel,
+      taskContext: meta.taskContext,
+      taskGoal: meta.goal,
+      taskConstraints: meta.constraints,
+      taskContract: meta.contract,
+      taskAssignment: meta.assignment,
+      subReports: meta.subReports,
+      taskTodos: meta.todos,
+    };
+  }
   if (meta.kind === "command") {
     return {
       metaKind: "command",
@@ -376,6 +398,29 @@ function restoredToolCardFields(
   success: boolean,
 ): Partial<ChatEntry> {
   const args = input && typeof input === "object" ? (input as Record<string, unknown>) : {};
+  if (name === "spawn_agents") {
+    // The live plan/TODO snapshot and per-agent names were carried on the
+    // (now-gone) meta; from the serialized args we can still recover the shared
+    // context and each task's brief so the launch card survives a restore.
+    const rawTasks = Array.isArray(args.tasks) ? (args.tasks as Array<Record<string, unknown>>) : [];
+    const subReports = rawTasks.map((entry, i) => {
+      const task = typeof entry?.task === "string" ? entry.task.trim() : "";
+      const brief = task ? task.split("\n")[0].slice(0, 64) : "";
+      const agent = typeof entry?.role === "string" ? entry.role : undefined;
+      return {
+        name: typeof entry?.name === "string" && entry.name.trim() ? entry.name.trim() : `#${i + 1}`,
+        ...(agent ? { agent } : {}),
+        ...(brief ? { brief } : {}),
+      };
+    });
+    if (subReports.length === 0) return {};
+    return {
+      metaKind: "task",
+      taskLabel: `${subReports.length} ${subReports.length === 1 ? "agent" : "agents"}`,
+      taskContext: typeof args.context === "string" && args.context.trim() ? args.context : undefined,
+      subReports,
+    };
+  }
   if (name === "bash" || name === "run_command") {
     const command = typeof args.command === "string" ? args.command.trim() : undefined;
     if (!command) return {};

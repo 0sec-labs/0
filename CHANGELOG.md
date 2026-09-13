@@ -14,6 +14,9 @@ on the published npm package and the GitHub Release tag.
 
 ### Fixed
 
+- Show shared batch instructions and worker briefs in bounded, expandable Task
+  cards without hiding the tool result. Pass shared instructions to every
+  `spawn_agents` child alongside its own task.
 - Present operator screens as bounded, responsive dialogs while keeping the
   current audit and draft mounted. Use consistent icons and palette colors.
 - Keep sidebar backgrounds and padding continuous, show live plan progress,
