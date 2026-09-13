@@ -4,6 +4,7 @@ import { TextAttributes } from "@opentui/core";
 import type { TodosEventPayload } from "@0sec/core";
 import { fitTuiText } from "../text.js";
 import type { Theme } from "../theme-context.js";
+import { useSymbols } from "../symbol-context.js";
 import {
   buildPlanOverflowFooter,
   buildSidebarHeader,
@@ -88,6 +89,7 @@ export function TodosSidebar({ payload, width, rows, theme, expanded: expandedPr
   expanded?: boolean;
   onToggle?: (expanded: boolean) => void;
 }) {
+  const symbols = useSymbols();
   const [internalExpanded, setInternalExpanded] = useState(false);
   const expanded = expandedProp ?? internalExpanded;
   const toggle = () => {
@@ -116,7 +118,7 @@ export function TodosSidebar({ payload, width, rows, theme, expanded: expandedPr
     : window.hiddenTodos > 0
       ? buildPlanOverflowFooter(window.hiddenTodos, window.hiddenActive, columns)
       : "click PLAN to expand";
-  const caret = expanded ? "▾" : "▸";
+  const caret = expanded ? symbols.caretOpen : symbols.caretClosed;
   const caretCells = Math.min(columns, 2);
   const labelCells = Math.max(0, columns - caretCells);
   return (

@@ -12,6 +12,12 @@ on the published npm package and the GitHub Release tag.
 
 ## [Unreleased]
 
+### Added
+
+- Add explicit Unicode, Nerd Font, and ASCII symbol choices to migrated operator
+  dialogs and sidebar components, with Unicode as the default. This migration
+  does not yet cover all chat, transcript, approval, and composer glyphs.
+
 ### Fixed
 
 - Present operator screens as bounded, responsive dialogs while keeping the

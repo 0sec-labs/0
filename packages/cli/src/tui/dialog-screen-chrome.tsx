@@ -1,6 +1,7 @@
 /** @jsxImportSource @opentui/react */
 import { TextAttributes } from "@opentui/core";
 import { useTheme, type Theme } from "./theme-context.js";
+import { useSymbols } from "./symbol-context.js";
 import { Cells, textCells } from "./primitives.js";
 import { operatorIcon, operatorTitle } from "./operator-icons.js";
 import type { DialogItem } from "./dialog-select.js";
@@ -87,7 +88,8 @@ export function wrapDialogLines(value: unknown, width: number, fg?: string): Dia
 /** Icon + label on the left, live metadata right-aligned, fitted to `width`. */
 export function DialogTitleRow({ screenKey, width, meta }: { screenKey: string; width: number; meta?: string }) {
   const theme = useTheme();
-  const title = `${operatorIcon(screenKey)} ${operatorTitle(screenKey)}`;
+  const symbols = useSymbols();
+  const title = `${operatorIcon(screenKey, symbols)} ${operatorTitle(screenKey)}`;
   const overhang = dialogTitleOverhang(title);
   const titleCells = textCells(title) + overhang;
   const metaCells = meta ? textCells(meta) : 0;

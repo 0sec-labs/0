@@ -39,6 +39,7 @@ import React from "react";
 
 import { fitTuiText } from "../text.js";
 import type { Theme } from "../theme-context.js";
+import { useSymbols } from "../symbol-context.js";
 import { operatorIcon } from "../operator-icons.js";
 import { wrapCells } from "./todos-sidebar-layout.js";
 
@@ -106,6 +107,7 @@ export function CloudHintCard({
    */
   onConnect: () => void;
 }) {
+  const symbols = useSymbols();
   if (dismissed) return null;
   if (!shouldOfferCloudHint({ hostedConnected, rows, width })) return null;
 
@@ -116,7 +118,7 @@ export function CloudHintCard({
   // The title row carries the glyph, the label and the dismiss affordance. The
   // dismiss is dropped before the label is, so a very narrow column still says
   // what the card is rather than showing a bare ✕.
-  const glyph = operatorIcon("connect");
+  const glyph = operatorIcon("connect", symbols);
   const dismissCells = DISMISS.length + 1;
   const titleRoom = inner - glyph.length - 1;
   const showDismiss = titleRoom - dismissCells >= 4;

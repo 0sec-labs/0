@@ -106,6 +106,7 @@ import { useKeyboard, usePaste } from "@opentui/react";
 import { decodePasteBytes, TextAttributes } from "@opentui/core";
 
 import { useTheme, type Theme } from "./theme-context.js";
+import { useSymbols } from "./symbol-context.js";
 import { useDialogSurface, useSurfaceDimensions } from "./dialog-surface.js";
 import { Cells, textCells } from "./primitives.js";
 import { DialogSelectBody, type DialogItem } from "./dialog-select.js";
@@ -130,8 +131,6 @@ import {
   modelTargetLine,
   singleModelLine,
   buildModelRows,
-  ICON_SEARCH,
-  ICON_WARN,
   type ModelCatalogScope,
   type ModelDetailLine,
   type ModelDetailTone,
@@ -268,6 +267,7 @@ export function ModelScreen({
   env,
 }: ModelScreenProps) {
   const theme = useTheme();
+  const symbols = useSymbols();
   const { width, height } = useSurfaceDimensions();
   const inDialog = useDialogSurface();
 
@@ -483,7 +483,7 @@ export function ModelScreen({
   // On hosted it names the host the rows came from and how many were listed —
   // a count of rows, not a verdict on any of them.
   const statusText = hostedError
-    ? `${ICON_WARN} Hosted catalog error: ${hostedError} · Ctrl+R reload`
+    ? `${symbols.warning} Hosted catalog error: ${hostedError} · Ctrl+R reload`
     : isHosted && !hostedSnapshot
       ? "Loading the account's hosted model catalog…"
       : isHosted && hostedSnapshot
@@ -690,7 +690,7 @@ export function ModelScreen({
       ? contextWindowFor(contextIndex, row.model.provider, row.model.id)
       : null;
     const lines: ModelDetailLine[] = clipModelDetailLines(
-      modelDetailLines({ row, configured, compact, contextTokens }, pane.width),
+      modelDetailLines({ row, configured, compact, contextTokens }, pane.width, symbols),
       pane.height,
       pane.width,
     );
@@ -747,7 +747,7 @@ export function ModelScreen({
   const metaLines: { text: string; fg: string }[] = [];
   if (rolesLive) {
     metaLines.push({
-      text: `${modelTargetLine(role, activeModel, role !== null && agentModels?.[role] !== undefined)} · Ctrl+←/→ target`,
+      text: `${modelTargetLine(role, activeModel, role !== null && agentModels?.[role] !== undefined, symbols)} · Ctrl+←/→ target`,
       fg: theme.ACCENT,
     });
   }
@@ -826,7 +826,7 @@ export function ModelScreen({
           cursor={cursor}
           panel={panel}
           query={filter}
-          placeholder={`${ICON_SEARCH} Find a model or provider`}
+          placeholder={`${symbols.fieldSearch} Find a model or provider`}
           gutter
           isCurrent={(item) => item.current === true}
           renderDetail={renderDetail}

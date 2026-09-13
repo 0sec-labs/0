@@ -38,9 +38,13 @@ import type { ToolHealthSummary } from "@0sec/core";
 
 import { computeKvSplit } from "./pane-layout.js";
 import { shellChromeRows } from "./settings-layout.js";
+import { getSymbols, type SymbolTable } from "./symbols.js";
 import { sanitizeTuiText } from "./text.js";
 
 export { shellChromeRows };
+
+/** Module-default table (Unicode) for callers that pass no `symbols`. */
+const DEFAULT_SYMBOLS = getSymbols("unicode");
 
 // ---------------------------------------------------------------------------
 // Numeric hygiene (mirrors model-layout.ts)
@@ -291,18 +295,22 @@ function contextTone(percent: number): UsageTone {
   return "ok";
 }
 
-// ── Row markers: plain text glyphs ──────────────────────────────────────────
-// The glyphs are decorative; the adjacent text label always carries the
-// meaning on its own, so no icon font is required.
-const ICON_CONTEXT = "◫";   // context window
-const ICON_INPUT  = "↓";    // input tokens
-const ICON_OUTPUT = "↑";    // output tokens
-const ICON_CACHE  = "▦";    // cached input
-const ICON_REASON = "✦";    // reasoning tokens
-const ICON_COST   = "$";    // cost
-const ICON_MODEL  = "◈";    // model
-const ICON_HOST   = "⌨";    // provider/host
-const ICON_WARN   = "!";    // warning
+// ── Row markers ──────────────────────────────────────────────────────────────
+// The adjacent text label always carries the meaning, so no icon font is
+// required; glyphs come from the active preset (symbols.ts).
+function usageIcons(symbols: SymbolTable) {
+  return {
+    context: symbols.fieldContext, // context window
+    input: symbols.fieldInput, // input tokens
+    output: symbols.fieldOutput, // output tokens
+    cache: symbols.fieldFolderOpen, // cached input
+    reason: symbols.fieldReason, // reasoning tokens
+    cost: symbols.fieldCost, // cost
+    model: symbols.fieldModel, // model
+    host: symbols.fieldHost, // provider/host
+    warn: symbols.warning, // warning
+  };
+}
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
@@ -324,7 +332,11 @@ const ICON_WARN   = "!";    // warning
  * synthesised from anything else. Cumulative billed tokens are never
  * substituted for context occupancy.
  */
-export function buildUsageReport(snapshot: UsageSnapshot = {}): UsageReportRow[] {
+export function buildUsageReport(
+  snapshot: UsageSnapshot = {},
+  symbols: SymbolTable = DEFAULT_SYMBOLS,
+): UsageReportRow[] {
+  const icon = usageIcons(symbols);
   const rows: UsageReportRow[] = [];
   const heading = (label: string) => rows.push({ kind: "heading", label, tone: "title" });
   const kv = (label: string, value: string, tone: UsageTone = "value") =>
@@ -345,8 +357,8 @@ export function buildUsageReport(snapshot: UsageSnapshot = {}): UsageReportRow[]
     const caption = `${percent}% · ${formatTokenCount(used)} / ${formatTokenCount(window)}`;
     rows.push({ kind: "meter", value: caption, fraction, tone: contextTone(percent) });
   } else {
-    kv(`${ICON_CONTEXT} window`, tokenOrDash(snapshot.contextWindow), "muted");
-    kv(`${ICON_CONTEXT} used`, tokenOrDash(snapshot.contextUsed), "muted");
+    kv(`${icon.context} window`, tokenOrDash(snapshot.contextWindow), "muted");
+    kv(`${icon.context} used`, tokenOrDash(snapshot.contextUsed), "muted");
     text("context window not reported for this session", "muted");
   }
 
@@ -364,13 +376,13 @@ export function buildUsageReport(snapshot: UsageSnapshot = {}): UsageReportRow[]
     kv(label, `${turnText} / ${sessionText}`);
   };
   text("this turn / session", "muted");
-  both(`${ICON_INPUT} input`, (u) => u?.inputTokens);
-  both(`${ICON_OUTPUT} output`, (u) => u?.outputTokens);
-  both(`${ICON_CACHE} cached`, (u) => u?.cachedInputTokens);
+  both(`${icon.input} input`, (u) => u?.inputTokens);
+  both(`${icon.output} output`, (u) => u?.outputTokens);
+  both(`${icon.cache} cached`, (u) => u?.cachedInputTokens);
   // Reasoning tokens are only shown when at least one side tracked them, so a
   // model that never reports them does not carry an em-dash row forever.
   if (hasNumber(session?.reasoningTokens) || hasNumber(turn?.reasoningTokens)) {
-    both(`${ICON_REASON} reasoning`, (u) => u?.reasoningTokens);
+    both(`${icon.reason} reasoning`, (u) => u?.reasoningTokens);
   }
 
   // ── COST ─────────────────────────────────────────────────────────────────
@@ -384,27 +396,27 @@ export function buildUsageReport(snapshot: UsageSnapshot = {}): UsageReportRow[]
       const rates = resolveRates(entry.model);
       if (rates) total += costUsd(entry, rates);
       else allPriced = false;
-      kv(`${ICON_COST} ${entry.model}`, costOrDash(entry, entry.model), rates ? "value" : "muted");
+      kv(`${icon.cost} ${entry.model}`, costOrDash(entry, entry.model), rates ? "value" : "muted");
     }
-    kv(`${ICON_COST} total`, allPriced ? formatCost(total) : "$—", allPriced ? "accent" : "muted");
+    kv(`${icon.cost} total`, allPriced ? formatCost(total) : "$—", allPriced ? "accent" : "muted");
   } else if (hasAnyTokens(session)) {
     const priced = Boolean(resolveRates(snapshot.model));
-    kv(`${ICON_COST} session estimate`, costOrDash(session ?? {}, snapshot.model), priced ? "accent" : "muted");
+    kv(`${icon.cost} session estimate`, costOrDash(session ?? {}, snapshot.model), priced ? "accent" : "muted");
     if (!priced) text(`no published rate for ${snapshot.model ?? "this model"}`, "muted");
   } else {
-    kv(`${ICON_COST} session estimate`, "$—", "muted");
+    kv(`${icon.cost} session estimate`, "$—", "muted");
   }
 
   // ── MODEL ────────────────────────────────────────────────────────────────
   heading("MODEL");
   const model = typeof snapshot.model === "string" ? snapshot.model.trim() : "";
   if (model) {
-    kv(`${ICON_MODEL} active`, model);
+    kv(`${icon.model} active`, model);
     const provider =
       (typeof snapshot.provider === "string" && snapshot.provider.trim()) || modelProvider(model);
-    kv(`${ICON_HOST} provider`, provider, "muted");
+    kv(`${icon.host} provider`, provider, "muted");
   } else {
-    kv(`${ICON_MODEL} active`, EM_DASH, "muted");
+    kv(`${icon.model} active`, EM_DASH, "muted");
   }
 
   // ── TOOL HEALTH ──────────────────────────────────────────────────────────
@@ -415,7 +427,7 @@ export function buildUsageReport(snapshot: UsageSnapshot = {}): UsageReportRow[]
     // rather than paraphrasing its category grouping. Amber, not red: a missing
     // optional scanner is a degraded run, not a failed one — red is reserved for
     // an over-budget context, the one genuinely destructive state on this screen.
-    text(`${ICON_WARN} ${health.line || `${health.total} tool issue${health.total === 1 ? "" : "s"}`}`, "warn");
+    text(`${icon.warn} ${health.line || `${health.total} tool issue${health.total === 1 ? "" : "s"}`}`, "warn");
     for (const event of health.events.slice(0, 6)) {
       const suffix = event.count > 1 ? ` (x${event.count})` : "";
       kv(`${event.tool}`, `${event.category}${suffix}`, "muted");
@@ -429,23 +441,25 @@ export function buildUsageReport(snapshot: UsageSnapshot = {}): UsageReportRow[]
 // Meter (mirrors the bottom-bar meter in status-bar.ts)
 // ---------------------------------------------------------------------------
 
-const METER_FILLED = "▰";
-const METER_EMPTY = "▱";
-
 /**
- * A unicode fill bar of exactly `cells` characters for a fraction in [0, 1].
+ * A fill bar of exactly `cells` characters for a fraction in [0, 1].
  *
  * The fill is clamped so a rounding artefact can never paint one cell too many
  * or a negative one, and the returned string is always exactly `cells` long, so
  * the caller can hand it straight to a `Cells` of the same width without it
- * over- or under-running its box.
+ * over- or under-running its box. Meter cells come from the active preset
+ * (unicode/nerd share `▰▱`; ascii uses `#-`).
  */
-export function usageMeterBar(fraction: number, cellCount: number): string {
+export function usageMeterBar(
+  fraction: number,
+  cellCount: number,
+  symbols: SymbolTable = DEFAULT_SYMBOLS,
+): string {
   const width = cells(cellCount);
   if (width <= 0) return "";
   const clamped = Number.isFinite(fraction) ? Math.max(0, Math.min(1, fraction)) : 0;
   const filled = Math.max(0, Math.min(width, Math.round(clamped * width)));
-  return METER_FILLED.repeat(filled) + METER_EMPTY.repeat(width - filled);
+  return symbols.meterFilled.repeat(filled) + symbols.meterEmpty.repeat(width - filled);
 }
 
 

@@ -38,6 +38,7 @@ import { useKeyboard } from "@opentui/react";
 import { TextAttributes } from "@opentui/core";
 
 import { useTheme, type Theme } from "./theme-context.js";
+import { useSymbols } from "./symbol-context.js";
 import { useDialogSurface, useSurfaceDimensions } from "./dialog-surface.js";
 import { operatorIcon, operatorTitle } from "./operator-icons.js";
 import { useSettings } from "./settings-store.js";
@@ -192,6 +193,7 @@ export function MarketScreen({
   activeThemeName,
 }: MarketScreenProps) {
   const theme = useTheme();
+  const symbols = useSymbols();
   const settings = useSettings();
   const { width, height } = useSurfaceDimensions();
   const inDialog = useDialogSurface();
@@ -601,7 +603,7 @@ export function MarketScreen({
 
   // Title row: `⊞ Marketplace` on the left; on the right the count of what is
   // actually listed, plus the highlighted artifact's real install state.
-  const title = `${operatorIcon("market")} ${operatorTitle("market")}`;
+  const title = `${operatorIcon("market", symbols)} ${operatorTitle("market")}`;
   const meta = [
     marketDialogMeta(dialogItems.length, items.length),
     activeState ? stateTag(activeState) : "",

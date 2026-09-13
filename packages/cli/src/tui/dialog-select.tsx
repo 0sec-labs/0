@@ -24,6 +24,7 @@ import { useKeyboard, usePaste } from "@opentui/react";
 import { TextAttributes, decodePasteBytes, RGBA } from "@opentui/core";
 
 import { useTheme } from "./theme-context.js";
+import { useSymbols } from "./symbol-context.js";
 import { Cells, textCells } from "./primitives.js";
 import { sanitizeTuiText } from "./text.js";
 import { useSurfaceDimensions } from "./dialog-surface.js";
@@ -355,6 +356,7 @@ export function DialogSelect({
   renderDetail,
 }: DialogSelectProps) {
   const theme = useTheme();
+  const symbols = useSymbols();
   const { width, height } = useSurfaceDimensions();
 
   const initialSelected = useMemo(() => normalizeValue(value), [value]);
@@ -517,7 +519,7 @@ export function DialogSelect({
         {/* Title + esc */}
         <box flexDirection="row" width={panel.innerWidth} flexShrink={0} minWidth={0} gap={titleGap}>
           <Cells width={titleWidth} fg={theme.PRIMARY} attributes={TextAttributes.BOLD}>
-            {`${operatorIcon(title.toLowerCase().includes("command") ? "commands" : title)} ${title}`}
+            {`${operatorIcon(title.toLowerCase().includes("command") ? "commands" : title, symbols)} ${title}`}
           </Cells>
           <Cells width={escWidth} align="right" fg={theme.MUTED}>
             {escLabel}

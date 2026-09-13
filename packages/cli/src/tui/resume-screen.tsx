@@ -37,6 +37,7 @@ import { useKeyboard, usePaste } from "@opentui/react";
 import { decodePasteBytes, TextAttributes } from "@opentui/core";
 
 import { type Theme } from "./theme-context.js";
+import { useSymbols } from "./symbol-context.js";
 import { useDialogSurface, useSurfaceDimensions } from "./dialog-surface.js";
 import { Cells, textCells } from "./primitives.js";
 import { DialogSelectBody, type DialogItem } from "./dialog-select.js";
@@ -58,10 +59,6 @@ import {
   sessionCategory,
   CATEGORY_THIS,
   CATEGORY_OTHER,
-  ICON_CWD,
-  ICON_PROTECTED,
-  ICON_SEARCH,
-  ICON_WARN,
   type ResumeDetailTone,
   type ResumeMode,
 } from "./resume-layout.js";
@@ -127,6 +124,7 @@ export function ResumeScreen({
   onExit,
   theme,
 }: ResumeScreenProps) {
+  const symbols = useSymbols();
   const { width, height } = useSurfaceDimensions();
   const inDialog = useDialogSurface();
 
@@ -187,8 +185,9 @@ export function ResumeScreen({
         now,
         filter,
         protectedSessionIds,
+        symbols,
       }),
-    [scopedSessions, currentId, currentCwd, now, filter, protectedSessionIds],
+    [scopedSessions, currentId, currentCwd, now, filter, protectedSessionIds, symbols],
   );
   const byId = useMemo(() => {
     const map = new Map<string, StoredSessionMeta>();
@@ -237,7 +236,7 @@ export function ResumeScreen({
     ? (items.find((item) => item.id === pendingDelete)?.label ?? "this session")
     : "";
   const statusText = pendingDelete
-    ? `${ICON_WARN} Delete "${pendingLabel}"? press del again to confirm · esc cancel`
+    ? `${symbols.warning} Delete "${pendingLabel}"? press del again to confirm · esc cancel`
     : deleteError
       ? deleteError
       : "";
@@ -273,6 +272,7 @@ export function ResumeScreen({
       now,
       filter: filterRef.current,
       protectedSessionIds,
+      symbols,
     });
   const selectedIndex = (visible: DialogItem[]) => {
     const index = visible.findIndex((item) => item.id === selectedIdRef.current);
@@ -309,7 +309,7 @@ export function ResumeScreen({
     if (!item) return;
     if (protectedSessionIds?.has(item.id)) {
       setPendingDelete(null);
-      setDeleteError(`${ICON_PROTECTED} Live audit must close first — its history is protected until the audit ends`);
+      setDeleteError(`${symbols.fieldProtected} Live audit must close first — its history is protected until the audit ends`);
       return;
     }
     setDeleteError(null);
@@ -319,7 +319,7 @@ export function ResumeScreen({
     }
     setPendingDelete(null);
     if (!onDelete(item.id)) {
-      setDeleteError(`${ICON_WARN} Failed to delete audit — it may still be live, or file permissions prevent deletion`);
+      setDeleteError(`${symbols.warning} Failed to delete audit — it may still be live, or file permissions prevent deletion`);
       return;
     }
     deletedRef.current = new Set(deletedRef.current).add(item.id);
@@ -365,7 +365,7 @@ export function ResumeScreen({
       if (pendingDeleteRef.current) return;
       const visible = currentItems();
       const item = visible[selectedIndex(visible)];
-      if (item && !onResume(item.id)) setDeleteError(`${ICON_WARN} Could not open audit — choose another saved audit`);
+      if (item && !onResume(item.id)) setDeleteError(`${symbols.warning} Could not open audit — choose another saved audit`);
       return;
     }
     if (key.name === "backspace") {
@@ -403,6 +403,7 @@ export function ResumeScreen({
       resumeDetailLines(
         { session, now, compact, isProtected: protectedSessionIds?.has(item.id) === true },
         pane.width,
+        symbols,
       ),
       pane.height,
       pane.width,
@@ -426,12 +427,12 @@ export function ResumeScreen({
   // Empty-state guidance text, context-aware.
   const totalAll = visibleSessions.length;
   const emptyText = (() => {
-    if (filter) return `${ICON_SEARCH} no audits match this filter`;
+    if (filter) return `${symbols.fieldSearch} no audits match this filter`;
     if (scopedSessions.length === 0 && scope === "project" && hasOtherSessions && totalAll > 0) {
-      return `${ICON_CWD} no audits in this project — press Tab to browse all`;
+      return `${symbols.fieldCwd} no audits in this project — press Tab to browse all`;
     }
-    if (totalAll === 0 && filter.length === 0) return `${ICON_SEARCH} no saved audits to open`;
-    return `${ICON_SEARCH} no audits to show`;
+    if (totalAll === 0 && filter.length === 0) return `${symbols.fieldSearch} no saved audits to open`;
+    return `${symbols.fieldSearch} no audits to show`;
   })();
 
   // ── Title row: glyph + label on the left, the live counter on the right.
@@ -441,8 +442,8 @@ export function ResumeScreen({
     (count, item) => (protectedSessionIds?.has(item.id) === true ? count + 1 : count),
     0,
   );
-  const titleText = resumeDialogTitle(scope, currentCwd !== undefined && currentCwd.length > 0);
-  const countText = resumeDialogCount(items.length, protectedOnScreen);
+  const titleText = resumeDialogTitle(scope, currentCwd !== undefined && currentCwd.length > 0, symbols);
+  const countText = resumeDialogCount(items.length, protectedOnScreen, symbols);
   const countWidth = Math.min(contentWidth, textCells(countText));
   const titleWidth = Math.max(0, contentWidth - countWidth - (countWidth > 0 ? 1 : 0));
 
@@ -470,7 +471,7 @@ export function ResumeScreen({
           cursor={cursor}
           panel={panel}
           query={filter}
-          placeholder={`${ICON_SEARCH} type to filter audits`}
+          placeholder={`${symbols.fieldSearch} type to filter audits`}
           gutter={items.some((item) => item.current === true)}
           isCurrent={(item) => item.current === true}
           renderDetail={renderDetail}
@@ -502,6 +503,7 @@ export function ResumeScreen({
               scope,
               scopedSessions.length,
               highlightProtected,
+              symbols,
             )}
           </Cells>
         </box>

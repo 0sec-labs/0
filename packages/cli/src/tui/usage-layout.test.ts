@@ -286,15 +286,9 @@ describe("cost resolution (mirrors status-bar.ts)", () => {
 const textOf = (rows: UsageReportRow[]): string =>
   rows.map((row) => `${row.label ?? ""} ${row.value ?? ""}`).join("\n");
 
-/**
- * A row label with its leading row marker removed.
- *
- * The markers are plain text glyphs (see `ICON_*` in usage-layout.ts), so the
- * set is spelled out explicitly: a `\p{Co}` Private-Use-Area class matches none
- * of them and would silently stop stripping.
- */
+/** Remove the single-glyph row marker without depending on the selected preset. */
 const labelOf = (row: UsageReportRow): string | undefined =>
-  row.label?.replace(/^[◫↓↑▦✦$◈⌨!]\s+/u, "");
+  row.label?.replace(/^.\s+/u, "");
 
 describe("buildUsageReport", () => {
   it("returns an empty snapshot from the lazy default and never fabricates", () => {

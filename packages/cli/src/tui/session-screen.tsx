@@ -224,7 +224,7 @@ function LiveBadge({ label, active = true }: { label: string; active?: boolean }
 
 function WorkingPulse({ label, detail, maxWidth }: { label: string; detail?: string; maxWidth: number }) {
   const theme = useTheme();
-  const { reduceMotion } = useSettings();
+  const { reduceMotion, symbolPreset } = useSettings();
   const startedAt = useMemo(() => Date.now(), [label]);
   const [frame, setFrame] = useState(0);
   const contentWidth = Math.max(1, maxWidth);
@@ -237,7 +237,12 @@ function WorkingPulse({ label, detail, maxWidth }: { label: string; detail?: str
     return () => clearInterval(timer);
   }, [reduceMotion]);
 
-  const animation = frameAt("tool", Date.now() - startedAt, { motion: !reduceMotion });
+  // The ASCII preset drives the already-authored ascii frame set; unicode and
+  // nerd both use the unicode frames (braille renders fine in a Nerd Font).
+  const animation = frameAt("tool", Date.now() - startedAt, {
+    motion: !reduceMotion,
+    ascii: symbolPreset === "ascii",
+  });
   const loader = animation.glyph;
   const workingLabel = `${label}${animation.elapsedLabel ? ` · ${animation.elapsedLabel}` : ""}`;
   // Reserve the rail, panel padding, glyph and gap before fitting the label.

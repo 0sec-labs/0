@@ -67,7 +67,11 @@ import { buildModelCatalog, type CatalogModel } from "./model-catalog.js";
 import { operatorIcon, operatorTitle } from "./operator-icons.js";
 import { PROVIDERS, providerStates, type ProviderState } from "./provider-status.js";
 import { shellChromeRows, wrapCells } from "./settings-layout.js";
+import { getSymbols, type SymbolTable } from "./symbols.js";
 import { sanitizeTuiText } from "./text.js";
+
+/** Module-default table (Unicode) for callers that pass no `symbols`. */
+const DEFAULT_SYMBOLS = getSymbols("unicode");
 
 export { shellChromeRows, wrapCells };
 
@@ -516,9 +520,13 @@ export function modelPriceText(price: unknown): string {
 export function modelDetailLines(
   { row, configured = [], compact = false, contextTokens }: ModelDetailInput,
   width: number,
+  symbols: SymbolTable = DEFAULT_SYMBOLS,
 ): ModelDetailLine[] {
   const limit = cells(width);
   if (!row || limit <= 0) return [];
+  const ICON_PROVIDER = symbols.fieldHost;
+  const ICON_PRICE = symbols.fieldCost;
+  const ICON_CONTEXT = symbols.fieldContext;
 
   const lines: ModelDetailLine[] = [];
   const push = (value: string, tone: ModelDetailTone) => {
@@ -881,12 +889,13 @@ export function modelTargetLine(
   role: string | null,
   activeModel: string | undefined,
   assigned: boolean,
+  symbols: SymbolTable = DEFAULT_SYMBOLS,
 ): string {
   const target = role === null ? "parent model" : sanitizeTuiText(role);
   const model = sanitizeTuiText(activeModel ?? "");
   const value = model.length > 0 ? model : "not selected";
   const inherits = role !== null && !assigned ? " (inherits the parent)" : "";
-  return `${ICON_MODEL} Target: ${target} → ${value}${inherits}`;
+  return `${symbols.fieldModel} Target: ${target} → ${value}${inherits}`;
 }
 
 /** The single-model policy line, stating the policy and how to change it. */

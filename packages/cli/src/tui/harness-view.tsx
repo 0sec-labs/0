@@ -6,6 +6,7 @@ import type { ScrollBoxRenderable } from "@opentui/core";
 import type { HarnessSetting, HarnessView, HarnessViewBlock } from "@0sec/shared";
 import { useHarness } from "./harness-context.js";
 import { useTheme } from "./theme-context.js";
+import { useSymbols } from "./symbol-context.js";
 import { useDialogSurface, useSurfaceDimensions } from "./dialog-surface.js";
 import { operatorIcon, operatorTitle } from "./operator-icons.js";
 import { Cells } from "./primitives.js";
@@ -60,6 +61,7 @@ function ViewBlocks({ blocks, width }: { blocks: HarnessViewBlock[]; width: numb
 export function HarnessViewPanel({ contentWidth, onBack }: { contentWidth: number; onBack: () => void }) {
   const harness = useHarness();
   const theme = useTheme();
+  const symbols = useSymbols();
   const surface = useSurfaceDimensions();
   const inDialog = useDialogSurface();
   const height = surface.height;
@@ -152,7 +154,7 @@ export function HarnessViewPanel({ contentWidth, onBack }: { contentWidth: numbe
   const panel = computeDialogPanel({ width: innerWidth, height, size: "large", totalRows, withDetail: true, bodyRows });
   // Title row: glyph + label on the left, an honest count of what the live
   // harness actually contributes on the right. Never a fabricated provider.
-  const title = `${operatorIcon("commands")} ${operatorTitle("commands")}`;
+  const title = `${operatorIcon("commands", symbols)} ${operatorTitle("commands")}`;
   const meta = items.length === rows.length
     ? `${rows.length} contribution${rows.length === 1 ? "" : "s"}`
     : `${items.length}/${rows.length}`;

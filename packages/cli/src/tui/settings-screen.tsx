@@ -50,6 +50,7 @@ import { getSettings, resetSettings, updateSetting, useSettings } from "./settin
 import { useDialogSurface, useSurfaceDimensions } from "./dialog-surface.js";
 import { operatorIcon, operatorTitle } from "./operator-icons.js";
 import { useTheme, type Theme } from "./theme-context.js";
+import { useSymbols } from "./symbol-context.js";
 import { sanitizeTuiText } from "./text.js";
 import { DialogSelectBody, type DialogItem } from "./dialog-select.js";
 import {
@@ -187,6 +188,7 @@ export function SettingsScreen({ frame, onBack, onExit }: SettingsScreenProps) {
   const { width, height } = useSurfaceDimensions();
   const inDialog = useDialogSurface();
   const theme = useTheme();
+  const symbols = useSymbols();
 
   // The live settings, read from the process-wide store. This screen is the
   // writer: the store's writes persist AND notify every other subscribed
@@ -545,7 +547,7 @@ export function SettingsScreen({ frame, onBack, onExit }: SettingsScreenProps) {
   };
 
   const hint = settingsFooterHint(mode, filter.length > 0);
-  const titleText = `${operatorIcon(SCREEN_KEY)} ${operatorTitle(SCREEN_KEY)}`;
+  const titleText = `${operatorIcon(SCREEN_KEY, symbols)} ${operatorTitle(SCREEN_KEY)}`;
   const titleMeta = modifiedCount > 0
     ? `${modifiedCount} changed`
     : `${SETTING_DEFS.length} settings`;

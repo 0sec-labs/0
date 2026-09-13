@@ -31,6 +31,7 @@ import { TextAttributes, decodePasteBytes } from "@opentui/core";
 import { useKeyboard, usePaste } from "@opentui/react";
 
 import { useTheme, type Theme } from "./theme-context.js";
+import { useSymbols } from "./symbol-context.js";
 import { useDialogSurface, useSurfaceDimensions } from "./dialog-surface.js";
 import { operatorIcon, operatorTitle } from "./operator-icons.js";
 import { Cells } from "./primitives.js";
@@ -95,6 +96,7 @@ function toneColor(theme: Theme, tone: ShortcutsTone | undefined): string | unde
 
 export function ShortcutsScreen({ frame, onBack, onExit }: ShortcutsScreenProps) {
   const theme = useTheme();
+  const symbols = useSymbols();
   const { width, height } = useSurfaceDimensions();
   const inDialog = useDialogSurface();
 
@@ -184,7 +186,7 @@ export function ShortcutsScreen({ frame, onBack, onExit }: ShortcutsScreenProps)
     }
   });
 
-  const title = `${operatorIcon("shortcuts")} ${operatorTitle("shortcuts")}`;
+  const title = `${operatorIcon("shortcuts", symbols)} ${operatorTitle("shortcuts")}`;
   const meta = paletteCountMeta(filtered.length, items.length);
   const titleCols = paneTitleColumns(panel.innerWidth, meta.length);
 

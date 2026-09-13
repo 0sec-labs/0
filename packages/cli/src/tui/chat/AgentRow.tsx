@@ -2,6 +2,7 @@
 import React from "react";
 import { TextAttributes } from "@opentui/core";
 import type { Theme } from "../theme-context.js";
+import { useSymbols, type SymbolTable } from "../symbol-context.js";
 import { fitTuiText } from "../text.js";
 import { sidebarBadgeCells } from "./todos-sidebar-layout.js";
 
@@ -58,16 +59,23 @@ export function shortAgentName(id: string): string {
 }
 
 /** Lifecycle mark: only active work animates; settled outcomes remain distinct. */
-function statusMark(status: string, theme: Theme, animationFrame?: number): { glyph: string; color: string } {
-  if (status === "failed") return { glyph: "×", color: theme.ERROR };
-  if (status === "cancelled" || status === "canceled") return { glyph: "■", color: theme.MUTED };
-  if (status === "completed" || status === "done") return { glyph: "✓", color: theme.SUCCESS };
+function statusMark(
+  status: string,
+  theme: Theme,
+  symbols: SymbolTable,
+  animationFrame?: number,
+): { glyph: string; color: string } {
+  if (status === "failed") return { glyph: symbols.cross, color: theme.ERROR };
+  if (status === "cancelled" || status === "canceled") return { glyph: symbols.stopped, color: theme.MUTED };
+  if (status === "completed" || status === "done") return { glyph: symbols.check, color: theme.SUCCESS };
   if (status === "running" || status === "working") {
-    return { glyph: animationFrame === undefined ? "▶" : "▖▘▝▗"[animationFrame % 4], color: theme.ACCENT };
+    // The animated quarter-block ring is motion-gated and single-cell; the
+    // static fallback (no frame) follows the preset's "running" glyph.
+    return { glyph: animationFrame === undefined ? symbols.running : "▖▘▝▗"[animationFrame % 4], color: theme.ACCENT };
   }
   // Parked: finished its task but still alive, ready to be revived.
-  if (status === "parked") return { glyph: "◌", color: theme.MUTED };
-  return { glyph: "·", color: theme.MUTED };
+  if (status === "parked") return { glyph: symbols.parked, color: theme.MUTED };
+  return { glyph: symbols.queued, color: theme.MUTED };
 }
 
 /**
@@ -118,8 +126,9 @@ export function AgentTreeRow({
   isLast: boolean;
   onSelect?: () => void;
 }) {
+  const symbols = useSymbols();
   const { MUTED, ACCENT, PANEL_ALT } = theme;
-  const mark = statusMark(view.status, theme, view.animationFrame);
+  const mark = statusMark(view.status, theme, symbols, view.animationFrame);
   const bg = selected ? PANEL_ALT : undefined;
   const meta = agentStatusLabel(view.status);
   // The status badge is budgeted by the SAME arithmetic as the FINDINGS
@@ -190,8 +199,9 @@ export function AgentSidebarRow({
   selected: boolean;
   onSelect?: () => void;
 }) {
+  const symbols = useSymbols();
   const { MUTED, ACCENT, PANEL_ALT } = theme;
-  const mark = statusMark(view.status, theme, view.animationFrame);
+  const mark = statusMark(view.status, theme, symbols, view.animationFrame);
   const bg = selected ? PANEL_ALT : undefined;
   const meta = agentStatusLabel(view.status);
   // Share the findings badge budget, keeping both sidebar sections aligned.

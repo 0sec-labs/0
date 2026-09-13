@@ -38,6 +38,7 @@ import {
   wrapCells,
 } from "./settings-layout.js";
 import { useTheme, type Theme } from "./theme-context.js";
+import { useSymbols } from "./symbol-context.js";
 
 // ---------------------------------------------------------------------------
 // Steps
@@ -222,8 +223,6 @@ function toneColor(tone: LineTone, theme: Theme): string {
 // Step rail
 // ---------------------------------------------------------------------------
 
-const FILLED = "●";
-const HOLLOW = "○";
 
 /**
  * A dot per step — filled for the steps reached, hollow for the ones ahead —
@@ -234,10 +233,11 @@ const HOLLOW = "○";
  * overflows would paint through the card beside it.
  */
 function StepRail({ current, width, theme }: { current: number; width: number; theme: Theme }) {
+  const symbols = useSymbols();
   const total = STEPS.length;
   const done = Math.max(0, Math.min(current, total - 1)) + 1;
-  const filled = Array.from({ length: done }, () => FILLED).join(" ");
-  const rest = Array.from({ length: Math.max(0, total - done) }, () => HOLLOW).join(" ");
+  const filled = Array.from({ length: done }, () => symbols.bulletFilled).join(" ");
+  const rest = Array.from({ length: Math.max(0, total - done) }, () => symbols.bulletHollow).join(" ");
   const filledWidth = textCells(filled);
   const restWidth = textCells(rest);
   const gap = restWidth > 0 ? 1 : 0;
@@ -271,6 +271,7 @@ export function OnboardingScreen({
   const { width, height } = useSurfaceDimensions();
   const inDialog = useDialogSurface();
   const theme = useTheme();
+  const symbols = useSymbols();
   // Inside a dialog the surface IS the panel's inner box — the shell renders
   // with `dialogContent`, so it has no header and no padding — and the only
   // row the host still spends is its single footer, drawn from the `hint`
@@ -335,7 +336,7 @@ export function OnboardingScreen({
     return render ? render(textWidth) : [];
   }, [currentStep, textWidth]);
 
-  const titleText = `${operatorIcon("onboarding")} ${operatorTitle("onboarding")}`;
+  const titleText = `${operatorIcon("onboarding", symbols)} ${operatorTitle("onboarding")}`;
   const titleMeta = `Step ${stepIndex + 1} of ${STEPS.length}`;
   const title = titleColumns(contentWidth, titleMeta.length);
 
