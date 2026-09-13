@@ -262,6 +262,7 @@ import { Todos, TodosSidebar } from "./chat/Todos.js";
 import { FindingsSidebar, FINDINGS_SIDEBAR_HEADER_ROWS } from "./chat/FindingsSidebar.js";
 import { ComposerFrame, ComposerInput, composerContentRows } from "./chat/Composer.js";
 import { autonomyFooterText, isAutonomyCycleKey, nextAutonomyMode } from "./composer-mode.js";
+import { matchesBinding } from "./keybindings.js";
 import { resolveContextLimit } from "./context-window.js";
 import { buildHostedModelCatalog, type HostedCatalogModel } from "./model-catalog.js";
 import { CloudHintCard, shouldOfferCloudHint } from "./chat/CloudHintCard.js";
@@ -296,7 +297,7 @@ import {
 import { agentAccentFor } from "./agent-color.js";
 import { appendTuiCrash, serializeError } from "./tui-crash.js";
 
-export type ChatDestination = "launcher" | "ops" | "history" | "findings" | "doctor" | "replay" | "settings" | "harness" | "new-chat" | "models" | "market" | "usage" | "connect" | "herd" | "comms" | "finding" | "resume" | "audits" | "onboard";
+export type ChatDestination = "launcher" | "ops" | "history" | "findings" | "doctor" | "replay" | "settings" | "keybindings" | "harness" | "new-chat" | "models" | "market" | "usage" | "connect" | "herd" | "comms" | "finding" | "resume" | "audits" | "onboard";
 
 /**
  * Map a status pill's semantic colour role onto the live palette. Kept theme-
@@ -3985,28 +3986,31 @@ export function ChatScreen({
       transcriptRef.current?.scrollBy(0.5, "viewport");
       return;
     }
-    // Ctrl+R flips the whole transcript between collapsed and expanded detail —
-    // the global disclosure toggle for the folded tool/reasoning summaries. It
-    // persists via the settings store (same layer `/settings` would write), so
-    // the choice survives the session; the store notifies subscribers, so the
-    // transcript repaints immediately with no remount.
-    if (key.ctrl && key.name === "r") {
+    // The three View toggles are the rebindable set: their chord is resolved
+    // through `matchesBinding` against the operator's persisted overrides
+    // (`settingsRef.current.keybindings`) rather than a hard-coded `key.name`
+    // literal, so `/keybindings` can remap them. `matchesBinding` falls back to
+    // the registry default (Ctrl+R / Ctrl+B / Ctrl+L) when there is no override.
+    // Handled above the composing block so the chord never reaches the
+    // composer's text catch-all (which only appends non-ctrl sequences anyway).
+    //
+    // transcript-detail flips the whole transcript between collapsed and
+    // expanded detail; both sidebars toggle their pane. All three persist via
+    // the settings store (the same layer `/settings` writes), so the choice
+    // survives the session and the store's subscribers repaint immediately.
+    const keybindingOverrides = settingsRef.current.keybindings;
+    if (matchesBinding(key, "view.transcript-detail", keybindingOverrides)) {
       updateSetting(
         "transcriptDetail",
         settingsRef.current.transcriptDetail === "collapsed" ? "expanded" : "collapsed",
       );
       return;
     }
-    // Ctrl+B / Ctrl+L collapse the LEFT / RIGHT chat sidebars. Both persist via
-    // the settings store (the same layer `/settings` writes), so the choice
-    // survives the session and the store's subscribers repaint immediately.
-    // Handled above the composing block so the chord never reaches the
-    // composer's text catch-all (which only appends non-ctrl sequences anyway).
-    if (key.ctrl && key.name === "b") {
+    if (matchesBinding(key, "view.left-sidebar", keybindingOverrides)) {
       updateSetting("showLeftSidebar", !settingsRef.current.showLeftSidebar);
       return;
     }
-    if (key.ctrl && key.name === "l") {
+    if (matchesBinding(key, "view.right-sidebar", keybindingOverrides)) {
       updateSetting("showRightSidebar", !settingsRef.current.showRightSidebar);
       return;
     }

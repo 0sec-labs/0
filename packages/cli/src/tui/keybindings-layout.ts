@@ -21,7 +21,10 @@
 import {
   KEYBINDINGS,
   keybindingsByCategory,
+  effectiveChords,
+  parseChord,
   type Keybinding,
+  type KeybindingCategory,
 } from "./keybindings.js";
 import type { DialogItem } from "./dialog-select-layout.js";
 import { shellChromeRows } from "./settings-layout.js";
@@ -441,4 +444,145 @@ export function paletteCountMeta(shown: number, total: number): string {
   const all = cells(total);
   if (visible === all) return `${all} entr${all === 1 ? "y" : "ies"}`;
   return `${visible}/${all}`;
+}
+
+// ===========================================================================
+// KEYBINDINGS EDITOR — the editable projection of the rebindable set
+// ===========================================================================
+//
+// `/keybindings` is the write side of `/shortcuts`: the same registry, but the
+// rebindable View toggles can be re-captured and persisted. This module owns
+// the row model and the display formatting; the screen (`keybindings-editor-
+// screen.tsx`) draws it and captures keys, and `keybindings.ts` owns the chord
+// model, the resolver and the conflict rules. Nothing here is invented — every
+// row is a registry binding, and every chord shown is the effective one
+// (override ?? default).
+
+/** Human-facing names for the OpenTUI key names the chord model stores. */
+const CHORD_NAME_LABELS: Readonly<Record<string, string>> = {
+  return: "Enter",
+  escape: "Esc",
+  pageup: "PageUp",
+  pagedown: "PageDown",
+  up: "Up",
+  down: "Down",
+  left: "Left",
+  right: "Right",
+  tab: "Tab",
+  backspace: "Backspace",
+  delete: "Delete",
+  insert: "Insert",
+  home: "Home",
+  end: "End",
+  space: "Space",
+};
+
+/** Human-facing labels for the chord modifiers, in canonical display order. */
+const CHORD_MODIFIER_LABELS: readonly [keyof ReturnType<typeof parseChordSafe>, string][] = [
+  ["ctrl", "Ctrl"],
+  ["shift", "Shift"],
+  ["meta", "Meta"],
+  ["option", "Alt"],
+];
+
+function parseChordSafe(chord: string) {
+  return parseChord(chord) ?? { ctrl: false, shift: false, meta: false, option: false, name: chord };
+}
+
+/**
+ * Render a canonical chord string ("ctrl+b", "pageup") as a display label
+ * ("Ctrl+B", "PageUp"). The inverse of the parser's normalisation, for the
+ * editor and any effective-chord reference. An unparseable string is shown
+ * verbatim rather than dropped, so the operator always sees what is stored.
+ */
+export function chordDisplay(chord: string): string {
+  const parsed = parseChord(chord);
+  if (!parsed) return chord;
+  const parts: string[] = [];
+  for (const [flag, label] of CHORD_MODIFIER_LABELS) {
+    if (parsed[flag]) parts.push(label);
+  }
+  const name = parsed.name;
+  const labelled =
+    CHORD_NAME_LABELS[name] ?? (name.length === 1 ? name.toUpperCase() : `${name[0]?.toUpperCase() ?? ""}${name.slice(1)}`);
+  parts.push(labelled);
+  return parts.join("+");
+}
+
+/**
+ * The effective chords of a binding, joined for display (" / " between
+ * alternates), applying any override. Used by the editor and — so the
+ * cheat-sheet reflects reality — the reference view when it is given the
+ * overrides map.
+ */
+export function effectiveKeysDisplay(
+  binding: Keybinding,
+  overrides?: Record<string, string>,
+): string {
+  return effectiveChords(binding, overrides).map(chordDisplay).join(" / ");
+}
+
+export interface KeybindingEditorRow {
+  kind: "heading" | "binding";
+  /** Heading text (category) for `heading` rows. */
+  label?: string;
+  /** Binding id for `binding` rows. */
+  id?: string;
+  description?: string;
+  category?: KeybindingCategory;
+  /** The effective chord label (override applied) for `binding` rows. */
+  chord?: string;
+  /** Whether the operator may remap this row. */
+  rebindable?: boolean;
+  /** Whether an override is currently active for this row. */
+  overridden?: boolean;
+}
+
+/**
+ * The editor's flat row model: one heading per category, one row per binding,
+ * with the effective chord and the rebindable / overridden flags decided here
+ * so the screen draws no logic. Built from the shared registry via
+ * `keybindingsByCategory`, so order and grouping match the source of truth.
+ */
+export function buildKeybindingEditorRows(
+  overrides: Record<string, string> = {},
+  bindings: readonly Keybinding[] = KEYBINDINGS,
+): KeybindingEditorRow[] {
+  const rows: KeybindingEditorRow[] = [];
+  for (const [category, entries] of keybindingsByCategory(bindings)) {
+    rows.push({ kind: "heading", label: category.toUpperCase(), category });
+    for (const binding of entries) {
+      rows.push({
+        kind: "binding",
+        id: binding.id,
+        description: sanitizeTuiText(binding.description),
+        category,
+        chord: sanitizeTuiText(effectiveKeysDisplay(binding, overrides)),
+        rebindable: binding.rebindable,
+        overridden: binding.rebindable && typeof overrides[binding.id] === "string",
+      });
+    }
+  }
+  return rows;
+}
+
+/** The indices of the editable (rebindable) binding rows, in row order. */
+export function rebindableRowIndices(rows: readonly KeybindingEditorRow[]): number[] {
+  const indices: number[] = [];
+  rows.forEach((row, index) => {
+    if (row.kind === "binding" && row.rebindable) indices.push(index);
+  });
+  return indices;
+}
+
+/** The editor's footer hint, depending on whether a chord is being captured. */
+export function keybindingsEditorFooterHint(capturing: boolean): string {
+  return capturing
+    ? ["press a chord to bind", "esc cancel"].join(" · ")
+    : ["↑/↓ move", "enter rebind", "r reset", "esc back", "ctrl+c exit"].join(" · ");
+}
+
+/** The editor's pane title. */
+export function keybindingsEditorTitle(): string {
+  return "KEYBINDINGS";
 }

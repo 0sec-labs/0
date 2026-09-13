@@ -27,6 +27,7 @@ import { dirname, join } from "node:path";
 
 import { DEFAULT_ALLOW_MODEL_SELF_EXTENSION, homeStateDir } from "@0sec/shared";
 
+import { sanitizeKeybindingOverrides } from "./keybindings.js";
 import {
   DEFAULT_THEME_NAME,
   THEME_NAMES,
@@ -207,6 +208,16 @@ export interface TuiSettings {
    * NO runtime font detection — this is an explicit operator choice.
    */
   symbolPreset: "unicode" | "nerd" | "ascii";
+  /**
+   * Per-action chord overrides for the rebindable keybindings, keyed by
+   * `Keybinding.id` (e.g. `{ "view.left-sidebar": "ctrl+b" }`). NOT part of the
+   * scalar `SETTING_DEFS` table — it is a map, neither a boolean nor a
+   * fixed-choice enum — so it is validated by its own bespoke `keybindingsAt`
+   * helper (the way `theme` uses `themeAt`) rather than the enum table. Only
+   * rebindable ids with a parseable, assignable, conflict-free chord survive a
+   * load; unknown ids and protected/duplicate chords are dropped.
+   */
+  keybindings: Record<string, string>;
 }
 
 /** Keys of `TuiSettings` whose value is a boolean. */
@@ -653,6 +664,7 @@ export const DEFAULT_SETTINGS: TuiSettings = {
   diagnosticReportingPrompted: false,
   updatePolicy: "automatic",
   symbolPreset: "unicode",
+  keybindings: {},
 };
 
 /** Basename of the settings file inside the 0sec state directory. */
@@ -732,6 +744,14 @@ function strictValueAt<K extends keyof TuiSettings>(raw: unknown, key: K): TuiSe
   if (key === "theme") {
     return typeof value === "string" && isKnownTheme(value)
       ? (value as TuiSettings[K])
+      : undefined;
+  }
+  if (key === "keybindings") {
+    // A layer "has" keybindings when it carries an object for the key; the whole
+    // sanitised map replaces the lower layer (project map wins over global map
+    // as a unit). A non-object value is not a valid layer for this key.
+    return typeof value === "object" && value !== null && !Array.isArray(value)
+      ? (sanitizeKeybindingOverrides(value) as TuiSettings[K])
       : undefined;
   }
   const def = DEF_BY_KEY.get(key);
@@ -871,6 +891,19 @@ function themeAt(raw: unknown): TuiSettings["theme"] {
 }
 
 /**
+ * The `keybindings` key is a map, not a scalar, so it gets a bespoke validator
+ * (like `theme` gets `themeAt`) rather than the enum table. It delegates the
+ * whole policy — keep only rebindable ids with a parseable, assignable,
+ * conflict-free chord; drop everything else — to `sanitizeKeybindingOverrides`
+ * in the shared registry, so the loader and the editor enforce the same rules.
+ * Total and pure: any shape at all yields a valid (possibly empty) map, never a
+ * throw.
+ */
+function keybindingsAt(raw: unknown): TuiSettings["keybindings"] {
+  return sanitizeKeybindingOverrides(rawValue(raw, "keybindings"));
+}
+
+/**
  * Total, pure coercion of anything at all into a valid `TuiSettings`.
  *
  * Building a fresh literal rather than merging over the input is what drops
@@ -919,6 +952,7 @@ export function normalizeSettings(raw: unknown): TuiSettings {
     diagnosticReportingPrompted: booleanAt(raw, "diagnosticReportingPrompted"),
     updatePolicy: strictValueAt(raw, "updatePolicy") ?? DEFAULT_SETTINGS.updatePolicy,
     symbolPreset: enumAt(raw, "symbolPreset"),
+    keybindings: keybindingsAt(raw),
   };
 }
 
