@@ -44,7 +44,8 @@ import { SelfExtensionRegistry } from "../plugins/self-extension.js";
 import { checkInvocationCapabilities, NETWORK_CAPABLE_TOOLS, LOCAL_SCOPE_TOOLS, READ_ONLY_TOOLS } from "../plugins/capability-classification.js";
 import type { SelfExtensionEvent } from "../plugins/self-extension.js";
 import type { PluginHost } from "../plugins/loader.js";
-import type { AgentRole, OperatorQuestionAnswer, OperatorQuestionRequest, ScopedAuditEscalationRequest, ToolCall, ToolContext, ToolDefinition, ToolResult } from "../agent/types.js";
+import type { AgentRole, OperatorQuestionAnswer, OperatorQuestionRequest, ScopedAuditEscalationRequest, ToolCall, ToolContext, ToolDefinition, ToolResult, ToolRisk } from "../agent/types.js";
+import { classifyToolRisk } from "../agent/destructive-classifier.js";
 import { normalizeScopeHostname, ScopePolicy } from "../scope/scope.js";
 import { eventBus } from "../events/bus.js";
 import { createSessionObjectiveService } from "./session-objective.js";
@@ -476,7 +477,7 @@ export interface ConsoleSessionConfig {
    * engine cannot invent an operator to ask), mirroring every other gate's
    * "no callback → defer to the layers beneath" contract.
    */
-  approveTool?: (call: ToolCall) => Promise<boolean>;
+  approveTool?: (call: ToolCall, risk?: ToolRisk) => Promise<boolean>;
   /**
    * Invoked when a tool is blocked purely by the scoped-source-audit
    * allow-list (role `audit`/`review` with a local scope). Return true to
@@ -630,18 +631,19 @@ const DEFAULT_MAX_TOOL_ITERATIONS = 100;
 /**
  * Default per-turn token budget (input + output across every model call).
  *
- * Calibrated against a real observed session: a repo audit that had run 30 tool
- * calls reported 779,532 input tokens in a single turn — and was still not
- * finished when the old 20-round cap dead-ended it. Because each iteration
- * resends the whole conversation, cumulative turn cost grows roughly with the
- * SQUARE of the round count, so 2,000,000 tokens (~2.5x the observed spend)
- * buys roughly sqrt(2.5) ~= 1.6x more rounds — around 45-50 — which is ample
- * headroom for that audit to reach a natural stop, while still bounding a
- * single turn to a knowable worst case (a few dollars at frontier input
- * pricing) instead of an open-ended one. It is a ceiling, not a target: a
- * normal conversational turn spends a tiny fraction of it.
+ * UNLIMITED BY DEFAULT (opt-in). Billing is by token/USD, not by turn, and an
+ * operator mid-audit does not want the turn to pause itself partway through a
+ * chain of tool calls just because a token count crossed a line. So the default
+ * is no cap: a turn runs until it reaches a natural stop (or the independent
+ * {@link DEFAULT_MAX_TOOL_ITERATIONS} runaway guard, or the operator interrupts).
+ *
+ * The cap is not removed, only defaulted off: a caller that WANTS a per-turn
+ * ceiling (a cost-bounded batch run, a CI harness) still sets
+ * `config.maxTurnTokens` to a finite number and gets the old behaviour,
+ * including the budget meter (which renders only for a finite cap — see the
+ * `Number.isFinite` guard in `chat-screen.tsx`'s `onUsage`).
  */
-const DEFAULT_MAX_TURN_TOKENS = 2_000_000;
+const DEFAULT_MAX_TURN_TOKENS = Number.POSITIVE_INFINITY;
 
 /**
  * Build the console persona system prompt. Distinct from the scan-role prompts
@@ -1816,6 +1818,10 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
   // turn.
   const maxToolIterations = config.maxToolIterations ?? DEFAULT_MAX_TOOL_ITERATIONS;
   const maxTurnTokens = config.maxTurnTokens ?? DEFAULT_MAX_TURN_TOKENS;
+  // True only when a finite per-turn cap is in force. When it is not (the
+  // default), operator-facing notices omit the "of N tokens" ceiling clause
+  // rather than print "of Infinity".
+  const hasTurnTokenCap = Number.isFinite(maxTurnTokens);
 
   // Seed conversation history. A caller rebuilding the session (e.g. an
   // in-place `/model` switch) passes the prior `messages` here; we take a
@@ -2439,7 +2445,11 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
     if (!approveTool) return "approved";
     if (readOnlyTools[call.name]) return "approved";
 
-    const ok = await approveTool(call);
+    // Presentation-only risk assessment, computed here (pre-decision) so it
+    // reaches the operator's prompt BEFORE they choose. It NEVER changes whether
+    // the gate fires or what is authorized — only how the prompt is surfaced.
+    const risk = classifyToolRisk(call);
+    const ok = await approveTool(call, risk);
     if (!ok) {
       return {
         success: false,
@@ -2722,7 +2732,7 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
       // before the request is issued, not during it.
       if (signal?.aborted) {
         callbacks?.onNotice?.(
-          `Turn cancelled by operator after ${iterations} tool round(s) — used ${usage.inputTokens + usage.outputTokens} of ${maxTurnTokens} tokens. Conversation is intact; send another message to continue.`,
+          `Turn cancelled by operator after ${iterations} tool round(s) — used ${usage.inputTokens + usage.outputTokens}${hasTurnTokenCap ? ` of ${maxTurnTokens}` : ""} tokens. Conversation is intact; send another message to continue.`,
         );
         return { assistantText, toolCalls: runCalls, usage, budget: budgetSnapshot(), stopReason: "cancelled" };
       }
@@ -2879,7 +2889,7 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
       // resumable. Reported as `cancelled`, carrying the budget spent so far.
       if (cancelledMidRound) {
         callbacks?.onNotice?.(
-          `Turn cancelled by operator mid-round — used ${usage.inputTokens + usage.outputTokens} of ${maxTurnTokens} tokens over ${iterations} tool round(s). Outstanding tool calls were closed out; send another message to continue.`,
+          `Turn cancelled by operator mid-round — used ${usage.inputTokens + usage.outputTokens}${hasTurnTokenCap ? ` of ${maxTurnTokens}` : ""} tokens over ${iterations} tool round(s). Outstanding tool calls were closed out; send another message to continue.`,
         );
         return { assistantText, toolCalls: runCalls, usage, budget: budgetSnapshot(), stopReason: "cancelled" };
       }
@@ -2909,7 +2919,7 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
       // rounds without burning budget.
       if (iterations >= maxToolIterations) {
         callbacks?.onNotice?.(
-          `Reached the ${maxToolIterations}-tool-call runaway cap for this turn (${tokensUsed} of ${maxTurnTokens} tokens used); pausing for operator input.`,
+          `Reached the ${maxToolIterations}-tool-call runaway cap for this turn (${tokensUsed} tokens used${hasTurnTokenCap ? ` of ${maxTurnTokens}` : ""}); pausing for operator input.`,
         );
         return { assistantText, toolCalls: runCalls, usage, budget: budgetSnapshot(), stopReason: "max_tool_iterations" };
       }

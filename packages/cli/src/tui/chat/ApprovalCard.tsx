@@ -19,9 +19,9 @@ export const APPROVAL_DENY_ID = "deny";
  * This is presentation only. Prepending it does NOT make an approval dangerous
  * and grants no protection on its own: a call is DANGER only when a producer
  * that holds an authoritative destructive classification says so and passes
- * `severity: "danger"` in the {@link ApprovalPrompt}. No such producer signal
- * exists yet (see the note on {@link ApprovalPrompt.severity}), so nothing in
- * the shipped tree sets this tier today.
+ * `severity: "danger"` in the {@link ApprovalPrompt}. That producer is the core
+ * `classifyToolRisk` classifier, run at the approval boundary before the
+ * operator decides (see the note on {@link ApprovalPrompt.severity}).
  */
 export const APPROVAL_DANGER_GLYPH = "▲";
 
@@ -77,18 +77,17 @@ export type ApprovalPrompt = {
   borderColor: string;
   titleColor: string;
   /**
-   * Tier of the decision, driving the danger presentation. Absent (the only
-   * value any shipped producer sets today) is the calm WARNING/INFO framing.
+   * Tier of the decision, driving the danger presentation. Absent is the calm
+   * WARNING/INFO framing (scope gates, the ordinary co-pilot gate).
    *
-   * `"danger"` is reserved for a DESTRUCTIVE action — one that can mutate or
-   * destroy state the operator would not want taken without a deliberate look.
-   * It MUST be set from an authoritative, producer-assigned classification, not
-   * from parsing the tool name or its arguments in the UI: `ToolCall` carries
-   * only `{ name, arguments }` and `ToolDefinition` carries no destructiveness
-   * field, so there is no signal to read yet. Until a producer supplies one,
-   * this field stays unset and the danger path is inert — the card can render
-   * the tier, but no live approval reaches it, and the tier is NOT
-   * destructive-command protection on its own.
+   * `"danger"` marks a DESTRUCTIVE action — one that can mutate or destroy state
+   * the operator would not want taken without a deliberate look. It MUST come
+   * from an authoritative, producer-assigned classification, never from parsing
+   * the tool name or its arguments in the UI. The producer is the core
+   * `classifyToolRisk`, computed at the approval boundary; a call it cannot
+   * positively classify as destructive stays calm (never a guessed danger), so
+   * this tier is a "look carefully" cue, not a claim that every destructive
+   * command is caught, and it changes presentation only — never the gate.
    */
   severity?: "danger";
   /** Applies the chosen item. Guarded to run at most once per `owner`. */
@@ -147,8 +146,7 @@ export function approvalCardRows({
  * prepends {@link APPROVAL_DANGER_GLYPH} to the title. This is presentation
  * only: it neither auto-approves nor changes which choice is pre-selected (the
  * caller owns the selector's default, and for a danger prompt that default is
- * the declining one — never grant). The card renders the tier it is told; no
- * shipped producer sets `danger` yet.
+ * the declining one — never grant). The card renders the tier it is told.
  */
 export function ApprovalCard({
   title,

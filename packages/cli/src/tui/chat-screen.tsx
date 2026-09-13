@@ -43,6 +43,8 @@ import {
   type TodosEventPayload,
   type SessionObjectivePayload,
   type ToolCall,
+  type ToolRisk,
+  describeDestructiveCategory,
   sendOperatorMessage,
   renderInboundMessage,
   type MessagingRuntime,
@@ -610,6 +612,8 @@ type PendingEscalation = {
 
 type PendingToolApproval = {
   call: ToolCall;
+  /** Presentation-only risk, from the core classifier at the approval boundary. */
+  risk?: ToolRisk;
   resolve: (approved: boolean) => void;
 };
 
@@ -1581,13 +1585,13 @@ export function ChatScreen({
         setPendingEscalation({ request, resolve: deferred.resolve });
         return deferred.promise;
       },
-      approveTool: (call) => {
+      approveTool: (call, risk) => {
         const deferred = trackedRequest<boolean>(false);
         if (!alive.current || stoppingAuditRef.current) {
           deferred.resolve(false);
           return deferred.promise;
         }
-        setPendingToolApproval({ call, resolve: deferred.resolve });
+        setPendingToolApproval({ call, risk, resolve: deferred.resolve });
         return deferred.promise;
       },
       // The `ask_operator` question channel. Unlike the gates above it grants
@@ -2324,14 +2328,26 @@ export function ChatScreen({
     }
     if (pendingToolApproval) {
       const owner = pendingToolApproval;
+      // A positively-classified destructive call is dressed as DANGER: the ERROR
+      // tone, the card's danger glyph (severity), a static category line, and a
+      // deny-first selection (below). This never changes that the gate fires or
+      // what it authorizes — an unclassified/obfuscated call is simply calm.
+      const danger = owner.risk?.level === "destructive";
+      const dangerLabel = danger && owner.risk?.category
+        ? describeDestructiveCategory(owner.risk.category)
+        : undefined;
+      const bodyLines = dangerLabel
+        ? [`Destructive action: ${dangerLabel}`, ...argumentSummaryLines(owner.call.arguments)]
+        : argumentSummaryLines(owner.call.arguments);
       return {
         owner,
         title: `${modeLabel(modeRef.current)} approval`,
         context: `${owner.call.name} ${JSON.stringify(owner.call.arguments)}`,
         subject: owner.call.name,
-        bodyLines: argumentSummaryLines(owner.call.arguments),
-        borderColor: INFO,
-        titleColor: INFO,
+        bodyLines,
+        borderColor: danger ? ERROR : INFO,
+        titleColor: danger ? ERROR : INFO,
+        severity: danger ? "danger" : undefined,
         items: [
           {
             id: APPROVAL_GRANT_ID,
@@ -2374,8 +2390,14 @@ export function ChatScreen({
     ? (approvalCursor && approvalCursor.owner === approvalPrompt.owner
         ? approvalCursor.state
         // The grant is highlighted first, exactly as Enter used to approve
-        // directly — the semantics of the default answer are unchanged.
-        : createSelectorState(approvalPrompt.title, approvalPrompt.items, APPROVAL_GRANT_ID))
+        // directly — the semantics of the default answer are unchanged. The ONE
+        // exception is a DANGER prompt: it opens on the declining choice, so a
+        // reflexive Enter denies rather than runs a destructive call.
+        : createSelectorState(
+            approvalPrompt.title,
+            approvalPrompt.items,
+            approvalPrompt.severity === "danger" ? APPROVAL_DENY_ID : APPROVAL_GRANT_ID,
+          ))
     : null;
   const stepApproval = useCallback((action: "up" | "down") => {
     setApprovalCursor((current) => {
@@ -4722,6 +4744,7 @@ export function ChatScreen({
       activeIndex={approvalState.index}
       hint="↑↓ choose · enter confirm · esc decline"
       accent={approvalPrompt.borderColor}
+      severity={approvalPrompt.severity}
       contentWidth={contentWidth}
       height={approvalBoxHeight}
       theme={theme}

@@ -109,6 +109,9 @@ export type {
   ToolDefinition,
   ToolCall,
   ToolResult,
+  ToolRisk,
+  ToolRiskLevel,
+  DestructiveCategory,
   ToolContext,
   ScopedAuditEscalationRequest,
   OperatorQuestion,
@@ -119,5 +122,6 @@ export type {
   MessageRole,
   DispatchMode,
 } from "./types.js";
+export { classifyToolRisk, classifyBashCommand, describeDestructiveCategory } from "./destructive-classifier.js";
 export type { AgentLoopOptions } from "./loop.js";
 export type { NativeAgentConfig, NativeAgentLoopOptions, NativeAgentState } from "./native-loop.js";

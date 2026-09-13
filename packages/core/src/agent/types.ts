@@ -48,6 +48,45 @@ export interface ToolCall {
   arguments: Record<string, unknown>;
 }
 
+/**
+ * A bounded, static classification of a destructive operation. The
+ * operator-facing label for each is a fixed string derived from this enum, so
+ * the approval surface can name the danger WITHOUT echoing the command text
+ * (which may carry secrets). New members are added deliberately, never derived
+ * from free text.
+ */
+export type DestructiveCategory =
+  | "recursive-delete"
+  | "disk-write"
+  | "filesystem-format"
+  | "process-kill"
+  | "repo-history-rewrite";
+
+/**
+ * The risk levels the classifier emits. There is deliberately NO `"safe"`:
+ * an arbitrary shell invocation whose effect cannot be POSITIVELY verified as
+ * destructive stays `"unknown"`, never downgraded to a safety claim. Only a
+ * positively-matched destructive operation is `"destructive"`. `"unknown"` is
+ * therefore the honest default, distinct from safe.
+ */
+export type ToolRiskLevel = "destructive" | "unknown";
+
+/**
+ * A risk assessment carried ALONGSIDE a {@link ToolCall} at the approval
+ * boundary — a sibling value, never a mutation of the call. It is
+ * PRESENTATION-ONLY: it changes how an approval is surfaced to the operator
+ * (a distinct tone + glyph, a deny-first selection) and NEVER whether the gate
+ * is raised, what is authorized, or the scope. A `"destructive"` result is a
+ * cue to look carefully, not a claim that every destructive command is caught
+ * — obfuscated or unrecognized commands remain `"unknown"` and still gate
+ * normally.
+ */
+export interface ToolRisk {
+  level: ToolRiskLevel;
+  /** Set only when `level === "destructive"`; identifies the matched category. */
+  category?: DestructiveCategory;
+}
+
 export interface ToolResult {
   success: boolean;
   output: unknown;

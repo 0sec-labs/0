@@ -359,6 +359,33 @@ describe("Console autonomy — standard mode (per-action approval)", () => {
     expect(outcome.toolCalls[0].result.success).toBe(true);
   });
 
+  it("hands approveTool a presentation-only destructive risk WITHOUT changing the gate", async () => {
+    // A destructive command and a benign one, each put to the operator. The
+    // classifier annotates the destructive one; the gate is unchanged — the call
+    // still runs ONLY on an explicit yes, and a no still blocks it.
+    const runtime = new ScriptedRuntime([
+      { content: [{ type: "tool_use", id: "c1", name: "bash", input: { command: "rm -rf /tmp/x" } }], stopReason: "tool_use", durationMs: 1 },
+      { content: [{ type: "tool_use", id: "c2", name: "bash", input: { command: "echo hi" } }], stopReason: "tool_use", durationMs: 1 },
+      endTurn("Both were put to the operator."),
+    ]);
+    const seen: Array<{ name: string; level?: string; category?: string }> = [];
+    const session = createConsoleSession({
+      runtime,
+      autonomyMode: "standard",
+      approveTool: async (call, risk) => {
+        seen.push({ name: call.name, level: risk?.level, category: risk?.category });
+        return call.arguments.command === "echo hi"; // approve only the benign one
+      },
+    });
+    const outcome = await session.send("do things");
+    expect(seen[0]).toEqual({ name: "bash", level: "destructive", category: "recursive-delete" });
+    expect(seen[1]).toEqual({ name: "bash", level: "unknown", category: undefined });
+    // Gate unchanged: the destructive call was denied (blocked), the benign one ran.
+    expect(outcome.toolCalls[0].result.success).toBe(false);
+    expect(outcome.toolCalls[0].result.error).toContain("not approved by the operator in standard mode");
+    expect(outcome.toolCalls[1].result.success).toBe(true);
+  });
+
   it("denies an effectful tool in standard when no approveTool channel is wired (fail-open corner closed)", async () => {
     // Standard is the per-action-approval mode. The old behaviour fell OPEN when
     // no approveTool was wired (headless/legacy embedder) and ran the tool

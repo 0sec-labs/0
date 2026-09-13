@@ -701,8 +701,9 @@ export function projectToolPreview(call: ToolCallLike, result: ToolResultLike): 
       if (binary) { append(`${prefix}${label}${binary}`); return; }
       textLines(value, prefix + label); return;
     }
-    if (value === null || value === undefined || typeof value === "number" || typeof value === "boolean") {
-      append(`${prefix}${label}${String(value)}`); return;
+    if (value === undefined) return; // an absent field renders nothing, never "undefined"
+    if (value === null || typeof value === "number" || typeof value === "boolean") {
+      append(`${prefix}${label}${String(value)}`); return; // a real null stays "null"
     }
     if (typeof value !== "object") { append(`${prefix}${label}[${typeof value}]`); return; }
     if (visited.has(value)) { append(`${prefix}${label}[circular]`); return; }
@@ -716,6 +717,13 @@ export function projectToolPreview(call: ToolCallLike, result: ToolResultLike): 
       const keys: string[] = [];
       for (const child in value) {
         if (!Object.hasOwn(value, child)) continue;
+        // A data property explicitly set to `undefined` is an ABSENT field, not
+        // a value: drop it before it can render as the literal "undefined". A
+        // real `null` is a value and is kept (rendered below). Accessors — where
+        // `"value"` is absent from the descriptor — are left in and reported as
+        // "[accessor omitted]". Reading the descriptor never invokes a getter.
+        const descriptor = Object.getOwnPropertyDescriptor(value, child);
+        if (descriptor && "value" in descriptor && descriptor.value === undefined) continue;
         if (keys.length >= PREVIEW_LINES - nodes) { truncated = true; break; }
         keys.push(child);
       }
