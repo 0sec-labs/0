@@ -338,6 +338,189 @@ export function buildTodoTreeRows(todos: TodosEventPayload["todos"], width: numb
   return result;
 }
 
+// ── Ephemeral plan (self-pruning HUD) ───────────────────────────────────────
+//
+// Ported from oh-my-pi's todo tool + interactive-mode auto-clear (see
+// `isClosedTodo` / `selectCollapsedTodos` / `#syncTodoAutoClearTimer`). The
+// intent: finished work stops cluttering the plan. A completed todo lingers
+// only long enough to play a strike-through flash, then it self-prunes; once
+// EVERY todo is settled the whole HUD collapses to nothing after a short delay.
+//
+// This module owns only the *policy* — it is a pure function of the todos, the
+// timestamps at which they completed, and a caller-supplied `now`. No clock is
+// read here and no timer is set: the component reads `Date.now()` per render,
+// and the returned `nextChangeInMs` tells it exactly when the next visual change
+// is due so it can nudge one more render (reusing the render cadence the sidebar
+// already runs on, never a new global timer). That split keeps every rule below
+// a unit test rather than something you can only see by watching the terminal.
+
+/**
+ * What "done, hide it" means, shared by every surface so the strike flash, the
+ * self-prune, and the full-clear can never disagree about which todos are
+ * finished (oh-my-pi's `isClosedTodo`). Takes a bare status string rather than
+ * the {@link TodoStatus} union so a future `"abandoned"`/`"blocked"` vocabulary
+ * needs no change here.
+ */
+export function isClosedTodo(status: string): boolean {
+  return status === "completed" || status === "abandoned";
+}
+
+/** Beat before the strike begins to travel, so a completion registers first. */
+export const TODO_STRIKE_HOLD_MS = 120;
+/** How long the strike-through takes to sweep across a completed row's text. */
+export const TODO_STRIKE_REVEAL_MS = 640;
+/**
+ * Total life of a completed row's flash. After this it self-prunes (vanishes)
+ * while other work is still open — the "walking viewport" that keeps the plan
+ * showing live work, not a growing pile of checked boxes.
+ */
+export const TODO_STRIKE_TOTAL_MS = TODO_STRIKE_HOLD_MS + TODO_STRIKE_REVEAL_MS;
+/**
+ * Delay after the LAST todo settles before the whole HUD collapses to empty
+ * (oh-my-pi's `tasks.todoClearDelay`, whose default is 60s and is user
+ * configurable). We deliberately shorten it to a few seconds and hardcode it —
+ * the operator asked for finished plans to clear on their own after a *short*
+ * delay, and settings.ts is a hot shared file we were asked to leave alone. If
+ * configurability is ever wanted, a single number setting read by the host and
+ * passed as `clearDelayMs` restores it without touching this policy.
+ */
+export const TODO_CLEAR_DELAY_MS = 6_000;
+/** Re-render cadence hint while a strike is mid-sweep, so the reveal is smooth. */
+const TODO_STRIKE_FRAME_MS = 60;
+
+export interface EphemeralTodoOptions {
+  /** Wall-clock the caller measured this render at (`Date.now()`). */
+  now: number;
+  /** todoId → ms at which it first became closed (completed/abandoned). */
+  completedAt: ReadonlyMap<string, number>;
+  /** Override the strike hold/reveal/clear windows (tests, or a host setting). */
+  holdMs?: number;
+  revealMs?: number;
+  clearDelayMs?: number;
+}
+
+export interface EphemeralTodoSelection {
+  /** The todos to render now: open work, plus any closed row still flashing. */
+  todos: TodosEventPayload["todos"];
+  /** todoId → strike reveal fraction in [0,1] for a currently-flashing row. */
+  strike: Map<string, number>;
+  /** True once a fully-settled plan's clear delay has elapsed → render nothing. */
+  cleared: boolean;
+  /**
+   * Milliseconds until the next visual change (a strike frame, a self-prune, or
+   * the full clear). The caller schedules ONE more render at this point;
+   * `undefined` means the plan is visually at rest and needs no further nudge.
+   */
+  nextChangeInMs: number | undefined;
+}
+
+function clamp01(value: number): number {
+  return value < 0 ? 0 : value > 1 ? 1 : value;
+}
+
+/** Reveal fraction for a completed row `elapsed` ms after it closed. */
+function strikeReveal(elapsed: number, holdMs: number, revealMs: number): number {
+  if (elapsed <= holdMs) return 0;
+  if (revealMs <= 0) return 1;
+  return clamp01((elapsed - holdMs) / revealMs);
+}
+
+/**
+ * The ephemeral-plan policy. Given the current todos, the times each closed
+ * todo settled, and `now`, decide what the HUD shows this instant:
+ *
+ *  - Open work always shows.
+ *  - A closed todo shows ONLY while its flash is alive (`< totalMs` since it
+ *    closed) — it plays a progressive strike-through, then self-prunes. A closed
+ *    todo with no recorded timestamp (e.g. one restored already-done from a
+ *    session) never flashed, so it is hidden immediately.
+ *  - When EVERY todo is settled the plan lingers (still striking any fresh rows)
+ *    until `clearDelayMs` after the last settle, then `cleared` flips true and
+ *    the caller renders nothing. A fully-settled plan with no timestamps at all
+ *    (a restored, already-finished plan) clears at once rather than lingering.
+ *
+ * `strike` carries the reveal fraction for whichever rows are mid-flash;
+ * `nextChangeInMs` is when to paint next. Pure: same inputs ⇒ same output.
+ */
+export function selectEphemeralTodos(
+  todos: TodosEventPayload["todos"],
+  options: EphemeralTodoOptions,
+): EphemeralTodoSelection {
+  const { now, completedAt } = options;
+  const holdMs = Math.max(0, options.holdMs ?? TODO_STRIKE_HOLD_MS);
+  const revealMs = Math.max(0, options.revealMs ?? TODO_STRIKE_REVEAL_MS);
+  const totalMs = holdMs + revealMs;
+  const clearDelayMs = Math.max(0, options.clearDelayMs ?? TODO_CLEAR_DELAY_MS);
+
+  const strike = new Map<string, number>();
+  let next = Number.POSITIVE_INFINITY;
+  const consider = (ms: number): void => {
+    if (ms > 0 && ms < next) next = ms;
+  };
+  const nextChangeInMs = (): number | undefined =>
+    Number.isFinite(next) ? Math.max(1, Math.ceil(next)) : undefined;
+
+  if (todos.length === 0) return { todos, strike, cleared: false, nextChangeInMs: undefined };
+
+  // How long a fresh closed row should stay on screen and how it strikes.
+  const trackFlash = (id: string, elapsed: number): void => {
+    if (elapsed >= totalMs) {
+      strike.set(id, 1);
+      return;
+    }
+    const fraction = strikeReveal(elapsed, holdMs, revealMs);
+    strike.set(id, fraction);
+    // Ask for the next paint: end of the hold beat, a smooth reveal frame, or
+    // the moment the flash expires — whichever comes first.
+    consider(elapsed < holdMs ? holdMs - elapsed : fraction < 1 ? TODO_STRIKE_FRAME_MS : totalMs - elapsed);
+  };
+
+  const settled = todos.every(item => isClosedTodo(item.status));
+
+  if (settled) {
+    let settledAt = Number.NEGATIVE_INFINITY;
+    let anyStamp = false;
+    for (const item of todos) {
+      const stamp = completedAt.get(item.id);
+      if (stamp != null) {
+        anyStamp = true;
+        if (stamp > settledAt) settledAt = stamp;
+      }
+    }
+    // A plan settled with no timestamps at all was already finished when we first
+    // saw it (a restored session): clear it straight away rather than lingering.
+    if (!anyStamp) return { todos: [], strike, cleared: true, nextChangeInMs: undefined };
+
+    const sinceSettled = now - settledAt;
+    if (sinceSettled >= clearDelayMs) return { todos: [], strike, cleared: true, nextChangeInMs: undefined };
+
+    // Still within the linger window: keep the finished plan up, striking any
+    // rows whose flash has not yet expired, and schedule the full clear.
+    for (const item of todos) {
+      const stamp = completedAt.get(item.id);
+      if (stamp != null) trackFlash(item.id, now - stamp);
+    }
+    consider(clearDelayMs - sinceSettled);
+    return { todos, strike, cleared: false, nextChangeInMs: nextChangeInMs() };
+  }
+
+  // Open work remains: show it, and keep only the closed rows still flashing.
+  const visible: TodosEventPayload["todos"] = [];
+  for (const item of todos) {
+    if (!isClosedTodo(item.status)) {
+      visible.push(item);
+      continue;
+    }
+    const stamp = completedAt.get(item.id);
+    if (stamp == null) continue; // never flashed (restored done) → prune now
+    const elapsed = now - stamp;
+    if (elapsed >= totalMs) continue; // flash finished → self-prune (vanish)
+    visible.push(item);
+    trackFlash(item.id, elapsed);
+  }
+  return { todos: visible, strike, cleared: false, nextChangeInMs: nextChangeInMs() };
+}
+
 /** Keep real active tasks before nearby pending work and one completed context item. */
 export function windowTodoTree(tree: readonly TodoTreeRow[], capacity: number): { rows: readonly TodoTreeRow[]; hiddenTodos: number; hiddenActive: number } {
   const count = Number.isFinite(capacity) ? Math.max(0, Math.floor(capacity)) : 0;
