@@ -248,6 +248,14 @@ export const SLASH_COMMANDS: readonly SlashCommand[] = [
     usage: "/settings",
   },
   {
+    name: "keybindings",
+    aliases: ["keys", "keymap"],
+    category: "system",
+    description: "View and rebind keyboard shortcuts; changes persist",
+    usage: "/keybindings",
+    tuiOnly: true,
+  },
+  {
     name: "theme",
     aliases: ["themes"],
     category: "system",

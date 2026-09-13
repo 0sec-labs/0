@@ -24,6 +24,7 @@ const KNOWN_PANE_ROUTE_RECORD: Record<string, true> = {
   connect: true,
   herd: true,
   comms: true,
+  keybindings: true,
   finding: true,
   resume: true,
 };

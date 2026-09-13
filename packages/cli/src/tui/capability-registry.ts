@@ -233,6 +233,15 @@ const CAPABILITIES: readonly CapabilityEntry[] = [
     description: "Modify TUI, convergence, and security settings.",
   },
   {
+    id: "keybindings",
+    label: "Keybindings",
+    category: "settings",
+    route: "keybindings",
+    outboundOrMutating: true,
+    safetyTier: "operator-confirmed",
+    description: "View and rebind keyboard shortcuts.",
+  },
+  {
     id: "usage",
     label: "Usage Report",
     category: "settings",

@@ -2945,6 +2945,11 @@ export function ChatScreen({
         // list squeezed above the composer.
         onNavigate("settings");
         return true;
+      case "keybindings":
+        // run.tsx routes the "keybindings" destination to the rebinding editor;
+        // chat just needs the nav entry (mirrors "/settings").
+        onNavigate("keybindings");
+        return true;
       case "audits":
       case "onboard":
         onNavigate(parsed.command);
