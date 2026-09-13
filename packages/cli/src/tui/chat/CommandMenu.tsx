@@ -6,6 +6,7 @@ import { operatorIcon, operatorTitle } from "../operator-icons.js";
 import type { CommandMenuLayout } from "../chat-layout.js";
 import type { SlashCommand } from "../slash-commands.js";
 import type { Theme } from "../theme-context.js";
+import { useSymbols } from "../symbol-context.js";
 
 const COMMAND_ICONS: Readonly<Record<string, string>> = {
   help: "?",
@@ -69,12 +70,13 @@ export function CommandMenu({
   compact: boolean;
   theme: Theme;
 }) {
+  const symbols = useSymbols();
   const { BORDER, PANEL_ALT, MUTED, PRIMARY, TEXT, ERROR } = theme;
   return (
     <box flexDirection="column" width={boxWidth} minWidth={0} height={height} flexShrink={0} marginTop={1} border borderColor={BORDER} backgroundColor={PANEL_ALT} paddingX={1}>
       <box flexDirection="row" width={layout.innerWidth} minWidth={0} gap={layout.headerGap}>
         <box width={layout.headerTitleWidth} flexShrink={0} minWidth={0}>
-          <text fg={MUTED}>{fitTuiText(`${operatorIcon("commands")} ${operatorTitle("commands")}`, layout.headerTitleWidth)}</text>
+          <text fg={MUTED}>{fitTuiText(`${operatorIcon("commands", symbols)} ${operatorTitle("commands")}`, layout.headerTitleWidth)}</text>
         </box>
         {layout.headerQueryWidth > 0 ? (
           <box width={layout.headerQueryWidth} flexShrink={0} minWidth={0}>
@@ -106,7 +108,7 @@ export function CommandMenu({
                 : command.category;
               return (
                 <box key={command.name} flexDirection="row" width={layout.innerWidth} flexShrink={0} minWidth={0}>
-                  <text width={1} flexShrink={0} fg={active ? PRIMARY : MUTED}>{active ? "▸" : " "}</text>
+                  <text width={1} flexShrink={0} fg={active ? PRIMARY : MUTED}>{active ? symbols.rowMarker : " "}</text>
                   <box flexDirection="column" width={layout.rowWidth} flexGrow={0} flexShrink={0} minWidth={0} marginLeft={1}>
                     <box flexDirection="row" width={layout.rowWidth} minWidth={0} gap={1}>
                       <box width={layout.nameWidth} flexShrink={0} minWidth={0}>

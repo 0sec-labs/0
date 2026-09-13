@@ -33,6 +33,7 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 
 import { fitTuiText } from "./text.js";
 import { useTheme, type Theme } from "./theme-context.js";
+import { useSymbols, type SymbolTable } from "./symbol-context.js";
 import {
   isToastDone,
   showToast as makeShow,
@@ -80,12 +81,16 @@ const GLYPH_CELLS = 2;
  * in the agent list. An unstated tone gets NO glyph and neutral chrome: the
  * pill says what it was given and claims nothing further.
  */
-function toneStyle(tone: ToastTone | undefined, theme: Theme): { glyph?: string; color: string } {
+function toneStyle(
+  tone: ToastTone | undefined,
+  theme: Theme,
+  symbols: SymbolTable,
+): { glyph?: string; color: string } {
   switch (tone) {
-    case "success": return { glyph: "✓", color: theme.SUCCESS };
-    case "warning": return { glyph: "!", color: theme.WARNING };
-    case "error": return { glyph: "×", color: theme.ERROR };
-    case "info": return { glyph: "·", color: theme.ACCENT };
+    case "success": return { glyph: symbols.check, color: theme.SUCCESS };
+    case "warning": return { glyph: symbols.warning, color: theme.WARNING };
+    case "error": return { glyph: symbols.cross, color: theme.ERROR };
+    case "info": return { glyph: symbols.info, color: theme.ACCENT };
     default: return { color: theme.ACCENT };
   }
 }
@@ -108,10 +113,11 @@ export function Toast({
   zIndex = 50,
 }: ToastProps): ReactNode {
   const theme = useTheme();
+  const symbols = useSymbols();
 
   if (!frame.visible || frame.message.trim().length === 0) return null;
 
-  const tone = toneStyle(frame.tone, theme);
+  const tone = toneStyle(frame.tone, theme, symbols);
 
   // Budget the label against the pill's inner width so it can never overflow
   // its border. `fitTuiText` also strips control chars from the message. The

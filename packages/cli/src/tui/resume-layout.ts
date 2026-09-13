@@ -46,7 +46,11 @@ import { computeDialogPanel, type DialogItem, type DialogPanel } from "./dialog-
 import { operatorIcon, operatorTitle } from "./operator-icons.js";
 import { relativeAge, type StoredSessionMeta } from "./session-store.js";
 import { shellChromeRows, wrapCells } from "./settings-layout.js";
+import { getSymbols, type SymbolTable } from "./symbols.js";
 import { sanitizeTuiText } from "./text.js";
+
+/** Module-default table (Unicode) for callers that pass no `symbols`. */
+const DEFAULT_SYMBOLS = getSymbols("unicode");
 
 export { shellChromeRows, wrapCells };
 
@@ -168,6 +172,8 @@ export interface ResumeItemsInput {
    * makes the same fact visible.
    */
   protectedSessionIds?: ReadonlySet<string>;
+  /** Active glyph preset; absent, the width-safe Unicode default is used. */
+  symbols?: SymbolTable;
 }
 
 /**
@@ -187,7 +193,9 @@ export function resumeItems({
   now,
   filter = "",
   protectedSessionIds,
+  symbols = DEFAULT_SYMBOLS,
 }: ResumeItemsInput): DialogItem[] {
+  const ICON_PROTECTED = symbols.fieldProtected;
   const terms = sanitizeTuiText(filter).toLowerCase().split(" ").filter(Boolean);
   const matched = sessions.filter((session) => {
     if (terms.length === 0) return true;
@@ -289,9 +297,11 @@ export interface ResumeDetailInput {
 export function resumeDetailLines(
   { session, now, compact = false, isProtected = false }: ResumeDetailInput,
   width: number,
+  symbols: SymbolTable = DEFAULT_SYMBOLS,
 ): ResumeDetailLine[] {
   const limit = cells(width);
   if (!session || limit <= 0) return [];
+  const ICON_PROTECTED = symbols.fieldProtected;
 
   const lines: ResumeDetailLine[] = [];
   const push = (value: string, tone: ResumeDetailTone) => {
@@ -496,18 +506,26 @@ export function computeResumeDialogLayout({
  * directory — with no `currentCwd` the list is not split, and claiming a scope
  * it did not apply would be a lie about what is on screen.
  */
-export function resumeDialogTitle(scope: "project" | "all", scoped: boolean): string {
-  const head = `${operatorIcon("resume")} ${operatorTitle("resume")}`;
+export function resumeDialogTitle(
+  scope: "project" | "all",
+  scoped: boolean,
+  symbols: SymbolTable = DEFAULT_SYMBOLS,
+): string {
+  const head = `${operatorIcon("resume", symbols)} ${operatorTitle("resume")}`;
   if (!scoped) return head;
   return `${head} · ${scope === "project" ? "this project" : "all projects"}`;
 }
 
 /** The right-aligned counter beside the title: rows actually on screen. */
-export function resumeDialogCount(matched: number, protectedCount = 0): string {
+export function resumeDialogCount(
+  matched: number,
+  protectedCount = 0,
+  symbols: SymbolTable = DEFAULT_SYMBOLS,
+): string {
   const count = cells(matched);
   const locked = cells(protectedCount);
   const head = `${count} audit${count === 1 ? "" : "s"}`;
-  return locked > 0 ? `${head} · ${ICON_PROTECTED} ${locked} live` : head;
+  return locked > 0 ? `${head} · ${symbols.fieldProtected} ${locked} live` : head;
 }
 
 // ---------------------------------------------------------------------------
@@ -537,7 +555,9 @@ export function resumeFooterHint(
    * advertising a deletion that cannot happen.
    */
   highlightProtected = false,
+  symbols: SymbolTable = DEFAULT_SYMBOLS,
 ): string {
+  const ICON_PROTECTED = symbols.fieldProtected;
   const count = sessionCount !== undefined ? `${sessionCount} audit${sessionCount === 1 ? "" : "s"}` : undefined;
 
   switch (mode) {

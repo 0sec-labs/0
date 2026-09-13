@@ -2,6 +2,7 @@
 import React, { useEffect, useState } from "react";
 import { VERSION } from "@0sec/shared";
 import { useTheme } from "./theme-context.js";
+import { useSymbols } from "./symbol-context.js";
 import { fitTuiText } from "./text.js";
 import { useSettings } from "./settings-store.js";
 import { useDialogSurface, useSurfaceDimensions } from "./dialog-surface.js";
@@ -101,6 +102,7 @@ function HeaderBar({
   status?: React.ReactNode;
 }) {
   const theme = useTheme();
+  const symbols = useSymbols();
   const { width } = useSurfaceDimensions();
   const contentWidth = Math.max(1, width - SHELL_HORIZONTAL_PADDING * 2);
   const statusWidth = status
@@ -114,7 +116,7 @@ function HeaderBar({
         <RailBar tone={theme.PRIMARY} />
         <box flexDirection="row" marginLeft={1} flexGrow={1} minWidth={0}>
           <box width={titleWidth} flexShrink={0} minWidth={0}>
-            <text fg={theme.TEXT}>{fitTuiText(`${operatorIcon(view)} ${operatorTitle(view)}`, titleWidth)}</text>
+            <text fg={theme.TEXT}>{fitTuiText(`${operatorIcon(view, symbols)} ${operatorTitle(view)}`, titleWidth)}</text>
           </box>
           {status ? (
             <box width={statusWidth} flexShrink={0} minWidth={0} alignItems="flex-end">

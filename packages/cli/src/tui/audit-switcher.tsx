@@ -3,6 +3,7 @@ import React, { useEffect, useState } from "react";
 import { TextAttributes } from "@opentui/core";
 import type { AuditSummary } from "./audit-workspace.js";
 import type { Theme } from "./theme-context.js";
+import { useSymbols } from "./symbol-context.js";
 import { useSettings } from "./settings-store.js";
 import { spinnerGlyph, UI_ANIMATION_INTERVAL_MS } from "./animations.js";
 import { fitTuiText, sanitizeTuiText } from "./text.js";
@@ -20,6 +21,7 @@ export interface AuditSwitcherProps {
 
 /** Presentation only: selecting and closing are requests to the workspace owner. */
 export function AuditSwitcher({ records, selectedAuditId, onSelect, onCreate, onClose, width, rows, theme }: AuditSwitcherProps) {
+  const symbols = useSymbols();
   const { reduceMotion } = useSettings();
   const [frame, setFrame] = useState(0);
   const columns = Number.isFinite(width) ? Math.max(0, Math.floor(width)) : 0;
@@ -56,13 +58,13 @@ export function AuditSwitcher({ records, selectedAuditId, onSelect, onCreate, on
       {records.length === 0 && capacity > 0 ? <text width={columns} height={1} wrapMode="none" truncate fg={theme.MUTED}>{fitTuiText("No live audits · create with Ctrl+Alt+N", columns)}</text> : null}
       {visible.map(record => {
         const active = record.id === selectedAuditId;
-        const glyph = record.status === "completed" ? "✓" : record.status === "failed" ? "×"
+        const glyph = record.status === "completed" ? symbols.check : record.status === "failed" ? symbols.cross
           : record.status === "running" ? spinnerGlyph(frame, { reduceMotion })
-          : record.status === "waiting" ? "?" : record.status === "stopping" ? "◌" : record.status === "stopped" ? "■" : "·";
+          : record.status === "waiting" ? "?" : record.status === "stopping" ? symbols.parked : record.status === "stopped" ? symbols.stopped : symbols.queued;
         const color = record.status === "completed" ? theme.SUCCESS : record.status === "failed" ? theme.ERROR
           : record.status === "running" ? theme.ACCENT : record.status === "waiting" ? theme.WARNING : theme.MUTED;
         const title = sanitizeTuiText(record.title).trim() || "Untitled audit";
-        const label = `${active ? "›" : " "}${record.unread ? "*" : " "} ${glyph} ${title}`;
+        const label = `${active ? symbols.rowMarker : " "}${record.unread ? "*" : " "} ${glyph} ${title}`;
         const activity = (record.status === "running" || record.status === "waiting") && record.activity
           ? `${record.status} · ${sanitizeTuiText(record.activity)}` : record.status;
         return (

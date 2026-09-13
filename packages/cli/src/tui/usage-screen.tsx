@@ -29,6 +29,7 @@ import { TextAttributes } from "@opentui/core";
 import { useKeyboard } from "@opentui/react";
 
 import { useTheme, type Theme } from "./theme-context.js";
+import { useSymbols, type SymbolTable } from "./symbol-context.js";
 import { useDialogSurface, useSurfaceDimensions } from "./dialog-surface.js";
 import { operatorIcon, operatorTitle } from "./operator-icons.js";
 import { Cells } from "./primitives.js";
@@ -140,10 +141,12 @@ function ReportRow({
   row,
   layout,
   theme,
+  symbols,
 }: {
   row: UsageReportRow;
   layout: UsageLayout;
   theme: Theme;
+  symbols: SymbolTable;
 }) {
   const inner = layout.pane.innerWidth;
 
@@ -177,7 +180,7 @@ function ReportRow({
     return (
       <box flexDirection="row" width={meter.width} flexShrink={0} minWidth={0}>
         <Cells width={meter.barCells} fg={barFg}>
-          {usageMeterBar(row.fraction ?? 0, meter.barCells)}
+          {usageMeterBar(row.fraction ?? 0, meter.barCells, symbols)}
         </Cells>
         <Cells width={meter.gap}>{""}</Cells>
         <Cells width={meter.captionWidth} fg={barFg}>
@@ -214,6 +217,7 @@ const DIALOG_HOST_ROWS = 1;
 
 export function UsageScreen({ frame, usage, onBack, onExit }: UsageScreenProps) {
   const theme = useTheme();
+  const symbols = useSymbols();
   const { width, height } = useSurfaceDimensions();
   const inDialog = useDialogSurface();
 
@@ -221,7 +225,7 @@ export function UsageScreen({ frame, usage, onBack, onExit }: UsageScreenProps) 
   // point-in-time reading handed in by the route; it does not change under a
   // screen that has no way to run a turn.
   const snapshot = useMemo<UsageSnapshot>(() => usage ?? readCurrentUsage(), [usage]);
-  const report = useMemo(() => buildUsageReport(snapshot), [snapshot]);
+  const report = useMemo(() => buildUsageReport(snapshot, symbols), [snapshot, symbols]);
 
   const layout = computeUsageLayout({
     width,
@@ -257,7 +261,7 @@ export function UsageScreen({ frame, usage, onBack, onExit }: UsageScreenProps) 
   // Title row: `▥ Usage` bold on the left, the model the snapshot actually
   // reports right-aligned. The two columns sum to the content width, so they
   // can never fuse; the glyph always travels with its text label.
-  const title = `${operatorIcon("usage")} ${operatorTitle("usage")}`;
+  const title = `${operatorIcon("usage", symbols)} ${operatorTitle("usage")}`;
   const meta = usageDialogMeta(snapshot);
   const titleCols = paneTitleColumns(layout.contentWidth, meta.length);
 
@@ -274,7 +278,7 @@ export function UsageScreen({ frame, usage, onBack, onExit }: UsageScreenProps) 
       </box>
       <Pane pane={layout.pane} bordered={layout.bordered}>
         {visible.map((row, index) => (
-          <ReportRow key={`usage-${index}`} row={row} layout={layout} theme={theme} />
+          <ReportRow key={`usage-${index}`} row={row} layout={layout} theme={theme} symbols={symbols} />
         ))}
       </Pane>
     </box>

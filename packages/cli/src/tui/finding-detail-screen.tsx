@@ -35,6 +35,7 @@ import type { Finding } from "@0sec/shared";
 import { renderPlatformReport, renderCvssSection, redactSensitiveHeaders } from "@0sec/core";
 
 import { useTheme, type Theme } from "./theme-context.js";
+import { useSymbols, type SymbolTable } from "./symbol-context.js";
 import { useDialogSurface, useSurfaceDimensions } from "./dialog-surface.js";
 import { operatorIcon } from "./operator-icons.js";
 import { Cells } from "./primitives.js";
@@ -201,10 +202,12 @@ function DetailRow({
   row,
   layout,
   theme,
+  symbols,
 }: {
   row: FindingDetailRow;
   layout: FindingDetailLayout;
   theme: Theme;
+  symbols: SymbolTable;
 }) {
   const inner = layout.pane.innerWidth;
 
@@ -219,7 +222,7 @@ function DetailRow({
   if (row.kind === "header") {
     // Two-column strong header: bold title left, severity badge right (a leading
     // "●" then the severity word, coloured by tone — red only for high/critical).
-    const badgeText = row.badge ? `● ${row.badge}` : "";
+    const badgeText = row.badge ? `${symbols.bulletFilled} ${row.badge}` : "";
     const cols = paneTitleColumns(inner, badgeText.length);
     return (
       <box flexDirection="row" width={inner} flexShrink={0} minWidth={0}>
@@ -324,6 +327,7 @@ export function FindingDetailScreen({
   onExit,
 }: FindingDetailScreenProps) {
   const theme = useTheme();
+  const symbols = useSymbols();
   const { width, height } = useSurfaceDimensions();
   // Inside a dialog the host spends exactly one row (its footer) and no
   // padding, and the surface is the panel interior — so the legacy shell
@@ -360,8 +364,9 @@ export function FindingDetailScreen({
       buildFindingRows(finding, layout.pane.innerWidth, {
         redact: redactSensitiveHeaders,
         cvssLine: finding ? plainCvssLine(finding) : undefined,
+        symbols,
       }),
-    [finding, layout.pane.innerWidth],
+    [finding, layout.pane.innerWidth, symbols],
   );
 
   const window = computeScrollWindow({
@@ -482,13 +487,13 @@ export function FindingDetailScreen({
       <Pane
         pane={layout.pane}
         bordered={layout.bordered}
-        title={`${operatorIcon("finding")} ${findingDetailTitle(finding)}`}
+        title={`${operatorIcon("finding", symbols)} ${findingDetailTitle(finding)}`}
         titleFg={theme.PRIMARY}
         titleRight={titleRight}
         titleRightFg={titleRightFg}
       >
         {visibleRows.map((row, index) => (
-          <DetailRow key={`detail-${window.start + index}`} row={row} layout={layout} theme={theme} />
+          <DetailRow key={`detail-${window.start + index}`} row={row} layout={layout} theme={theme} symbols={symbols} />
         ))}
       </Pane>
       <ActionBar actions={actions} layout={layout} theme={theme} />

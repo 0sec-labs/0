@@ -28,7 +28,11 @@
 
 import { MODEL_PRICING, type ModelRates, type TokenUsageForPricing } from "@0sec/shared";
 
+import { getSymbols, type SymbolTable } from "./symbols.js";
 import { fitTuiText } from "./text.js";
+
+/** Module-default table (Unicode) for callers that pass no `symbols`. */
+const DEFAULT_SYMBOLS = getSymbols("unicode");
 
 export type StatusSegmentKind =
   | "model"
@@ -145,6 +149,12 @@ export interface StatusBarInput {
   showCost?: boolean;
   /** Already formatted authoritative Cloud account state, never a quota estimate. */
   hostedBalance?: string;
+  /**
+   * Active glyph preset. Resolved by the screen via `useSymbols()` and threaded
+   * through; absent, the width-safe Unicode default is used, so the bar is
+   * unchanged until the caller wires it.
+   */
+  symbols?: SymbolTable;
 }
 
 /**
@@ -205,22 +215,24 @@ const ORDER: StatusSegmentKind[] = [
  * Text glyphs that retain their labels and require no patched icon font. Their
  * width is included in the status-row budget alongside the label.
  */
-const ICON: Record<StatusSegmentKind, string> = {
-  model: "◈",
-  effort: "✦",
-  mode: "◐",
-  elapsed: "",
-  evolution: "",
-  cwd: "⌂",
-  branch: "⑂",
-  dirty: "±",
-  tokens: "↕",
-  cost: "$",
-  cloud: "",
-  context: "◫",
-  meter: "◫",
-  plan: "▣",
-};
+function iconMap(symbols: SymbolTable): Record<StatusSegmentKind, string> {
+  return {
+    model: symbols.fieldModel,
+    effort: symbols.fieldEffort,
+    mode: symbols.fieldMode,
+    elapsed: "",
+    evolution: "",
+    cwd: symbols.fieldCwd,
+    branch: symbols.fieldBranch,
+    dirty: symbols.fieldDirty,
+    tokens: symbols.fieldTokens,
+    cost: symbols.fieldCost,
+    cloud: "",
+    context: symbols.fieldContext,
+    meter: symbols.fieldContext,
+    plan: symbols.fieldPlan,
+  };
+}
 
 /** Semantic colour role per kind; the meter shares the plain percent's role. */
 const COLOR_ROLE: Record<StatusSegmentKind, StatusColorRole> = {
@@ -300,8 +312,6 @@ function label(value: string | null | undefined): string {
 
 /** Cells in the visual context bar; matches the `▰▰▰▱▱▱` reference width. */
 const METER_CELLS = 6;
-const METER_FILLED = "▰";
-const METER_EMPTY = "▱";
 
 /**
  * A compact unicode usage bar plus the percent and window, e.g.
@@ -309,10 +319,10 @@ const METER_EMPTY = "▱";
  * artefact can never paint a seventh cell or a negative one. The renderer picks
  * the colour off the `meter` segment kind, matching the existing pattern.
  */
-function contextMeter(percent: number, contextWindow: number): string {
+function contextMeter(percent: number, contextWindow: number, symbols: SymbolTable): string {
   const fraction = Math.max(0, Math.min(1, percent / 100));
   const filled = Math.max(0, Math.min(METER_CELLS, Math.round(fraction * METER_CELLS)));
-  const bar = METER_FILLED.repeat(filled) + METER_EMPTY.repeat(METER_CELLS - filled);
+  const bar = symbols.meterFilled.repeat(filled) + symbols.meterEmpty.repeat(METER_CELLS - filled);
   return `${bar} ${percent}% of ${formatTokenCount(contextWindow)}`;
 }
 
@@ -391,6 +401,8 @@ function dirtyText(modified: number, untracked: number): string {
  * from a bar reporting the truth, which makes the whole line untrustworthy.
  */
 export function buildStatusSegments(input: StatusBarInput): StatusSegment[] {
+  const symbols = input.symbols ?? DEFAULT_SYMBOLS;
+  const ICON = iconMap(symbols);
   const texts = new Map<StatusSegmentKind, string>();
   if (input.hostedBalance) texts.set("cloud", input.hostedBalance);
 
@@ -470,7 +482,7 @@ export function buildStatusSegments(input: StatusBarInput): StatusSegment[] {
     const used = Math.max(0, input.contextUsed as number);
     const percent = roundForDisplay((used / contextWindow) * 100);
     if (input.showContextMeter) {
-      texts.set("meter", `Context: ${contextMeter(percent, contextWindow)}`);
+      texts.set("meter", `Context: ${contextMeter(percent, contextWindow, symbols)}`);
     } else {
       texts.set("context", `${percent}%/${formatTokenCount(contextWindow)}`);
     }

@@ -2,6 +2,7 @@
 import React, { type MutableRefObject, useMemo } from "react";
 import type { PresentationTranscriptDocument } from "@0sec/shared";
 import type { Theme } from "../theme-context.js";
+import { useSymbols } from "../symbol-context.js";
 import {
   compileTranscriptReview,
   reviewRule,
@@ -29,6 +30,7 @@ export function TranscriptReview({
   theme,
   renderableRef,
 }: TranscriptReviewProps) {
+  const symbols = useSymbols();
   const document = useMemo<TranscriptReviewDocument>(
     () => compileTranscriptReview(transcript, { width, detail, expandedTurns }),
     [detail, expandedTurns, transcript, width],
@@ -42,7 +44,7 @@ export function TranscriptReview({
   // empty transcript says so instead of printing "0 entries" under a heading.
   const count = transcript.entries.length;
   // The registered `replay` glyph, always beside its label — never glyph-only.
-  const title = `${operatorIcon("replay")} TRANSCRIPT REVIEW`;
+  const title = `${operatorIcon("replay", symbols)} TRANSCRIPT REVIEW`;
   const hints = "Esc / Ctrl+O live · PgUp/PgDn scroll · Ctrl+Home/Ctrl+End jump";
   const rule = reviewRule(width);
   const content = document.text

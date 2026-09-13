@@ -4,14 +4,16 @@ import { useKeyboard } from "@opentui/react";
 import { useHarness } from "./harness-context.js";
 import { HarnessViewPanel } from "./harness-view.js";
 import { useTheme } from "./theme-context.js";
+import { useSymbols } from "./symbol-context.js";
 import { operatorIcon, operatorTitle } from "./operator-icons.js";
 import { fitTuiText } from "./text.js";
 
 /** The dialog title row: glyph plus its label, never a glyph alone. */
 function HarnessTitle({ contentWidth }: { contentWidth: number }) {
   const theme = useTheme();
+  const symbols = useSymbols();
   return <text fg={theme.PRIMARY} flexShrink={0}>
-    {fitTuiText(`${operatorIcon("harness")} ${operatorTitle("harness")}`, contentWidth)}
+    {fitTuiText(`${operatorIcon("harness", symbols)} ${operatorTitle("harness")}`, contentWidth)}
   </text>;
 }
 

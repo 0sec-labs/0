@@ -34,6 +34,7 @@ import { decodePasteBytes, TextAttributes } from "@opentui/core";
 import { eventBus, peekInbox, sendOperatorMessage, type MessagingRuntime } from "@0sec/core";
 
 import { useTheme, type Theme } from "./theme-context.js";
+import { useSymbols } from "./symbol-context.js";
 import { useDialogSurface, useSurfaceDimensions } from "./dialog-surface.js";
 import { operatorIcon, operatorTitle } from "./operator-icons.js";
 import { Cells } from "./primitives.js";
@@ -274,6 +275,7 @@ export function HerdScreen({
   sendSteer,
 }: HerdScreenProps) {
   const theme = useTheme();
+  const symbols = useSymbols();
   const { width, height } = useSurfaceDimensions();
   // Inside a dialog the host draws one footer row and no padding, and the
   // surface is the panel interior, so the legacy shell chrome allowance must
@@ -917,7 +919,7 @@ export function HerdScreen({
   // Title row: `♙ Agents` on the left; on the right an honest count of the
   // merged roster and the highlighted agent's own status. An empty roster says
   // "none" — the hub still has no producer, and that is the normal state.
-  const title = `${operatorIcon("agents")} ${operatorTitle("agents")}`;
+  const title = `${operatorIcon("agents", symbols)} ${operatorTitle("agents")}`;
   const listMeta = [
     herdDialogMeta(dialogItems.length, mergedPeers.length),
     activeRow?.kind === "peer" ? herdStatusLabel(activeRow.status) : "",
@@ -1015,7 +1017,7 @@ export function HerdScreen({
         <Pane
           pane={focusLayout.meta}
           bordered={focusLayout.bordered}
-          title={`${operatorIcon("agents")} Focus`}
+          title={`${operatorIcon("agents", symbols)} Focus`}
           meta={focusRecord ? subagentStatusLabel(focusRecord.status) : undefined}
         >
           <scrollbox

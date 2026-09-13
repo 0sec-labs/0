@@ -35,7 +35,11 @@ import type { Finding, Severity } from "@0sec/shared";
 
 import { computeKvSplit } from "./pane-layout.js";
 import { shellChromeRows, wrapCells } from "./settings-layout.js";
+import { getSymbols, type SymbolTable } from "./symbols.js";
 import { sanitizeTuiText } from "./text.js";
+
+/** Module-default table (Unicode) for callers that pass no `symbols`. */
+const DEFAULT_SYMBOLS = getSymbols("unicode");
 
 export { shellChromeRows, wrapCells };
 
@@ -138,6 +142,11 @@ export interface BuildFindingRowsOptions {
    * and score, and falls back to an em-dash when neither exists.
    */
   cvssLine?: string;
+  /**
+   * Active glyph preset. The screen resolves it via `useSymbols()` and passes
+   * it through; absent, the width-safe Unicode default is used.
+   */
+  symbols?: SymbolTable;
 }
 
 const EM_DASH = "—";
@@ -185,17 +194,25 @@ function findingCvssLine(finding: Finding, injected: string | undefined): string
   return EM_DASH;
 }
 
-// ── Row markers: plain text glyphs ──────────────────────────────────────────
-const ICON_CATEGORY  = "▦"; // nf-fa-folder-open
-const ICON_STATUS    = "●"; // nf-fa-circle
-const ICON_TRIAGE    = "◈"; // nf-fa-tags
-const ICON_CONFID    = "◐"; // nf-fa-info-circle
-const ICON_LOCATION  = "▥"; // nf-fa-folder
-const ICON_DESC      = "▤"; // nf-fa-file-text
-const ICON_EVIDENCE  = "✦"; // nf-fa-eye
-const ICON_FIX       = "✚"; // nf-fa-gavel
-const ICON_CVSS      = "◇"; // nf-fa-diamond
-const ICON_LINK      = "↗"; // nf-fa-link
+// ── Row markers ──────────────────────────────────────────────────────────────
+// Glyphs now come from the active symbol preset (symbols.ts): the Unicode
+// default upgrades these thin outlines to heavier forms, the `nerd` preset
+// restores the exact `nf-fa-…` PUA icons this row set was written for, and
+// `ascii` degrades safely. Resolved per-call from `options.symbols`.
+function findingRowIcons(symbols: SymbolTable): Readonly<Record<string, string>> {
+  return {
+    category: symbols.fieldFolderOpen, // nf-fa-folder-open
+    status: symbols.fieldStatus, // nf-fa-circle
+    triage: symbols.fieldTags, // nf-fa-tags
+    confid: symbols.fieldInfo, // nf-fa-info-circle
+    location: symbols.fieldFolder, // nf-fa-folder
+    desc: symbols.fieldFile, // nf-fa-file-text
+    evidence: symbols.fieldEye, // nf-fa-eye
+    fix: symbols.fieldGavel, // nf-fa-gavel
+    cvss: symbols.fieldDiamond, // nf-fa-diamond
+    link: symbols.fieldLink, // nf-fa-link
+  };
+}
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
@@ -219,6 +236,7 @@ export function buildFindingRows(
   }
 
   const redact = options.redact ?? ((text: string) => text);
+  const icon = findingRowIcons(options.symbols ?? DEFAULT_SYMBOLS);
   const rows: FindingDetailRow[] = [];
 
 
@@ -228,7 +246,7 @@ export function buildFindingRows(
   // 2. Severity — explicit kv row (coloured badge tone for critical/high).
   rows.push({
     kind: "kv",
-    label: `${ICON_STATUS} Severity`,
+    label: `${icon.status} Severity`,
     value: finding.severity ? String(finding.severity).toUpperCase() : EM_DASH,
     tone: severityDetailTone(finding.severity),
   });
@@ -236,31 +254,31 @@ export function buildFindingRows(
   // 3. Status
   rows.push({
     kind: "kv",
-    label: `${ICON_STATUS} Status`,
+    label: `${icon.status} Status`,
     value: finding.status ? findingText(finding.status) : EM_DASH,
     tone: "text",
   });
 
   // 4. CVSS — near top alongside severity/status.
-  pushWrapped(rows, `${ICON_CVSS} CVSS: ${findingCvssLine(finding, options.cvssLine)}`, width, "text");
+  pushWrapped(rows, `${icon.cvss} CVSS: ${findingCvssLine(finding, options.cvssLine)}`, width, "text");
 
   // 5. Category
   rows.push({
     kind: "kv",
-    label: `${ICON_CATEGORY} Category`,
+    label: `${icon.category} Category`,
     value: finding.category ? findingText(finding.category) : EM_DASH,
     tone: "text",
   });
 
   // 6. Triage (if present)
   if (finding.triageStatus) {
-    rows.push({ kind: "kv", label: `${ICON_TRIAGE} Triage`, value: findingText(finding.triageStatus), tone: "text" });
+    rows.push({ kind: "kv", label: `${icon.triage} Triage`, value: findingText(finding.triageStatus), tone: "text" });
   }
 
   // 7. Confidence
   rows.push({
     kind: "kv",
-    label: `${ICON_CONFID} Confidence`,
+    label: `${icon.confid} Confidence`,
     value:
       typeof finding.confidence === "number" && Number.isFinite(finding.confidence)
         ? `${Math.round(clamp(finding.confidence, 0, 1) * 100)}%`
@@ -269,7 +287,7 @@ export function buildFindingRows(
   });
 
   // 8. Location — compact section label inline with wrapped text.
-  pushWrapped(rows, `${ICON_LOCATION} Location: ${findingLocation(finding) ?? EM_DASH}`, width, "text");
+  pushWrapped(rows, `${icon.location} Location: ${findingLocation(finding) ?? EM_DASH}`, width, "text");
 
   // 9. Endpoint+method — only from actual evidence.request first line.
   const redactedRequest = finding.evidence?.request ? redact(finding.evidence.request) : "";
@@ -281,12 +299,12 @@ export function buildFindingRows(
   }
 
   // 10. Description
-  pushWrapped(rows, `${ICON_DESC} Description: ${finding.description || EM_DASH}`, width, "text");
+  pushWrapped(rows, `${icon.desc} Description: ${finding.description || EM_DASH}`, width, "text");
 
   // 11. Evidence — subsections (Request / Response / Analysis) visibly distinct.
   const ev = finding.evidence;
   if (ev && (ev.request || ev.response || ev.analysis)) {
-    rows.push({ kind: "text", text: `${ICON_EVIDENCE} Evidence`, tone: "heading" });
+    rows.push({ kind: "text", text: `${icon.evidence} Evidence`, tone: "heading" });
 
     if (ev.request) {
       const reqText = `Request:\n${redactedRequest}`;
@@ -317,15 +335,15 @@ export function buildFindingRows(
       }
     }
   } else {
-    pushWrapped(rows, `${ICON_EVIDENCE} Evidence: ${EM_DASH}`, width, "muted");
+    pushWrapped(rows, `${icon.evidence} Evidence: ${EM_DASH}`, width, "muted");
   }
 
   // 12. Remediation
   const remediation = finding.remediation;
   if (!remediation || (!remediation.summary && (remediation.steps?.length ?? 0) === 0)) {
-    pushWrapped(rows, `${ICON_FIX} Remediation: ${EM_DASH}`, width, "muted");
+    pushWrapped(rows, `${icon.fix} Remediation: ${EM_DASH}`, width, "muted");
   } else {
-    pushWrapped(rows, `${ICON_FIX} Remediation${remediation.summary ? `: ${remediation.summary}` : ""}`, width, "text");
+    pushWrapped(rows, `${icon.fix} Remediation${remediation.summary ? `: ${remediation.summary}` : ""}`, width, "text");
     for (const step of remediation.steps ?? []) {
       pushWrapped(rows, `${step}`, width, "text");
     }
@@ -334,9 +352,9 @@ export function buildFindingRows(
   // 13. References
   const refs = [...(finding.remediation?.references ?? []), ...(finding.dedupRefs ?? [])];
   if (refs.length === 0) {
-    pushWrapped(rows, `${ICON_LINK} References: ${EM_DASH}`, width, "muted");
+    pushWrapped(rows, `${icon.link} References: ${EM_DASH}`, width, "muted");
   } else {
-    rows.push({ kind: "text", text: `${ICON_LINK} References`, tone: "heading" });
+    rows.push({ kind: "text", text: `${icon.link} References`, tone: "heading" });
     for (const ref of refs) pushWrapped(rows, ref, width, "accent");
   }
 

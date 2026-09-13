@@ -187,6 +187,14 @@ export interface TuiSettings {
   diagnosticReportingPrompted: boolean;
   /** Operator-global update policy; unset installations remain opted out. */
   updatePolicy: "off" | "notify" | "automatic";
+  /**
+   * Symbol/glyph preset for status marks, row icons, checkboxes and spinners.
+   * "unicode" (default) uses width-safe geometric glyphs; "nerd" restores the
+   * Nerd Font PUA icons (offered to the operator profile only after
+   * release-owner qualification); "ascii" is a single-cell, terminal-safe set.
+   * NO runtime font detection — this is an explicit operator choice.
+   */
+  symbolPreset: "unicode" | "nerd" | "ascii";
 }
 
 /** Keys of `TuiSettings` whose value is a boolean. */
@@ -224,7 +232,8 @@ type TuiSettingDef =
   | EnumSettingDef<"diagnosticReporting">
   | EnumSettingDef<"updatePolicy">
   | EnumSettingDef<"logoAnimation">
-  | EnumSettingDef<"theme">;
+  | EnumSettingDef<"theme">
+  | EnumSettingDef<"symbolPreset">;
 
 /**
  * Selectable values for the `theme` setting: the built-ins, plus any user
@@ -559,6 +568,15 @@ const DEFS: readonly TuiSettingDef[] = [
     choices: ["off", "notify", "automatic"],
     group: "Updates",
   },
+  {
+    key: "symbolPreset",
+    label: "Symbols",
+    description: "Glyph set for icons, status marks and checkboxes: Unicode (default, works everywhere), Nerd Font (crisp patched-font icons — requires a Nerd Font terminal) or ASCII (plain, single-cell).",
+    kind: "enum",
+    default: "unicode",
+    choices: ["unicode", "nerd", "ascii"],
+    group: "Display",
+  },
 ];
 
 export const SETTING_DEFS: readonly SettingDef[] = DEFS;
@@ -601,6 +619,7 @@ export const DEFAULT_SETTINGS: TuiSettings = {
   diagnosticReporting: "automatic",
   diagnosticReportingPrompted: false,
   updatePolicy: "off",
+  symbolPreset: "unicode",
 };
 
 /** Basename of the settings file inside the 0sec state directory. */
@@ -859,6 +878,7 @@ export function normalizeSettings(raw: unknown): TuiSettings {
     diagnosticReporting: strictValueAt(raw, "diagnosticReporting") ?? DEFAULT_SETTINGS.diagnosticReporting,
     diagnosticReportingPrompted: booleanAt(raw, "diagnosticReportingPrompted"),
     updatePolicy: strictValueAt(raw, "updatePolicy") ?? DEFAULT_SETTINGS.updatePolicy,
+    symbolPreset: enumAt(raw, "symbolPreset"),
   };
 }
 
