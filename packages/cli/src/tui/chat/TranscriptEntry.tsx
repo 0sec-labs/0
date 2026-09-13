@@ -3,12 +3,13 @@ import React from "react";
 import { TextAttributes } from "@opentui/core";
 import { MODEL_PRICING, type ModelRates } from "@0sec/shared";
 import { fitTuiText, sanitizeTuiText } from "../text.js";
-import { agentAccentFor } from "../agent-color.js";
 import { ShimmerText } from "./shimmer.js";
 import { renderMarkdown } from "../markdown.js";
 import { formatElapsed } from "../animation.js";
 import { repeatSuffix } from "../transcript.js";
 import { panelColumns } from "../panels.js";
+import { MessageCard } from "./MessageCard.js";
+import { messageCardFromPeerEntry } from "./message-card-layout.js";
 import {
   foldSummary,
   roleLabelText,
@@ -492,30 +493,20 @@ export function renderEntry(
   }
 
   if (entry.kind === "peer") {
-    // An inter-agent (IRC) message: `» from → to  body`, each name in its stable
-    // agent accent so a reader tracks who is talking to whom at a glance. A
-    // broadcast recipient renders as `#all` in the muted channel tone. The body
-    // is fit to the remaining width so the line never overflows the column.
-    const from = entry.peerFrom ?? "?";
-    const rawTo = entry.peerTo ?? "?";
-    const toLabel = rawTo === "all" ? "#all" : rawTo;
-    const fromFg = agentAccentFor(from, theme.CANVAS);
-    const toFg = rawTo === "all" ? MUTED : agentAccentFor(rawTo, theme.CANVAS);
-    const age = display.showTimestamps ? relativeAge(entry.at, display.now) : "";
-    const timePrefix = age ? `${age} ` : "";
-    const lead = `» ${timePrefix}`;
-    const prefixCells = lead.length + from.length + 3 + toLabel.length + 2;
-    const bodyCells = Math.max(4, maxWidth - prefixCells);
+    // An inter-agent (IRC) message, drawn as an OMP-style directional card:
+    // `» from → to` with each name in its stable agent accent, meta chips (kind ·
+    // reply · age), and a bounded/collapsible body. Degrades to a single line
+    // when the column is too narrow for a card.
     return (
-      <box key={entry.id} flexDirection="row" marginTop={display.spacing} minWidth={0}>
-        <text flexShrink={0} fg={MUTED}>{lead}</text>
-        <text flexShrink={0} fg={fromFg} attributes={TextAttributes.BOLD}>{from}</text>
-        <text flexShrink={0} fg={MUTED}>{" → "}</text>
-        <text flexShrink={0} fg={toFg} attributes={TextAttributes.BOLD}>{toLabel}</text>
-        <box flexGrow={1} minWidth={0} marginLeft={2}>
-          <text fg={TEXT}>{fitTuiText(entry.text, bodyCells)}</text>
-        </box>
-      </box>
+      <MessageCard
+        key={entry.id}
+        data={messageCardFromPeerEntry(entry, { now: display.now })}
+        width={maxWidth}
+        theme={theme}
+        spacing={display.spacing}
+        expanded={fullDetails}
+        toggleable={interactive}
+      />
     );
   }
 
