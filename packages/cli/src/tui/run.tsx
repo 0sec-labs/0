@@ -35,6 +35,7 @@ import { ReplayScreen } from "./replay-screen.js";
 import { PanePalette } from "./command-palette.js";
 import type { FindingsScreenOptions } from "./findings-data.js";
 import { DialogSurface, useSurfaceDimensions } from "./dialog-surface.js";
+import { ShutdownDialog } from "./shutdown-dialog.js";
 import {
   ChatScreen,
   type ChatDestination,
@@ -1354,7 +1355,16 @@ function ConsoleApp({
     <box flexDirection="column" width="100%" height="100%">
       {pluginError ? <text fg={theme.ERROR} wrapMode="word">{pluginError}</text> : null}
       {shellError ? <text fg={theme.ERROR} wrapMode="word">{shellError}</text> : null}
-      {closingAll ? <text fg={theme.MUTED}>Stopping audits and awaiting cleanup…</text> : null}
+      {closingAll ? (
+        <ShutdownDialog
+          auditCount={records.length}
+          onForceQuit={() => {
+            appendTuiEvent({ kind: "shutdown", stage: "force-quit-button" });
+            try { process.stdout.write("\x1b[?1049l\x1b[?25h"); } catch { /* best-effort terminal restore */ }
+            process.exit(0);
+          }}
+        />
+      ) : null}
       <box flexDirection="column" width="100%" flexGrow={1} minHeight={0} position="relative" overflow="hidden">
         {!firstRun ? auditPanels : null}
         {onboarding ? (
