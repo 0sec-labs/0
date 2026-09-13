@@ -39,6 +39,7 @@ export type StatusSegmentKind =
   | "effort"
   | "mode"
   | "elapsed"
+  | "activity"
   | "evolution"
   | "cwd"
   | "branch"
@@ -68,6 +69,7 @@ export type StatusColorRole =
   | "effort"
   | "mode"
   | "elapsed"
+  | "activity"
   | "evolution"
   | "cwd"
   | "branch"
@@ -104,6 +106,15 @@ export interface StatusBarInput {
   mode?: string;
   /** Wall-clock elapsed for the active turn; omitted while idle or unknown. */
   turnElapsedMs?: number;
+  /**
+   * A live "what it's doing" one-liner, already composed by the caller from the
+   * TRUTHFUL in-flight source — the active tool name and its argument preview
+   * (`runningTool` + `runningEntry.toolArgs` in chat-screen). This module never
+   * invents it: no summarizer is wired into the TUI, so an absent activity means
+   * "nothing running", not "unknown". Omitted while idle. The caller owns any
+   * pre-truncation (the fitters still clamp it to the row width regardless).
+   */
+  activity?: string;
   cwd?: string;
   /** TUI-owned self-evolution state; omitted when the watcher is disabled. */
   evolution?: string;
@@ -188,17 +199,30 @@ const PRIORITY: Record<StatusSegmentKind, number> = {
   branch: 7,
   mode: 0,
   elapsed: 11,
+  // The live activity line is the most incidental pill: it is a transient
+  // "what it's doing" that the spinner line already echoes, so it sheds before
+  // anything the operator relies on to read (cwd, git, tokens, mode).
+  activity: 2,
   evolution: 8,
   cloud: 9,
   model: 0,
 };
 
-/** Segment order on screen, independent of drop priority. */
+/**
+ * Segment order on screen, independent of drop priority.
+ *
+ * `elapsed` leads so its pill lands immediately after the bottom-left spinner
+ * icon (`loadingLabel`, drawn before every pill by the renderer) — a compact,
+ * clock-glyphed turn timer right next to the working indicator. `activity`
+ * trails so the live "what it's doing" line reads as the rightmost pill,
+ * matching OMP's "live text lives at the right end" geometry within our
+ * single left-anchored row (a true flush-right cluster is a renderer change).
+ */
 const ORDER: StatusSegmentKind[] = [
+  "elapsed",
   "model",
   "effort",
   "mode",
-  "elapsed",
   "cloud",
   "evolution",
   "cwd",
@@ -209,6 +233,7 @@ const ORDER: StatusSegmentKind[] = [
   "context",
   "meter",
   "plan",
+  "activity",
 ];
 
 /**
@@ -220,7 +245,13 @@ function iconMap(symbols: SymbolTable): Record<StatusSegmentKind, string> {
     model: symbols.fieldModel,
     effort: symbols.fieldEffort,
     mode: symbols.fieldMode,
-    elapsed: "",
+    // A single-cell clock glyph so the timer reads as its own pill next to the
+    // spinner. Hard-coded rather than symbol-preset-driven: the symbol table has
+    // no time/clock field, and this module may not edit it. One BMP code point,
+    // matching the module's "cell width == UTF-16 length" rule.
+    elapsed: "◷",
+    // Small forward triangle marking the live "what it's doing" line.
+    activity: "▸",
     evolution: "",
     cwd: symbols.fieldCwd,
     branch: symbols.fieldBranch,
@@ -240,6 +271,7 @@ const COLOR_ROLE: Record<StatusSegmentKind, StatusColorRole> = {
   effort: "effort",
   mode: "mode",
   elapsed: "elapsed",
+  activity: "activity",
   evolution: "evolution",
   cwd: "cwd",
   branch: "branch",
@@ -424,8 +456,15 @@ export function buildStatusSegments(input: StatusBarInput): StatusSegment[] {
     const elapsed = seconds < 60 ? `${seconds}s`
       : seconds < 3600 ? `${Math.floor(seconds / 60)}m`
       : `${Math.floor(seconds / 3600)}h`;
-    texts.set("elapsed", `running for ${elapsed}`);
+    // Time only — the clock glyph carries the "elapsed" meaning, so no "running
+    // for " prefix: "4s" / "3m" / "1h", compact, sitting next to the spinner.
+    texts.set("elapsed", elapsed);
   }
+
+  // The live "what it's doing" line: a caller-composed one-liner from the active
+  // tool. Never invented here — an absent value emits no segment.
+  const activity = label(input.activity);
+  if (activity) texts.set("activity", activity);
 
   const evolution = label(input.evolution);
   if (evolution) texts.set("evolution", evolution);

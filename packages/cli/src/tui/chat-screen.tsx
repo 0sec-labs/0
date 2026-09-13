@@ -493,6 +493,8 @@ function statusRoleColor(
       return theme.SUCCESS;
     case "context":
       return theme.ACCENT;
+    case "activity":
+      return theme.ACCENT;
     case "effort":
     case "elapsed":
     case "plan":
@@ -4187,10 +4189,21 @@ export function ChatScreen({
   const contextLimit = useMemo(() => !focusAgentId && settings.showContextMeter
     ? resolveContextLimit({ modelId: activeModel, providerId: activeProvider, hosted: activeProvider === "hosted" }, { hostedCatalog: currentHostedCatalog })
     : null, [focusAgentId, settings.showContextMeter, activeModel, activeProvider, currentHostedCatalog]);
+  // The live "what it's doing" one-liner: the active tool + its args, truthfully
+  // (never fabricated). Only while the root turn is running and not focused on a
+  // worker. Computed here because the status bar is built above the later
+  // `runningEntry`.
+  const statusRunningEntry = busy && !focusAgentId && runningTool
+    ? entries.findLast((entry) => entry.kind === "tool" && entry.text === runningTool && entry.success === undefined)
+    : undefined;
+  const statusActivity = busy && !focusAgentId && runningTool
+    ? (statusRunningEntry?.toolArgs ? `${runningTool} · ${statusRunningEntry.toolArgs}` : runningTool)
+    : undefined;
   const statusSegments = buildStatusSegments({
     model: focusAgentId ? focusedTelemetry?.model : modelId ?? undefined,
     mode: autonomyFooterText(mode),
-    turnElapsedMs: !focusAgentId && busy && activeTurnStartedAt.current !== null
+    activity: statusActivity,
+    turnElapsedMs: settings.elapsedTimer !== "off" && !focusAgentId && busy && activeTurnStartedAt.current !== null
       ? Date.now() - activeTurnStartedAt.current : undefined,
     evolution: evolutionStatus,
     cwd: process.cwd(),

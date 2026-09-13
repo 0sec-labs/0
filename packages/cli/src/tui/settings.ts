@@ -151,6 +151,13 @@ export interface TuiSettings {
    */
   modelDisplay: "statusbar" | "message" | "off";
   /**
+   * Turn timer in the bottom bar: "left" shows a compact clock-glyphed elapsed
+   * time next to the left spinner icon; "off" hides it. An enum (rather than a
+   * boolean) leaves room for a future "right" placement once the bar grows a
+   * right cluster. chat-screen gates the bar's `turnElapsedMs` on this.
+   */
+  elapsedTimer: "left" | "off";
+  /**
    * Intro animation style for the "0SEC" logo. One-shot reveals: "glitch" (a
    * neon-flecked scramble that resolves — the default), "matrix" (a green
    * matrix-rain cascade), "wave" (a rippling cyan wavefront), "neon" (a
@@ -228,6 +235,7 @@ type TuiSettingDef =
   | EnumSettingDef<"toolCardStyle">
   | EnumSettingDef<"transcriptDetail">
   | EnumSettingDef<"modelDisplay">
+  | EnumSettingDef<"elapsedTimer">
   | EnumSettingDef<"busyInputMode">
   | EnumSettingDef<"diagnosticReporting">
   | EnumSettingDef<"updatePolicy">
@@ -517,6 +525,15 @@ const DEFS: readonly TuiSettingDef[] = [
     group: "Telemetry",
   },
   {
+    key: "elapsedTimer",
+    label: "Elapsed timer",
+    description: "Show the running-turn elapsed time as a compact clock-glyphed pill next to the left status icon, or hide it.",
+    kind: "enum",
+    default: "left",
+    choices: ["left", "off"],
+    group: "Telemetry",
+  },
+  {
     key: "logoAnimation",
     label: "Logo animation",
     description:
@@ -614,6 +631,7 @@ export const DEFAULT_SETTINGS: TuiSettings = {
   showCost: true,
   showContextMeter: true,
   modelDisplay: "statusbar",
+  elapsedTimer: "left",
   logoAnimation: "glitch",
   reduceMotion: false,
   diagnosticReporting: "automatic",
@@ -873,6 +891,7 @@ export function normalizeSettings(raw: unknown): TuiSettings {
     showCost: booleanAt(raw, "showCost"),
     showContextMeter: booleanAt(raw, "showContextMeter"),
     modelDisplay: enumAt(raw, "modelDisplay"),
+    elapsedTimer: enumAt(raw, "elapsedTimer"),
     logoAnimation: enumAt(raw, "logoAnimation"),
     reduceMotion: booleanAt(raw, "reduceMotion"),
     diagnosticReporting: strictValueAt(raw, "diagnosticReporting") ?? DEFAULT_SETTINGS.diagnosticReporting,
