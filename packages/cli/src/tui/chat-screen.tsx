@@ -60,6 +60,16 @@ import {
 import { useTheme, type Theme } from "./theme-context.js";
 import { createTranscriptDocument, modelProvider } from "@0sec/shared";
 import { homedir } from "node:os";
+import { existsSync } from "node:fs";
+import {
+  addImage,
+  addText,
+  createPasteStore,
+  expandPasteMarkers,
+  isLongPaste,
+  IMAGE_PATH_RE,
+  type PasteStore,
+} from "./chat/paste-store.js";
 import {
   createPresentationEmitter,
   type PresentationEmitter,
@@ -1465,6 +1475,13 @@ export function ChatScreen({
     controlsWidth,
   } = layout;
   const composerRef = useRef("");
+  // OMP-style paste collapsing: long text and image-path pastes are stashed here
+  // and represented in the composer by a compact chip marker; `pasteCounterRef`
+  // is the monotonic chip number N (shared across text and image chips so their
+  // store keys never collide). Expanded back to full payloads at the Enter
+  // boundary — see the return handler — then the consumed keys are cleared.
+  const pasteStoreRef = useRef<PasteStore>(createPasteStore());
+  const pasteCounterRef = useRef(0);
   const composingRef = useRef(false);
   const commandMenuOpenRef = useRef(false);
   /**
@@ -1545,6 +1562,12 @@ export function ChatScreen({
     // live draft. A recall re-sets the cursor immediately after calling this.
     historyIndexRef.current = historyRef.current.length;
   }, [setCommandMenuVisible]);
+
+  // Drop the store entries a submit expanded, so the map does not grow without
+  // bound. Called from the composer-clear branches after Enter expands markers.
+  const clearConsumedPastes = useCallback((ids: string[]) => {
+    for (const id of ids) pasteStoreRef.current.delete(id);
+  }, []);
 
   const restorePaletteDraft = useCallback(() => {
     const draft = paletteDraftRef.current;
@@ -4036,7 +4059,21 @@ export function ChatScreen({
     if (approvalPrompt || picker || reviewOpen) return;
     composingRef.current = true;
     setComposing(true);
-    setComposerText(composerRef.current + text);
+    // OMP-style collapse: an image path or a long text paste becomes a compact
+    // chip marker instead of dumping raw content into the composer; a short
+    // paste appends inline as before. Length/shape are measured on the SANITIZED
+    // text. The chip is literal text, so wrapping/history/slash-menu are intact;
+    // Enter expands it back to the full payload before the message ships.
+    const trimmed = text.trim();
+    if (IMAGE_PATH_RE.test(trimmed) && existsSync(trimmed)) {
+      const { marker } = addImage(pasteStoreRef.current, (pasteCounterRef.current += 1), trimmed);
+      setComposerText(composerRef.current + marker);
+    } else if (isLongPaste(text)) {
+      const { marker } = addText(pasteStoreRef.current, (pasteCounterRef.current += 1), text);
+      setComposerText(composerRef.current + marker);
+    } else {
+      setComposerText(composerRef.current + text);
+    }
   });
 
   useKeyboard((key) => {
@@ -4542,6 +4579,14 @@ export function ChatScreen({
           setComposing(false);
           return;
         }
+        // Expand any paste chips back to their full payloads HERE, at the Enter
+        // boundary — before pushHistory and submit. This must happen outside the
+        // send path: submitOperatorMessage may QUEUE the raw string and the idle
+        // drain replays it later, so expanding inside send would ship literal
+        // markers. History stores the EXPANDED text so Up-arrow recall still
+        // works after the store keys are cleared. A slash command has no markers,
+        // so expansion is a no-op there.
+        const { text: expandedInput, consumedIds: consumedPasteIds } = expandPasteMarkers(input, pasteStoreRef.current);
         // Drilled into a subagent: a plain message is steered straight to it via
         // the hub mailbox, not sent to the main agent. Slash commands still run
         // as commands (they fall through), so /agents, /settings, etc. keep
@@ -4550,15 +4595,16 @@ export function ChatScreen({
           const worker = herdAgents[focusAgentId];
           if (worker?.status === "completed" || worker?.status === "failed") {
             const result = renderInboundMessage({ id: `${focusAgentId}-followup`, from: focusAgentId, to: "Main", ts: Date.now(), body: worker.summary ?? worker.error ?? "" }).text;
-            submitOperatorMessage(`Follow up on ${worker.name ?? focusAgentId}.\nTask: ${worker.task}\n${result}\n\nOperator request: ${input}`);
+            submitOperatorMessage(`Follow up on ${worker.name ?? focusAgentId}.\nTask: ${worker.task}\n${result}\n\nOperator request: ${expandedInput}`);
             setFocusAgentId(null);
             setAgentNavIndex(-1);
           } else {
-            const res = deliverToSubagent(focusAgentId, input);
-            setSubagentTranscripts((prev) => ({ ...prev, [focusAgentId]: [...(prev[focusAgentId] ?? []), { id: `${focusAgentId}-operator-${Date.now()}`, kind: res.ok ? "user" : "error", text: res.ok ? input : `${res.reason ?? "Message could not be delivered"}. Your draft is retained; Escape returns to Main.`, turn: worker?.turn ?? 0, at: Date.now() }] }));
+            const res = deliverToSubagent(focusAgentId, expandedInput);
+            setSubagentTranscripts((prev) => ({ ...prev, [focusAgentId]: [...(prev[focusAgentId] ?? []), { id: `${focusAgentId}-operator-${Date.now()}`, kind: res.ok ? "user" : "error", text: res.ok ? expandedInput : `${res.reason ?? "Message could not be delivered"}. Your draft is retained; Escape returns to Main.`, turn: worker?.turn ?? 0, at: Date.now() }] }));
             if (!res.ok) return;
           }
-          historyRef.current = pushHistory(historyRef.current, input);
+          historyRef.current = pushHistory(historyRef.current, expandedInput);
+          clearConsumedPastes(consumedPasteIds);
           composingRef.current = false;
           setComposerText("");
           setComposing(false);
@@ -4568,8 +4614,9 @@ export function ChatScreen({
         // Remember every submitted message (sent or queued) for Up/Down recall.
         // Done before the setComposerText("") below, which re-bases the history
         // cursor onto the freshly-grown ring.
-        historyRef.current = pushHistory(historyRef.current, input);
-        submitOperatorMessage(input);
+        historyRef.current = pushHistory(historyRef.current, expandedInput);
+        submitOperatorMessage(expandedInput);
+        clearConsumedPastes(consumedPasteIds);
         if (!restorePaletteDraft()) {
           composingRef.current = false;
           setComposerText("");
