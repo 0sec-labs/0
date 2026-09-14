@@ -274,20 +274,27 @@ actions, settings toggles, and screen switches.
 
 ### Model picker
 
-`/model` opens a curated list, including the active model even when it is a
-custom deployment. **Tab** switches between curated models and the full catalog
-without clearing your search. Type or paste a model/provider query; **↑ / ↓**
-select, **Enter** applies the model, **Ctrl+U** clears the query, and **Esc**
-clears a query before going back.
+For BYOK connections, `/model` opens the priced core and includes the active
+model even when it is a custom deployment. With an empty query, **Tab**
+switches between this curated list and the full catalog. Any nonblank
+model/provider query searches the full catalog, regardless of the Tab setting.
+**↑ / ↓** moves the highlight, **Enter** selects, **Ctrl+U** clears the query,
+and **Esc** clears a query before going back.
 
-The detail pane keeps its height while filtering, so a single result still
+Models with the same ID remain separate provider rows. Moving between them
+shows each provider's own price and context window. Provider labels describe
+catalog entries; configured credentials determine runtime routing.
+
+Hosted connections show only the account's model catalog. **Tab** does not
+add BYOK models, and a catalog failure does not substitute an offline list.
+
+The detail pane keeps its height while filtering, so a single BYOK result still
 shows its price estimate, credential source, and setup guidance. A listed model
-is not a guarantee of account access, and `—` means the price is unknown.
+does not guarantee account access; missing prices remain unknown.
 
-Switching models keeps the conversation and unsent draft open, including when
-you reach the picker through **Ctrl+P**. A failed switch keeps the old runtime;
-an active turn must finish before switching. Provider selection also respects
-your configured API endpoint, including `OPENAI_BASE_URL`.
+If a chat already has a runtime, connection and model choices apply to the next
+`/new-chat`. The current runtime, conversation and unsent draft stay unchanged,
+including when you reach the picker through **Ctrl+P**.
 
 ## Keyboard shortcuts
 

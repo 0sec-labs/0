@@ -290,9 +290,10 @@ only fills a variable the environment doesn't already carry.
 file permissions. Treat `credentials.json` like an exported secret in a shell
 profile.
 
-The `/model` picker starts with curated models; **Tab** opens the full catalog.
+The BYOK `/model` picker starts with curated models. **Tab** opens the full
+catalog; typing a query searches the full catalog from either view.
 Check credentials and account access before use. The detail pane shows setup
-hints and credential sources; unknown prices appear as `—`.
+hints and credential sources; missing prices remain unknown.
 Use `/connect` to add credentials and `/providers` to inspect them.
 In the hosted-enabled CLI candidate, connection and model changes take effect
 with `/new-chat` when a runtime already exists; they leave the current chat intact.
