@@ -504,3 +504,37 @@ describe("connected reporting, masks and hints", () => {
     }
   });
 });
+
+
+describe("cloud verification in the detail pane", () => {
+  const cloudRow = { kind: "cloud" as const };
+  const render = (v?: import("./connect-layout.js").HostedVerificationStatus) =>
+    connectDetailLines({ row: cloudRow, cloudConnected: true, hostedVerification: v }, 60)
+      .map((l) => `${l.tone}:${l.text}`)
+      .join("\n");
+
+  it("shows a pending line while verifying", () => {
+    expect(render({ kind: "pending" })).toContain("Verifying your 0sec Cloud");
+    expect(render(undefined)).toContain("Verifying your 0sec Cloud");
+  });
+  it("shows the confirmed credit balance when verified", () => {
+    const out = render({ kind: "verified", remainingUsd: 12.5 });
+    expect(out).toContain("Verified with 0sec Cloud");
+    expect(out).toContain("$12.50");
+    expect(out).toContain("ok:"); // success tone
+  });
+  it("tells the operator to sign in again when the token is rejected", () => {
+    const out = render({ kind: "rejected" });
+    expect(out).toContain("rejected the token");
+    expect(out).toContain("warn:");
+  });
+  it("distinguishes an unreachable backend from a bad token", () => {
+    expect(render({ kind: "unreachable" })).toContain("couldn");
+    expect(render({ kind: "unreachable" })).not.toContain("rejected");
+  });
+  it("never claims verification for a not-connected cloud row", () => {
+    const out = connectDetailLines({ row: cloudRow, cloudConnected: false }, 60).map((l) => l.text).join("\n");
+    expect(out).toContain("not configured");
+    expect(out).not.toContain("Verified with 0sec Cloud");
+  });
+});

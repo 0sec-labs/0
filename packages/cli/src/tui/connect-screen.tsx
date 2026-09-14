@@ -78,6 +78,7 @@ import {
 } from "./device-auth.js";
 import {
   startHostedDeviceAuth,
+  verifyHostedConnection,
   readHostedConnection,
   type HostedDeviceAuthUpdate,
 } from "./hosted-device-auth.js";
@@ -88,6 +89,7 @@ import {
   computeConnectTitleLayout,
   connectConnectedCounts,
   connectDetailLines,
+  type HostedVerificationStatus,
   connectDetailTitleLabel,
   connectDetailTitleMeta,
   connectDialogItems,
@@ -354,6 +356,7 @@ export function ConnectScreen({ frame, onBack, onExit, recovery, onConnected, en
     setHosted(next);
   };
   const [authEpoch, setAuthEpoch] = useState(0);
+  const [hostedVerification, setHostedVerification] = useState<HostedVerificationStatus | undefined>(undefined);
 
   const cloudState = useMemo(() => readHostedConnection(env ?? process.env, homeDir), [env, authEpoch, homeDir]);
   const cloudConnected = cloudState.configured && recovery?.providerId !== "hosted";
@@ -432,6 +435,20 @@ export function ConnectScreen({ frame, onBack, onExit, recovery, onConnected, en
     oauthSessionRef.current?.cancel();
     hostedSessionRef.current?.cancel();
   }, []);
+
+  // Actually verify a saved 0sec Cloud sign-in against the backend (rather than
+  // trusting that the browser flow completed): call the Bearer-authenticated
+  // account endpoint and surface verified / rejected / unreachable in the cloud
+  // detail pane. Re-runs whenever the sign-in changes (authEpoch).
+  useEffect(() => {
+    if (!cloudConnected) { setHostedVerification(undefined); return; }
+    let active = true;
+    setHostedVerification({ kind: "pending" });
+    void verifyHostedConnection({ env: (env ?? process.env) as Record<string, string | undefined>, homeDir })
+      .then((result) => { if (active) setHostedVerification(result); })
+      .catch(() => { if (active) setHostedVerification({ kind: "unreachable" }); });
+    return () => { active = false; };
+  }, [cloudConnected, authEpoch, env, homeDir]);
 
   const currentRows = () => filterRef.current === filter
     ? rows
@@ -802,7 +819,7 @@ export function ConnectScreen({ frame, onBack, onExit, recovery, onConnected, en
         lines.push(blank());
       }
       const detail = connectDetailLines(
-        { row: shownRow, compact: bodyRows < 12, cloudConnected },
+        { row: shownRow, compact: bodyRows < 12, cloudConnected, hostedVerification },
         width,
       );
       // The pane header already names the provider; drop the repeated lead

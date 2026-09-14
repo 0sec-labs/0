@@ -182,6 +182,8 @@ export interface ConnectSources {
    * readiness or funding assertion.
    */
   cloudConnected?: boolean;
+  /** Live verification of the saved cloud sign-in (component-supplied). */
+  hostedVerification?: HostedVerificationStatus;
 }
 
 /** Does any provider hold a real credential? Drives the onboarding nudge. */
@@ -461,6 +463,19 @@ export interface ConnectDetailLine {
   readonly tone: ConnectDetailTone;
 }
 
+/**
+ * The result of verifying a saved 0sec Cloud sign-in against the backend
+ * (`GET /api/inference/account`). `pending` while the check is in flight;
+ * `verified` carries the confirmed credit balance; `rejected` means the token
+ * was refused (401/403 — sign in again); `unreachable` is a transient network
+ * failure, not a bad token.
+ */
+export type HostedVerificationStatus =
+  | { readonly kind: "pending" }
+  | { readonly kind: "verified"; readonly remainingUsd?: number }
+  | { readonly kind: "rejected" }
+  | { readonly kind: "unreachable" };
+
 export interface ConnectDetailInput {
   row?: ConnectRow;
   compact?: boolean;
@@ -469,6 +484,8 @@ export interface ConnectDetailInput {
    * never reads environment variables or credential files.
    */
   cloudConnected?: boolean;
+  /** Live backend verification of the saved cloud sign-in (component-supplied). */
+  hostedVerification?: HostedVerificationStatus;
 }
 
 /**
@@ -478,7 +495,7 @@ export interface ConnectDetailInput {
  * alignment columns, because `sanitizeTuiText` would trim padded literals.
  */
 export function connectDetailLines(
-  { row, compact = false, cloudConnected }: ConnectDetailInput,
+  { row, compact = false, cloudConnected, hostedVerification }: ConnectDetailInput,
   width: number,
 ): ConnectDetailLine[] {
   const limit = cells(width);
@@ -501,7 +518,21 @@ export function connectDetailLines(
     push("Model access and credits are checked when used.", "muted");
     separate();
     if (connected) {
-      push("Cloud login saved locally; not verified here.", "text");
+      const v = hostedVerification;
+      if (!v || v.kind === "pending") {
+        push("Verifying your 0sec Cloud sign-in\u2026", "muted");
+      } else if (v.kind === "verified") {
+        push(
+          typeof v.remainingUsd === "number"
+            ? `Verified with 0sec Cloud \u2014 $${v.remainingUsd.toFixed(2)} in credits.`
+            : "Verified with 0sec Cloud.",
+          "ok",
+        );
+      } else if (v.kind === "rejected") {
+        push("Sign-in saved, but 0sec Cloud rejected the token \u2014 press Enter to sign in again.", "warn");
+      } else {
+        push("Sign-in saved; couldn\u2019t reach 0sec Cloud to verify right now.", "muted");
+      }
     } else {
       push("Cloud login not configured.", "muted");
     }

@@ -1,4 +1,5 @@
-import { loadCloudCredentials } from "@0sec/core";
+import { loadCloudCredentials, CloudClient, CloudUnauthorizedError, CloudForbiddenError } from "@0sec/core";
+import type { HostedVerificationStatus } from "./connect-layout.js";
 import { hostedBrowserLoginFlow, type HostedBrowserLoginOptions, type HostedLoginPhase, type LoginResult } from "../commands/auth.js";
 
 export interface HostedDeviceAuthUpdate {
@@ -47,4 +48,29 @@ export function startHostedDeviceAuth(options: StartHostedDeviceAuthOptions): { 
     if (!controller.signal.aborted) onUpdate({ phase: "failed", message: "0sec Cloud sign-in could not complete. Use your own provider or try again." });
   });
   return { cancel: () => controller.abort() };
+}
+
+/**
+ * Verify a saved 0sec Cloud sign-in against the backend by calling the
+ * Bearer-authenticated account endpoint (`GET /api/inference/account`). This is
+ * the real check the connect screen shows instead of trusting that the browser
+ * flow merely completed: a good token returns the account (and its credit
+ * balance); a refused token (401/403) proves the sign-in is stale; any other
+ * failure is a transient network problem, not a bad token. Never throws.
+ */
+export async function verifyHostedConnection(opts: {
+  env: Record<string, string | undefined>;
+  homeDir?: string;
+  fetchImpl?: typeof fetch;
+}): Promise<HostedVerificationStatus> {
+  const creds = loadCloudCredentials({ env: opts.env, homeDir: opts.homeDir, warn: () => {} });
+  if (!creds.token || !creds.host) return { kind: "unreachable" };
+  const client = new CloudClient({ host: creds.host, token: creds.token, fetchImpl: opts.fetchImpl });
+  try {
+    const account = await client.getInferenceAccount();
+    return { kind: "verified", remainingUsd: typeof account.remainingUsd === "number" ? account.remainingUsd : undefined };
+  } catch (error) {
+    if (error instanceof CloudUnauthorizedError || error instanceof CloudForbiddenError) return { kind: "rejected" };
+    return { kind: "unreachable" };
+  }
 }
