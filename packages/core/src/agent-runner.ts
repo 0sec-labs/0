@@ -16,6 +16,7 @@ import { parseFindingsFromCliOutput } from "./findings-parser.js";
 import { estimateCost } from "./agent/cost.js";
 import { getCloudSinkConfig, postFinding } from "./cloud-sink.js";
 import { analyticsPipeline } from "./telemetry/analytics-pipeline.js";
+import { reportUnsupportedContributionMode } from "./telemetry/run-contribution.js";
 
 // ── Types ──
 
@@ -292,6 +293,7 @@ export async function runAnalysisAgent(opts: AnalysisAgentOptions): Promise<Anal
 
   // ── Branch 1: CLI runtime fast path (claude/codex/etc.) ──
   if (!scopedSourceAudit && CLI_RUNTIME_TYPES.has(runtimeType) && available.has(runtimeType)) {
+    reportUnsupportedContributionMode("external CLI runtime");
     emit({
       type: "stage:start",
       stage: "attack",
@@ -585,6 +587,7 @@ export async function runAnalysisAgent(opts: AnalysisAgentOptions): Promise<Anal
 
     // ── Single-shot fallback for API runtimes without native tool_use ──
     if (directApiPrompt) {
+      reportUnsupportedContributionMode("single-response analysis");
       const result = await apiRuntime.execute(directApiPrompt, {
         systemPrompt: cliSystemPrompt,
       });
@@ -627,6 +630,7 @@ export async function runAnalysisAgent(opts: AnalysisAgentOptions): Promise<Anal
   }
 
   // ── Branch 3: Legacy fallback — text-based agent loop ──
+  reportUnsupportedContributionMode("legacy text loop");
   const maxTurns = getMaxTurns(role, config.depth, "legacy", purpose);
 
   const runtimeConfig = {

@@ -50,14 +50,17 @@ function isAnalyticsLevel(value: string): value is AnalyticsLevel {
   return value === "off" || value === "usage" || value === "commands" || value === "full";
 }
 
+/** Shared hard opt-out gate for analytics and separately permissioned contributions. */
+export function analyticsOptedOut(env: NodeJS.ProcessEnv = process.env): boolean {
+  return ANALYTICS_OPT_OUT_ENV.some(name => isOptOutSet(env[name]));
+}
+
 /**
  * Resolve the effective analytics tier. Any opt-out env forces "off"; an
  * unknown or invalid `0SEC_ANALYTICS_LEVEL` also yields "off" (fail closed).
  */
 export function resolveAnalyticsLevel(env: NodeJS.ProcessEnv = process.env): AnalyticsLevel {
-  for (const name of ANALYTICS_OPT_OUT_ENV) {
-    if (isOptOutSet(env[name])) return "off";
-  }
+  if (analyticsOptedOut(env)) return "off";
   const raw = env[ANALYTICS_LEVEL_ENV];
   if (typeof raw !== "string") return "off";
   const normalized = raw.trim().toLowerCase();

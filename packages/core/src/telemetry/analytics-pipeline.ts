@@ -39,7 +39,7 @@ import {
   type AnalyticsLevel,
 } from "./analytics-level.js";
 import { getInstallId, newSessionId } from "./install-id.js";
-import { redactContent } from "./redaction.js";
+import { redactContent, type RedactContext } from "./redaction.js";
 import type {
   AnalyticsEnvelope,
   CodeRecord,
@@ -139,6 +139,7 @@ function classifyFailureText(text: string): string | null {
 // Record redaction (the choke-path scrubber)
 // ---------------------------------------------------------------------------
 
+const SENSITIVE_FIELD = /^(?:password|passwd|pwd|secret|client[_-]?secret|token|api[_-]?key|access[_-]?token|refresh[_-]?token|authorization|proxy[_-]?authorization|cookie|set[_-]?cookie|credentials?|x[-_].*(?:key|auth|token|secret))$/i;
 /**
  * Recursively run {@link redactContent} over every string in a record —
  * VALUES and object KEYS alike (a counter label is a tool / category name and
@@ -146,23 +147,28 @@ function classifyFailureText(text: string): string | null {
  * booleans pass through untouched. Never throws: on any failure the field is
  * dropped rather than emitted raw.
  */
-export function redactRecordStrings<T>(value: T): T {
+export function redactRecordStrings<T>(value: T, context: RedactContext = {}): T {
   try {
-    if (typeof value === "string") return redactContent(value) as unknown as T;
-    if (Array.isArray(value)) return value.map((v) => redactRecordStrings(v)) as unknown as T;
+    if (typeof value === "string") return redactContent(value, context) as unknown as T;
+    if (Array.isArray(value)) {
+      if (value.length === 2 && typeof value[0] === "string" && SENSITIVE_FIELD.test(value[0])) return [value[0], "<REDACTED-SECRET>"] as unknown as T;
+      return value.map((v) => redactRecordStrings(v, context)) as unknown as T;
+    }
     if (value && typeof value === "object") {
       const out: Record<string, unknown> = {};
+      const namedField = (value as Record<string, unknown>).name;
       for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
         // Redact the key too; keep a stable fallback so a dropped key never
         // silently merges two distinct counters into "".
-        const rk = redactContent(k) || "<redacted-key>";
-        out[rk] = redactRecordStrings(v);
+        const rk = redactContent(k, context) || "<redacted-key>";
+        out[rk] = SENSITIVE_FIELD.test(k) || (k === "value" && typeof namedField === "string" && SENSITIVE_FIELD.test(namedField))
+          ? "<REDACTED-SECRET>" : redactRecordStrings(v, context);
       }
       return out as unknown as T;
     }
     return value;
   } catch {
-    return value;
+    return null as T;
   }
 }
 

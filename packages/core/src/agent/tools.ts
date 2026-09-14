@@ -1213,7 +1213,7 @@ function executePipeline(
         // trailing `| head`/`| wc` still produces a bounded, useful result.
         stdin = partial;
         if (segments[segments.length - 1] === tokens) {
-          return { success: true, output: partial.slice(0, 10_000) + note };
+          return { success: true, output: formatTruncated(partial, { mode: "bytes", limit: 10_000 - Buffer.byteLength(note, "utf8") }) + note };
         }
         continue;
       }
@@ -1247,7 +1247,7 @@ function executePipeline(
       return {
         success: false,
         output: null,
-        error: output.slice(0, 2_000) || `Command exited with status ${result.status}`,
+        error: formatTruncated(output, { mode: "bytes", limit: 2_000 }) || `Command exited with status ${result.status}`,
       };
     }
 
@@ -1256,7 +1256,7 @@ function executePipeline(
 
   return {
     success: true,
-    output: typeof stdin === "string" ? stdin.slice(0, 10_000) : "",
+    output: typeof stdin === "string" ? formatTruncated(stdin, { mode: "bytes", limit: 10_000 }) : "",
   };
 }
 
