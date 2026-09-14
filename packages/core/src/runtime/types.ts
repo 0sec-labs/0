@@ -55,6 +55,19 @@ export interface Runtime {
   isAvailable(): Promise<boolean>;
   /** Fork the parent account; model overrides require operator consent, never account failover. */
   forkForSubagent?(timeoutMs: number, selection?: SubagentModelSelection): Promise<NativeRuntime>;
+  /**
+   * Mutate the live model/provider/role-map selection in place, so the next
+   * turn and next fork pick it up without tearing down the session. Optional so
+   * callers/tests can feature-detect support; undefined fields leave the
+   * corresponding state unchanged.
+   */
+  reconfigure?(sel: {
+    model?: string;
+    provider?: string;
+    agentModels?: Record<string, string>;
+    singleModel?: boolean;
+    env?: NodeJS.ProcessEnv;
+  }): void;
 }
 
 export interface RuntimeContext {
@@ -217,6 +230,19 @@ export interface NativeRuntime {
   isAvailable(): Promise<boolean>;
   /** Fork the parent account with independent request state; model overrides require operator consent. */
   forkForSubagent?(timeoutMs: number, selection?: SubagentModelSelection): Promise<NativeRuntime>;
+  /**
+   * Mutate the live model/provider/role-map selection in place, so the next
+   * turn and next fork pick it up without tearing down the session. Optional so
+   * callers/tests can feature-detect support; undefined fields leave the
+   * corresponding state unchanged.
+   */
+  reconfigure?(sel: {
+    model?: string;
+    provider?: string;
+    agentModels?: Record<string, string>;
+    singleModel?: boolean;
+    env?: NodeJS.ProcessEnv;
+  }): void;
   /** Current model identifier; not a per-request billing identity or rate receipt. */
   resolvedModel?(): string;
 }

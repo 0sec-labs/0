@@ -39,6 +39,7 @@ function makeSession(input: GatewayFactoryInput): ConsoleSession {
     scope: undefined,
     localScopePath: undefined,
     setAutonomyMode: () => undefined,
+    reconfigureRuntime: () => undefined,
     clearConversation: () => undefined,
     stopPersistentAgent: async () => false,
     stopPersistentAgents: async () => undefined,

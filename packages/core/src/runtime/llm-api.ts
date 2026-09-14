@@ -1966,21 +1966,25 @@ function detectProvider(configApiKey: string | undefined, preferredModel: string
  */
 export class LlmApiRuntime implements Runtime, NativeRuntime {
   readonly type = "api" as const;
-  private config: RuntimeConfig;
-  private readonly env: Readonly<NodeJS.ProcessEnv>;
-  private readonly codexAuthState?: ChatGptCodexAuthState;
-  private provider: ApiProvider;
-  private apiKey: string;
-  private baseUrl: string;
-  private model: string;
-  private wireApi: WireApi;
+  // These are set by the constructor via applyConfiguration() (root) or the
+  // inherited fork branch; the `!` records that a fork sets them directly while
+  // the root path assigns them through the shared applyConfiguration() helper.
+  private config!: RuntimeConfig;
+  // Not readonly: a live provider switch re-freezes env from the new account.
+  private env!: Readonly<NodeJS.ProcessEnv>;
+  private codexAuthState?: ChatGptCodexAuthState;
+  private provider!: ApiProvider;
+  private apiKey!: string;
+  private baseUrl!: string;
+  private model!: string;
+  private wireApi!: WireApi;
   private reasoningEffort?: string;
-  private azureConfig: ReturnType<typeof parseCodexAzureConfig>;
+  private azureConfig!: ReturnType<typeof parseCodexAzureConfig>;
   private serverCompactionTokens?: number;
   /** Ordered fallback chain (0SEC_LLM_FALLBACK). Empty = no failover. */
-  private fallbackChain: Array<FallbackEntry & { credentials?: ApiProviderConnection }>;
+  private fallbackChain!: Array<FallbackEntry & { credentials?: ApiProviderConnection }>;
   /** Index into fallbackChain — which entry to try next. */
-  private fallbackIndex: number;
+  private fallbackIndex!: number;
   /** Resolve and validate the hosted model and wire protocol once per runtime. */
   private hostedCatalogPromise: Promise<void> | null = null;
   /** Catalog ceiling, resolved before hosted inference is submitted. */
@@ -2031,6 +2035,16 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
       }
       return;
     }
+    this.applyConfiguration(config);
+  }
+
+  /**
+   * Root provider/model detection. Shared by the constructor and
+   * {@link reconfigure} so a live provider switch re-resolves the account,
+   * endpoint, wire protocol and default model with the SAME logic the
+   * constructor uses — never a second, drifting code path.
+   */
+  private applyConfiguration(config: RuntimeConfig): void {
     this.config = {
       ...config,
       ...(config.agentModels ? { agentModels: Object.freeze({ ...config.agentModels }) } : {}),
@@ -2048,6 +2062,9 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
     this.apiKey = detected.apiKey;
     this.baseUrl = detected.baseUrl;
     this.wireApi = detected.wireApi;
+    // Clear any prior codex auth so a switch away from ChatGPT Codex cannot
+    // carry a stale OAuth state; re-resolve only when the new route needs it.
+    this.codexAuthState = undefined;
     if (this.provider === "chatgpt-codex" || this.fallbackChain.some(entry => entry.provider === "chatgpt-codex")) {
       if (readChatGptCodexEnv(this.env) || readChatGptCodexAuthFile(this.env)) {
         this.codexAuthState = resolveChatGptCodexAuthState(this.env);
@@ -2096,6 +2113,69 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
       ).catch(() => {
         // Swallow — startup logging must never abort runtime init.
       });
+    }
+  }
+
+  /**
+   * Mutate the live selection in place so the NEXT turn (the engine reads
+   * `config.runtime` per turn) and the NEXT `forkForSubagent` pick up the new
+   * model / provider / role map with zero session teardown. No-op-safe:
+   * undefined fields leave the corresponding state unchanged.
+   */
+  reconfigure(sel: {
+    model?: string;
+    provider?: string;
+    agentModels?: Record<string, string>;
+    singleModel?: boolean;
+    env?: NodeJS.ProcessEnv;
+  }): void {
+    const providerChanged = sel.provider !== undefined && sel.provider !== this.provider;
+
+    if (providerChanged) {
+      // Full re-detection against the (optionally new) account, reusing the
+      // exact constructor path. Preserve the existing selection knobs unless
+      // this call overrides them; drop any explicit apiKey so credentials come
+      // from the (possibly refreshed) environment.
+      const merged: RuntimeConfig = {
+        ...this.config,
+        apiKey: undefined,
+        provider: sel.provider as RuntimeConfig["provider"],
+        ...(sel.model !== undefined ? { model: sel.model } : {}),
+        ...(sel.agentModels !== undefined ? { agentModels: sel.agentModels } : {}),
+        ...(sel.singleModel !== undefined ? { singleModel: sel.singleModel } : {}),
+        ...(sel.env !== undefined ? { env: sel.env as Record<string, string> } : {}),
+      };
+      // A new account must re-resolve the hosted catalog; drop the memo so
+      // ensureHostedModel re-queries rather than trusting the old ceiling/id.
+      this.hostedCatalogPromise = null;
+      this.hostedMaxOutputTokens = undefined;
+      this.applyConfiguration(merged);
+      return;
+    }
+
+    // No provider change beyond here.
+    // agentModels / singleModel affect only future forkForSubagent — no
+    // provider work. Re-freeze a replacement map to keep this.config immutable.
+    if (sel.agentModels !== undefined) {
+      this.config = { ...this.config, agentModels: Object.freeze({ ...sel.agentModels }) };
+    }
+    if (sel.singleModel !== undefined) {
+      this.config = { ...this.config, singleModel: sel.singleModel };
+    }
+
+    // Same-provider model change: re-run model/wire-api resolution exactly like
+    // the fork `modelChanged` branch.
+    if (sel.model !== undefined) {
+      const model = this.provider === "opencode" ? opencodeModelId(sel.model) : sel.model;
+      if (model !== this.model) {
+        this.model = model;
+        this.config = { ...this.config, model };
+        if (this.provider === "opencode") this.wireApi = opencodeWireApiForModel(model);
+        if (this.provider === "openai") this.wireApi = openAICompatibleWireApi(this.env, "OPENAI_WIRE_API");
+        if (this.provider === "azure") this.wireApi = openAICompatibleWireApi(this.env, "AZURE_OPENAI_WIRE_API", this.azureConfig.wireApi);
+        this.applyModelWireApi();
+        this.reasoningEffort = undefined;
+      }
     }
   }
 

@@ -614,6 +614,18 @@ export interface ConsoleSession {
   /** Switch autonomy without discarding the conversation or in-memory scope. */
   setAutonomyMode(mode: ConsoleAutonomyMode): void;
   /**
+   * Live-reconfigure the model / provider / role map on the underlying runtime,
+   * so the next turn and next subagent fork pick it up without a session
+   * restart. No-op when the runtime does not support live reconfiguration.
+   */
+  reconfigureRuntime(sel: {
+    model?: string;
+    provider?: string;
+    agentModels?: Record<string, string>;
+    singleModel?: boolean;
+    env?: NodeJS.ProcessEnv;
+  }): void;
+  /**
    * Clear all conversation messages while preserving session identity, target,
    * scope, autonomy mode, system prompt, tools, and executor resources.
    * The next call to {@link send} starts from an empty history.
@@ -3183,6 +3195,11 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
       if (customSystemPrompt === undefined) {
         systemPrompt = buildConsoleSystemPrompt({ target: sessionTarget, scanId, autonomyMode, developmentSourceRoot: config.developmentSourceRoot });
       }
+    },
+    reconfigureRuntime: (sel) => {
+      // Mutate the existing runtime in place; the engine reads config.runtime
+      // per turn and binds forkForSubagent per fork, so no teardown is needed.
+      config.runtime.reconfigure?.(sel);
     },
     clearConversation: () => {
       messages.length = 0;
