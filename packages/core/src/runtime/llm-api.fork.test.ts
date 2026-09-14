@@ -185,6 +185,40 @@ describe("isolated child runtimes", () => {
     expect(await parent.executeNative("system", messages, [])).toMatchObject({ content: [{ type: "text", text: "parent responses accepted" }] });
   });
 
+  it("auto-routes an accessible model, refuses an unreachable one, and keeps fixed pins and singleModel unchanged", async () => {
+    // Two providers configured (openai primary + anthropic). No Z_AI_API_KEY,
+    // so any glm model is unreachable.
+    const env = { ...environment(), OPENAI_API_KEY: "openai-key", OPENAI_BASE_URL: "https://openai.fixture/v1", ANTHROPIC_API_KEY: "anthropic-key" };
+    const base = { type: "api" as const, provider: "openai" as const, model: "parent", timeout: 1000, env };
+
+    // "auto" role: the orchestrator's selection.model is accepted because its
+    // provider (anthropic) has creds. "auto" never becomes a real model id.
+    const auto = new LlmApiRuntime({ ...base, agentModels: { review: "auto" } });
+    const accessible = auto.accessibleModels();
+    expect(accessible).toContain("parent");
+    expect(accessible).toContain("gpt-4o");
+    expect(accessible).toContain("claude-sonnet-4-6");
+    expect(accessible).not.toContain("glm-5.3");
+
+    const autoChild = await auto.forkForSubagent(1000, { role: "review", model: "claude-sonnet-4-6" });
+    expect(autoChild.resolvedModel()).toBe("claude-sonnet-4-6");
+
+    // Under auto, an unreachable model (no Z_AI_API_KEY) is still refused.
+    await expect(auto.forkForSubagent(1000, { role: "review", model: "glm-5.3" })).rejects.toThrow("not reachable");
+
+    // autoRoute flag auto-routes any UNMAPPED role the same way.
+    const global = new LlmApiRuntime({ ...base, autoRoute: true });
+    expect((await global.forkForSubagent(1000, { role: "anything", model: "claude-sonnet-4-6" })).resolvedModel()).toBe("claude-sonnet-4-6");
+
+    // Non-auto role: an accessible-but-unpinned model is refused exactly as before.
+    const pinned = new LlmApiRuntime({ ...base, agentModels: { review: "gpt-4o" } });
+    await expect(pinned.forkForSubagent(1000, { role: "review", model: "claude-sonnet-4-6" })).rejects.toThrow("not operator-approved");
+
+    // singleModel still forces the parent model even when the role is auto.
+    const forced = new LlmApiRuntime({ ...base, singleModel: true, agentModels: { review: "auto" } });
+    expect((await forced.forkForSubagent(1000, { role: "review", model: "claude-sonnet-4-6" })).resolvedModel()).toBe("parent");
+  });
+
   it("cannot extend the parent request timeout", async () => {
     vi.useFakeTimers();
     const parent = new LlmApiRuntime({ type: "api", provider: "openai", model: "fixture", timeout: 25, env: { ...environment(), OPENAI_API_KEY: "fixture", OPENAI_BASE_URL: "https://timeout.fixture/v1" } });

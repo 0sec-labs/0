@@ -14,8 +14,21 @@ export interface RuntimeConfig {
   cwd?: string;
   env?: Record<string, string>;
   model?: string;
-  /** Operator-approved role models and override allowlist; unmapped roles inherit. */
+  /**
+   * Operator-approved role models and override allowlist; unmapped roles inherit.
+   * A role whose value is the sentinel `"auto"` opts that role into AUTO-ROUTING:
+   * the main agent may pick the child's model from the models it can actually
+   * reach (a provider with credentials present), instead of a fixed pin. `"auto"`
+   * is never treated as a real model id.
+   */
   agentModels?: Readonly<Record<string, string>>;
+  /**
+   * Global AUTO-ROUTING switch: when true, any role NOT given a fixed pin in
+   * `agentModels` is auto-routed exactly as an `"auto"` sentinel would be — the
+   * main agent may pick an accessible model for it. Fixed pins still win, and an
+   * unreachable model is still refused. Ignored while `singleModel` is on.
+   */
+  autoRoute?: boolean;
   /** Force children to use the resolved parent model regardless of selection. */
   singleModel?: boolean;
   /** Explicit provider for this new runtime; conflicting FORCE pins fail closed. */
@@ -55,6 +68,13 @@ export interface Runtime {
   isAvailable(): Promise<boolean>;
   /** Fork the parent account; model overrides require operator consent, never account failover. */
   forkForSubagent?(timeoutMs: number, selection?: SubagentModelSelection): Promise<NativeRuntime>;
+  /**
+   * Read-only roster of model ids this runtime can actually reach right now
+   * (one per provider whose credentials are present, plus the resolved model).
+   * Lets the orchestrator name a reachable model for an auto-routed role.
+   * Optional so callers/tests can feature-detect support.
+   */
+  accessibleModels?(): string[];
   /**
    * Mutate the live model/provider/role-map selection in place, so the next
    * turn and next fork pick it up without tearing down the session. Optional so
@@ -230,6 +250,13 @@ export interface NativeRuntime {
   isAvailable(): Promise<boolean>;
   /** Fork the parent account with independent request state; model overrides require operator consent. */
   forkForSubagent?(timeoutMs: number, selection?: SubagentModelSelection): Promise<NativeRuntime>;
+  /**
+   * Read-only roster of model ids this runtime can actually reach right now
+   * (one per provider whose credentials are present, plus the resolved model).
+   * Lets the orchestrator name a reachable model for an auto-routed role.
+   * Optional so callers/tests can feature-detect support.
+   */
+  accessibleModels?(): string[];
   /**
    * Mutate the live model/provider/role-map selection in place, so the next
    * turn and next fork pick it up without tearing down the session. Optional so

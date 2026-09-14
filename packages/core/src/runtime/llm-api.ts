@@ -1582,6 +1582,15 @@ const DEFAULT_PROVIDER_MODELS: Record<ApiProvider, string | undefined> = {
 };
 
 /**
+ * Sentinel `agentModels[role]` value (and the meaning of `RuntimeConfig.autoRoute`
+ * for an unmapped role): let the orchestrator pick the subagent's model for this
+ * role, bounded to what is actually reachable. Never a real model id — it must
+ * never flow into a selected model — it only WIDENS the operator-approved fork
+ * guard to also accept any accessible model (see `LlmApiRuntime.forkForSubagent`).
+ */
+const AUTO_MODEL_SENTINEL = "auto";
+
+/**
  * Detect which API provider to use based on available keys.
  * When `preferredModel` maps to a provider whose auth is present, that wins
  * (per-call routing). Otherwise priority: 0SEC_CHATGPT_OAUTH_REFRESH_TOKEN ->
@@ -2190,15 +2199,71 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
   }
 
   /** Isolated child inference, bound to this runtime's resolved account and route. */
+  /**
+   * Providers whose credentials are present in THIS runtime's environment
+   * (`this.env`, never process-global). A provider counts as accessible iff
+   * `resolveFailoverProvider` — the same auth-presence check the cross-provider
+   * failover chain uses — can build a connection for it, so auth-only providers
+   * (chatgpt-codex OAuth) and cloud-hosted are covered by the identical rule.
+   */
+  accessibleProviders(): ApiProvider[] {
+    const out: ApiProvider[] = [];
+    for (const provider of Object.keys(DEFAULT_PROVIDER_MODELS) as ApiProvider[]) {
+      const probeModel = DEFAULT_PROVIDER_MODELS[provider] || "probe";
+      try {
+        if (resolveFailoverProvider(provider, probeModel, this.env)) out.push(provider);
+      } catch {
+        // resolveFailoverProvider only throws on unexpected cloud-credential
+        // errors; treat a throwing provider as inaccessible, never abort.
+      }
+    }
+    return out;
+  }
+
+  /**
+   * A concrete, reachable model id per accessible provider (its catalog default)
+   * plus the currently-resolved model. This is the read-only roster the
+   * orchestrator can be shown so it names a model under an "auto" role that is
+   * actually reachable; the fork guard independently accepts any model whose
+   * provider has creds, so this is a helpful starting set, not the whole bound.
+   */
+  accessibleModels(): string[] {
+    const models = new Set<string>();
+    if (this.model) models.add(this.model);
+    for (const provider of this.accessibleProviders()) {
+      const def = DEFAULT_PROVIDER_MODELS[provider];
+      if (def) models.add(def);
+    }
+    return [...models];
+  }
+
+  /**
+   * Whether `model` routes to a provider whose credentials are present. Uses the
+   * same per-call `providerForModel` routing the runtime uses everywhere (which
+   * returns a provider only when its key is present), with the concrete
+   * accessible defaults as a fallback for ids the router does not pattern-match.
+   */
+  private isModelAccessible(model: string): boolean {
+    if (providerForModel(model, this.env) !== undefined) return true;
+    return this.accessibleModels().includes(model);
+  }
+
   async forkForSubagent(timeoutMs: number, selection?: SubagentModelSelection): Promise<LlmApiRuntime> {
     if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
       throw new Error("Subagent timeout must be a positive finite number");
     }
     await this.ensureHostedModel();
-    const configuredModel = selection?.role !== undefined && this.config.agentModels &&
+    const roleModel = selection?.role !== undefined && this.config.agentModels &&
       Object.hasOwn(this.config.agentModels, selection.role)
       ? this.config.agentModels[selection.role]
       : undefined;
+    // AUTO-ROUTING: a role pinned to the "auto" sentinel — or ANY role left
+    // unmapped when RuntimeConfig.autoRoute is on — lets the orchestrator pick
+    // the model, bounded to what is reachable. "auto" is a sentinel, never a
+    // real model id, so it must not flow into the selected model.
+    const autoInEffect = roleModel === AUTO_MODEL_SENTINEL ||
+      (this.config.autoRoute === true && roleModel === undefined);
+    const configuredModel = roleModel === AUTO_MODEL_SENTINEL ? undefined : roleModel;
     const selectedModel = this.config.singleModel
       ? this.model
       : selection?.model ?? configuredModel ?? this.model;
@@ -2206,11 +2271,22 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
       throw new Error("Subagent model must be a non-empty model ID");
     }
     const model = this.provider === "opencode" ? opencodeModelId(selectedModel) : selectedModel;
-    const approved = model === this.model || Object.values(this.config.agentModels ?? {}).some(
-      id => (this.provider === "opencode" ? opencodeModelId(id) : id) === model,
+    // Operator-approved allowlist: the parent's own model, or any FIXED pin in
+    // agentModels (the "auto" sentinel is not a real pin, so it is excluded).
+    const approvedByAllowlist = model === this.model || Object.values(this.config.agentModels ?? {}).some(
+      id => id !== AUTO_MODEL_SENTINEL &&
+        (this.provider === "opencode" ? opencodeModelId(id) : id) === model,
     );
+    // Auto WIDENS the guard to also accept any model whose provider has creds;
+    // it never lets an unreachable model through. singleModel still forces the
+    // parent model above, so it is always approved via the allowlist branch.
+    const approved = approvedByAllowlist || (autoInEffect && this.isModelAccessible(selectedModel));
     if (!approved) {
-      throw new Error(`Subagent model "${selectedModel}" is not operator-approved. Configure agentModels before selecting it.`);
+      throw new Error(
+        autoInEffect
+          ? `Subagent model "${selectedModel}" is not reachable: its provider has no configured credentials.`
+          : `Subagent model "${selectedModel}" is not operator-approved. Configure agentModels before selecting it.`,
+      );
     }
     const child = new LlmApiRuntime({ type: "api", timeout: timeoutMs, model }, this);
     await child.ensureHostedModel();
