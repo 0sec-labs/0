@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { PROVIDERS, isProviderConfigured, providerStates } from "./provider-status.js";
+import { PROVIDERS, isProviderConfigured, providerStates, providerSupportsMethod } from "./provider-status.js";
 
 /** No env at all — the state of a fresh container. */
 const EMPTY: Record<string, string | undefined> = {};
@@ -35,6 +35,43 @@ describe("PROVIDERS", () => {
       // still names one of its tokens.
       expect(named).toBe(true);
     }
+  });
+
+  it("gives every provider at least one authentication method", () => {
+    for (const provider of PROVIDERS) {
+      expect(provider.methods.length).toBeGreaterThan(0);
+      for (const method of provider.methods) {
+        expect(["api-key", "oauth"]).toContain(method);
+      }
+    }
+  });
+
+  it("derives the scalar `auth` from the first (most-preferred) method", () => {
+    for (const provider of PROVIDERS) {
+      expect(provider.auth).toBe(provider.methods[0]);
+    }
+  });
+
+  it("models chatgpt-codex as OAuth and every other provider as API key", () => {
+    // The scope decision: Codex/ChatGPT subscription OAuth is added; all
+    // API-key providers stay; Anthropic OAuth is deferred, so anthropic is
+    // still api-key.
+    const byId = new Map(PROVIDERS.map((provider) => [provider.id, provider]));
+    expect(byId.get("chatgpt-codex")?.methods).toEqual(["oauth"]);
+    expect(byId.get("anthropic")?.methods).toEqual(["api-key"]);
+    for (const provider of PROVIDERS) {
+      if (provider.id === "chatgpt-codex") continue;
+      expect(provider.methods).toEqual(["api-key"]);
+    }
+  });
+
+  it("answers providerSupportsMethod for known and unknown ids", () => {
+    expect(providerSupportsMethod("chatgpt-codex", "oauth")).toBe(true);
+    expect(providerSupportsMethod("chatgpt-codex", "api-key")).toBe(false);
+    expect(providerSupportsMethod("anthropic", "api-key")).toBe(true);
+    expect(providerSupportsMethod("anthropic", "oauth")).toBe(false);
+    expect(providerSupportsMethod("google", "api-key")).toBe(false);
+    expect(providerSupportsMethod("", "oauth")).toBe(false);
   });
 
   it("covers exactly the providers the runtime can detect", () => {
