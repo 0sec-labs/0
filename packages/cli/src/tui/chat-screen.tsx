@@ -117,6 +117,8 @@ import {
 } from "./animation.js";
 import {
   PROVIDERS,
+  isProviderConfigured,
+  cloudConfigured as isCloudConfigured,
 } from "./provider-status.js";
 import {
   credentialEnvPatch,
@@ -674,6 +676,19 @@ export interface ChatScreenProps {
   runtimeInfoHandle: React.MutableRefObject<{
     model: () => string;
     providerId: () => string;
+    /**
+     * Live-apply a model/provider/role-map selection to the running runtime.
+     * Reconfigures in place at a turn boundary (never mid-turn): applies at
+     * once when idle, otherwise stashes and flushes when the current turn
+     * completes. A provider switch into a dark (uncredentialed) provider is
+     * NOT applied live — it stays staged for the next audit with a notice.
+     */
+    applySelection: (sel: {
+      model?: string;
+      providerId?: string;
+      agentModels?: Record<string, string>;
+      singleModel?: boolean;
+    }) => void;
   } | null>;
   renderAuditSwitcher?: (width: number, rows: number) => React.ReactNode;
 }
@@ -1378,6 +1393,33 @@ export function ChatScreen({
   busyRef.current = busy;
   const modelIdRef = useRef(modelId);
   modelIdRef.current = modelId;
+  // The live runtime for the current session, published by buildSession so the
+  // live-apply path can reconfigure it in place without capturing a specific
+  // runtime in a closure (a rebuild swaps the reference here).
+  const runtimeRef = useRef<ReturnType<typeof createConsoleRuntime> | null>(null);
+  // A selection that arrived mid-turn. NEVER reconfigure mid-turn; this is
+  // flushed to the live runtime in send()'s completion path, where busy flips
+  // back to false. Last-writer-wins per field, agentModels merged.
+  const pendingSelectionRef = useRef<{
+    model?: string;
+    providerId?: string;
+    agentModels?: Record<string, string>;
+    singleModel?: boolean;
+  } | null>(null);
+  // Latest idle-apply core + busy-aware handle, kept in refs so buildSession
+  // and send() can reach them without dep churn or TDZ ordering constraints.
+  const applyRuntimeSelectionRef = useRef<((sel: {
+    model?: string;
+    providerId?: string;
+    agentModels?: Record<string, string>;
+    singleModel?: boolean;
+  }) => void) | null>(null);
+  const applySelectionRef = useRef<((sel: {
+    model?: string;
+    providerId?: string;
+    agentModels?: Record<string, string>;
+    singleModel?: boolean;
+  }) => void) | null>(null);
   const turn = useRef(0);
   // The bottom bar's right cell (a "N turns · M tools" counter + sidebar toggle
   // glyphs) was removed: the counter was noise and the closed-state toggle
@@ -1760,9 +1802,13 @@ export function ChatScreen({
       throw error;
     });
     cloudSource.current = { owner: created, isHosted: () => runtime.getConfigurationDiagnostics().provider === "hosted", env };
+    // Publish the live runtime so applyRuntimeSelection can reconfigure it in
+    // place. A rebuild (provider connect from a dead session) swaps this.
+    runtimeRef.current = runtime;
     runtimeInfoHandle.current = {
       model: () => runtime.resolvedModel(),
       providerId: () => runtime.getConfigurationDiagnostics().provider,
+      applySelection: (sel) => applySelectionRef.current?.(sel),
     };
     // resolvedModel() is the id the runtime actually settled on after
     // provider detection — not necessarily what was requested — so it is
@@ -1875,6 +1921,104 @@ export function ChatScreen({
     });
   }, [pluginHostManager, appendEntry]);
 
+  // Idle core: reconfigure the live runtime in place, right now. Assumes the
+  // caller has already confirmed no turn is in flight (busy-gating lives in the
+  // handle + the send() flush). A provider switch into a dark provider is not
+  // applied — it stays staged for the next audit (the callers do that) with a
+  // notice, so a credential-less switch can never break an active conversation.
+  const applyRuntimeSelection = useCallback((sel: {
+    model?: string;
+    providerId?: string;
+    agentModels?: Record<string, string>;
+    singleModel?: boolean;
+  }): void => {
+    const runtime = runtimeRef.current;
+    if (!runtime) return;
+    // Explicit shell exports win; a live switch re-resolves the account from
+    // this environment, exactly as construction does.
+    const env = credentialEnvPatch(loadCredentials(), process.env);
+    const currentProvider = runtime.getConfigurationDiagnostics().provider;
+    // Which provider would this selection switch the live runtime into? An
+    // explicit hint (e.g. a 0sec Cloud row's "hosted") wins over the model id,
+    // so a hosted model whose id also lives in a BYOK catalog still forces
+    // hosted; otherwise derive it from the model and only treat it as a switch
+    // when it actually differs from the running provider.
+    let targetProvider: string | undefined = sel.providerId;
+    if (targetProvider === undefined && sel.model !== undefined) {
+      const derived = modelProvider(sel.model);
+      if (derived !== currentProvider && derived !== "unknown") targetProvider = derived;
+    }
+    if (targetProvider !== undefined && targetProvider !== currentProvider) {
+      const configured = targetProvider === "hosted"
+        ? isCloudConfigured(env)
+        : isProviderConfigured(targetProvider, env);
+      if (!configured) {
+        const label = targetProvider === "hosted"
+          ? "0sec Cloud"
+          : PROVIDERS.find((candidate) => candidate.id === targetProvider)?.label ?? targetProvider;
+        appendEntry({
+          kind: "notice",
+          text: `Connect ${label} to switch this audit live`,
+          detail: "Saved for the next audit. Connect the provider, then reselect to apply it to this conversation.",
+          turn: turn.current,
+        });
+        return;
+      }
+    }
+    runtime.reconfigure({
+      ...(sel.model !== undefined ? { model: sel.model } : {}),
+      ...(targetProvider !== undefined ? { provider: targetProvider } : {}),
+      ...(sel.agentModels !== undefined ? { agentModels: sel.agentModels } : {}),
+      ...(sel.singleModel !== undefined ? { singleModel: sel.singleModel } : {}),
+      env,
+    });
+    // resolvedModel() is the id the runtime settled on after re-detection.
+    const applied = runtime.resolvedModel();
+    setModelId(applied);
+    modelIdRef.current = applied;
+    const providerNow = runtime.getConfigurationDiagnostics().provider;
+    const providerLabel = providerNow === "hosted"
+      ? "0sec Cloud"
+      : PROVIDERS.find((candidate) => candidate.id === providerNow)?.label ?? providerNow;
+    appendEntry({
+      kind: "notice",
+      text: `Applied to this audit: ${applied} (${providerLabel})`,
+      detail: "Live for the next turn and every new subagent. Conversation, scope and self-extension are unchanged.",
+      turn: turn.current,
+    });
+  }, [appendEntry]);
+  applyRuntimeSelectionRef.current = applyRuntimeSelection;
+
+  // Busy-aware handle. Apply at once when idle; when a turn is in flight, stash
+  // (last-writer-wins per field; agentModels merged) and let send()'s
+  // completion path flush it at the turn boundary. NEVER reconfigures mid-turn.
+  const applySelection = useCallback((sel: {
+    model?: string;
+    providerId?: string;
+    agentModels?: Record<string, string>;
+    singleModel?: boolean;
+  }): void => {
+    if (busyRef.current) {
+      const prior = pendingSelectionRef.current;
+      pendingSelectionRef.current = {
+        ...prior,
+        ...sel,
+        ...(sel.agentModels || prior?.agentModels
+          ? { agentModels: { ...prior?.agentModels, ...sel.agentModels } }
+          : {}),
+      };
+      appendEntry({
+        kind: "notice",
+        text: "Selection queued for this audit",
+        detail: "It applies to this conversation the moment the current turn finishes.",
+        turn: turn.current,
+      });
+      return;
+    }
+    applyRuntimeSelection(sel);
+  }, [appendEntry, applyRuntimeSelection]);
+  applySelectionRef.current = applySelection;
+
   const reconnectProvider = useCallback((providerId: string) => {
     const knownProvider = PROVIDERS.find((candidate) => candidate.id === providerId);
     if (providerId !== "hosted" && !knownProvider) {
@@ -1885,14 +2029,11 @@ export function ChatScreen({
     const providerLabel = providerId === "hosted"
       ? "0sec Cloud"
       : knownProvider?.label ?? providerId;
+    // Keep the choice staged so /new inherits it too; then apply it LIVE to
+    // this audit's running runtime (deferred to the turn boundary when busy).
     onNextChatOptions?.({ providerId: provider });
     if (sessionRef.current) {
-      appendEntry({
-        kind: "notice",
-        text: `${providerLabel} saved for new audits`,
-        detail: "Use /new to use this connection. The current runtime, conversation and live harness are unchanged.",
-        turn: turn.current,
-      });
+      applySelectionRef.current?.({ providerId: provider });
       return;
     }
     try {
@@ -1922,14 +2063,11 @@ export function ChatScreen({
   }, [reconnectHandle, reconnectProvider]);
 
   const selectModel = useCallback((requested: string) => {
+    // Stage for /new, then apply LIVE to the running audit (deferred to the
+    // turn boundary when busy; kept staged only if the provider is dark).
     onNextChatOptions?.({ model: requested });
     if (sessionRef.current) {
-      appendEntry({
-        kind: "notice",
-        text: `Next-audit model: ${requested}`,
-        detail: "Use /new to start with this model. This audit keeps its runtime, accounting and live harness.",
-        turn: turn.current,
-      });
+      applySelectionRef.current?.({ model: requested });
       return;
     }
     try {
@@ -3584,6 +3722,15 @@ export function ChatScreen({
       flushStreamPatches();
       activeTurnStartedAt.current = null;
       setBusy(false);
+      // Flush any model/provider/role-map selection that arrived mid-turn. The
+      // turn boundary is the only safe point to reconfigure; busyRef still
+      // reads true here (state has not re-rendered), so call the idle core
+      // directly rather than the busy-aware handle.
+      const pendingSelection = pendingSelectionRef.current;
+      if (pendingSelection) {
+        pendingSelectionRef.current = null;
+        applyRuntimeSelectionRef.current?.(pendingSelection);
+      }
       // The turn is over: stop the tool spinner and SETTLE any tool/subagent
       // rows still in flight when it ended (interrupt, error, or a budget stop).
       // `animationKind` reads `runningTool` BEFORE `busy`, so a stale runningTool

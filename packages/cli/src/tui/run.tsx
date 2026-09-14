@@ -296,7 +296,6 @@ function ModelRoute({
   onExit: () => void;
   shell?: ShellNav;
 }) {
-  const theme = useTheme();
   return (
     <ModelScreen
       currentModel={currentModel}
@@ -310,7 +309,6 @@ function ModelRoute({
       onExit={onExit}
       frame={({ body, hint }) => (
         <ShellFrame view="models" dialogContent>
-          <text fg={theme.MUTED}>Selections apply to the next audit; the current runtime stays unchanged.</text>
           {body}
           <FooterBar hint={hint} />
         </ShellFrame>
@@ -870,6 +868,16 @@ function ConsoleApp({
     owner.onNextOptions(selection);
     return true;
   };
+  // Apply a selection LIVE to the audit's running runtime, and always stage it
+  // so /new inherits it too. `applySelection` is a no-op that returns false when
+  // the audit has no live session yet, leaving `stageNext` as the sole effect.
+  const applyOrStage = (selection: Parameters<AuditRecord["onNextOptions"]>[0]) => {
+    const owner = ownerForAction();
+    if (!owner) return false;
+    owner.onNextOptions(selection);
+    owner.applySelection(selection);
+    return true;
+  };
   const shell: ShellNav = {
     canGoBack: routeIndex > (firstRun ? 1 : 0),
     canGoForward: routeIndex < routes.length - 1,
@@ -1197,14 +1205,13 @@ function ConsoleApp({
             providerId={sel?.nextOptions.providerId ?? sel?.runtimeInfo.current?.providerId() ?? sel?.options?.providerId}
             agentModels={sel?.nextOptions.agentModels ?? sel?.options?.agentModels}
             singleModel={sel?.nextOptions.singleModel ?? sel?.options?.singleModel}
-            onAgentModelsChange={(map) => { stageNext({ agentModels: map }); }}
-            onSingleModelChange={(enabled) => { stageNext({ singleModel: enabled }); }}
-            onSelect={(id) => { stageNext({ model: id }); nav.onDone(); }}
+            onAgentModelsChange={(map) => { applyOrStage({ agentModels: map }); }}
+            onSingleModelChange={(enabled) => { applyOrStage({ singleModel: enabled }); }}
+            onSelect={(id) => { applyOrStage({ model: id }); nav.onDone(); }}
             onBack={nav.onSkip}
             onExit={nav.onCancel}
             frame={({ body, hint }) => (
               <ShellFrame view="models" dialogContent>
-                <text fg={theme.MUTED}>Selections apply to the next audit; the current runtime stays unchanged.</text>
                 {body}
                 <FooterBar hint={hint} />
               </ShellFrame>
@@ -1276,10 +1283,10 @@ function ConsoleApp({
         providerId={sel?.nextOptions.providerId ?? sel?.runtimeInfo.current?.providerId() ?? sel?.options?.providerId}
         agentModels={sel?.nextOptions.agentModels ?? sel?.options?.agentModels}
         singleModel={sel?.nextOptions.singleModel ?? sel?.options?.singleModel}
-        onAgentModelsChange={(map) => { stageNext({ agentModels: map }); }}
-        onSingleModelChange={(enabled) => { stageNext({ singleModel: enabled }); }}
+        onAgentModelsChange={(map) => { applyOrStage({ agentModels: map }); }}
+        onSingleModelChange={(enabled) => { applyOrStage({ singleModel: enabled }); }}
         onSelect={(id) => {
-          if (stageNext({ model: id })) leaveCurrentScreen(shell, appExit);
+          if (applyOrStage({ model: id })) leaveCurrentScreen(shell, appExit);
         }}
         onExit={appExit}
         shell={shell}

@@ -51,6 +51,13 @@ export interface AuditRecord extends AuditSummary {
   readonly onWorkingChange: (busy: boolean) => void;
   readonly onActivity: (activity: AuditActivity) => void;
   readonly onNextOptions: (selection: NextOptions) => void;
+  /**
+   * Live-apply a selection to this audit's RUNNING runtime when it has one,
+   * reconfiguring in place at a turn boundary (no session teardown). Returns
+   * false when no live session owns the runtime yet, so the caller keeps the
+   * stage-for-next-audit fallback.
+   */
+  readonly applySelection: (selection: NextOptions) => boolean;
   closing: Promise<void> | undefined;
 }
 
@@ -128,6 +135,7 @@ export class AuditWorkspace {
       onWorkingChange: (busy) => this.#setBusy(id, busy),
       onActivity: (activity) => this.update(id, activity),
       onNextOptions: (selection) => this.stageOptions(id, selection),
+      applySelection: (selection) => this.#applyLiveSelection(id, selection),
     };
     this.#records = [...this.#records, record];
     if (sourceSessionId) this.protectedSessionIds.add(sourceSessionId);
@@ -205,6 +213,21 @@ export class AuditWorkspace {
       ? { ...item, options: { ...item.options, ...item.nextOptions }, nextOptions: {} }
       : item);
     this.#emit();
+    return true;
+  }
+
+  /**
+   * Reconfigure the audit's live runtime in place, when a ChatScreen has bound
+   * its runtime handle. Selection never changes runtime lifetime; a busy turn
+   * is handled by the handle (deferred to the turn boundary), so this stays a
+   * pure dispatch. Returns false when the audit has no live runtime yet.
+   */
+  #applyLiveSelection(id: string, selection: NextOptions): boolean {
+    const record = this.get(id);
+    if (!record || record.closeRequested || !record.session) return false;
+    const apply = record.runtimeInfo.current?.applySelection;
+    if (!apply) return false;
+    apply(selection);
     return true;
   }
 
