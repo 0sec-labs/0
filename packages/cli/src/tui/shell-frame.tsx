@@ -4,7 +4,7 @@ import { VERSION } from "@0sec/shared";
 import { useTheme } from "./theme-context.js";
 import { readableOnPrimary } from "./themes.js";
 import { useSymbols } from "./symbol-context.js";
-import { fitTuiText } from "./text.js";
+import { fitLegend, fitTuiText } from "./text.js";
 import { useSettings } from "./settings-store.js";
 import { useDialogSurface, useSurfaceDimensions } from "./dialog-surface.js";
 import { operatorIcon, operatorTitle } from "./operator-icons.js";
@@ -41,7 +41,7 @@ export function OverlayFrame({
       <box flexDirection="column" width="100%" minWidth={0}>
         <text fg={theme.PRIMARY}>{fitTuiText(title, overlay.contentWidth)}</text>
         {children}
-        <text fg={theme.MUTED}>{fitTuiText(footer, overlay.contentWidth)}</text>
+        <text fg={theme.MUTED}>{fitLegend(overlay.contentWidth, footer)}</text>
       </box>
     </box>
   );
@@ -133,7 +133,12 @@ function HeaderBar({
   const theme = useTheme();
   const symbols = useSymbols();
   const { width } = useSurfaceDimensions();
-  const contentWidth = Math.max(1, width - SHELL_HORIZONTAL_PADDING * 2);
+  // The bar is now full-bleed (it escapes ShellFrame's horizontal padding and
+  // reaches both terminal edges), keeping only a single-cell text inset via its
+  // own paddingX={1}. So its columns are budgeted against that real inner width
+  // — the terminal less the two inset cells — not against the shell's padded
+  // content column.
+  const contentWidth = Math.max(1, width - 2);
   const statusWidth = status
     ? Math.max(1, Math.min(Math.floor(contentWidth * 0.42), Math.max(1, contentWidth - 18)))
     : 0;
@@ -142,12 +147,16 @@ function HeaderBar({
   // on every palette's signature colour, not just the default orange.
   const fg = readableOnPrimary(theme);
 
-  // A single full-width PRIMARY strip: the colour IS the delineation, so no
-  // border divider row and no leading rail. `marginBottom` keeps content
-  // below breathing.
+  // A single full-BLEED PRIMARY strip: the colour IS the delineation, so no
+  // border divider row and no leading rail. It escapes ShellFrame's horizontal
+  // padding — the frame now applies that padding to the BODY below instead, so
+  // this strip's `width="100%"` is the whole terminal width and the orange
+  // reaches column 0 and the last column. Its own `paddingX={1}` keeps the text
+  // a clean single cell in from each edge. `marginBottom` keeps content below
+  // breathing.
   return (
     <HeaderForegroundContext.Provider value={fg}>
-      <box flexDirection="row" width="100%" minWidth={0} marginBottom={1} backgroundColor={theme.PRIMARY}>
+      <box flexDirection="row" width="100%" minWidth={0} marginBottom={1} paddingLeft={1} paddingRight={1} backgroundColor={theme.PRIMARY}>
         <box width={titleWidth} flexShrink={0} minWidth={0}>
           <text fg={fg}>{fitTuiText(`${operatorIcon(view, symbols)} ${operatorTitle(view)}`, titleWidth)}</text>
         </box>
@@ -161,7 +170,7 @@ function HeaderBar({
   );
 }
 
-export function FooterBar({ hint, status }: { hint: string; status?: React.ReactNode }) {
+export function FooterBar({ hint, status }: { hint: string | readonly string[]; status?: React.ReactNode }) {
   const theme = useTheme();
   const { width } = useSurfaceDimensions();
   const inDialog = useDialogSurface();
@@ -170,7 +179,7 @@ export function FooterBar({ hint, status }: { hint: string; status?: React.React
     const statusWidth = status ? Math.min(30, Math.floor(width / 3)) : 0;
     return (
       <box flexDirection="row" width="100%" height={1} flexShrink={0} overflow="hidden">
-        <box flexGrow={1} minWidth={0}><text fg={theme.MUTED}>{fitTuiText(hint, Math.max(0, width - statusWidth))}</text></box>
+        <box flexGrow={1} minWidth={0}><text fg={theme.MUTED}>{fitLegend(Math.max(0, width - statusWidth), hint)}</text></box>
         {status ? <box width={statusWidth} flexShrink={0}>{typeof status === "string" ? <text fg={theme.MUTED}>{fitTuiText(status, statusWidth)}</text> : status}</box> : null}
       </box>
     );
@@ -179,7 +188,7 @@ export function FooterBar({ hint, status }: { hint: string; status?: React.React
   return (
     <box flexDirection={footer.inline ? "row" : "column"} width="100%" minWidth={0}>
       <box width={footer.inline ? footer.hintWidth : "100%"} flexShrink={0} minWidth={0}>
-        <text fg={theme.MUTED} wrapMode="word">{fitTuiText(hint, footer.hintWidth)}</text>
+        <text fg={theme.MUTED} wrapMode="word">{fitLegend(footer.hintWidth, hint)}</text>
       </box>
       <box flexDirection="row" flexShrink={0} marginTop={footer.inline ? 0 : 1}>
         {status ? (
@@ -213,10 +222,16 @@ export function ShellFrame({
   if (inDialog && dialogContent) {
     return <box flexDirection="column" width="100%" height="100%" backgroundColor={theme.PANEL}>{children}</box>;
   }
+  // The header bar is full-bleed, so the frame carries only the top padding at
+  // the outer level; the horizontal padding moves onto the BODY wrapper below
+  // the bar. That lets the orange strip reach both terminal edges while the
+  // content keeps its usual side gutter.
   return (
-    <box flexDirection="column" width="100%" height="100%" paddingLeft={2} paddingRight={2} paddingTop={1} backgroundColor={inDialog ? theme.PANEL : theme.CANVAS}>
+    <box flexDirection="column" width="100%" height="100%" paddingTop={1} backgroundColor={inDialog ? theme.PANEL : theme.CANVAS}>
       <HeaderBar view={view} status={status ?? meta} />
-      {children}
+      <box flexDirection="column" flexGrow={1} minHeight={0} width="100%" minWidth={0} paddingLeft={SHELL_HORIZONTAL_PADDING} paddingRight={SHELL_HORIZONTAL_PADDING}>
+        {children}
+      </box>
     </box>
   );
 }

@@ -92,7 +92,6 @@ import {
   highlighted,
   reduceSelector,
   visibleItems,
-  windowFor,
   type SelectorItem,
   type SelectorState,
 } from "./selector.js";
@@ -158,7 +157,7 @@ import {
   buildToolsPanel,
 } from "./panels.js";
 import { getAllCapabilities } from "./capability-registry.js";
-import { fitTuiText, sanitizeComposerText } from "./text.js";
+import { fitLegend, fitTuiText, sanitizeComposerText } from "./text.js";
 import { THEME_NAMES, getThemeEntry, isThemeName, readableOnPrimary } from "./themes.js";
 import { sleekScrollbar } from "./scrollbar.js";
 import {
@@ -1507,23 +1506,17 @@ export function ChatScreen({
   // The drilled-in subagent's transcript scrollbox (auto-follows newest, like
   // the main one); pageup/pagedown scroll it while focused.
   const focusTranscriptRef = useRef<ScrollBoxRenderable | null>(null);
-  /**
-   * The slash-command list scrollbox, so the selected row can be scrolled into
-   * view as the operator arrows past the height-clamped window. Not focusable —
-   * navigation stays with the module-level keyboard handler.
-   */
-  const commandMenuScrollRef = useRef<ScrollBoxRenderable | null>(null);
   /** The `ask_operator` modal body scrollbox, scrolled to keep the active row visible. */
   const operatorScrollRef = useRef<ScrollBoxRenderable | null>(null);
   const commandCatalog: readonly SlashCommand[] = SLASH_COMMANDS;
   const isSlashComposer = composer.trimStart().startsWith("/");
   const slashQuery = isSlashComposer ? composer.trimStart().slice(1).split(/\s+/, 1)[0] ?? "" : "";
-  // A wide menu prints a description under each command; a compact one
-  // does not. The row cost per entry therefore differs, and the visible
-  // count has to be derived from the real height instead of a constant —
-  // over-allocating is what painted the menu's bottom border through the
-  // last two command rows.
-  const commandRowsPerCommand = compact ? 1 : 2;
+  // The command menu now renders through the shared `DialogSelectBody`, which
+  // puts each command on ONE row (name · description · alias columns) exactly
+  // like the model/theme pickers — so every entry costs a single row, compact
+  // or not. The visible count is still derived from the real terminal height so
+  // the box is never taller than the column can spare.
+  const commandRowsPerCommand = 1;
   const commandMenuLimit = computeCommandMenuHeight({
     height,
     compact,
@@ -4030,6 +4023,44 @@ export function ChatScreen({
     submitOperatorMessage(prompt);
   }, [session, submitOperatorMessage]);
 
+  // ── Command-menu pointer handlers (hover + click) ──────────────────────────
+  // The shared `DialogSelectBody` reports a hovered row and a clicked row; both
+  // reuse the SAME select/run path the keyboard already drives, so the mouse is
+  // purely additive and steals nothing from the module keyboard handler.
+  // Hover highlights (moves the cursor); a click activates the row exactly as
+  // pressing Enter on it would.
+  const hoverSlashCommand = useCallback((index: number) => {
+    setSlashSelected(index);
+  }, []);
+  const scrollSlashCommand = useCallback((delta: number) => {
+    setSlashSelected((current) =>
+      Math.min(Math.max(0, current + delta), Math.max(0, menuCommands.length - 1)),
+    );
+  }, [menuCommands.length]);
+  const activateSlashCommand = useCallback((index: number) => {
+    const command = menuCommands[index];
+    if (!command) return;
+    setSlashSelected(index);
+    const parsed = findCommand(composerRef.current);
+    const input = completionFor(command, parsed.args);
+    // A command whose usage still expects arguments and has none typed yet
+    // completes into the composer (the Tab affordance) rather than running with
+    // an empty argument; anything runnable submits, exactly like Enter.
+    if (!parsed.args && completionFor(command).endsWith(" ")) {
+      setComposerText(input);
+      setCommandMenuVisible(true);
+      return;
+    }
+    historyRef.current = pushHistory(historyRef.current, input);
+    submitOperatorMessage(input);
+    if (!restorePaletteDraft()) {
+      composingRef.current = false;
+      setComposerText("");
+      setComposing(false);
+      setCommandMenuVisible(false);
+    }
+  }, [menuCommands, submitOperatorMessage, setComposerText, setCommandMenuVisible, restorePaletteDraft]);
+
 
   // Deliver one parked message per idle transition. One at a time rather than a
   // loop: delivering makes the console busy again, so the NEXT idle drains the
@@ -4780,11 +4811,12 @@ export function ChatScreen({
     hasContext: false,
     hasDetail: Boolean(pickerDetail),
   });
-  const pickerWindow = picker
-    ? windowFor(picker.state, pickerPlan.maxItemRows)
-    : { start: 0, end: 0 };
-  const pickerRows = pickerVisible.slice(pickerWindow.start, pickerWindow.end);
-  const pickerBoxHeight = selectorPanelHeight(pickerRows.length, false, pickerPlan.showDetail);
+  // The shared list body windows the full item list around the cursor itself,
+  // so the picker no longer slices its own visible window — it passes the whole
+  // filtered list and the absolute cursor. It still budgets the box height for
+  // exactly the rows that will paint.
+  const pickerVisibleRows = Math.min(pickerPlan.maxItemRows, pickerVisible.length);
+  const pickerBoxHeight = selectorPanelHeight(pickerVisibleRows, false, pickerPlan.showDetail);
 
   // The approval card shows its choices in full (there are only ever two) and
   // spends the rest of its budget on READABLE argument rows. A long arg list is
@@ -5260,14 +5292,14 @@ export function ChatScreen({
       layout={ml}
       boxWidth={boxWidth}
       height={commandMenuHeight}
-      scrollRef={commandMenuScrollRef}
       commands={menuCommands}
       selectedIndex={slashSelected}
       visibleRows={visibleCommandRows}
-      rowsPerCommand={commandRowsPerCommand}
       query={slashQuery}
-      compact={compact}
       theme={theme}
+      onActivateRow={activateSlashCommand}
+      onHoverRow={hoverSlashCommand}
+      onScroll={scrollSlashCommand}
     />
   );
   const commandMenuNode = commandMenuVisible ? buildCommandMenu(menu, "100%") : null;
@@ -5289,7 +5321,7 @@ export function ChatScreen({
         <text fg={MUTED}>{fitTuiText(`Stored owner-only in your 0sec state dir and exported as ${secretPrompt.envVar}. Never transmitted by 0sec.`, approvalWidth, { mode: "middle" })}</text>
       </box>
       <box width={approvalWidth} flexShrink={0} minWidth={0}>
-        <text fg={MUTED}>{fitTuiText("enter save · esc cancel", approvalWidth)}</text>
+        <text fg={MUTED}>{fitLegend(approvalWidth, "enter save · esc cancel")}</text>
       </box>
     </box>
   ) : null;
@@ -5298,9 +5330,9 @@ export function ChatScreen({
     <SelectorPanel
       title={picker.state.title}
       subtitle={picker.state.query ? picker.state.query : `${pickerVisible.length} available`}
-      rows={pickerRows}
-      windowStart={pickerWindow.start}
+      items={pickerVisible}
       activeIndex={picker.state.index}
+      visibleRows={pickerVisibleRows}
       detail={pickerPlan.showDetail ? pickerDetail : undefined}
       hint="↑↓ select · type to filter · enter apply · esc cancel"
       emptyText={`no match for "${picker.state.query}"`}
@@ -5540,7 +5572,7 @@ export function ChatScreen({
         <CloudHintCard hostedConnected={cloudConfigured} width={rightInner} rows={cloudHintRows} theme={theme}
           dismissed={cloudHintDismissed} onDismiss={() => setCloudHintDismissed(true)} onConnect={() => onNavigate("connect")} />
         <box width={rightInner} flexShrink={0} minWidth={0} onMouseDown={() => updateSetting("showRightSidebar", false)}>
-          <text fg={MUTED}>{fitTuiText("Hide agents · ctrl+l", rightInner)}</text>
+          <text fg={MUTED}>{fitLegend(rightInner, "Hide agents · ctrl+l")}</text>
         </box>
       </box>
     </box>
@@ -5914,16 +5946,10 @@ export function ChatScreen({
   const heroOverlayOpen = commandMenuVisible || Boolean(picker) || Boolean(approvalPrompt) || Boolean(secretPrompt) || operatorQuestionOpen;
   const showMasthead = !heroOverlayOpen && !startupError;
 
-  // ── Command-menu selection scroll ──────────────────────────────────────────
-  // Keep the highlighted command inside the height-clamped window: the rows live
-  // in a scrollbox, so scrolling — not slicing — is what makes entries past the
-  // visible window reachable. Centred, clamped flush to the ends (chat-layout).
-  useEffect(() => {
-    const box = commandMenuScrollRef.current;
-    if (!box || !commandMenuVisible || menuCommands.length === 0) return;
-    const start = commandMenuWindowStart(slashSelected, visibleCommandRows, menuCommands.length);
-    box.scrollTop = start * commandRowsPerCommand;
-  }, [commandMenuVisible, slashSelected, visibleCommandRows, menuCommands.length, commandRowsPerCommand]);
+  // The command menu now renders through the shared `DialogSelectBody`, which
+  // windows the list around the cursor internally (see dialog-select-layout's
+  // `dialogWindow`) exactly as every other picker does — so it needs no external
+  // scrollbox and no scroll effect of its own.
 
   // ── ask_operator body scroll ───────────────────────────────────────────────
   // Scroll the active answerable row into view within the fixed-height body.
@@ -5967,7 +5993,7 @@ export function ChatScreen({
   });
 
   return (
-    <box flexDirection="column" width="100%" height="100%" paddingLeft={compact ? 1 : 2} paddingRight={compact ? 1 : 2} paddingTop={1} backgroundColor={CANVAS}>
+    <box flexDirection="column" width="100%" height="100%" paddingTop={1} backgroundColor={CANVAS}>
       {/*
         * flexShrink is disabled because this box is two stacked rows with
         * no explicit height: when the column is over-subscribed Yoga
@@ -5981,7 +6007,7 @@ export function ChatScreen({
         * environmental (model, cwd, branch, counters) moved to the bottom
         * bar, where it sits next to the input the operator is looking at.
         */}
-      <box flexDirection="row" width="100%" minWidth={0} flexShrink={0} marginBottom={1} gap={1} backgroundColor={PRIMARY}>
+      <box flexDirection="row" width="100%" minWidth={0} flexShrink={0} marginBottom={1} gap={1} paddingLeft={1} paddingRight={1} backgroundColor={PRIMARY}>
         <box flexDirection="row" flexShrink={0} minWidth={0}>
           <text fg={headerFg}>0sec</text>
         </box>
@@ -6007,6 +6033,13 @@ export function ChatScreen({
         </box>
       </box>
 
+      {/*
+        * The BODY wrapper carries the horizontal padding the outer frame used
+        * to own. Moving the side gutter here (rather than onto the root box)
+        * is what lets the masthead strip above bleed to both terminal edges
+        * while everything below it keeps its usual `compact ? 1 : 2` inset.
+        */}
+      <box flexDirection="column" flexGrow={1} minHeight={0} width="100%" minWidth={0} paddingLeft={compact ? 1 : 2} paddingRight={compact ? 1 : 2}>
       {empty && !reviewOpen && !leftSidebarNode ? (
         /*
          * The centered start screen: logo + captions + the COMPOSER + a dim
@@ -6046,7 +6079,7 @@ export function ChatScreen({
               {keyHintsLength(heroHintPairs, " · ") <= heroContentWidth ? (
                 <KeyHints pairs={heroHintPairs} theme={theme} />
               ) : (
-                <text fg={MUTED}>{fitTuiText("/connect · /resume · ctrl+p", heroContentWidth)}</text>
+                <text fg={MUTED}>{fitLegend(heroContentWidth, "/connect · /resume · ctrl+p")}</text>
               )}
             </box>
             <box height={heroBottomSpacer} flexShrink={0} minWidth={0} />
@@ -6101,6 +6134,7 @@ export function ChatScreen({
             </box>
           ) : <text fg={MUTED}>{fitTuiText(statusBarText, statusContentWidth)}</text>}
         </box>
+      </box>
       {/*
         * The copy-on-highlight toast. Positioned absolutely with a high
         * zIndex (see toast.tsx), so it floats over the transcript without

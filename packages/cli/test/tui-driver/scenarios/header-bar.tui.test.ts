@@ -79,3 +79,47 @@ test("header paints a wide PRIMARY strip with a legible foreground", async () =>
   // the orange bar.
   expect(fgWidthOnBar, "no readable foreground glyphs painted on the PRIMARY strip").toBeGreaterThan(0);
 });
+
+test("header bar bleeds to BOTH terminal edges (column 0 and the last column)", async () => {
+  // The redesign made the bar full-bleed: it escapes the screen frame's
+  // horizontal padding so the orange reaches the very first and very last
+  // column, rather than stopping a cell or two short of each edge.
+  tui = await launch({ settings: { theme: "0sec" } });
+  await tui.waitForText(HOME_READY, 15_000);
+  await tui.settle();
+
+  const theme = degradePalette(getTheme("0sec"), detectColorDepth(process.env));
+  const primary = parseHex(theme.PRIMARY)!;
+  const primaryKey = `${primary.r},${primary.g},${primary.b}`;
+
+  const frame = tui.captureSpans();
+
+  // Reconstruct each row's per-column background from its ordered spans, then
+  // find the row that is PRIMARY across the WHOLE width — the full-bleed bar.
+  let bledLine = -1;
+  frame.lines.forEach((line, i) => {
+    const cols: string[] = [];
+    for (const span of line.spans) {
+      const [br, bg, bb] = span.bg.toInts();
+      const key = `${br},${bg},${bb}`;
+      for (let c = 0; c < span.width; c += 1) cols.push(key);
+    }
+    if (cols.length < frame.cols) return;
+    // The first and last painted columns must both be the orange, and the whole
+    // row must be orange (a true edge-to-edge strip, not an inset block).
+    const allPrimary = cols.slice(0, frame.cols).every((k) => k === primaryKey);
+    if (allPrimary) bledLine = i;
+  });
+
+  expect(
+    bledLine,
+    "no full-bleed PRIMARY strip: the orange bar does not reach both terminal edges",
+  ).toBeGreaterThanOrEqual(0);
+
+  // Spell the edge guarantee out explicitly on that row.
+  const edge = frame.lines[bledLine]!;
+  const firstBg = edge.spans[0]!.bg.toInts();
+  const lastBg = edge.spans[edge.spans.length - 1]!.bg.toInts();
+  expect(`${firstBg[0]},${firstBg[1]},${firstBg[2]}`, "column 0 is not PRIMARY").toBe(primaryKey);
+  expect(`${lastBg[0]},${lastBg[1]},${lastBg[2]}`, "the last column is not PRIMARY").toBe(primaryKey);
+});
