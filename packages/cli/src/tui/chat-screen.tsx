@@ -4760,8 +4760,13 @@ export function ChatScreen({
   const headerSegments: string[] = [];
   if (settings.showScope) headerSegments.push(`Scope: ${scopeLabel}`);
   headerSegments.push(sessionState);
-  // Version rides at the far left of the top bar, like the startup masthead.
-  const headerEngagement = [`v${VERSION}`, ...headerSegments].join(" · ");
+  // Version rides at the far left of the top bar, like the startup masthead,
+  // carrying the build-channel badge right beside it: [dev] when launched from
+  // a dev source checkout (the `0dev` wrapper exports 0SEC_DEV_SOURCE_ROOT),
+  // else [beta] for a published build. fitTuiText truncates the MIDDLE here, so
+  // this leading segment survives even on a narrow bar.
+  const channelBadge = process.env["0SEC_DEV_SOURCE_ROOT"]?.trim() ? "[dev]" : "[beta]";
+  const headerEngagement = [`v${VERSION} ${channelBadge}`, ...headerSegments].join(" · ");
 
 
   // Activity comes from the real in-flight call, not an invented model intent.
