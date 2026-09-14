@@ -66,8 +66,8 @@ export function Masthead({
       {showTerminalMark ? (
         <box flexDirection="column" width={TERMINAL_BLOCK_LOGO_WIDTH} minWidth={TERMINAL_BLOCK_LOGO_WIDTH} flexShrink={0}>
           {/*
-            * 0sec brand mark: a slashed zero — a white "0" outline with a
-            * red diagonal slash through its hollow — then white "SEC".
+            * 0sec brand mark: a slashed zero — a white "0" outline with an
+            * orange diagonal slash through its hollow — then white "SEC".
             * The per-cell frame comes from computeLogoFrame (the intro
             * animation, or the settled final frame under reduceMotion/"off");
             * logoRowRuns coalesces each row into (tone,visible) runs whose
@@ -101,7 +101,7 @@ export function Masthead({
         </box>
       )}
       {showTagline ? (
-        <text fg={TEXT} marginTop={1}>{fitTuiText("The open, extensible cybersecurity harness", contentWidth, { mode: "middle" })}</text>
+        <text fg={TEXT} marginTop={1}>{fitTuiText("Software that secures itself.", contentWidth, { mode: "middle" })}</text>
       ) : null}
       {facts.length > 0 ? (
         <box flexDirection="column" width={contentWidth} flexShrink={0} minWidth={0} marginTop={1} alignItems="center">
