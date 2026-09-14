@@ -38,8 +38,13 @@
 
 import { computeListWindow, type ListWindow } from "./pane-layout.js";
 import { sanitizeTuiText } from "./text.js";
-import { shellChromeRows } from "./herd-layout.js";
+import { shellChromeRows, formatTokens, formatElapsed, completionReasonNote } from "./herd-layout.js";
 import type { HerdSubagentMap, HerdSubagentRecord, RosterSort, SubagentStatus } from "./herd-layout.js";
+
+// The token/elapsed chip formatters live in herd-layout (one source, no module
+// cycle) and are re-exported here so this module's public surface — and its
+// test — keep importing them from `agents-comms-layout`.
+export { formatTokens, formatElapsed } from "./herd-layout.js";
 import {
   type MessageCardData,
   type PeerMessageLike,
@@ -217,31 +222,6 @@ export function commsFleetName(record: HerdSubagentRecord): string {
   return sanitizeTuiText(record.agentId);
 }
 
-/**
- * Compact token count — "1.2k" / "980" / "" — for a stat chip. Returns "" for a
- * missing or zero total so the caller drops the chip rather than showing "0 tok".
- */
-export function formatTokens(total: number | undefined): string {
-  if (typeof total !== "number" || !Number.isFinite(total) || total <= 0) return "";
-  const n = Math.trunc(total);
-  if (n < 1000) return `${n}`;
-  if (n < 1_000_000) return `${(n / 1000).toFixed(n < 10_000 ? 1 : 0)}k`;
-  return `${(n / 1_000_000).toFixed(1)}m`;
-}
-
-/**
- * Compact elapsed duration — "4.2s" / "1m03s" / "2h" — for a stat chip. Returns
- * "" for a missing / non-positive duration so the caller omits it.
- */
-export function formatElapsed(ms: number | undefined): string {
-  if (typeof ms !== "number" || !Number.isFinite(ms) || ms <= 0) return "";
-  const seconds = Math.floor(ms / 1000);
-  if (seconds < 60) return `${(ms / 1000).toFixed(1)}s`;
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes}m${String(seconds % 60).padStart(2, "0")}s`;
-  return `${Math.floor(minutes / 60)}h${String(minutes % 60).padStart(2, "0")}m`;
-}
-
 /** Relative age of a peer's last heartbeat — mirrors herd's formatRelativeAge. */
 export function commsRelativeAge(lastSeen: number | undefined, now: number): string {
   if (typeof lastSeen !== "number" || !Number.isFinite(lastSeen)) return "";
@@ -269,7 +249,12 @@ export function commsRelativeAge(lastSeen: number | undefined, now: number): str
 export function commsFleetStatLine(row: CommsFleetRow, now: number): string {
   const { record, telemetry } = row;
   const parts: string[] = [];
-  parts.push(record.operatorStopped ? "stopped" : commsStatusLabel(record.status));
+  // Status word, with the completion reason appended for a terminal worker
+  // (`done (turn_limit)`), so a curtailed run reads distinctly from a clean done.
+  // Operator-stopped stays "stopped"; a bare `done`/failed appends nothing.
+  const statusWord = record.operatorStopped ? "stopped" : commsStatusLabel(record.status);
+  const reasonNote = record.operatorStopped ? "" : completionReasonNote(record.completionReason);
+  parts.push(reasonNote ? `${statusWord} (${reasonNote})` : statusWord);
 
   const turnValue = typeof record.turns === "number" ? record.turns : record.turn;
   if (typeof turnValue === "number" && Number.isFinite(turnValue)) {

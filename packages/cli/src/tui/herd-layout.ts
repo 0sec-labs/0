@@ -638,6 +638,55 @@ export function formatRelativeAge(lastSeen: number, now: number): string {
 }
 
 /**
+ * Compact token count — "1.2k" / "980" / "" — for a stat chip. Returns "" for a
+ * missing or zero total so the caller drops the chip rather than showing "0 tok".
+ * Lives here (rather than agents-comms-layout) so both the comms and herd layers
+ * share one formatter without a module cycle; comms re-exports it.
+ */
+export function formatTokens(total: number | undefined): string {
+  if (typeof total !== "number" || !Number.isFinite(total) || total <= 0) return "";
+  const n = Math.trunc(total);
+  if (n < 1000) return `${n}`;
+  if (n < 1_000_000) return `${(n / 1000).toFixed(n < 10_000 ? 1 : 0)}k`;
+  return `${(n / 1_000_000).toFixed(1)}m`;
+}
+
+/**
+ * Compact elapsed duration — "4.2s" / "1m03s" / "2h" — for a stat chip. Returns
+ * "" for a missing / non-positive duration so the caller omits it.
+ */
+export function formatElapsed(ms: number | undefined): string {
+  if (typeof ms !== "number" || !Number.isFinite(ms) || ms <= 0) return "";
+  const seconds = Math.floor(ms / 1000);
+  if (seconds < 60) return `${(ms / 1000).toFixed(1)}s`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m${String(seconds % 60).padStart(2, "0")}s`;
+  return `${Math.floor(minutes / 60)}h${String(minutes % 60).padStart(2, "0")}m`;
+}
+
+/**
+ * The parenthetical completion-reason NOTE to show alongside a terminal status,
+ * e.g. `done (turn_limit)`. Returns "" for a missing reason OR a clean `done`
+ * (the status word already says "done", so "(done)" would be noise) — MEASURED,
+ * never inferred. The reason is a fixed enum from the lifecycle payload; an
+ * unknown value passes through control-stripped so a new Core reason still shows.
+ */
+export function completionReasonNote(reason: string | undefined): string {
+  if (typeof reason !== "string") return "";
+  const r = sanitizeHerdText(reason);
+  if (r.length === 0 || r === "done") return "";
+  return r;
+}
+
+/**
+ * Tone for a completion reason: a `turn_limit`/`cost_limit`/`error` reason is a
+ * curtailed run and reads WARNING; `early_stop` and a clean `done` read MUTED.
+ */
+export function completionReasonTone(reason: string | undefined): HerdDetailTone {
+  return reason === "turn_limit" || reason === "cost_limit" || reason === "error" ? "warn" : "muted";
+}
+
+/**
  * Abbreviate a project directory with `~` when it sits under `homeDir`, then
  * sanitize it. The cwd is opaque data that may have been written by another
  * process, so it is control-stripped before it can reach the frame.
@@ -1109,6 +1158,13 @@ export interface HerdSubagentRecord {
   readonly findings?: number;
   readonly summary?: string;
   readonly error?: string;
+  /**
+   * Why a terminal worker stopped, straight off the lifecycle payload's
+   * `completion_reason` ("done"|"turn_limit"|"cost_limit"|"early_stop"|"error").
+   * `undefined` means "not reported", never a synthesised default — a curtailed
+   * run (turn_limit/cost_limit) reads distinctly from a clean `done`.
+   */
+  readonly completionReason?: string;
   /** Latest tool the child ran, mirrored onto the roster row's activity. */
   readonly tool?: string;
   /** Latest note the child authored. */
@@ -1120,6 +1176,43 @@ export interface HerdSubagentRecord {
 
 /** A live subagent map, keyed by `agentId`. */
 export type HerdSubagentMap = Record<string, HerdSubagentRecord>;
+
+/**
+ * MEASURED per-agent telemetry the focus header renders — every field optional
+ * and, when present, actually reported (the `usage` counts + `contextTokens` +
+ * `durationMs` + `model` come off `subagent_lifecycle`/`subagent_message`'s
+ * `SubagentTelemetry`). Absent → "not reported", so the header omits the line
+ * rather than showing a zero. Keyed elsewhere by `agent_id`.
+ */
+export interface FocusTelemetry {
+  inputTokens?: number;
+  outputTokens?: number;
+  cachedInputTokens?: number;
+  contextTokens?: number;
+  durationMs?: number;
+  model?: string;
+}
+
+/**
+ * Read a MEASURED telemetry snapshot off a `subagent_lifecycle` or
+ * `subagent_message` payload (both extend `SubagentTelemetry`). Returns
+ * `undefined` when nothing measurable is present, so a caller merges only real
+ * data. Mirrors the comms screen's `readTelemetry`, plus cached + context.
+ */
+export function readFocusTelemetry(payload: Record<string, unknown>): FocusTelemetry | undefined {
+  const snap: FocusTelemetry = {};
+  const usage = payload["usage"];
+  if (usage && typeof usage === "object") {
+    const u = usage as Record<string, unknown>;
+    if (typeof u["inputTokens"] === "number") snap.inputTokens = u["inputTokens"];
+    if (typeof u["outputTokens"] === "number") snap.outputTokens = u["outputTokens"];
+    if (typeof u["cachedInputTokens"] === "number") snap.cachedInputTokens = u["cachedInputTokens"];
+  }
+  if (typeof payload["contextTokens"] === "number") snap.contextTokens = payload["contextTokens"];
+  if (typeof payload["durationMs"] === "number") snap.durationMs = payload["durationMs"];
+  if (typeof payload["model"] === "string") snap.model = payload["model"];
+  return Object.keys(snap).length > 0 ? snap : undefined;
+}
 
 // -- Defensive coercion of bus payload fields (payloads arrive as records) --
 
@@ -1174,6 +1267,7 @@ export function applySubagentLifecycle(
   const findings = pickFiniteInt(payload["findings"]) ?? prev?.findings;
   const summary = pickString(payload["summary"]) ?? prev?.summary;
   const error = pickString(payload["error"]) ?? prev?.error;
+  const completionReason = pickString(payload["completion_reason"]) ?? prev?.completionReason;
 
   const entry: SubagentActivityEntry = {
     kind: "lifecycle",
@@ -1196,6 +1290,7 @@ export function applySubagentLifecycle(
     findings,
     summary,
     error,
+    ...(completionReason ? { completionReason } : {}),
     tool: prev?.tool,
     note: prev?.note,
     lastSeen: ts,
@@ -1241,6 +1336,7 @@ export function applySubagentProgress(
     findings: prev?.findings,
     summary: prev?.summary,
     error: prev?.error,
+    ...(prev?.completionReason ? { completionReason: prev.completionReason } : {}),
     tool: tool ?? prev?.tool,
     note: note ?? prev?.note,
     lastSeen: ts,
@@ -1395,7 +1491,14 @@ export function focusHeaderLines(
     compact = false,
     siblingIndex,
     siblingTotal,
-  }: { compact?: boolean; siblingIndex?: number; siblingTotal?: number } = {},
+    telemetry,
+  }: {
+    compact?: boolean;
+    siblingIndex?: number;
+    siblingTotal?: number;
+    /** MEASURED usage/duration/model for this agent, joined by `agent_id`. */
+    telemetry?: FocusTelemetry;
+  } = {},
 ): HerdDetailLine[] {
   const limit = cells(width);
   if (!peer || limit <= 0) return [];
@@ -1422,7 +1525,18 @@ export function focusHeaderLines(
   separate();
 
   if (record) {
-    push(`Status: ${settled ?? subagentStatusLabel(record.status)}`, settled ? "muted" : focusStatusTone(record.status));
+    // Status, with the completion reason appended for a terminal worker
+    // (`done (turn_limit)`). A curtailed run (turn_limit/cost_limit/error) reads
+    // WARNING; a clean done shows no parenthetical and keeps its muted tone.
+    const reasonNote = completionReasonNote(record.completionReason);
+    const statusWord = settled ?? subagentStatusLabel(record.status);
+    const statusText = reasonNote ? `${statusWord} (${reasonNote})` : statusWord;
+    const statusTone: HerdDetailTone = reasonNote
+      ? completionReasonTone(record.completionReason)
+      : settled
+        ? "muted"
+        : focusStatusTone(record.status);
+    push(`Status: ${statusText}`, statusTone);
     // Show turn progress as a plain count, not `turn/maxTurns` — the budget cap
     // is an internal guardrail, and surfacing it here reads as an arbitrary
     // "limit" on the subagent rather than useful progress.
@@ -1436,6 +1550,26 @@ export function focusHeaderLines(
     if (typeof record.findings === "number") push(`Findings: ${record.findings}`, "text");
     if (record.tool) push(`Tool: ${record.tool}`, "text");
     if (record.note) push(`Note: ${record.note}`, "text");
+    // MEASURED telemetry — every line only when the datum was actually reported
+    // (never a zero). No cost/$ line: 0sec has no pricing, so it is not shown.
+    if (telemetry?.model) push(`Model: ${telemetry.model}`, "muted");
+    if (typeof telemetry?.inputTokens === "number" || typeof telemetry?.outputTokens === "number") {
+      const inTok = formatTokens(telemetry.inputTokens);
+      const outTok = formatTokens(telemetry.outputTokens);
+      const cached = formatTokens(telemetry.cachedInputTokens);
+      const tokenBits: string[] = [];
+      if (inTok) tokenBits.push(`${inTok} in`);
+      if (outTok) tokenBits.push(`${outTok} out`);
+      if (cached) tokenBits.push(`${cached} cached`);
+      if (tokenBits.length > 0) push(`Tokens: ${tokenBits.join(" / ")}`, "text");
+    }
+    const contextTok = formatTokens(telemetry?.contextTokens);
+    if (contextTok) push(`Context: ${contextTok}`, "text");
+    const elapsed = formatElapsed(telemetry?.durationMs);
+    if (elapsed) push(`Elapsed: ${elapsed}`, "text");
+    // Lineage: the spawning parent scan, when known. The full spawn-tree
+    // overview is a follow-up — this is just the one-line ancestry pointer.
+    if (record.parentScanId) push(`Parent: ${record.parentScanId}`, "muted");
     push(`Last seen: ${formatRelativeAge(record.lastSeen, now)}`, "muted");
     if (record.status === "completed" && record.summary) {
       separate();

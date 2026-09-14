@@ -76,12 +76,15 @@ import {
   subagentPeers,
   subagentStatusLabel,
   windowFocusTail,
+  readFocusTelemetry,
   type HerdDetailTone,
   type HerdInboxMessage,
   type HerdPane,
   type HerdPeer,
   type HerdSubagentMap,
+  type FocusTelemetry,
 } from "./herd-layout.js";
+import { summarizeFleet } from "./agents-panel-model.js";
 
 /** How many rows page-up and page-down move. */
 const PAGE_STEP = 5;
@@ -361,6 +364,12 @@ export function HerdScreen({
   const subagentsRef = useRef(subagents);
   subagentsRef.current = subagents;
 
+  // MEASURED per-agent telemetry (usage/context/duration/model), keyed by the
+  // same `agent_id`. Harvested LIVE from `subagent_message` (per-turn) and the
+  // terminal `subagent_lifecycle`; the focus header renders the focused agent's
+  // snapshot. Absent → "not reported", so the header omits it rather than zeroing.
+  const [telemetry, setTelemetry] = useState<Record<string, FocusTelemetry>>({});
+
   // Focus mode: the id of the subagent the operator drilled into, or null in
   // list mode. `scrollOffset` scrolls the live transcript back from its tail.
   const [focusId, setFocusId] = useState<string | null>(null);
@@ -500,6 +509,7 @@ export function HerdScreen({
 
     // A new audit owner: reset every per-audit piece of view state, then seed.
     setSubagents(() => seedAgents({}));
+    setTelemetry({});
     applyFocusId(null);
     setScrollOffset(0);
     applySelected(0);
@@ -514,6 +524,25 @@ export function HerdScreen({
         // Events emitted for a superseded audit are dropped before anything
         // else — the ref, not the closure, decides which audit is current.
         if (ownerRef.current !== owner) return;
+        // LIVE telemetry: `subagent_message` (per-turn) + `subagent_lifecycle`
+        // (terminal) both carry measured usage/context/duration/model. Merge it
+        // for any agent this screen owns; the terminal snapshot arrives last and
+        // wins per field. Gated by the same audit-membership rule as the roster.
+        if (type === "subagent_lifecycle" || type === "subagent_message") {
+          const id = payload["agent_id"];
+          if (typeof id === "string") {
+            const snap = readFocusTelemetry(payload);
+            if (snap) {
+              const parent = payload["parent_scan_id"];
+              const belongs =
+                !scoped ||
+                Object.hasOwn(subagentsRef.current, id) ||
+                (typeof parent === "string" &&
+                  (parent === parentScanId || Object.hasOwn(subagentsRef.current, parent)));
+              if (belongs) setTelemetry((prev) => ({ ...prev, [id]: { ...prev[id], ...snap } }));
+            }
+          }
+        }
         if (type !== "subagent_lifecycle" && type !== "subagent_progress") return;
         const at = clock();
         setSubagents((prev) => {
@@ -983,8 +1012,27 @@ export function HerdScreen({
   // merged roster and the highlighted agent's own status. An empty roster says
   // "none" — the hub still has no producer, and that is the normal state.
   const title = `${operatorIcon("agents", symbols)} ${operatorTitle("agents")}`;
+  // Aggregate status + measured-usage header for the live subagent fleet:
+  // "4 agents · 2 running · 1 done · 128k tok · 3 findings". Replaces the plain
+  // roster count when subagents exist; falls back to the count for a
+  // sessions-only or empty roster. Usage is the LIVE telemetry map, joined by id.
+  const fleetRecords = Object.values(subagents);
+  const fleetSummary =
+    fleetRecords.length > 0
+      ? summarizeFleet(
+          fleetRecords.map((r) => (r.operatorStopped ? "cancelled" : r.status)),
+          fleetRecords.map((r) => {
+            const t = telemetry[r.agentId];
+            return {
+              ...(typeof t?.inputTokens === "number" ? { inputTokens: t.inputTokens } : {}),
+              ...(typeof t?.outputTokens === "number" ? { outputTokens: t.outputTokens } : {}),
+              ...(typeof r.findings === "number" ? { findings: r.findings } : {}),
+            };
+          }),
+        )
+      : "";
   const listMeta = [
-    herdDialogMeta(dialogItems.length, mergedPeers.length),
+    fleetSummary || herdDialogMeta(dialogItems.length, mergedPeers.length),
     activeRow?.kind === "peer" ? herdStatusLabel(activeRow.status) : "",
   ].filter(Boolean).join(" · ");
   const titleCols = paneTitleColumns(layout.contentWidth, listMeta.length);
@@ -1031,6 +1079,8 @@ export function HerdScreen({
     ? (
         focusHeaderLines(focusedPeer, focusRecord, Math.max(1, focusLayout.meta.innerWidth - 1), now, {
           compact: !focusLayout.bordered,
+          // MEASURED telemetry for the focused agent, joined by `agent_id`.
+          ...(focusId && telemetry[focusId] ? { telemetry: telemetry[focusId] } : {}),
           // Sibling index/total mirrors OpenCode's subagent-footer identity:
           // tells the operator where this subagent sits among its siblings in
           // the merged roster. Computed from same-parent live subagent records.

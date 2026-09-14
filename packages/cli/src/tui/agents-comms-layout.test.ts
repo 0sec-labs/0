@@ -194,6 +194,31 @@ describe("commsFleetStatLine", () => {
     expect(commsFleetStatLine(running, NOW)).not.toContain("5s");
     expect(commsFleetStatLine(done, NOW)).toContain("5s");
   });
+
+  it("appends a curtailed completion reason to the status word", () => {
+    const [row] = buildCommsFleet(
+      mapOf(record({ agentId: "a", status: "completed", completionReason: "turn_limit" })),
+    );
+    expect(commsFleetStatLine(row!, NOW).startsWith("done (turn_limit)")).toBe(true);
+  });
+
+  it("shows no parenthetical for a clean done", () => {
+    const [row] = buildCommsFleet(
+      mapOf(record({ agentId: "a", status: "completed", completionReason: "done" })),
+    );
+    expect(commsFleetStatLine(row!, NOW).startsWith("done")).toBe(true);
+    expect(commsFleetStatLine(row!, NOW)).not.toContain("(");
+  });
+
+  it("shows live measured tokens/elapsed from the joined telemetry", () => {
+    const [row] = buildCommsFleet(
+      mapOf(record({ agentId: "a", status: "running" })),
+      { a: { inputTokens: 80_000, outputTokens: 48_000, durationMs: 4200 } },
+    );
+    const line = commsFleetStatLine(row!, NOW);
+    expect(line).toContain("128k tok");
+    expect(line).toContain("4.2s");
+  });
 });
 
 describe("format helpers", () => {

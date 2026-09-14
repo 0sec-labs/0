@@ -52,7 +52,6 @@ import {
   buildCommsFleet,
   clampFleetSelection,
   commsEdgeLabel,
-  commsFleetMeta,
   commsFleetName,
   commsFleetStatLine,
   commsFooterHint,
@@ -67,6 +66,7 @@ import {
   fleetIndexForNumber,
   moveFleetSelection,
 } from "./agents-comms-layout.js";
+import { summarizeFleet } from "./agents-panel-model.js";
 
 /** How often the view refreshes (age ticks + roster poll), in ms. */
 const REFRESH_MS = 1500;
@@ -104,7 +104,8 @@ export interface AgentsCommsScreenProps {
   /**
    * Subscribes a bus sink and returns an unsubscribe fn. Injected for tests;
    * defaults to the real {@link eventBus}. The screen listens for `peer_message`
-   * (the stream) and `subagent_lifecycle` (measured telemetry).
+   * (the stream) and `subagent_lifecycle` + `subagent_message` (measured, live
+   * telemetry).
    */
   subscribe?: (sink: CommsBusSink) => () => void;
   /** Show the "who talks to whom" edge summary. Defaults to true. */
@@ -227,7 +228,11 @@ export function AgentsCommsScreen({
         if (type === "peer_message") {
           seqRef.current += 1;
           setMessages((prev) => applyCommsMessage(prev, payload, seqRef.current));
-        } else if (type === "subagent_lifecycle") {
+        } else if (type === "subagent_lifecycle" || type === "subagent_message") {
+          // Telemetry is LIVE: `subagent_message` carries per-turn measured
+          // usage/durationMs/model (partial turns included), so tokens/elapsed
+          // appear WHILE an agent runs, not only when it settles. The terminal
+          // `subagent_lifecycle` values arrive last and win via the merge.
           const id = payload["agent_id"];
           if (typeof id !== "string") return;
           const snap = readTelemetry(payload);
@@ -380,7 +385,17 @@ export function AgentsCommsScreen({
 
   // ── Title rows for each region ──
   const fleetTitle = `${operatorIcon("agents", symbols)} ${operatorTitle("agents")}`;
-  const fleetMeta = commsFleetMeta(fleet.length, fleet.length);
+  // Aggregate status + measured-usage header: "4 agents · 2 running · 1 done ·
+  // 128k tok · 3 findings". Statuses fold operator-stopped → "cancelled"; the
+  // usage is the LIVE telemetry map joined per row plus each record's findings.
+  const fleetSummary = summarizeFleet(
+    fleet.map((r) => (r.record.operatorStopped ? "cancelled" : r.record.status)),
+    fleet.map((r) => ({
+      ...(typeof r.telemetry?.inputTokens === "number" ? { inputTokens: r.telemetry.inputTokens } : {}),
+      ...(typeof r.telemetry?.outputTokens === "number" ? { outputTokens: r.telemetry.outputTokens } : {}),
+      ...(typeof r.record.findings === "number" ? { findings: r.record.findings } : {}),
+    })),
+  );
   const streamMeta = commsStreamMeta(streamShown.length, streamAll.length, focused);
 
   const clampedSelected = clampFleetSelection(fleet.length, selected);
@@ -395,7 +410,7 @@ export function AgentsCommsScreen({
         innerWidth={layout.fleet.innerWidth}
         bordered={layout.bordered}
         title={fleetTitle}
-        meta={`${fleetMeta}${fleetWindow.hasAbove || fleetWindow.hasBelow ? ` · ${fleetWindow.start + 1}-${fleetWindow.end}` : ""}`}
+        meta={`${fleetSummary}${fleetWindow.hasAbove || fleetWindow.hasBelow ? ` · ${fleetWindow.start + 1}-${fleetWindow.end}` : ""}`}
       >
         {fleet.length === 0 ? (
           <Cells width={layout.fleet.innerWidth} fg={theme.MUTED}>
