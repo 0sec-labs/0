@@ -5,8 +5,8 @@ import type { LogoCellTone } from "../logo-animation.js";
 /**
  * The 0sec block mark as a per-cell colour grid, one string per row over a
  * three-letter alphabet: ' ' is an empty cell, '#' a white (`theme.TEXT`)
- * block, '/' a red (`theme.ERROR`) block. The "0" is drawn wider than the
- * other letters so its interior has room for a two-cell-thick red diagonal
+ * block, '/' an orange (brand) block. The "0" is drawn wider than the
+ * other letters so its interior has room for a two-cell-thick orange diagonal
  * slash — lower-left to upper-right — that clears the white outline on both
  * sides: a slashed zero. "SEC" stays white. This grid is the fixed base the
  * intro animation reveals: `computeLogoFrame` (logo-animation.ts) turns it into
@@ -50,10 +50,10 @@ export function logoRunStyle(tone: LogoCellTone, theme: Theme): { fg: string; at
   if (tone.startsWith("#")) return { fg: tone };
   switch (tone) {
     case "error":
-      // The slashed-zero's diagonal is the 0sec BRAND red — a fixed mark, not a
+      // The slashed-zero's diagonal is the 0sec BRAND orange — a fixed mark, not a
       // semantic error tone. Pinned so it stays the brand red regardless of the
-      // theme's ERROR colour (which is tuned for contrast on text surfaces).
-      return { fg: "#DC2626" };
+      // theme's colours (the orange is the brand mark, tuned to the 0sec identity).
+      return { fg: "#FD802E" };
     case "muted":
       return { fg: theme.MUTED };
     case "dim":
