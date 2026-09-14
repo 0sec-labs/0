@@ -733,24 +733,26 @@ export const THEME_NAMES = [
   "paper",
   "mono-dim",
   "swiss",
-  "golden",
-  "oh-my-pi",
+  "golden-gate",
+  "blue-team",
 ] as const;
 export type ThemeName = (typeof THEME_NAMES)[number];
 
 /**
  * Legacy theme ids that map to a renamed built-in. `opencode` was renamed to
- * `golden`; a persisted `theme: "opencode"` still resolves to the same palette.
+ * `golden-gate`; a persisted `theme: "opencode"` still resolves to the same palette.
  */
 export const THEME_ALIASES: Readonly<Record<string, ThemeName>> = {
-  opencode: "golden",
+  opencode: "golden-gate",
+  golden: "golden-gate",
+  "oh-my-pi": "blue-team",
 };
 
 /**
- * The theme a fresh session gets. `oh-my-pi` — the electric-blue-on-titanium
+ * The theme a fresh session gets. `blue-team` — the electric-blue-on-titanium
  * look the operator asked for — is the shipped default, because a rich,
  * semantically-coloured transcript reads far less flat than a neutral grey.
- * `golden` (the warm-tan-and-gold palette, formerly `opencode`) is the other
+ * `golden-gate` (the warm-tan-and-gold palette, formerly `opencode`) is the other
  * rich dark, available for anyone who prefers it. Like the other shipped darks
  * both clear AA on every text token with no waivers, so the default carries no
  * contrast debt. `slate` remains available for anyone who prefers hueless grey
@@ -765,7 +767,7 @@ export const THEME_ALIASES: Readonly<Record<string, ThemeName>> = {
  * preferred the old warm-grey look can opt back into it. That preservation — not
  * being the default — is why `dark` is the sole carrier of `CONTRAST_WAIVERS`.
  */
-export const DEFAULT_THEME_NAME: ThemeName = "oh-my-pi";
+export const DEFAULT_THEME_NAME: ThemeName = "blue-team";
 
 /**
  * The one palette pinned byte-for-byte to the original `ui/theme.ts`, and so the
@@ -853,16 +855,16 @@ export const THEMES: Readonly<Record<ThemeName, ThemeEntry>> = {
     mode: "dark",
     palette: SWISS,
   },
-  golden: {
-    name: "golden",
-    label: "Golden",
+  "golden-gate": {
+    name: "golden-gate",
+    label: "Golden Gate",
     description: "Warm tan-and-gold highlights on near-black surfaces, with a purple accent.",
     mode: "dark",
     palette: GOLDEN,
   },
-  "oh-my-pi": {
-    name: "oh-my-pi",
-    label: "oh-my-pi",
+  "blue-team": {
+    name: "blue-team",
+    label: "Blue Team",
     description: "Electric-blue on brushed-titanium near-black, gold accent. A port of oh-my-pi's titanium theme.",
     mode: "dark",
     palette: OH_MY_PI,

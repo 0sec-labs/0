@@ -132,8 +132,8 @@ describe("default theme", () => {
   });
 
   it("is the fallback", () => {
-    expect(DEFAULT_THEME_NAME).toBe("oh-my-pi");
-    expect(getTheme(DEFAULT_THEME_NAME)).toBe(THEMES["oh-my-pi"].palette);
+    expect(DEFAULT_THEME_NAME).toBe("blue-team");
+    expect(getTheme(DEFAULT_THEME_NAME)).toBe(THEMES["blue-team"].palette);
   });
 
   it("reproduces severityTone's mapping", () => {
@@ -312,8 +312,8 @@ describe("contrast sweep", () => {
       paper: 5.16,
       "mono-dim": 4.5,
       swiss: 5.74,
-      golden: 5.01,
-      "oh-my-pi": 5.6,
+      "golden-gate": 5.01,
+      "blue-team": 5.6,
     });
   });
 });
@@ -430,13 +430,13 @@ describe("semantic colours survive colour blindness", () => {
       paper: 1.162,
       "mono-dim": 1.165,
       swiss: 1.21,
-      golden: 1.156,
-      "oh-my-pi": 1.328,
+      "golden-gate": 1.156,
+      "blue-team": 1.328,
     });
-    // Every theme clears the floor; golden is the tightest of the set (its
+    // Every theme clears the floor; golden-gate is the tightest of the set (its
     // semantic hues are distinguished by colour rather than luminance, the
     // OpenCode palette's own trade-off), just above paper.
-    expect(Math.min(...Object.values(achieved))).toBe(achieved.golden);
+    expect(Math.min(...Object.values(achieved))).toBe(achieved["golden-gate"]);
     expect(Math.min(...Object.values(achieved))).toBeGreaterThanOrEqual(MIN_SEMANTIC_CONTRAST);
   });
 });
@@ -1084,8 +1084,13 @@ describe("syntax / diff sub-palette (additive optional group)", () => {
 });
 
 describe("theme aliases", () => {
-  it("resolves the legacy 'opencode' id to the renamed 'golden' palette", () => {
-    expect(getTheme("opencode")).toBe(THEMES.golden.palette);
-    expect(getThemeEntry("opencode").name).toBe("golden");
+  it("resolves the legacy 'opencode' id to the renamed 'golden-gate' palette", () => {
+    expect(getTheme("opencode")).toBe(THEMES["golden-gate"].palette);
+    expect(getThemeEntry("opencode").name).toBe("golden-gate");
+  });
+
+  it("resolves every legacy theme id to its renamed palette", () => {
+    expect(getThemeEntry("golden").name).toBe("golden-gate");
+    expect(getThemeEntry("oh-my-pi").name).toBe("blue-team");
   });
 });
