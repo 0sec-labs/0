@@ -1396,7 +1396,7 @@ function ConsoleApp({
   );
 }
 
-function UnifiedApp({
+export function UnifiedApp({
   mode,
   lensEvolution,
 }: {
