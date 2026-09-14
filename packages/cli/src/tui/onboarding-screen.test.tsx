@@ -34,6 +34,8 @@ import {
   ONBOARDING_PREFERENCE_KEYS,
   ONBOARDING_STEPS,
   finalizeOnboarding,
+  recordAnalyticsConsent,
+  skipAnalyticsConsent,
   stepAfter,
   type OnboardingStep,
 } from "./onboarding-screen.js";
@@ -69,12 +71,13 @@ afterEach(() => {
 });
 
 describe("guided step machine", () => {
-  it("walks welcome → connect → models → preferences → done", () => {
+  it("walks welcome → connect → models → preferences → analytics → done", () => {
     expect(ONBOARDING_STEPS.map((s) => s.key)).toEqual([
       "welcome",
       "connect",
       "models",
       "preferences",
+      "analytics",
       "done",
     ]);
     expect(ONBOARDING_STEPS.map((s) => s.label)).toEqual([
@@ -82,15 +85,22 @@ describe("guided step machine", () => {
       "Connect",
       "Models",
       "Preferences",
+      "Analytics",
       "Done",
     ]);
 
+    // Analytics is skippable; only welcome and done are not.
+    const analytics = ONBOARDING_STEPS.find((s) => s.key === "analytics");
+    expect(analytics?.skippable).toBe(true);
+
     // Linear transitions — the same chain the embedded ConnectScreen.onConnected
-    // and ModelScreen.onSelect advance along.
+    // and ModelScreen.onSelect advance along. Analytics sits between the
+    // preferences step and completion.
     expect(stepAfter("welcome")).toBe("connect");
     expect(stepAfter("connect")).toBe("models");
     expect(stepAfter("models")).toBe("preferences");
-    expect(stepAfter("preferences")).toBe("done");
+    expect(stepAfter("preferences")).toBe("analytics");
+    expect(stepAfter("analytics")).toBe("done");
     expect(stepAfter("done")).toBeUndefined();
   });
 
@@ -120,7 +130,12 @@ describe("completion is written in exactly one place", () => {
         expect(updateSetting("theme", theme)).toBe(true);
         expect(updateSetting("density", "compact")).toBe(true);
       }
-      // Reaching a step, skipping it, or setting a preference must NOT complete.
+      if (step === "analytics") {
+        // The analytics step's Enter persists consent — but NOT completion.
+        recordAnalyticsConsent(true);
+      }
+      // Reaching a step, skipping it, or setting a preference/consent must NOT
+      // complete onboarding.
       expect(getSettings().onboardingCompleted).toBe(false);
       step = stepAfter(step);
     }
@@ -145,6 +160,58 @@ describe("completion is written in exactly one place", () => {
 
     finalizeOnboarding();
     expect(reloadSettings().onboardingCompleted).toBe(true);
+  });
+});
+
+describe("analytics consent wiring", () => {
+  it("Yes sets diagnosticReporting automatic and marks prompted", () => {
+    configureSettingsStore({ homeDir: makeHome() });
+    // Start from a non-default reporting value so the write is observable.
+    expect(updateSetting("diagnosticReporting", "off")).toBe(true);
+    expect(getSettings().diagnosticReportingPrompted).toBe(false);
+
+    recordAnalyticsConsent(true);
+
+    expect(getSettings().diagnosticReporting).toBe("automatic");
+    expect(getSettings().diagnosticReportingPrompted).toBe(true);
+    // Consent is independent of completion.
+    expect(getSettings().onboardingCompleted).toBe(false);
+  });
+
+  it("No sets diagnosticReporting off and marks prompted", () => {
+    configureSettingsStore({ homeDir: makeHome() });
+    // Default is "automatic"; No must turn it fully off.
+    expect(getSettings().diagnosticReporting).toBe("automatic");
+
+    recordAnalyticsConsent(false);
+
+    expect(getSettings().diagnosticReporting).toBe("off");
+    expect(getSettings().diagnosticReportingPrompted).toBe(true);
+    expect(getSettings().onboardingCompleted).toBe(false);
+  });
+
+  it("skip marks prompted but leaves the current reporting default unchanged", () => {
+    configureSettingsStore({ homeDir: makeHome() });
+    const before = getSettings().diagnosticReporting;
+    expect(getSettings().diagnosticReportingPrompted).toBe(false);
+
+    skipAnalyticsConsent();
+
+    // Prompted is recorded so the in-session prompt never re-asks…
+    expect(getSettings().diagnosticReportingPrompted).toBe(true);
+    // …but the reporting value is untouched by a skip.
+    expect(getSettings().diagnosticReporting).toBe(before);
+    expect(getSettings().onboardingCompleted).toBe(false);
+  });
+
+  it("consent decisions survive a reload without completing onboarding", () => {
+    configureSettingsStore({ homeDir: makeHome() });
+    recordAnalyticsConsent(false);
+
+    const persisted = reloadSettings();
+    expect(persisted.diagnosticReporting).toBe("off");
+    expect(persisted.diagnosticReportingPrompted).toBe(true);
+    expect(persisted.onboardingCompleted).toBe(false);
   });
 });
 
