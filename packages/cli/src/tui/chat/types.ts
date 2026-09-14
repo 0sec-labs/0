@@ -1,4 +1,4 @@
-import type { TodoStatus } from "@0sec/core";
+import type { NativeMessage, TodoStatus } from "@0sec/core";
 import type { PanelData } from "../panels.js";
 import type { ToolPreview, ToolPreviewImage } from "../tool-format.js";
 import type {
@@ -21,6 +21,25 @@ export type ChatImageAttachment = ToolPreviewImage & {
   /** Name of the tool whose result carried this image, when it is known. */
   origin?: string;
 };
+
+/**
+ * A retained record of one context-compaction event, kept by chat-screen so the
+ * Ctrl+O review overlay can render a readable pre-compaction recap. Mirrors the
+ * load-bearing fields of core's `ConsoleCompactionEvent`; `tokensAfter` is back-
+ * filled from the next planner usage sample (Stream A emits it undefined).
+ */
+export interface CompactionRecap {
+  /** Planner input tokens that tripped the trigger (pre-compaction occupancy). */
+  tokensBefore: number;
+  /** Post-compaction planner input tokens, patched in from the next sample. */
+  tokensAfter?: number;
+  /** The `[COMPACTED CONVERSATION SUMMARY]` body produced. */
+  summaryText: string;
+  /** Deep copy of the pre-compaction history, for the "expand" recap view. */
+  preCompactionMessages: readonly NativeMessage[];
+  /** True when the summary degraded to regex extraction / hard-trim. */
+  degraded: boolean;
+}
 
 export type ChatEntry = {
   id: string;
@@ -89,6 +108,13 @@ export type ChatEntry = {
    * `appendTranscriptEntry`. Rendered as a trailing "(xN)".
    */
   repeat?: number;
+  /**
+   * Tags a `notice` entry as the inline indicator for a specific context
+   * compaction (1-based `compactionNumber`), so the token-count text can be
+   * back-patched in place from the next planner sample and the Ctrl+O recap can
+   * be keyed off the focused row. Absent on every non-compaction entry.
+   */
+  compactionNumber?: number;
   /**
    * Rich tool-card fields, mirroring `ToolResult.meta` (core). Populated for a
    * bash / run_command / apply_patch tool entry so both a LIVE turn and a

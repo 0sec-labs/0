@@ -131,6 +131,17 @@ export interface TuiSettings {
    */
   transcriptDetail: "collapsed" | "expanded";
   /**
+   * Automatically summarise older turns when the conversation nears the model's
+   * context window. Read by the context-compaction path (Stream B); this module
+   * only declares it.
+   */
+  autoCompaction: boolean;
+  /**
+   * How full the context window gets before auto-compaction runs. Consumed
+   * alongside `autoCompaction` by the compaction path (Stream B).
+   */
+  compactionThreshold: "70%" | "75%" | "80%" | "85%";
+  /**
    * Colour palette. A built-in theme name OR an installed theme id (themes.ts).
    * Typed loosely on purpose: an installed theme's id is an arbitrary safe
    * string, and `normalizeSettings` validates it with `isKnownTheme` (built-in
@@ -302,6 +313,7 @@ type TuiSettingDef =
   | EnumSettingDef<"roleLabelStyle">
   | EnumSettingDef<"toolCardStyle">
   | EnumSettingDef<"transcriptDetail">
+  | EnumSettingDef<"compactionThreshold">
   | EnumSettingDef<"modelDisplay">
   | EnumSettingDef<"elapsedTimer">
   | EnumSettingDef<"busyInputMode">
@@ -544,6 +556,24 @@ const DEFS: readonly TuiSettingDef[] = [
     group: "Transcript",
   },
   {
+    key: "autoCompaction",
+    label: "Auto-compaction",
+    description:
+      "Automatically summarise older turns when the conversation nears the model's context window (the recap stays viewable with Ctrl+O).",
+    kind: "boolean",
+    default: true,
+    group: "Context",
+  },
+  {
+    key: "compactionThreshold",
+    label: "Compaction threshold",
+    description: "How full the context window gets before auto-compaction runs.",
+    kind: "enum",
+    default: "80%",
+    choices: ["70%", "75%", "80%", "85%"],
+    group: "Context",
+  },
+  {
     key: "theme",
     label: "Theme",
     description:
@@ -751,6 +781,8 @@ export const DEFAULT_SETTINGS: TuiSettings = {
   toolCardStyle: "compact",
   richToolCards: true,
   transcriptDetail: "expanded",
+  autoCompaction: true,
+  compactionThreshold: "80%",
   theme: DEFAULT_THEME_NAME,
   allowModelSelfExtension: DEFAULT_ALLOW_MODEL_SELF_EXTENSION,
   allowDevSourceUpdates: false,
@@ -1046,6 +1078,8 @@ export function normalizeSettings(raw: unknown): TuiSettings {
     toolCardStyle: enumAt(raw, "toolCardStyle"),
     richToolCards: booleanAt(raw, "richToolCards"),
     transcriptDetail: enumAt(raw, "transcriptDetail"),
+    autoCompaction: booleanAt(raw, "autoCompaction"),
+    compactionThreshold: enumAt(raw, "compactionThreshold"),
     theme: themeAt(raw),
     allowModelSelfExtension: booleanAt(raw, "allowModelSelfExtension"),
     allowDevSourceUpdates: booleanAt(raw, "allowDevSourceUpdates"),

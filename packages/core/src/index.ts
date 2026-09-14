@@ -2342,6 +2342,7 @@ export type {
   ConsoleSessionCheckpoint,
   ConsoleSessionConfig,
   ConsoleRenderCallbacks,
+  ConsoleCompactionEvent,
   ConsoleTurnOutcome,
   ConsoleStopReason,
   ConsoleAutonomyMode,

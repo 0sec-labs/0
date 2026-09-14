@@ -3220,3 +3220,201 @@ describe("describeCaughtError", () => {
     expect(text.endsWith("…")).toBe(true);
   });
 });
+
+// ── Console-loop context compaction (Stream A) ──
+describe("createConsoleSession — context compaction", () => {
+  /**
+   * A runtime that distinguishes PLANNER calls (tools present) from the
+   * compaction SUMMARIZER call (no tools), so a test can control planner
+   * occupancy and the summarizer's outcome independently.
+   */
+  class CompactionRuntime implements NativeRuntime {
+    readonly type = "api" as const;
+    plannerCalls = 0;
+    summarizerCalls = 0;
+    // Presence of this field makes the console treat the runtime as doing
+    // server-side compaction and stand down (see runtimeUsesServerSideCompaction).
+    compactionTokens?: number;
+    constructor(
+      private readonly plannerInputTokens: number,
+      private readonly opts: { summarizerThrows?: boolean; summaryText?: string; serverSide?: boolean } = {},
+    ) {
+      if (opts.serverSide) this.compactionTokens = 150_000;
+    }
+    async isAvailable(): Promise<boolean> {
+      return true;
+    }
+    async executeNative(
+      _system: string,
+      _messages: NativeMessage[],
+      tools: NativeToolDef[],
+    ): Promise<NativeRuntimeResult> {
+      if (tools.length === 0) {
+        // Compaction summarizer call.
+        this.summarizerCalls++;
+        if (this.opts.summarizerThrows) throw new Error("summarizer unavailable");
+        return {
+          content: [{ type: "text", text: this.opts.summaryText ?? ("Concise recap of the conversation so far. ".repeat(4)) }],
+          stopReason: "end_turn",
+          durationMs: 1,
+          usage: { inputTokens: 20, outputTokens: 30 },
+        };
+      }
+      // Planner call: ends the turn immediately, reporting the configured
+      // prompt occupancy so the NEXT turn's compaction trigger can read it.
+      this.plannerCalls++;
+      return {
+        content: [{ type: "text", text: "ok" }],
+        stopReason: "end_turn",
+        durationMs: 1,
+        usage: { inputTokens: this.plannerInputTokens, outputTokens: 1 },
+      };
+    }
+  }
+
+  const SUMMARY_MARKER = "[COMPACTED CONVERSATION SUMMARY]";
+
+  /** N alternating messages, starting with a distinctively-anchored user turn. */
+  function seedConversation(n: number): NativeMessage[] {
+    const msgs: NativeMessage[] = [
+      { role: "user", content: [{ type: "text", text: "FIRST-ANCHOR: the original operator request" }] },
+    ];
+    for (let i = 1; i < n; i++) {
+      msgs.push({
+        role: i % 2 === 1 ? "assistant" : "user",
+        content: [{ type: "text", text: `seed message ${i}` }],
+      });
+    }
+    return msgs;
+  }
+
+  function baseConfig(runtime: NativeRuntime, over: Partial<Parameters<typeof createConsoleSession>[0]> = {}) {
+    return {
+      runtime,
+      // Off so it never fires the deferred model call the compaction test would
+      // otherwise miscount as a summarizer call.
+      refineObjective: false,
+      contextWindowTokens: 100_000,
+      compaction: { enabled: true, thresholdFraction: 0.80 },
+      initialMessages: seedConversation(14),
+      ...over,
+    };
+  }
+
+  function hasSummaryMarker(msgs: NativeMessage[]): boolean {
+    return msgs.some((m) => m.content.some((b) => b.type === "text" && b.text.includes(SUMMARY_MARKER)));
+  }
+
+  it("compacts at a turn boundary once planner occupancy crosses the threshold", async () => {
+    // 90k of a 100k window > 0.80 threshold (80k) and > 15k regrow.
+    const runtime = new CompactionRuntime(90_000);
+    const session = createConsoleSession(baseConfig(runtime));
+    await session.ready;
+
+    const events: import("./turn-engine.js").ConsoleCompactionEvent[] = [];
+    const cbs = { onCompaction: (e: import("./turn-engine.js").ConsoleCompactionEvent) => events.push(e) };
+
+    // Turn 1: lastPlannerInputTokens is still 0 at the top, so no compaction;
+    // this call is what SETS occupancy to 90k for the next turn.
+    await session.send("first operator line", cbs);
+    expect(events).toHaveLength(0);
+
+    const beforeLen = session.messages.length;
+    const originalFirst = structuredClone(session.messages[0]!);
+
+    // Turn 2: occupancy (90k) is read at the top → compaction fires.
+    await session.send("second operator line", cbs);
+
+    expect(events).toHaveLength(1);
+    const ev = events[0]!;
+    expect(ev.degraded).toBe(false);
+    expect(ev.tokensBefore).toBe(90_000);
+    expect(ev.tokensAfter).toBeUndefined();
+    expect(ev.contextWindowTokens).toBe(100_000);
+    expect(ev.compactionNumber).toBe(1);
+    expect(ev.summaryText.length).toBeGreaterThan(0);
+    // Before/after counts are coherent and history actually shrank.
+    expect(ev.messagesBefore).toBe(beforeLen + 1); // + this turn's user push
+    expect(ev.messagesAfter).toBeLessThan(ev.messagesBefore);
+    expect(ev.preCompactionMessages).toHaveLength(ev.messagesBefore);
+    // messages[0] is preserved verbatim and a summary marker was inserted.
+    expect(session.messages[0]).toEqual(originalFirst);
+    expect(hasSummaryMarker(session.messages)).toBe(true);
+    // The tail is preserved: the last pre-compaction message (this turn's user
+    // line) survives verbatim in the rewritten history. It is no longer LAST —
+    // the turn's planner call appended an assistant reply after compaction — so
+    // assert presence rather than position.
+    const tailMsg = ev.preCompactionMessages.at(-1)!;
+    expect(session.messages).toContainEqual(tailMsg);
+    expect(runtime.summarizerCalls).toBe(1);
+  });
+
+  it("does not compact below the threshold", async () => {
+    const runtime = new CompactionRuntime(50_000); // < 80k threshold
+    const session = createConsoleSession(baseConfig(runtime));
+    await session.ready;
+    const events: unknown[] = [];
+    const cbs = { onCompaction: () => events.push(1) };
+    await session.send("one", cbs);
+    await session.send("two", cbs);
+    expect(events).toHaveLength(0);
+    expect(runtime.summarizerCalls).toBe(0);
+    expect(hasSummaryMarker(session.messages)).toBe(false);
+  });
+
+  it("never compacts on the first turn (occupancy still zero)", async () => {
+    const runtime = new CompactionRuntime(90_000);
+    const session = createConsoleSession(baseConfig(runtime));
+    await session.ready;
+    const events: unknown[] = [];
+    await session.send("only turn", { onCompaction: () => events.push(1) });
+    expect(events).toHaveLength(0);
+    expect(runtime.summarizerCalls).toBe(0);
+  });
+
+  it("does not compact when compaction is disabled", async () => {
+    const runtime = new CompactionRuntime(90_000);
+    const session = createConsoleSession(baseConfig(runtime, { compaction: { enabled: false, thresholdFraction: 0.80 } }));
+    await session.ready;
+    const events: unknown[] = [];
+    const cbs = { onCompaction: () => events.push(1) };
+    await session.send("one", cbs);
+    await session.send("two", cbs);
+    expect(events).toHaveLength(0);
+    expect(runtime.summarizerCalls).toBe(0);
+  });
+
+  it("stands down when the runtime performs server-side compaction", async () => {
+    const runtime = new CompactionRuntime(90_000, { serverSide: true });
+    const session = createConsoleSession(baseConfig(runtime));
+    await session.ready;
+    const events: unknown[] = [];
+    const cbs = { onCompaction: () => events.push(1) };
+    await session.send("one", cbs);
+    await session.send("two", cbs);
+    expect(events).toHaveLength(0);
+    expect(runtime.summarizerCalls).toBe(0);
+    expect(hasSummaryMarker(session.messages)).toBe(false);
+  });
+
+  it("leaves history unchanged and reports degraded=true when the summarizer throws", async () => {
+    const runtime = new CompactionRuntime(90_000, { summarizerThrows: true });
+    const session = createConsoleSession(baseConfig(runtime));
+    await session.ready;
+    const events: import("./turn-engine.js").ConsoleCompactionEvent[] = [];
+    const cbs = { onCompaction: (e: import("./turn-engine.js").ConsoleCompactionEvent) => events.push(e) };
+
+    await session.send("first operator line", cbs);
+    // Snapshot the anchor set that must survive an un-applied (degraded) attempt.
+    await session.send("second operator line", cbs);
+
+    expect(events).toHaveLength(1);
+    const ev = events[0]!;
+    expect(ev.degraded).toBe(true);
+    // The compaction was NOT applied: counts equal, no summary marker inserted,
+    // and the original anchor is still present.
+    expect(ev.messagesAfter).toBe(ev.messagesBefore);
+    expect(hasSummaryMarker(session.messages)).toBe(false);
+    expect(session.messages.some((m) => m.content.some((b) => b.type === "text" && b.text.includes("FIRST-ANCHOR")))).toBe(true);
+  });
+});

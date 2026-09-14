@@ -248,6 +248,7 @@ import {
 import type {
   ChatEntry,
   ChatImageAttachment,
+  CompactionRecap,
   EntryDisplay,
   KeyHint,
 } from "./chat/types.js";
@@ -893,6 +894,21 @@ const SUBAGENT_TRANSCRIPT_MAX = 300;
 
 const EMPTY_EXPANDED_TURNS: ReadonlySet<number> = new Set();
 
+/**
+ * Parse a compaction-threshold setting (`"80%"`) into the fraction the core
+ * loop expects (`0.80`). Falls back to the 0.80 default on anything unparseable,
+ * so a malformed setting never disables compaction with a NaN threshold.
+ */
+function parsePct(value: string): number {
+  const n = Number.parseInt(value, 10);
+  return Number.isFinite(n) && n > 0 ? n / 100 : 0.8;
+}
+
+/** The inline transcript indicator text for a (non-degraded) compaction row. */
+function compactionIndicatorText(tokensBefore: number, tokensAfter?: number): string {
+  return `⊟ compacted · ${tokensBefore}→${tokensAfter ?? "?"} · ctrl+o`;
+}
+
 export function ChatScreen({
   options,
   onGoBack,
@@ -1108,6 +1124,18 @@ export function ChatScreen({
   const [reviewOpen, setReviewOpen] = useState(false);
   const reviewRenderableRef = useRef<TranscriptReviewRenderable | null>(null);
   const reviewEventOpenRef = useRef(false);
+  // ── Context-compaction recaps ───────────────────────────────────────────────
+  // Every compaction the core loop performs this session, keyed by its 1-based
+  // `compactionNumber`. Bounded by the (small) compaction count, so the whole
+  // set is kept for the session — the Ctrl+O overlay reads the most recent one.
+  const compactionRecapsRef = useRef<Map<number, CompactionRecap>>(new Map());
+  // The most recent compaction number, in state so the indicator + overlay
+  // recap re-render when a compaction happens. `undefined` until the first one.
+  const [latestCompaction, setLatestCompaction] = useState<number | undefined>(undefined);
+  // A compaction whose `tokensAfter` is still unknown: the NEXT planner usage
+  // sample is the post-compaction size, so we patch it into the recap + the
+  // inline indicator when that sample arrives, then clear this.
+  const pendingTokensAfterRef = useRef<number | undefined>(undefined);
   useEffect(() => {
     const emitter = presentationEmitterRef.current!;
     if (!session) return;
@@ -1698,12 +1726,31 @@ export function ChatScreen({
       env,
     });
     const resolvedModel = runtime.resolvedModel();
+    // Initial compaction window: resolved synchronously from the just-built
+    // runtime's model + provider. BYOK/local models resolve against the synced/
+    // offline catalog here; a hosted route's window is only in the per-account
+    // catalog (not yet loaded for this new session), so it stays undefined and
+    // is re-based by the effect below once that catalog arrives. Deliberately
+    // NOT the display-gated `contextLimit` (that goes null when the meter is
+    // hidden or a subagent is focused, which must not disable compaction).
+    const buildDiag = runtime.getConfigurationDiagnostics();
+    const initialContextWindow = resolveContextLimit(
+      { modelId: resolvedModel, providerId: buildDiag.provider, hosted: buildDiag.provider === "hosted" },
+      { hostedCatalog: null },
+    )?.tokens;
     const pluginLease = pluginHostManager?.acquire();
     let created: ConsoleSession;
     try {
     created = createLocalConsoleSession({
       runtime,
       costModel: resolvedModel,
+      // Context-compaction (Stream A) inputs: the model's window drives the
+      // trigger, and the operator's settings gate it + set the threshold.
+      contextWindowTokens: initialContextWindow,
+      compaction: {
+        enabled: settingsRef.current.autoCompaction,
+        thresholdFraction: parsePct(settingsRef.current.compactionThreshold),
+      },
       target: options?.target,
       scope: options?.scope,
       role: options?.role,
@@ -3606,8 +3653,49 @@ export function ChatScreen({
             ? { used: usage.turnTokensUsed, limit: usage.turnTokenBudget }
             : null);
           if (usage.kind === "planner") {
-            setLastContext(Number.isFinite(usage.inputTokens) && usage.inputTokens > 0 ? usage.inputTokens : undefined);
+            const planned = Number.isFinite(usage.inputTokens) && usage.inputTokens > 0 ? usage.inputTokens : undefined;
+            setLastContext(planned);
+            // Stream A emits `tokensAfter` undefined — the rewrite is only sized
+            // once the model actually receives it, which is THIS next planner
+            // sample. Patch it into both the stored recap and the inline
+            // indicator so the operator sees the real before→after.
+            const pending = pendingTokensAfterRef.current;
+            if (pending !== undefined && planned !== undefined) {
+              pendingTokensAfterRef.current = undefined;
+              const recap = compactionRecapsRef.current.get(pending);
+              if (recap) recap.tokensAfter = planned;
+              const before = recap?.tokensBefore ?? planned;
+              setEntries((current) => current.map((entry) =>
+                entry.compactionNumber === pending && entry.kind === "notice"
+                  ? { ...entry, text: compactionIndicatorText(before, planned) }
+                  : entry));
+            }
           }
+        },
+        onCompaction: (event) => {
+          // Retain the recap for the Ctrl+O overlay (bounded by compaction
+          // count). `tokensAfter` is unknown at emit time — the next planner
+          // sample patches it in (see onUsage above).
+          compactionRecapsRef.current.set(event.compactionNumber, {
+            tokensBefore: event.tokensBefore,
+            tokensAfter: event.tokensAfter,
+            summaryText: event.summaryText,
+            preCompactionMessages: event.preCompactionMessages,
+            degraded: event.degraded,
+          });
+          setLatestCompaction(event.compactionNumber);
+          // A degraded compaction kept its history but produced no usable
+          // summary and no meaningful post size, so its indicator is a muted
+          // "summary unavailable" with no token counts to back-fill.
+          if (!event.degraded) pendingTokensAfterRef.current = event.compactionNumber;
+          appendEntry({
+            kind: "notice",
+            text: event.degraded
+              ? "⊟ compacted · summary unavailable"
+              : compactionIndicatorText(event.tokensBefore, event.tokensAfter),
+            turn: currentTurn,
+            compactionNumber: event.compactionNumber,
+          });
         },
         onNotice: (notice) => {
           setScopeRules(session.scope?.raw.in_scope ?? []);
@@ -4563,6 +4651,25 @@ export function ChatScreen({
   const contextLimit = useMemo(() => !focusAgentId && settings.showContextMeter
     ? resolveContextLimit({ modelId: activeModel, providerId: activeProvider, hosted: activeProvider === "hosted" }, { hostedCatalog: currentHostedCatalog })
     : null, [focusAgentId, settings.showContextMeter, activeModel, activeProvider, currentHostedCatalog]);
+  // The window that drives context COMPACTION — resolved independently of the
+  // context-METER display (which is gated by `showContextMeter` / a focused
+  // subagent). Compaction must not turn off just because the meter is hidden or
+  // the operator drilled into a child, so this ignores both gates.
+  const compactionContextWindow = useMemo(
+    () => (activeModel && activeProvider)
+      ? resolveContextLimit({ modelId: activeModel, providerId: activeProvider, hosted: activeProvider === "hosted" }, { hostedCatalog: currentHostedCatalog })?.tokens
+      : undefined,
+    [activeModel, activeProvider, currentHostedCatalog],
+  );
+  // Re-base the live session's compaction trigger whenever that window changes:
+  // a `/model` switch to a different-window model, or the per-account hosted
+  // catalog loading after the session was built (when the window was unknown).
+  // An empty/undefined value is a no-op in core (it only re-bases on a real
+  // number), so this never disables a window the session already had.
+  useEffect(() => {
+    if (compactionContextWindow === undefined) return;
+    sessionRef.current?.reconfigureRuntime({ contextWindowTokens: compactionContextWindow });
+  }, [compactionContextWindow]);
   // The live "what it's doing" one-liner: the active tool + its args, truthfully
   // (never fabricated). Only while the root turn is running and not focused on a
   // worker. Computed here because the status bar is built above the later
@@ -5654,7 +5761,7 @@ export function ChatScreen({
         </box>
       )}
       <text fg={MUTED} marginTop={1}>
-        {fitTuiText(`ctrl+o transcript · ctrl+r ${workerDisplay.transcriptDetail === "expanded" ? "collapse" : "expand"} details · esc/← Main`, focusInner)}
+        {fitTuiText(`ctrl+o ${latestCompaction !== undefined ? "recap" : "transcript"} · ctrl+r ${workerDisplay.transcriptDetail === "expanded" ? "collapse" : "expand"} details · esc/← Main`, focusInner)}
       </text>
     </box>
   );
@@ -5673,6 +5780,7 @@ export function ChatScreen({
       expandedTurns={expandedTurns}
       theme={theme}
       renderableRef={reviewRenderableRef}
+      recap={latestCompaction !== undefined ? compactionRecapsRef.current.get(latestCompaction) : undefined}
     />
   ) : focused ? (
     focusViewNode
