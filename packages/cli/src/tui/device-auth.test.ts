@@ -229,6 +229,92 @@ describe("startDeviceAuth", () => {
   });
 });
 
+const COPILOT = PROVIDER_DEVICE_AUTH.copilot as DeviceCodeProviderConfig;
+
+/** A fake transport for the GitHub Copilot device flow, keyed on its URLs. */
+function makeCopilotFetch(tokenResponses: Array<DeviceAuthResponse | Error>) {
+  const calls = { device: 0, token: 0 };
+  const fetchImpl = async (
+    url: string,
+    _init: { method: string; headers: Record<string, string>; body: string },
+  ): Promise<DeviceAuthResponse> => {
+    if (url === COPILOT.deviceCodeUrl) {
+      calls.device += 1;
+      return jsonResponse(200, {
+        device_code: "gh-dev-code",
+        user_code: "WXYZ-9876",
+        verification_uri: "https://github.com/login/device",
+        interval: 1,
+        expires_in: 900,
+      });
+    }
+    if (url === COPILOT.tokenUrl) {
+      const next = tokenResponses[calls.token] ?? jsonResponse(400, { error: "authorization_pending" });
+      calls.token += 1;
+      if (next instanceof Error) throw next;
+      return next;
+    }
+    throw new Error(`unexpected url ${url}`);
+  };
+  return { fetchImpl, calls };
+}
+
+describe("startDeviceAuth (GitHub Copilot device-code)", () => {
+  it("uses the GitHub endpoints/client id and stores the access token as an oauth record", () => {
+    // Config confirmed against opencode/oh-my-pi (2026-09-14): GitHub device
+    // flow, client id Ov23li8tweQw6odWQebz, scope read:user, no refresh.
+    expect(COPILOT.kind).toBe("device-code");
+    expect(COPILOT.deviceCodeUrl).toBe("https://github.com/login/device/code");
+    expect(COPILOT.tokenUrl).toBe("https://github.com/login/oauth/access_token");
+    expect(COPILOT.clientId).toBe("Ov23li8tweQw6odWQebz");
+    expect(COPILOT.scopes).toEqual(["read:user"]);
+    expect(providerSupportsMethod("copilot", "oauth")).toBe(true);
+  });
+
+  it("polls authorization_pending -> token, then writes 0SEC_COPILOT_GITHUB_TOKEN", async () => {
+    const home = temporaryHome();
+    const env: NodeJS.ProcessEnv = {};
+    // GitHub's device token has no refresh_token / expires_in — a bare
+    // access_token is the whole credential, sent directly as a Bearer.
+    const { fetchImpl, calls } = makeCopilotFetch([
+      jsonResponse(400, { error: "authorization_pending" }),
+      jsonResponse(200, { access_token: "gho_copilot_token", token_type: "bearer", scope: "read:user" }),
+    ]);
+    const updates: DeviceAuthUpdate[] = [];
+    let connected = 0;
+
+    startDeviceAuth(COPILOT, {
+      env,
+      homeDir: home,
+      fetch: fetchImpl,
+      now: fixedNow,
+      sleep: () => Promise.resolve(),
+      openBrowser: noopBrowser,
+      onUpdate: (update) => updates.push(update),
+      onConnected: () => { connected += 1; },
+    });
+    await flush();
+
+    expect(calls.token).toBe(2);
+    expect(connected).toBe(1);
+    expect(updates.at(-1)?.phase).toBe("connected");
+
+    // Access token lands in the provider's single env var; no refresh var.
+    expect(env["0SEC_COPILOT_GITHUB_TOKEN"]).toBe("gho_copilot_token");
+
+    const record = getActiveAccount(loadAccountStore(home), "copilot");
+    expect(record?.kind).toBe("oauth");
+    if (record?.kind === "oauth") {
+      expect(record.tokens.accessToken).toBe("gho_copilot_token");
+      expect(record.tokens.refreshToken).toBeUndefined();
+    }
+
+    // The user code and verification URL surfaced as transcript lines.
+    const running = updates.find((u) => u.lines.length > 0);
+    expect(running?.lines.some((line) => line.includes("WXYZ-9876"))).toBe(true);
+  });
+});
+
 const OPENROUTER = PROVIDER_DEVICE_AUTH.openrouter as PkceLoopbackProviderConfig;
 
 /** A fake loopback server whose redirect the test drives by hand. */

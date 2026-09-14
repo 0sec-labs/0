@@ -772,6 +772,23 @@ export const PROVIDER_DEVICE_AUTH: Record<string, DeviceAuthProviderConfig> = {
     buildHeaders: kimiFingerprintHeaders,
     toAccountRecord: buildOAuthRecord,
   },
+  // Matches opencode packages/opencode/src/plugin/github-copilot and oh-my-pi
+  // oauth/github-copilot (fetched 2026-09-14). GitHub's device flow: device url
+  // https://github.com/login/device/code, token endpoint
+  // https://github.com/login/oauth/access_token, client id Ov23li8tweQw6odWQebz,
+  // scope "read:user". The device token is long-lived and sent DIRECTLY as a
+  // Bearer to api.githubcopilot.com — NO secondary token exchange and NO
+  // refresh — so it is stored as a plain oauth record (buildOAuthRecord) whose
+  // access_token accountEnvPatch writes to 0SEC_COPILOT_GITHUB_TOKEN (envVars[0]).
+  copilot: {
+    kind: "device-code",
+    providerId: "copilot",
+    deviceCodeUrl: "https://github.com/login/device/code",
+    tokenUrl: "https://github.com/login/oauth/access_token",
+    clientId: "Ov23li8tweQw6odWQebz",
+    scopes: ["read:user"],
+    toAccountRecord: buildOAuthRecord,
+  },
   // Matches oh-my-pi rules/auth/openrouter.kdl (fetched 2026-09-14):
   //   https://github.com/can1357/oh-my-pi/blob/main/packages/catalog/src/compat/rules/auth/openrouter.kdl
   // login "oauth-code" pkce=#true, standard authorize params OFF: open

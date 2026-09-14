@@ -169,6 +169,17 @@ const PROVIDER_DEFS: readonly Omit<ProviderInfo, "auth">[] = [
     hint: "set OPENCODE_API_KEY from opencode.ai/auth (endpoint override: OPENCODE_BASE_URL)",
   },
   {
+    id: "copilot",
+    label: "GitHub Copilot",
+    // OAuth only (device-code sign-in). The GitHub device-flow access token is
+    // written to 0SEC_COPILOT_GITHUB_TOKEN (envVars[0]) and sent directly as a
+    // Bearer to api.githubcopilot.com — no secondary exchange, no refresh, so
+    // there is no refresh-token env var.
+    methods: ["oauth"],
+    envVars: ["0SEC_COPILOT_GITHUB_TOKEN"],
+    hint: "sign in with your GitHub Copilot account (device sign-in), or set 0SEC_COPILOT_GITHUB_TOKEN=... (endpoint override: COPILOT_BASE_URL)",
+  },
+  {
     id: "anthropic",
     label: "Anthropic",
     // API key only for now. The schema supports OAuth, but Anthropic/Claude

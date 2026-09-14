@@ -103,6 +103,13 @@ export function connectionRecoveryForError(error: string): ConnectionRecovery | 
       detail,
     };
   }
+  if (/copilot/i.test(detail)) {
+    return {
+      providerId: "copilot",
+      title: "GitHub Copilot needs to reconnect",
+      detail,
+    };
+  }
   if (/openai/i.test(detail)) {
     return {
       providerId: "openai",

@@ -827,6 +827,38 @@ function opencodeWireApiForModel(model: string | undefined): WireApi {
   throw new Error(`OpenCode Zen has no wire mapping for model "${bare}"`);
 }
 
+// ── GitHub Copilot (device-code OAuth, OpenAI chat_completions wire) ────────
+//
+// The GitHub device-flow access token is sent DIRECTLY as `Authorization:
+// Bearer <token>` to api.githubcopilot.com/chat/completions — NO secondary
+// token exchange and NO refresh (GitHub device tokens are long-lived). This is
+// the xai/kimi device-code pattern plus a set of static Copilot integration
+// headers and a `copilot/` model prefix. Confirmed against opencode's
+// plugin/github-copilot and oh-my-pi's oauth/github-copilot (fetched 2026-09-14).
+//
+// The `copilot/` prefix disambiguates routing/pricing (Copilot serves
+// gpt-*/claude-*/gemini- families); it is STRIPPED off the model id in
+// applyConfiguration before the request, mirroring the opencode-prefix strip.
+const COPILOT_API_BASE = "https://api.githubcopilot.com";
+const COPILOT_DEFAULT_MODEL = "gpt-4o";
+// Static Copilot integration headers required on every inference call. Values
+// track the VS Code Copilot Chat client the endpoint expects.
+//   - Copilot-Vision-Request: "true" is sent ONLY alongside an image part —
+//     omitted here (text-only v1). TODO: set it when image content is present.
+const COPILOT_STATIC_HEADERS: Readonly<Record<string, string>> = {
+  "Copilot-Integration-Id": "vscode-chat",
+  "Editor-Version": "vscode/1.99.3",
+  "Editor-Plugin-Version": "copilot-chat/0.26.7",
+  "X-GitHub-Api-Version": "2026-06-01",
+  "Openai-Intent": "conversation-edits",
+  "X-Initiator": "user",
+};
+
+/** Strip the `copilot/` routing prefix off a model id (canonical id for the wire). */
+function copilotModelId(model: string): string {
+  return model.replace(/^copilot\//i, "");
+}
+
 type ApiProvider = NonNullable<RuntimeConfig["provider"]>;
 /**
  * Azure Foundry deployment ids used by 0cloud. The worker can inject both
@@ -875,7 +907,7 @@ export function parseLlmFallbackChain(env: Readonly<NodeJS.ProcessEnv> = process
   const VALID_PROVIDERS: Record<string, true> = {
     openrouter: true, anthropic: true, openai: true, azure: true, deepseek: true,
     "chatgpt-codex": true, "z-ai": true, kimi: true, qwen: true, xai: true, opencode: true,
-    hosted: true,
+    copilot: true, hosted: true,
   };
   for (const part of raw.split(",")) {
     const trimmed = part.trim();
@@ -986,6 +1018,13 @@ export function resolveFailoverProvider(
       const key = apiKey ?? env.OPENCODE_API_KEY;
       if (!key) return undefined;
       return { apiKey: key, baseUrl: env.OPENCODE_BASE_URL ?? OPENCODE_DEFAULT_BASE_URL, wireApi: opencodeWireApiForModel(model) };
+    }
+    case "copilot": {
+      // The GitHub device-flow access token is the credential; it's sent
+      // directly as a Bearer to the Copilot chat_completions endpoint.
+      const key = apiKey ?? env["0SEC_COPILOT_GITHUB_TOKEN"];
+      if (!key) return undefined;
+      return { apiKey: key, baseUrl: env.COPILOT_BASE_URL ?? COPILOT_API_BASE, wireApi: "chat_completions" };
     }
     case "hosted": {
       // Hosted inference uses cloud credentials from env or cloud.env.
@@ -1558,6 +1597,12 @@ function providerForModel(model: string | undefined, env: Readonly<NodeJS.Proces
   if (/^(opencode\/|muse-spark|mimo|ling|big-pickle|nemotron|minimax)/.test(m)) {
     return env.OPENCODE_API_KEY ? "opencode" : undefined;
   }
+  // GitHub Copilot: the `copilot/` prefix routes to Copilot regardless of the
+  // underlying family (Copilot serves gpt-*/claude-*/gemini-*), so it must win
+  // over the bare gpt-*/claude-* branches below.
+  if (m.startsWith("copilot/")) {
+    return env["0SEC_COPILOT_GITHUB_TOKEN"] ? "copilot" : undefined;
+  }
   // OpenAI GPT-5 / o-series → ChatGPT-Codex subscription if present, else OpenAI.
   if (/^gpt-|^o[1-4](?:[-_]|$)/.test(m)) {
     if (env["0SEC_CHATGPT_ACCESS_TOKEN"] || env["0SEC_CHATGPT_OAUTH_REFRESH_TOKEN"]) return "chatgpt-codex";
@@ -1578,7 +1623,7 @@ const DEFAULT_PROVIDER_MODELS: Record<ApiProvider, string | undefined> = {
   openai: DEFAULT_OPENAI_MODEL, azure: undefined, deepseek: DEEPSEEK_DEFAULT_MODEL,
   "chatgpt-codex": CODEX_DEFAULT_MODEL, "z-ai": ZAI_DEFAULT_MODEL,
   kimi: KIMI_DEFAULT_MODEL, qwen: QWEN_DEFAULT_MODEL, xai: XAI_DEFAULT_MODEL,
-  opencode: OPENCODE_DEFAULT_MODEL, hosted: "",
+  opencode: OPENCODE_DEFAULT_MODEL, copilot: COPILOT_DEFAULT_MODEL, hosted: "",
 };
 
 /**
@@ -1734,6 +1779,9 @@ function detectProvider(configApiKey: string | undefined, preferredModel: string
     case "opencode":
       return { provider: "opencode", apiKey: env.OPENCODE_API_KEY as string,
         baseUrl: env.OPENCODE_BASE_URL ?? OPENCODE_DEFAULT_BASE_URL, defaultModel: OPENCODE_DEFAULT_MODEL, wireApi: opencodeWireApiForModel(preferredModel) };
+    case "copilot":
+      return { provider: "copilot", apiKey: env["0SEC_COPILOT_GITHUB_TOKEN"] as string,
+        baseUrl: env.COPILOT_BASE_URL ?? COPILOT_API_BASE, defaultModel: preferredModel ?? COPILOT_DEFAULT_MODEL, wireApi: "chat_completions" };
     case "chatgpt-codex":
       return { provider: "chatgpt-codex", apiKey: "", baseUrl: CODEX_API_ENDPOINT,
         defaultModel: env["0SEC_MODEL"] ?? CODEX_DEFAULT_MODEL, wireApi: "responses" };
@@ -1912,6 +1960,20 @@ function detectProvider(configApiKey: string | undefined, preferredModel: string
       baseUrl: env.OPENCODE_BASE_URL ?? OPENCODE_DEFAULT_BASE_URL,
       defaultModel: OPENCODE_DEFAULT_MODEL,
       wireApi: opencodeWireApiForModel(preferredModel),
+    };
+  }
+
+  // GitHub Copilot — device-code OAuth token sent directly as a Bearer to the
+  // Copilot chat_completions endpoint. Explicit operator opt-in via
+  // 0SEC_COPILOT_GITHUB_TOKEN, still before the Anthropic final fallback.
+  const copilotToken = env["0SEC_COPILOT_GITHUB_TOKEN"];
+  if (copilotToken) {
+    return {
+      provider: "copilot",
+      apiKey: copilotToken,
+      baseUrl: env.COPILOT_BASE_URL ?? COPILOT_API_BASE,
+      defaultModel: preferredModel ?? COPILOT_DEFAULT_MODEL,
+      wireApi: "chat_completions",
     };
   }
 
@@ -2098,6 +2160,11 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
     if (this.provider === "opencode") {
       this.model = opencodeModelId(this.model);
     }
+    // `copilot/<model-id>` is a routing/pricing prefix, not an upstream model
+    // id — strip it so the Copilot endpoint receives its canonical id (gpt-4o).
+    if (this.provider === "copilot") {
+      this.model = copilotModelId(this.model);
+    }
 
     // These deployments reject function tools plus reasoning_effort on
     // /chat/completions. The Responses endpoint supports the agent loop, so
@@ -2175,7 +2242,11 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
     // Same-provider model change: re-run model/wire-api resolution exactly like
     // the fork `modelChanged` branch.
     if (sel.model !== undefined) {
-      const model = this.provider === "opencode" ? opencodeModelId(sel.model) : sel.model;
+      const model = this.provider === "opencode"
+        ? opencodeModelId(sel.model)
+        : this.provider === "copilot"
+          ? copilotModelId(sel.model)
+          : sel.model;
       if (model !== this.model) {
         this.model = model;
         this.config = { ...this.config, model };
@@ -2270,12 +2341,17 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
     if (typeof selectedModel !== "string" || !selectedModel.trim()) {
       throw new Error("Subagent model must be a non-empty model ID");
     }
-    const model = this.provider === "opencode" ? opencodeModelId(selectedModel) : selectedModel;
+    const stripProviderPrefix = (id: string): string =>
+      this.provider === "opencode"
+        ? opencodeModelId(id)
+        : this.provider === "copilot"
+          ? copilotModelId(id)
+          : id;
+    const model = stripProviderPrefix(selectedModel);
     // Operator-approved allowlist: the parent's own model, or any FIXED pin in
     // agentModels (the "auto" sentinel is not a real pin, so it is excluded).
     const approvedByAllowlist = model === this.model || Object.values(this.config.agentModels ?? {}).some(
-      id => id !== AUTO_MODEL_SENTINEL &&
-        (this.provider === "opencode" ? opencodeModelId(id) : id) === model,
+      id => id !== AUTO_MODEL_SENTINEL && stripProviderPrefix(id) === model,
     );
     // Auto WIDENS the guard to also accept any model whose provider has creds;
     // it never lets an unreachable model through. singleModel still forces the
@@ -2354,6 +2430,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
       this.provider === "deepseek" ||
       this.provider === "qwen" ||
       this.provider === "xai" ||
+      this.provider === "copilot" ||
       this.provider === "hosted" ||
       (this.provider === "opencode" &&
         (this.wireApi === "chat_completions" || this.wireApi === "responses")) ||
@@ -2426,6 +2503,17 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
       return {
         "Content-Type": "application/json",
         "x-goog-api-key": this.apiKey,
+      };
+    }
+    if (this.provider === "copilot") {
+      // GitHub Copilot rides the OpenAI chat_completions wire (Bearer), but the
+      // endpoint additionally requires a set of static VS Code Copilot Chat
+      // integration headers. Dedicated branch BEFORE the generic OpenAI-compat
+      // path so those headers are always attached.
+      return {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${this.apiKey}`,
+        ...COPILOT_STATIC_HEADERS,
       };
     }
     if (this.isOpenAICompat) {
@@ -2669,6 +2757,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
       case "qwen": return "Qwen (Alibaba Model Studio)";
       case "xai": return "xAI (Grok)";
       case "opencode": return "OpenCode Zen";
+      case "copilot": return "GitHub Copilot";
       case "hosted": return "0sec Cloud";
     }
   }
@@ -2687,6 +2776,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
       "  export QWEN_API_KEY=...                (Alibaba Qwen — Token Plan sub, OpenAI-compatible)\n" +
       "  export XAI_API_KEY=...                 (xAI Grok — OpenAI-compatible)\n" +
       "  export OPENCODE_API_KEY=...            (OpenCode Zen — multi-wire gateway)\n" +
+      "  export 0SEC_COPILOT_GITHUB_TOKEN=...   (GitHub Copilot — device-code OAuth token)\n" +
       "  Run `0sec login`                     (0sec hosted inference)"
     );
   }
@@ -2803,7 +2893,11 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
         continue;
       }
       this.provider = entry.provider;
-      this.model = entry.provider === "opencode" ? opencodeModelId(entry.model) : entry.model;
+      this.model = entry.provider === "opencode"
+        ? opencodeModelId(entry.model)
+        : entry.provider === "copilot"
+          ? copilotModelId(entry.model)
+          : entry.model;
       this.apiKey = cfg.apiKey;
       this.baseUrl = cfg.baseUrl;
       this.wireApi = cfg.wireApi;

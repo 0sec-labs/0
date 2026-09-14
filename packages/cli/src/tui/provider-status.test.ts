@@ -55,19 +55,21 @@ describe("PROVIDERS", () => {
     }
   });
 
-  it("models chatgpt-codex as OAuth-only, xai/kimi/openrouter as OAuth+API-key, and the rest as API key", () => {
-    // The scope decision: chatgpt-codex is OAuth-only. xai and kimi gained a
-    // device-code OAuth flow, and openrouter a PKCE browser flow, but all three
-    // keep a pasted API key as a secondary method (OAuth is preferred, so it
-    // leads `methods`). Anthropic OAuth is deferred, so anthropic — and every
-    // other provider — stays api-key only.
+  it("models chatgpt-codex/copilot as OAuth-only, xai/kimi/openrouter as OAuth+API-key, and the rest as API key", () => {
+    // The scope decision: chatgpt-codex and copilot are OAuth-only (copilot's
+    // GitHub device token has no pasted-key equivalent in the picker). xai and
+    // kimi gained a device-code OAuth flow, and openrouter a PKCE browser flow,
+    // but all three keep a pasted API key as a secondary method (OAuth is
+    // preferred, so it leads `methods`). Anthropic OAuth is deferred, so
+    // anthropic — and every other provider — stays api-key only.
     const byId = new Map(PROVIDERS.map((provider) => [provider.id, provider]));
     expect(byId.get("chatgpt-codex")?.methods).toEqual(["oauth"]);
+    expect(byId.get("copilot")?.methods).toEqual(["oauth"]);
     expect(byId.get("xai")?.methods).toEqual(["oauth", "api-key"]);
     expect(byId.get("kimi")?.methods).toEqual(["oauth", "api-key"]);
     expect(byId.get("openrouter")?.methods).toEqual(["oauth", "api-key"]);
     expect(byId.get("anthropic")?.methods).toEqual(["api-key"]);
-    const oauthCapable = new Set(["chatgpt-codex", "xai", "kimi", "openrouter"]);
+    const oauthCapable = new Set(["chatgpt-codex", "copilot", "xai", "kimi", "openrouter"]);
     for (const provider of PROVIDERS) {
       if (oauthCapable.has(provider.id)) continue;
       expect(provider.methods).toEqual(["api-key"]);
@@ -92,6 +94,7 @@ describe("PROVIDERS", () => {
         "anthropic",
         "azure",
         "chatgpt-codex",
+        "copilot",
         "deepseek",
         "kimi",
         "openai",

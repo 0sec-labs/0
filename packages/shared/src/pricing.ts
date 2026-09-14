@@ -85,6 +85,16 @@ export const MANUAL_PRICING: Record<string, ModelRates> = {
   "grok-4.6": { input: 2.00, output: 6.00 },
   "grok-4.5": { input: 2.00, output: 6.00 },
   "grok-4.3": { input: 1.25, output: 2.50 },
+  // GitHub Copilot (device-code OAuth) — the `copilot/` prefix disambiguates
+  // routing/pricing (Copilot serves gpt-*/claude-*/gemini-* families). These are
+  // DISPLAY-ONLY estimates so the model picker can group and show these ids;
+  // Copilot subscription billing is per-seat, not metered per token, so the
+  // estimated spend against a Copilot key is not a real charge. v1 ships the
+  // gpt-* families (claude-*/gemini-* need a one-time model-policy enable —
+  // TODO). Rates mirror the underlying OpenAI list prices.
+  "copilot/gpt-4o": { input: 2.50, output: 10.00, cachedInput: 1.25 },
+  "copilot/gpt-4o-mini": { input: 0.15, output: 0.60, cachedInput: 0.075 },
+  "copilot/gpt-4.1": { input: 2.00, output: 8.00, cachedInput: 0.50 },
   // Azure Foundry deployment names (verified 2026-07-25) — exact aliases
   // forwarded by the engine. DeepSeek/gpt-oss rates use the Azure-specific `azure_ai/*` LiteLLM feed
   // entries (not the cheaper direct-provider rates). Kimi is Microsoft's
@@ -198,6 +208,7 @@ export function modelProvider(model?: string): string {
   if (lowered.startsWith("kimi/") || lowered.startsWith("moonshot/")) return "kimi";
   if (lowered.startsWith("openrouter/")) return "openrouter";
   if (lowered.startsWith("opencode/")) return "opencode";
+  if (lowered.startsWith("copilot/")) return "copilot";
   if (lowered.startsWith("xai/") || lowered.startsWith("x-ai/")) return "xai";
 
   const stripped = normalizeModel(model).toLowerCase();
