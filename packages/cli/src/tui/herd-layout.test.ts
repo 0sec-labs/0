@@ -16,6 +16,7 @@ import {
   formatElapsed,
   readFocusTelemetry,
   buildHerdRows,
+  herdDialogItems,
   clampHerdSelection,
   clipDetailLines,
   computeHerdFocusLayout,
@@ -1103,5 +1104,37 @@ describe("focus header — telemetry block + lineage", () => {
     const p = subagentPeers(map, NOW).find((x) => x.id === "child-1");
     const text = focusHeaderLines(p, rec, 80, NOW).map((l) => l.text);
     expect(text).toContain("Parent: scan-1");
+  });
+});
+
+describe("herdDialogItems — worker identity + live summary (no prompt echo)", () => {
+  it("labels a subagent row by its NAME and shows a live 'doing now' summary, not the spawn prompt", () => {
+    const lifecycle = {
+      agent_id: "c1",
+      parent_scan_id: "s",
+      status: "running" as const,
+      task: "# Target — enumerate the whole attack surface and report",
+      name: "SwiftFalcon",
+      max_turns: 8,
+    };
+    const map = applySubagentProgress(
+      applySubagentLifecycle({}, lifecycle, NOW),
+      { agent_id: "c1", parent_scan_id: "s", turn: 2, max_turns: 8, tool: "read_file" },
+      NOW,
+    );
+    const rows = buildHerdRows(subagentPeers(map, NOW), NOW);
+    const { items } = herdDialogItems(rows, { workers: map });
+    const item = items.find((i) => i.id === "c1");
+    expect(item?.label).toBe("SwiftFalcon");
+    expect(item?.label).not.toContain("# Target");
+    expect(item?.meta).toBe("Reading files");
+  });
+
+  it("keeps a bare provider peer's own label + roster status text when no worker record joins", () => {
+    const rows = buildHerdRows([peer("hub-1", { label: "recon session" })], NOW);
+    const { items } = herdDialogItems(rows, {});
+    const item = items.find((i) => i.id === "hub-1");
+    expect(item?.label).toBe("recon session");
+    expect(item?.meta).toBe("idle");
   });
 });

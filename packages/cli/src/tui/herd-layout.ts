@@ -38,6 +38,7 @@
 
 import type { DialogItem } from "./dialog-select-layout.js";
 import { borderChrome, computeListWindow, computePaneSplit, makePane } from "./pane-layout.js";
+import { deriveAgentSummary } from "./subagent-card.js";
 import { fitTuiText, sanitizeTuiText, wrapText } from "./text.js";
 
 // ---------------------------------------------------------------------------
@@ -981,11 +982,29 @@ export function herdDialogItems(
   rows.forEach((row, index) => {
     if (row.kind !== "peer") return;
     const tone = toneFor?.(row.peer, row.status);
-    const settled = settledWorkerState(options.workers?.[row.peer.id]);
+    const worker = options.workers?.[row.peer.id];
+    const settled = settledWorkerState(worker);
+    // Identity is the worker's human NAME when known (never the raw spawn
+    // prompt); a provider peer with no worker record keeps its own label/id.
+    const identity = worker?.name ? sanitizeHerdText(worker.name) : herdRowLabelText(row.peer);
+    // The status column is a LIVE "doing now" summary for a worker row (its
+    // latest tool / note / turn), falling back to the roster's tool/turn text
+    // for a bare provider peer. A settled worker shows its settled word.
+    const meta =
+      settled ??
+      (worker
+        ? deriveAgentSummary({
+            status: worker.status,
+            tool: worker.tool,
+            note: worker.note,
+            turn: worker.turn ?? worker.turns,
+            maxTurns: worker.maxTurns,
+          })
+        : herdRowStatusText(row.peer, row.status));
     items.push({
       id: row.peer.id,
-      label: `${settled ? "■ " : ""}${herdRowLabelText(row.peer)}`,
-      meta: settled ?? herdRowStatusText(row.peer, row.status),
+      label: `${settled ? "■ " : ""}${identity}`,
+      meta,
       category: settled ? "Idle" : herdStatusLabel(row.status),
       current: focusedId !== undefined && row.peer.id === focusedId,
       ...(tone === undefined ? {} : { tone }),
@@ -1325,6 +1344,9 @@ export function applySubagentProgress(
 
   const record: HerdSubagentRecord = {
     agentId,
+    // Carry the human name forward — a progress event never re-states it, so
+    // dropping it here would blank the roster/rail identity between turns.
+    name: pickString(payload["name"]) ?? prev?.name,
     parentScanId: pickString(payload["parent_scan_id"]) ?? prev?.parentScanId ?? "",
     task: prev?.task ?? "",
     // A child still emitting turns is running, unless it already reached a

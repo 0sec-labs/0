@@ -151,6 +151,7 @@ import { THEME_NAMES, getThemeEntry, isThemeName } from "./themes.js";
 import {
   parseSubagentCard,
   reduceActiveSubagents,
+  summaryInputFromMessage,
 } from "./subagent-card.js";
 import { onTuiOutputLine } from "./output-guard.js";
 import {
@@ -5088,11 +5089,21 @@ export function ChatScreen({
       {subagentVisible.map((sa, index) => {
         const rec = herdAgents[sa.agent_id];
         const status = subagentEffectiveStatus(sa);
+        // The tail is a LIVE, present-tense summary of what the agent is doing
+        // now (from its latest prose / current tool / note), NOT the raw prompt
+        // it was spawned with. `activity` is left unset so the row shows just
+        // that summary; the status badge carries running/done/failed distinctly.
         const view: AgentRowView = {
           id: sa.agent_id,
           name: sa.name ?? rec?.name ?? agentNamesRef.current.get(sa.agent_id) ?? "Unnamed worker",
-          task: sa.task ?? "",
-          activity: summarizeAgentActivity({ status, tool: rec?.tool, note: rec?.note, turn: rec?.turn, maxTurns: rec?.maxTurns ?? sa.max_turns }),
+          task: summarizeAgentActivity({
+            status,
+            tool: rec?.tool,
+            note: rec?.note,
+            turn: rec?.turn,
+            maxTurns: rec?.maxTurns ?? sa.max_turns,
+            ...summaryInputFromMessage(workerTelemetry[sa.agent_id]),
+          }),
           status,
           animationFrame: settings.reduceMotion ? undefined : animTick,
           accent: agentAccentFor(sa.agent_id, theme.CANVAS),
@@ -5176,15 +5187,21 @@ export function ChatScreen({
         ) : (
           railVisible.map((rec) => {
             // Share the inline worker identity and truthful status presentation.
+            const railStatus = operatorStopped.has(rec.agentId) ? "cancelled" : rec.status === "completed" && workerOutcomes[rec.agentId]?.done === false ? "incomplete" : rec.status;
             const view: AgentRowView = {
               id: rec.agentId,
               name: rec.name ?? agentNamesRef.current.get(rec.agentId) ?? "Unnamed worker",
-              task: rec.task || "No task reported",
-              activity: summarizeAgentActivity({
-                status: operatorStopped.has(rec.agentId) ? "cancelled" : rec.status === "completed" && workerOutcomes[rec.agentId]?.done === false ? "incomplete" : rec.status,
-                tool: rec.tool, note: rec.note, turn: rec.turn, maxTurns: rec.maxTurns,
+              // The task slot carries the LIVE activity summary, not the raw
+              // spawn prompt; the status badge shows running/done/failed.
+              task: summarizeAgentActivity({
+                status: railStatus,
+                tool: rec.tool,
+                note: rec.note,
+                turn: rec.turn,
+                maxTurns: rec.maxTurns,
+                ...summaryInputFromMessage(workerTelemetry[rec.agentId]),
               }),
-              status: operatorStopped.has(rec.agentId) ? "cancelled" : rec.status === "completed" && workerOutcomes[rec.agentId]?.done === false ? "incomplete" : rec.status,
+              status: railStatus,
               animationFrame: settings.reduceMotion ? undefined : animTick,
               accent: agentAccentFor(rec.agentId, theme.CANVAS),
             };

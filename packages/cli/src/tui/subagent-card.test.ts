@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { parseSubagentCard, reduceActiveSubagents } from "./subagent-card.js";
+import {
+  AGENT_SUMMARY_MAX,
+  deriveAgentSummary,
+  describeToolAction,
+  parseSubagentCard,
+  reduceActiveSubagents,
+  summaryInputFromMessage,
+} from "./subagent-card.js";
 
 describe("parseSubagentCard", () => {
   it("returns card data for a successful completed subagent", () => {
@@ -180,5 +187,120 @@ describe("reduceActiveSubagents", () => {
     const result = reduceActiveSubagents(state, rEvent);
     expect(result).not.toBe(state);
     expect(state.a1?.status).toBe("queued");
+  });
+});
+describe("describeToolAction", () => {
+  it("names a concrete file target for read/write/edit tools", () => {
+    expect(describeToolAction("read_file", { path: "src/auth/auth.ts" })).toBe("Reading auth.ts");
+    expect(describeToolAction("apply_patch", { path: "packages/cli/src/tui/model-screen.tsx" }))
+      .toBe("Editing model-screen.tsx");
+    expect(describeToolAction("write", { file: "/tmp/out.json" })).toBe("Writing out.json");
+  });
+
+  it("falls back to a generic verb when no target argument is present", () => {
+    expect(describeToolAction("read_file")).toBe("Reading files");
+    expect(describeToolAction("Edit", {})).toBe("Editing files");
+  });
+
+  it("summarises a shell command by its first token (skipping env prefixes)", () => {
+    expect(describeToolAction("bash", { command: "rg TODO packages/cli" })).toBe("Running `rg`");
+    expect(describeToolAction("run_command", { command: "FOO=bar node build.js" })).toBe("Running `node`");
+    expect(describeToolAction("bash", {})).toBe("Running a command");
+  });
+
+  it("summarises a search by its pattern and a fetch by its host", () => {
+    expect(describeToolAction("search_files", { pattern: "spawn_agent" })).toBe("Searching for `spawn_agent`");
+    expect(describeToolAction("grep", {})).toBe("Searching the code");
+    expect(describeToolAction("http_request", { url: "https://www.example.com/a/b?x=1" }))
+      .toBe("Fetching example.com");
+  });
+
+  it("maps domain tools and treats report_status as no action", () => {
+    expect(describeToolAction("save_finding", { title: "x" })).toBe("Recording a finding");
+    expect(describeToolAction("spawn_agents", {})).toBe("Delegating to subagents");
+    expect(describeToolAction("report_status", { note: "x" })).toBe("");
+  });
+
+  it("keeps an unknown tool name as `Running <tool>` and is total on junk", () => {
+    expect(describeToolAction("nmap")).toBe("Running nmap");
+    expect(describeToolAction("")).toBe("");
+    expect(() => describeToolAction("read_file", null)).not.toThrow();
+  });
+});
+
+describe("deriveAgentSummary", () => {
+  it("prefers a tool that is in flight over prose (the freshest 'now')", () => {
+    expect(
+      deriveAgentSummary({
+        status: "running",
+        assistant: "Now I will inspect the auth module.",
+        tool: "read_file",
+        toolInput: { path: "src/auth.ts" },
+        toolRunning: true,
+      }),
+    ).toBe("Reading auth.ts");
+  });
+
+  it("uses the latest assistant prose (first sentence, sentence-cased) when no tool is in flight", () => {
+    expect(
+      deriveAgentSummary({
+        status: "running",
+        assistant: "reviewing the MCP tool-execution paths. Next I will read the handler.",
+      }),
+    ).toBe("Reviewing the MCP tool-execution paths");
+  });
+
+  it("strips leading Markdown noise from prose so a heading never echoes as-is", () => {
+    expect(deriveAgentSummary({ status: "running", assistant: "# Reading the final lines" }))
+      .toBe("Reading the final lines");
+  });
+
+  it("falls back through note, then last tool, then turn, then Starting…", () => {
+    expect(deriveAgentSummary({ status: "running", note: "scanning ports" })).toBe("Scanning ports");
+    expect(deriveAgentSummary({ status: "running", tool: "grep", toolInput: { pattern: "x" } }))
+      .toBe("Searching for `x`");
+    expect(deriveAgentSummary({ status: "running", turn: 3, maxTurns: 8 })).toBe("Working (turn 3/8)");
+    expect(deriveAgentSummary({ status: "running" })).toBe("Starting…");
+    expect(deriveAgentSummary({ status: "queued" })).toBe("Queued");
+  });
+
+  it("returns a terminal word for a settled agent, ignoring stale activity", () => {
+    expect(deriveAgentSummary({ status: "completed", tool: "grep", assistant: "still going" })).toBe("done");
+    expect(deriveAgentSummary({ status: "failed" })).toBe("failed");
+    expect(deriveAgentSummary({ status: "cancelled" })).toBe("stopped");
+    expect(deriveAgentSummary({ status: "incomplete" })).toBe("incomplete");
+  });
+
+  it("truncates to the bound with an ellipsis and never throws on junk", () => {
+    const out = deriveAgentSummary({ status: "running", assistant: "a".repeat(200) }, 20);
+    expect(out.length).toBe(20);
+    expect(out.endsWith("…")).toBe(true);
+    expect(() => deriveAgentSummary(null)).not.toThrow();
+    expect(() => deriveAgentSummary({ status: 5 as unknown as string })).not.toThrow();
+    expect(deriveAgentSummary({})).toBe("Starting…");
+    expect(AGENT_SUMMARY_MAX).toBeGreaterThan(0);
+  });
+});
+
+describe("summaryInputFromMessage", () => {
+  it("pulls the latest prose and the current (last) tool with its args + in-flight flag", () => {
+    const out = summaryInputFromMessage({
+      assistant: "Looking at the handler.",
+      tools: [
+        { call: { name: "read_file", arguments: { path: "a.ts" } }, result: { success: true, output: "" } },
+        { call: { name: "grep", arguments: { pattern: "x" } }, running: true },
+      ],
+    });
+    expect(out.assistant).toBe("Looking at the handler.");
+    expect(out.tool).toBe("grep");
+    expect(out.toolInput).toEqual({ pattern: "x" });
+    expect(out.toolRunning).toBe(true);
+  });
+
+  it("is total: a non-object or a message with no tools yields an empty patch", () => {
+    expect(summaryInputFromMessage(undefined)).toEqual({});
+    expect(summaryInputFromMessage({ turn: 1 })).toEqual({});
+    expect(summaryInputFromMessage({ tools: [] })).toEqual({});
+    expect(() => summaryInputFromMessage({ tools: [null] })).not.toThrow();
   });
 });
