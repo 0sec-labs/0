@@ -31,7 +31,7 @@ import { isRightClick } from "./use-context-menu.js";
 import { sanitizeTuiText } from "./text.js";
 import { useSurfaceDimensions } from "./dialog-surface.js";
 import { Popup } from "./popup.js";
-import { operatorIcon } from "./operator-icons.js";
+import { operatorIcon, categoryIcon } from "./operator-icons.js";
 import {
   buildDialogRows,
   clampDialogSelection,
@@ -213,6 +213,7 @@ export function DialogSelectBody({
   onHoverRow,
 }: DialogSelectBodyProps) {
   const theme = useTheme();
+  const symbols = useSymbols();
   // Last pointer position seen by a hover handler. A row can slide under a
   // STATIONARY cursor when the list scrolls (keyboard nav / paging), and
   // OpenTUI re-fires onMouseOver on the newly-under row with the SAME pointer
@@ -255,7 +256,10 @@ export function DialogSelectBody({
           fg={theme.PRIMARY}
           attributes={TextAttributes.BOLD}
         >
-          {row.category.toUpperCase()}
+          {(() => {
+            const icon = categoryIcon(row.category, symbols);
+            return icon ? `${icon}  ${row.category.toUpperCase()}` : row.category.toUpperCase();
+          })()}
         </Cells>
       );
     }
