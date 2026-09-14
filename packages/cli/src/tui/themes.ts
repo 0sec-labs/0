@@ -793,25 +793,26 @@ const OSEC_THEME: Theme = {
   surface: "#26221D",
   surfaceAlt: "#35302A",
   overlay: "#403D39", // the #403D39 graphite anchor itself, as the topmost raised surface tier
-  // Code palette adopts oh-my-pi's (titanium) SEMANTIC hue map on PANEL: a
-  // cool polychrome that reads as "code" and stays distinct from the warm
-  // orange brand chrome. keyword=purple, string=green, function=blue,
-  // type=cyan, number=amber, variable=cool aluminium, comment=dim blue-grey,
-  // operator/punctuation=muted cool grey. DIFF/LINK follow OMP too (diff add =
-  // string green, diff del = OMP's pink-red, link = OMP's blue). Every token
-  // clears AA (>=4.5:1) on PANEL (worst is comment at 5.07:1).
-  syntaxKeyword: "#BB9AF7",
-  syntaxString: "#9ECE6A",
-  syntaxNumber: "#F0A868",
-  syntaxComment: "#8A91AE",
-  syntaxFunction: "#7AA2F7",
-  syntaxType: "#2AC3DE",
-  syntaxVariable: "#C0CAF5",
-  syntaxOperator: "#8FB5C0",
-  syntaxPunctuation: "#9AA5CE",
-  DIFF_ADD: "#9ECE6A",
-  DIFF_DEL: "#F7768E",
-  LINK: "#7AA2F7",
+  // Code palette HARMONIZED to the 0sec warm palette (oh-my-pi dark-volcanic
+  // philosophy: draw the syntax hues from the theme's OWN colours rather than a
+  // foreign rainbow, so code reads as part of the brand, not confetti). A warm
+  // family carries the meaningful tokens — keyword=amber (ACCENT), function=soft
+  // gold, string=yellow (WARNING hue), number=green (SUCCESS) — with ONE cool
+  // teal (INFO) for types as the single contrast note; everything structural
+  // (variable/operator/punctuation/comment) recedes into warm greys so the eye
+  // lands on the meaning, not the punctuation. Every token clears AA on PANEL.
+  syntaxKeyword: "#F2A24C",     // amber (ACCENT) — warm, in-brand
+  syntaxFunction: "#F7C97D",    // soft gold, a step lighter than keyword
+  syntaxString: "#E4BC46",      // saturated yellow (WARNING hue)
+  syntaxNumber: "#69C489",      // green (SUCCESS) — the warm-family break
+  syntaxType: "#4FBAC6",        // teal (INFO) — the single cool accent
+  syntaxVariable: "#D8CBBA",    // warm cream — plain identifiers stay calm
+  syntaxComment: "#9E927F",     // dim warm grey — dimmer than MUTED
+  syntaxOperator: "#B0A493",    // MUTED — structure recedes
+  syntaxPunctuation: "#9E9384", // a touch dimmer than operators
+  DIFF_ADD: "#69C489",          // number/string green
+  DIFF_DEL: "#F47B72",          // ERROR coral
+  LINK: "#4FBAC6",              // teal (INFO)
 };
 
 /* ----------------------------------------------------------------- registry */
