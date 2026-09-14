@@ -616,7 +616,7 @@ const SWISS: Theme = {
  * ≥3.3:1) — every text token clears 4.5:1 on all three backgrounds with no
  * waivers, verified by validateTheme.
  */
-const OPENCODE: Theme = {
+const GOLDEN: Theme = {
   CANVAS: "#0A0A0A",
   PANEL: "#141414",
   PANEL_ALT: "#1E1E1E",
@@ -733,19 +733,28 @@ export const THEME_NAMES = [
   "paper",
   "mono-dim",
   "swiss",
-  "opencode",
+  "golden",
   "oh-my-pi",
 ] as const;
 export type ThemeName = (typeof THEME_NAMES)[number];
 
 /**
- * The theme a fresh session gets. `opencode` — the warm-tan-on-near-black look
- * with a purple accent and a polychrome syntax palette — is the shipped look,
- * because a rich, semantically-coloured transcript (the OpenCode/oh-my-pi feel
- * the operator asked for) reads far less flat than a neutral grey. Like the
- * other shipped darks it clears AA on every text token with no waivers, so the
- * default carries no contrast debt. `slate` remains available for anyone who
- * prefers hueless grey chrome.
+ * Legacy theme ids that map to a renamed built-in. `opencode` was renamed to
+ * `golden`; a persisted `theme: "opencode"` still resolves to the same palette.
+ */
+export const THEME_ALIASES: Readonly<Record<string, ThemeName>> = {
+  opencode: "golden",
+};
+
+/**
+ * The theme a fresh session gets. `oh-my-pi` — the electric-blue-on-titanium
+ * look the operator asked for — is the shipped default, because a rich,
+ * semantically-coloured transcript reads far less flat than a neutral grey.
+ * `golden` (the warm-tan-and-gold palette, formerly `opencode`) is the other
+ * rich dark, available for anyone who prefers it. Like the other shipped darks
+ * both clear AA on every text token with no waivers, so the default carries no
+ * contrast debt. `slate` remains available for anyone who prefers hueless grey
+ * chrome.
  *
  * This is a default, not a migration: an operator who has explicitly chosen a
  * theme keeps it, because a persisted preference is read in preference to this
@@ -844,12 +853,12 @@ export const THEMES: Readonly<Record<ThemeName, ThemeEntry>> = {
     mode: "dark",
     palette: SWISS,
   },
-  opencode: {
-    name: "opencode",
-    label: "OpenCode",
-    description: "Warm tan highlight on near-black surfaces, purple accent. The OpenCode look.",
+  golden: {
+    name: "golden",
+    label: "Golden",
+    description: "Warm tan-and-gold highlights on near-black surfaces, with a purple accent.",
     mode: "dark",
-    palette: OPENCODE,
+    palette: GOLDEN,
   },
   "oh-my-pi": {
     name: "oh-my-pi",
@@ -888,6 +897,10 @@ export function getTheme(name: unknown): Theme {
  */
 export function getThemeEntry(name: unknown): ThemeEntry {
   if (isThemeName(name)) return THEMES[name];
+  // A renamed built-in still resolves from its legacy id, so an operator who
+  // persisted the old name keeps the same palette instead of silently
+  // reverting to the default.
+  if (typeof name === "string" && name in THEME_ALIASES) return THEMES[THEME_ALIASES[name]!];
   if (typeof name === "string" && installedThemes !== null) {
     const installed = installedThemes.get(name);
     if (installed) return installed;
