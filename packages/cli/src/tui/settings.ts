@@ -436,7 +436,7 @@ const DEFS: readonly TuiSettingDef[] = [
     description:
       "Right sidebar: live agents, their activity, the current plan and findings. Hidden on narrow terminals.",
     kind: "boolean",
-    default: true,
+    default: false,
     group: "Display",
   },
   {
@@ -766,7 +766,7 @@ export const DEFAULT_SETTINGS: TuiSettings = {
   showTurnSummary: false,
   showSubagents: true,
   showLeftSidebar: false,
-  showRightSidebar: true,
+  showRightSidebar: false,
   showTimestamps: false,
   showObjective: true,
   showScope: true,
