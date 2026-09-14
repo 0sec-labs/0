@@ -132,8 +132,8 @@ describe("default theme", () => {
   });
 
   it("is the fallback", () => {
-    expect(DEFAULT_THEME_NAME).toBe("opencode");
-    expect(getTheme(DEFAULT_THEME_NAME)).toBe(THEMES.opencode.palette);
+    expect(DEFAULT_THEME_NAME).toBe("oh-my-pi");
+    expect(getTheme(DEFAULT_THEME_NAME)).toBe(THEMES["oh-my-pi"].palette);
   });
 
   it("reproduces severityTone's mapping", () => {
@@ -313,6 +313,7 @@ describe("contrast sweep", () => {
       "mono-dim": 4.5,
       swiss: 5.74,
       opencode: 5.01,
+      "oh-my-pi": 5.6,
     });
   });
 });
@@ -430,6 +431,7 @@ describe("semantic colours survive colour blindness", () => {
       "mono-dim": 1.165,
       swiss: 1.21,
       opencode: 1.156,
+      "oh-my-pi": 1.328,
     });
     // Every theme clears the floor; opencode is the tightest of the set (its
     // semantic hues are distinguished by colour rather than luminance, the
