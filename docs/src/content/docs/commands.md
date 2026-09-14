@@ -2375,7 +2375,7 @@ Guide: [Read the workflow](/integrations/).
 
 ### plugin
 
-Install, enable, and inspect third-party plugins. This scaffold has no public marketplace. For model-authored executable plugins and third-party setup, see [Integrations](/integrations/#plugin-system).
+Install, enable, inspect, and run Hackstore extensions. For authoring, local testing, and the separate model-authored plugin mechanism, see [Integrations](/integrations/#plugin-system).
 
 ```text
 0sec plugin

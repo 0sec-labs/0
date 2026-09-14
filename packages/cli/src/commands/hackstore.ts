@@ -1,26 +1,11 @@
-// `0sec hackstore` — the community authoring toolkit for Hackstore, the 0sec
-// extension store.
+// `0sec hackstore` creates extension source and validates manifests.
+// These authoring commands do not install, enable, or execute plugin code.
+// `0sec plugin` handles installation, project approval, and direct tool calls.
+// Manifest validation is shared with the loader; runnable code is checked
+// separately by loading and calling the installed plugin.
 //
-// A Hackstore extension is a `PluginManifest` (declaring one or more tools, each
-// gated by a closed set of capabilities) plus its source files. This command is
-// the AUTHOR's surface — it never installs, enables, or runs anything:
-//
-//   init <name>      — scaffold a new extension directory, ready to edit.
-//   validate <path>  — run a manifest.json through the SAME validator
-//                      (`validatePluginManifest`) the loader uses, so what
-//                      passes here is exactly what the store will accept.
-//
-// Installing, enabling, and running extensions is the job of `0sec plugin`; the
-// trust model (installed = bytes on disk, nothing runs; enabled = one operator
-// json record; running = only at scan time for enabled ids) lives there.
-//
-// DEPENDENCY NOTE
-// ───────────────
-// The one core primitive this command needs — `validatePluginManifest` — is
-// consumed through an injected {@link HackstoreCorePort} so the subcommands are
-// unit-testable with the real validator imported directly from core source
-// (no barrel round-trip), matching the technique in commands/__tests__/. The
-// production port lazily imports the `@0sec/core` barrel, which re-exports it.
+// HackstoreCorePort lets command tests use the real validator without importing
+// the full core barrel. Production resolves it lazily from @0sec/core.
 
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
@@ -176,20 +161,18 @@ function scaffoldManifest(name: string): Record<string, unknown> {
     id: slugifyId(name),
     name,
     version: "0.1.0",
-    minCoreVersion: "0.9.0",
     tools: [
       {
-        name: "example_tool",
-        description: `An example tool for the "${name}" extension. Replace this with a real tool.`,
+        name: "sha256",
+        description: `Compute the SHA-256 hash of a text input. Example tool for the "${name}" extension.`,
         parameters: {
           input: {
             type: "string",
-            description: "Example input parameter.",
+            description: "Text to hash.",
           },
         },
         required: ["input"],
-        // "compute" is the least-privileged capability: no network, no
-        // filesystem, no process spawn, no findings mutation. See docs/HACKSTORE.md.
+        // Declares the tool's behavior; it does not sandbox the process.
         capabilities: ["compute"],
       },
     ],
@@ -199,45 +182,72 @@ function scaffoldManifest(name: string): Record<string, unknown> {
 function scaffoldReadme(name: string, id: string): string {
   return `# ${name}
 
-A [Hackstore](${HACKSTORE_INDEX_URL}) extension for the 0sec CLI.
+A [Hackstore](https://${HACKSTORE_REGISTRY_REPO}) extension for 0sec.
+The included \`sha256\` tool hashes its \`input\` string.
 
-- **id**: \`${id}\`
-- **manifest**: [\`manifest.json\`](./manifest.json)
+## Develop and test
 
-## Develop
-
-Edit \`manifest.json\` to declare your tools and their capabilities, then implement
-them in your source files (see \`example_tool.mjs\`). Every tool MUST declare a
-non-empty \`capabilities\` list from the closed set (compute, model-call, network,
-filesystem-read, filesystem-write, process-exec, findings-write).
-
-## Validate
+Edit \`manifest.json\` and \`plugin.js\` together. The installer writes the
+manifest as \`plugin.json\`; the program reads that file when it starts.
 
 \`\`\`sh
 0sec hackstore validate .
 \`\`\`
 
-## Submit to the community index
+Follow the [local installation guide](https://github.com/0sec-labs/0sec/blob/main/docs/HACKSTORE.md#run-locally)
+to test with an isolated home and project. After installing and enabling:
 
-1. Fork ${HACKSTORE_REGISTRY_REPO}
-2. Add your manifest entry to \`index.json\`
-3. Open a pull request
+\`\`\`sh
+0sec plugin run ${id} sha256 input=hello
+\`\`\`
 
-See the author guide, \`docs/HACKSTORE.md\`, for the full contract and trust model.
+Name the tool before passing arguments. Validate arguments in the implementation,
+return failures explicitly, and keep stdout for protocol frames. Capability
+declarations inform approvals; they do not sandbox the code.
+
+## Publish
+
+Follow the [submission instructions](https://${HACKSTORE_REGISTRY_REPO}/blob/main/CONTRIBUTING.md).
+Add the source under \`extensions/\` in that repository and run \`npm run build\`
+to generate the registry entry. Do not hand-copy source into \`index.json\`.
 `;
 }
 
-function scaffoldToolSource(): string {
-  return `// Example tool source for a Hackstore extension.
-//
-// Each tool your manifest declares needs an implementation. This stub shows the
-// shape: a named export that receives the validated arguments and returns a
-// result. Wire your real logic here and declare only the capabilities you use.
+/** A self-contained protocol program with one working compute tool. */
+function scaffoldPluginSource(): string {
+  return `"use strict";
+const { createHash } = require("node:crypto");
+const { readFileSync } = require("node:fs");
+const { join } = require("node:path");
+const { createInterface } = require("node:readline");
 
-export async function example_tool(args) {
-  const { input } = args ?? {};
-  return { ok: true, echo: input };
+// Read the installed manifest so version and description edits stay in sync.
+const manifest = JSON.parse(readFileSync(join(__dirname, "plugin.json"), "utf8"));
+function send(message) {
+  process.stdout.write(JSON.stringify({ v: 1, ...message }) + "\\n");
 }
+
+send({ kind: "handshake", pluginId: manifest.id, version: manifest.version, manifest });
+const input = createInterface({ input: process.stdin, terminal: false });
+input.on("line", (line) => {
+  let message;
+  try { message = JSON.parse(line); } catch { return; }
+  if (!message || message.v !== 1 || typeof message.id !== "string") return;
+  if (message.kind === "list_tools") {
+    send({ kind: "list_tools", id: message.id, tools: manifest.tools });
+  } else if (message.kind === "call_tool") {
+    try {
+      if (message.tool !== "sha256") throw new Error("Unknown tool.");
+      if (typeof message.args?.input !== "string") {
+        throw new Error("input must be a string.");
+      }
+      const hash = createHash("sha256").update(message.args.input, "utf8").digest("hex");
+      send({ kind: "tool_result", id: message.id, ok: true, content: hash, truncated: false });
+    } catch (error) {
+      send({ kind: "tool_result", id: message.id, ok: false, content: error.message, truncated: false });
+    }
+  }
+});
 `;
 }
 
@@ -278,20 +288,19 @@ export function runInit(name: string, deps: InitDeps): void {
   mkdirSync(targetDir, { recursive: true });
   writeFileSync(join(targetDir, MANIFEST_FILE), `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
   writeFileSync(join(targetDir, "README.md"), scaffoldReadme(name, id), "utf8");
-  writeFileSync(join(targetDir, "example_tool.mjs"), scaffoldToolSource(), "utf8");
+  writeFileSync(join(targetDir, "plugin.js"), scaffoldPluginSource(), "utf8");
 
   console.log(chalk.green(`Scaffolded Hackstore extension ${chalk.bold(id)} in ${targetDir}`));
   console.log("");
   console.log(chalk.bold("  Files:"));
   console.log(`    ${MANIFEST_FILE}      the extension manifest (edit this)`);
   console.log(`    README.md          how to develop, validate, and submit`);
-  console.log(`    example_tool.mjs   example tool implementation`);
+  console.log(`    plugin.js          self-contained plugin (NDJSON protocol over stdio)`);
   console.log("");
   console.log(chalk.bold("  Next steps:"));
   console.log(`    1. Edit ${join(name, MANIFEST_FILE)} — declare your tools + capabilities`);
   console.log(`    2. Validate:  ${chalk.cyan(`0sec hackstore validate ${name}`)}`);
-  console.log(`    3. Submit:    fork ${HACKSTORE_REGISTRY_REPO}, add your entry to`);
-  console.log(`                  index.json, and open a pull request`);
+  console.log(`    3. Test locally and submit: https://${HACKSTORE_REGISTRY_REPO}/blob/main/CONTRIBUTING.md`);
   process.exitCode = EXIT_OK;
 }
 
