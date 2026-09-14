@@ -5,12 +5,15 @@ import { Command } from "commander";
 import chalk from "chalk";
 import { VERSION } from "@0sec/shared";
 import {
+  ANALYTICS_LEVEL_ENV,
   createHerdrEventSink,
   eventBus,
+  maybeSubscribeAnalyticsPipeline,
   maybeSubscribeCloudEventSink,
   maybeSubscribeOperationalEventSink,
   presentationEventSink,
 } from "@0sec/core";
+import { getSettings } from "./tui/settings-store.js";
 import { maybeLoadCodexAuth } from "./codex-auth.js";
 import { presentationEventBus } from "./presentation/event-bus.js";
 import {
@@ -39,6 +42,20 @@ maybeLoadCodexAuth();
 // the sink module is dead code and the cloud's live-trace UI stays
 // dark for every scan.
 maybeSubscribeCloudEventSink();
+
+// Consent bridge for the analytics pipeline. core must NOT import the CLI
+// settings store, so the operator's `analyticsLevel` crosses the boundary as
+// an env var that `resolveAnalyticsLevel` reads (any opt-out env — 0SEC_OFFLINE
+// / 0SEC_NO_TELEMETRY / DO_NOT_TRACK — still wins and forces "off"). We set it
+// from the resolved setting, then subscribe the pipeline's usage sink. When the
+// level is "off" this is a no-op: nothing subscribes and nothing transmits.
+// A live /settings change re-runs this bridge from settings-store.ts.
+try {
+  process.env[ANALYTICS_LEVEL_ENV] = getSettings().analyticsLevel;
+} catch {
+  // Settings unreadable — leave the env untouched; resolve fails closed to off.
+}
+maybeSubscribeAnalyticsPipeline();
 
 // Operational NDJSON stderr sink (0SEC_LOG_FORMAT=json). Opt-in metadata-
 // only logging — writes one NDJSON line per allowlisted lifecycle / cost

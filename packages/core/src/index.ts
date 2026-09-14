@@ -1796,6 +1796,26 @@ export {
   isCloudEventSinkActive,
   presentationEventSink,
 } from "./events/bus.js";
+// Consent-gated analytics pipeline — the single choke point that may transmit
+// analytics. The CLI entry must set `0SEC_ANALYTICS_LEVEL` from the operator's
+// setting and call `maybeSubscribeAnalyticsPipeline()` (mirrors the cloud sink
+// wiring); without that call the pipeline never subscribes and transmits
+// nothing. USAGE tier only for now — command/code/target/finding collectors
+// are a separate, reviewed wave.
+export {
+  analyticsPipeline,
+  maybeSubscribeAnalyticsPipeline,
+  redactRecordStrings,
+  ANALYTICS_SCHEMA_VERSION,
+  ANALYTICS_ENDPOINT,
+  ANALYTICS_SENT_LOG_FILENAME,
+} from "./telemetry/analytics-pipeline.js";
+export {
+  ANALYTICS_LEVEL_ENV,
+  resolveAnalyticsLevel,
+  levelAtLeast,
+  type AnalyticsLevel,
+} from "./telemetry/analytics-level.js";
 // Operational NDJSON stderr sink (0SEC_LOG_FORMAT=json). Writes one
 // NDJSON line per allowlisted lifecycle/cost event to stderr, stripped
 // of all sensitive fields (prompts, responses, reasoning, tool args,

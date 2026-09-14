@@ -34,6 +34,11 @@
  */
 
 import { useSyncExternalStore } from "react";
+import {
+  ANALYTICS_LEVEL_ENV,
+  analyticsPipeline,
+  resolveAnalyticsLevel,
+} from "@0sec/core";
 
 import {
   SETTING_DEFS,
@@ -228,6 +233,28 @@ export function subscribeSettings(fn: Subscriber): () => void {
     subscribers.delete(fn);
   };
 }
+
+// ── Analytics consent bridge (live) ─────────────────────────────────────────
+//
+// core must NOT import this CLI settings store, so the operator's
+// `analyticsLevel` crosses the boundary as an env var. The CLI entry sets it
+// once at startup; this bridge keeps it in lock-step when the setting changes
+// live (a /settings toggle), re-resolving through `resolveAnalyticsLevel` so an
+// opt-out env still wins, and pushing the tier into the pipeline's cached level
+// so the change takes effect WITHOUT a restart. Only fires on an actual change,
+// and every step is fail-soft — a broken bridge must never break settings.
+let lastBridgedLevel: string | undefined;
+function bridgeAnalyticsLevel(settings: TuiSettings): void {
+  try {
+    if (settings.analyticsLevel === lastBridgedLevel) return;
+    lastBridgedLevel = settings.analyticsLevel;
+    process.env[ANALYTICS_LEVEL_ENV] = settings.analyticsLevel;
+    analyticsPipeline.setLevel(resolveAnalyticsLevel());
+  } catch {
+    // Never let telemetry wiring break a settings write.
+  }
+}
+subscribeSettings(bridgeAnalyticsLevel);
 
 /**
  * Re-read both layers and notify — for when a settings file was edited by hand
