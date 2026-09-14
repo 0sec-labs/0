@@ -3,7 +3,11 @@ import { useEffect, useMemo, useRef, useState, type SetStateAction } from "react
 import { useKeyboard } from "@opentui/react";
 import type { Finding, FindingTriageStatus } from "@0sec/shared";
 import { useTheme } from "./theme-context.js";
+import { useSettings } from "./settings-store.js";
 import { severityToneFor } from "./themes.js";
+import { ContextMenu } from "./context-menu.js";
+import { useContextMenu, type ContextMenuItem } from "./use-context-menu.js";
+import { copyToClipboard, defaultSpawn, defaultWhich } from "./clipboard.js";
 import { fitTuiText } from "./text.js";
 import { DialogSelectBody, type DialogItem } from "./dialog-select.js";
 import {
@@ -83,6 +87,10 @@ function findingSeverityHeading(severity: string): string {
 
 export function FindingsScreen({ options, onExit, shell }: { options: FindingsScreenOptions; onExit: () => void; shell?: ShellNav }) {
   const theme = useTheme();
+  const { mouseSupport } = useSettings();
+  // Right-click context menu over a finding row. Opens only on a right press
+  // and only when mouse support is on; the left-click path is untouched.
+  const contextMenu = useContextMenu();
   const [rows, setRows] = useState<FindingsRow[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [index, setIndex] = useState(0);
@@ -476,7 +484,57 @@ export function FindingsScreen({ options, onExit, shell }: { options: FindingsSc
     void runSourceFixForRow(row, finding, repoRoot, testCommand);
   };
 
+  // Open the highlighted finding in the persistent chat — the same action the
+  // Enter key and the "open-finding" palette command perform.
+  const openSelectedFinding = () => {
+    const row = currentFindingsRow();
+    const finding = row === selectedRow ? selectedFinding : row ? findingFromRow(row) : null;
+    if (row && finding) shell?.openFindingDetail(row.id, finding);
+  };
+
+  // Copy a finding to the clipboard (title + severity + description + evidence).
+  // This is the one context action the screen did not already expose; it is a
+  // safe, backend-free default built on the shared clipboard util.
+  const copyFinding = (row: FindingsRow) => {
+    const text = [
+      row.title,
+      `${row.severity} · ${row.status} · ${row.triageStatus ?? "new"}`,
+      "",
+      row.description,
+      "",
+      "Evidence (request):",
+      row.evidenceRequest,
+      "",
+      "Evidence (response):",
+      row.evidenceResponse,
+    ].join("\n");
+    void copyToClipboard(text, { spawn: defaultSpawn, which: defaultWhich }).then((result) => {
+      setNotice(result.ok ? "Copied finding to clipboard" : "Could not copy finding to clipboard");
+    });
+  };
+
+  // The right-click menu for a finding row. Every action reuses an existing
+  // screen handler; "Copy finding" is the safe default. Disabled states mirror
+  // the reasons the keyboard paths would otherwise report (a family with no
+  // fingerprint cannot be triaged; a finding the fixer rejects cannot be fixed).
+  const buildFindingMenuItems = (row: FindingsRow | null): ContextMenuItem[] => {
+    if (!row) return [];
+    const canTriage = Boolean(row.fingerprint);
+    const fixReady = fixEligibility(findingFromRow(row)).eligible;
+    return [
+      { label: "Open in chat", onSelect: openSelectedFinding },
+      { label: "Accept family", disabled: !canTriage, onSelect: () => void mutateTriage("accepted") },
+      { label: "Suppress family", disabled: !canTriage, onSelect: () => void mutateTriage("suppressed") },
+      { label: "Reopen family", disabled: !canTriage, onSelect: () => void mutateTriage("new") },
+      { label: "Generate source fix", disabled: !fixReady, onSelect: () => requestSourceFix() },
+      { label: "Copy finding", onSelect: () => copyFinding(row) },
+    ];
+  };
+
   useKeyboard((key) => {
+    // The context menu owns the keyboard while open (its own handler moves the
+    // highlight / activates / closes); bail so the list beneath does not react.
+    if (contextMenu.state.open) return;
     if (palette.handlePaletteKey(key)) return;
     if (key.ctrl && key.name === "c") {
       onExit();
@@ -655,6 +713,14 @@ export function FindingsScreen({ options, onExit, shell }: { options: FindingsSc
   return (
     <ShellFrame view="findings" dialogContent>
       {palette.paletteOpen ? <PaletteOverlay title="Findings commands" query={palette.paletteQuery} selected={palette.paletteSelected} commands={palette.filteredPalette} /> : null}
+      {contextMenu.state.open ? (
+        <ContextMenu
+          items={contextMenu.state.items}
+          x={contextMenu.state.x}
+          y={contextMenu.state.y}
+          onClose={contextMenu.close}
+        />
+      ) : null}
       <box flexDirection="column" width="100%" height="100%" minWidth={0}>
         <DialogTitleRow
           screenKey="findings"
@@ -672,6 +738,13 @@ export function FindingsScreen({ options, onExit, shell }: { options: FindingsSc
           renderDetail={renderFindingsDetail}
           onActivateRow={(itemIndex) => applyIndex(itemIndex)}
           onScroll={moveFindingsCursor}
+          onRowContextMenu={mouseSupport ? (itemIndex, event) => {
+            // Select the right-clicked row first, so every reused action (which
+            // resolves against the current selection) operates on it, then pop
+            // the menu at the cursor.
+            applyIndex(itemIndex);
+            contextMenu.open(event.x, event.y, buildFindingMenuItems(currentFindingsRow()));
+          } : undefined}
         />
         <Cells width={width} fg={findingsStatusTone}>
           {findingsStatusLine}

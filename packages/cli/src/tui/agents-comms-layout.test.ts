@@ -22,6 +22,7 @@ import {
   computeCommsLayout,
   computeFleetWindow,
   filterMessagesForAgent,
+  fleetIndexForNumber,
   formatElapsed,
   formatTokens,
   moveFleetSelection,
@@ -75,6 +76,66 @@ describe("buildCommsFleet", () => {
     const fleet = buildCommsFleet(mapOf(record({ agentId: "a" }), record({ agentId: "b" })), tele);
     expect(fleet[0]?.telemetry).toEqual({ inputTokens: 10, outputTokens: 5 });
     expect(fleet[1]?.telemetry).toBeUndefined();
+  });
+
+  it("keeps the historical status order for sort=\"status\" (the default)", () => {
+    const map = mapOf(
+      record({ agentId: "done1", status: "completed" }),
+      record({ agentId: "run1", status: "running" }),
+      record({ agentId: "queued1", status: "queued" }),
+      record({ agentId: "fail1", status: "failed" }),
+      record({ agentId: "parked1", status: "parked" }),
+    );
+    expect(buildCommsFleet(map, {}, "status").map((r) => r.record.agentId)).toEqual([
+      "run1", "queued1", "parked1", "fail1", "done1",
+    ]);
+  });
+
+  it("floats failed/parked (needs-operator) to the top for sort=\"attention\"", () => {
+    const map = mapOf(
+      record({ agentId: "done1", status: "completed" }),
+      record({ agentId: "run1", status: "running" }),
+      record({ agentId: "queued1", status: "queued" }),
+      record({ agentId: "fail1", status: "failed" }),
+      record({ agentId: "parked1", status: "parked" }),
+    );
+    // failed → parked → running → completed → queued (mirrors herd attention).
+    expect(buildCommsFleet(map, {}, "attention").map((r) => r.record.agentId)).toEqual([
+      "fail1", "parked1", "run1", "done1", "queued1",
+    ]);
+  });
+
+  it("attention ordering is stable within a bucket", () => {
+    const map = mapOf(
+      record({ agentId: "f1", status: "failed" }),
+      record({ agentId: "r1", status: "running" }),
+      record({ agentId: "f2", status: "failed" }),
+      record({ agentId: "r2", status: "running" }),
+    );
+    expect(buildCommsFleet(map, {}, "attention").map((r) => r.record.agentId)).toEqual([
+      "f1", "f2", "r1", "r2",
+    ]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Index → agent mapping (number-key jump)
+// ---------------------------------------------------------------------------
+
+describe("fleetIndexForNumber — 1-based agent jump", () => {
+  it("maps a 1-based number to a 0-based index within range", () => {
+    expect(fleetIndexForNumber(5, 1)).toBe(0);
+    expect(fleetIndexForNumber(5, 3)).toBe(2);
+    expect(fleetIndexForNumber(5, 5)).toBe(4);
+  });
+
+  it("returns -1 for out-of-range, zero, negative, non-integer and empty fleets", () => {
+    expect(fleetIndexForNumber(5, 6)).toBe(-1);
+    expect(fleetIndexForNumber(5, 0)).toBe(-1);
+    expect(fleetIndexForNumber(5, -1)).toBe(-1);
+    expect(fleetIndexForNumber(5, 2.5)).toBe(-1);
+    expect(fleetIndexForNumber(0, 1)).toBe(-1);
+    expect(fleetIndexForNumber(Number.NaN, 1)).toBe(-1);
   });
 });
 
@@ -132,6 +193,31 @@ describe("commsFleetStatLine", () => {
     const done = buildCommsFleet(mapOf(record({ agentId: "b", status: "completed", lastSeen: NOW - 5000 })))[0]!;
     expect(commsFleetStatLine(running, NOW)).not.toContain("5s");
     expect(commsFleetStatLine(done, NOW)).toContain("5s");
+  });
+
+  it("appends a curtailed completion reason to the status word", () => {
+    const [row] = buildCommsFleet(
+      mapOf(record({ agentId: "a", status: "completed", completionReason: "turn_limit" })),
+    );
+    expect(commsFleetStatLine(row!, NOW).startsWith("done (turn_limit)")).toBe(true);
+  });
+
+  it("shows no parenthetical for a clean done", () => {
+    const [row] = buildCommsFleet(
+      mapOf(record({ agentId: "a", status: "completed", completionReason: "done" })),
+    );
+    expect(commsFleetStatLine(row!, NOW).startsWith("done")).toBe(true);
+    expect(commsFleetStatLine(row!, NOW)).not.toContain("(");
+  });
+
+  it("shows live measured tokens/elapsed from the joined telemetry", () => {
+    const [row] = buildCommsFleet(
+      mapOf(record({ agentId: "a", status: "running" })),
+      { a: { inputTokens: 80_000, outputTokens: 48_000, durationMs: 4200 } },
+    );
+    const line = commsFleetStatLine(row!, NOW);
+    expect(line).toContain("128k tok");
+    expect(line).toContain("4.2s");
   });
 });
 

@@ -38,8 +38,13 @@
 
 import { computeListWindow, type ListWindow } from "./pane-layout.js";
 import { sanitizeTuiText } from "./text.js";
-import { shellChromeRows } from "./herd-layout.js";
-import type { HerdSubagentMap, HerdSubagentRecord, SubagentStatus } from "./herd-layout.js";
+import { shellChromeRows, formatTokens, formatElapsed, completionReasonNote } from "./herd-layout.js";
+import type { HerdSubagentMap, HerdSubagentRecord, RosterSort, SubagentStatus } from "./herd-layout.js";
+
+// The token/elapsed chip formatters live in herd-layout (one source, no module
+// cycle) and are re-exported here so this module's public surface — and its
+// test — keep importing them from `agents-comms-layout`.
+export { formatTokens, formatElapsed } from "./herd-layout.js";
 import {
   type MessageCardData,
   type PeerMessageLike,
@@ -115,14 +120,41 @@ function statusRank(status: SubagentStatus): number {
 }
 
 /**
+ * Attention-first priority: the agents that need the operator lead. A `failed`
+ * agent is the most urgent, then a `parked` (waiting-on-input) one — together
+ * the comms equivalent of the herd's "blocked/needs-input" bucket — then the
+ * actively `running` ones ("working"), then settled `completed` ("done"), and
+ * finally still-`queued` ("idle") agents that have not started. Mirrors
+ * `herd-layout.HERD_ATTENTION_ORDER`. Stable within a bucket.
+ */
+function attentionRank(status: SubagentStatus): number {
+  switch (status) {
+    case "failed":
+      return 0;
+    case "parked":
+      return 1;
+    case "running":
+      return 2;
+    case "completed":
+      return 3;
+    default:
+      return 4; // queued
+  }
+}
+
+/**
  * Build the sorted fleet rows from the live subagent map and the telemetry map.
- * Preserves insertion order within a status bucket (a stable sort keyed only by
- * the status rank). Skips malformed records. Invents nothing — an empty map
- * yields an empty fleet, which the screen states honestly.
+ * `sort` chooses the priority: `"status"` (the historical running → queued →
+ * parked → failed → done order) or `"attention"` (failed/parked float to the
+ * top). Either way the sort is STABLE within a bucket (decorated with the
+ * original index so equal ranks keep insertion order), so the list does not
+ * reshuffle between polls. Skips malformed records. Invents nothing — an empty
+ * map yields an empty fleet, which the screen states honestly.
  */
 export function buildCommsFleet(
   agents: Readonly<HerdSubagentMap>,
   telemetry: Readonly<CommsTelemetryMap> = {},
+  sort: RosterSort = "status",
 ): CommsFleetRow[] {
   const rows: CommsFleetRow[] = [];
   for (const record of Object.values(agents)) {
@@ -130,11 +162,25 @@ export function buildCommsFleet(
     const snap = telemetry[record.agentId];
     rows.push({ kind: "agent", record, ...(snap ? { telemetry: snap } : {}) });
   }
+  const rankOf = sort === "attention" ? attentionRank : statusRank;
   // Stable sort: decorate with the original index so equal ranks keep order.
   return rows
     .map((row, index) => ({ row, index }))
-    .sort((a, b) => statusRank(a.row.record.status) - statusRank(b.row.record.status) || a.index - b.index)
+    .sort((a, b) => rankOf(a.row.record.status) - rankOf(b.row.record.status) || a.index - b.index)
     .map((entry) => entry.row);
+}
+
+/**
+ * The fleet index (0-based) for a 1-based agent number, or -1 when out of
+ * range. The comms fleet is a flat list (no headings), so `n = 1` is index 0,
+ * bounded by `count`. This is the pure index→agent map the roster views use to
+ * jump directly to an agent by number key.
+ */
+export function fleetIndexForNumber(count: number, n: number): number {
+  const total = cells(count);
+  if (total === 0 || !Number.isInteger(n)) return -1;
+  if (n < 1 || n > total) return -1;
+  return n - 1;
 }
 
 /** Human status word for a fleet row (mirrors herd's subagentStatusLabel). */
@@ -176,31 +222,6 @@ export function commsFleetName(record: HerdSubagentRecord): string {
   return sanitizeTuiText(record.agentId);
 }
 
-/**
- * Compact token count — "1.2k" / "980" / "" — for a stat chip. Returns "" for a
- * missing or zero total so the caller drops the chip rather than showing "0 tok".
- */
-export function formatTokens(total: number | undefined): string {
-  if (typeof total !== "number" || !Number.isFinite(total) || total <= 0) return "";
-  const n = Math.trunc(total);
-  if (n < 1000) return `${n}`;
-  if (n < 1_000_000) return `${(n / 1000).toFixed(n < 10_000 ? 1 : 0)}k`;
-  return `${(n / 1_000_000).toFixed(1)}m`;
-}
-
-/**
- * Compact elapsed duration — "4.2s" / "1m03s" / "2h" — for a stat chip. Returns
- * "" for a missing / non-positive duration so the caller omits it.
- */
-export function formatElapsed(ms: number | undefined): string {
-  if (typeof ms !== "number" || !Number.isFinite(ms) || ms <= 0) return "";
-  const seconds = Math.floor(ms / 1000);
-  if (seconds < 60) return `${(ms / 1000).toFixed(1)}s`;
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes}m${String(seconds % 60).padStart(2, "0")}s`;
-  return `${Math.floor(minutes / 60)}h${String(minutes % 60).padStart(2, "0")}m`;
-}
-
 /** Relative age of a peer's last heartbeat — mirrors herd's formatRelativeAge. */
 export function commsRelativeAge(lastSeen: number | undefined, now: number): string {
   if (typeof lastSeen !== "number" || !Number.isFinite(lastSeen)) return "";
@@ -228,7 +249,12 @@ export function commsRelativeAge(lastSeen: number | undefined, now: number): str
 export function commsFleetStatLine(row: CommsFleetRow, now: number): string {
   const { record, telemetry } = row;
   const parts: string[] = [];
-  parts.push(record.operatorStopped ? "stopped" : commsStatusLabel(record.status));
+  // Status word, with the completion reason appended for a terminal worker
+  // (`done (turn_limit)`), so a curtailed run reads distinctly from a clean done.
+  // Operator-stopped stays "stopped"; a bare `done`/failed appends nothing.
+  const statusWord = record.operatorStopped ? "stopped" : commsStatusLabel(record.status);
+  const reasonNote = record.operatorStopped ? "" : completionReasonNote(record.completionReason);
+  parts.push(reasonNote ? `${statusWord} (${reasonNote})` : statusWord);
 
   const turnValue = typeof record.turns === "number" ? record.turns : record.turn;
   if (typeof turnValue === "number" && Number.isFinite(turnValue)) {

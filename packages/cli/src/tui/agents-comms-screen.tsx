@@ -32,6 +32,8 @@ import { eventBus } from "@0sec/core";
 
 import { useTheme, type Theme } from "./theme-context.js";
 import { useSymbols } from "./symbol-context.js";
+import { useSettings } from "./settings-store.js";
+import { keyMatchesChord } from "./keybindings.js";
 import { useDialogSurface, useSurfaceDimensions } from "./dialog-surface.js";
 import { operatorIcon, operatorTitle } from "./operator-icons.js";
 import { Cells } from "./primitives.js";
@@ -50,7 +52,6 @@ import {
   buildCommsFleet,
   clampFleetSelection,
   commsEdgeLabel,
-  commsFleetMeta,
   commsFleetName,
   commsFleetStatLine,
   commsFooterHint,
@@ -62,8 +63,10 @@ import {
   computeCommsLayout,
   computeFleetWindow,
   filterMessagesForAgent,
+  fleetIndexForNumber,
   moveFleetSelection,
 } from "./agents-comms-layout.js";
+import { summarizeFleet } from "./agents-panel-model.js";
 
 /** How often the view refreshes (age ticks + roster poll), in ms. */
 const REFRESH_MS = 1500;
@@ -101,7 +104,8 @@ export interface AgentsCommsScreenProps {
   /**
    * Subscribes a bus sink and returns an unsubscribe fn. Injected for tests;
    * defaults to the real {@link eventBus}. The screen listens for `peer_message`
-   * (the stream) and `subagent_lifecycle` (measured telemetry).
+   * (the stream) and `subagent_lifecycle` + `subagent_message` (measured, live
+   * telemetry).
    */
   subscribe?: (sink: CommsBusSink) => () => void;
   /** Show the "who talks to whom" edge summary. Defaults to true. */
@@ -204,6 +208,13 @@ export function AgentsCommsScreen({
   const [messages, setMessages] = useState<readonly CommsMessage[]>([]);
   const [focusId, setFocusId] = useState<string | null>(null);
   const [selected, setSelected] = useState(0);
+  // Live settings: roster ordering + the optional leader chord (read via the
+  // shared store hook so a change re-renders without run.tsx plumbing).
+  const settings = useSettings();
+  const rosterSort = settings.rosterSort;
+  const leaderKey = settings.leaderKey;
+  // One-shot leader ("prefix") arming, consumed by the next key.
+  const prefixArmedRef = useRef(false);
   // A repaint pulse so relative ages tick on the refresh cadence. Only the
   // setter is read — the value itself is never rendered.
   const [, setTick] = useState(0);
@@ -217,7 +228,11 @@ export function AgentsCommsScreen({
         if (type === "peer_message") {
           seqRef.current += 1;
           setMessages((prev) => applyCommsMessage(prev, payload, seqRef.current));
-        } else if (type === "subagent_lifecycle") {
+        } else if (type === "subagent_lifecycle" || type === "subagent_message") {
+          // Telemetry is LIVE: `subagent_message` carries per-turn measured
+          // usage/durationMs/model (partial turns included), so tokens/elapsed
+          // appear WHILE an agent runs, not only when it settles. The terminal
+          // `subagent_lifecycle` values arrive last and win via the merge.
           const id = payload["agent_id"];
           if (typeof id !== "string") return;
           const snap = readTelemetry(payload);
@@ -251,7 +266,7 @@ export function AgentsCommsScreen({
 
   const now = clock();
 
-  const fleet = useMemo(() => buildCommsFleet(agents, telemetry), [agents, telemetry]);
+  const fleet = useMemo(() => buildCommsFleet(agents, telemetry, rosterSort), [agents, telemetry, rosterSort]);
 
   // A stable id → display name resolver for the stream and the edge summary.
   // "Main" and the broadcast sentinel pass through; a known agent id resolves to
@@ -305,10 +320,46 @@ export function AgentsCommsScreen({
     [fleet],
   );
 
+  const jumpToAgent = (n: number) => {
+    const index = fleetIndexForNumber(fleet.length, n);
+    if (index >= 0) selectRow(index);
+  };
+
   useKeyboard((key) => {
     // Ctrl+C always exits — never trap the operator.
     if (key.ctrl && key.name === "c") {
       onExit();
+      return;
+    }
+    // Optional leader (prefix) chord: arms a one-shot prefix so the next key is
+    // a leader action. Off by default; placed after the Ctrl+C guard so exit is
+    // never trapped.
+    if (leaderKey !== "off" && !prefixArmedRef.current && keyMatchesChord(key, leaderKey)) {
+      prefixArmedRef.current = true;
+      return;
+    }
+    if (prefixArmedRef.current) {
+      prefixArmedRef.current = false;
+      if (!key.ctrl && !key.meta && typeof key.sequence === "string" && /^[1-9]$/.test(key.sequence)) {
+        jumpToAgent(Number(key.sequence));
+        return;
+      }
+      if (!key.ctrl && !key.meta && (key.sequence === "n" || key.sequence === "N")) {
+        setSelected((current) => moveFleetSelection(fleet.length, current, 1));
+        return;
+      }
+      if (!key.ctrl && !key.meta && (key.sequence === "p" || key.sequence === "P")) {
+        setSelected((current) => moveFleetSelection(fleet.length, current, -1));
+        return;
+      }
+      // Not a leader action: the prefix is spent and the key falls through to
+      // normal handling below (Esc/Enter/arrows are never swallowed by it).
+    }
+    // Number keys 1-9 focus the N-th agent in the current ordering directly —
+    // always available, no leader required. Reuses the existing focus/select
+    // handler (`selectRow`), exactly as Enter and a click do.
+    if (!key.ctrl && !key.meta && typeof key.sequence === "string" && /^[1-9]$/.test(key.sequence)) {
+      jumpToAgent(Number(key.sequence));
       return;
     }
     if (key.name === "escape") {
@@ -334,7 +385,17 @@ export function AgentsCommsScreen({
 
   // ── Title rows for each region ──
   const fleetTitle = `${operatorIcon("agents", symbols)} ${operatorTitle("agents")}`;
-  const fleetMeta = commsFleetMeta(fleet.length, fleet.length);
+  // Aggregate status + measured-usage header: "4 agents · 2 running · 1 done ·
+  // 128k tok · 3 findings". Statuses fold operator-stopped → "cancelled"; the
+  // usage is the LIVE telemetry map joined per row plus each record's findings.
+  const fleetSummary = summarizeFleet(
+    fleet.map((r) => (r.record.operatorStopped ? "cancelled" : r.record.status)),
+    fleet.map((r) => ({
+      ...(typeof r.telemetry?.inputTokens === "number" ? { inputTokens: r.telemetry.inputTokens } : {}),
+      ...(typeof r.telemetry?.outputTokens === "number" ? { outputTokens: r.telemetry.outputTokens } : {}),
+      ...(typeof r.record.findings === "number" ? { findings: r.record.findings } : {}),
+    })),
+  );
   const streamMeta = commsStreamMeta(streamShown.length, streamAll.length, focused);
 
   const clampedSelected = clampFleetSelection(fleet.length, selected);
@@ -349,7 +410,7 @@ export function AgentsCommsScreen({
         innerWidth={layout.fleet.innerWidth}
         bordered={layout.bordered}
         title={fleetTitle}
-        meta={`${fleetMeta}${fleetWindow.hasAbove || fleetWindow.hasBelow ? ` · ${fleetWindow.start + 1}-${fleetWindow.end}` : ""}`}
+        meta={`${fleetSummary}${fleetWindow.hasAbove || fleetWindow.hasBelow ? ` · ${fleetWindow.start + 1}-${fleetWindow.end}` : ""}`}
       >
         {fleet.length === 0 ? (
           <Cells width={layout.fleet.innerWidth} fg={theme.MUTED}>

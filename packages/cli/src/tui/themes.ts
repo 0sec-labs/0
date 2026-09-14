@@ -650,6 +650,77 @@ const OPENCODE: Theme = {
   LINK: "#7AA2F7",
 };
 
+/**
+ * `oh-my-pi` — a faithful port of oh-my-pi's default dark theme ("titanium").
+ *
+ * The operator loves OMP's colours and asked for a default "exactly like oh my
+ * pi". This is a direct transcription of OMP's built-in `titanium` theme —
+ * https://github.com/can1357/oh-my-pi/blob/main/packages/coding-agent/src/modes/theme/defaults/titanium.json
+ * (the dark slot in OMP's default selection; see docs/theme.md). OMP's `vars`
+ * map onto 0sec's tokens as follows:
+ *
+ *   brushedTitanium #151820  -> CANVAS / background  (OMP export.pageBg)
+ *   darkTitanium    #0F1216  -> PANEL / surface      (OMP export.cardBg)
+ *   borderMuted     #1F252D  -> PANEL_ALT / surfaceAlt (OMP colors.borderMuted)
+ *   subtleGray      #2A3038  -> overlay              (OMP export.infoBg)
+ *   brightAluminum  #E8ECF4  -> TEXT   (OMP colors.text resolves to this fg)
+ *   dimAluminum     #9CA3B0  -> MUTED
+ *   electricBlue    #00B4FF  -> PRIMARY / BRAND / INFO (OMP colors.accent)
+ *   titaniumGold    #D4C090  -> ACCENT (OMP's gold label / string colour)
+ *   readoutGreen    #00FF88  -> SUCCESS
+ *   warningAmber    #FFB347  -> WARNING
+ *   alertRed        #FF4757  -> ERROR (see contrast note)
+ *
+ * Two values are nudged off OMP's exact hex to clear 0sec's no-waiver AA
+ * contract (every text token >= 4.5:1 on all three backgrounds, BORDER >= 3:1):
+ *
+ *   - BORDER: OMP's base `border` is subtleGray #2A3038, which sits at only
+ *     ~1.3:1 on these near-black surfaces — far below the 3:1 non-text bar. Used
+ *     OMP's own lighter `dim` grey #6B7280 instead (>=3.19:1 on all three), so
+ *     panel edges are visible; the darker subtleGray survives as `overlay`.
+ *   - ERROR: OMP's alertRed #FF4757 lands at 3.99:1 on the lightest surface
+ *     (PANEL_ALT), below AA. Lifted a touch to #FF6B78 (>=5.60:1) — the same
+ *     alert red, now AA-legible everywhere. DIFF_DEL mirrors it.
+ *
+ * Every other token is OMP's titanium value verbatim (upper-cased for the
+ * repo's hex-case rule). Syntax palette mirrors OMP's `syntax*` tokens
+ * (keyword/type/operator=electricBlue, function=readoutGreen, string=gold,
+ * number=amber, variable=aluminum, comment=dim). Verified by validateTheme:
+ * worst text ratio 5.60:1, semantic separation 1.328:1, no waivers.
+ */
+const OH_MY_PI: Theme = {
+  CANVAS: "#151820",
+  PANEL: "#0F1216",
+  PANEL_ALT: "#1F252D",
+  BORDER: "#6B7280",
+  TEXT: "#E8ECF4",
+  MUTED: "#9CA3B0",
+  PRIMARY: "#00B4FF",
+  ACCENT: "#D4C090",
+  BRAND: "#00B4FF",
+  SUCCESS: "#00FF88",
+  WARNING: "#FFB347",
+  ERROR: "#FF6B78", // OMP alertRed #FF4757 nudged up for AA on the lightest surface
+  INFO: "#00B4FF",
+  background: "#151820",
+  surface: "#0F1216",
+  surfaceAlt: "#1F252D",
+  overlay: "#2A3038",
+  // OMP titanium's syntax hues, verbatim.
+  syntaxKeyword: "#00B4FF",
+  syntaxString: "#D4C090",
+  syntaxNumber: "#FFB347",
+  syntaxComment: "#6B7280",
+  syntaxFunction: "#00FF88",
+  syntaxType: "#00B4FF",
+  syntaxVariable: "#E8ECF4",
+  syntaxOperator: "#00B4FF",
+  syntaxPunctuation: "#9CA3B0",
+  DIFF_ADD: "#00FF88",
+  DIFF_DEL: "#FF6B78",
+  LINK: "#00B4FF",
+};
+
 /* ----------------------------------------------------------------- registry */
 
 export const THEME_NAMES = [
@@ -663,6 +734,7 @@ export const THEME_NAMES = [
   "mono-dim",
   "swiss",
   "opencode",
+  "oh-my-pi",
 ] as const;
 export type ThemeName = (typeof THEME_NAMES)[number];
 
@@ -684,7 +756,7 @@ export type ThemeName = (typeof THEME_NAMES)[number];
  * preferred the old warm-grey look can opt back into it. That preservation — not
  * being the default — is why `dark` is the sole carrier of `CONTRAST_WAIVERS`.
  */
-export const DEFAULT_THEME_NAME: ThemeName = "opencode";
+export const DEFAULT_THEME_NAME: ThemeName = "oh-my-pi";
 
 /**
  * The one palette pinned byte-for-byte to the original `ui/theme.ts`, and so the
@@ -778,6 +850,13 @@ export const THEMES: Readonly<Record<ThemeName, ThemeEntry>> = {
     description: "Warm tan highlight on near-black surfaces, purple accent. The OpenCode look.",
     mode: "dark",
     palette: OPENCODE,
+  },
+  "oh-my-pi": {
+    name: "oh-my-pi",
+    label: "oh-my-pi",
+    description: "Electric-blue on brushed-titanium near-black, gold accent. A port of oh-my-pi's titanium theme.",
+    mode: "dark",
+    palette: OH_MY_PI,
   },
 };
 

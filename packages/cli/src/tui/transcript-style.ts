@@ -51,6 +51,10 @@ import { sanitizeTuiText } from "./text.js";
  *                 coloured accent rail down its left; the answer flows as plain
  *                 body text flush against the pane. Minimal chrome, maximal read.
  *  - `bubble` — right-aligned operator messages and left-aligned answers.
+ *  - `balanced` — a half-and-half of `bubble` and `plain`: ONLY the operator's
+ *                 own turns are drawn as a bordered bubble (identical geometry
+ *                 to `bubble`'s user framing); every other voice — the answer,
+ *                 tools, reasoning, notices, errors — is flat, full-width plain.
  *  - `rail`     — a 1-cell coloured rail down the left of each turn.
  *  - `plain`    — no rails, no borders; the role is a short coloured prefix
  *                 and the content gets every remaining cell. Densest reading.
@@ -59,7 +63,7 @@ import { sanitizeTuiText } from "./text.js";
  *  - `document` — generous whitespace and full-width markdown so a long
  *                 analysis reads like a document rather than a chat log.
  */
-export const TRANSCRIPT_STYLES = ["minimal", "bubble", "rail", "plain", "compact", "document"] as const;
+export const TRANSCRIPT_STYLES = ["minimal", "bubble", "balanced", "rail", "plain", "compact", "document"] as const;
 export type TranscriptStyle = (typeof TRANSCRIPT_STYLES)[number];
 
 /**
@@ -406,6 +410,42 @@ export function speechFrame(
       labelOwnRow: true,
       contentWidth: inner,
       markdownWidth: Math.max(MIN_MARKDOWN_WIDTH, inner),
+    };
+  }
+
+  // balanced: ONLY the operator's own turn is a bordered bubble (byte-identical
+  // to the `bubble` branch's bubble geometry); every other voice — the answer,
+  // errors, and the quiet reasoning/notice voices — is flat, full-width plain
+  // (byte-identical to the `plain` branch). A user turn on a pane too narrow to
+  // hold the border chrome degrades to the same flat framing.
+  if (style === "balanced" && kind === "user" && !isReasoning && !isNotice && width - BORDER_CHROME >= 1) {
+    // Inner content is width - (2 borders + 2 padding).
+    const inner = clampWidth(width - BORDER_CHROME);
+    return {
+      bordered: true,
+      railKind: "none",
+      railWidth: 0,
+      contentGap: 0,
+      extraMarginTop: 0,
+      labelOwnRow: true,
+      contentWidth: inner,
+      markdownWidth: Math.max(MIN_MARKDOWN_WIDTH, inner),
+    };
+  }
+
+  if (style === "balanced") {
+    // Everything that is not the operator's bubble is flat and full-width,
+    // exactly like the `plain` branch.
+    const content = width;
+    return {
+      bordered: false,
+      railKind: "none",
+      railWidth: 0,
+      contentGap: 0,
+      extraMarginTop: 0,
+      labelOwnRow: true,
+      contentWidth: content,
+      markdownWidth: Math.max(MIN_MARKDOWN_WIDTH, content),
     };
   }
 

@@ -3,8 +3,9 @@
  * The guided first-run onboarding dialog.
  *
  * A GUIDED, one-decision-per-step first run: welcome → connect → models →
- * preferences → done. Each step explains itself and collects its own answer
- * inline; onboarding never hands the operator the whole Settings catalogue.
+ * preferences → analytics → done. Each step explains itself and collects its
+ * own answer inline; onboarding never hands the operator the whole Settings
+ * catalogue.
  *
  * It is a pop-up rather than a full-screen route: the host wraps it in
  * `DialogSurface`, `useSurfaceDimensions` reports that panel's inner box, and
@@ -69,6 +70,7 @@ export type OnboardingStep =
   | "connect"
   | "models"
   | "preferences"
+  | "analytics"
   | "done";
 
 /** Metadata for a single step. */
@@ -88,6 +90,7 @@ export const ONBOARDING_STEPS: readonly StepDef[] = [
   { key: "connect", label: "Connect", skippable: true },
   { key: "models", label: "Models", skippable: true },
   { key: "preferences", label: "Preferences", skippable: true },
+  { key: "analytics", label: "Analytics", skippable: true },
   { key: "done", label: "Done", skippable: false },
 ];
 
@@ -114,6 +117,30 @@ type PreferenceKey = (typeof ONBOARDING_PREFERENCE_KEYS)[number];
  */
 export function finalizeOnboarding(): void {
   updateSetting("onboardingCompleted", true);
+}
+
+/**
+ * Persist the analytics-consent decision. Flips the CONSENT gate only —
+ * `diagnosticReporting` to "automatic" on Yes, "off" on No — and ALWAYS records
+ * that we asked (`diagnosticReportingPrompted`), so the separate in-session
+ * prompt never re-asks. Exported so a test drives the exact writes the
+ * `analytics` step's Enter performs, the way `finalizeOnboarding` is tested.
+ *
+ * This does NOT broaden WHAT is collected: broadening the wire is a follow-up
+ * requiring privacy review; keep it finite (see feedback.ts `diagnosticError`,
+ * which maps failures to a category label, never raw text).
+ */
+export function recordAnalyticsConsent(yes: boolean): void {
+  updateSetting("diagnosticReporting", yes ? "automatic" : "off");
+  updateSetting("diagnosticReportingPrompted", true);
+}
+
+/**
+ * Skip the analytics step: record that we asked so the in-session prompt never
+ * re-asks, and leave the current `diagnosticReporting` default untouched.
+ */
+export function skipAnalyticsConsent(): void {
+  updateSetting("diagnosticReportingPrompted", true);
 }
 
 // ---------------------------------------------------------------------------
@@ -225,8 +252,48 @@ const STEP_HINT: Record<OnboardingStep, string> = {
   connect: "connect or esc to skip · ctrl+c cancel",
   models: "select a model or esc to skip · ctrl+c cancel",
   preferences: "←/→ change · enter confirm · s skip · esc cancel",
+  analytics: "←/→ choose · enter confirm · s skip · esc cancel",
   done: "enter start working · esc review later",
 };
+
+// ---------------------------------------------------------------------------
+// Analytics consent step
+// ---------------------------------------------------------------------------
+
+/**
+ * The two consent options, in the order they render left → right. Index 0 is
+ * the highlighted default ("Yes"), but this is a GENUINE opt-in, not a dark
+ * pattern: "No" sits one ←/→ away and Enter confirms whichever is highlighted,
+ * so declining is exactly one keypress heavier than accepting nothing — and
+ * `s` skips the whole step without changing the current default. There is no
+ * hidden state, no pre-checked trap, and no extra confirmation to say no.
+ */
+const ANALYTICS_CHOICES = [
+  { yes: true, label: "Yes, share anonymous analytics" },
+  { yes: false, label: "No, keep everything local" },
+] as const;
+
+/**
+ * HONEST consent copy. Every claim here must stay true of what the code
+ * actually collects: today the wire carries only feature-usage signals and the
+ * finite ERROR CATEGORY (see feedback.ts `diagnosticError`) — never raw error
+ * text, targets, findings, commands, code, or any engagement data. If this copy
+ * ever implies more, either narrow the copy or gate it behind the privacy
+ * review below — do NOT quietly broaden collection to match richer wording.
+ */
+function analyticsLines(width: number): StepLine[] {
+  return [
+    ...paragraph("Help improve 0sec", "title", width),
+    BLANK,
+    ...paragraph(
+      "Share anonymous usage analytics so we can improve and advance open AI-cybersecurity research.",
+      "text",
+      width,
+    ),
+    BLANK,
+    ...paragraph("You can change this anytime in Settings.", "muted", width),
+  ];
+}
 
 function toneColor(tone: LineTone, theme: Theme): string {
   switch (tone) {
@@ -367,7 +434,7 @@ export function OnboardingScreen({
     if (next < ONBOARDING_PREFERENCE_KEYS.length) {
       setPrefIndex(next);
     } else {
-      advanceTo("done");
+      advanceTo("analytics");
     }
   }, [prefKey, prefChoices, choiceIndex, prefIndex, advanceTo]);
 
@@ -376,6 +443,26 @@ export function OnboardingScreen({
     if (n === 0) return;
     setChoiceIndex((i) => ((i + delta) % n + n) % n);
   }, [prefChoices.length]);
+
+  // Analytics consent: which option is highlighted (0 = "Yes", the default).
+  // Nothing is persisted while cycling — only Enter (or skip) writes.
+  const [analyticsIndex, setAnalyticsIndex] = useState(0);
+
+  const cycleAnalytics = useCallback((delta: number) => {
+    const n = ANALYTICS_CHOICES.length;
+    setAnalyticsIndex((i) => ((i + delta) % n + n) % n);
+  }, []);
+
+  const commitAnalytics = useCallback(() => {
+    const yes = ANALYTICS_CHOICES[analyticsIndex]?.yes ?? false;
+    recordAnalyticsConsent(yes);
+    advanceTo("done");
+  }, [analyticsIndex, advanceTo]);
+
+  const skipAnalytics = useCallback(() => {
+    skipAnalyticsConsent();
+    advanceTo("done");
+  }, [advanceTo]);
 
   useKeyboard((key) => {
     if (!interactive) return;
@@ -390,7 +477,15 @@ export function OnboardingScreen({
       if (key.name === "left" || key.name === "h") cycleChoice(-1);
       else if (key.name === "right" || key.name === "l") cycleChoice(1);
       else if (key.name === "return" && !key.shift) commitPreference();
-      else if (key.name === "s") advanceTo("done");
+      else if (key.name === "s") advanceTo("analytics");
+      return;
+    }
+
+    if (currentStep === "analytics") {
+      if (key.name === "left" || key.name === "h") cycleAnalytics(-1);
+      else if (key.name === "right" || key.name === "l") cycleAnalytics(1);
+      else if (key.name === "return" && !key.shift) commitAnalytics();
+      else if (key.name === "s") skipAnalytics();
       return;
     }
 
@@ -450,7 +545,16 @@ export function OnboardingScreen({
   );
 
   let body: React.ReactNode;
-  if (currentStep === "preferences" && prefDef) {
+  if (currentStep === "analytics") {
+    body = renderAnalytics({
+      lines: analyticsLines(textWidth),
+      choiceIndex: analyticsIndex,
+      theme,
+      contentWidth,
+      textWidth,
+      bodyRows,
+    });
+  } else if (currentStep === "preferences" && prefDef) {
     body = renderPreferences({
       def: prefDef,
       choices: prefChoices,
@@ -577,6 +681,56 @@ function renderPreferences({
           theme={theme}
         />
       ) : null}
+    </box>
+  );
+}
+
+/**
+ * The analytics consent card: the honest prose, then the two options rendered
+ * side by side with the highlighted one accented and marked. NOT a dark
+ * pattern — both options are always visible, "No" is one ←/→ keystroke from the
+ * default, and Enter confirms whatever is highlighted. The highlighted default
+ * is "Yes" (recommended) but the operator pays no extra tax to decline.
+ */
+function renderAnalytics({
+  lines,
+  choiceIndex,
+  theme,
+  contentWidth,
+  textWidth,
+  bodyRows,
+}: {
+  lines: StepLine[];
+  choiceIndex: number;
+  theme: Theme;
+  contentWidth: number;
+  textWidth: number;
+  bodyRows: number;
+}) {
+  return (
+    <box flexDirection="column" width={contentWidth} height={bodyRows} flexShrink={0} minWidth={0} overflow="hidden">
+      {lines.map((line, index) => (
+        <Cells key={`analytics-${index}`} width={textWidth} fg={toneColor(line.tone, theme)}
+          attributes={line.tone === "title" ? TextAttributes.BOLD : undefined}>
+          {line.text}
+        </Cells>
+      ))}
+      <Cells width={textWidth}>{""}</Cells>
+      {ANALYTICS_CHOICES.map((choice, index) => {
+        const active = index === choiceIndex;
+        const marker = active ? "‹●›" : " ○ ";
+        const recommended = choice.yes ? "  (recommended)" : "";
+        return (
+          <Cells
+            key={`analytics-choice-${index}`}
+            width={textWidth}
+            fg={active ? theme.ACCENT : theme.MUTED}
+            attributes={active ? TextAttributes.BOLD : undefined}
+          >
+            {`${marker} ${choice.label}${active ? recommended : ""}`}
+          </Cells>
+        );
+      })}
     </box>
   );
 }

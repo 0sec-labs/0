@@ -35,6 +35,8 @@ import { eventBus, peekInbox, sendOperatorMessage, type MessagingRuntime } from 
 
 import { useTheme, type Theme } from "./theme-context.js";
 import { useSymbols } from "./symbol-context.js";
+import { useSettings } from "./settings-store.js";
+import { keyMatchesChord } from "./keybindings.js";
 import { useDialogSurface, useSurfaceDimensions } from "./dialog-surface.js";
 import { operatorIcon, operatorTitle } from "./operator-icons.js";
 import { Cells } from "./primitives.js";
@@ -53,6 +55,7 @@ import {
   computeHerdFocusLayout,
   computeHerdLayout,
   filterHerdPeers,
+  nthPeerRowIndex,
   focusHeaderLines,
   focusScrollPosition,
   herdComposerFooterHint,
@@ -73,12 +76,15 @@ import {
   subagentPeers,
   subagentStatusLabel,
   windowFocusTail,
+  readFocusTelemetry,
   type HerdDetailTone,
   type HerdInboxMessage,
   type HerdPane,
   type HerdPeer,
   type HerdSubagentMap,
+  type FocusTelemetry,
 } from "./herd-layout.js";
+import { summarizeFleet } from "./agents-panel-model.js";
 
 /** How many rows page-up and page-down move. */
 const PAGE_STEP = 5;
@@ -326,11 +332,22 @@ export function HerdScreen({
     [cwd, mailboxHome, parentScanId, scoped],
   );
 
+  // Live settings from the process-wide store: the roster ordering and the
+  // optional leader chord. Read via the shared hook (like chat-screen) so the
+  // screen re-renders when the operator changes them — no run.tsx plumbing.
+  const settings = useSettings();
+  const rosterSort = settings.rosterSort;
+  const leaderKey = settings.leaderKey;
+
   const [tick, setTick] = useState(0);
   const [now, setNow] = useState(() => clock());
   const [peers, setPeers] = useState<HerdPeer[]>(() => readRoster?.(clock()) ?? []);
   const [selected, setSelected] = useState(0);
   const selectedRef = useRef(0);
+  // One-shot leader ("prefix") arming: set true when the leader chord is
+  // pressed, consumed by the very next key. A ref so the handler reads the
+  // current value without a re-render race.
+  const prefixArmedRef = useRef(false);
   const applySelected = (next: number) => {
     selectedRef.current = next;
     setSelected(next);
@@ -346,6 +363,12 @@ export function HerdScreen({
   // the CURRENT map (state in render, ref in the handler).
   const subagentsRef = useRef(subagents);
   subagentsRef.current = subagents;
+
+  // MEASURED per-agent telemetry (usage/context/duration/model), keyed by the
+  // same `agent_id`. Harvested LIVE from `subagent_message` (per-turn) and the
+  // terminal `subagent_lifecycle`; the focus header renders the focused agent's
+  // snapshot. Absent → "not reported", so the header omits it rather than zeroing.
+  const [telemetry, setTelemetry] = useState<Record<string, FocusTelemetry>>({});
 
   // Focus mode: the id of the subagent the operator drilled into, or null in
   // list mode. `scrollOffset` scrolls the live transcript back from its tail.
@@ -486,6 +509,7 @@ export function HerdScreen({
 
     // A new audit owner: reset every per-audit piece of view state, then seed.
     setSubagents(() => seedAgents({}));
+    setTelemetry({});
     applyFocusId(null);
     setScrollOffset(0);
     applySelected(0);
@@ -500,6 +524,25 @@ export function HerdScreen({
         // Events emitted for a superseded audit are dropped before anything
         // else — the ref, not the closure, decides which audit is current.
         if (ownerRef.current !== owner) return;
+        // LIVE telemetry: `subagent_message` (per-turn) + `subagent_lifecycle`
+        // (terminal) both carry measured usage/context/duration/model. Merge it
+        // for any agent this screen owns; the terminal snapshot arrives last and
+        // wins per field. Gated by the same audit-membership rule as the roster.
+        if (type === "subagent_lifecycle" || type === "subagent_message") {
+          const id = payload["agent_id"];
+          if (typeof id === "string") {
+            const snap = readFocusTelemetry(payload);
+            if (snap) {
+              const parent = payload["parent_scan_id"];
+              const belongs =
+                !scoped ||
+                Object.hasOwn(subagentsRef.current, id) ||
+                (typeof parent === "string" &&
+                  (parent === parentScanId || Object.hasOwn(subagentsRef.current, parent)));
+              if (belongs) setTelemetry((prev) => ({ ...prev, [id]: { ...prev[id], ...snap } }));
+            }
+          }
+        }
         if (type !== "subagent_lifecycle" && type !== "subagent_progress") return;
         const at = clock();
         setSubagents((prev) => {
@@ -548,7 +591,7 @@ export function HerdScreen({
     () => filterHerdPeers(mergedPeers, searchQuery),
     [mergedPeers, searchQuery],
   );
-  const rows = useMemo(() => buildHerdRows(filteredPeers, now), [filteredPeers, now]);
+  const rows = useMemo(() => buildHerdRows(filteredPeers, now, undefined, rosterSort), [filteredPeers, now, rosterSort]);
   const cursor = clampHerdSelection(rows, selected);
   const activeRow = cursor >= 0 ? rows[cursor] : undefined;
   const activePeer = activeRow?.kind === "peer" ? activeRow.peer : undefined;
@@ -624,7 +667,7 @@ export function HerdScreen({
 
   const currentRows = () => searchQueryRef.current === searchQuery
     ? rows
-    : buildHerdRows(filterHerdPeers(mergedPeers, searchQueryRef.current), now);
+    : buildHerdRows(filterHerdPeers(mergedPeers, searchQueryRef.current), now, undefined, rosterSort);
   const currentPeer = () => {
     const visible = currentRows();
     const row = visible[clampHerdSelection(visible, selectedRef.current)];
@@ -636,6 +679,22 @@ export function HerdScreen({
     const visible = currentRows();
     const next = moveHerdSelection(visible, clampHerdSelection(visible, selectedRef.current), delta);
     if (next >= 0) applySelected(next);
+  };
+
+  /**
+   * Jump the highlight straight to the N-th agent (1-based) in the current
+   * roster ordering, skipping headings. Reuses the plain select handler
+   * (`applySelected`) — it highlights the peer exactly as an arrow or a click
+   * would, and never drills into focus mode (that stays Enter's job). A no-op
+   * when N is out of range, so an over-count never moves or clears the cursor.
+   */
+  const jumpToPeer = (n: number) => {
+    const visible = currentRows();
+    const rowIndex = nthPeerRowIndex(visible, n);
+    if (rowIndex >= 0) {
+      setNotice(null);
+      applySelected(rowIndex);
+    }
   };
 
   /**
@@ -799,6 +858,39 @@ export function HerdScreen({
     }
 
     // ── Navigation mode ──
+    // Optional leader (prefix) chord. Pressing it arms a one-shot prefix so the
+    // NEXT key is a leader action; it is off by default. Placed AFTER the
+    // Ctrl+C guard at the top of the handler, so quitting is never trapped.
+    if (leaderKey !== "off" && !prefixArmedRef.current && keyMatchesChord(key, leaderKey)) {
+      prefixArmedRef.current = true;
+      setNotice({ text: "prefix — 1-9 focus agent · n/p step", tone: "ok" });
+      return;
+    }
+    if (prefixArmedRef.current) {
+      prefixArmedRef.current = false;
+      setNotice(null);
+      if (!key.ctrl && !key.meta && typeof key.sequence === "string" && /^[1-9]$/.test(key.sequence)) {
+        jumpToPeer(Number(key.sequence));
+        return;
+      }
+      if (!key.ctrl && !key.meta && (key.sequence === "n" || key.sequence === "N")) {
+        move(1);
+        return;
+      }
+      if (!key.ctrl && !key.meta && (key.sequence === "p" || key.sequence === "P")) {
+        move(-1);
+        return;
+      }
+      // Not a leader action: the prefix is spent and this key falls through to
+      // normal handling below, so Esc/Enter/arrows are never swallowed by it.
+    }
+    // Number keys 1-9 jump straight to the N-th agent in the current ordering —
+    // always available, no leader required. Digits are otherwise unbound in the
+    // roster, so this steals nothing from existing keys.
+    if (!key.ctrl && !key.meta && typeof key.sequence === "string" && /^[1-9]$/.test(key.sequence)) {
+      jumpToPeer(Number(key.sequence));
+      return;
+    }
     if (key.name === "escape") {
       onBack();
       return;
@@ -920,8 +1012,27 @@ export function HerdScreen({
   // merged roster and the highlighted agent's own status. An empty roster says
   // "none" — the hub still has no producer, and that is the normal state.
   const title = `${operatorIcon("agents", symbols)} ${operatorTitle("agents")}`;
+  // Aggregate status + measured-usage header for the live subagent fleet:
+  // "4 agents · 2 running · 1 done · 128k tok · 3 findings". Replaces the plain
+  // roster count when subagents exist; falls back to the count for a
+  // sessions-only or empty roster. Usage is the LIVE telemetry map, joined by id.
+  const fleetRecords = Object.values(subagents);
+  const fleetSummary =
+    fleetRecords.length > 0
+      ? summarizeFleet(
+          fleetRecords.map((r) => (r.operatorStopped ? "cancelled" : r.status)),
+          fleetRecords.map((r) => {
+            const t = telemetry[r.agentId];
+            return {
+              ...(typeof t?.inputTokens === "number" ? { inputTokens: t.inputTokens } : {}),
+              ...(typeof t?.outputTokens === "number" ? { outputTokens: t.outputTokens } : {}),
+              ...(typeof r.findings === "number" ? { findings: r.findings } : {}),
+            };
+          }),
+        )
+      : "";
   const listMeta = [
-    herdDialogMeta(dialogItems.length, mergedPeers.length),
+    fleetSummary || herdDialogMeta(dialogItems.length, mergedPeers.length),
     activeRow?.kind === "peer" ? herdStatusLabel(activeRow.status) : "",
   ].filter(Boolean).join(" · ");
   const titleCols = paneTitleColumns(layout.contentWidth, listMeta.length);
@@ -968,6 +1079,8 @@ export function HerdScreen({
     ? (
         focusHeaderLines(focusedPeer, focusRecord, Math.max(1, focusLayout.meta.innerWidth - 1), now, {
           compact: !focusLayout.bordered,
+          // MEASURED telemetry for the focused agent, joined by `agent_id`.
+          ...(focusId && telemetry[focusId] ? { telemetry: telemetry[focusId] } : {}),
           // Sibling index/total mirrors OpenCode's subagent-footer identity:
           // tells the operator where this subagent sits among its siblings in
           // the merged roster. Computed from same-parent live subagent records.

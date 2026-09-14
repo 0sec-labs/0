@@ -17,7 +17,9 @@ const SESSION_MIN_SIDEBAR_HEIGHT = 22;
 // <text> nodes. VERSION is a build-time string, so a prerelease suffix
 // silently widens the stamp; without reserving those cells up front the
 // footer hint next to it is shrunk and the two fuse.
-export const BRAND_STAMP_WIDTH = "0sec".length + " v".length + VERSION.length;
+/** The build-channel badge shown after the version, e.g. " [dev]" / " [beta]". */
+export const CHANNEL_BADGE_WIDTH = " [beta]".length;
+export const BRAND_STAMP_WIDTH = "0sec".length + " v".length + VERSION.length + CHANNEL_BADGE_WIDTH;
 // Below this HeaderBar stacks its two columns, which costs two extra rows.
 const HEADER_COMPACT_WIDTH = 88;
 // Overlays are anchored at 12% of the terminal height.

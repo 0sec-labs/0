@@ -1,10 +1,17 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
   buildCrashFeedbackMessage,
   crashStackLines,
+  describeErrorForSurface,
   describeFeedbackOutcome,
+  firstStackFrame,
+  logProblem,
   resolveCrashKey,
   sanitizeCrashText,
+  serializeError,
   type CrashInfo,
 } from "./tui-crash.js";
 
@@ -149,5 +156,115 @@ describe("describeFeedbackOutcome", () => {
     const out = describeFeedbackOutcome({ ok: false, path: local.path, error: "EACCES" }, { ok: false, skipped: "no-endpoint" });
     expect(out.tone).toBe("err");
     expect(out.text).toContain("Could not save");
+  });
+});
+
+describe("serializeError", () => {
+  it("captures name, message and the full stack for an Error", () => {
+    const err = new TypeError("boom");
+    const out = serializeError(err);
+    expect(out.name).toBe("TypeError");
+    expect(out.message).toBe("boom");
+    expect(typeof out.stack).toBe("string");
+    expect(String(out.stack)).toContain("boom");
+    expect(String(out.stack)).toContain("at ");
+  });
+
+  it("falls back to a stringified value for a non-Error", () => {
+    expect(serializeError("plain string")).toEqual({ value: "plain string" });
+  });
+});
+
+describe("firstStackFrame", () => {
+  it("returns the first `at …` frame without the leading `at`", () => {
+    const stack = [
+      "TypeError: x",
+      "    at ChatScreen (/home/op/run.tsx:12:5)",
+      "    at render (/node_modules/react/index.js:1:1)",
+    ].join("\n");
+    expect(firstStackFrame(stack)).toBe("ChatScreen (/home/op/run.tsx:12:5)");
+  });
+
+  it("returns undefined for empty or frame-less stacks", () => {
+    expect(firstStackFrame(undefined)).toBeUndefined();
+    expect(firstStackFrame("TypeError: x")).toBeUndefined();
+  });
+});
+
+describe("describeErrorForSurface", () => {
+  it("uses the real message when present", () => {
+    expect(describeErrorForSurface(new Error("real reason"))).toBe("real reason");
+  });
+
+  it("never renders a bare 'unknown' for an Error with an empty message", () => {
+    const err = new Error("");
+    err.stack = "Error\n    at doThing (/home/op/turn.ts:88:3)";
+    const text = describeErrorForSurface(err);
+    expect(text).not.toBe("unknown");
+    expect(text).toContain("Error");
+    expect(text).toContain("doThing (/home/op/turn.ts:88:3)");
+    expect(text).toContain("0sec-tui.log");
+  });
+
+  it("uses the error name and a log hint when there is no stack at all", () => {
+    const err = new RangeError("");
+    err.stack = undefined;
+    const text = describeErrorForSurface(err);
+    expect(text).toContain("RangeError");
+    expect(text).toContain("0sec-tui.log");
+  });
+
+  it("handles null/empty non-Errors without producing 'unknown'", () => {
+    expect(describeErrorForSurface(null)).toContain("no message");
+    expect(describeErrorForSurface("")).toContain("no message");
+    expect(describeErrorForSurface("a plain error string")).toBe("a plain error string");
+  });
+
+  it("bounds the surfaced text", () => {
+    const text = describeErrorForSurface(new Error("x".repeat(5000)), 100);
+    expect(text.length).toBeLessThanOrEqual(100);
+    expect(text.endsWith("…")).toBe(true);
+  });
+});
+
+describe("logProblem (always-on local capture)", () => {
+  let dir: string;
+  const savedLog = process.env["0SEC_TUI_LOG"];
+
+  afterEach(() => {
+    if (dir) rmSync(dir, { recursive: true, force: true });
+    if (savedLog === undefined) delete process.env["0SEC_TUI_LOG"];
+    else process.env["0SEC_TUI_LOG"] = savedLog;
+  });
+
+  it("writes the full serialized error (with stack) to the log by default", () => {
+    dir = mkdtempSync(join(tmpdir(), "tui-log-"));
+    const logPath = join(dir, "tui.log");
+    process.env["0SEC_TUI_LOG"] = logPath;
+
+    const err = new Error("kaboom");
+    logProblem("runtime", err, "shell");
+
+    const written = readFileSync(logPath, "utf8").trim();
+    const record = JSON.parse(written);
+    expect(record.kind).toBe("problem");
+    expect(record.problemKind).toBe("runtime");
+    expect(record.toolName).toBe("shell");
+    expect(record.error.message).toBe("kaboom");
+    expect(typeof record.error.stack).toBe("string");
+    expect(record.error.stack).toContain("kaboom");
+  });
+
+  it("captures a non-Error problem too", () => {
+    dir = mkdtempSync(join(tmpdir(), "tui-log-"));
+    const logPath = join(dir, "tui.log");
+    process.env["0SEC_TUI_LOG"] = logPath;
+
+    logProblem("tool", "string failure");
+
+    const record = JSON.parse(readFileSync(logPath, "utf8").trim());
+    expect(record.problemKind).toBe("tool");
+    expect(record.error.value).toBe("string failure");
+    expect(record.toolName).toBeUndefined();
   });
 });

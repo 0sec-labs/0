@@ -230,6 +230,13 @@ import {
 } from "./transcript-style.js";
 import { useSelectionCopy, type SelectionCopyFn } from "./use-selection-copy.js";
 import { useToast, Toast } from "./toast.js";
+import { ContextMenu } from "./context-menu.js";
+import {
+  useContextMenu,
+  isRightClick,
+  type ContextMenuItem,
+} from "./use-context-menu.js";
+import { firstCodeBlock } from "./markdown.js";
 import {
   copyToClipboard,
   defaultSpawn,
@@ -297,7 +304,8 @@ import {
   type AgentRowView,
 } from "./chat/AgentRow.js";
 import { agentAccentFor } from "./agent-color.js";
-import { appendTuiCrash, appendTuiEvent, serializeError } from "./tui-crash.js";
+import { summarizeAgentActivity, summarizeRoster } from "./agents-panel-model.js";
+import { appendTuiCrash, appendTuiEvent, serializeError, logProblem, describeErrorForSurface, tuiLogPath } from "./tui-crash.js";
 
 export type ChatDestination = "launcher" | "ops" | "history" | "findings" | "doctor" | "replay" | "settings" | "keybindings" | "harness" | "new-chat" | "models" | "market" | "usage" | "connect" | "herd" | "comms" | "finding" | "resume" | "audits" | "onboard";
 
@@ -849,6 +857,14 @@ export function runFindingsFromEntries(entries: readonly ChatEntry[]): RunFindin
  */
 const SUBAGENT_MAX_VISIBLE = 4;
 
+/**
+ * Below this content width the inline AGENTS panel auto-collapses to its
+ * one-line summary: a per-agent row needs room for a name, a status glyph and a
+ * live-activity tail, and under ~44 cells those fuse into noise. The operator
+ * can still drill in (Down) to browse the roster one selection at a time.
+ */
+const SUBAGENT_PANEL_MIN_WIDTH = 44;
+
 /** Window after a first Ctrl+C in which a second Ctrl+C confirms the quit. */
 const EXIT_CONFIRM_MS = 3000;
 
@@ -1032,6 +1048,39 @@ export function ChatScreen({
     which: defaultWhich,
     onCopied: ({ bytes }) => showToast(`Copied ${bytes} bytes`),
   });
+  // Right-click context menu over the transcript. Purely additive: it opens
+  // only on a right press (button 2) and only when mouse support is on, so the
+  // left-click / drag-to-select / keyboard paths are untouched.
+  const transcriptMenu = useContextMenu();
+  const copyMenuText = useCallback(
+    (text: string, label: string) => {
+      void copySelection(text, { spawn: defaultSpawn, which: defaultWhich }).then(
+        (result) => showToast(result.ok ? `Copied ${label}` : "Copy failed"),
+      );
+    },
+    [copySelection, showToast],
+  );
+  const buildMessageMenuItems = useCallback(
+    (entry: ChatEntry): ContextMenuItem[] => {
+      const text = entry.text ?? "";
+      const items: ContextMenuItem[] = [
+        {
+          label: "Copy message",
+          disabled: text.trim().length === 0,
+          onSelect: () => copyMenuText(text, "message"),
+        },
+      ];
+      const code = firstCodeBlock(text);
+      if (code) {
+        items.push({
+          label: "Copy code block",
+          onSelect: () => copyMenuText(code, "code block"),
+        });
+      }
+      return items;
+    },
+    [copyMenuText],
+  );
   /**
    * Per-turn transcript expansion. In collapsed mode each turn's successful
    * tool/reasoning steps fold to one ▸ line; clicking that line adds the turn
@@ -1272,6 +1321,14 @@ export function ChatScreen({
    * on an empty composer (only when agents are running), left with Left/Esc.
    */
   const [agentNavIndex, setAgentNavIndex] = useState(-1);
+  /**
+   * Collapse toggle for the inline AGENTS panel. The panel is EXPANDED by
+   * default (running agents are visible without arrowing in); the operator can
+   * collapse it to a single summary line via its corner control (mouse) or the
+   * existing keyboard path. Session-scoped state — the choice is remembered for
+   * the life of the screen but is not persisted to disk.
+   */
+  const [agentsPanelCollapsed, setAgentsPanelCollapsed] = useState(false);
   /**
    * The subagent the operator drilled INTO, or null in list/composer mode. When
    * set, the transcript region is replaced by the inline focus view (the same
@@ -1525,6 +1582,11 @@ export function ChatScreen({
     if (!alive.current || abortRef.current?.signal.aborted) return;
     if (error instanceof Error && error.name === "AbortError") return;
     if (typeof error === "string" && /^(?:aborted|cancelled|canceled)\b|(?:operator|user).*(?:declined|rejected)|(?:was )?(?:already )?(?:declined|rejected) by (?:the )?(?:operator|user)\b|previously declined/i.test(error)) return;
+    // Always capture the FULL error (stack included) to the always-on local log
+    // by default — no env flag — so a failure is learnable even when the
+    // surfaced line and the transmitted diagnostic are both bounded/coarse.
+    // Local only; nothing here crosses a network wire.
+    logProblem(kind, error, toolName);
     const payload = buildDiagnosticFeedback({
       kind, error, toolName, version: VERSION, platform: process.platform, arch: process.arch,
       runtime: process.versions.bun ? "bun" : "node",
@@ -3429,6 +3491,15 @@ export function ChatScreen({
         input: prev.input + outcome.usage.inputTokens,
         output: prev.output + outcome.usage.outputTokens,
       }));
+      // Context occupancy = the tokens the last model call actually sent (the
+      // whole conversation resent). Some backends (e.g. the ChatGPT/Codex wire)
+      // report usage only on the RETURN value, not through the streaming
+      // `onUsage(kind:"planner")` callback above — so without this the meter
+      // stayed at 0% for a full conversation. Fall back to the turn's final
+      // input count whenever it is a real, positive measurement.
+      if (Number.isFinite(outcome.usage.inputTokens) && outcome.usage.inputTokens > 0) {
+        setLastContext(outcome.usage.inputTokens);
+      }
       turnUsage = { inputTokens: outcome.usage.inputTokens, outputTokens: outcome.usage.outputTokens };
 
       // A turn that fails must say so. The engine reports failure through
@@ -3437,7 +3508,10 @@ export function ChatScreen({
       // which reads as the agent having simply ignored the operator.
       const producedText = Boolean(assistantText || outcome.assistantText);
       if (outcome.stopReason === "error") {
-        const detail = outcome.error ?? "The runtime reported an error but gave no message.";
+        const trimmed = outcome.error?.trim();
+        const detail = trimmed
+          ? trimmed
+          : `The runtime reported an error but gave no message — see ${tuiLogPath()}.`;
         recordProblem("runtime", outcome.error);
         appendEntry({
           kind: "error",
@@ -3488,7 +3562,10 @@ export function ChatScreen({
     } catch (error) {
       onAuditActivity({ outcome: controller.signal.aborted ? "stopped" : "failed" });
       recordProblem("runtime", error);
-      const detail = error instanceof Error ? error.message : String(error);
+      // Never surface a bare "unknown"/empty: an Error with no message falls
+      // back to its name + first stack frame and a pointer to the always-on log
+      // (where recordProblem just wrote the full stack).
+      const detail = describeErrorForSurface(error);
       appendEntry({
         kind: "error",
         text: "turn failed",
@@ -3728,6 +3805,10 @@ export function ChatScreen({
 
   useKeyboard((key) => {
     if (!interactive || stoppingAuditRef.current) return;
+    // While the right-click context menu is open it owns the keyboard (its own
+    // handler moves the highlight / activates / closes); bail so the transcript
+    // beneath does not also act on Up/Down/Enter/Esc.
+    if (transcriptMenu.state.open) return;
     // The `ask_operator` modal takes precedence exactly like an approval prompt,
     // but it AUTHORIZES NOTHING — Esc resolves a `null` answer (the tool renders
     // that as "dismissed, nothing authorized"), Enter resolves the collected
@@ -3885,8 +3966,18 @@ export function ChatScreen({
       requestExitRef.current();
       return;
     }
+    // The rebindable set resolves its chord through `matchesBinding` against the
+    // operator's persisted overrides rather than a hard-coded `key.name` literal,
+    // so `/keybindings` remaps actually take effect. `matchesBinding` falls back
+    // to the registry default when there is no override. The protected set
+    // (arrows, Enter, Esc, Ctrl+C, the modal scroll verbs, the review extremes
+    // and Right→accept-suggestion) keeps its literal guards on purpose.
+    const keybindingOverrides = settingsRef.current.keybindings;
     if (reviewOpen) {
-      if (key.name === "escape" || (key.ctrl && key.name === "o")) {
+      // review-toggle is rebindable, so its close chord is resolved too (Esc
+      // always closes as well). The overlay's own scroll verbs stay literal —
+      // they are the protected modal Page/Ctrl+Home/End set.
+      if (key.name === "escape" || matchesBinding(key, "overlay.review-toggle", keybindingOverrides)) {
         setReviewOpen(false);
         return;
       }
@@ -3911,7 +4002,7 @@ export function ChatScreen({
       }
       return;
     }
-    if (key.ctrl && key.name === "o") {
+    if (matchesBinding(key, "overlay.review-toggle", keybindingOverrides)) {
       setReviewOpen(true);
       return;
     }
@@ -3996,27 +4087,28 @@ export function ChatScreen({
     // recall composer history. The box is non-focusable, so it never grabs the
     // arrows itself; we drive it explicitly here. Sticky-bottom auto-scroll
     // keeps the newest evidence in view the rest of the time.
-    if (key.name === "pageup" || (key.ctrl && key.name === "up")) {
+    // Main-transcript scrolling is rebindable (nav.scroll-up / nav.scroll-down).
+    // The default answers PageUp/Ctrl+Up and PageDown/Ctrl+Down; an override
+    // replaces those with the operator's chord. The MODAL scroll handlers inside
+    // the review overlay and the focus view above keep their literal Page/Ctrl
+    // guards — those scroll a different surface and are protected.
+    if (matchesBinding(key, "nav.scroll-up", keybindingOverrides)) {
       transcriptRef.current?.scrollBy(-0.5, "viewport");
       return;
     }
-    if (key.name === "pagedown" || (key.ctrl && key.name === "down")) {
+    if (matchesBinding(key, "nav.scroll-down", keybindingOverrides)) {
       transcriptRef.current?.scrollBy(0.5, "viewport");
       return;
     }
-    // The three View toggles are the rebindable set: their chord is resolved
-    // through `matchesBinding` against the operator's persisted overrides
-    // (`settingsRef.current.keybindings`) rather than a hard-coded `key.name`
-    // literal, so `/keybindings` can remap them. `matchesBinding` falls back to
-    // the registry default (Ctrl+R / Ctrl+B / Ctrl+L) when there is no override.
-    // Handled above the composing block so the chord never reaches the
-    // composer's text catch-all (which only appends non-ctrl sequences anyway).
+    // The rebindable global chords, resolved through `matchesBinding` (see the
+    // const above) so `/keybindings` remaps take effect. They are handled above
+    // the composing block so a chord never reaches the composer's text catch-all
+    // (which only appends non-ctrl sequences anyway).
     //
     // transcript-detail flips the whole transcript between collapsed and
     // expanded detail; both sidebars toggle their pane. All three persist via
     // the settings store (the same layer `/settings` writes), so the choice
     // survives the session and the store's subscribers repaint immediately.
-    const keybindingOverrides = settingsRef.current.keybindings;
     if (matchesBinding(key, "view.transcript-detail", keybindingOverrides)) {
       updateSetting(
         "transcriptDetail",
@@ -4032,12 +4124,28 @@ export function ChatScreen({
       updateSetting("showRightSidebar", !settingsRef.current.showRightSidebar);
       return;
     }
+    // nav.jump-agents (Ctrl+G) drops straight into the active-subagents list —
+    // the same affordance Down offers on an empty composer, reachable directly
+    // and while composing. Only acts when there are workers to jump to;
+    // otherwise it falls through so the chord is a harmless no-op.
+    if (matchesBinding(key, "nav.jump-agents", keybindingOverrides)) {
+      const navList = settings.showSubagents ? workerRoster : [];
+      if (navList.length > 0) {
+        setAgentNavIndex(0);
+        return;
+      }
+    }
+    // nav.open-comms (Ctrl+T) opens the agent comms view via the shell nav.
+    if (matchesBinding(key, "nav.open-comms", keybindingOverrides)) {
+      onNavigate("comms");
+      return;
+    }
     // Ctrl+Y pulls the most recently queued message back into the composer for
     // editing — which doubles as cancel: it leaves the queue, and dropping it
     // (Esc) or re-sending it (Enter, re-queued at the back while still busy) is
     // then just normal composer editing. Newest-first so a hurried operator can
     // fix the last thing they typed without disturbing earlier parked lines.
-    if (key.ctrl && key.name === "y" && queuedRef.current.length > 0) {
+    if (matchesBinding(key, "composer.edit-queued", keybindingOverrides) && queuedRef.current.length > 0) {
       const queue = queuedRef.current;
       const last = queue[queue.length - 1];
       const rest = queue.slice(0, -1);
@@ -4062,7 +4170,7 @@ export function ChatScreen({
       routeSlashCommand(`/mode ${nextAutonomyMode(modeRef.current)}`);
       return;
     }
-    if (key.ctrl && (key.name === "p" || key.name === "k")) {
+    if (matchesBinding(key, "nav.palette", keybindingOverrides)) {
       if (restorePaletteDraft()) return;
       paletteDraftRef.current = { text: composerRef.current, composing: composingRef.current };
       composingRef.current = true;
@@ -4574,17 +4682,33 @@ export function ChatScreen({
   // reserved in the ledger via computeLedgerRows regardless of focus, so the
   // focus transcript makes room for it.
   const subagentEntries = settings.showSubagents ? workerRoster : [];
+  const hasSubagents = subagentEntries.length > 0;
   const visibleRosterLimit = Math.max(1, Math.min(SUBAGENT_MAX_VISIBLE, Math.floor(height / 5)));
-  const rosterStart = Math.max(0, agentNavIndex - visibleRosterLimit + 1);
-  const subagentVisible = agentNavIndex >= 0
-    ? subagentEntries.slice(rosterStart, rosterStart + visibleRosterLimit)
-    : [];
+  // The panel is EXPANDED by default so running agents are visible without the
+  // operator arrowing in (the OMP-style "always show what the herd is doing").
+  // It collapses to a one-line summary when the operator toggles the corner
+  // control, and AUTO-collapses on a very narrow terminal where per-agent rows
+  // would not fit. Drilling in (agentNavIndex >= 0) always forces it open so the
+  // selection is on screen — the existing Down-arrow path keeps working.
+  const subagentPanelNarrow = contentWidth < SUBAGENT_PANEL_MIN_WIDTH;
+  const subagentPanelCollapsed = hasSubagents && agentNavIndex < 0 && (agentsPanelCollapsed || subagentPanelNarrow);
+  const rosterStart = agentNavIndex >= 0 ? Math.max(0, agentNavIndex - visibleRosterLimit + 1) : 0;
+  const subagentVisible = subagentPanelCollapsed
+    ? []
+    : agentNavIndex >= 0
+      ? subagentEntries.slice(rosterStart, rosterStart + visibleRosterLimit)
+      : subagentEntries.slice(0, visibleRosterLimit);
   const subagentOverflow = subagentEntries.length - subagentVisible.length;
-  const subagentOverflowRow = agentNavIndex >= 0 && subagentOverflow > 0 ? 1 : 0;
-  // One activity/shortcut row at rest; expand only the selected worker roster.
-  const subagentBlockRows = subagentEntries.length > 0
-    ? 1 + subagentVisible.length + subagentOverflowRow
-    : 0;
+  // Below the header: the visible rows plus a "+N more" tail whenever the
+  // roster outruns the window (both when navigating and when resting expanded).
+  const subagentOverflowRow = !subagentPanelCollapsed && subagentOverflow > 0 ? 1 : 0;
+  // Collapsed → the single summary line (the header itself). Expanded → header
+  // + rows + overflow tail.
+  const subagentBlockRows = !hasSubagents
+    ? 0
+    : subagentPanelCollapsed
+      ? 1
+      : 1 + subagentVisible.length + subagentOverflowRow;
   // Selection within the block while navigating into it. Clamped every render so
   // an index left dangling by a finished agent lands back on a live row.
   const agentNavSelected =
@@ -4636,8 +4760,13 @@ export function ChatScreen({
   const headerSegments: string[] = [];
   if (settings.showScope) headerSegments.push(`Scope: ${scopeLabel}`);
   headerSegments.push(sessionState);
-  // Version rides at the far left of the top bar, like the startup masthead.
-  const headerEngagement = [`v${VERSION}`, ...headerSegments].join(" · ");
+  // Version rides at the far left of the top bar, like the startup masthead,
+  // carrying the build-channel badge right beside it: [dev] when launched from
+  // a dev source checkout (the `0dev` wrapper exports 0SEC_DEV_SOURCE_ROOT),
+  // else [beta] for a published build. fitTuiText truncates the MIDDLE here, so
+  // this leading segment survives even on a narrow bar.
+  const channelBadge = process.env["0SEC_DEV_SOURCE_ROOT"]?.trim() ? "[dev]" : "[beta]";
+  const headerEngagement = [`v${VERSION} ${channelBadge}`, ...headerSegments].join(" · ");
 
 
   // Activity comes from the real in-flight call, not an invented model intent.
@@ -4930,24 +5059,41 @@ export function ChatScreen({
     </>
   );
 
+  // Effective status per roster row (operator-stop and incomplete folded in),
+  // reused by the row views and the collapsed summary so both read identically.
+  const subagentEffectiveStatus = (sa: (typeof subagentEntries)[number]): string =>
+    operatorStopped.has(sa.agent_id)
+      ? "cancelled"
+      : sa.status === "completed" && sa.done === false
+        ? "incomplete"
+        : sa.status;
+  // The corner control is the "small button to expand": ▸ collapsed / ▾ open.
+  // Clicking the header toggles it (or, while navigating, backs out to the
+  // composer — the same exit the Left/Esc keys give). Collapsed, the header IS
+  // the one-line summary; expanded, it carries the roster count and hints.
+  const subagentToggleGlyph = subagentPanelCollapsed ? "▸" : "▾";
+  const subagentHeaderText = subagentPanelCollapsed
+    ? `${subagentToggleGlyph} ${summarizeRoster(subagentEntries.map(subagentEffectiveStatus))}`
+    : agentNavIndex >= 0
+      ? `${subagentToggleGlyph} agents (${subagentEntries.length}) · ↑↓ select · enter open · esc back`
+      : `${subagentToggleGlyph} agents (${subagentEntries.length}) · ${runningWorkers} running · ↓ select`;
   const subagentNode = subagentBlockRows > 0 ? (
     <box flexDirection="column" width="100%" minWidth={0} height={subagentBlockRows} flexShrink={0} marginTop={1}>
-      <box width={contentWidth} flexShrink={0} onMouseDown={() => setAgentNavIndex(agentNavIndex >= 0 ? -1 : 0)}>
-        <text fg={MUTED}>{fitTuiText(
-          agentNavIndex >= 0
-            ? `AGENTS · ${subagentEntries.length} · ↑↓ select · enter open · esc back`
-            : `Agents: ${runningWorkers} running / ${subagentEntries.length} total · ↓ select`,
-          contentWidth,
-        )}</text>
+      <box width={contentWidth} flexShrink={0} onMouseDown={() => {
+        if (agentNavIndex >= 0) setAgentNavIndex(-1);
+        else setAgentsPanelCollapsed((collapsed) => !collapsed);
+      }}>
+        <text fg={agentNavIndex >= 0 ? ACCENT : MUTED}>{fitTuiText(subagentHeaderText, contentWidth)}</text>
       </box>
       {subagentVisible.map((sa, index) => {
         const rec = herdAgents[sa.agent_id];
+        const status = subagentEffectiveStatus(sa);
         const view: AgentRowView = {
           id: sa.agent_id,
           name: sa.name ?? rec?.name ?? agentNamesRef.current.get(sa.agent_id) ?? "Unnamed worker",
           task: sa.task ?? "",
-          activity: rec?.tool ?? rec?.note,
-          status: operatorStopped.has(sa.agent_id) ? "cancelled" : sa.status === "completed" && sa.done === false ? "incomplete" : sa.status,
+          activity: summarizeAgentActivity({ status, tool: rec?.tool, note: rec?.note, turn: rec?.turn, maxTurns: rec?.maxTurns ?? sa.max_turns }),
+          status,
           animationFrame: settings.reduceMotion ? undefined : animTick,
           accent: agentAccentFor(sa.agent_id, theme.CANVAS),
         };
@@ -4957,7 +5103,12 @@ export function ChatScreen({
           onSelect={() => { setFocusAgentId(sa.agent_id); setAgentNavIndex(-1); }} />;
       })}
       {subagentOverflowRow > 0 ? (
-        <text fg={MUTED}>{fitTuiText(`${rosterStart + 1}–${rosterStart + subagentVisible.length}/${subagentEntries.length} · ↑↓ browse all`, contentWidth)}</text>
+        <text fg={MUTED}>{fitTuiText(
+          agentNavIndex >= 0
+            ? `${rosterStart + 1}–${rosterStart + subagentVisible.length}/${subagentEntries.length} · ↑↓ browse all`
+            : `+${subagentOverflow} more · ↓ browse all`,
+          contentWidth,
+        )}</text>
       ) : null}
     </box>
   ) : null;
@@ -5029,7 +5180,10 @@ export function ChatScreen({
               id: rec.agentId,
               name: rec.name ?? agentNamesRef.current.get(rec.agentId) ?? "Unnamed worker",
               task: rec.task || "No task reported",
-              activity: rec.tool ?? rec.note,
+              activity: summarizeAgentActivity({
+                status: operatorStopped.has(rec.agentId) ? "cancelled" : rec.status === "completed" && workerOutcomes[rec.agentId]?.done === false ? "incomplete" : rec.status,
+                tool: rec.tool, note: rec.note, turn: rec.turn, maxTurns: rec.maxTurns,
+              }),
               status: operatorStopped.has(rec.agentId) ? "cancelled" : rec.status === "completed" && workerOutcomes[rec.agentId]?.done === false ? "incomplete" : rec.status,
               animationFrame: settings.reduceMotion ? undefined : animTick,
               accent: agentAccentFor(rec.agentId, theme.CANVAS),
@@ -5217,7 +5371,7 @@ export function ChatScreen({
               : "static";
         }
       }
-      return renderEntry(
+      const node = renderEntry(
         entry,
         width,
         expanded ? { ...display, transcriptDetail: "expanded" } : display,
@@ -5230,6 +5384,31 @@ export function ChatScreen({
         } : undefined,
         reasoningLabel,
       );
+      // A right-click on an operator/model message pops its actions at the
+      // cursor. The wrapper is a layout-neutral column and its handler fires
+      // ONLY for a right press (button 2), so left-click / drag-select / the
+      // fold-toggle handlers inside `node` are all untouched. Gated on
+      // `mouseSupport`, matching every other mouse affordance.
+      const isMessage = entry.kind === "user" || entry.kind === "assistant";
+      if (settings.mouseSupport && isMessage && (entry.text ?? "").length > 0) {
+        return (
+          <box
+            key={entry.id}
+            flexDirection="column"
+            flexShrink={0}
+            minWidth={0}
+            onMouseDown={(event) => {
+              if (!isRightClick(event)) return;
+              event.stopPropagation?.();
+              event.preventDefault?.();
+              transcriptMenu.open(event.x, event.y, buildMessageMenuItems(entry));
+            }}
+          >
+            {node}
+          </box>
+        );
+      }
+      return node;
     });
   };
   const focusHasTranscript = focused && Boolean(focusEntries?.length);
@@ -5593,6 +5772,14 @@ export function ChatScreen({
         * participating in — or shifting — the column layout above.
         */}
       {interactive ? <Toast frame={toastFrame} /> : null}
+      {interactive && transcriptMenu.state.open ? (
+        <ContextMenu
+          items={transcriptMenu.state.items}
+          x={transcriptMenu.state.x}
+          y={transcriptMenu.state.y}
+          onClose={transcriptMenu.close}
+        />
+      ) : null}
     </box>
   );
 }

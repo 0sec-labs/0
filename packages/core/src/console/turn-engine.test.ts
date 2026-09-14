@@ -3,7 +3,7 @@ import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, realpathSyn
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { buildConsoleSystemPrompt, createConsoleSession } from "./turn-engine.js";
+import { buildConsoleSystemPrompt, createConsoleSession, describeCaughtError } from "./turn-engine.js";
 import type {
   ConsoleLocalScopeRequest,
   ConsoleScopeRequest,
@@ -3181,5 +3181,42 @@ describe("buildConsoleSystemPrompt — Voice (register only, never facts)", () =
     expect(prompt.indexOf("Voice: talk like a sharp teammate")).toBeLessThan(
       prompt.indexOf("For finding summaries"),
     );
+  });
+});
+
+describe("describeCaughtError", () => {
+  it("uses the real message when the Error has one", () => {
+    expect(describeCaughtError(new Error("provider rejected the request"))).toBe(
+      "provider rejected the request",
+    );
+  });
+
+  it("never yields an empty string / 'unknown' for an Error with no message", () => {
+    const err = new Error("");
+    err.stack = "Error\n    at executeNative (/pkg/core/src/runtime/llm-api.ts:4123:9)";
+    const text = describeCaughtError(err);
+    expect(text).not.toBe("");
+    expect(text).not.toBe("unknown");
+    // Falls back to the name plus the first stack frame so the surfaced line
+    // still points at code.
+    expect(text).toContain("Error");
+    expect(text).toContain("executeNative (/pkg/core/src/runtime/llm-api.ts:4123:9)");
+  });
+
+  it("uses the name alone when an empty-message Error has no stack", () => {
+    const err = new TypeError("");
+    err.stack = undefined;
+    expect(describeCaughtError(err)).toBe("TypeError (no message)");
+  });
+
+  it("stringifies non-Errors and never returns empty", () => {
+    expect(describeCaughtError("boom")).toBe("boom");
+    expect(describeCaughtError({})).toBe("runtime error with no message");
+  });
+
+  it("bounds the returned message", () => {
+    const text = describeCaughtError(new Error("x".repeat(9000)), 120);
+    expect(text.length).toBeLessThanOrEqual(120);
+    expect(text.endsWith("…")).toBe(true);
   });
 });

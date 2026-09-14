@@ -229,7 +229,7 @@ function speechTurnBlock(
   roleStyle: TuiSettings["roleLabelStyle"],
   width: number,
 ): PreviewBlock {
-  const messageWidth = style === "bubble" && kind === "user" && width >= 32
+  const messageWidth = (style === "bubble" || style === "balanced") && kind === "user" && width >= 32
     ? Math.floor(width * 0.85)
     : width;
   const frame = speechFrame(style, kind, messageWidth);
