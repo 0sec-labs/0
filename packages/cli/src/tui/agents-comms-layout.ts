@@ -39,7 +39,7 @@
 import { computeListWindow, type ListWindow } from "./pane-layout.js";
 import { sanitizeTuiText } from "./text.js";
 import { shellChromeRows } from "./herd-layout.js";
-import type { HerdSubagentMap, HerdSubagentRecord, SubagentStatus } from "./herd-layout.js";
+import type { HerdSubagentMap, HerdSubagentRecord, RosterSort, SubagentStatus } from "./herd-layout.js";
 import {
   type MessageCardData,
   type PeerMessageLike,
@@ -115,14 +115,41 @@ function statusRank(status: SubagentStatus): number {
 }
 
 /**
+ * Attention-first priority: the agents that need the operator lead. A `failed`
+ * agent is the most urgent, then a `parked` (waiting-on-input) one — together
+ * the comms equivalent of the herd's "blocked/needs-input" bucket — then the
+ * actively `running` ones ("working"), then settled `completed` ("done"), and
+ * finally still-`queued` ("idle") agents that have not started. Mirrors
+ * `herd-layout.HERD_ATTENTION_ORDER`. Stable within a bucket.
+ */
+function attentionRank(status: SubagentStatus): number {
+  switch (status) {
+    case "failed":
+      return 0;
+    case "parked":
+      return 1;
+    case "running":
+      return 2;
+    case "completed":
+      return 3;
+    default:
+      return 4; // queued
+  }
+}
+
+/**
  * Build the sorted fleet rows from the live subagent map and the telemetry map.
- * Preserves insertion order within a status bucket (a stable sort keyed only by
- * the status rank). Skips malformed records. Invents nothing — an empty map
- * yields an empty fleet, which the screen states honestly.
+ * `sort` chooses the priority: `"status"` (the historical running → queued →
+ * parked → failed → done order) or `"attention"` (failed/parked float to the
+ * top). Either way the sort is STABLE within a bucket (decorated with the
+ * original index so equal ranks keep insertion order), so the list does not
+ * reshuffle between polls. Skips malformed records. Invents nothing — an empty
+ * map yields an empty fleet, which the screen states honestly.
  */
 export function buildCommsFleet(
   agents: Readonly<HerdSubagentMap>,
   telemetry: Readonly<CommsTelemetryMap> = {},
+  sort: RosterSort = "status",
 ): CommsFleetRow[] {
   const rows: CommsFleetRow[] = [];
   for (const record of Object.values(agents)) {
@@ -130,11 +157,25 @@ export function buildCommsFleet(
     const snap = telemetry[record.agentId];
     rows.push({ kind: "agent", record, ...(snap ? { telemetry: snap } : {}) });
   }
+  const rankOf = sort === "attention" ? attentionRank : statusRank;
   // Stable sort: decorate with the original index so equal ranks keep order.
   return rows
     .map((row, index) => ({ row, index }))
-    .sort((a, b) => statusRank(a.row.record.status) - statusRank(b.row.record.status) || a.index - b.index)
+    .sort((a, b) => rankOf(a.row.record.status) - rankOf(b.row.record.status) || a.index - b.index)
     .map((entry) => entry.row);
+}
+
+/**
+ * The fleet index (0-based) for a 1-based agent number, or -1 when out of
+ * range. The comms fleet is a flat list (no headings), so `n = 1` is index 0,
+ * bounded by `count`. This is the pure index→agent map the roster views use to
+ * jump directly to an agent by number key.
+ */
+export function fleetIndexForNumber(count: number, n: number): number {
+  const total = cells(count);
+  if (total === 0 || !Number.isInteger(n)) return -1;
+  if (n < 1 || n > total) return -1;
+  return n - 1;
 }
 
 /** Human status word for a fleet row (mirrors herd's subagentStatusLabel). */

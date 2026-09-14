@@ -4,6 +4,7 @@ import {
   HERD_ACTIVITY_MAX,
   HERD_COMPOSER_CURSOR,
   HERD_COMPOSER_PROMPT,
+  HERD_ATTENTION_ORDER,
   HERD_PEER_TTL_MS,
   HERD_STATUS_ORDER,
   abbreviateHomePath,
@@ -31,6 +32,7 @@ import {
   herdStatusOf,
   isPeerStale,
   lastSelectableIndex,
+  nthPeerRowIndex,
   mergeSubagentRoster,
   moveHerdSelection,
   renderFocusActivity,
@@ -161,6 +163,81 @@ describe("buildHerdRows — grouping", () => {
       NOW,
     );
     expect(rows.filter((r) => r.kind === "peer")).toHaveLength(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Attention-first ordering (rosterSort: "attention")
+// ---------------------------------------------------------------------------
+
+describe("buildHerdRows — attention ordering", () => {
+  it("keeps the historical status order by default and for sort=\"status\"", () => {
+    const headingsOf = (sort?: "status" | "attention") =>
+      buildHerdRows(everyStatusRoster(), NOW, undefined, sort)
+        .filter((r): r is Extract<HerdRow, { kind: "heading" }> => r.kind === "heading")
+        .map((h) => h.status);
+    expect(headingsOf()).toEqual(HERD_STATUS_ORDER);
+    expect(headingsOf("status")).toEqual(HERD_STATUS_ORDER);
+  });
+
+  it("floats blocked → working → done → idle → stale for sort=\"attention\"", () => {
+    const headings = buildHerdRows(everyStatusRoster(), NOW, undefined, "attention")
+      .filter((r): r is Extract<HerdRow, { kind: "heading" }> => r.kind === "heading")
+      .map((h) => h.status);
+    expect(headings).toEqual(HERD_ATTENTION_ORDER);
+    expect(headings).toEqual(["blocked", "working", "done", "idle", "stale"]);
+    // blocked comes first — the whole point is surfacing agents needing input.
+    expect(headings[0]).toBe("blocked");
+  });
+
+  it("is stable within a bucket (provider order preserved)", () => {
+    const roster = [
+      peer("b1", { activity: { phase: "blocked" } }),
+      peer("w1", { activity: { phase: "working" } }),
+      peer("b2", { activity: { phase: "blocked" } }),
+      peer("w2", { activity: { phase: "working" } }),
+    ];
+    const ids = buildHerdRows(roster, NOW, undefined, "attention")
+      .filter((r) => r.kind === "peer")
+      .map((r) => (r.kind === "peer" ? r.peer.id : ""));
+    // Blocked bucket first (b1 before b2), then working (w1 before w2).
+    expect(ids).toEqual(["b1", "b2", "w1", "w2"]);
+  });
+
+  it("omits empty groups under attention ordering too", () => {
+    const rows = buildHerdRows([peer("a"), peer("b")], NOW, undefined, "attention");
+    expect([...new Set(rows.map((r) => r.status))]).toEqual(["idle"]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Index → agent mapping (number-key jump)
+// ---------------------------------------------------------------------------
+
+describe("nthPeerRowIndex — 1-based agent jump", () => {
+  const rows = buildHerdRows(everyStatusRoster(), NOW, undefined, "attention");
+  const peerRowIndexes = rows.reduce<number[]>((acc, row, index) => {
+    if (row.kind === "peer") acc.push(index);
+    return acc;
+  }, []);
+
+  it("maps N to the N-th peer row, skipping headings", () => {
+    expect(nthPeerRowIndex(rows, 1)).toBe(peerRowIndexes[0]);
+    expect(nthPeerRowIndex(rows, 3)).toBe(peerRowIndexes[2]);
+    expect(nthPeerRowIndex(rows, 5)).toBe(peerRowIndexes[4]);
+    // The mapped rows are always peers, never headings.
+    for (let n = 1; n <= peerRowIndexes.length; n++) {
+      expect(rows[nthPeerRowIndex(rows, n)]?.kind).toBe("peer");
+    }
+  });
+
+  it("returns -1 for out-of-range, zero, negative and non-integer n", () => {
+    expect(nthPeerRowIndex(rows, 0)).toBe(-1);
+    expect(nthPeerRowIndex(rows, peerRowIndexes.length + 1)).toBe(-1);
+    expect(nthPeerRowIndex(rows, -2)).toBe(-1);
+    expect(nthPeerRowIndex(rows, 1.5)).toBe(-1);
+    expect(nthPeerRowIndex(rows, Number.NaN)).toBe(-1);
+    expect(nthPeerRowIndex([], 1)).toBe(-1);
   });
 });
 

@@ -115,6 +115,31 @@ export const HERD_STATUS_ORDER: readonly HerdStatus[] = [
 ];
 
 /**
+ * How the roster (and the comms fleet — see `agents-comms-layout.ts`) is
+ * ordered. `"status"` is the historical fixed lifecycle order; `"attention"`
+ * floats the agents that need the operator to the top. The setting
+ * (`rosterSort`) is resolved by the screen and passed into the PURE builders —
+ * neither module reads settings itself.
+ */
+export type RosterSort = "status" | "attention";
+
+/**
+ * Attention-first group order: the agents that need the operator lead. A
+ * `blocked` (needs-input) peer is surfaced first, then the actively `working`
+ * ones, then settled `done`, then merely `idle`, and finally `stale`. Mirrors
+ * the comms fleet's attention ranking (failed/parked → running → completed →
+ * queued). Empty groups are omitted from the row model, exactly as with
+ * {@link HERD_STATUS_ORDER}; within a group, provider order is preserved.
+ */
+export const HERD_ATTENTION_ORDER: readonly HerdStatus[] = [
+  "blocked",
+  "working",
+  "done",
+  "idle",
+  "stale",
+];
+
+/**
  * Optional live enrichment for one peer, keyed elsewhere by the peer's id.
  *
  * The natural producer is the event bus — `subagent_progress` carries
@@ -248,15 +273,18 @@ export type HerdRow =
  * Flattens a roster into a renderable list of status headings and peer rows.
  *
  * Peers are bucketed by {@link herdStatusOf} and emitted group-by-group in the
- * fixed {@link HERD_STATUS_ORDER}. A heading is emitted only for a group with
- * at least one peer — an empty group is a row of noise. Within a group, peers
- * keep the order the provider handed them (the registry preserves entry order
- * across heartbeats), so the list does not reshuffle on every poll.
+ * chosen order — the historical {@link HERD_STATUS_ORDER} for `"status"`, or
+ * the operator-first {@link HERD_ATTENTION_ORDER} for `"attention"` (the
+ * default). A heading is emitted only for a group with at least one peer — an
+ * empty group is a row of noise. Within a group, peers keep the order the
+ * provider handed them (the registry preserves entry order across heartbeats),
+ * so the list is stable within a bucket and does not reshuffle on every poll.
  */
 export function buildHerdRows(
   peers: readonly HerdPeer[],
   now: number,
   ttlMs?: number,
+  sort: RosterSort = "status",
 ): HerdRow[] {
   const byStatus = new Map<HerdStatus, HerdPeer[]>();
   for (const peer of peers) {
@@ -266,8 +294,9 @@ export function buildHerdRows(
     byStatus.get(status)?.push(peer);
   }
 
+  const order = sort === "attention" ? HERD_ATTENTION_ORDER : HERD_STATUS_ORDER;
   const rows: HerdRow[] = [];
-  for (const status of HERD_STATUS_ORDER) {
+  for (const status of order) {
     const group = byStatus.get(status);
     if (!group || group.length === 0) continue;
     rows.push({ kind: "heading", status, count: group.length });
@@ -308,6 +337,27 @@ export function firstSelectableIndex(rows: readonly HerdRow[]): number {
 export function lastSelectableIndex(rows: readonly HerdRow[]): number {
   for (let index = rows.length - 1; index >= 0; index--) {
     if (rows[index]?.kind === "peer") return index;
+  }
+  return -1;
+}
+
+/**
+ * Row index of the N-th selectable (peer) row, counting peers only and
+ * skipping headings, for a 1-based `n` (so `n = 1` is the first agent in the
+ * current ordering). Returns -1 when `n` is out of range, non-integer, or
+ * below 1. This is the pure index→agent map the roster views use to jump
+ * directly to an agent by number, independent of how headings interleave the
+ * rows.
+ */
+export function nthPeerRowIndex(rows: readonly HerdRow[], n: number): number {
+  if (!Number.isInteger(n) || n < 1) return -1;
+  const target = n;
+  let seen = 0;
+  for (let index = 0; index < rows.length; index++) {
+    if (rows[index]?.kind === "peer") {
+      seen += 1;
+      if (seen === target) return index;
+    }
   }
   return -1;
 }

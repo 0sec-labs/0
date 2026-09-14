@@ -223,6 +223,26 @@ export interface TuiSettings {
    */
   symbolPreset: "unicode" | "nerd" | "ascii";
   /**
+   * Ordering of the agent-herd roster and the comms fleet. "attention" (the
+   * default) floats the agents that need the operator to the top —
+   * blocked/needs-input, then working, done, idle and finally stale — so a
+   * blocked child is the first thing seen. "status" keeps the historical fixed
+   * lifecycle order (working → idle → blocked → done → stale for the herd; the
+   * comms equivalent running → queued → parked → failed → done). Threaded into
+   * the PURE ordering of `herd-layout.buildHerdRows` /
+   * `agents-comms-layout.buildCommsFleet` by the two screens, which pass it in.
+   */
+  rosterSort: "status" | "attention";
+  /**
+   * Optional tmux-style leader (prefix) chord for the herd/comms roster views.
+   * "off" (the default) disables it. When set to a modifier chord, pressing it
+   * arms a one-shot prefix mode so the NEXT key triggers a leader action
+   * (a digit focuses the Nth agent; "n"/"p" step next/prev). Additive: the
+   * direct number-key agent jump works whether or not a leader is set, and the
+   * arrows/Enter/Esc/Ctrl+C handling is never altered.
+   */
+  leaderKey: "off" | "ctrl+a" | "ctrl+b" | "ctrl+space";
+  /**
    * Per-action chord overrides for the rebindable keybindings, keyed by
    * `Keybinding.id` (e.g. `{ "view.left-sidebar": "ctrl+b" }`). NOT part of the
    * scalar `SETTING_DEFS` table — it is a map, neither a boolean nor a
@@ -274,7 +294,9 @@ type TuiSettingDef =
   | EnumSettingDef<"updatePolicy">
   | EnumSettingDef<"logoAnimation">
   | EnumSettingDef<"theme">
-  | EnumSettingDef<"symbolPreset">;
+  | EnumSettingDef<"symbolPreset">
+  | EnumSettingDef<"rosterSort">
+  | EnumSettingDef<"leaderKey">;
 
 /**
  * Selectable values for the `theme` setting: the built-ins, plus any user
@@ -654,6 +676,24 @@ const DEFS: readonly TuiSettingDef[] = [
     choices: ["unicode", "nerd", "ascii"],
     group: "Display",
   },
+  {
+    key: "rosterSort",
+    label: "Roster order",
+    description: "Order the agent herd and comms fleet by attention (blocked and working agents float to the top — the default) or by fixed lifecycle status.",
+    kind: "enum",
+    default: "attention",
+    choices: ["attention", "status"],
+    group: "Display",
+  },
+  {
+    key: "leaderKey",
+    label: "Leader key",
+    description: "Optional tmux-style prefix chord for the roster views: press it, then a number to focus that agent, or n/p to step. Off disables it (the direct number keys work regardless).",
+    kind: "enum",
+    default: "off",
+    choices: ["off", "ctrl+a", "ctrl+b", "ctrl+space"],
+    group: "Display",
+  },
 ];
 
 export const SETTING_DEFS: readonly SettingDef[] = DEFS;
@@ -701,6 +741,8 @@ export const DEFAULT_SETTINGS: TuiSettings = {
   diagnosticReportingPrompted: false,
   updatePolicy: "automatic",
   symbolPreset: "unicode",
+  rosterSort: "attention",
+  leaderKey: "off",
   keybindings: {},
 };
 
@@ -991,6 +1033,8 @@ export function normalizeSettings(raw: unknown): TuiSettings {
     diagnosticReportingPrompted: booleanAt(raw, "diagnosticReportingPrompted"),
     updatePolicy: strictValueAt(raw, "updatePolicy") ?? DEFAULT_SETTINGS.updatePolicy,
     symbolPreset: enumAt(raw, "symbolPreset"),
+    rosterSort: enumAt(raw, "rosterSort"),
+    leaderKey: enumAt(raw, "leaderKey"),
     keybindings: keybindingsAt(raw),
   };
 }

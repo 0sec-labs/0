@@ -32,6 +32,8 @@ import { eventBus } from "@0sec/core";
 
 import { useTheme, type Theme } from "./theme-context.js";
 import { useSymbols } from "./symbol-context.js";
+import { useSettings } from "./settings-store.js";
+import { keyMatchesChord } from "./keybindings.js";
 import { useDialogSurface, useSurfaceDimensions } from "./dialog-surface.js";
 import { operatorIcon, operatorTitle } from "./operator-icons.js";
 import { Cells } from "./primitives.js";
@@ -62,6 +64,7 @@ import {
   computeCommsLayout,
   computeFleetWindow,
   filterMessagesForAgent,
+  fleetIndexForNumber,
   moveFleetSelection,
 } from "./agents-comms-layout.js";
 
@@ -204,6 +207,13 @@ export function AgentsCommsScreen({
   const [messages, setMessages] = useState<readonly CommsMessage[]>([]);
   const [focusId, setFocusId] = useState<string | null>(null);
   const [selected, setSelected] = useState(0);
+  // Live settings: roster ordering + the optional leader chord (read via the
+  // shared store hook so a change re-renders without run.tsx plumbing).
+  const settings = useSettings();
+  const rosterSort = settings.rosterSort;
+  const leaderKey = settings.leaderKey;
+  // One-shot leader ("prefix") arming, consumed by the next key.
+  const prefixArmedRef = useRef(false);
   // A repaint pulse so relative ages tick on the refresh cadence. Only the
   // setter is read — the value itself is never rendered.
   const [, setTick] = useState(0);
@@ -251,7 +261,7 @@ export function AgentsCommsScreen({
 
   const now = clock();
 
-  const fleet = useMemo(() => buildCommsFleet(agents, telemetry), [agents, telemetry]);
+  const fleet = useMemo(() => buildCommsFleet(agents, telemetry, rosterSort), [agents, telemetry, rosterSort]);
 
   // A stable id → display name resolver for the stream and the edge summary.
   // "Main" and the broadcast sentinel pass through; a known agent id resolves to
@@ -305,10 +315,46 @@ export function AgentsCommsScreen({
     [fleet],
   );
 
+  const jumpToAgent = (n: number) => {
+    const index = fleetIndexForNumber(fleet.length, n);
+    if (index >= 0) selectRow(index);
+  };
+
   useKeyboard((key) => {
     // Ctrl+C always exits — never trap the operator.
     if (key.ctrl && key.name === "c") {
       onExit();
+      return;
+    }
+    // Optional leader (prefix) chord: arms a one-shot prefix so the next key is
+    // a leader action. Off by default; placed after the Ctrl+C guard so exit is
+    // never trapped.
+    if (leaderKey !== "off" && !prefixArmedRef.current && keyMatchesChord(key, leaderKey)) {
+      prefixArmedRef.current = true;
+      return;
+    }
+    if (prefixArmedRef.current) {
+      prefixArmedRef.current = false;
+      if (!key.ctrl && !key.meta && typeof key.sequence === "string" && /^[1-9]$/.test(key.sequence)) {
+        jumpToAgent(Number(key.sequence));
+        return;
+      }
+      if (!key.ctrl && !key.meta && (key.sequence === "n" || key.sequence === "N")) {
+        setSelected((current) => moveFleetSelection(fleet.length, current, 1));
+        return;
+      }
+      if (!key.ctrl && !key.meta && (key.sequence === "p" || key.sequence === "P")) {
+        setSelected((current) => moveFleetSelection(fleet.length, current, -1));
+        return;
+      }
+      // Not a leader action: the prefix is spent and the key falls through to
+      // normal handling below (Esc/Enter/arrows are never swallowed by it).
+    }
+    // Number keys 1-9 focus the N-th agent in the current ordering directly —
+    // always available, no leader required. Reuses the existing focus/select
+    // handler (`selectRow`), exactly as Enter and a click do.
+    if (!key.ctrl && !key.meta && typeof key.sequence === "string" && /^[1-9]$/.test(key.sequence)) {
+      jumpToAgent(Number(key.sequence));
       return;
     }
     if (key.name === "escape") {

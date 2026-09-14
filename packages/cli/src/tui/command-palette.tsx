@@ -9,7 +9,17 @@ import { getOverlayBodyRows, getOverlayLayout } from "./shell-geometry.js";
 import { OverlayFrame, RailBar } from "./shell-frame.js";
 import { useSurfaceDimensions } from "./dialog-surface.js";
 import type { ShellNav } from "./shell-nav.js";
+import { rankFuzzy } from "./fuzzy-match.js";
+import { SLASH_COMMANDS } from "./slash-commands.js";
+import { KEYBINDINGS } from "./keybindings.js";
 
+/**
+ * What a palette row represents. `"command"` is a navigation/action command
+ * (the historical entries); `"slash"` is a `/…` slash command searchable by
+ * name and description; `"shortcut"` is a keybinding, shown with its chord and
+ * treated as informational (selecting it just closes the palette).
+ */
+export type PaletteKind = "command" | "slash" | "shortcut";
 
 export interface PaletteCommand {
   id: string;
@@ -18,7 +28,52 @@ export interface PaletteCommand {
   description: string;
   keybind?: string;
   suggested?: boolean;
+  /** Defaults to "command" when absent. */
+  kind?: PaletteKind;
   action: () => void;
+}
+
+/** Cap on ranked results per keystroke, so a merged list stays fast. */
+const PALETTE_RESULT_LIMIT = 60;
+
+/** The searchable haystack for one command: title first (so a prefix match on
+ *  the title wins), then chord, category and description. */
+function paletteHaystack(command: PaletteCommand): string {
+  return `${command.title} ${command.keybind ?? ""} ${command.category} ${command.description}`;
+}
+
+/**
+ * The slash commands as palette rows, so `/comms`, `/hackstore`, … are findable
+ * by name and description. Selecting one runs `onRun` with its bare name (when
+ * a runner is wired by the host); with no runner it is informational and simply
+ * closes, matching how the palette dispatches (`action()`).
+ */
+export function slashPaletteCommands(onRun?: (name: string) => void): PaletteCommand[] {
+  return SLASH_COMMANDS.map((cmd) => ({
+    id: `slash-${cmd.name}`,
+    title: `/${cmd.name}`,
+    category: cmd.category,
+    description: cmd.description,
+    kind: "slash" as const,
+    action: () => onRun?.(cmd.name),
+  }));
+}
+
+/**
+ * The keybindings as palette rows, each carrying its formatted chord, so a user
+ * can search "sidebar" and see the shortcut. Informational — selecting one just
+ * closes the palette (a chord cannot be synthesised from here).
+ */
+export function keybindingPaletteCommands(): PaletteCommand[] {
+  return KEYBINDINGS.map((binding) => ({
+    id: `kb-${binding.id}`,
+    title: binding.description,
+    category: binding.category,
+    description: binding.keys,
+    keybind: binding.keys,
+    kind: "shortcut" as const,
+    action: () => {},
+  }));
 }
 
 export function createShellCommands(shell?: ShellNav): PaletteCommand[] {
@@ -190,21 +245,52 @@ export function createShellCommands(shell?: ShellNav): PaletteCommand[] {
   ];
 }
 
+/**
+ * Filter + rank commands against a query with the fuzzy subsequence scorer:
+ * typing "oa" finds "Open agents", and prefix > word-boundary > scattered
+ * matches rank in that order. An empty query returns the input unchanged (the
+ * caller's curation/order is preserved). Bounded so a merged multi-source list
+ * stays fast on every keystroke.
+ */
 export function filterCommands(commands: PaletteCommand[], query: string): PaletteCommand[] {
-  const q = query.trim().toLowerCase();
+  const q = query.trim();
   if (!q) return commands;
-  return commands.filter((command) => `${command.title} ${command.category} ${command.description}`.toLowerCase().includes(q));
+  return rankFuzzy(commands, q, paletteHaystack, PALETTE_RESULT_LIMIT).map((ranked) => ranked.item);
 }
 
-export function usePaletteController(commands: PaletteCommand[]) {
+/** Extra searchable sources to merge into the palette. */
+export interface PaletteSources {
+  /** Include the `/…` slash commands (default true). */
+  includeSlash?: boolean;
+  /** Include the keybindings as informational chord rows (default true). */
+  includeShortcuts?: boolean;
+  /** Runs a chosen slash command by its bare name; omit for informational-only. */
+  onRunSlash?: (name: string) => void;
+}
+
+export function usePaletteController(commands: PaletteCommand[], sources: PaletteSources = {}) {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [paletteQuery, setPaletteQuery] = useState("");
   const [paletteSelected, setPaletteSelected] = useState(0);
 
+  const { includeSlash = true, includeShortcuts = true, onRunSlash } = sources;
+
+  // The full searchable list: the caller's commands plus the merged sources.
+  // Slash/keybinding rows are never `suggested`, so the empty-query view (which
+  // shows only suggested commands) is unchanged — they surface only on typing.
+  const mergedCommands = useMemo(
+    () => [
+      ...commands,
+      ...(includeSlash ? slashPaletteCommands(onRunSlash) : []),
+      ...(includeShortcuts ? keybindingPaletteCommands() : []),
+    ],
+    [commands, includeSlash, includeShortcuts, onRunSlash],
+  );
+
   const filteredPalette = useMemo(() => {
-    const base = paletteQuery.trim() ? commands : commands.filter((command) => command.suggested);
+    const base = paletteQuery.trim() ? mergedCommands : mergedCommands.filter((command) => command.suggested);
     return filterCommands(base, paletteQuery);
-  }, [commands, paletteQuery]);
+  }, [mergedCommands, paletteQuery]);
 
   const handlePaletteKey = (key: { ctrl?: boolean; meta?: boolean; name?: string; sequence?: string }): boolean => {
     if (key.ctrl && (key.name === "p" || key.name === "k")) {
@@ -313,6 +399,15 @@ export function PaletteOverlay({
         </box>
         {commands.slice(0, visibleCommands).map((command, index) => {
           const active = index === selected;
+          // The right-hand meta shows each row's kind and, for a keybinding, its
+          // chord: a shortcut shows "shortcut · <chord>", a slash shows "slash",
+          // and a plain command keeps its historical keybind-or-category.
+          const metaText =
+            command.kind === "shortcut"
+              ? (command.keybind ? `shortcut · ${command.keybind}` : "shortcut")
+              : command.kind === "slash"
+                ? "slash"
+                : (command.keybind ?? command.category);
           return (
             <box key={command.id} flexDirection="row" width="100%" minWidth={0}>
               <RailBar tone={active ? theme.PRIMARY : theme.BORDER} />
@@ -323,7 +418,7 @@ export function PaletteOverlay({
                   </box>
                   {commandMetaWidth > 0 ? (
                     <box width={commandMetaWidth} flexShrink={0} minWidth={0} alignItems="flex-end">
-                      <text fg={theme.MUTED}>{fitTuiText(command.keybind ?? command.category, commandMetaWidth)}</text>
+                      <text fg={theme.MUTED}>{fitTuiText(metaText, commandMetaWidth)}</text>
                     </box>
                   ) : null}
                 </box>

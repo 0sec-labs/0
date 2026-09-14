@@ -35,6 +35,8 @@ import { eventBus, peekInbox, sendOperatorMessage, type MessagingRuntime } from 
 
 import { useTheme, type Theme } from "./theme-context.js";
 import { useSymbols } from "./symbol-context.js";
+import { useSettings } from "./settings-store.js";
+import { keyMatchesChord } from "./keybindings.js";
 import { useDialogSurface, useSurfaceDimensions } from "./dialog-surface.js";
 import { operatorIcon, operatorTitle } from "./operator-icons.js";
 import { Cells } from "./primitives.js";
@@ -53,6 +55,7 @@ import {
   computeHerdFocusLayout,
   computeHerdLayout,
   filterHerdPeers,
+  nthPeerRowIndex,
   focusHeaderLines,
   focusScrollPosition,
   herdComposerFooterHint,
@@ -326,11 +329,22 @@ export function HerdScreen({
     [cwd, mailboxHome, parentScanId, scoped],
   );
 
+  // Live settings from the process-wide store: the roster ordering and the
+  // optional leader chord. Read via the shared hook (like chat-screen) so the
+  // screen re-renders when the operator changes them — no run.tsx plumbing.
+  const settings = useSettings();
+  const rosterSort = settings.rosterSort;
+  const leaderKey = settings.leaderKey;
+
   const [tick, setTick] = useState(0);
   const [now, setNow] = useState(() => clock());
   const [peers, setPeers] = useState<HerdPeer[]>(() => readRoster?.(clock()) ?? []);
   const [selected, setSelected] = useState(0);
   const selectedRef = useRef(0);
+  // One-shot leader ("prefix") arming: set true when the leader chord is
+  // pressed, consumed by the very next key. A ref so the handler reads the
+  // current value without a re-render race.
+  const prefixArmedRef = useRef(false);
   const applySelected = (next: number) => {
     selectedRef.current = next;
     setSelected(next);
@@ -548,7 +562,7 @@ export function HerdScreen({
     () => filterHerdPeers(mergedPeers, searchQuery),
     [mergedPeers, searchQuery],
   );
-  const rows = useMemo(() => buildHerdRows(filteredPeers, now), [filteredPeers, now]);
+  const rows = useMemo(() => buildHerdRows(filteredPeers, now, undefined, rosterSort), [filteredPeers, now, rosterSort]);
   const cursor = clampHerdSelection(rows, selected);
   const activeRow = cursor >= 0 ? rows[cursor] : undefined;
   const activePeer = activeRow?.kind === "peer" ? activeRow.peer : undefined;
@@ -624,7 +638,7 @@ export function HerdScreen({
 
   const currentRows = () => searchQueryRef.current === searchQuery
     ? rows
-    : buildHerdRows(filterHerdPeers(mergedPeers, searchQueryRef.current), now);
+    : buildHerdRows(filterHerdPeers(mergedPeers, searchQueryRef.current), now, undefined, rosterSort);
   const currentPeer = () => {
     const visible = currentRows();
     const row = visible[clampHerdSelection(visible, selectedRef.current)];
@@ -636,6 +650,22 @@ export function HerdScreen({
     const visible = currentRows();
     const next = moveHerdSelection(visible, clampHerdSelection(visible, selectedRef.current), delta);
     if (next >= 0) applySelected(next);
+  };
+
+  /**
+   * Jump the highlight straight to the N-th agent (1-based) in the current
+   * roster ordering, skipping headings. Reuses the plain select handler
+   * (`applySelected`) — it highlights the peer exactly as an arrow or a click
+   * would, and never drills into focus mode (that stays Enter's job). A no-op
+   * when N is out of range, so an over-count never moves or clears the cursor.
+   */
+  const jumpToPeer = (n: number) => {
+    const visible = currentRows();
+    const rowIndex = nthPeerRowIndex(visible, n);
+    if (rowIndex >= 0) {
+      setNotice(null);
+      applySelected(rowIndex);
+    }
   };
 
   /**
@@ -799,6 +829,39 @@ export function HerdScreen({
     }
 
     // ── Navigation mode ──
+    // Optional leader (prefix) chord. Pressing it arms a one-shot prefix so the
+    // NEXT key is a leader action; it is off by default. Placed AFTER the
+    // Ctrl+C guard at the top of the handler, so quitting is never trapped.
+    if (leaderKey !== "off" && !prefixArmedRef.current && keyMatchesChord(key, leaderKey)) {
+      prefixArmedRef.current = true;
+      setNotice({ text: "prefix — 1-9 focus agent · n/p step", tone: "ok" });
+      return;
+    }
+    if (prefixArmedRef.current) {
+      prefixArmedRef.current = false;
+      setNotice(null);
+      if (!key.ctrl && !key.meta && typeof key.sequence === "string" && /^[1-9]$/.test(key.sequence)) {
+        jumpToPeer(Number(key.sequence));
+        return;
+      }
+      if (!key.ctrl && !key.meta && (key.sequence === "n" || key.sequence === "N")) {
+        move(1);
+        return;
+      }
+      if (!key.ctrl && !key.meta && (key.sequence === "p" || key.sequence === "P")) {
+        move(-1);
+        return;
+      }
+      // Not a leader action: the prefix is spent and this key falls through to
+      // normal handling below, so Esc/Enter/arrows are never swallowed by it.
+    }
+    // Number keys 1-9 jump straight to the N-th agent in the current ordering —
+    // always available, no leader required. Digits are otherwise unbound in the
+    // roster, so this steals nothing from existing keys.
+    if (!key.ctrl && !key.meta && typeof key.sequence === "string" && /^[1-9]$/.test(key.sequence)) {
+      jumpToPeer(Number(key.sequence));
+      return;
+    }
     if (key.name === "escape") {
       onBack();
       return;

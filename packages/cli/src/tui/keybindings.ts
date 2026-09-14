@@ -470,6 +470,23 @@ export function chordFromKey(key: KeyLike): Chord | null {
 }
 
 /**
+ * Whether a live keypress matches a chord string ("ctrl+a", "Ctrl+Space", …).
+ * Pure and total: an unparseable chord, or a keypress carrying no name, never
+ * matches (returns `false`) rather than throwing. Both sides collapse to the
+ * canonical {@link formatChord} text, so spelling/case/alias differences do not
+ * matter. Used by the roster views to detect the optional `leaderKey` prefix
+ * chord without re-deriving the modifier logic.
+ */
+export function keyMatchesChord(key: KeyLike, chord: unknown): boolean {
+  if (typeof chord !== "string" || chord.length === 0) return false;
+  const parsed = parseChord(chord);
+  if (!parsed) return false;
+  const pressed = chordFromKey(key);
+  if (!pressed) return false;
+  return formatChord(pressed) === formatChord(parsed);
+}
+
+/**
  * Whether a chord may be *assigned* to a rebindable action. A chord must carry
  * at least one of Ctrl / Meta / Option so it cannot collide with plain typing
  * (the composer's catch-all appends any un-modified printable sequence), and it
