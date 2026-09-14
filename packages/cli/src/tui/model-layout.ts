@@ -724,7 +724,31 @@ export interface ModelDialogLayoutInput {
   inDialog?: boolean;
   /** Override the rows reserved for the host frame inside a dialog panel. */
   hostChromeRows?: number;
+  /**
+   * How many meta lines the caller actually wants to show above the list — the
+   * focus/target line, the single-model policy line, the agent roster and the
+   * curated/all line, already wrapped to `contentWidth`. The layout hands out
+   * as many rows as height allows without starving the picker; when omitted it
+   * falls back to the historical two-row budget.
+   */
+  metaLineCount?: number;
 }
+
+/**
+ * The cells every body row may occupy, from the surface box. Pure and stable —
+ * it depends only on width and whether we are inside a dialog panel, never on
+ * how many meta or body rows there are — so a caller can size its wrapped meta
+ * content with this *before* asking `computeModelDialogLayout` how many of those
+ * rows fit, and the two are guaranteed to agree.
+ */
+export function dialogContentWidth(width: number, inDialog = false): number {
+  return Math.max(0, cells(width) - (inDialog ? 0 : 4));
+}
+
+/** The most meta rows the dialog will ever spend, however tall the surface. */
+const MAX_META_ROWS = 8;
+/** Rows the picker body always keeps before any meta line is affordable. */
+const META_BODY_FLOOR = 6;
 
 export interface ModelDialogLayout {
   /** Cells every row of the body may occupy. */
@@ -765,12 +789,13 @@ export function computeModelDialogLayout({
   totalRows,
   inDialog = false,
   hostChromeRows,
+  metaLineCount,
 }: ModelDialogLayoutInput): ModelDialogLayout {
   const surfaceWidth = cells(width);
   const surfaceHeight = cells(height);
   // Inside a dialog the panel already paid for its border and padding; on a
   // bare terminal the shell's own horizontal padding still has to come off.
-  const contentWidth = Math.max(0, surfaceWidth - (inDialog ? 0 : 4));
+  const contentWidth = dialogContentWidth(surfaceWidth, inDialog);
   const chrome = inDialog
     ? cells(hostChromeRows ?? MODEL_DIALOG_HOST_CHROME_ROWS)
     : shellChromeRows(surfaceWidth);
@@ -778,7 +803,15 @@ export function computeModelDialogLayout({
 
   const titleRows = available >= 5 ? 1 : 0;
   const statusRows = available >= 4 ? 1 : 0;
-  const metaRows = available >= 10 ? 2 : available >= 8 ? 1 : 0;
+  // Meta rows (focus line, single-model policy, agent roster, curated/all) are
+  // handed out last so a short surface degrades to "just the list", never to
+  // "chrome with no list". A caller that wants more than the historical two
+  // rows says how many lines it has; the body keeps `META_BODY_FLOOR` rows
+  // whatever the demand, and nothing below eight rows tall shows meta at all.
+  const desiredMeta = cells(metaLineCount ?? 2);
+  const metaCeiling = available >= 10 ? MAX_META_ROWS : available >= 8 ? 1 : 0;
+  const metaBudget = Math.max(0, available - titleRows - statusRows - META_BODY_FLOOR);
+  const metaRows = Math.min(desiredMeta, metaCeiling, metaBudget);
   const bodyRows = Math.max(0, available - titleRows - statusRows - metaRows);
 
   const panelFor = (rows: number): DialogPanel =>
@@ -818,6 +851,11 @@ export interface ModelDialogTitleInput {
   providerId?: string;
   /** BYOK only: whether the full synced superset is on show. */
   showAll?: boolean;
+  /**
+   * BYOK only: whether 0sec Cloud routes are being folded in as an extra group.
+   * Reflected in the title so an operator can see the list is not BYOK-only.
+   */
+  cloudMerged?: boolean;
 }
 
 /**
@@ -828,12 +866,15 @@ export interface ModelDialogTitleInput {
  * exactly like every other one, and the label is always beside the glyph —
  * there is no icon font behind these code points.
  */
-export function modelDialogTitle({ scope, providerId, showAll = false }: ModelDialogTitleInput): string {
+export function modelDialogTitle({ scope, providerId, showAll = false, cloudMerged = false }: ModelDialogTitleInput): string {
   const head = `${operatorIcon("models")} ${operatorTitle("models")}`;
   if (scope === "hosted") return `${head} · Hosted catalog`;
   if (scope === "unknown") return `${head} · no connection`;
   const connection = sanitizeTuiText(providerId ?? "");
-  return `${head} · ${connection.length > 0 ? connection : "BYOK"} · ${showAll ? "all synced" : "curated"}`;
+  const source = cloudMerged
+    ? `${connection.length > 0 ? connection : "BYOK"} + 0sec Cloud`
+    : connection.length > 0 ? connection : "BYOK";
+  return `${head} · ${source} · ${showAll ? "all synced" : "curated"}`;
 }
 
 /**
@@ -853,6 +894,12 @@ export interface ModelDialogHintInput {
   /** Null when the parent model is the target; otherwise the role being set. */
   role?: string | null;
   hasFilter?: boolean;
+  /**
+   * Whether Ctrl+R reloads a live hosted catalogue. True on the hosted lane,
+   * and on the BYOK lane while 0sec Cloud routes are merged (a dark cloud is
+   * retried without disturbing the BYOK list). Defaults to `scope === "hosted"`.
+   */
+  canReload?: boolean;
 }
 
 /**
@@ -862,14 +909,16 @@ export interface ModelDialogHintInput {
  * each is named only where it works; `Ctrl+Backspace` is named only while a
  * role is targeted, because that is the only state in which it does anything.
  */
-export function modelDialogHint({ scope, role = null, hasFilter = false }: ModelDialogHintInput): string {
+export function modelDialogHint({ scope, role = null, hasFilter = false, canReload }: ModelDialogHintInput): string {
+  const reload = canReload ?? scope === "hosted";
   return [
     "↑↓ model",
     "enter stage",
     "ctrl+←/→ target",
     "ctrl+s single",
     role !== null ? "ctrl+backspace inherit" : undefined,
-    scope === "hosted" ? "ctrl+r reload" : scope === "byok" ? "tab curated/all" : undefined,
+    scope === "byok" ? "tab curated/all" : undefined,
+    reload ? "ctrl+r reload" : undefined,
     hasFilter ? "ctrl+u clear" : "type to filter",
     hasFilter ? "esc clear" : "esc back",
   ]
@@ -890,12 +939,85 @@ export function modelTargetLine(
   activeModel: string | undefined,
   assigned: boolean,
   symbols: SymbolTable = DEFAULT_SYMBOLS,
+  singleModel = false,
 ): string {
-  const target = role === null ? "parent model" : sanitizeTuiText(role);
+  const target = role === null ? "parent (base) model" : `${sanitizeTuiText(role)} agent`;
   const model = sanitizeTuiText(activeModel ?? "");
   const value = model.length > 0 ? model : "not selected";
   const inherits = role !== null && !assigned ? " (inherits the parent)" : "";
-  return `${symbols.fieldModel} Target: ${target} → ${value}${inherits}`;
+  // When single-model is on, a role pick is staged but the runtime ignores it
+  // (llm-api pins every role to the base model), so the focus line says so
+  // outright rather than letting Enter look like it took effect.
+  const inert = singleModel && role !== null ? " · single-model on: this pick is inert" : "";
+  return `${symbols.fieldModel} Selecting for ${target} → ${value}${inherits}${inert}`;
+}
+
+/**
+ * The at-a-glance roster of every assignment target — the parent (base) model
+ * plus each subagent role — and the model each resolves to today, so an
+ * operator sees the whole per-agent mapping without cycling the target blindly.
+ *
+ * One token per target, `role → model`, with a role that has no assignment of
+ * its own reading `→ inherits parent` rather than borrowing the parent's id (a
+ * shown id would read as an assignment that was never made). The target
+ * currently in focus is bracketed so the roster doubles as a "you are here".
+ *
+ * Single-model mode is stated in the header and every role token is marked
+ * inert, because in that mode the runtime pins every role to the base model
+ * and an unmarked `attack → opus` would read as a live override it is not.
+ *
+ * Wrapped to the pane, tone-tagged for the component: the header warns while
+ * single-model is on, and reads muted otherwise.
+ */
+export interface AgentRosterInput {
+  /** Every target in display order: `null` (parent) first, then each role. */
+  roles: readonly (string | null)[];
+  /** The parent/base model the session runs, when there is one. */
+  parentModel?: string;
+  /** Per-role assignments staged for the next audit. */
+  agentModels?: Readonly<Record<string, string>>;
+  /** The target currently in focus, bracketed in the roster. */
+  activeRole: string | null;
+  /** Whether single-model mode is staged, which makes role picks inert. */
+  singleModel?: boolean;
+}
+
+/** One `role → model` token for the roster; `focused` brackets it. */
+export function agentRosterToken(
+  role: string | null,
+  parentModel: string | undefined,
+  agentModels: Readonly<Record<string, string>>,
+  focused: boolean,
+): string {
+  let token: string;
+  if (role === null) {
+    const model = sanitizeTuiText(parentModel ?? "");
+    token = `parent → ${model.length > 0 ? model : "not selected"}`;
+  } else {
+    const assigned = agentModels[role];
+    token = assigned !== undefined
+      ? `${sanitizeTuiText(role)} → ${sanitizeTuiText(assigned)}`
+      : `${sanitizeTuiText(role)} → inherits parent`;
+  }
+  return focused ? `[${token}]` : token;
+}
+
+export function agentRosterLines(
+  { roles, parentModel, agentModels = {}, activeRole, singleModel = false }: AgentRosterInput,
+  width: number,
+  _symbols: SymbolTable = DEFAULT_SYMBOLS,
+): ModelDetailLine[] {
+  const limit = cells(width);
+  if (limit <= 0 || roles.length === 0) return [];
+  const tokens = roles.map((role) => agentRosterToken(role, parentModel, agentModels, role === activeRole));
+  const header = singleModel
+    ? "Agents (single-model on — role picks inert): "
+    : "Agents: ";
+  const lines: ModelDetailLine[] = [];
+  wrapCells(`${header}${tokens.join("   ")}`, limit).forEach((text, index) => {
+    lines.push({ text, tone: index === 0 && singleModel ? "warn" : "muted" });
+  });
+  return lines;
 }
 
 /** The single-model policy line, stating the policy and how to change it. */

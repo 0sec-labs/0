@@ -115,12 +115,14 @@ import {
   moveDialogSelection,
 } from "./dialog-select-layout.js";
 import {
+  agentRosterLines,
   buildContextWindowIndex,
   clipModelDetailLines,
   computeModelDialogLayout,
   contextWindowFor,
   configuredProviderLabels,
   credentialSummary,
+  dialogContentWidth,
   hostedDetailLines,
   isFilterKey,
   modelDetailLines,
@@ -150,7 +152,7 @@ import {
   loadHostedModelCatalog,
   type HostedCatalogSnapshot,
 } from "./model-catalog-sync.js";
-import { providerStates } from "./provider-status.js";
+import { cloudConfigured, providerStates } from "./provider-status.js";
 import { sanitizeTuiText } from "./text.js";
 
 /** How many rows page-up and page-down move. */
@@ -268,11 +270,26 @@ export function ModelScreen({
   const { width, height } = useSurfaceDimensions();
   const inDialog = useDialogSurface();
 
-  // A hosted runtime is the only thing that switches catalogues. Everything
-  // else — a named BYOK provider, or a router that did not say — keeps the
-  // BYOK catalogue this screen has always drawn.
+  // A hosted *runtime* (`providerId === "hosted"`) still gets the pure hosted
+  // catalogue with no BYOK fallback — that lane is unchanged. What is new is the
+  // BYOK lane: when 0sec Cloud credentials exist, the account can reach every
+  // route the cloud lists, so those are folded in as an extra "0sec Cloud"
+  // group alongside the BYOK rows rather than being hidden until the runtime
+  // itself is hosted. The old "two catalogues, never mixed" rule held because a
+  // hosted id's numbers must never be borrowed from a public Models.dev row of
+  // the same name; that invariant is intact here — the cloud rows carry the
+  // service's OWN catalogue metadata (`buildHostedModelCatalog`), never a BYOK
+  // number — this only lets both authoritative catalogues appear at once.
   const isHosted = providerId === HOSTED_PROVIDER_ID;
   const isByok = !isHosted;
+  // 0sec Cloud credentials present → the BYOK lane merges the cloud catalogue.
+  // Read once per mount for the same reason provider credentials are: they are
+  // process/file-level and cannot change under a screen with no way to set them.
+  const cloudCreds = useMemo(() => cloudConfigured(env ?? process.env), [env]);
+  const mergeCloud = isByok && cloudCreds;
+  // Whether the live hosted catalogue must be read at all: the pure hosted
+  // runtime always, and the BYOK lane only when cloud creds exist to merge.
+  const loadHosted = isHosted || mergeCloud;
   const scope: ModelCatalogScope = isHosted ? "hosted" : "byok";
   // A control exists only when its callback does. These two flags gate the
   // key, the row and the footer text together, so a binding is never named
@@ -329,40 +346,54 @@ export function ModelScreen({
   useEffect(() => {
     let alive = true;
     setRefreshing(true);
-    if (isHosted) {
-      void loadHostedModelCatalog({ env })
-        .then((snapshot) => {
-          // Project before publishing: a malformed catalogue (an id-less or
-          // duplicated row) throws here and stays an error rather than being
-          // half-drawn.
-          buildHostedModelCatalog(snapshot.models);
-          if (alive) setHostedState({ source, snapshot, error: null });
-        })
-        .catch((error: unknown) => {
-          if (alive) {
-            setHostedState({
-              source,
-              snapshot: null,
-              error: sanitizeTuiText(
-                error instanceof Error ? error.message : "Hosted catalog failed",
-              ),
-            });
-          }
-        })
-        .finally(() => {
-          if (alive) setRefreshing(false);
-        });
-    } else {
-      void syncModelCatalog().then((updated) => {
-        if (!alive) return;
-        if (updated) setCatalogNonce((n) => n + 1);
-        setRefreshing(false);
-      });
+    const tasks: Promise<unknown>[] = [];
+    // Hosted read: the pure hosted runtime, or the BYOK lane merging cloud
+    // routes. A failure here becomes a status line, never a blanked picker —
+    // when it is a merge the BYOK list still stands (see `connectionMessage`,
+    // which only clears the list for the pure hosted lane).
+    if (loadHosted) {
+      tasks.push(
+        loadHostedModelCatalog({ env })
+          .then((snapshot) => {
+            // Project before publishing: a malformed catalogue (an id-less or
+            // duplicated row) throws here and stays an error rather than being
+            // half-drawn.
+            buildHostedModelCatalog(snapshot.models);
+            if (alive) setHostedState({ source, snapshot, error: null });
+          })
+          .catch((error: unknown) => {
+            // CloudNetworkError / CloudUnauthorizedError (and any other) all mean
+            // the same thing to the picker: cloud is unreachable right now. The
+            // message is shown; no cached, offline or BYOK row is ever passed off
+            // as a hosted route.
+            if (alive) {
+              setHostedState({
+                source,
+                snapshot: null,
+                error: sanitizeTuiText(
+                  error instanceof Error ? error.message : "Hosted catalog failed",
+                ),
+              });
+            }
+          }),
+      );
     }
+    // BYOK sync: refresh the Models.dev cache for next open. Runs alongside the
+    // hosted read in merge mode, so the list is both cloud-aware and up to date.
+    if (isByok) {
+      tasks.push(
+        syncModelCatalog().then((updated) => {
+          if (alive && updated) setCatalogNonce((n) => n + 1);
+        }),
+      );
+    }
+    void Promise.allSettled(tasks).finally(() => {
+      if (alive) setRefreshing(false);
+    });
     return () => {
       alive = false;
     };
-  }, [source, isHosted, env]);
+  }, [source, isHosted, isByok, loadHosted, env]);
 
   const hostedCatalog = useMemo(
     () => (hostedSnapshot ? buildHostedModelCatalog(hostedSnapshot.models) : []),
@@ -408,8 +439,10 @@ export function ModelScreen({
   );
   // The hosted list has no provider-credential story to group by — the account
   // holds the keys — so it groups by upstream vendor and filters over the
-  // fields the service actually published.
-  const hostedItems = (query: string): DialogItem[] => {
+  // fields the service actually published. The `prefix` names the group: the
+  // pure hosted lane calls it "Hosted", the BYOK merge calls it "0sec Cloud" so
+  // its routes read as one extra group beside the credential-grouped BYOK rows.
+  const hostedItems = (query: string, prefix: string): DialogItem[] => {
     const terms = query.toLowerCase().trim().split(/\s+/).filter(Boolean);
     return hostedCatalog
       .filter((model) =>
@@ -423,7 +456,7 @@ export function ModelScreen({
         id: model.id,
         label: model.id,
         meta: model.price,
-        category: `Hosted · ${model.provider}`,
+        category: `${prefix} · ${model.provider}`,
         current: model.id === activeModel,
       }));
   };
@@ -432,7 +465,15 @@ export function ModelScreen({
     [modelRows],
   );
   const byokItems = useMemo(() => modelDialogItems(modelOnlyRows), [modelOnlyRows]);
-  const items = isHosted ? hostedItems(filter) : byokItems;
+  // Pure hosted → the hosted catalogue only. BYOK → the credential-grouped BYOK
+  // rows, with the 0sec Cloud group appended when cloud creds exist. Appending
+  // (rather than prepending) leaves the operator's chosen BYOK ordering untouched
+  // and reads as "…and these are also reachable through 0sec Cloud".
+  const items = isHosted
+    ? hostedItems(filter, "Hosted")
+    : mergeCloud
+      ? [...byokItems, ...hostedItems(filter, "0sec Cloud")]
+      : byokItems;
   const hostedById = useMemo(
     () => new Map(hostedCatalog.map((model) => [model.id, model])),
     [hostedCatalog],
@@ -475,9 +516,53 @@ export function ModelScreen({
   // Every width and row count comes off the layout module, from the surface
   // box the dialog handed down — never from `useTerminalDimensions` and never
   // computed here (PRIMITIVES.md: Yoga shrinks siblings rather than clipping).
-  const layout = computeModelDialogLayout({ width, height, totalRows, inDialog });
+  // ── Meta lines (above the list), in priority order:
+  //   1. the focus line — which target the next Enter assigns, and its model;
+  //   2. the single-model policy — stated loudly when on, because it makes every
+  //      role pick inert;
+  //   3. the agent roster — every target and the model it resolves to, so the
+  //      whole per-agent mapping is visible without cycling the target blindly;
+  //   4. the curated/all slice (BYOK only).
+  // The layout hands out as many rows as height allows (never starving the
+  // list), and the slice below keeps the highest-priority lines. Each line that
+  // names a key is present only when that key is bound. Built here, before the
+  // layout, so the layout can size the list against the real demand — the width
+  // it wraps to (`dialogContentWidth`) is the same the layout will report.
+  const metaContentWidth = dialogContentWidth(width, inDialog);
+  const byokVisible = modelRows.reduce((n, r) => (r.kind === "model" ? n + 1 : n), 0);
+  const metaLines: { text: string; fg: string }[] = [];
+  if (rolesLive) {
+    metaLines.push({
+      text: `${modelTargetLine(role, activeModel, role !== null && agentModels?.[role] !== undefined, symbols, singleModel)} · Ctrl+←/→ target · Enter assign`,
+      fg: theme.ACCENT,
+    });
+  }
+  if (singleModelLive) {
+    metaLines.push({
+      text: `${singleModelLine(singleModel)} · Ctrl+S toggle`,
+      fg: singleModel ? theme.WARNING : theme.MUTED,
+    });
+  }
+  if (rolesLive) {
+    for (const line of agentRosterLines(
+      { roles, parentModel: currentModel, agentModels, activeRole: role, singleModel },
+      metaContentWidth,
+      symbols,
+    )) {
+      metaLines.push({ text: line.text, fg: line.tone === "warn" ? theme.WARNING : theme.MUTED });
+    }
+  }
+  if (isByok) {
+    metaLines.push({
+      text: `${showAll ? "All models" : "Curated models"} · ${byokVisible} of ${scopedCatalog.length} · Tab ${showAll ? "curated" : "all models"}${refreshing ? " · refreshing…" : ""}`,
+      fg: theme.ACCENT,
+    });
+  }
+
+  const layout = computeModelDialogLayout({ width, height, totalRows, inDialog, metaLineCount: metaLines.length });
   const { contentWidth, panel, stackedRows } = layout;
   const listRows = layout.bodyRows - stackedRows;
+  const visibleMetaLines = metaLines.slice(0, layout.metaRows);
 
   const mode: ModelMode = filter ? "filter" : "browse";
   // The always-on status line carries the one statement this screen can always
@@ -486,25 +571,44 @@ export function ModelScreen({
   // no heading names them, and without this line that reads as "nothing works".
   // On hosted it names the host the rows came from and how many were listed —
   // a count of rows, not a verdict on any of them.
-  const statusText = hostedError
-    ? `${symbols.warning} Hosted catalog error: ${hostedError} · Ctrl+R reload`
-    : isHosted && !hostedSnapshot
-      ? "Loading the account's hosted model catalog…"
-      : isHosted && hostedSnapshot
-        ? `${hostedSnapshot.host} · ${hostedCatalog.length} model${hostedCatalog.length === 1 ? "" : "s"} listed for this account`
-        : credentialSummary(states);
+  // In the merged BYOK lane the cloud read is additive: its outcome is reported
+  // as a suffix on the credential summary — offline, loading, or a route count —
+  // and never replaces the BYOK list, so a dark cloud degrades to "BYOK plus a
+  // note" rather than an empty picker.
+  const cloudStatus = mergeCloud
+    ? hostedError
+      ? `${symbols.warning} 0sec Cloud offline: ${hostedError} · Ctrl+R retry`
+      : hostedSnapshot
+        ? `0sec Cloud · ${hostedCatalog.length} route${hostedCatalog.length === 1 ? "" : "s"}`
+        : "0sec Cloud · loading…"
+    : null;
+  // A hosted error is only fatal on the *pure* hosted lane, where there is no
+  // other list to fall back to. In the merge it is just the cloud suffix above.
+  const hostedFatal = isHosted && hostedError !== null;
+  const statusText = isHosted
+    ? hostedError
+      ? `${symbols.warning} Hosted catalog error: ${hostedError} · Ctrl+R reload`
+      : !hostedSnapshot
+        ? "Loading the account's hosted model catalog…"
+        : `${hostedSnapshot.host} · ${hostedCatalog.length} model${hostedCatalog.length === 1 ? "" : "s"} listed for this account`
+    : cloudStatus
+      ? `${credentialSummary(states)} · ${cloudStatus}`
+      : credentialSummary(states);
   // When there is no list to draw, the reason takes the list's place. It is the
-  // whole explanation, so it is wrapped and scrolled rather than clipped.
-  const connectionMessage = hostedError
-    ? `${statusText}. No cached, offline or BYOK models are substituted for a hosted route.`
-    : isHosted && hostedSnapshot && hostedCatalog.length === 0
-      ? "The hosted service listed no models for this account. Check the connection, then Ctrl+R to reload. No fallback model will be substituted."
-      : null;
+  // whole explanation, so it is wrapped and scrolled rather than clipped. This
+  // only happens on the pure hosted lane — the merge always has the BYOK list.
+  const connectionMessage = !isHosted
+    ? null
+    : hostedError
+      ? `${statusText}. No cached, offline or BYOK models are substituted for a hosted route.`
+      : hostedSnapshot && hostedCatalog.length === 0
+        ? "The hosted service listed no models for this account. Check the connection, then Ctrl+R to reload. No fallback model will be substituted."
+        : null;
 
-  const currentItems = () => isHosted
-    ? hostedItems(filterRef.current)
-    : filterRef.current === filter && showAllRef.current === showAll
-      ? items
+  const currentItems = (): DialogItem[] => {
+    if (isHosted) return hostedItems(filterRef.current, "Hosted");
+    const byok = filterRef.current === filter && showAllRef.current === showAll
+      ? byokItems
       : modelDialogItems(buildModelRows({
         catalog: scopeModelCatalog(catalog, {
           showAll: showAllRef.current,
@@ -515,6 +619,8 @@ export function ModelScreen({
         filter: filterRef.current,
         activeModel,
       }));
+    return mergeCloud ? [...byok, ...hostedItems(filterRef.current, "0sec Cloud")] : byok;
+  };
   const highlight = (index: number) => {
     const item = currentItems()[index];
     selectedItemRef.current = item;
@@ -566,7 +672,9 @@ export function ModelScreen({
       setNotice("Single-model policy staged for the next audit; the running audit is unchanged.");
       return;
     }
-    if (isHosted && key.ctrl && key.name === "r") {
+    // Ctrl+R re-reads the live hosted catalogue — on the pure hosted lane, and
+    // in the merge to retry a dark cloud without losing the BYOK list.
+    if (loadHosted && key.ctrl && key.name === "r") {
       setReload((value) => value + 1);
       return;
     }
@@ -630,9 +738,13 @@ export function ModelScreen({
 
     const compact = pane.height < 12;
 
-    if (isHosted) {
-      const hosted = hostedById.get(item.id);
-      if (!hosted) return null;
+    // A hosted/cloud row (pure hosted lane, or a "0sec Cloud" row in the merged
+    // BYOK lane) is detailed from the service's OWN catalogue; a BYOK row falls
+    // through to the priced/synced detail below. Dispatching on membership in
+    // the hosted catalogue rather than on `isHosted` is what lets both kinds of
+    // row sit in one list and each keep its authoritative detail.
+    const hosted = hostedById.get(item.id);
+    if (hosted) {
       // Every string below is the hosted service's own report of this model.
       const details = hostedModelDetails(hosted);
       if (role !== null && rolesLive) {
@@ -715,7 +827,7 @@ export function ModelScreen({
 
   // ── Title row: glyph + label on the left, the live row count on the right.
   // Split explicitly so the two leaves can never be handed overlapping cells.
-  const titleText = modelDialogTitle({ scope, providerId, showAll: showAll || !!filter.trim() });
+  const titleText = modelDialogTitle({ scope, providerId, showAll: showAll || !!filter.trim(), cloudMerged: mergeCloud });
   const countText = modelDialogCount(items.length, refreshing);
   const countWidth = Math.min(contentWidth, textCells(countText));
   const titleWidth = Math.max(0, contentWidth - countWidth - (countWidth > 0 ? 1 : 0));
@@ -727,7 +839,7 @@ export function ModelScreen({
   // neither, and is listed explicitly rather than borrowing a line that
   // advertises a key it does not implement.
   const hint = rolesLive && singleModelLive
-    ? modelDialogHint({ scope, role, hasFilter: filter.length > 0 })
+    ? modelDialogHint({ scope, role, hasFilter: filter.length > 0, canReload: loadHosted })
     : isByok
       ? modelFooterHint(mode, filter.length > 0)
       : [
@@ -742,28 +854,6 @@ export function ModelScreen({
       ]
         .filter((part): part is string => part !== undefined)
         .join(" · ");
-
-  // The meta rows, in priority order: what the next Enter will change, then
-  // the policy that governs it, then which slice of the BYOK superset is on
-  // show. `computeModelDialogLayout` hands out 0, 1 or 2 of them, and each row
-  // that names a key is only present when that key is bound.
-  const metaLines: { text: string; fg: string }[] = [];
-  if (rolesLive) {
-    metaLines.push({
-      text: `${modelTargetLine(role, activeModel, role !== null && agentModels?.[role] !== undefined, symbols)} · Ctrl+←/→ target`,
-      fg: theme.ACCENT,
-    });
-  }
-  if (singleModelLive) {
-    metaLines.push({ text: `${singleModelLine(singleModel)} · Ctrl+S toggle`, fg: theme.MUTED });
-  }
-  if (isByok) {
-    metaLines.push({
-      text: `${showAll || filter.trim() ? "All models" : "Curated models"} · ${items.length} of ${scopedCatalog.length} · Tab ${showAll ? "curated" : "all models"}${refreshing ? " · refreshing…" : ""}`,
-      fg: theme.ACCENT,
-    });
-  }
-  const visibleMetaLines = metaLines.slice(0, layout.metaRows);
 
   // The connection/failure notice is wrapped, not clipped: it is the whole
   // explanation of why there is no list. One cell goes to the scrollbar.
@@ -852,8 +942,8 @@ export function ModelScreen({
       ) : null}
 
       {layout.statusRows > 0 && contentWidth > 0 ? (
-        <Cells width={contentWidth} fg={hostedError ? theme.ERROR : theme.MUTED}>
-          {hostedError ? statusText : notice || statusText}
+        <Cells width={contentWidth} fg={hostedFatal ? theme.ERROR : theme.MUTED}>
+          {hostedFatal ? statusText : notice || statusText}
         </Cells>
       ) : null}
     </box>

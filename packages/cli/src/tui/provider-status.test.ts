@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
-import { PROVIDERS, isProviderConfigured, providerStates, providerSupportsMethod } from "./provider-status.js";
+import { PROVIDERS, cloudConfigured, isProviderConfigured, providerStates, providerSupportsMethod } from "./provider-status.js";
 
 /** No env at all — the state of a fresh container. */
 const EMPTY: Record<string, string | undefined> = {};
@@ -210,5 +213,34 @@ describe("isProviderConfigured", () => {
     for (const state of providerStates(env)) {
       expect(isProviderConfigured(state.id, env)).toBe(state.configured);
     }
+  });
+});
+
+describe("cloudConfigured", () => {
+  // A home with no ~/.0sec/cloud.env, so only the injected env can supply a
+  // token — the real user's cloud.env can never leak into these assertions.
+  const emptyHome = mkdtempSync(join(tmpdir(), "0sec-cloud-test-"));
+
+  it("is true when 0SEC_CLOUD_TOKEN is set in env (host optional)", () => {
+    expect(cloudConfigured({ "0SEC_CLOUD_TOKEN": "tok-123" }, emptyHome)).toBe(true);
+  });
+
+  it("honours an explicit cloud host alongside the token", () => {
+    expect(
+      cloudConfigured({ "0SEC_CLOUD_TOKEN": "tok", "0SEC_CLOUD_HOST": "https://staging.example" }, emptyHome),
+    ).toBe(true);
+  });
+
+  it("is false with no token and no cloud.env on disk", () => {
+    expect(cloudConfigured({}, emptyHome)).toBe(false);
+  });
+
+  it("treats a whitespace-only token as no token", () => {
+    expect(cloudConfigured({ "0SEC_CLOUD_TOKEN": "   " }, emptyHome)).toBe(false);
+  });
+
+  it("never throws — a malformed host with no usable token is just false", () => {
+    expect(() => cloudConfigured({ "0SEC_CLOUD_HOST": "not-a-url" }, emptyHome)).not.toThrow();
+    expect(cloudConfigured({ "0SEC_CLOUD_HOST": "not-a-url" }, emptyHome)).toBe(false);
   });
 });

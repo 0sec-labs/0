@@ -2,14 +2,20 @@ import { describe, expect, it } from "vitest";
 
 import { buildModelCatalog, type CatalogModel } from "./model-catalog.js";
 import {
+  agentRosterLines,
+  agentRosterToken,
   buildModelRows,
   clipModelDetailLines,
+  computeModelDialogLayout,
   configuredProviderLabels,
   credentialLabel,
   credentialSummary,
+  dialogContentWidth,
   indexOfModel,
   isFilterKey,
   modelDetailLines,
+  modelDialogTitle,
+  modelTargetLine,
   providerGroupFor,
   type ModelRow,
 } from "./model-layout.js";
@@ -391,5 +397,104 @@ describe("hints and keys", () => {
     expect(isFilterKey("\x7f"), "delete").toBe(false);
     expect(isFilterKey("\r")).toBe(false);
     expect(isFilterKey(undefined)).toBe(false);
+  });
+});
+
+describe("the agent roster (per-role selection at a glance)", () => {
+  const ROLES = [null, "discovery", "attack", "verify", "report", "audit", "review"] as const;
+
+  it("shows every target and the model it resolves to, marking inheritance", () => {
+    const [line] = agentRosterLines(
+      { roles: ROLES, parentModel: "gpt-5", agentModels: { attack: "opus" }, activeRole: null },
+      500,
+    );
+    expect(line?.text).toContain("parent → gpt-5");
+    expect(line?.text).toContain("attack → opus");
+    // An unassigned role reads as inheriting, never as the parent's id.
+    expect(line?.text).toContain("discovery → inherits parent");
+    expect(line?.text).not.toContain("discovery → gpt-5");
+  });
+
+  it("brackets the target currently in focus", () => {
+    expect(agentRosterToken("verify", "gpt-5", {}, true)).toBe("[verify → inherits parent]");
+    expect(agentRosterToken("verify", "gpt-5", {}, false)).toBe("verify → inherits parent");
+    expect(agentRosterToken(null, "gpt-5", {}, true)).toBe("[parent → gpt-5]");
+    expect(agentRosterToken(null, undefined, {}, false)).toBe("parent → not selected");
+  });
+
+  it("warns that role picks are inert while single-model is on", () => {
+    const [header] = agentRosterLines(
+      { roles: ROLES, parentModel: "gpt-5", agentModels: { attack: "opus" }, activeRole: "attack", singleModel: true },
+      500,
+    );
+    expect(header?.text).toMatch(/single-model on/i);
+    expect(header?.tone).toBe("warn");
+  });
+
+  it("stays inside the pane it was measured for at every width", () => {
+    for (let width = 0; width <= 120; width++) {
+      for (const line of agentRosterLines(
+        { roles: ROLES, parentModel: "claude-sonnet-4", agentModels: { report: "gpt-5" }, activeRole: "report" },
+        width,
+      )) {
+        expect(line.text.length, `overflowed a ${width}-cell roster`).toBeLessThanOrEqual(width);
+      }
+    }
+  });
+
+  it("returns nothing when there is no room or no target", () => {
+    expect(agentRosterLines({ roles: ROLES, activeRole: null }, 0)).toEqual([]);
+    expect(agentRosterLines({ roles: [], activeRole: null }, 80)).toEqual([]);
+  });
+});
+
+describe("the focus / target line", () => {
+  it("names the parent target and its model", () => {
+    expect(modelTargetLine(null, "gpt-5", false)).toContain("parent");
+    expect(modelTargetLine(null, "gpt-5", false)).toContain("gpt-5");
+  });
+
+  it("says a role inherits when it has no assignment of its own", () => {
+    expect(modelTargetLine("attack", "gpt-5", false)).toContain("inherits the parent");
+    expect(modelTargetLine("attack", "opus", true)).not.toContain("inherits the parent");
+  });
+
+  it("marks the pick inert for a role while single-model is on", () => {
+    expect(modelTargetLine("attack", "opus", true, undefined, true)).toMatch(/single-model on/i);
+    // The parent target is never inert — single-model pins to it.
+    expect(modelTargetLine(null, "gpt-5", false, undefined, true)).not.toMatch(/single-model on/i);
+  });
+});
+
+describe("the dialog title", () => {
+  it("flags a merged 0sec Cloud group without hiding the BYOK connection", () => {
+    const merged = modelDialogTitle({ scope: "byok", providerId: "anthropic", cloudMerged: true });
+    expect(merged).toContain("anthropic");
+    expect(merged).toContain("0sec Cloud");
+    const plain = modelDialogTitle({ scope: "byok", providerId: "anthropic" });
+    expect(plain).not.toContain("0sec Cloud");
+  });
+});
+
+describe("the meta-row budget", () => {
+  const base = { width: 100, totalRows: 40, inDialog: true } as const;
+
+  it("agrees with dialogContentWidth on the body width", () => {
+    const layout = computeModelDialogLayout({ ...base, height: 40, metaLineCount: 5 });
+    expect(layout.contentWidth).toBe(dialogContentWidth(100, true));
+  });
+
+  it("grows meta rows to fit the roster when there is height, never past demand", () => {
+    const layout = computeModelDialogLayout({ ...base, height: 40, metaLineCount: 6 });
+    expect(layout.metaRows).toBe(6);
+  });
+
+  it("never starves the picker body below its floor, whatever the demand", () => {
+    for (let height = 0; height <= 80; height++) {
+      const layout = computeModelDialogLayout({ ...base, height, metaLineCount: 12 });
+      const available = layout.titleRows + layout.statusRows + layout.metaRows + layout.bodyRows;
+      expect(available, `overspent rows at height ${height}`).toBeLessThanOrEqual(height);
+      if (layout.metaRows > 0) expect(layout.bodyRows).toBeGreaterThanOrEqual(6);
+    }
   });
 });
