@@ -523,6 +523,128 @@ describe("startDeviceAuth pkce-loopback (OpenRouter)", () => {
   });
 });
 
+const GOOGLE = PROVIDER_DEVICE_AUTH.google as PkceLoopbackProviderConfig;
+
+describe("startDeviceAuth pkce-loopback (Google Gemini Code Assist)", () => {
+  it("uses the standard authorize params and a FORM token exchange, storing an oauth record", async () => {
+    const home = temporaryHome();
+    const env: NodeJS.ProcessEnv = {};
+    const pkce = makePkceServer();
+    const calls: Array<{ url: string; headers: Record<string, string>; body: string }> = [];
+    const fetchImpl = async (
+      url: string,
+      init: { method: string; headers: Record<string, string>; body: string },
+    ): Promise<DeviceAuthResponse> => {
+      calls.push({ url, headers: init.headers, body: init.body });
+      if (url === GOOGLE.keysUrl) {
+        return jsonResponse(200, {
+          access_token: "ya29.access",
+          refresh_token: "1//refresh",
+          expires_in: 3599,
+          token_type: "Bearer",
+        });
+      }
+      throw new Error(`unexpected url ${url}`);
+    };
+    const opened: string[] = [];
+    const updates: DeviceAuthUpdate[] = [];
+    let connected = 0;
+
+    startDeviceAuth(GOOGLE, {
+      env,
+      homeDir: home,
+      fetch: fetchImpl,
+      now: fixedNow,
+      sleep: neverSleep,
+      serverFactory: pkce.factory,
+      createPkcePair: () => ({ verifier: "ver-1", challenge: "chal-1" }),
+      openBrowser: (url) => { opened.push(url); },
+      onUpdate: (update) => updates.push(update),
+      onConnected: () => { connected += 1; },
+    });
+    await flush();
+
+    // The authorize URL carries the standard authorization-code params + state,
+    // the S256 challenge, the client id, and the loopback redirect_uri.
+    expect(opened).toHaveLength(1);
+    const authorizeUrl = new URL(opened[0]!);
+    expect(authorizeUrl.origin + authorizeUrl.pathname).toBe("https://accounts.google.com/o/oauth2/v2/auth");
+    expect(authorizeUrl.searchParams.get("response_type")).toBe("code");
+    expect(authorizeUrl.searchParams.get("access_type")).toBe("offline");
+    expect(authorizeUrl.searchParams.get("prompt")).toBe("consent");
+    expect(authorizeUrl.searchParams.get("code_challenge")).toBe("chal-1");
+    expect(authorizeUrl.searchParams.get("code_challenge_method")).toBe("S256");
+    expect(authorizeUrl.searchParams.get("client_id")).toBe(GOOGLE.clientId);
+    expect(authorizeUrl.searchParams.get("redirect_uri")).toBe(`http://localhost:${pkce.state.port}/callback`);
+    expect((authorizeUrl.searchParams.get("state") ?? "").length).toBeGreaterThan(0);
+
+    pkce.redirect({ code: "auth-code-1" });
+    await flush();
+
+    // The exchange is FORM-encoded and carries the full OAuth 2.0
+    // authorization-code grant: grant_type + code + verifier + redirect_uri +
+    // client_id + client_secret. NONE of OpenRouter's JSON-mode fields appear.
+    expect(calls).toHaveLength(1);
+    expect(calls[0]!.url).toBe(GOOGLE.keysUrl);
+    expect(calls[0]!.headers["Content-Type"]).toBe("application/x-www-form-urlencoded");
+    const form = new URLSearchParams(calls[0]!.body);
+    expect(form.get("grant_type")).toBe("authorization_code");
+    expect(form.get("code")).toBe("auth-code-1");
+    expect(form.get("code_verifier")).toBe("ver-1");
+    expect(form.get("redirect_uri")).toBe(`http://localhost:${pkce.state.port}/callback`);
+    expect(form.get("client_id")).toBe(GOOGLE.clientId);
+    expect(form.get("client_secret")).toBe(GOOGLE.clientSecret);
+    expect(form.get("code_challenge_method")).toBeNull();
+
+    expect(connected).toBe(1);
+    expect(updates.at(-1)?.phase).toBe("connected");
+
+    // The credential is stored as an oauth record (access + refresh + expiry)
+    // and mirrored into the two 0SEC_GEMINI_* env vars.
+    expect(env["0SEC_GEMINI_ACCESS_TOKEN"]).toBe("ya29.access");
+    expect(env["0SEC_GEMINI_OAUTH_REFRESH_TOKEN"]).toBe("1//refresh");
+    const record = getActiveAccount(loadAccountStore(home), "google");
+    expect(record?.kind).toBe("oauth");
+    if (record?.kind === "oauth") {
+      expect(record.tokens.accessToken).toBe("ya29.access");
+      expect(record.tokens.refreshToken).toBe("1//refresh");
+      expect(typeof record.tokens.expiresAt).toBe("number");
+    }
+  });
+
+  it("leaves OpenRouter's JSON exchange byte-identical (the form extension is opt-in)", async () => {
+    const home = temporaryHome();
+    const pkce = makePkceServer();
+    const { fetchImpl, calls } = makePkceFetch(jsonResponse(200, { key: "sk-or-json" }));
+
+    startDeviceAuth(OPENROUTER, {
+      env: {},
+      homeDir: home,
+      fetch: fetchImpl,
+      now: fixedNow,
+      sleep: neverSleep,
+      serverFactory: pkce.factory,
+      createPkcePair: () => ({ verifier: "v", challenge: "c" }),
+      openBrowser: () => {},
+      onUpdate: () => {},
+      onConnected: () => {},
+    });
+    await flush();
+    pkce.redirect({ code: "c1" });
+    await flush();
+
+    // Still a JSON body carrying exactly the OpenRouter triple — the form path
+    // (grant_type/client_secret/redirect_uri) never touches this provider.
+    expect(JSON.parse(calls[0]!.body)).toEqual({
+      code: "c1",
+      code_verifier: "v",
+      code_challenge_method: "S256",
+    });
+    const record = getActiveAccount(loadAccountStore(home), "openrouter");
+    expect(record?.kind).toBe("api_key");
+  });
+});
+
 describe("provider-status oauth methods", () => {
   it("lets xai and kimi authenticate with oauth (api-key stays secondary)", () => {
     for (const id of ["xai", "kimi"]) {

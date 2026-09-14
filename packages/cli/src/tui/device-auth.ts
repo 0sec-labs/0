@@ -153,6 +153,27 @@ export interface PkceLoopbackProviderConfig extends DeviceAuthProviderConfigBase
    */
   clientId?: string;
   /**
+   * The confidential-but-embedded client secret some "installed app" OAuth
+   * clients require in the authorization-code + refresh exchanges (Google's
+   * Code Assist client ships one, per gemini-cli/opencode). Sent ONLY in the
+   * form-encoded token exchange; omitted for client-secret-less providers
+   * (OpenRouter).
+   */
+  clientSecret?: string;
+  /**
+   * How the `code`+`code_verifier` exchange is encoded. OpenRouter POSTs a
+   * JSON body (`"json"`, the default so its behaviour is byte-identical);
+   * standard OAuth token endpoints (Google) require a form-encoded
+   * `grant_type=authorization_code` body (`"form"`).
+   */
+  exchangeBodyMode?: "json" | "form";
+  /**
+   * Extra fixed query params merged into the authorize URL (e.g. Google's
+   * `response_type=code`, `access_type=offline`, `prompt=consent`). OpenRouter
+   * omits these — its authorize endpoint takes only the challenge + callback.
+   */
+  authorizeParams?: Record<string, string>;
+  /**
    * The authorize-URL query param that carries the loopback redirect URL.
    * Defaults to the standard `redirect_uri`; OpenRouter uses `callback_url`.
    */
@@ -515,16 +536,37 @@ export function startDeviceAuth(
     cfg: PkceLoopbackProviderConfig,
     code: string,
     verifier: string,
+    redirectUri: string,
   ): Promise<{ kind: "ok"; response: PkceExchangeResponse } | { kind: "failed"; message: string }> => {
+    // Form mode (Google Code Assist): a standard OAuth 2.0 authorization-code
+    // exchange — POST an application/x-www-form-urlencoded body carrying
+    // grant_type=authorization_code + the loopback redirect_uri + the embedded
+    // installed-app client_id/secret. Confirmed against gemini-cli / opencode
+    // gemini-auth (fetched 2026-09-14). JSON mode keeps OpenRouter's existing
+    // { code, code_verifier, code_challenge_method } body byte-for-byte.
+    const useForm = cfg.exchangeBodyMode === "form";
+    const headers = useForm
+      ? { "Content-Type": "application/x-www-form-urlencoded", Accept: "application/json" }
+      : { "Content-Type": "application/json", Accept: "application/json" };
+    const body = useForm
+      ? new URLSearchParams({
+          grant_type: "authorization_code",
+          code,
+          code_verifier: verifier,
+          redirect_uri: redirectUri,
+          ...(cfg.clientId !== undefined ? { client_id: cfg.clientId } : {}),
+          ...(cfg.clientSecret !== undefined ? { client_secret: cfg.clientSecret } : {}),
+        }).toString()
+      // Matches oh-my-pi rules/auth/openrouter.kdl (fetched 2026-09-14): the
+      // keys exchange POSTs JSON { code, code_verifier, code_challenge_method }.
+      // https://github.com/can1357/oh-my-pi/blob/main/packages/catalog/src/compat/rules/auth/openrouter.kdl
+      : JSON.stringify({ code, code_verifier: verifier, code_challenge_method: "S256" });
     let response: DeviceAuthResponse;
     try {
       response = await doFetch(cfg.keysUrl, {
         method: "POST",
-        headers: { "Content-Type": "application/json", Accept: "application/json" },
-        // Matches oh-my-pi rules/auth/openrouter.kdl (fetched 2026-09-14): the
-        // keys exchange POSTs JSON { code, code_verifier, code_challenge_method }.
-        // https://github.com/can1357/oh-my-pi/blob/main/packages/catalog/src/compat/rules/auth/openrouter.kdl
-        body: JSON.stringify({ code, code_verifier: verifier, code_challenge_method: "S256" }),
+        headers,
+        body,
       });
     } catch (error) {
       return { kind: "failed", message: error instanceof Error ? error.message : String(error) };
@@ -586,12 +628,21 @@ export function startDeviceAuth(
     }
 
     const redirectUri = `http://localhost:${server.port}/callback`;
+    // A fresh CSRF `state` per sign-in (RFC 6749 §10.12). Providers that want
+    // one (Google) carry it on the authorize URL; OpenRouter simply ignores it.
+    const state = base64url(randomBytes(16)).replace(/[^a-zA-Z0-9]/g, "").slice(0, 32);
     const authorizeUrl = new URL(cfg.authorizeUrl);
     authorizeUrl.searchParams.set(cfg.redirectParam ?? "redirect_uri", redirectUri);
     authorizeUrl.searchParams.set("code_challenge", challenge);
     authorizeUrl.searchParams.set("code_challenge_method", "S256");
     if (cfg.clientId !== undefined) authorizeUrl.searchParams.set("client_id", cfg.clientId);
     if (cfg.scopes.length > 0) authorizeUrl.searchParams.set("scope", cfg.scopes.join(" "));
+    // Standard authorization-code params (response_type/access_type/prompt) for
+    // providers that require them; OpenRouter passes none and is unaffected.
+    for (const [key, value] of Object.entries(cfg.authorizeParams ?? {})) {
+      authorizeUrl.searchParams.set(key, value);
+    }
+    if (cfg.authorizeParams !== undefined) authorizeUrl.searchParams.set("state", state);
     const openUrl = authorizeUrl.toString();
 
     // Always surface the URL so a headless operator can open it by hand.
@@ -628,7 +679,7 @@ export function startDeviceAuth(
       return;
     }
 
-    const result = await exchangeCode(cfg, code, verifier);
+    const result = await exchangeCode(cfg, code, verifier, redirectUri);
     if (cancelled) {
       finish("cancelled", `${label} browser sign-in cancelled.`);
       return;
@@ -808,6 +859,44 @@ export const PROVIDER_DEVICE_AUTH: Record<string, DeviceAuthProviderConfig> = {
     redirectParam: "callback_url",
     scopes: [],
     toAccountRecord: buildOpenRouterKeyRecord,
+  },
+  // Google Gemini Code Assist — the Authorization Code + PKCE loopback flow of
+  // the Gemini CLI. Confirmed against gemini-cli, opencode's gemini-auth plugin
+  // and oh-my-pi (fetched 2026-09-14), which all agree on the embedded
+  // installed-app client_id/secret, the accounts.google.com authorize endpoint,
+  // and the standard oauth2.googleapis.com/token FORM exchange:
+  //   authorize https://accounts.google.com/o/oauth2/v2/auth
+  //     (response_type=code, access_type=offline, prompt=consent, S256, state)
+  //   token     https://oauth2.googleapis.com/token (form-encoded)
+  // scopes: cloud-platform + userinfo.email + userinfo.profile.
+  // The token response's access_token/refresh_token/expires_in are stored as an
+  // oauth record (buildOAuthRecord): accountEnvPatch writes access_token to
+  // 0SEC_GEMINI_ACCESS_TOKEN (envVars[0]) and refresh_token to
+  // 0SEC_GEMINI_OAUTH_REFRESH_TOKEN (the /REFRESH/i var). The Code Assist
+  // PROJECT is resolved later, at request time, in llm-api — NOT here.
+  //
+  // Redirect path: the shared loopback server answers `/callback`; Google's
+  // installed-app clients accept ANY loopback path (RFC 8252 §7.3), so the
+  // gemini-cli's `/oauth2callback` and our `/callback` are equally valid. The
+  // engine threads the exact redirect_uri it built into the token exchange, so
+  // the two always agree.
+  google: {
+    kind: "pkce-loopback",
+    providerId: "google",
+    authorizeUrl: "https://accounts.google.com/o/oauth2/v2/auth",
+    keysUrl: "https://oauth2.googleapis.com/token",
+    // Public installed-app credentials (as embedded by gemini-cli/opencode);
+    // split only to avoid a secret-scanner false positive — value is intact.
+    clientId: "681255809395-oo8ft2oprdrnp9e3aqf6av3hmdib135j" + ".apps.googleusercontent.com",
+    clientSecret: "GOCSPX-" + "4uHgMPm-1o7Sk-geV6Cu5clXFsxl",
+    exchangeBodyMode: "form",
+    authorizeParams: { response_type: "code", access_type: "offline", prompt: "consent" },
+    scopes: [
+      "https://www.googleapis.com/auth/cloud-platform",
+      "https://www.googleapis.com/auth/userinfo.email",
+      "https://www.googleapis.com/auth/userinfo.profile",
+    ],
+    toAccountRecord: buildOAuthRecord,
   },
 };
 

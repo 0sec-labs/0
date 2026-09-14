@@ -180,6 +180,18 @@ const PROVIDER_DEFS: readonly Omit<ProviderInfo, "auth">[] = [
     hint: "sign in with your GitHub Copilot account (device sign-in), or set 0SEC_COPILOT_GITHUB_TOKEN=... (endpoint override: COPILOT_BASE_URL)",
   },
   {
+    id: "google",
+    label: "Google Gemini (Code Assist)",
+    // OAuth only (PKCE browser sign-in — the Gemini CLI flow). The minted
+    // access token is written to 0SEC_GEMINI_ACCESS_TOKEN (envVars[0]) and the
+    // refresh token to 0SEC_GEMINI_OAUTH_REFRESH_TOKEN (the /REFRESH/i var); the
+    // runtime refreshes on demand against oauth2.googleapis.com. There is no
+    // pasted-key equivalent — Code Assist authenticates only via OAuth.
+    methods: ["oauth"],
+    envVars: ["0SEC_GEMINI_ACCESS_TOKEN", "0SEC_GEMINI_OAUTH_REFRESH_TOKEN"],
+    hint: "sign in with your Google account (browser sign-in), or set 0SEC_GEMINI_OAUTH_REFRESH_TOKEN=... for Gemini Code Assist (project override: GOOGLE_CLOUD_PROJECT / 0SEC_GEMINI_PROJECT)",
+  },
+  {
     id: "anthropic",
     label: "Anthropic",
     // API key only for now. The schema supports OAuth, but Anthropic/Claude

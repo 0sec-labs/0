@@ -576,7 +576,7 @@ describe("account transforms (add / active / remove / logout)", () => {
   });
 
   it("throws on an unknown provider or an unsupported record kind, never leaking the secret", () => {
-    expect(() => addAccount(empty(), "google", { kind: "api_key", secret: "top-secret" })).toThrow(/unknown provider/);
+    expect(() => addAccount(empty(), "meta", { kind: "api_key", secret: "top-secret" })).toThrow(/unknown provider/);
     try {
       addAccount(empty(), "anthropic", { kind: "oauth", tokens: { accessToken: "top-secret" } });
       throw new Error("expected addAccount to throw");

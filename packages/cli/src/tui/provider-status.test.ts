@@ -65,11 +65,12 @@ describe("PROVIDERS", () => {
     const byId = new Map(PROVIDERS.map((provider) => [provider.id, provider]));
     expect(byId.get("chatgpt-codex")?.methods).toEqual(["oauth"]);
     expect(byId.get("copilot")?.methods).toEqual(["oauth"]);
+    expect(byId.get("google")?.methods).toEqual(["oauth"]);
     expect(byId.get("xai")?.methods).toEqual(["oauth", "api-key"]);
     expect(byId.get("kimi")?.methods).toEqual(["oauth", "api-key"]);
     expect(byId.get("openrouter")?.methods).toEqual(["oauth", "api-key"]);
     expect(byId.get("anthropic")?.methods).toEqual(["api-key"]);
-    const oauthCapable = new Set(["chatgpt-codex", "copilot", "xai", "kimi", "openrouter"]);
+    const oauthCapable = new Set(["chatgpt-codex", "copilot", "google", "xai", "kimi", "openrouter"]);
     for (const provider of PROVIDERS) {
       if (oauthCapable.has(provider.id)) continue;
       expect(provider.methods).toEqual(["api-key"]);
@@ -96,6 +97,7 @@ describe("PROVIDERS", () => {
         "chatgpt-codex",
         "copilot",
         "deepseek",
+        "google",
         "kimi",
         "openai",
         "opencode",
@@ -212,7 +214,7 @@ describe("isProviderConfigured", () => {
 
   it("returns false for an unknown id instead of throwing", () => {
     // The model catalog carries vendors with no direct runtime path.
-    for (const id of ["google", "meta", "mistral", "unknown", "", "ANTHROPIC"]) {
+    for (const id of ["meta", "mistral", "unknown", "", "ANTHROPIC"]) {
       expect(isProviderConfigured(id, { ANTHROPIC_API_KEY: "sk-ant" })).toBe(false);
     }
   });

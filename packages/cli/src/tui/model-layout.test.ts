@@ -236,7 +236,7 @@ describe("provider credential reporting", () => {
 
   it("calls a vendor with no runtime env path unmapped rather than unconfigured", () => {
     // These come from the pricing table and have no entry in PROVIDERS.
-    for (const id of ["google", "meta", "mistral", "unknown"]) {
+    for (const id of ["meta", "mistral", "unknown"]) {
       const group = providerGroupFor(id, EMPTY_ENV);
       expect(group.credential, id).toBe("unmapped");
       expect(group.envVars).toEqual([]);
