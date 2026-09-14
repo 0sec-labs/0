@@ -447,23 +447,11 @@ function TaskCard({
     >
       {visibleBody.length > 0 ? (
         <box flexDirection="column" width={inner} flexShrink={0} minWidth={0} marginTop={1}>
-          {expanded ? (
-            <scrollbox
-              width={inner}
-              height={bodyScrollRows}
-              flexShrink={0}
-              scrollX={false}
-              verticalScrollbarOptions={scrollbarOptions}
-            >
-              <box width={bodyWidth} flexDirection="column" flexShrink={0} minWidth={0}>
-                {visibleBody.map(renderBodyLine)}
-              </box>
-            </scrollbox>
-          ) : (
-            <box width={inner} flexDirection="column" flexShrink={0} minWidth={0}>
-              {visibleBody.map(renderBodyLine)}
-            </box>
-          )}
+          {/* Inline, never a nested scrollbox — the outer transcript scrolls.
+              Expanded retains more lines; the "… N more" hint expands. */}
+          <box width={inner} flexDirection="column" flexShrink={0} minWidth={0}>
+            {visibleBody.map(renderBodyLine)}
+          </box>
           {hiddenBody > 0 ? (
             <text width={inner} height={1} wrapMode="none" truncate fg={MUTED}>
               {fitTuiText(`… ${hiddenBody} more line${hiddenBody === 1 ? "" : "s"}${expandHint}`, inner)}
@@ -569,19 +557,12 @@ function TaskCard({
       <box flexDirection="column" width={inner} flexShrink={0} minWidth={0} marginTop={1}>
         <SectionRule label="Output" width={inner} theme={theme} />
         {outVisible.length > 0 ? (
-          expanded ? (
-            <scrollbox
-              width={inner}
-              height={Math.max(1, outRows)}
-              flexShrink={0}
-              scrollX={false}
-              verticalScrollbarOptions={scrollbarOptions}
-            >
-              <box width={bodyWidth} flexDirection="column" flexShrink={0} minWidth={0}>{outBody}</box>
-            </scrollbox>
-          ) : (
-            <box width={inner} flexDirection="column" flexShrink={0} minWidth={0}>{outBody}</box>
-          )
+          // Output renders INLINE — no nested scrollbox. A scroll region inside
+          // the transcript (itself scrollable) traps the wheel and reads as
+          // broken; instead the card grows to its (bounded) retained lines and
+          // the outer transcript does the scrolling, the way OpenCode shows it.
+          // Expanded simply retains more lines; the "… N more" hint expands.
+          <box width={inner} flexDirection="column" flexShrink={0} minWidth={0}>{outBody}</box>
         ) : (
           <text width={inner} height={1} wrapMode="none" truncate fg={MUTED}>
             {fitTuiText(running ? "Awaiting output" : "No output retained", inner)}
@@ -713,13 +694,8 @@ function CodeCard({
       <box flexDirection="column" width={inner} flexShrink={0} minWidth={0} marginTop={1}>
         <SectionRule label={langLabel} width={inner} theme={theme} />
         {codeVisible.length > 0 ? (
-          expanded ? (
-            <scrollbox width={inner} height={Math.max(1, codeRows)} flexShrink={0} scrollX={false} verticalScrollbarOptions={scrollbarOptions}>
-              <box width={bodyWidth} flexDirection="column" flexShrink={0} minWidth={0}>{codeBody}</box>
-            </scrollbox>
-          ) : (
-            <box width={inner} flexDirection="column" flexShrink={0} minWidth={0}>{codeBody}</box>
-          )
+          // Inline — no nested scrollbox; the outer transcript scrolls.
+          <box width={inner} flexDirection="column" flexShrink={0} minWidth={0}>{codeBody}</box>
         ) : (
           <text width={inner} height={1} wrapMode="none" truncate fg={MUTED}>{fitTuiText("(no source)", inner)}</text>
         )}
@@ -738,17 +714,7 @@ function CodeCard({
       <box flexDirection="column" width={inner} flexShrink={0} minWidth={0} marginTop={1}>
         <SectionRule label="Output" width={inner} theme={theme} />
         {hasOutput && outVisible.length > 0 ? (
-          expanded ? (
-            <scrollbox width={inner} height={Math.max(1, outRows)} flexShrink={0} scrollX={false} verticalScrollbarOptions={scrollbarOptions}>
-              <box width={bodyWidth} flexDirection="column" flexShrink={0} minWidth={0}>
-                {outVisible.map((line, index) => (
-                  <text key={`${entry.id}-out-${index}`} width={bodyWidth} height={1} wrapMode="none" truncate fg={failed ? ERROR : TEXT}>
-                    {fitTuiText(line, bodyWidth)}
-                  </text>
-                ))}
-              </box>
-            </scrollbox>
-          ) : (
+          // Inline — no nested scrollbox; the outer transcript scrolls.
             <box width={inner} flexDirection="column" flexShrink={0} minWidth={0}>
               {outVisible.map((line, index) => (
                 <text key={`${entry.id}-out-${index}`} width={bodyWidth} height={1} wrapMode="none" truncate fg={failed ? ERROR : TEXT}>
@@ -756,7 +722,6 @@ function CodeCard({
                 </text>
               ))}
             </box>
-          )
         ) : (
           <text width={inner} height={1} wrapMode="none" truncate fg={MUTED}>
             {fitTuiText(running ? "Awaiting output" : "No output", inner)}
@@ -999,28 +964,8 @@ export function ToolCard({
       <box flexDirection="column" width={inner} flexShrink={0} minWidth={0} marginTop={1}>
         <SectionRule label="Output" width={inner} theme={theme} />
         {visible.length > 0 ? (
-          expanded ? (
-            <scrollbox
-              width={inner}
-              height={Math.max(1, outputRows)}
-              flexShrink={0}
-              scrollX={false}
-              verticalScrollbarOptions={{
-                trackOptions: {
-                  backgroundColor: theme.PANEL,
-                  foregroundColor: theme.MUTED,
-                },
-                arrowOptions: {
-                  foregroundColor: theme.MUTED,
-                  backgroundColor: theme.PANEL,
-                },
-              }}
-            >
-              <box width={bodyWidth} flexDirection="column" flexShrink={0} minWidth={0}>{outputBody}</box>
-            </scrollbox>
-          ) : (
-            <box width={inner} flexDirection="column" flexShrink={0} minWidth={0}>{outputBody}</box>
-          )
+          // Inline — no nested scrollbox; the outer transcript scrolls.
+          <box width={inner} flexDirection="column" flexShrink={0} minWidth={0}>{outputBody}</box>
         ) : (
           <text width={inner} height={1} wrapMode="none" truncate fg={MUTED}>
             {fitTuiText(running ? "Awaiting output" : "No output retained", inner)}
