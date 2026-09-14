@@ -1059,10 +1059,38 @@ function wrapBlock(block: MdBlock, width: number): MdBlock {
  * the quote bar) subtract it themselves, so the renderer can paint
  * `gutter + line` and stay inside the column. `width <= 0` yields no blocks.
  */
+/**
+ * Per-(source,width) cache for the parse+wrap of a transcript entry. The chat
+ * transcript re-renders on every stream flush, shimmer tick and timer, and each
+ * render walks EVERY entry through renderMarkdown; without a cache that is an
+ * O(transcript length) parse/wrap per frame that grows with the conversation.
+ * The output is `readonly MdBlock[]` (never mutated by renderMarkdownBlocks),
+ * and parsing/wrapping is a pure function of (source, width) — theme colours are
+ * applied later at render — so the result is safe to memoize and reuse. Only the
+ * growing tail entry (new text each frame → new key) misses; every stable entry
+ * above it hits. Insertion-order LRU, bounded so long sessions stay flat.
+ */
+const RENDER_MARKDOWN_CACHE_MAX = 512;
+const renderMarkdownCache = new Map<string, MdBlock[]>();
+
 export function renderMarkdown(source: string, width: number): MdBlock[] {
   const w = normalizeWidth(width);
   if (w <= 0) return [];
-  return parseMarkdownBlocks(source).map((block) => wrapBlock(block, w));
+  const key = `${w}\u0000${source}`;
+  const cached = renderMarkdownCache.get(key);
+  if (cached) {
+    // Refresh recency (delete+set moves the key to the newest slot).
+    renderMarkdownCache.delete(key);
+    renderMarkdownCache.set(key, cached);
+    return cached;
+  }
+  const blocks = parseMarkdownBlocks(source).map((block) => wrapBlock(block, w));
+  renderMarkdownCache.set(key, blocks);
+  if (renderMarkdownCache.size > RENDER_MARKDOWN_CACHE_MAX) {
+    const oldest = renderMarkdownCache.keys().next().value;
+    if (oldest !== undefined) renderMarkdownCache.delete(oldest);
+  }
+  return blocks;
 }
 
 /**

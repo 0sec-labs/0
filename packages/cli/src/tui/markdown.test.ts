@@ -798,3 +798,16 @@ describe("heading colours", () => {
     }
   });
 });
+
+describe("renderMarkdown cache", () => {
+  it("returns the same block array for identical (source, width) and re-parses on change", () => {
+    const src = "# Title\n\nSome **bold** and `code` and a paragraph that wraps.";
+    const a = renderMarkdown(src, 40);
+    const b = renderMarkdown(src, 40);
+    expect(b).toBe(a); // cached reference reused — no re-parse
+    expect(renderMarkdown(src, 41)).not.toBe(a); // width change misses
+    expect(renderMarkdown(src + " more", 40)).not.toBe(a); // text change misses
+    // Content is still correct after a cache hit.
+    expect(a.length).toBeGreaterThan(0);
+  });
+});
