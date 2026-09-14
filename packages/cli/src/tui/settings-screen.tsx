@@ -42,10 +42,12 @@
  */
 
 import React, { useMemo, useRef, useState } from "react";
-import { useKeyboard, usePaste } from "@opentui/react";
+import { useKeyboard, usePaste, useTerminalDimensions } from "@opentui/react";
 import { decodePasteBytes, TextAttributes } from "@opentui/core";
 
 import { Cells } from "./primitives.js";
+import { Popup } from "./popup.js";
+import { usePopupStack, type PopupEntryApi } from "./popup-stack.js";
 import { getSettings, resetSettings, updateSetting, useSettings } from "./settings-store.js";
 import { useDialogSurface, useSurfaceDimensions } from "./dialog-surface.js";
 import { operatorIcon, operatorTitle } from "./operator-icons.js";
@@ -111,13 +113,77 @@ export interface SettingsScreenProps {
   homeDir?: string;
 }
 
-type PendingReset =
+/** What a reset confirmation is about — one setting, or the whole table. */
+type ResetTarget =
   | { kind: "one"; key: keyof TuiSettings; label: string; value: string }
   | { kind: "all" };
 
 interface Notice {
   text: string;
   tone: "error" | "warn" | "info";
+}
+
+/**
+ * The reset confirmation, as a NESTED popup pushed above the settings screen.
+ *
+ * This is the concrete "settings with multiple levels of popups": the settings
+ * dialog is level 0 (its route + DialogSurface), and this confirm rides one
+ * level higher on the shared popup stack. Because the stack keeps only the
+ * topmost layer interactive, the settings list underneath goes inert while this
+ * is up — Esc here pops just this confirm and lands back on the still-open
+ * settings, rather than leaving the screen.
+ *
+ * Nothing is reset without an explicit `y`/Enter; `n`/Esc — and, matching the
+ * old inline gate, any other key — cancels, so a stray keystroke is only ever a
+ * "no".
+ */
+function ResetConfirmPopup({
+  target,
+  api,
+  onConfirm,
+  onCancel,
+}: {
+  target: ResetTarget;
+  api: PopupEntryApi;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  const theme = useTheme();
+  const terminal = useTerminalDimensions();
+
+  useKeyboard((key) => {
+    const seq = typeof key.sequence === "string" ? key.sequence : "";
+    if (key.ctrl || key.meta) return;
+    if (key.name === "return" || seq === "y" || seq === "Y") {
+      onConfirm();
+      return;
+    }
+    onCancel();
+  });
+
+  const width = Math.max(32, Math.min(64, terminal.width - 4));
+  const innerWidth = Math.max(1, width - 4);
+  const prompt =
+    target.kind === "all"
+      ? "Reset ALL settings to their defaults? This cannot be undone."
+      : `Reset "${target.label}" to ${target.value}?`;
+
+  return (
+    <Popup
+      variant="centered"
+      width={width}
+      height="auto"
+      tone="danger"
+      title={target.kind === "all" ? "Reset all settings" : "Reset setting"}
+      titleMeta="esc"
+      footer="y confirm · n or esc cancel"
+      zIndex={api.zIndex}
+      onClose={onCancel}
+    >
+      <box height={1} />
+      <Cells width={innerWidth} fg={theme.TEXT}>{prompt}</Cells>
+    </Popup>
+  );
 }
 
 function toneColor(tone: SettingsDetailTone, theme: Theme): string | undefined {
@@ -205,8 +271,12 @@ export function SettingsScreen({ frame, onBack, onExit }: SettingsScreenProps) {
   };
   const [selected, setSelected] = useState(0);
   const selectedRef = useRef(0);
-  const [pending, setPending] = useState<PendingReset | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
+  // The nested popup stack: a reset confirmation is pushed a level above this
+  // screen rather than faked with an inline status line and a mode flag.
+  const { push } = usePopupStack();
+  // The confirm popup's id while it is up, so `r`/`R` can't stack two of them.
+  const confirmId = useRef<string | null>(null);
 
   // `buildSettingsRows` does the domain work — grouping by the table's group,
   // first-appearance order, and the AND-over-terms filter across key, label,
@@ -233,25 +303,17 @@ export function SettingsScreen({ frame, onBack, onExit }: SettingsScreenProps) {
     [settings],
   );
 
-  const mode: SettingsMode = pending
-    ? pending.kind === "all"
-      ? "confirm-reset-all"
-      : "confirm-reset"
-    : filtering
-      ? "filter"
-      : "browse";
+  // The reset confirmation is now a nested popup, so this screen only ever sits
+  // in browse or filter mode; the confirm bindings live on the popup's footer.
+  const mode: SettingsMode = filtering ? "filter" : "browse";
 
-  // The status line under the list carries the confirm prompt and any save
-  // failure. The filter lives in the picker's search line, so it does not
-  // compete for this row.
-  const statusText = pending
-    ? pending.kind === "all"
-      ? "Reset ALL settings to their defaults? y confirm / n cancel"
-      : `Reset "${pending.label}" to ${pending.value}? y confirm / n cancel`
-    : notice
-      ? notice.text
-      : `${items.length} setting${items.length === 1 ? "" : "s"} · ${modifiedCount} changed · changes save automatically`;
-  const statusTone = pending ? theme.WARNING : notice?.tone === "error" ? theme.ERROR : theme.MUTED;
+  // The status line under the list carries any save failure. The confirm prompt
+  // moved to the pushed popup, and the filter lives in the picker's search line,
+  // so neither competes for this row.
+  const statusText = notice
+    ? notice.text
+    : `${items.length} setting${items.length === 1 ? "" : "s"} · ${modifiedCount} changed · changes save automatically`;
+  const statusTone = notice?.tone === "error" ? theme.ERROR : theme.MUTED;
 
   // Inside a dialog the surface IS the panel's inner box — the shell renders
   // with `dialogContent`, so it has no header and no padding — and the only
@@ -272,7 +334,6 @@ export function SettingsScreen({ frame, onBack, onExit }: SettingsScreenProps) {
    * worked: the change stays live for the session and the status line says so.
    */
   const reportSave = (saved: boolean) => {
-    setPending(null);
     if (saved) {
       setNotice(null);
       return;
@@ -293,6 +354,50 @@ export function SettingsScreen({ frame, onBack, onExit }: SettingsScreenProps) {
    */
   const commit = (next: TuiSettings, key: keyof TuiSettings) => {
     reportSave(updateSetting(key, next[key]));
+  };
+
+  /**
+   * Performs a confirmed reset.
+   *
+   * Only the keys the table actually shows are reset. The store's
+   * `resetSettings` writes exactly those and drops their project shadows, so
+   * hidden or metadata-only keys — the ones that record that an operator has
+   * already been asked something — survive a "reset all" instead of being
+   * re-armed by it. This is the exact write the old inline confirm gate ran; it
+   * just now fires from the pushed popup's `y`/Enter.
+   */
+  const applyReset = (target: ResetTarget) => {
+    const keys = target.kind === "all"
+      ? SETTING_DEFS.map((def) => settingKey(def.key))
+      : [target.key];
+    const next = target.kind === "all"
+      ? resetAllSettings()
+      : resetSetting(getSettings(), target.key);
+    reportSave(resetSettings(next, keys));
+  };
+
+  /**
+   * Opens the nested reset confirmation one level above this screen. The screen
+   * goes inert while it is up (the popup stack keeps only the top layer live),
+   * and Esc/`n` pops just the confirm, landing back here.
+   */
+  const requestReset = (target: ResetTarget) => {
+    if (confirmId.current) return;
+    confirmId.current = push((api: PopupEntryApi) => (
+      <ResetConfirmPopup
+        target={target}
+        api={api}
+        onConfirm={() => {
+          api.pop();
+          confirmId.current = null;
+          applyReset(target);
+        }}
+        onCancel={() => {
+          api.pop();
+          confirmId.current = null;
+        }}
+      />
+    ));
   };
 
   const currentItems = () => filterRef.current === filter
@@ -351,7 +456,6 @@ export function SettingsScreen({ frame, onBack, onExit }: SettingsScreenProps) {
   };
 
   usePaste((event) => {
-    if (pending) return;
     const text = sanitizeTuiText(decodePasteBytes(event.bytes));
     if (!text) return;
     setFilterMode(true);
@@ -367,35 +471,15 @@ export function SettingsScreen({ frame, onBack, onExit }: SettingsScreenProps) {
       return;
     }
     if (key.ctrl && key.name === "u") {
-      setPending(null);
       setQuery("");
       setFilterMode(false);
       return;
     }
     if (key.ctrl || key.meta) return;
 
-    // ── confirm gate ──
-    // Nothing is reset without passing through here. Anything that is not an
-    // explicit yes cancels, so a stray keystroke can only ever be a no.
-    if (pending) {
-      if (key.name === "return" || seq === "y" || seq === "Y") {
-        // Only the keys the table actually shows are reset. The store's
-        // `resetSettings` writes exactly those and drops their project
-        // shadows, so hidden or metadata-only keys — the ones that record
-        // that an operator has already been asked something — survive a
-        // "reset all" instead of being re-armed by it.
-        const keys = pending.kind === "all"
-          ? SETTING_DEFS.map((def) => settingKey(def.key))
-          : [pending.key];
-        const next = pending.kind === "all"
-          ? resetAllSettings()
-          : resetSetting(getSettings(), pending.key);
-        reportSave(resetSettings(next, keys));
-        return;
-      }
-      setPending(null);
-      return;
-    }
+    // The reset confirmation is a nested popup now; while it is up this screen
+    // is inert (the popup stack holds the live keyHandler), so there is no
+    // confirm gate to run here — `y`/`n`/Esc are handled by the popup itself.
 
     // Up/down and paging move the selection in every non-confirm mode, filter
     // capture included, so the list can be walked while a query is being typed.
@@ -451,7 +535,7 @@ export function SettingsScreen({ frame, onBack, onExit }: SettingsScreenProps) {
       const item = visible[clampDialogSelection(visible, selectedRef.current)];
       const activeDef = item ? defByKey.get(item.id) : undefined;
       if (!activeDef) return;
-      setPending({
+      requestReset({
         kind: "one",
         key: settingKey(activeDef.key),
         label: activeDef.label,
@@ -460,7 +544,7 @@ export function SettingsScreen({ frame, onBack, onExit }: SettingsScreenProps) {
       return;
     }
     if (seq === "R") {
-      setPending({ kind: "all" });
+      requestReset({ kind: "all" });
       return;
     }
     if (seq === "/") {

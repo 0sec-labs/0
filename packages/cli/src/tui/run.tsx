@@ -33,6 +33,7 @@ import { HistoryScreen } from "./history-screen.js";
 import { FindingsScreen } from "./findings-screen.js";
 import { ReplayScreen } from "./replay-screen.js";
 import { PanePalette } from "./command-palette.js";
+import { PopupStackProvider } from "./popup-stack.js";
 import type { FindingsScreenOptions } from "./findings-data.js";
 import { DialogSurface, useSurfaceDimensions } from "./dialog-surface.js";
 import { ShutdownDialog } from "./shutdown-dialog.js";
@@ -1360,6 +1361,11 @@ function ConsoleApp({
       stagePrompt={stageHarnessPrompt}
     >
     <box flexDirection="column" width="100%" height="100%">
+    {/* The visual popup stack lives inside the full-screen box (like the
+        shutdown dialog), so pushed sub-popups (levels ≥1) render ABOVE the
+        level-0 route/DialogSurface with a sized parent for their absolute
+        layout, and only the topmost one is interactive. Route stack = level 0. */}
+    <PopupStackProvider>
       {pluginError ? <text fg={theme.ERROR} wrapMode="word">{pluginError}</text> : null}
       {shellError ? <text fg={theme.ERROR} wrapMode="word">{shellError}</text> : null}
       {closingAll ? (
@@ -1390,6 +1396,7 @@ function ConsoleApp({
           </DialogSurface>
         ) : null}
       </box>
+    </PopupStackProvider>
     </box>
     </HarnessProvider>
     </AppContext.Provider>

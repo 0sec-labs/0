@@ -1,7 +1,8 @@
 /** @jsxImportSource @opentui/react */
-import React, { useContext, useEffect, useMemo, useState } from "react";
-import { AppContext } from "@opentui/react";
+import React, { useContext, useEffect, useMemo, useRef, useState } from "react";
+import { AppContext, useKeyboard } from "@opentui/react";
 import type { KeyEvent } from "@opentui/core";
+import { usePopupStack } from "./popup-stack.js";
 import { useTheme } from "./theme-context.js";
 import { fitTuiText } from "./text.js";
 import { DialogSelect } from "./dialog-select.js";
@@ -436,45 +437,69 @@ export function PaletteOverlay({
   );
 }
 
+/**
+ * The command list, as the topmost popup layer.
+ *
+ * Rendered by the popup stack, so it alone holds the live keyHandler while it
+ * is open. Its own `useKeyboard` re-adds the Ctrl+P / Ctrl+K toggle-to-close
+ * that the base pane can no longer serve (the pane is inert under the popup),
+ * and `DialogSelect` handles Esc / arrows / enter as before.
+ */
+function CommandPalettePopup({ shell, onClose }: { shell: ShellNav; onClose: () => void }) {
+  const commands = useMemo(() => createShellCommands(shell), [shell]);
+  useKeyboard((key) => {
+    if (key.ctrl && (key.name === "p" || key.name === "k")) {
+      key.preventDefault?.();
+      key.stopPropagation?.();
+      onClose();
+    }
+  });
+  return (
+    <DialogSelect
+      title="Commands"
+      placeholder="Search commands"
+      items={commands.map((command) => ({
+        id: command.id, label: command.title, description: command.description,
+      }))}
+      onSelect={(selection) => {
+        const command = commands.find((item) => item.id === selection);
+        onClose();
+        command?.action();
+      }}
+      onCancel={onClose}
+    />
+  );
+}
+
 /** Supply command navigation to control panes without their own palette. */
 export function PanePalette({ shell, children }: { shell: ShellNav; children: React.ReactNode }) {
   const context = useContext(AppContext);
-  const [open, setOpen] = useState(false);
-  const commands = createShellCommands(shell);
+  const { push, pop } = usePopupStack();
+  // The id of the palette popup while it is open, so the same shortcut toggles
+  // it and the base pane's inertness (owned by the stack renderer) tracks it.
+  const openId = useRef<string | null>(null);
 
   useEffect(() => {
+    const close = () => {
+      if (openId.current) {
+        pop(openId.current);
+        openId.current = null;
+      }
+    };
+    const open = () => {
+      if (openId.current) return;
+      openId.current = push(() => <CommandPalettePopup shell={shell} onClose={close} />);
+    };
     // Capture global shortcuts before a pane can interpret Ctrl+K as plain k.
     const handle = (key: KeyEvent) => {
       if (!key.ctrl || (key.name !== "p" && key.name !== "k")) return;
       key.preventDefault();
       key.stopPropagation();
-      setOpen((current) => !current);
+      open();
     };
     context.keyHandler?.prependListener("keypress", handle);
     return () => { context.keyHandler?.off("keypress", handle); };
-  }, [context.keyHandler]);
+  }, [context.keyHandler, push, pop, shell]);
 
-  return (
-    <>
-      <AppContext.Provider value={open ? { ...context, keyHandler: null } : context}>
-        {children}
-      </AppContext.Provider>
-      {open ? (
-        <DialogSelect
-          title="Commands"
-          placeholder="Search commands"
-          items={commands.map((command) => ({
-            id: command.id, label: command.title, description: command.description,
-          }))}
-          onSelect={(selection) => {
-            const command = commands.find((item) => item.id === selection);
-            if (!command) return;
-            setOpen(false);
-            command.action();
-          }}
-          onCancel={() => setOpen(false)}
-        />
-      ) : null}
-    </>
-  );
+  return <>{children}</>;
 }
