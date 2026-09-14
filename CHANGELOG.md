@@ -34,7 +34,7 @@ on the published npm package and the GitHub Release tag.
 - Search the full BYOK model catalog from the curated picker and navigate models
   with duplicate IDs across providers without mixing their detail panes.
   Preserve hosted model pins and role-selection controls.
-- Re-anchor eight existing Foxguard baseline entries after line-only shifts,
+- Re-anchor existing Foxguard baseline entries after line-only shifts,
   without adding suppressed findings or changing the security policy.
 - Keep unlimited turn budgets out of finite-JSON harness checkpoints without
   weakening snapshot validation.

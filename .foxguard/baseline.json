@@ -3650,16 +3650,16 @@
       "line": 65
     },
     {
-      "fingerprint": "13cfb1f4f18c8e20c39ff6644f259d8eaf1f007f4a5a5340862f25f63243e3e4",
+      "fingerprint": "787031486fee1cc3f7f89d3866102233bfed7f8e9350f7874b66cf710ceb2e66",
       "rule_id": "js/no-hardcoded-secret",
       "file": "packages/cli/src/tui/themes.test.ts",
-      "line": 1035
+      "line": 1037
     },
     {
-      "fingerprint": "e9707d4bbd7cc2c2d78d615a11cf680f558e95cb33f7970df587ec3960e3b3d4",
+      "fingerprint": "a93d411eb109c0d0944a1d8900ff8be4313a5101daaa75b4e97f7ccefe65e68b",
       "rule_id": "js/no-unsafe-regex",
       "file": "packages/cli/src/tui/themes.ts",
-      "line": 1330
+      "line": 1409
     },
     {
       "fingerprint": "69319d3e3c504f30c956fe191268c5c4ed7a916a0e1d14b929e83d6246410423",
