@@ -304,6 +304,7 @@ import {
   type AgentRowView,
 } from "./chat/AgentRow.js";
 import { agentAccentFor } from "./agent-color.js";
+import { summarizeAgentActivity, summarizeRoster } from "./agents-panel-model.js";
 import { appendTuiCrash, appendTuiEvent, serializeError, logProblem, describeErrorForSurface, tuiLogPath } from "./tui-crash.js";
 
 export type ChatDestination = "launcher" | "ops" | "history" | "findings" | "doctor" | "replay" | "settings" | "keybindings" | "harness" | "new-chat" | "models" | "market" | "usage" | "connect" | "herd" | "comms" | "finding" | "resume" | "audits" | "onboard";
@@ -856,6 +857,14 @@ export function runFindingsFromEntries(entries: readonly ChatEntry[]): RunFindin
  */
 const SUBAGENT_MAX_VISIBLE = 4;
 
+/**
+ * Below this content width the inline AGENTS panel auto-collapses to its
+ * one-line summary: a per-agent row needs room for a name, a status glyph and a
+ * live-activity tail, and under ~44 cells those fuse into noise. The operator
+ * can still drill in (Down) to browse the roster one selection at a time.
+ */
+const SUBAGENT_PANEL_MIN_WIDTH = 44;
+
 /** Window after a first Ctrl+C in which a second Ctrl+C confirms the quit. */
 const EXIT_CONFIRM_MS = 3000;
 
@@ -1312,6 +1321,14 @@ export function ChatScreen({
    * on an empty composer (only when agents are running), left with Left/Esc.
    */
   const [agentNavIndex, setAgentNavIndex] = useState(-1);
+  /**
+   * Collapse toggle for the inline AGENTS panel. The panel is EXPANDED by
+   * default (running agents are visible without arrowing in); the operator can
+   * collapse it to a single summary line via its corner control (mouse) or the
+   * existing keyboard path. Session-scoped state — the choice is remembered for
+   * the life of the screen but is not persisted to disk.
+   */
+  const [agentsPanelCollapsed, setAgentsPanelCollapsed] = useState(false);
   /**
    * The subagent the operator drilled INTO, or null in list/composer mode. When
    * set, the transcript region is replaced by the inline focus view (the same
@@ -4629,17 +4646,33 @@ export function ChatScreen({
   // reserved in the ledger via computeLedgerRows regardless of focus, so the
   // focus transcript makes room for it.
   const subagentEntries = settings.showSubagents ? workerRoster : [];
+  const hasSubagents = subagentEntries.length > 0;
   const visibleRosterLimit = Math.max(1, Math.min(SUBAGENT_MAX_VISIBLE, Math.floor(height / 5)));
-  const rosterStart = Math.max(0, agentNavIndex - visibleRosterLimit + 1);
-  const subagentVisible = agentNavIndex >= 0
-    ? subagentEntries.slice(rosterStart, rosterStart + visibleRosterLimit)
-    : [];
+  // The panel is EXPANDED by default so running agents are visible without the
+  // operator arrowing in (the OMP-style "always show what the herd is doing").
+  // It collapses to a one-line summary when the operator toggles the corner
+  // control, and AUTO-collapses on a very narrow terminal where per-agent rows
+  // would not fit. Drilling in (agentNavIndex >= 0) always forces it open so the
+  // selection is on screen — the existing Down-arrow path keeps working.
+  const subagentPanelNarrow = contentWidth < SUBAGENT_PANEL_MIN_WIDTH;
+  const subagentPanelCollapsed = hasSubagents && agentNavIndex < 0 && (agentsPanelCollapsed || subagentPanelNarrow);
+  const rosterStart = agentNavIndex >= 0 ? Math.max(0, agentNavIndex - visibleRosterLimit + 1) : 0;
+  const subagentVisible = subagentPanelCollapsed
+    ? []
+    : agentNavIndex >= 0
+      ? subagentEntries.slice(rosterStart, rosterStart + visibleRosterLimit)
+      : subagentEntries.slice(0, visibleRosterLimit);
   const subagentOverflow = subagentEntries.length - subagentVisible.length;
-  const subagentOverflowRow = agentNavIndex >= 0 && subagentOverflow > 0 ? 1 : 0;
-  // One activity/shortcut row at rest; expand only the selected worker roster.
-  const subagentBlockRows = subagentEntries.length > 0
-    ? 1 + subagentVisible.length + subagentOverflowRow
-    : 0;
+  // Below the header: the visible rows plus a "+N more" tail whenever the
+  // roster outruns the window (both when navigating and when resting expanded).
+  const subagentOverflowRow = !subagentPanelCollapsed && subagentOverflow > 0 ? 1 : 0;
+  // Collapsed → the single summary line (the header itself). Expanded → header
+  // + rows + overflow tail.
+  const subagentBlockRows = !hasSubagents
+    ? 0
+    : subagentPanelCollapsed
+      ? 1
+      : 1 + subagentVisible.length + subagentOverflowRow;
   // Selection within the block while navigating into it. Clamped every render so
   // an index left dangling by a finished agent lands back on a live row.
   const agentNavSelected =
@@ -4985,24 +5018,41 @@ export function ChatScreen({
     </>
   );
 
+  // Effective status per roster row (operator-stop and incomplete folded in),
+  // reused by the row views and the collapsed summary so both read identically.
+  const subagentEffectiveStatus = (sa: (typeof subagentEntries)[number]): string =>
+    operatorStopped.has(sa.agent_id)
+      ? "cancelled"
+      : sa.status === "completed" && sa.done === false
+        ? "incomplete"
+        : sa.status;
+  // The corner control is the "small button to expand": ▸ collapsed / ▾ open.
+  // Clicking the header toggles it (or, while navigating, backs out to the
+  // composer — the same exit the Left/Esc keys give). Collapsed, the header IS
+  // the one-line summary; expanded, it carries the roster count and hints.
+  const subagentToggleGlyph = subagentPanelCollapsed ? "▸" : "▾";
+  const subagentHeaderText = subagentPanelCollapsed
+    ? `${subagentToggleGlyph} ${summarizeRoster(subagentEntries.map(subagentEffectiveStatus))}`
+    : agentNavIndex >= 0
+      ? `${subagentToggleGlyph} agents (${subagentEntries.length}) · ↑↓ select · enter open · esc back`
+      : `${subagentToggleGlyph} agents (${subagentEntries.length}) · ${runningWorkers} running · ↓ select`;
   const subagentNode = subagentBlockRows > 0 ? (
     <box flexDirection="column" width="100%" minWidth={0} height={subagentBlockRows} flexShrink={0} marginTop={1}>
-      <box width={contentWidth} flexShrink={0} onMouseDown={() => setAgentNavIndex(agentNavIndex >= 0 ? -1 : 0)}>
-        <text fg={MUTED}>{fitTuiText(
-          agentNavIndex >= 0
-            ? `AGENTS · ${subagentEntries.length} · ↑↓ select · enter open · esc back`
-            : `Agents: ${runningWorkers} running / ${subagentEntries.length} total · ↓ select`,
-          contentWidth,
-        )}</text>
+      <box width={contentWidth} flexShrink={0} onMouseDown={() => {
+        if (agentNavIndex >= 0) setAgentNavIndex(-1);
+        else setAgentsPanelCollapsed((collapsed) => !collapsed);
+      }}>
+        <text fg={agentNavIndex >= 0 ? ACCENT : MUTED}>{fitTuiText(subagentHeaderText, contentWidth)}</text>
       </box>
       {subagentVisible.map((sa, index) => {
         const rec = herdAgents[sa.agent_id];
+        const status = subagentEffectiveStatus(sa);
         const view: AgentRowView = {
           id: sa.agent_id,
           name: sa.name ?? rec?.name ?? agentNamesRef.current.get(sa.agent_id) ?? "Unnamed worker",
           task: sa.task ?? "",
-          activity: rec?.tool ?? rec?.note,
-          status: operatorStopped.has(sa.agent_id) ? "cancelled" : sa.status === "completed" && sa.done === false ? "incomplete" : sa.status,
+          activity: summarizeAgentActivity({ status, tool: rec?.tool, note: rec?.note, turn: rec?.turn, maxTurns: rec?.maxTurns ?? sa.max_turns }),
+          status,
           animationFrame: settings.reduceMotion ? undefined : animTick,
           accent: agentAccentFor(sa.agent_id, theme.CANVAS),
         };
@@ -5012,7 +5062,12 @@ export function ChatScreen({
           onSelect={() => { setFocusAgentId(sa.agent_id); setAgentNavIndex(-1); }} />;
       })}
       {subagentOverflowRow > 0 ? (
-        <text fg={MUTED}>{fitTuiText(`${rosterStart + 1}–${rosterStart + subagentVisible.length}/${subagentEntries.length} · ↑↓ browse all`, contentWidth)}</text>
+        <text fg={MUTED}>{fitTuiText(
+          agentNavIndex >= 0
+            ? `${rosterStart + 1}–${rosterStart + subagentVisible.length}/${subagentEntries.length} · ↑↓ browse all`
+            : `+${subagentOverflow} more · ↓ browse all`,
+          contentWidth,
+        )}</text>
       ) : null}
     </box>
   ) : null;
@@ -5084,7 +5139,10 @@ export function ChatScreen({
               id: rec.agentId,
               name: rec.name ?? agentNamesRef.current.get(rec.agentId) ?? "Unnamed worker",
               task: rec.task || "No task reported",
-              activity: rec.tool ?? rec.note,
+              activity: summarizeAgentActivity({
+                status: operatorStopped.has(rec.agentId) ? "cancelled" : rec.status === "completed" && workerOutcomes[rec.agentId]?.done === false ? "incomplete" : rec.status,
+                tool: rec.tool, note: rec.note, turn: rec.turn, maxTurns: rec.maxTurns,
+              }),
               status: operatorStopped.has(rec.agentId) ? "cancelled" : rec.status === "completed" && workerOutcomes[rec.agentId]?.done === false ? "incomplete" : rec.status,
               animationFrame: settings.reduceMotion ? undefined : animTick,
               accent: agentAccentFor(rec.agentId, theme.CANVAS),
