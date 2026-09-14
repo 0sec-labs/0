@@ -218,14 +218,17 @@ describe("credentialEnvPatch", () => {
     expect(credentialEnvPatch({ "chatgpt-codex": "oauth-secret" }, {})).toEqual({});
   });
 
-  it("covers every API-key provider in the table", () => {
+  it("covers every provider that accepts an API key", () => {
     const creds: StoredCredentials = Object.fromEntries(
       PROVIDERS.map((info) => [info.id, `secret-for-${info.id}`]),
     );
     const patch = credentialEnvPatch(creds, {});
 
+    // A provider is reachable through the flat key store when it accepts an
+    // API key at all — including xai/kimi, which prefer OAuth but keep a key as
+    // a secondary method. Only an OAuth-only provider (chatgpt-codex) is out.
     expect(Object.keys(patch).sort()).toEqual(
-      PROVIDERS.filter((info) => info.auth === "api-key").map((info) => info.envVars[0]).sort(),
+      PROVIDERS.filter((info) => info.methods.includes("api-key")).map((info) => info.envVars[0]).sort(),
     );
   });
 

@@ -533,7 +533,7 @@ export function connectDetailLines(
   separate();
 
   push(
-    provider.auth === "oauth" ? "Auth: ChatGPT Codex device OAuth" : "Auth: API key",
+    provider.auth === "oauth" ? `Auth: ${provider.label} device sign-in` : "Auth: API key",
     "text",
   );
 
@@ -559,7 +559,7 @@ export function connectDetailLines(
   separate();
   push(
     provider.auth === "oauth"
-      ? "Enter: start Codex device OAuth. No API key or pasted token is used."
+      ? `Enter: start ${provider.label} device sign-in. No API key or pasted token is used.`
       : "Enter: paste an API key. It is stored owner-only on this machine.",
     "muted",
   );

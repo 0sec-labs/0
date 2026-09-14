@@ -68,9 +68,13 @@ import {
 import type { ConnectionRecovery } from "./connection-recovery.js";
 import {
   startCodexDeviceAuth,
-  type CodexDeviceAuthSession,
   type CodexDeviceAuthUpdate,
 } from "./codex-device-auth.js";
+import {
+  startDeviceAuth,
+  PROVIDER_DEVICE_AUTH,
+  type DeviceAuthSession,
+} from "./device-auth.js";
 import {
   startHostedDeviceAuth,
   readHostedConnection,
@@ -175,16 +179,17 @@ function oauthStateTone(theme: Theme, phase: CodexDeviceAuthUpdate["phase"]): st
 function oauthStateTitle(
   phase: CodexDeviceAuthUpdate["phase"],
   standalone: boolean,
+  label: string,
 ): string {
   switch (phase) {
     case "connected":
-      return standalone ? "ChatGPT Codex connected" : "connected";
+      return standalone ? `${label} connected` : "connected";
     case "failed":
-      return standalone ? "ChatGPT Codex sign-in failed" : "sign-in failed";
+      return standalone ? `${label} sign-in failed` : "sign-in failed";
     case "cancelled":
-      return standalone ? "ChatGPT Codex sign-in cancelled" : "sign-in cancelled";
+      return standalone ? `${label} sign-in cancelled` : "sign-in cancelled";
     default:
-      return standalone ? "ChatGPT Codex device sign-in" : "device sign-in";
+      return standalone ? `${label} device sign-in` : "device sign-in";
   }
 }
 
@@ -206,9 +211,9 @@ function oauthRecoveryHint(phase: CodexDeviceAuthUpdate["phase"]): string {
     case "running":
       return "Complete the sign-in in your browser. Keep this pane open; Esc cancels.";
     case "failed":
-      return "Review the Codex output, then press Enter to try again or use ↑/↓ to choose another provider.";
+      return "Review the sign-in output, then press Enter to try again or use ↑/↓ to choose another provider.";
     case "connected":
-      return "The subscription credential is loaded for this session.";
+      return "The credential is loaded for this session.";
     default:
       return "Press Enter to try again or use ↑/↓ to choose another provider.";
   }
@@ -327,7 +332,9 @@ export function ConnectScreen({ frame, onBack, onExit, recovery, onConnected, en
     setInputValue(next);
   };
   const [notice, setNotice] = useState<string | undefined>(undefined);
-  const oauthSessionRef = useRef<CodexDeviceAuthSession | undefined>(undefined);
+  // Both engines expose the same cancel-only session, so one ref serves the
+  // Codex subprocess flow and the generic in-process device-code flow alike.
+  const oauthSessionRef = useRef<DeviceAuthSession | undefined>(undefined);
   const hostedSessionRef = useRef<{ cancel(): void } | undefined>(undefined);
   const [oauth, setOauth] = useState<
     (CodexDeviceAuthUpdate & { providerId: string }) | undefined
@@ -464,21 +471,47 @@ export function ConnectScreen({ frame, onBack, onExit, recovery, onConnected, en
       providerId: provider.id,
       phase: "running",
       lines: [],
-      message: "Starting ChatGPT Codex device sign-in…",
+      message: `Starting ${provider.label} device sign-in…`,
     });
-    oauthSessionRef.current = startCodexDeviceAuth({
+    // The state plumbing is identical for both engines; only the engine that
+    // owns the protocol differs. ChatGPT Codex delegates to the Codex CLI
+    // subprocess; every other OAuth provider runs the in-process RFC 8628
+    // device-code engine, configured from PROVIDER_DEVICE_AUTH.
+    const handleUpdate = (update: CodexDeviceAuthUpdate) => {
+      applyOauth({ ...update, providerId: provider.id });
+      if (update.phase === "failed") setNotice(update.message);
+    };
+    const handleConnected = () => {
+      oauthSessionRef.current = undefined;
+      setAuthEpoch((current) => current + 1);
+      setStored(loadCredentials(homeDir));
+      setNotice(`connected ${provider.label} through device OAuth`);
+      onConnected?.(provider.id);
+    };
+    if (provider.id === "chatgpt-codex") {
+      oauthSessionRef.current = startCodexDeviceAuth({
+        homeDir,
+        onUpdate: handleUpdate,
+        onConnected: handleConnected,
+      });
+      return;
+    }
+    const config = PROVIDER_DEVICE_AUTH[provider.id];
+    if (config === undefined) {
+      applyOauth({
+        providerId: provider.id,
+        phase: "failed",
+        lines: [],
+        message: `${provider.label} has no device sign-in configured.`,
+      });
+      setNotice(`${provider.label} has no device sign-in configured.`);
+      return;
+    }
+    oauthSessionRef.current = startDeviceAuth(config, {
+      env: (env ?? process.env) as NodeJS.ProcessEnv,
       homeDir,
-      onUpdate: (update) => {
-        applyOauth({ ...update, providerId: provider.id });
-        if (update.phase === "failed") setNotice(update.message);
-      },
-      onConnected: () => {
-        oauthSessionRef.current = undefined;
-        setAuthEpoch((current) => current + 1);
-        setStored(loadCredentials(homeDir));
-        setNotice(`connected ${provider.label} through device OAuth`);
-        onConnected?.(provider.id);
-      },
+      onUpdate: handleUpdate,
+      onConnected: handleConnected,
     });
   };
 
@@ -723,10 +756,10 @@ export function ConnectScreen({ frame, onBack, onExit, recovery, onConnected, en
       title = provider.label;
       meta = oauthStateMeta(oauth.phase);
       metaFg = tone;
-      lines.push(...wrap(oauthStateTitle(oauth.phase, headerRows === 0), tone, true), blank());
+      lines.push(...wrap(oauthStateTitle(oauth.phase, headerRows === 0, provider.label), tone, true), blank());
       lines.push(...wrap(oauth.message, oauth.phase === "failed" ? theme.TEXT : theme.MUTED));
       if (oauth.lines.length > 0) {
-        lines.push(blank(), ...wrap("CODEX", theme.MUTED));
+        lines.push(blank(), ...wrap(provider.label.toUpperCase(), theme.MUTED));
         for (const line of oauth.lines) lines.push(...wrap(line, theme.TEXT));
       }
       lines.push(blank(), ...wrap(oauthRecoveryHint(oauth.phase), theme.MUTED));

@@ -130,9 +130,13 @@ const PROVIDER_DEFS: readonly Omit<ProviderInfo, "auth">[] = [
   {
     id: "kimi",
     label: "Moonshot Kimi",
-    methods: ["api-key"],
-    envVars: ["KIMI_API_KEY"],
-    hint: "set KIMI_API_KEY from your Kimi coding plan (endpoint override: KIMI_BASE_URL)",
+    // OAuth (device sign-in) is preferred; a pasted KIMI_API_KEY remains a
+    // secondary path. The OAuth access token is written to KIMI_API_KEY as a
+    // Bearer (llm-api.ts reads it there, no change needed), and the refresh
+    // token to the 0sec-owned var so the store can round-trip it.
+    methods: ["oauth", "api-key"],
+    envVars: ["KIMI_API_KEY", "0SEC_KIMI_OAUTH_REFRESH_TOKEN"],
+    hint: "sign in with your Kimi account, or set KIMI_API_KEY from your Kimi coding plan (endpoint override: KIMI_BASE_URL)",
   },
   {
     id: "qwen",
@@ -144,9 +148,13 @@ const PROVIDER_DEFS: readonly Omit<ProviderInfo, "auth">[] = [
   {
     id: "xai",
     label: "xAI Grok",
-    methods: ["api-key"],
-    envVars: ["XAI_API_KEY"],
-    hint: "set XAI_API_KEY from console.x.ai (endpoint override: XAI_BASE_URL)",
+    // OAuth (device sign-in) is preferred; a pasted XAI_API_KEY remains a
+    // secondary path. The OAuth access token is written to XAI_API_KEY as a
+    // Bearer (llm-api.ts reads it there, no change needed), and the refresh
+    // token to the 0sec-owned var so the store can round-trip it.
+    methods: ["oauth", "api-key"],
+    envVars: ["XAI_API_KEY", "0SEC_XAI_OAUTH_REFRESH_TOKEN"],
+    hint: "sign in with your xAI account, or set XAI_API_KEY from console.x.ai (endpoint override: XAI_BASE_URL)",
   },
   {
     id: "opencode",

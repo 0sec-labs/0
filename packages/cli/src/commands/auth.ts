@@ -554,7 +554,7 @@ function extractToken(body: unknown): string | null {
  * elsewhere. Adding a dep for a 12-line function loses on the
  * dependency-cost calculus.
  */
-function defaultOpenBrowser(url: string): Promise<void> {
+export function defaultOpenBrowser(url: string): Promise<void> {
   const plat = platform();
   return new Promise<void>((resolve, reject) => {
     const options = { detached: true, stdio: "ignore" as const, shell: false };

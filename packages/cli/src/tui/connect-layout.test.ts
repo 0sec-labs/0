@@ -174,7 +174,9 @@ describe("buildConnectRows", () => {
     expect(new Set(providers.map((row) => row.provider.id))).toEqual(new Set(PROVIDERS.map((provider) => provider.id)));
     expect(providers.length).toBe(PROVIDERS.length);
     const subscription = providers.filter((row) => row.group.id === "subscription");
-    expect(subscription.map((row) => row.provider.id)).toEqual(["chatgpt-codex"]);
+    // Every OAuth-preferred provider lands in the subscription group, in the
+    // PROVIDERS table order: chatgpt-codex, then kimi, then xai.
+    expect(subscription.map((row) => row.provider.id)).toEqual(["chatgpt-codex", "kimi", "xai"]);
     expect(providers.filter((row) => row.group.id !== "subscription").every((row) => row.provider.auth === "api-key")).toBe(true);
     expect(providers.every((row) => !row.provider.connected)).toBe(true);
 
