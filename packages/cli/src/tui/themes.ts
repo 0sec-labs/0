@@ -721,9 +721,82 @@ const OH_MY_PI: Theme = {
   LINK: "#00B4FF",
 };
 
+/**
+ * `Ember` — the flagship 0sec look: signature orange on warm graphite.
+ *
+ * The brand palette. Two anchors drive everything: the signature orange
+ * `#FD802E` (PRIMARY / BRAND — the hero the eye lands on: rails, titles, the
+ * active selection, the logo) and a warm graphite `#403D39` that the whole
+ * surface family derives from. The neutrals stay warm — graphite has a
+ * brown/olive cast, so the ramp never drifts to cool blue-grey.
+ *
+ * Surface ramp (dark, so each tier steps *up* in luminance): CANVAS `#1A1613`
+ * is a graphite darker than `#403D39` — the app ground; PANEL `#26221D` a step
+ * up for cards; PANEL_ALT `#35302A` a further step for inset/nested rows; and
+ * `overlay` is `#403D39` itself — the graphite anchor as the topmost raised
+ * tier so a floating panel reads as "on top". `surface`/`surfaceAlt` mirror
+ * PANEL/PANEL_ALT.
+ *
+ * Colour is disciplined: orange + warm graphite neutrals + exactly two
+ * supporting hues. ACCENT is a warm amber `#F2A24C` (orange's lighter, calmer
+ * sibling — headers and secondary highlights, so orange-for-everything never
+ * reads flat), and a muted teal `#4FBAC6` is the single cool pop, used only for
+ * INFO / LINK against the warm ground. TEXT is a warm bone white `#F5EEE4`,
+ * MUTED a warm mid grey `#B0A493` that still clears AA.
+ *
+ * Semantics are held apart by hue *and* luminance for colour-blind separation:
+ * SUCCESS a warm-leaning green `#69C489`, WARNING a gold `#E4BC46` kept
+ * distinctly more yellow than the orange PRIMARY (so a warning never blends
+ * into brand chrome), ERROR a clear coral red `#F47B72`.
+ *
+ * No waivers: every text token clears AA (4.5:1) on all three backgrounds and
+ * BORDER clears the 3:1 non-text bar, verified by validateTheme (worst text
+ * ratio 4.93:1 — ERROR on PANEL_ALT; semantic separation 1.175:1). The
+ * signature orange `#FD802E` is used verbatim (unnudged): it measures 7.11:1 on
+ * CANVAS, 6.25:1 on PANEL and 5.17:1 on PANEL_ALT, comfortably past the 4.5:1
+ * text bar as PRIMARY. Syntax is a warm, legible palette: comment a dim warm
+ * grey, strings/functions in warm hues, the cool teal reserved for types/links.
+ */
+const EMBER: Theme = {
+  CANVAS: "#1A1613",
+  PANEL: "#26221D",
+  PANEL_ALT: "#35302A",
+  BORDER: "#8A7D6B",
+  TEXT: "#F5EEE4",
+  MUTED: "#B0A493",
+  PRIMARY: "#FD802E",
+  ACCENT: "#F2A24C",
+  BRAND: "#FD802E",
+  SUCCESS: "#69C489",
+  WARNING: "#E4BC46",
+  ERROR: "#F47B72", // signature-adjacent coral; lifted from a deeper red so it clears AA on PANEL_ALT
+  INFO: "#4FBAC6",
+  background: "#1A1613",
+  surface: "#26221D",
+  surfaceAlt: "#35302A",
+  overlay: "#403D39", // the #403D39 graphite anchor itself, as the topmost raised surface tier
+  // Warm, legible code palette on PANEL: the hero orange for keywords, amber
+  // for functions, a warm green for strings, gold for numbers, the cool teal
+  // reserved for types (and LINK), a dim warm grey for comments. DIFF_ADD/DEL
+  // mirror SUCCESS/ERROR so diff semantics match the rest of the TUI.
+  syntaxKeyword: "#FD9152",
+  syntaxString: "#A9C77E",
+  syntaxNumber: "#E4BC46",
+  syntaxComment: "#8A7D6B",
+  syntaxFunction: "#F2A24C",
+  syntaxType: "#4FBAC6",
+  syntaxVariable: "#F5EEE4",
+  syntaxOperator: "#B0A493",
+  syntaxPunctuation: "#B0A493",
+  DIFF_ADD: "#69C489",
+  DIFF_DEL: "#F47B72",
+  LINK: "#4FBAC6",
+};
+
 /* ----------------------------------------------------------------- registry */
 
 export const THEME_NAMES = [
+  "ember",
   "midnight",
   "dark",
   "light",
@@ -749,14 +822,18 @@ export const THEME_ALIASES: Readonly<Record<string, ThemeName>> = {
 };
 
 /**
- * The theme a fresh session gets. `blue-team` — the electric-blue-on-titanium
- * look the operator asked for — is the shipped default, because a rich,
- * semantically-coloured transcript reads far less flat than a neutral grey.
- * `golden-gate` (the warm-tan-and-gold palette, formerly `opencode`) is the other
- * rich dark, available for anyone who prefers it. Like the other shipped darks
- * both clear AA on every text token with no waivers, so the default carries no
- * contrast debt. `slate` remains available for anyone who prefers hueless grey
- * chrome.
+ * The theme a fresh session gets. `ember` — the flagship 0sec look, signature
+ * orange (`#FD802E`) on warm graphite — is the shipped default: it puts the
+ * brand hue front and centre while a rich, semantically-coloured transcript
+ * reads far less flat than a neutral grey. `blue-team` (electric-blue on
+ * titanium) and `golden-gate` (warm tan-and-gold) remain available for anyone
+ * who prefers them. Like the other shipped darks all three clear AA on every
+ * text token with no waivers, so the default carries no contrast debt.
+ * `slate` remains available for anyone who prefers hueless grey chrome.
+ *
+ * The `ember` name is a suggestion — orange-on-graphite reads as ember/coal —
+ * and the operator can rename it freely (label, id, and the `THEME_ALIASES`
+ * entries are the only places the name is user-visible).
  *
  * This is a default, not a migration: an operator who has explicitly chosen a
  * theme keeps it, because a persisted preference is read in preference to this
@@ -767,7 +844,7 @@ export const THEME_ALIASES: Readonly<Record<string, ThemeName>> = {
  * preferred the old warm-grey look can opt back into it. That preservation — not
  * being the default — is why `dark` is the sole carrier of `CONTRAST_WAIVERS`.
  */
-export const DEFAULT_THEME_NAME: ThemeName = "blue-team";
+export const DEFAULT_THEME_NAME: ThemeName = "ember";
 
 /**
  * The one palette pinned byte-for-byte to the original `ui/theme.ts`, and so the
@@ -792,6 +869,13 @@ export interface ThemeEntry {
 }
 
 export const THEMES: Readonly<Record<ThemeName, ThemeEntry>> = {
+  ember: {
+    name: "ember",
+    label: "Ember",
+    description: "The flagship 0sec look: signature orange on warm graphite, with an amber accent.",
+    mode: "dark",
+    palette: EMBER,
+  },
   dark: {
     name: "dark",
     label: "Carbon",

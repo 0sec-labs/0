@@ -132,8 +132,8 @@ describe("default theme", () => {
   });
 
   it("is the fallback", () => {
-    expect(DEFAULT_THEME_NAME).toBe("blue-team");
-    expect(getTheme(DEFAULT_THEME_NAME)).toBe(THEMES["blue-team"].palette);
+    expect(DEFAULT_THEME_NAME).toBe("ember");
+    expect(getTheme(DEFAULT_THEME_NAME)).toBe(THEMES.ember.palette);
   });
 
   it("reproduces severityTone's mapping", () => {
@@ -303,6 +303,7 @@ describe("contrast sweep", () => {
       }),
     );
     expect(worst).toEqual({
+      ember: 4.93,
       dark: 4.32,
       light: 5.24,
       "high-contrast": 7.75,
@@ -421,6 +422,7 @@ describe("semantic colours survive colour blindness", () => {
       allThemes().map(({ name, palette }) => [name, Number(semanticSeparation(palette).toFixed(3))]),
     );
     expect(achieved).toEqual({
+      ember: 1.175,
       dark: 1.188,
       light: 1.254,
       "high-contrast": 1.319,
