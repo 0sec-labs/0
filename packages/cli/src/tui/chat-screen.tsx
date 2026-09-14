@@ -5604,6 +5604,11 @@ export function ChatScreen({
         model?: string;
         tool?: string;
         note?: string;
+        assistant?: string;
+        toolInput?: Record<string, unknown> | null;
+        toolRunning?: boolean;
+        turn?: number;
+        maxTurns?: number;
       }
     >();
     for (const id in herdAgents) {
@@ -5621,6 +5626,13 @@ export function ChatScreen({
         model: tel?.model,
         tool: rec.tool,
         note: rec.note,
+        turn: rec.turn,
+        maxTurns: rec.maxTurns,
+        // The child's latest prose + current tool (with args + in-flight flag),
+        // spread LAST so the fresher message tool/args win over the coarse
+        // herd `tool`. Identical to what the AGENTS rail feeds
+        // `summarizeAgentActivity`; the Task card derives the same live line.
+        ...summaryInputFromMessage(tel),
       });
     }
     return byName;

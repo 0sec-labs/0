@@ -208,6 +208,19 @@ export type ChatEntry = {
     tool?: string;
     /** Latest `report_status` note (the live intent sentence). */
     note?: string;
+    /**
+     * The child's most recent assistant prose (from `subagent_message`), fed
+     * into the live activity summary the row's tail shows.
+     */
+    assistant?: string;
+    /** Current tool's arguments, when known — a concrete target for the summary. */
+    toolInput?: Record<string, unknown> | null;
+    /** True while the current tool is still in flight (drives the freshest phrasing). */
+    toolRunning?: boolean;
+    /** 1-based turn the child last completed, for a "Working (turn N/M)" fallback. */
+    turn?: number;
+    /** The child's turn budget, when known. */
+    maxTurns?: number;
   }>;
   /** Phase/checkbox plan snapshot, fed straight into `buildTodoTreeRows`. */
   taskTodos?: Array<{ id: string; content: string; status: TodoStatus; group?: string }>;

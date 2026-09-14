@@ -1,4 +1,5 @@
 import { formatCompact, formatDurationMs } from "./card-layout.js";
+import { deriveAgentSummary } from "../subagent-card.js";
 import type { ChatEntry } from "./types.js";
 
 /**
@@ -226,7 +227,11 @@ export interface SubReportRow {
   name: string;
   /** `(scout)`-style agent-TYPE badge suffix, empty for the generic worker. */
   badge: string;
-  /** Muted task first line, empty when none. */
+  /**
+   * Always empty. The raw spawn PROMPT is deliberately NOT shown on the launch
+   * card — the live `summary` tail replaces it (see {@link composeSubReportRow}).
+   * Kept as a field so the renderer's line-1 geometry is unchanged.
+   */
   brief: string;
   /** ` [isolated]` suffix, empty otherwise. */
   isolated: string;
@@ -242,7 +247,15 @@ export interface SubReportRow {
   running: boolean;
   /** OMP-order truthful stat tokens (already formatted); empty when none. */
   stats: string[];
-  /** Live-intent line (`tool: note`); empty unless running with an intent. */
+  /**
+   * The live "what it's doing now" summary — a clean, present-tense one-liner
+   * derived from the child's latest prose / current tool / note (via
+   * {@link deriveAgentSummary}), NEVER the raw spawn prompt. Falls back to
+   * "Starting…" while a running child has no activity yet. The card shows it on
+   * the `└` tail line while the agent is running; a settled agent's terminal
+   * state is carried by the `[status]` word, so the tail is suppressed and this
+   * is not painted. (Named `intent` for renderer/back-compat reasons.)
+   */
   intent: string;
 }
 
@@ -257,13 +270,27 @@ export function composeSubReportRow(sr: SubReport): SubReportRow {
   return {
     name: sr.name?.trim() || "agent",
     badge: sr.agent?.trim() ? ` (${sr.agent.trim()})` : "",
-    brief: sr.brief?.trim() ? `: ${sr.brief.trim()}` : "",
+    // The raw prompt is intentionally dropped — the live `intent` summary below
+    // is the child's "what it's doing now" line (matching the AGENTS rail).
+    brief: "",
     isolated: sr.isolated ? " [isolated]" : "",
     accentId: sr.id?.trim() || sr.name?.trim() || "agent",
     status: sr.status?.trim().toLowerCase().replace(/_/g, " ") ?? "",
     running: isRunningStatus(sr.status),
     stats: agentStatsParts(sr),
-    intent: agentIntentLine(sr),
+    // The SAME derivation the active-agents block, sidebar rail, and herd view
+    // use: latest prose / current tool (+args, in-flight) / note / turn, with a
+    // "Starting…" fallback before any activity — never the spawn prompt.
+    intent: deriveAgentSummary({
+      status: sr.status,
+      assistant: sr.assistant,
+      tool: sr.tool,
+      toolInput: sr.toolInput,
+      toolRunning: sr.toolRunning,
+      note: sr.note,
+      turn: sr.turn,
+      maxTurns: sr.maxTurns,
+    }),
   };
 }
 
