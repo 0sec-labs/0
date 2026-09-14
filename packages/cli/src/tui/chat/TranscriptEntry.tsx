@@ -329,7 +329,16 @@ export function renderEntry(
     const { glyph, word } = toolStateLabel(state);
     const tone = failed ? ERROR : running ? PRIMARY : MUTED;
     if (toolCardStyle === "hidden" && !failed && !running) return null;
-    if (toolCardStyle === "compact") return finish(
+    // A command / edit / web / code / task result has a rich OMP-style card
+    // (the `$ cmd · SH · (1.2s)` framed body, the diff, the answer block). When
+    // `richToolCards` is on — the default — those keep their card even in
+    // "compact" mode, which is meant to flatten only the GENERIC tool rows
+    // (read/grep/…), not hide a command's output and timing behind a bare line.
+    const hasRichCard =
+      entry.metaKind === "command" || entry.metaKind === "edit" || entry.metaKind === "web" ||
+      entry.metaKind === "code" || entry.metaKind === "task";
+    const richCardWanted = hasRichCard && display.richToolCards !== false;
+    if (toolCardStyle === "compact" && !richCardWanted) return finish(
       <box key={entry.id} width={maxWidth} flexShrink={0} minWidth={0} marginTop={display.spacing}>
         <text width={maxWidth} height={1} wrapMode="none" truncate fg={tone}>{toolCompactLine(glyph, toolActionTitle(entry), toolResultLine(entry) ?? word, maxWidth)}{repeat}</text>
       </box>,
