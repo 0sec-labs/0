@@ -19,6 +19,8 @@ import {
   parseFeedbackCommand,
   submitFeedback,
   MAX_DIAGNOSTIC_MESSAGE_BYTES,
+  MAX_DIAGNOSTIC_DETAIL_MESSAGE_BYTES,
+  redactDiagnosticDetail,
   buildDiagnosticReview,
   diagnosticErrorText,
   LOCAL_DETAIL_NOTICE,
@@ -754,5 +756,76 @@ describe("buildDiagnosticReview", () => {
 
   it("exposes a local-only notice for the UI to display", () => {
     expect(LOCAL_DETAIL_NOTICE.toLowerCase()).toContain("not transmitted");
+  });
+});
+
+describe("buildDiagnosticFeedback — consented full detail (analyticsLevel commands|full)", () => {
+  const consent = { "0SEC_ANALYTICS_LEVEL": "full" } as unknown as NodeJS.ProcessEnv;
+
+  function withStack(message: string, stack: string): Error {
+    const e = new Error(message);
+    e.stack = stack;
+    return e;
+  }
+
+  it("appends the error type, message and stack frames when consented", () => {
+    const err = new TypeError("boom in the scanner");
+    err.stack = [
+      "TypeError: boom in the scanner",
+      "    at scan (/home/dev/coding/0sec/packages/core/src/scan.ts:42:7)",
+      "    at runAudit (/home/dev/coding/0sec/packages/cli/src/run.ts:10:3)",
+    ].join("\n");
+    const result = buildDiagnosticFeedback(diagInfo({ error: err, kind: "tool" }), consent);
+    // Finite header is still present.
+    expect(result.message).toContain("Diagnostic: tool error");
+    // ...and now the real detail.
+    expect(result.message).toContain("TypeError: boom in the scanner");
+    expect(result.message).toContain("at scan (");
+    expect(result.message).toContain("scan.ts:42");
+  });
+
+  it("still redacts the hard floor — secrets, emails, home usernames — from the detail", () => {
+    const err = withStack(
+      "auth failed for ops@acme.com with sk-abcdEFGH1234ijklMNOP5678 at /home/alice/proj/x.ts",
+      "Error: auth failed\n    at f (/home/alice/proj/x.ts:1:1)",
+    );
+    const result = buildDiagnosticFeedback(diagInfo({ error: err, kind: "tool" }), consent);
+    expect(result.message).not.toContain("sk-abcdEFGH1234ijklMNOP5678");
+    expect(result.message).not.toContain("ops@acme.com");
+    expect(result.message).not.toContain("/home/alice");
+    expect(result.message).toContain("/home/‹user›");
+  });
+
+  it("bounds the consented message to the larger detail cap", () => {
+    const frames = Array.from({ length: 6000 }, (_, i) => `    at frame${i} (/home/dev/f.ts:${i}:1)`).join("\n");
+    const err = withStack("x", `Error: x\n${frames}`);
+    const result = buildDiagnosticFeedback(diagInfo({ error: err, kind: "tool" }), consent);
+    expect(Buffer.byteLength(result.message)).toBeLessThanOrEqual(MAX_DIAGNOSTIC_DETAIL_MESSAGE_BYTES);
+  });
+
+  it("appends NOTHING and stays at the finite cap without consent", () => {
+    const err = withStack("boom", "Error: boom\n    at f (/x.ts:1:1)");
+    for (const level of ["off", "usage", ""]) {
+      const env = { "0SEC_ANALYTICS_LEVEL": level } as unknown as NodeJS.ProcessEnv;
+      const result = buildDiagnosticFeedback(diagInfo({ error: err, kind: "tool" }), env);
+      expect(result.message).not.toContain("at f (");
+      expect(Buffer.byteLength(result.message)).toBeLessThanOrEqual(MAX_DIAGNOSTIC_MESSAGE_BYTES);
+    }
+  });
+
+  it("redactDiagnosticDetail scrubs credential shapes and private keys", () => {
+    const raw = [
+      "ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789",
+      "-----BEGIN RSA PRIVATE KEY-----\nabcd\n-----END RSA PRIVATE KEY-----",
+      "password=hunter2xyz",
+      "postgres://dbuser:s3cr3tpw@db.internal:5432/prod",
+    ].join(" ");
+    const out = redactDiagnosticDetail(raw);
+    expect(out).not.toContain("ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789");
+    expect(out).not.toContain("hunter2xyz");
+    expect(out).not.toContain("BEGIN RSA PRIVATE KEY");
+    expect(out).not.toContain("s3cr3tpw");
+    // Non-secret shape (host) is intentionally preserved for debuggability.
+    expect(out).toContain("db.internal");
   });
 });

@@ -636,7 +636,7 @@ function diagnosticVersion(raw: string): string {
  * paths and environment values never enter the existing feedback wire body.
  * This builder performs no I/O and grants no permission to transmit.
  */
-export function buildDiagnosticFeedback(info: DiagnosticInfo): FeedbackPayload {
+export function buildDiagnosticFeedback(info: DiagnosticInfo, env: NodeJS.ProcessEnv = process.env): FeedbackPayload {
   const kind = info.kind === "tool" ? "tool" : info.kind === "runtime" ? "runtime" : "unknown";
   const platform = DIAGNOSTIC_PLATFORMS.has(info.platform) ? info.platform : "unknown";
   const arch = DIAGNOSTIC_ARCHS.has(info.arch) ? info.arch : "unknown";
@@ -646,13 +646,119 @@ export function buildDiagnosticFeedback(info: DiagnosticInfo): FeedbackPayload {
   const timestamp = typeof info.timestamp === "string"
     && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(info.timestamp)
     && Number.isFinite(Date.parse(info.timestamp)) ? info.timestamp : new Date().toISOString();
-  // All interpolated values are finite labels or bounded numeric versions;
-  // the complete UTF-8 message remains below MAX_DIAGNOSTIC_MESSAGE_BYTES.
-  return {
-    message: `Diagnostic: ${kind} error — ${platform}/${arch} on ${runtime} ${runtimeVersion}\nVersion: ${version}\nError: ${diagnosticError(info.error)}`,
-    timestamp,
-    version,
-  };
+  // The finite header: all interpolated values are finite labels or bounded
+  // numeric versions, so this stays below MAX_DIAGNOSTIC_MESSAGE_BYTES.
+  let message = `Diagnostic: ${kind} error — ${platform}/${arch} on ${runtime} ${runtimeVersion}\nVersion: ${version}\nError: ${diagnosticError(info.error)}`;
+  // When — and ONLY when — the operator has consented to sharing commands/code
+  // (analyticsLevel `commands` or `full`, surfaced to core+cli as the
+  // 0SEC_ANALYTICS_LEVEL env var), append the REDACTED full failure detail:
+  // the error type, its message, the stack frames and any captured output,
+  // with credentials, API keys, tokens, private keys and emails scrubbed and
+  // home-dir usernames anonymised. Without that consent the wire body is the
+  // finite category exactly as before — byte-capped and leak-free — so the
+  // default privacy contract (and its tests) is untouched.
+  if (diagnosticDetailAllowed(env)) {
+    const detail = redactDiagnosticDetail(buildDiagnosticDetailText(info));
+    if (detail) message = capUtf8Bytes(`${message}\n\n${detail}`, MAX_DIAGNOSTIC_DETAIL_MESSAGE_BYTES);
+  }
+  return { message, timestamp, version };
+}
+
+/**
+ * The larger wire cap for the consented, redacted detail path. Big enough for a
+ * real stack trace, still bounded so a runaway error can never balloon the POST.
+ */
+export const MAX_DIAGNOSTIC_DETAIL_MESSAGE_BYTES = 8192;
+/** Longest detail body assembled before redaction/capping. */
+const MAX_DIAGNOSTIC_DETAIL_CHARS = 6000;
+
+/**
+ * True only when the operator has opted into sharing command/code-level detail
+ * (analyticsLevel `commands` or `full`). Read from the env bridge the CLI sets
+ * from the setting, so core and cli agree without a settings-store import. An
+ * absent/`off`/`usage` value keeps diagnostics at the finite-category default.
+ */
+function diagnosticDetailAllowed(env: NodeJS.ProcessEnv): boolean {
+  const level = (env["0SEC_ANALYTICS_LEVEL"] ?? "").trim().toLowerCase();
+  return level === "commands" || level === "full";
+}
+
+/**
+ * Assemble the FULL failure detail (pre-redaction): tool name, error type +
+ * message, stack frames, and any separately-captured exit output. Bounded to
+ * {@link MAX_DIAGNOSTIC_DETAIL_CHARS}. The caller redacts before it goes on any
+ * wire; this function performs no I/O.
+ */
+function buildDiagnosticDetailText(info: DiagnosticInfo): string {
+  const parts: string[] = [];
+  if (info.toolName) parts.push(`Tool: ${info.toolName}`);
+  const err = info.error;
+  if (err instanceof Error) {
+    parts.push(`${err.name}: ${err.message || "(no message)"}`);
+    if (typeof err.stack === "string" && err.stack.trim()) parts.push(err.stack.trim());
+  } else {
+    const text = diagnosticErrorText(err);
+    if (text) parts.push(text);
+  }
+  const exitOutput = typeof info.exitOutput === "string" ? info.exitOutput.trim() : "";
+  if (exitOutput && !parts.some((p) => p.includes(exitOutput))) parts.push(exitOutput);
+  let detail = parts.join("\n").trim();
+  if (detail.length > MAX_DIAGNOSTIC_DETAIL_CHARS) detail = detail.slice(0, MAX_DIAGNOSTIC_DETAIL_CHARS - 1) + "…";
+  return detail;
+}
+
+/** Credential/PII patterns applied as REPLACE (the hard redaction floor). */
+const DETAIL_REDACTIONS: { re: RegExp; to: string }[] = [
+  { re: /-----BEGIN (?:[A-Z0-9 ]+ )?PRIVATE KEY-----[\s\S]*?-----END (?:[A-Z0-9 ]+ )?PRIVATE KEY-----/g, to: "‹redacted:private-key›" },
+  { re: /\bsk-[A-Za-z0-9_-]{16,}/g, to: "‹redacted:key›" },
+  { re: /\bgh[pousr]_[A-Za-z0-9]{20,}/g, to: "‹redacted:gh-token›" },
+  { re: /\b(?:AKIA|ASIA|ABIA|ACCA)[0-9A-Z]{16}\b/g, to: "‹redacted:aws-key›" },
+  { re: /\bAIza[0-9A-Za-z_-]{35}\b/g, to: "‹redacted:gcp-key›" },
+  { re: /\bxox[abprs]-[A-Za-z0-9-]{10,}/g, to: "‹redacted:slack-token›" },
+  { re: /\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]+/g, to: "‹redacted:jwt›" },
+  { re: /authorization\s*[:=]\s*(?:bearer|basic|token|digest)\s+\S+/gi, to: "authorization: ‹redacted›" },
+  { re: /\b((?:pass(?:word|wd)?|api[_-]?key|secret|token|credentials?)\s*[:=]\s*)\S{6,}/gi, to: "$1‹redacted›" },
+  // Connection strings: keep the scheme/host shape, drop the inline credentials.
+  // MUST run before the email rule so `user:pass@host` is not mis-read as an
+  // email (which would swallow the host too).
+  { re: /([a-z][a-z0-9+.-]*:\/\/)[^\s/@:]+:[^\s/@]+@/gi, to: "$1‹redacted›@" },
+  { re: /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/g, to: "‹redacted:email›" },
+  // Home-dir usernames in file paths — keep the path shape, anonymise the user.
+  { re: /(\/home\/)[^/\s]+/g, to: "$1‹user›" },
+  { re: /(\/Users\/)[^/\s]+/g, to: "$1‹user›" },
+  { re: /([A-Za-z]:\\Users\\)[^\\\s]+/g, to: "$1‹user›" },
+];
+
+/**
+ * Redact the HARD-floor secrets and PII from the detail before it goes on the
+ * wire: credentials, API keys, tokens, private keys, JWTs, auth headers, inline
+ * connection-string passwords, emails and home-dir usernames. This is the
+ * safety floor that always applies to the consented detail path — it does NOT
+ * strip target hostnames, IPs or tool names, which the operator has opted to
+ * share by enabling the commands/full tier. Never throws.
+ */
+export function redactDiagnosticDetail(text: string): string {
+  if (typeof text !== "string" || text.length === 0) return "";
+  try {
+    let out = text;
+    for (const { re, to } of DETAIL_REDACTIONS) out = out.replace(re, to);
+    return out;
+  } catch {
+    // A pathological input must never leak raw: drop it entirely.
+    return "";
+  }
+}
+
+/** Truncate to at most `maxBytes` UTF-8 bytes without splitting a code point. */
+function capUtf8Bytes(text: string, maxBytes: number): string {
+  if (Buffer.byteLength(text, "utf8") <= maxBytes) return text;
+  let lo = 0, hi = text.length;
+  while (lo < hi) {
+    const mid = Math.ceil((lo + hi) / 2);
+    if (Buffer.byteLength(text.slice(0, mid), "utf8") <= maxBytes - 1) lo = mid;
+    else hi = mid - 1;
+  }
+  return text.slice(0, lo) + "…";
 }
 
 // ---------------------------------------------------------------------------
