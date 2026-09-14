@@ -1,5 +1,6 @@
 /** @jsxImportSource @opentui/react */
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { sleekScrollbar } from "./scrollbar.js";
 import { useKeyboard } from "@opentui/react";
 import { useTheme, type Theme } from "./theme-context.js";
 import { severityToneFor } from "./themes.js";
@@ -811,16 +812,7 @@ export function SessionScreen({ state, onExit, shell, queueUserMessage }: { stat
           backgroundColor={theme.PANEL}
           paddingX={1}
           paddingY={0}
-          verticalScrollbarOptions={{
-            trackOptions: {
-              backgroundColor: theme.PANEL_ALT,
-              foregroundColor: theme.MUTED,
-            },
-            arrowOptions: {
-              foregroundColor: theme.MUTED,
-              backgroundColor: theme.PANEL,
-            },
-          }}
+          verticalScrollbarOptions={sleekScrollbar(theme)}
         >
           <box flexDirection="column" width="100%" minWidth={0}>
             {visibleTranscript.map((item) => renderTranscriptItem(theme, item, {
@@ -844,16 +836,7 @@ export function SessionScreen({ state, onExit, shell, queueUserMessage }: { stat
           flexShrink={0}
           minWidth={0}
           minHeight={0}
-          verticalScrollbarOptions={{
-            trackOptions: {
-              backgroundColor: theme.PANEL_ALT,
-              foregroundColor: theme.MUTED,
-            },
-            arrowOptions: {
-              foregroundColor: theme.MUTED,
-              backgroundColor: theme.PANEL,
-            },
-          }}
+          verticalScrollbarOptions={sleekScrollbar(theme)}
         >
           <PanelSection title="Target" contentWidth={sidebarTextWidth} tone={theme.PRIMARY}>
             <box flexDirection="column" minWidth={0}>

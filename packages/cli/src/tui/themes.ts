@@ -277,6 +277,21 @@ export function contrastRatio(a: string, b: string): number {
   return (hi + 0.05) / (lo + 0.05);
 }
 
+/**
+ * The legible foreground for text painted directly on the theme's `PRIMARY`
+ * strip — the orange header bar. Picks whichever of `CANVAS` / `TEXT` has the
+ * higher WCAG contrast against `PRIMARY`, so a dark glyph reads on a light
+ * signature colour and a light glyph reads on a dark one, across every theme
+ * (0sec orange, blue-team blue, golden-gate tan, the light and high-contrast
+ * palettes). Both candidates are always `#RRGGBB` (degrade snaps to hex), so
+ * `contrastRatio` never throws here.
+ */
+export function readableOnPrimary(theme: Theme): string {
+  return contrastRatio(theme.CANVAS, theme.PRIMARY) >= contrastRatio(theme.TEXT, theme.PRIMARY)
+    ? theme.CANVAS
+    : theme.TEXT;
+}
+
 /* -------------------------------------------------------------- thresholds */
 
 /** WCAG 2.2 SC 1.4.3 (AA), normal-size text. The bar for every `TEXT_TOKEN`. */

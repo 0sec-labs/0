@@ -102,6 +102,7 @@
  */
 
 import React, { useEffect, useMemo, useRef, useState, type SetStateAction } from "react";
+import { sleekScrollbar } from "./scrollbar.js";
 import { useKeyboard, usePaste } from "@opentui/react";
 import { decodePasteBytes, TextAttributes } from "@opentui/core";
 
@@ -762,16 +763,7 @@ export function ModelScreen({
           height={pane.height}
           flexShrink={0}
           scrollX={false}
-          verticalScrollbarOptions={{
-            trackOptions: {
-              backgroundColor: theme.PANEL,
-              foregroundColor: theme.MUTED,
-            },
-            arrowOptions: {
-              foregroundColor: theme.MUTED,
-              backgroundColor: theme.PANEL,
-            },
-          }}
+          verticalScrollbarOptions={sleekScrollbar(theme)}
         >
           <box width={inner} flexDirection="column" flexShrink={0} minWidth={0}>
             {lines.map((line, index) => (
@@ -886,16 +878,7 @@ export function ModelScreen({
           height={listRows}
           flexShrink={0}
           scrollX={false}
-          verticalScrollbarOptions={{
-            trackOptions: {
-              backgroundColor: theme.PANEL,
-              foregroundColor: theme.MUTED,
-            },
-            arrowOptions: {
-              foregroundColor: theme.MUTED,
-              backgroundColor: theme.PANEL,
-            },
-          }}
+          verticalScrollbarOptions={sleekScrollbar(theme)}
         >
           <box width={messageWidth} flexDirection="column" flexShrink={0} minWidth={0}>
             {messageLines.map((line, index) => (

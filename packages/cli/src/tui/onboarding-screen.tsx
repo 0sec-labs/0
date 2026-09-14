@@ -44,6 +44,7 @@ import React, {
   useMemo,
   useState,
 } from "react";
+import { sleekScrollbar } from "./scrollbar.js";
 import { useKeyboard } from "@opentui/react";
 import { TextAttributes } from "@opentui/core";
 
@@ -671,10 +672,7 @@ function renderProse({
       height={bodyRows}
       flexShrink={0}
       scrollX={false}
-      verticalScrollbarOptions={{
-        trackOptions: { backgroundColor: theme.PANEL, foregroundColor: theme.MUTED },
-        arrowOptions: { foregroundColor: theme.MUTED, backgroundColor: theme.PANEL },
-      }}
+      verticalScrollbarOptions={sleekScrollbar(theme)}
     >
       <box flexDirection="column" width={textWidth} flexShrink={0} minWidth={0}>
         {rows}

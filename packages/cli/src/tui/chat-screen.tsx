@@ -159,7 +159,8 @@ import {
 } from "./panels.js";
 import { getAllCapabilities } from "./capability-registry.js";
 import { fitTuiText, sanitizeComposerText } from "./text.js";
-import { THEME_NAMES, getThemeEntry, isThemeName } from "./themes.js";
+import { THEME_NAMES, getThemeEntry, isThemeName, readableOnPrimary } from "./themes.js";
+import { sleekScrollbar } from "./scrollbar.js";
 import {
   parseSubagentCard,
   reduceActiveSubagents,
@@ -1036,12 +1037,14 @@ export function ChatScreen({
     WARNING,
     INFO,
     ACCENT,
-    BRAND,
     PANEL,
     PANEL_ALT,
     CANVAS,
     BORDER,
   } = theme;
+  // Dark/legible text for the orange (PRIMARY) header strip — theme-picked so
+  // it reads on every palette's signature colour.
+  const headerFg = readableOnPrimary(theme);
   // The OpenTUI renderer, for the OSC-52 clipboard path (copy-on-highlight).
   // OpenTUI owns the framebuffer, so the terminal's native mouse-selection is
   // off; we re-add copy-on-highlight ourselves and must never touch raw stdout.
@@ -5783,7 +5786,7 @@ export function ChatScreen({
             flexGrow={1}
             minHeight={0}
             backgroundColor={PANEL}
-            verticalScrollbarOptions={{ trackOptions: { backgroundColor: PANEL, foregroundColor: MUTED }, arrowOptions: { foregroundColor: MUTED, backgroundColor: PANEL } }}
+            verticalScrollbarOptions={sleekScrollbar(theme, PANEL)}
             contentOptions={{ flexDirection: "column" }}
             stickyScroll
             stickyStart="bottom"
@@ -5855,7 +5858,7 @@ export function ChatScreen({
         paddingX={compact ? 1 : 2}
         paddingY={1}
       >
-        <scrollbox ref={transcriptRef} focusable={false} width="100%" flexGrow={1} minHeight={0} backgroundColor={PANEL} stickyScroll stickyStart="bottom" verticalScrollbarOptions={{ trackOptions: { backgroundColor: PANEL, foregroundColor: MUTED }, arrowOptions: { foregroundColor: MUTED, backgroundColor: PANEL } }}>
+        <scrollbox ref={transcriptRef} focusable={false} width="100%" flexGrow={1} minHeight={0} backgroundColor={PANEL} stickyScroll stickyStart="bottom" verticalScrollbarOptions={sleekScrollbar(theme, PANEL)}>
           <box flexDirection="column" width="100%">
             {renderTranscriptEntries(entries, transcriptWidth, entryDisplay)}
             {/* The plan lives in the RIGHT sidebar now; this inline card is only
@@ -5978,27 +5981,28 @@ export function ChatScreen({
         * environmental (model, cwd, branch, counters) moved to the bottom
         * bar, where it sits next to the input the operator is looking at.
         */}
-      <box flexDirection="row" width="100%" minWidth={0} flexShrink={0} marginBottom={1} gap={1}>
+      <box flexDirection="row" width="100%" minWidth={0} flexShrink={0} marginBottom={1} gap={1} backgroundColor={PRIMARY}>
         <box flexDirection="row" flexShrink={0} minWidth={0}>
-          <text fg={PRIMARY}>0sec</text>
+          <text fg={headerFg}>0sec</text>
         </box>
         <box width={headerEngagementWidth} flexShrink={0} minWidth={0}>
-          <text fg={MUTED}>{fitTuiText(headerEngagement, headerEngagementWidth, { mode: "middle" })}</text>
+          <text fg={headerFg}>{fitTuiText(headerEngagement, headerEngagementWidth, { mode: "middle" })}</text>
         </box>
         {headerObjectiveWidth > 0 ? (
-          // The async AI objective summary, right-aligned at the top-right in the
-          // 0sec voice (BRAND). Empty/compact hides it and the engagement
-          // summary reclaims the cells.
+          // The async AI objective summary, right-aligned at the top-right.
+          // Legible on the orange strip via the contrast-picked header fg; the
+          // 0sec voice (BRAND) reads on canvas but not on PRIMARY. Empty/compact
+          // hides it and the engagement summary reclaims the cells.
           <box width={headerObjectiveWidth} flexShrink={0} minWidth={0} flexDirection="row" justifyContent="flex-end">
-            <text fg={BRAND}>{fitTuiText(headerObjective, headerObjectiveWidth, { mode: "end" })}</text>
+            <text fg={headerFg}>{fitTuiText(headerObjective, headerObjectiveWidth, { mode: "end" })}</text>
           </box>
         ) : null}
         <box width={sidebarControlWidth} flexDirection="row" flexShrink={0} gap={1}>
           <box width={Math.floor((sidebarControlWidth - 1) / 2)} flexShrink={0} onMouseDown={() => updateSetting("showLeftSidebar", !settingsRef.current.showLeftSidebar)}>
-            <text fg={settings.showLeftSidebar ? ACCENT : MUTED}>{sidebarControlWidth > 8 ? `${settings.showLeftSidebar ? "▾" : "▸"} Audits` : "◀"}</text>
+            <text fg={headerFg}>{sidebarControlWidth > 8 ? `${settings.showLeftSidebar ? "▾" : "▸"} Audits` : "◀"}</text>
           </box>
           <box width={Math.floor(sidebarControlWidth / 2)} flexShrink={0} onMouseDown={() => updateSetting("showRightSidebar", !settingsRef.current.showRightSidebar)}>
-            <text fg={settings.showRightSidebar ? ACCENT : MUTED}>{sidebarControlWidth > 8 ? `${settings.showRightSidebar ? "▾" : "▸"} Agents` : "▶"}</text>
+            <text fg={headerFg}>{sidebarControlWidth > 8 ? `${settings.showRightSidebar ? "▾" : "▸"} Agents` : "▶"}</text>
           </box>
         </box>
       </box>

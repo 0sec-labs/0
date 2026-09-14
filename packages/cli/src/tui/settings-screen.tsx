@@ -42,6 +42,7 @@
  */
 
 import React, { useMemo, useRef, useState } from "react";
+import { sleekScrollbar } from "./scrollbar.js";
 import { useKeyboard, usePaste, useTerminalDimensions } from "@opentui/react";
 import { decodePasteBytes, TextAttributes } from "@opentui/core";
 
@@ -596,16 +597,7 @@ export function SettingsScreen({ frame, onBack, onExit }: SettingsScreenProps) {
           height={textRows}
           flexShrink={0}
           scrollX={false}
-          verticalScrollbarOptions={{
-            trackOptions: {
-              backgroundColor: theme.PANEL,
-              foregroundColor: theme.MUTED,
-            },
-            arrowOptions: {
-              foregroundColor: theme.MUTED,
-              backgroundColor: theme.PANEL,
-            },
-          }}
+          verticalScrollbarOptions={sleekScrollbar(theme)}
         >
           <box width={detailWidth} flexDirection="column" flexShrink={0} minWidth={0}>
             {detailLines.map((line, index) => (

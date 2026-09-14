@@ -49,6 +49,7 @@
  */
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { sleekScrollbar } from "./scrollbar.js";
 import { decodePasteBytes, TextAttributes } from "@opentui/core";
 import { useKeyboard, usePaste } from "@opentui/react";
 
@@ -844,16 +845,7 @@ export function ConnectScreen({ frame, onBack, onExit, recovery, onConnected, en
             height={bodyRows}
             flexShrink={0}
             scrollX={false}
-            verticalScrollbarOptions={{
-              trackOptions: {
-                backgroundColor: theme.PANEL,
-                foregroundColor: theme.MUTED,
-              },
-              arrowOptions: {
-                foregroundColor: theme.MUTED,
-                backgroundColor: theme.PANEL,
-              },
-            }}
+            verticalScrollbarOptions={sleekScrollbar(theme)}
           >
             <box width={width} flexDirection="column" flexShrink={0} minWidth={0}>
               {lines.map((line, index) => (

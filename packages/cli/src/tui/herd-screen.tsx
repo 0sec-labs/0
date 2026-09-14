@@ -29,6 +29,7 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { sleekScrollbar } from "./scrollbar.js";
 import { useKeyboard, usePaste } from "@opentui/react";
 import { decodePasteBytes, TextAttributes } from "@opentui/core";
 import { eventBus, peekInbox, sendOperatorMessage, type MessagingRuntime } from "@0sec/core";
@@ -966,16 +967,7 @@ export function HerdScreen({
         height={pane.height}
         flexShrink={0}
         scrollX={false}
-        verticalScrollbarOptions={{
-          trackOptions: {
-            backgroundColor: theme.PANEL,
-            foregroundColor: theme.MUTED,
-          },
-          arrowOptions: {
-            foregroundColor: theme.MUTED,
-            backgroundColor: theme.PANEL,
-          },
-        }}
+        verticalScrollbarOptions={sleekScrollbar(theme)}
       >
         <box width={inner} flexDirection="column" flexShrink={0} minWidth={0}>
           {lines.map((line, index) => (
@@ -1139,16 +1131,7 @@ export function HerdScreen({
             height={Math.max(1, focusLayout.meta.bodyRows)}
             flexShrink={0}
             scrollX={false}
-            verticalScrollbarOptions={{
-              trackOptions: {
-                backgroundColor: theme.PANEL,
-                foregroundColor: theme.MUTED,
-              },
-              arrowOptions: {
-                foregroundColor: theme.MUTED,
-                backgroundColor: theme.PANEL,
-              },
-            }}
+            verticalScrollbarOptions={sleekScrollbar(theme)}
           >
             <box
               width={Math.max(1, focusLayout.meta.innerWidth - 1)}

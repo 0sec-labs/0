@@ -1,5 +1,6 @@
 /** @jsxImportSource @opentui/react */
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { sleekScrollbar } from "./scrollbar.js";
 import { useKeyboard, usePaste } from "@opentui/react";
 import { decodePasteBytes } from "@opentui/core";
 import type { ScrollBoxRenderable } from "@opentui/core";
@@ -180,16 +181,7 @@ export function HarnessViewPanel({ contentWidth, onBack }: { contentWidth: numbe
         ref={scroll}
         flexGrow={1}
         minHeight={0}
-        verticalScrollbarOptions={{
-          trackOptions: {
-            backgroundColor: theme.PANEL,
-            foregroundColor: theme.MUTED,
-          },
-          arrowOptions: {
-            foregroundColor: theme.MUTED,
-            backgroundColor: theme.PANEL,
-          },
-        }}
+        verticalScrollbarOptions={sleekScrollbar(theme)}
       ><ViewBlocks blocks={document.view.blocks} width={Math.max(1, innerWidth - 1)} /></scrollbox>
       <text fg={theme.MUTED}>↑↓ / PgUp/PgDn scroll · Esc picker</text>
     </> : <>

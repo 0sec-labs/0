@@ -6,6 +6,7 @@ import { Cells, textCells } from "./primitives.js";
 import { operatorIcon, operatorTitle } from "./operator-icons.js";
 import type { DialogItem } from "./dialog-select.js";
 import { SCROLLBAR_COLUMN } from "./shell-geometry.js";
+import { sleekScrollbar } from "./scrollbar.js";
 
 // ---------------------------------------------------------------------------
 // Dialog-interior helpers (presentation only)
@@ -130,7 +131,7 @@ export function DialogDetailColumn({
   const theme = useTheme();
   const inner = Math.max(1, pane.width - SCROLLBAR_COLUMN);
   return (
-    <scrollbox width={pane.width} height={pane.height} flexShrink={0} scrollX={false}>
+    <scrollbox width={pane.width} height={pane.height} flexShrink={0} scrollX={false} verticalScrollbarOptions={sleekScrollbar(theme)}>
       <box width={inner} flexDirection="column" flexShrink={0} minWidth={0}>
         {lines.map((line, index) => (
           <Cells key={`detail-${index}`} width={inner} fg={line.fg ?? theme.MUTED}>
