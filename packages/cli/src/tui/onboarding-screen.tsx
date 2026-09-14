@@ -56,7 +56,6 @@ import { operatorIcon, operatorTitle } from "./operator-icons.js";
 import {
   DIALOG_HOST_FOOTER_ROWS,
   shellChromeRows,
-  titleColumns,
   wrapCells,
 } from "./settings-layout.js";
 import { useTheme, type Theme } from "./theme-context.js";
@@ -119,19 +118,28 @@ export function finalizeOnboarding(): void {
   updateSetting("onboardingCompleted", true);
 }
 
+/** The four consent tiers, matching the `analyticsLevel` setting's choices. */
+export type AnalyticsLevel = TuiSettings["analyticsLevel"];
+
 /**
- * Persist the analytics-consent decision. Flips the CONSENT gate only —
- * `diagnosticReporting` to "automatic" on Yes, "off" on No — and ALWAYS records
- * that we asked (`diagnosticReportingPrompted`), so the separate in-session
- * prompt never re-asks. Exported so a test drives the exact writes the
- * `analytics` step's Enter performs, the way `finalizeOnboarding` is tested.
+ * Persist the analytics-consent decision. Writes the chosen tier to
+ * `analyticsLevel`, keeps the legacy `diagnosticReporting` boolean in sync by
+ * DERIVING it (`analyticsLevel !== "off"` ⇒ "automatic", else "off"), and
+ * ALWAYS records that we asked (`diagnosticReportingPrompted`) so the separate
+ * in-session prompt never re-asks. Exported so a test drives the exact writes
+ * the `analytics` step's Enter performs, the way `finalizeOnboarding` is tested.
  *
- * This does NOT broaden WHAT is collected: broadening the wire is a follow-up
- * requiring privacy review; keep it finite (see feedback.ts `diagnosticError`,
- * which maps failures to a category label, never raw text).
+ * This does NOT broaden WHAT is collected. A tier above "usage" is a CONSENT
+ * GRANT only: the collection/transmission pipeline for commands, code, targets
+ * and findings does not exist yet, and the wire still carries only feature
+ * usage and the finite error category regardless of the stored tier (see
+ * feedback.ts `diagnosticError`, which maps failures to a category label, never
+ * raw text). Any future collection must still pass privacy review before
+ * anything more goes on the wire.
  */
-export function recordAnalyticsConsent(yes: boolean): void {
-  updateSetting("diagnosticReporting", yes ? "automatic" : "off");
+export function recordAnalyticsConsent(level: AnalyticsLevel): void {
+  updateSetting("analyticsLevel", level);
+  updateSetting("diagnosticReporting", level === "off" ? "off" : "automatic");
   updateSetting("diagnosticReportingPrompted", true);
 }
 
@@ -252,7 +260,7 @@ const STEP_HINT: Record<OnboardingStep, string> = {
   connect: "connect or esc to skip · ctrl+c cancel",
   models: "select a model or esc to skip · ctrl+c cancel",
   preferences: "←/→ change · enter confirm · s skip · esc cancel",
-  analytics: "←/→ choose · enter confirm · s skip · esc cancel",
+  analytics: "↑/↓ choose · enter confirm · s skip · esc cancel",
   done: "enter start working · esc review later",
 };
 
@@ -261,37 +269,60 @@ const STEP_HINT: Record<OnboardingStep, string> = {
 // ---------------------------------------------------------------------------
 
 /**
- * The two consent options, in the order they render left → right. Index 0 is
- * the highlighted default ("Yes"), but this is a GENUINE opt-in, not a dark
- * pattern: "No" sits one ←/→ away and Enter confirms whichever is highlighted,
- * so declining is exactly one keypress heavier than accepting nothing — and
- * `s` skips the whole step without changing the current default. There is no
- * hidden state, no pre-checked trap, and no extra confirmation to say no.
+ * The four consent tiers, top → bottom, each mapping to an `analyticsLevel`.
+ * The first three are escalating GRANTS of sharing (the operator's "3 versions"
+ * of sharing); the fourth declines everything. This is a GENUINE radio, not a
+ * dark pattern: every option is visible at once, the selection moves one
+ * ↑/↓ keystroke at a time, Enter confirms whatever is highlighted, and `s`
+ * skips the whole step without changing the stored value. Declining ("Don't
+ * share anything") sits in the list exactly like every other option.
+ *
+ * CRITICAL: the `detail` copy describes what each tier AUTHORIZES, not what is
+ * transmitted. See the honesty note on `recordAnalyticsConsent` — tiers above
+ * "usage" grant consent for future, privacy-reviewed collection that does not
+ * exist yet; the wire carries only usage + error category regardless of tier.
  */
-const ANALYTICS_CHOICES = [
-  { yes: true, label: "Yes, share anonymous analytics" },
-  { yes: false, label: "No, keep everything local" },
-] as const;
+const ANALYTICS_OPTIONS = [
+  {
+    level: "usage",
+    label: "Anonymous usage & error types",
+    detail:
+      "How features are used and the category of errors that occur. No commands, code, targets, or findings.",
+  },
+  {
+    level: "commands",
+    label: "＋ Commands & code",
+    detail:
+      "Also the commands the agent runs and the code it writes, anonymized. Helps us understand real workflows and failures.",
+  },
+  {
+    level: "full",
+    label: "＋ Full engagement",
+    detail:
+      "Also targets and findings — the most useful for open research. Only enable on engagements where you're authorized to share.",
+  },
+  {
+    level: "off",
+    label: "Don't share anything",
+    detail: "Nothing leaves your machine.",
+  },
+] as const satisfies readonly { level: AnalyticsLevel; label: string; detail: string }[];
 
 /**
- * HONEST consent copy. Every claim here must stay true of what the code
- * actually collects: today the wire carries only feature-usage signals and the
- * finite ERROR CATEGORY (see feedback.ts `diagnosticError`) — never raw error
- * text, targets, findings, commands, code, or any engagement data. If this copy
- * ever implies more, either narrow the copy or gate it behind the privacy
- * review below — do NOT quietly broaden collection to match richer wording.
+ * The intro copy above the radio. HONEST: it describes sharing anonymized data
+ * and that the operator chooses how much — it does NOT claim any particular
+ * category is currently being transmitted. Kept to two short lines (title +
+ * one body paragraph) so the four tiers below dominate the card.
  */
 function analyticsLines(width: number): StepLine[] {
   return [
-    ...paragraph("Help improve 0sec", "title", width),
+    ...paragraph("Help advance open AI-cybersecurity research", "title", width),
     BLANK,
     ...paragraph(
-      "Share anonymous usage analytics so we can improve and advance open AI-cybersecurity research.",
+      "Share anonymous usage analytics so we can improve and advance open AI-cybersecurity research. Everything is anonymized and you choose how much to share — change it anytime in /settings.",
       "text",
       width,
     ),
-    BLANK,
-    ...paragraph("You can change this anytime in Settings.", "muted", width),
   ];
 }
 
@@ -315,11 +346,17 @@ function toneColor(tone: LineTone, theme: Theme): string {
 const FILLED = "●";
 const HOLLOW = "○";
 
+/** Upper bound on the card's width: past this a wizard reads better centered
+ *  with generous side gutters than stretched edge-to-edge, exactly the way the
+ *  overlay caps and centers its own body. */
+const CARD_MAX_WIDTH = 72;
+
 /**
- * A dot per step — filled for the steps reached, hollow for the ones ahead —
- * followed by the current step's name. Both columns are budgeted before
- * anything is painted, and the whole row is dropped rather than squeezed when
- * the surface cannot pay for it.
+ * A centered progress row: a dot per step — filled for the steps reached,
+ * hollow for the ones ahead — followed by a muted "Step X of N · Label"
+ * counter. Everything is budgeted before it is painted; pieces drop (counter
+ * first, then the whole row) rather than being squeezed when the surface cannot
+ * pay for them, and the group is centered within `width`.
  */
 function StepRail({ current, width, theme }: { current: number; width: number; theme: Theme }) {
   const total = ONBOARDING_STEPS.length;
@@ -329,18 +366,25 @@ function StepRail({ current, width, theme }: { current: number; width: number; t
   const filledWidth = textCells(filled);
   const restWidth = textCells(rest);
   const gap = restWidth > 0 ? 1 : 0;
-  const label = ONBOARDING_STEPS[current]?.label ?? "";
   const dots = filledWidth + gap + restWidth;
   if (width < dots) return null;
-  const labelGap = width > dots && label.length > 0 ? 1 : 0;
-  const labelWidth = Math.max(0, width - dots - labelGap);
+
+  const label = ONBOARDING_STEPS[current]?.label ?? "";
+  const counter = `Step ${current + 1} of ${total}${label ? ` · ${label}` : ""}`;
+  const sep = 2; // "  " between the dots and the counter
+  const counterWidth = width >= dots + sep + counter.length ? counter.length : 0;
+
   return (
-    <box flexDirection="row" width={width} flexShrink={0} minWidth={0}>
+    <box flexDirection="row" width={width} justifyContent="center" flexShrink={0} minWidth={0}>
       <Cells width={filledWidth} fg={theme.ACCENT}>{filled}</Cells>
       {gap > 0 ? <Cells width={gap}>{""}</Cells> : null}
       {restWidth > 0 ? <Cells width={restWidth} fg={theme.MUTED}>{rest}</Cells> : null}
-      {labelGap > 0 ? <Cells width={labelGap}>{""}</Cells> : null}
-      {labelWidth > 0 ? <Cells width={labelWidth} fg={theme.MUTED}>{label}</Cells> : null}
+      {counterWidth > 0 ? (
+        <>
+          <Cells width={sep}>{""}</Cells>
+          <Cells width={counterWidth} fg={theme.MUTED}>{counter}</Cells>
+        </>
+      ) : null}
     </box>
   );
 }
@@ -371,10 +415,6 @@ export function OnboardingScreen({
     0,
     height - (inDialog ? DIALOG_HOST_FOOTER_ROWS : shellChromeRows(width)),
   );
-  // The step's words scroll rather than being cut off; a scrollbox shows its
-  // bar in the last column.
-  const textWidth = Math.max(1, contentWidth - 1);
-
   const [stepIndex, setStepIndex] = useState(0);
   const currentStep = ONBOARDING_STEPS[stepIndex]?.key ?? "done";
 
@@ -444,18 +484,19 @@ export function OnboardingScreen({
     setChoiceIndex((i) => ((i + delta) % n + n) % n);
   }, [prefChoices.length]);
 
-  // Analytics consent: which option is highlighted (0 = "Yes", the default).
-  // Nothing is persisted while cycling — only Enter (or skip) writes.
+  // Analytics consent: which tier is highlighted (0 = the minimal "usage"
+  // share, the recommended default). Nothing is persisted while moving — only
+  // Enter (or skip) writes.
   const [analyticsIndex, setAnalyticsIndex] = useState(0);
 
   const cycleAnalytics = useCallback((delta: number) => {
-    const n = ANALYTICS_CHOICES.length;
+    const n = ANALYTICS_OPTIONS.length;
     setAnalyticsIndex((i) => ((i + delta) % n + n) % n);
   }, []);
 
   const commitAnalytics = useCallback(() => {
-    const yes = ANALYTICS_CHOICES[analyticsIndex]?.yes ?? false;
-    recordAnalyticsConsent(yes);
+    const level = ANALYTICS_OPTIONS[analyticsIndex]?.level ?? "off";
+    recordAnalyticsConsent(level);
     advanceTo("done");
   }, [analyticsIndex, advanceTo]);
 
@@ -482,8 +523,8 @@ export function OnboardingScreen({
     }
 
     if (currentStep === "analytics") {
-      if (key.name === "left" || key.name === "h") cycleAnalytics(-1);
-      else if (key.name === "right" || key.name === "l") cycleAnalytics(1);
+      if (key.name === "up" || key.name === "k" || key.name === "left" || key.name === "h") cycleAnalytics(-1);
+      else if (key.name === "down" || key.name === "j" || key.name === "right" || key.name === "l") cycleAnalytics(1);
       else if (key.name === "return" && !key.shift) commitAnalytics();
       else if (key.name === "s") skipAnalytics();
       return;
@@ -513,45 +554,48 @@ export function OnboardingScreen({
 
   const hint = STEP_HINT[currentStep] ?? "esc to dismiss";
 
-  // Row budget: the title and the rail give way before the step's own content.
+  // Cap the card and center it on a wide surface, the way the overlay does, so
+  // no line runs edge-to-edge. Fully responsive: on a narrow (~60 col) dialog
+  // the cap simply IS the whole width and the gutters vanish.
+  const cardWidth = Math.min(contentWidth, CARD_MAX_WIDTH);
+  const cardTextWidth = Math.max(1, cardWidth - 1);
+  const sideGutter = Math.max(0, Math.floor((contentWidth - cardWidth) / 2));
+
+  // Row budget: the title, the rail and the gap under them all give way before
+  // the step's own content.
   const titleRows = availableRows >= 3 ? 1 : 0;
   const railRows = availableRows >= 7 ? 1 : 0;
-  const bodyRows = Math.max(0, availableRows - titleRows - railRows);
+  const headerRows = titleRows + railRows;
+  const gapRow = headerRows > 0 && availableRows >= 9 ? 1 : 0;
+  const bodyRows = Math.max(0, availableRows - headerRows - gapRow);
 
   const titleText = `${operatorIcon("onboarding")} ${operatorTitle("onboarding")}`;
-  const titleMeta = `Step ${stepIndex + 1} of ${ONBOARDING_STEPS.length}`;
-  const title = titleColumns(contentWidth, titleMeta.length);
 
   const chrome = (content: React.ReactNode) => (
-    <box flexDirection="column" width={contentWidth} flexGrow={1} minWidth={0} overflow="hidden">
-      {titleRows > 0 ? (
-        <box flexDirection="row" width={title.width} flexShrink={0} minWidth={0}>
-          <Cells width={title.titleWidth} fg={theme.PRIMARY} attributes={TextAttributes.BOLD}>
+    <box flexDirection="row" width={contentWidth} flexGrow={1} minWidth={0} overflow="hidden">
+      {sideGutter > 0 ? <box width={sideGutter} flexShrink={0} /> : null}
+      <box flexDirection="column" width={cardWidth} flexGrow={1} minWidth={0} overflow="hidden">
+        {titleRows > 0 ? (
+          <Cells width={cardWidth} align="center" fg={theme.PRIMARY} attributes={TextAttributes.BOLD}>
             {titleText}
           </Cells>
-          {title.metaWidth > 0 ? (
-            <>
-              <Cells width={title.gap}>{""}</Cells>
-              <Cells width={title.metaWidth} align="right" fg={theme.MUTED}>
-                {titleMeta}
-              </Cells>
-            </>
-          ) : null}
-        </box>
-      ) : null}
-      {railRows > 0 ? <StepRail current={stepIndex} width={contentWidth} theme={theme} /> : null}
-      {bodyRows > 0 ? content : null}
+        ) : null}
+        {railRows > 0 ? <StepRail current={stepIndex} width={cardWidth} theme={theme} /> : null}
+        {gapRow > 0 ? <Cells width={cardWidth}>{""}</Cells> : null}
+        {bodyRows > 0 ? content : null}
+      </box>
+      {sideGutter > 0 ? <box width={sideGutter} flexShrink={0} /> : null}
     </box>
   );
 
   let body: React.ReactNode;
   if (currentStep === "analytics") {
     body = renderAnalytics({
-      lines: analyticsLines(textWidth),
+      lines: analyticsLines(cardTextWidth),
       choiceIndex: analyticsIndex,
       theme,
-      contentWidth,
-      textWidth,
+      contentWidth: cardWidth,
+      textWidth: cardTextWidth,
       bodyRows,
     });
   } else if (currentStep === "preferences" && prefDef) {
@@ -562,14 +606,14 @@ export function OnboardingScreen({
       value: prefChoices[choiceIndex],
       settings,
       theme,
-      contentWidth,
-      textWidth,
+      contentWidth: cardWidth,
+      textWidth: cardTextWidth,
       bodyRows,
     });
   } else {
     const render = STEP_LINES[currentStep];
-    const lines = render ? render(textWidth) : [];
-    body = renderProse({ lines, theme, currentStep, contentWidth, textWidth, bodyRows });
+    const lines = render ? render(cardTextWidth) : [];
+    body = renderProse({ lines, theme, currentStep, contentWidth: cardWidth, textWidth: cardTextWidth, bodyRows });
   }
 
   return interactive ? (frame({ body: chrome(body), hint }) as React.ReactElement) : null;
@@ -594,6 +638,32 @@ function renderProse({
   textWidth: number;
   bodyRows: number;
 }) {
+  const rows = lines.map((line, index) => (
+    <Cells key={`step-${index}`} width={textWidth} align="center" fg={toneColor(line.tone, theme)}
+      attributes={line.tone === "title" ? TextAttributes.BOLD : undefined}>
+      {line.text}
+    </Cells>
+  ));
+
+  // When the prose fits, center it vertically for a polished hero look; only
+  // when it overflows does it fall back to a top-anchored scrollbox.
+  if (lines.length <= bodyRows) {
+    return (
+      <box
+        flexDirection="column"
+        width={contentWidth}
+        height={bodyRows}
+        justifyContent="center"
+        alignItems="center"
+        flexShrink={0}
+        minWidth={0}
+        overflow="hidden"
+      >
+        {rows}
+      </box>
+    );
+  }
+
   return (
     <scrollbox
       key={currentStep}
@@ -607,12 +677,7 @@ function renderProse({
       }}
     >
       <box flexDirection="column" width={textWidth} flexShrink={0} minWidth={0}>
-        {lines.map((line, index) => (
-          <Cells key={`step-${index}`} width={textWidth} fg={toneColor(line.tone, theme)}
-            attributes={line.tone === "title" ? TextAttributes.BOLD : undefined}>
-            {line.text}
-          </Cells>
-        ))}
+        {rows}
       </box>
     </scrollbox>
   );
@@ -686,11 +751,17 @@ function renderPreferences({
 }
 
 /**
- * The analytics consent card: the honest prose, then the two options rendered
- * side by side with the highlighted one accented and marked. NOT a dark
- * pattern — both options are always visible, "No" is one ←/→ keystroke from the
- * default, and Enter confirms whatever is highlighted. The highlighted default
- * is "Yes" (recommended) but the operator pays no extra tax to decline.
+ * The analytics consent card: the honest intro (centered), then a vertical
+ * RADIO of the four tiers. Every option's label is always visible; the
+ * highlighted option is accented, marked with a filled dot, and shows its
+ * detail beneath it (the same "describe the highlighted choice" pattern the
+ * preferences step uses). NOT a dark pattern — declining ("Don't share
+ * anything") is one ↑/↓ keystroke away like any other option and Enter confirms
+ * whatever is highlighted.
+ *
+ * The detail copy states what each tier AUTHORIZES, not what is transmitted:
+ * see `recordAnalyticsConsent` — the wire still carries only usage + error
+ * category regardless of the chosen tier.
  */
 function renderAnalytics({
   lines,
@@ -707,30 +778,55 @@ function renderAnalytics({
   textWidth: number;
   bodyRows: number;
 }) {
-  return (
-    <box flexDirection="column" width={contentWidth} height={bodyRows} flexShrink={0} minWidth={0} overflow="hidden">
-      {lines.map((line, index) => (
-        <Cells key={`analytics-${index}`} width={textWidth} fg={toneColor(line.tone, theme)}
-          attributes={line.tone === "title" ? TextAttributes.BOLD : undefined}>
-          {line.text}
-        </Cells>
-      ))}
-      <Cells width={textWidth}>{""}</Cells>
-      {ANALYTICS_CHOICES.map((choice, index) => {
-        const active = index === choiceIndex;
-        const marker = active ? "‹●›" : " ○ ";
-        const recommended = choice.yes ? "  (recommended)" : "";
-        return (
-          <Cells
-            key={`analytics-choice-${index}`}
-            width={textWidth}
-            fg={active ? theme.ACCENT : theme.MUTED}
-            attributes={active ? TextAttributes.BOLD : undefined}
-          >
-            {`${marker} ${choice.label}${active ? recommended : ""}`}
-          </Cells>
+  const rows: React.ReactNode[] = [];
+
+  lines.forEach((line, index) => {
+    rows.push(
+      <Cells key={`analytics-intro-${index}`} width={textWidth} align="center" fg={toneColor(line.tone, theme)}
+        attributes={line.tone === "title" ? TextAttributes.BOLD : undefined}>
+        {line.text}
+      </Cells>,
+    );
+  });
+  rows.push(<Cells key="analytics-gap" width={textWidth}>{""}</Cells>);
+
+  const detailWidth = Math.max(1, textWidth - 2);
+  ANALYTICS_OPTIONS.forEach((option, index) => {
+    const active = index === choiceIndex;
+    rows.push(
+      <Cells
+        key={`analytics-opt-${index}`}
+        width={textWidth}
+        fg={active ? theme.ACCENT : theme.TEXT}
+        attributes={active ? TextAttributes.BOLD : undefined}
+      >
+        {`${active ? FILLED : HOLLOW} ${option.label}`}
+      </Cells>,
+    );
+    if (active) {
+      wrapCells(option.detail, detailWidth).forEach((detailLine, di) => {
+        rows.push(
+          <Cells key={`analytics-detail-${index}-${di}`} width={textWidth} fg={theme.MUTED}>
+            {`  ${detailLine}`}
+          </Cells>,
         );
-      })}
+      });
+    }
+  });
+
+  // Center the block vertically when it fits; anchor to the top and clip only
+  // when a very short surface cannot hold every row.
+  return (
+    <box
+      flexDirection="column"
+      width={contentWidth}
+      height={bodyRows}
+      justifyContent={rows.length <= bodyRows ? "center" : "flex-start"}
+      flexShrink={0}
+      minWidth={0}
+      overflow="hidden"
+    >
+      {rows}
     </box>
   );
 }

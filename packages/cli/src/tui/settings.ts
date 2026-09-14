@@ -208,6 +208,21 @@ export interface TuiSettings {
    * disables decorative animations (logo intro, shimmers, sweeps).
    */
   reduceMotion: boolean;
+  /**
+   * How much anonymous AI-cybersecurity research data the operator authorizes.
+   * "off" shares nothing; "usage" shares only feature usage and the finite
+   * error category (this is ALL the wire actually carries today — see
+   * feedback.ts); "commands" additionally AUTHORIZES anonymized commands and
+   * code; "full" additionally AUTHORIZES targets and findings. The higher tiers
+   * are a consent GRANT only: the collection/transmission pipeline for
+   * commands/code/targets/findings does not exist yet and any future collection
+   * must still pass privacy review before anything more goes on the wire. The
+   * legacy `diagnosticReporting` boolean is kept in sync by DERIVING it
+   * (`diagnosticReporting !== "off"` ⇔ `analyticsLevel !== "off"`); other code
+   * still reads `diagnosticReporting`. Operator-global — a project must never
+   * broaden it (see `isOperatorSetting`).
+   */
+  analyticsLevel: "off" | "usage" | "commands" | "full";
   /** Operator-global consent; a project must never enable diagnostic egress. */
   diagnosticReporting: "off" | "ask" | "automatic";
   /** Internal first-use state, not a grant of reporting consent. */
@@ -290,6 +305,7 @@ type TuiSettingDef =
   | EnumSettingDef<"modelDisplay">
   | EnumSettingDef<"elapsedTimer">
   | EnumSettingDef<"busyInputMode">
+  | EnumSettingDef<"analyticsLevel">
   | EnumSettingDef<"diagnosticReporting">
   | EnumSettingDef<"updatePolicy">
   | EnumSettingDef<"logoAnimation">
@@ -650,6 +666,16 @@ const DEFS: readonly TuiSettingDef[] = [
     group: "Motion",
   },
   {
+    key: "analyticsLevel",
+    label: "Research analytics",
+    description:
+      "How much anonymous data you share to advance open AI-cybersecurity research. Off shares nothing. Usage shares how features are used and the category of errors (no commands, code, targets or findings) — all that is transmitted today. Commands additionally authorizes anonymized commands and code; Full additionally authorizes targets and findings for open research. The richer tiers are a consent grant for future, privacy-reviewed collection, not extra data on the wire yet. Applies to this computer, not this project.",
+    kind: "enum",
+    default: "off",
+    choices: ["off", "usage", "commands", "full"],
+    group: "Privacy",
+  },
+  {
     key: "diagnosticReporting",
     label: "Problem reports",
     description: "Send limited diagnostics automatically by default, ask first, or turn reporting off. Uses Cloud sign-in or a configured HTTPS feedback endpoint. Never includes prompts, tool arguments or output. Applies to this computer, not this project.",
@@ -737,6 +763,7 @@ export const DEFAULT_SETTINGS: TuiSettings = {
   elapsedTimer: "left",
   logoAnimation: "glitch",
   reduceMotion: false,
+  analyticsLevel: "off",
   diagnosticReporting: "automatic",
   diagnosticReportingPrompted: false,
   updatePolicy: "automatic",
@@ -855,8 +882,9 @@ export interface LayeredSettings {
  *
  * Both halves of this list are load-bearing and neither side's list is
  * sufficient alone. A project-level settings file that could set
- * `diagnosticReporting` or `updatePolicy` would let a checked-in file turn on
- * telemetry egress or automatic update installation for anyone who opens that
+ * `diagnosticReporting`, `analyticsLevel` or `updatePolicy` would let a
+ * checked-in file turn on telemetry egress (or broaden what it authorizes) or
+ * automatic update installation for anyone who opens that
  * repository — a privilege the repository does not have. One that could set
  * `onboardingCompleted` would suppress first-use consent the operator has not
  * actually given. Both are the same class of escalation: the project claiming
@@ -868,6 +896,7 @@ export interface LayeredSettings {
  */
 export function isOperatorSetting(key: keyof TuiSettings): boolean {
   return key === "onboardingCompleted"
+    || key === "analyticsLevel"
     || key === "diagnosticReporting"
     || key === "diagnosticReportingPrompted"
     || key === "updatePolicy"
@@ -1029,6 +1058,7 @@ export function normalizeSettings(raw: unknown): TuiSettings {
     elapsedTimer: enumAt(raw, "elapsedTimer"),
     logoAnimation: enumAt(raw, "logoAnimation"),
     reduceMotion: booleanAt(raw, "reduceMotion"),
+    analyticsLevel: enumAt(raw, "analyticsLevel"),
     diagnosticReporting: strictValueAt(raw, "diagnosticReporting") ?? DEFAULT_SETTINGS.diagnosticReporting,
     diagnosticReportingPrompted: booleanAt(raw, "diagnosticReportingPrompted"),
     updatePolicy: strictValueAt(raw, "updatePolicy") ?? DEFAULT_SETTINGS.updatePolicy,

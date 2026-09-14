@@ -783,9 +783,25 @@ describe("operator-only privacy and updates", () => {
     const { setProjectOverride } = await import("./settings.js");
     expect(setProjectOverride("diagnosticReporting", "automatic", project)).toBe(false);
     expect(setProjectOverride("diagnosticReportingPrompted", true, project)).toBe(false);
+    // analyticsLevel gates the same egress grant, so a project may not broaden it.
+    expect(setProjectOverride("analyticsLevel", "full", project)).toBe(false);
     expect(setProjectOverride("updatePolicy", "automatic", project)).toBe(false);
     expect(setProjectOverride("allowDevSourceUpdates", true, project)).toBe(false);
     expect(readProjectOverrides(project)).toEqual({ showLogo: false });
+  });
+
+  it("defaults analyticsLevel to off and offers off/usage/commands/full", () => {
+    expect(DEFAULT_SETTINGS.analyticsLevel).toBe("off");
+    const def = SETTING_DEFS.find((d) => d.key === "analyticsLevel");
+    expect(def?.kind).toBe("enum");
+    expect(def?.choices).toEqual(["off", "usage", "commands", "full"]);
+    // A project override may not set it (operator-owned egress grant).
+    const { settings, sources } = loadLayeredSettings({
+      homeDir: makeHome(),
+      projectDir: makeProjectDir(),
+    });
+    expect(settings.analyticsLevel).toBe("off");
+    expect(sources.analyticsLevel).toBe("default");
   });
 });
 

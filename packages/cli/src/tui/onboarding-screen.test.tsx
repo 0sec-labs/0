@@ -132,7 +132,7 @@ describe("completion is written in exactly one place", () => {
       }
       if (step === "analytics") {
         // The analytics step's Enter persists consent — but NOT completion.
-        recordAnalyticsConsent(true);
+        recordAnalyticsConsent("usage");
       }
       // Reaching a step, skipping it, or setting a preference/consent must NOT
       // complete onboarding.
@@ -164,51 +164,69 @@ describe("completion is written in exactly one place", () => {
 });
 
 describe("analytics consent wiring", () => {
-  it("Yes sets diagnosticReporting automatic and marks prompted", () => {
+  it("a sharing tier sets analyticsLevel, derives diagnosticReporting automatic, and marks prompted", () => {
     configureSettingsStore({ homeDir: makeHome() });
     // Start from a non-default reporting value so the write is observable.
     expect(updateSetting("diagnosticReporting", "off")).toBe(true);
+    expect(getSettings().analyticsLevel).toBe("off");
     expect(getSettings().diagnosticReportingPrompted).toBe(false);
 
-    recordAnalyticsConsent(true);
+    recordAnalyticsConsent("usage");
 
+    expect(getSettings().analyticsLevel).toBe("usage");
+    // diagnosticReporting is DERIVED: any tier above "off" is "automatic".
     expect(getSettings().diagnosticReporting).toBe("automatic");
     expect(getSettings().diagnosticReportingPrompted).toBe(true);
     // Consent is independent of completion.
     expect(getSettings().onboardingCompleted).toBe(false);
   });
 
-  it("No sets diagnosticReporting off and marks prompted", () => {
+  it("maps each sharing tier to analyticsLevel and keeps diagnosticReporting in sync", () => {
+    for (const level of ["usage", "commands", "full"] as const) {
+      configureSettingsStore({ homeDir: makeHome() });
+      recordAnalyticsConsent(level);
+      expect(getSettings().analyticsLevel).toBe(level);
+      // Every sharing tier derives reporting on.
+      expect(getSettings().diagnosticReporting).toBe("automatic");
+      expect(getSettings().diagnosticReportingPrompted).toBe(true);
+    }
+  });
+
+  it("the decline tier sets analyticsLevel off, derives diagnosticReporting off, and marks prompted", () => {
     configureSettingsStore({ homeDir: makeHome() });
-    // Default is "automatic"; No must turn it fully off.
+    // Default reporting is "automatic"; declining must turn it fully off.
     expect(getSettings().diagnosticReporting).toBe("automatic");
 
-    recordAnalyticsConsent(false);
+    recordAnalyticsConsent("off");
 
+    expect(getSettings().analyticsLevel).toBe("off");
     expect(getSettings().diagnosticReporting).toBe("off");
     expect(getSettings().diagnosticReportingPrompted).toBe(true);
     expect(getSettings().onboardingCompleted).toBe(false);
   });
 
-  it("skip marks prompted but leaves the current reporting default unchanged", () => {
+  it("skip marks prompted but leaves the current level and reporting default unchanged", () => {
     configureSettingsStore({ homeDir: makeHome() });
-    const before = getSettings().diagnosticReporting;
+    const beforeReporting = getSettings().diagnosticReporting;
+    const beforeLevel = getSettings().analyticsLevel;
     expect(getSettings().diagnosticReportingPrompted).toBe(false);
 
     skipAnalyticsConsent();
 
     // Prompted is recorded so the in-session prompt never re-asks…
     expect(getSettings().diagnosticReportingPrompted).toBe(true);
-    // …but the reporting value is untouched by a skip.
-    expect(getSettings().diagnosticReporting).toBe(before);
+    // …but neither the level nor the reporting value is touched by a skip.
+    expect(getSettings().analyticsLevel).toBe(beforeLevel);
+    expect(getSettings().diagnosticReporting).toBe(beforeReporting);
     expect(getSettings().onboardingCompleted).toBe(false);
   });
 
   it("consent decisions survive a reload without completing onboarding", () => {
     configureSettingsStore({ homeDir: makeHome() });
-    recordAnalyticsConsent(false);
+    recordAnalyticsConsent("off");
 
     const persisted = reloadSettings();
+    expect(persisted.analyticsLevel).toBe("off");
     expect(persisted.diagnosticReporting).toBe("off");
     expect(persisted.diagnosticReportingPrompted).toBe(true);
     expect(persisted.onboardingCompleted).toBe(false);
