@@ -29,38 +29,44 @@ import {
   badgeChip,
   formatDurationMs,
   pathExtension,
-  statusColumns,
   toolActionTitle,
   toolBadgeLabel,
+  toolHeaderStatus,
   toolInputSection,
   toolKindIdentity,
   toolResultLine,
+  toolRunningNote,
   toolState,
   toolStateLabel,
-  toolStatusRows,
   type ToolState,
 } from "./card-layout.js";
 
 /**
  * A tool call, drawn as a titled rounded card.
  *
- *   ╭ $ npm test -- --silent · SH · (1.24s) ─────╮
- *   │ COMMAND ─────────────────────────────────│
- *   │ npm test -- --silent      (highlighted)  │
- *   │ OUTPUT ──────────────────────────────────│
- *   │ …                                        │
- *   │ STATUS ──────────────────────────────────│
- *   │ State    complete                        │
- *   │ Exit     0                               │
- *   ╰──────────────────────────────────────────╯
+ *   ╭ $ npm test -- --silent · exit 1 · SH · (1.24s) ─╮
+ *   │ OUTPUT ──────────────────────────────────────│
+ *   │ …                                            │
+ *   ╰──────────────────────────────────────────────╯
  *
- * What the card is allowed to say:
+ * OMP-style: the header is the ONE-LINE summary and the body is only the tool's
+ * distinctive content. What the card is allowed to say:
  *
  *   - The top-border TITLE is the operation that actually ran — the command
  *     string, edited path, search provider, or tool name with its recorded
  *     argument summary, led by a kind glyph and closed by the execution time.
  *     Its language/kind chip comes from retained metadata. There is no generic
- *     stand-in title and no second heading in the body.
+ *     stand-in title and no second heading in the body. Crucially, the body
+ *     never RESTATES the input the title already shows — a command card draws
+ *     its output, not a second "COMMAND" copy of the command (`toolInputSection`
+ *     suppresses the redundant section for command/edit/web).
+ *   - STATUS lives on the header, not in a block. State is carried by the border
+ *     colour + glyph; the extra facts a glance can't convey — a non-zero exit,
+ *     a wallclock kill, an edit's `+A -R` delta, a web search's source count —
+ *     ride the headline as ` · <fact>` segments (`toolHeaderStatus`). The old
+ *     multi-row State / Exit / Ceiling / Output block is gone. The timeout
+ *     budget ("ceiling") shows only on the live running note and disappears
+ *     once the call settles.
  *   - STATUS is derived, never assumed: a call with no recorded outcome reads
  *     "running", a non-zero exit or a wallclock kill reads "failed" in the
  *     error tone, and only `success === true` reads "complete". Finishing is
@@ -655,13 +661,12 @@ function CodeCard({
   const hasOutput = (entry.codeOutput ?? "").length > 0;
   const outRows = Math.max(1, Math.min(MAX_OUTPUT_ROWS, outVisible.length));
 
-  const statusRows = toolStatusRows(entry, state, outRetained.length, outCapped);
-  const columns = statusColumns(statusRows, inner);
-
   const durText = formatDurationMs(entry.wallMs);
   const durSuffix = durText ? ` · (${durText})` : "";
+  const statusSuffix = toolHeaderStatus(entry, state);
   const headerGlyph = failed ? `${glyph} ` : "";
-  const headline = fitTuiText(`${headerGlyph}${title}${repeat ?? ""}${durSuffix}`, inner);
+  const headline = fitTuiText(`${headerGlyph}${title}${repeat ?? ""}${statusSuffix}${durSuffix}`, inner);
+  const runningNote = toolRunningNote(entry, state, glyph);
   const shimmer = running && typeof display.shimmerFrame === "number";
 
   const codeBody = codeVisible.map((line, index) => (
@@ -739,31 +744,9 @@ function CodeCard({
         ) : null}
       </box>
 
-      <box flexDirection="column" width={inner} flexShrink={0} minWidth={0} marginTop={1}>
-        <SectionRule label="Status" width={inner} theme={theme} />
-        {statusRows.map((row, index) =>
-          columns.labelWidth > 0 ? (
-            <box key={`${entry.id}-status-${index}`} flexDirection="row" width={inner} height={1} flexShrink={0} minWidth={0} gap={columns.gap}>
-              <box width={columns.labelWidth} flexShrink={0} minWidth={0}>
-                <text width={columns.labelWidth} height={1} wrapMode="none" truncate fg={MUTED}>{fitTuiText(row.label, columns.labelWidth)}</text>
-              </box>
-              <box width={columns.valueWidth} flexShrink={0} minWidth={0}>
-                <text width={columns.valueWidth} height={1} wrapMode="none" truncate fg={row.tone === "error" ? ERROR : row.tone === "state" ? tone : MUTED} attributes={row.tone === "error" ? TextAttributes.BOLD : undefined}>
-                  {fitTuiText(row.value, columns.valueWidth)}
-                </text>
-              </box>
-            </box>
-          ) : (
-            <text key={`${entry.id}-status-${index}`} width={inner} height={1} wrapMode="none" truncate fg={row.tone === "error" ? ERROR : MUTED}>
-              {fitTuiText(`${row.label} ${row.value}`, inner)}
-            </text>
-          ),
-        )}
-      </box>
-
-      {running ? (
-        shimmer ? <ShimmerText label={`${glyph} running`} frame={display.shimmerFrame!} base={MUTED} peak={TEXT} />
-          : <text fg={MUTED}>{`${glyph} running`}</text>
+      {runningNote ? (
+        shimmer ? <ShimmerText label={runningNote} frame={display.shimmerFrame!} base={MUTED} peak={TEXT} />
+          : <text fg={MUTED}>{runningNote}</text>
       ) : null}
     </box>
   );
@@ -893,11 +876,9 @@ export function ToolCard({
   );
 
   // ── input ─────────────────────────────────────────────────────────────────
+  // Suppressed for command/edit/web, whose input already lives in the header or
+  // the body — see `toolInputSection`. Only a generic tool keeps its Arguments.
   const input = toolInputSection(entry, MAX_INPUT_ROWS);
-
-  // ── status ────────────────────────────────────────────────────────────────
-  const statusRows = toolStatusRows(entry, state, retained.length, capped);
-  const columns = statusColumns(statusRows, inner);
 
   const allImages: readonly ChatImageAttachment[] = entry.toolPreview?.images ?? preview.images ?? entry.images ?? [];
   const images = allImages.slice(0, MAX_CARD_IMAGES);
@@ -915,17 +896,22 @@ export function ToolCard({
   const headerGlyph = failed ? `${glyph} ` : running ? "" : kindGlyph ? `${kindGlyph} ` : "";
   // Execution time rides the TOP of the card, OMP-style: ` · (<dur>)` appended
   // to the headline. Only a measured `wallMs` prints — never an estimate. The
-  // old bottom "Duration" STATUS row is gone (see `toolStatusRows`).
+  // old bottom Status block (State / Exit / Ceiling / Output) is gone; its
+  // essential facts fold into the headline via `toolHeaderStatus`.
   const durText = formatDurationMs(entry.wallMs);
   const durSuffix = durText ? ` · (${durText})` : "";
-  // OMP row shape: `<glyph> <Verb inputs> · <result summary> · <badge> · (dur)`.
-  // The summary sits right after the title so the headline reads as a complete
-  // sentence — what ran, then what it found — before the language/kind chip.
+  // OMP row shape: `<glyph> <Verb inputs> · <result> · <status> · <badge> · (dur)`.
+  // The result summary sits right after the title so the headline reads as a
+  // complete sentence — what ran, then what it found — then the compact status
+  // facts (exit / timed out / edit delta / source count) fold in from the old
+  // Status block, then the language/kind chip, then the wallclock.
   const summarySuffix = resultLine ? ` · ${resultLine}` : "";
+  const statusSuffix = toolHeaderStatus(entry, state);
   const headline = fitTuiText(
-    `${headerGlyph}${title}${repeat}${summarySuffix}${badge ? ` · ${badgeChip(badge, inner)}` : ""}${durSuffix}`,
+    `${headerGlyph}${title}${repeat}${summarySuffix}${statusSuffix}${badge ? ` · ${badgeChip(badge, inner)}` : ""}${durSuffix}`,
     inner,
   );
+  const runningNote = toolRunningNote(entry, state, glyph);
   const shimmer = running && typeof display.shimmerFrame === "number";
 
   return (
@@ -983,52 +969,6 @@ export function ToolCard({
         ) : null}
       </box>
 
-      <box flexDirection="column" width={inner} flexShrink={0} minWidth={0} marginTop={1}>
-        <SectionRule label="Status" width={inner} theme={theme} />
-        {statusRows.map((row, index) =>
-          columns.labelWidth > 0 ? (
-            <box
-              key={`${entry.id}-status-${index}`}
-              flexDirection="row"
-              width={inner}
-              height={1}
-              flexShrink={0}
-              minWidth={0}
-              gap={columns.gap}
-            >
-              <box width={columns.labelWidth} flexShrink={0} minWidth={0}>
-                <text width={columns.labelWidth} height={1} wrapMode="none" truncate fg={MUTED}>
-                  {fitTuiText(row.label, columns.labelWidth)}
-                </text>
-              </box>
-              <box width={columns.valueWidth} flexShrink={0} minWidth={0}>
-                <text
-                  width={columns.valueWidth}
-                  height={1}
-                  wrapMode="none"
-                  truncate
-                  fg={row.tone === "error" ? ERROR : row.tone === "state" ? tone : MUTED}
-                  attributes={row.tone === "error" ? TextAttributes.BOLD : undefined}
-                >
-                  {fitTuiText(row.value, columns.valueWidth)}
-                </text>
-              </box>
-            </box>
-          ) : (
-            <text
-              key={`${entry.id}-status-${index}`}
-              width={inner}
-              height={1}
-              wrapMode="none"
-              truncate
-              fg={row.tone === "error" ? ERROR : MUTED}
-            >
-              {fitTuiText(`${row.label} ${row.value}`, inner)}
-            </text>
-          ),
-        )}
-      </box>
-
       {images.map((image, index) => (
         <ImageCard
           key={`${entry.id}-image-${image.index ?? index}`}
@@ -1038,9 +978,9 @@ export function ToolCard({
           marginTop={1}
         />
       ))}
-      {running ? (
-        shimmer ? <ShimmerText label={`${glyph} running`} frame={display.shimmerFrame!} base={MUTED} peak={TEXT} />
-          : <text fg={MUTED}>{`${glyph} running`}</text>
+      {runningNote ? (
+        shimmer ? <ShimmerText label={runningNote} frame={display.shimmerFrame!} base={MUTED} peak={TEXT} />
+          : <text fg={MUTED}>{runningNote}</text>
       ) : null}
     </box>
   );
