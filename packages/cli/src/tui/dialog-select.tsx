@@ -213,6 +213,13 @@ export function DialogSelectBody({
   onHoverRow,
 }: DialogSelectBodyProps) {
   const theme = useTheme();
+  // Last pointer position seen by a hover handler. A row can slide under a
+  // STATIONARY cursor when the list scrolls (keyboard nav / paging), and
+  // OpenTUI re-fires onMouseOver on the newly-under row with the SAME pointer
+  // coordinates. Honoring that would snap the selection back to the mouse and
+  // fight keyboard scrolling, so hover-select only fires when the pointer
+  // actually moved.
+  const lastHoverPosRef = useRef<{ x: number; y: number } | null>(null);
 
   const rows = useMemo(() => buildDialogRows(items), [items]);
   const displayIndex = dialogDisplayIndex(rows, cursor);
@@ -285,7 +292,17 @@ export function DialogSelectBody({
             : undefined
         }
         onMouseOver={
-          onHoverRow && !item.disabled ? () => onHoverRow(row.itemIndex) : undefined
+          onHoverRow && !item.disabled
+            ? (event: OpenTuiMouseEvent) => {
+                const last = lastHoverPosRef.current;
+                // Ignore a hover the pointer did not actually move to — it was
+                // the list scrolling a row under a stationary cursor, which
+                // must never override keyboard navigation.
+                if (last && last.x === event.x && last.y === event.y) return;
+                lastHoverPosRef.current = { x: event.x, y: event.y };
+                onHoverRow(row.itemIndex);
+              }
+            : undefined
         }
       >
         {columns.gutterWidth > 0 ? (
