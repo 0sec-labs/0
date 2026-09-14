@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { fitHint, fitLegend, fitTuiText, fitTuiUrl, sanitizeComposerText, sanitizeTuiText } from "./text.js";
+import { fitHint, fitLegend, fitTuiText, fitTuiUrl, keyGlyph, keyLegend, sanitizeComposerText, sanitizeTuiText } from "./text.js";
 
 describe("sanitizeComposerText", () => {
   it("preserves whitespace exactly (trailing, leading, and runs)", () => {
@@ -123,5 +123,47 @@ describe("fitLegend", () => {
 
   it("behaves like fitTuiText for a single-unit hint", () => {
     expect(fitLegend(12, "no separators here")).toBe(fitTuiText("no separators here", 12));
+  });
+});
+
+describe("keyGlyph / keyLegend", () => {
+  it("maps named keys to their display glyphs", () => {
+    expect(keyGlyph("updown")).toBe("↑↓");
+    expect(keyGlyph("enter")).toBe("⏎");
+    expect(keyGlyph("esc")).toBe("esc");
+    expect(keyGlyph("tab")).toBe("⇥");
+  });
+
+  it("renders control chords with modifier glyphs and an upper-cased letter", () => {
+    expect(keyGlyph("ctrl+c")).toBe("⌃C");
+    expect(keyGlyph("shift+tab")).toBe("⇧⇥");
+    expect(keyGlyph("ctrl+u")).toBe("⌃U");
+  });
+
+  it("passes single-character and unknown tokens through verbatim", () => {
+    expect(keyGlyph("/")).toBe("/");
+    expect(keyGlyph("r")).toBe("r");
+    expect(keyGlyph("*")).toBe("*");
+  });
+
+  it("builds a bracketed legend joined by the standard separator", () => {
+    expect(
+      keyLegend([
+        { keys: "updown", label: "move" },
+        { keys: "enter", label: "confirm" },
+        { keys: "/", label: "filter" },
+        { keys: "esc" },
+      ]),
+    ).toBe("[↑↓] move · [⏎] confirm · [/] filter · [esc]");
+  });
+
+  it("produces legends fitLegend can shrink by dropping trailing units", () => {
+    const legend = keyLegend([
+      { keys: "updown", label: "move" },
+      { keys: "/", label: "filter" },
+      { keys: "esc", label: "back" },
+    ]);
+    expect(fitLegend(80, legend)).toBe(legend);
+    expect(fitLegend(14, legend)).toBe("[↑↓] move");
   });
 });

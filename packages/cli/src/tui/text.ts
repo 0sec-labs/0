@@ -90,6 +90,68 @@ export function fitHint(columns: number, variants: readonly string[]): string {
 const LEGEND_SEPARATOR = " · ";
 
 /**
+ * Display glyphs for the keys that appear in bracketed legends, so a legend
+ * reads `[↑↓] move · [⏎] confirm · [/] filter · [esc] back` everywhere with one
+ * consistent vocabulary (OMP/OpenCode-style). Arrow/enter/tab keys render as
+ * icons; a control chord renders with the ⌃ glyph and an upper-cased letter
+ * (`ctrl+c` → `⌃C`); everything else (single letters, `esc`, `space`, `/`) is
+ * passed through verbatim. Chords are `+`-joined tokens (`ctrl+c`, `shift+tab`).
+ */
+const KEY_GLYPHS: Readonly<Record<string, string>> = {
+  up: "↑", down: "↓", updown: "↑↓", "up/down": "↑↓", left: "←", right: "→",
+  leftright: "←→", enter: "⏎", return: "⏎", esc: "esc", escape: "esc",
+  tab: "⇥", space: "space", backspace: "⌫", delete: "⌦", pageup: "⇞", pagedown: "⇟",
+};
+
+/** Render one key token (possibly a `+`-joined chord) to its display glyph(s). */
+export function keyGlyph(token: string): string {
+  const raw = token.trim();
+  if (raw.length === 0) return raw;
+  const key = raw.toLowerCase();
+  if (key in KEY_GLYPHS) return KEY_GLYPHS[key]!;
+  if (key.includes("+")) {
+    return key
+      .split("+")
+      .map((part) => {
+        const p = part.trim();
+        if (p === "ctrl") return "⌃";
+        if (p === "shift") return "⇧";
+        if (p === "meta" || p === "cmd" || p === "super") return "⌘";
+        if (p === "alt" || p === "option") return "⌥";
+        if (p in KEY_GLYPHS) return KEY_GLYPHS[p]!;
+        return p.length === 1 ? p.toUpperCase() : p;
+      })
+      .join("");
+  }
+  return raw;
+}
+
+/** One bracketed unit of a key legend: the key(s) plus an optional action word. */
+export interface LegendUnit {
+  /** Key token or `+`-joined chord (`"updown"`, `"enter"`, `"/"`, `"ctrl+c"`). */
+  readonly keys: string;
+  /** Action label shown after the bracket (`"move"`, `"confirm"`). Optional. */
+  readonly label?: string;
+}
+
+/**
+ * Build a bracketed key legend — the one standard hint format across the TUI:
+ * `keyLegend([{keys:"updown",label:"move"},{keys:"enter",label:"confirm"}])`
+ * → `"[↑↓] move · [⏎] confirm"`. Units are authored priority-ordered (least
+ * important last) so {@link fitLegend} can drop trailing units to fit width.
+ * Pass a bare string `keys` for a modeless glyph (`{keys:"esc"}` → `"[esc]"`).
+ */
+export function keyLegend(units: readonly LegendUnit[]): string {
+  return units
+    .map((unit) => {
+      const glyph = keyGlyph(unit.keys);
+      return unit.label ? `[${glyph}] ${unit.label}` : `[${glyph}]`;
+    })
+    .join(LEGEND_SEPARATOR);
+}
+
+
+/**
  * Fit a FIXED key legend / action hint to `columns` without a mid-word "…".
  *
  * A legend such as `"↑↓ move · / filter · esc back"` is a set of authored,
