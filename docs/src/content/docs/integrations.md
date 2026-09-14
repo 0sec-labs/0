@@ -469,7 +469,7 @@ or `--registry` on browse, search, and install. An explicit empty setting disabl
 fetching. Entries use the unconfigured signature verifier and are marked
 `unverified`.
 
-The [author guide](https://github.com/0sec-labs/0sec/blob/main/docs/HACKSTORE.md)
+The [author guide](/hackstore/)
 covers executable scaffolding, the manifest, and a local two-file installation
 in an isolated home. The installer writes `plugin.js` and `plugin.json` only.
 These instructions follow source; the tested 0.16.3 binary requires the

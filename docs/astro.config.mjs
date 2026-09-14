@@ -95,6 +95,13 @@ export default defineConfig({
           ],
         },
         {
+          label: "Hackstore",
+          items: [
+            { label: "Build an extension", slug: "hackstore" },
+            { label: "Browse extensions", link: "https://github.com/0sec-labs/hackstore" },
+          ],
+        },
+        {
           label: "Self-evolving agents",
           items: [
             { label: "Overview", slug: "improvement-plane" },

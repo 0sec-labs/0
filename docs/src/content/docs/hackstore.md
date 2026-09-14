@@ -1,4 +1,7 @@
-# Build a Hackstore extension
+---
+title: Build a Hackstore extension
+description: Create, test, and publish tools for the 0sec agent.
+---
 
 An extension adds tools the 0sec agent can call. It consists of a manifest and a
 self-contained Node.js program. This guide takes a generated extension through a
@@ -107,7 +110,7 @@ Document external executables such as `foxguard` as prerequisites.
 
 The [JSON schema](https://raw.githubusercontent.com/0sec-labs/hackstore/main/hackstore-manifest.schema.json)
 provides editor checks. The runtime validator in
-[`manifest.ts`](../packages/core/src/plugins/manifest.ts) is authoritative.
+[`manifest.ts`](https://github.com/0sec-labs/0sec/blob/main/packages/core/src/plugins/manifest.ts) is authoritative.
 
 | Field | Contract |
 | --- | --- |
@@ -157,7 +160,7 @@ credential, a paid model allowance, or an internal API handle.
 
 ## Wire protocol
 
-See [`protocol.ts`](../packages/core/src/plugins/protocol.ts) for exact message
+See [`protocol.ts`](https://github.com/0sec-labs/0sec/blob/main/packages/core/src/plugins/protocol.ts) for exact message
 types and validation. Registry plugins use newline-delimited JSON over stdin and
 stdout. Every frame has `v: 1`. Each request and response shares a printable,
 bounded correlation `id`.

@@ -52,6 +52,7 @@ console, or `0 --help` for commands. Only test systems you own or have permissio
 - [Getting started](https://docs.0.security/getting-started/): installation, source builds and your first scan.
 - [Console](https://docs.0.security/console/) and [scan workflows](https://docs.0.security/scan-workflows/): interactive and command-line use.
 - [Commands](https://docs.0.security/commands/) and [configuration](https://docs.0.security/configuration/): reference.
+- [Build a Hackstore extension](https://docs.0.security/hackstore/): create a tool, test it locally, and publish it.
 - [Integrations and CI](https://docs.0.security/integrations/) · [Troubleshooting](https://docs.0.security/troubleshooting/).
 
 Docs follow the source checkout; use `0sec --version` and command-specific

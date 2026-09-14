@@ -194,7 +194,7 @@ manifest as \`plugin.json\`; the program reads that file when it starts.
 0sec hackstore validate .
 \`\`\`
 
-Follow the [local installation guide](https://github.com/0sec-labs/0sec/blob/main/docs/HACKSTORE.md#run-locally)
+Follow the [local installation guide](https://docs.0.security/hackstore/#run-locally)
 to test with an isolated home and project. After installing and enabling:
 
 \`\`\`sh
