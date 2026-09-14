@@ -769,8 +769,11 @@ const OH_MY_PI: Theme = {
  * ratio 4.93:1 — ERROR on PANEL_ALT; semantic separation 1.175:1). The
  * signature orange `#FD802E` is used verbatim (unnudged): it measures 7.11:1 on
  * CANVAS, 6.25:1 on PANEL and 5.17:1 on PANEL_ALT, comfortably past the 4.5:1
- * text bar as PRIMARY. Syntax is a warm, legible palette: comment a dim warm
- * grey, strings/functions in warm hues, the cool teal reserved for types/links.
+ * text bar as PRIMARY. The brand chrome stays orange, but the code syntax
+ * palette adopts oh-my-pi's (titanium) semantic hues — keyword=purple,
+ * string=green, function=blue, type=cyan, number=amber, comment=dim blue-grey
+ * — a cooler polychrome that reads as "code" against the warm graphite PANEL
+ * and never washes into the orange chrome. All syntax tokens clear AA on PANEL.
  */
 const OSEC_THEME: Theme = {
   CANVAS: "#1A1613",
@@ -790,22 +793,25 @@ const OSEC_THEME: Theme = {
   surface: "#26221D",
   surfaceAlt: "#35302A",
   overlay: "#403D39", // the #403D39 graphite anchor itself, as the topmost raised surface tier
-  // Warm, legible code palette on PANEL: the hero orange for keywords, amber
-  // for functions, a warm green for strings, gold for numbers, the cool teal
-  // reserved for types (and LINK), a dim warm grey for comments. DIFF_ADD/DEL
-  // mirror SUCCESS/ERROR so diff semantics match the rest of the TUI.
-  syntaxKeyword: "#FD9152",
-  syntaxString: "#A9C77E",
-  syntaxNumber: "#E4BC46",
-  syntaxComment: "#8A7D6B",
-  syntaxFunction: "#F2A24C",
-  syntaxType: "#4FBAC6",
-  syntaxVariable: "#F5EEE4",
-  syntaxOperator: "#B0A493",
-  syntaxPunctuation: "#B0A493",
-  DIFF_ADD: "#69C489",
-  DIFF_DEL: "#F47B72",
-  LINK: "#4FBAC6",
+  // Code palette adopts oh-my-pi's (titanium) SEMANTIC hue map on PANEL: a
+  // cool polychrome that reads as "code" and stays distinct from the warm
+  // orange brand chrome. keyword=purple, string=green, function=blue,
+  // type=cyan, number=amber, variable=cool aluminium, comment=dim blue-grey,
+  // operator/punctuation=muted cool grey. DIFF/LINK follow OMP too (diff add =
+  // string green, diff del = OMP's pink-red, link = OMP's blue). Every token
+  // clears AA (>=4.5:1) on PANEL (worst is comment at 5.07:1).
+  syntaxKeyword: "#BB9AF7",
+  syntaxString: "#9ECE6A",
+  syntaxNumber: "#F0A868",
+  syntaxComment: "#8A91AE",
+  syntaxFunction: "#7AA2F7",
+  syntaxType: "#2AC3DE",
+  syntaxVariable: "#C0CAF5",
+  syntaxOperator: "#8FB5C0",
+  syntaxPunctuation: "#9AA5CE",
+  DIFF_ADD: "#9ECE6A",
+  DIFF_DEL: "#F7768E",
+  LINK: "#7AA2F7",
 };
 
 /* ----------------------------------------------------------------- registry */

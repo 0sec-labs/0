@@ -1083,6 +1083,23 @@ describe("syntax / diff sub-palette (additive optional group)", () => {
     expect(degraded.syntaxKeyword).toBeDefined();
     expect(degraded.syntaxKeyword).toMatch(/^#[0-9A-F]{6}$/);
   });
+
+  it("gives the 0sec theme a genuinely polychrome code palette (OMP hues, not an orange wash)", () => {
+    const p = THEMES["0sec"].palette;
+    const c = resolveSyntaxColors(p);
+    // keyword / string / function / type / number must all differ from one
+    // another AND from the orange brand PRIMARY — i.e. real syntax colouring,
+    // not orange-on-orange.
+    const hues = [c.keyword, c.string, c.function, c.type, c.number];
+    expect(new Set(hues).size).toBe(hues.length);
+    for (const h of hues) expect(h).not.toBe(p.PRIMARY);
+    // Every 0sec syntax token clears AA (4.5:1) on the PANEL it renders on.
+    for (const token of SYNTAX_TOKENS) {
+      const hex = (p as Record<string, string>)[token];
+      if (!hex) continue;
+      expect(contrastRatio(hex, p.PANEL), `${token} on PANEL`).toBeGreaterThanOrEqual(MIN_TEXT_CONTRAST);
+    }
+  });
 });
 
 describe("theme aliases", () => {
