@@ -101,7 +101,7 @@ export function Masthead({
         </box>
       )}
       {showTagline ? (
-        <text fg={TEXT} marginTop={1}>{fitTuiText("Software that secures itself.", contentWidth, { mode: "middle" })}</text>
+        <text fg={TEXT} marginTop={1}>{fitTuiText("Make software secure itself.", contentWidth, { mode: "middle" })}</text>
       ) : null}
       {facts.length > 0 ? (
         <box flexDirection="column" width={contentWidth} flexShrink={0} minWidth={0} marginTop={1} alignItems="center">
