@@ -27,8 +27,8 @@ import { TextAttributes } from "@opentui/core";
 
 import { useTheme } from "./theme-context.js";
 import { fitTuiText, sanitizeTuiText } from "./text.js";
+import { Popup } from "./popup.js";
 import {
-  clampMenuPosition,
   firstEnabledIndex,
   nextEnabledIndex,
   type ContextMenuItem,
@@ -59,7 +59,7 @@ export interface ContextMenuProps {
  */
 export function ContextMenu({ items, x, y, onClose }: ContextMenuProps) {
   const theme = useTheme();
-  const { width: termWidth, height: termHeight } = useTerminalDimensions();
+  const { width: termWidth } = useTerminalDimensions();
   const [highlight, setHighlight] = useState(() => firstEnabledIndex(items));
 
   // A fresh open (new items identity) re-seeds the highlight onto the first
@@ -108,11 +108,6 @@ export function ContextMenu({ items, x, y, onClose }: ContextMenuProps) {
   const boxWidth = innerWidth + CHROME_CELLS;
   const boxHeight = items.length + 2; // one row per item + top/bottom padding
 
-  const pos = clampMenuPosition(x, y, { width: boxWidth, height: boxHeight }, {
-    width: termWidth,
-    height: termHeight,
-  });
-
   const activate = (item: ContextMenuItem) => {
     if (item.disabled) return;
     onClose();
@@ -120,34 +115,16 @@ export function ContextMenu({ items, x, y, onClose }: ContextMenuProps) {
   };
 
   return (
-    <>
-      {/* Click-outside backdrop: transparent, full-screen, closes on press. */}
-      <box
-        position="absolute"
-        top={0}
-        left={0}
-        width="100%"
-        height="100%"
-        zIndex={BACKDROP_ZINDEX}
-        onMouseDown={(event) => {
-          event.stopPropagation?.();
-          onClose();
-        }}
-      />
-      <box
-        position="absolute"
-        left={pos.x}
-        top={pos.y}
-        width={boxWidth}
-        flexDirection="column"
-        flexShrink={0}
-        minWidth={0}
-        backgroundColor={theme.PANEL}
-        paddingX={2}
-        paddingY={1}
-        zIndex={BACKDROP_ZINDEX + 1}
-      >
-        {items.map((item, i) => {
+    <Popup
+      variant="anchored"
+      backdrop="transparent"
+      anchor={{ x, y }}
+      width={boxWidth}
+      height={boxHeight}
+      onClose={onClose}
+      zIndex={BACKDROP_ZINDEX}
+    >
+      {items.map((item, i) => {
           const active = i === highlight && !item.disabled;
           const fg = active
             ? theme.CANVAS
@@ -183,7 +160,6 @@ export function ContextMenu({ items, x, y, onClose }: ContextMenuProps) {
             </box>
           );
         })}
-      </box>
-    </>
+    </Popup>
   );
 }

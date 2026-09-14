@@ -21,7 +21,7 @@
 
 import React, { useMemo, useRef, useState, type ReactNode, type SetStateAction } from "react";
 import { useKeyboard, usePaste } from "@opentui/react";
-import { TextAttributes, decodePasteBytes, RGBA, type MouseEvent as OpenTuiMouseEvent } from "@opentui/core";
+import { TextAttributes, decodePasteBytes, type MouseEvent as OpenTuiMouseEvent } from "@opentui/core";
 
 import { useTheme } from "./theme-context.js";
 import { useSymbols } from "./symbol-context.js";
@@ -30,6 +30,7 @@ import { wheelRowDelta } from "./mouse.js";
 import { isRightClick } from "./use-context-menu.js";
 import { sanitizeTuiText } from "./text.js";
 import { useSurfaceDimensions } from "./dialog-surface.js";
+import { Popup } from "./popup.js";
 import { operatorIcon } from "./operator-icons.js";
 import {
   buildDialogRows,
@@ -404,7 +405,6 @@ export function DialogSelect({
   size = "medium",
   renderDetail,
 }: DialogSelectProps) {
-  const theme = useTheme();
   const symbols = useSymbols();
   const { width, height } = useSurfaceDimensions();
 
@@ -535,64 +535,42 @@ export function DialogSelect({
     }
   });
 
-  // Title row: title left, "esc" pinned right. Split the inner width so the two
-  // can never fuse under pressure.
-  const escLabel = "esc";
-  const titleGap = 1;
-  const escWidth = Math.min(panel.innerWidth, escLabel.length);
-  const titleWidth = Math.max(1, panel.innerWidth - escWidth - titleGap);
+  // Title left, "esc" pinned right; the panel geometry (position, width and the
+  // dim scrim) is the shared `Popup` chrome. The title string keeps the
+  // command-palette icon special-case it always had.
+  const titleText = `${operatorIcon(title.toLowerCase().includes("command") ? "commands" : title, symbols)} ${title}`;
+  const footerHint = multiSelect
+    ? "↑↓ move · space toggle · enter confirm · esc back"
+    : "↑↓ select · enter run · ctrl+u clear · esc back";
 
   return (
-    <box
-      position="absolute"
-      top={0}
-      left={0}
-      width="100%"
-      height="100%"
-      backgroundColor={RGBA.fromInts(0, 0, 0, 150)}
+    <Popup
+      variant="centered"
+      backdrop="dim"
+      anchor={{ x: panel.left, y: panel.top }}
+      width={panel.panelWidth}
+      height="auto"
+      dismissOnBackdrop={false}
       zIndex={1000}
+      title={titleText}
+      titleMeta="esc"
+      footer={footerHint}
+      onClose={onCancel}
     >
-      <box
-        position="absolute"
-        top={panel.top}
-        left={panel.left}
-        width={panel.panelWidth}
-        flexShrink={0}
-        flexDirection="column"
-        backgroundColor={theme.PANEL}
-        paddingX={2}
-        paddingY={1}
-      >
-        {/* Title + esc */}
-        <box flexDirection="row" width={panel.innerWidth} flexShrink={0} minWidth={0} gap={titleGap}>
-          <Cells width={titleWidth} fg={theme.PRIMARY} attributes={TextAttributes.BOLD}>
-            {`${operatorIcon(title.toLowerCase().includes("command") ? "commands" : title, symbols)} ${title}`}
-          </Cells>
-          <Cells width={escWidth} align="right" fg={theme.MUTED} onMouseDown={onCancel}>
-            {escLabel}
-          </Cells>
-        </box>
-
-        {/* Search line + windowed list + optional detail column. */}
-        <DialogSelectBody
-          items={filtered}
-          cursor={cursor}
-          panel={panel}
-          query={query}
-          placeholder={placeholder}
-          gutter={hasGutter}
-          isCurrent={isCurrent}
-          renderDetail={renderDetail}
-          onActivateRow={moveTo}
-          onHoverRow={moveTo}
-          onScroll={move}
-        />
-
-        {/* Footer hint */}
-        <Cells width={panel.innerWidth} fg={theme.MUTED}>
-          {multiSelect ? "↑↓ move · space toggle · enter confirm · esc back" : "↑↓ select · enter run · ctrl+u clear · esc back"}
-        </Cells>
-      </box>
-    </box>
+      {/* Search line + windowed list + optional detail column. */}
+      <DialogSelectBody
+        items={filtered}
+        cursor={cursor}
+        panel={panel}
+        query={query}
+        placeholder={placeholder}
+        gutter={hasGutter}
+        isCurrent={isCurrent}
+        renderDetail={renderDetail}
+        onActivateRow={moveTo}
+        onHoverRow={moveTo}
+        onScroll={move}
+      />
+    </Popup>
   );
 }
