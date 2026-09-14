@@ -42,9 +42,13 @@ import { getInstallId, newSessionId } from "./install-id.js";
 import { redactContent } from "./redaction.js";
 import type {
   AnalyticsEnvelope,
+  CodeRecord,
+  CommandRecord,
+  FindingRecord,
   FiniteArch,
   FinitePlatform,
   FiniteRuntime,
+  ScopeRecord,
   UsageRecord,
 } from "./schema.js";
 
@@ -160,6 +164,35 @@ export function redactRecordStrings<T>(value: T): T {
   } catch {
     return value;
   }
+}
+
+/**
+ * Coerce an arbitrary collector input into a single string suitable for a
+ * `*Redacted` field. The result is still raw here — {@link enqueue} runs
+ * {@link redactContent} over it before anything leaves the process. Never
+ * throws: an unstringifiable value collapses to "".
+ */
+function toText(value: unknown): string {
+  try {
+    if (typeof value === "string") return value;
+    if (value === undefined || value === null) return "";
+    if (typeof value === "number" || typeof value === "boolean" || typeof value === "bigint") {
+      return String(value);
+    }
+    return JSON.stringify(value) ?? "";
+  } catch {
+    return "";
+  }
+}
+
+/** Coerce a possibly-non-finite number to a safe finite value (default 0). */
+function finiteNumber(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
+
+/** Coerce a value to a non-empty label, defaulting to "unknown". */
+function label(value: unknown): string {
+  return typeof value === "string" && value.length > 0 ? value : "unknown";
 }
 
 // ---------------------------------------------------------------------------
@@ -347,6 +380,108 @@ class AnalyticsPipeline {
       ...(this.acc.hasCost ? { costUsd: this.acc.costUsd } : {}),
     };
     this.enqueue(record as unknown as Record<string, unknown>, "usage");
+  }
+
+  // ── Direct collectors (commands / full tiers) ─────────────────────────
+  //
+  // Every collector below GATES AT THE CALL SITE FIRST: it checks
+  // `levelAtLeast(this.level, requiredTier)` and returns before it assembles
+  // the record, so the raw args / output / source / target / finding fields
+  // are never even copied out of the caller — let alone redacted, enveloped,
+  // or queued — below the consented tier. The subsequent `enqueue` gate is a
+  // redundant second boundary. These records go DIRECT to the pipeline: they
+  // are never placed on the shared event bus, so the bus payloads stay narrow.
+  // Every method is no-throw and a no-op when the pipeline is "off".
+
+  /**
+   * "commands" tier: record one executed tool call. `args` / `output` are the
+   * caller's raw values; they are stringified here and redacted in `enqueue`.
+   */
+  recordCommand(input: {
+    tool: unknown;
+    args: unknown;
+    output: unknown;
+    status: unknown;
+    durationMs: unknown;
+    turn: unknown;
+  }): void {
+    try {
+      if (!levelAtLeast(this.level, "commands")) return;
+      const record: CommandRecord = {
+        tool: label(input.tool),
+        argsRedacted: toText(input.args),
+        outputRedacted: toText(input.output),
+        status: label(input.status),
+        durationMs: finiteNumber(input.durationMs),
+        turn: finiteNumber(input.turn),
+      };
+      this.enqueue(record as unknown as Record<string, unknown>, "commands");
+    } catch {
+      // Fail-soft: telemetry must never break the caller.
+    }
+  }
+
+  /**
+   * "commands" tier: record a model-authored code snippet. `source` is raw
+   * here and redacted in `enqueue`.
+   */
+  recordCode(input: { lang: unknown; source: unknown; origin: unknown }): void {
+    try {
+      if (!levelAtLeast(this.level, "commands")) return;
+      const record: CodeRecord = {
+        lang: label(input.lang),
+        sourceRedacted: toText(input.source),
+        origin: label(input.origin),
+      };
+      this.enqueue(record as unknown as Record<string, unknown>, "commands");
+    } catch {
+      // Fail-soft.
+    }
+  }
+
+  /**
+   * "full" tier: record an engagement scope / target entry. `target` is raw
+   * here and redacted in `enqueue`.
+   */
+  recordScope(input: { target: unknown; kind: unknown }): void {
+    try {
+      if (!levelAtLeast(this.level, "full")) return;
+      const record: ScopeRecord = {
+        targetRedacted: toText(input.target),
+        kind: label(input.kind),
+      };
+      this.enqueue(record as unknown as Record<string, unknown>, "full");
+    } catch {
+      // Fail-soft.
+    }
+  }
+
+  /**
+   * "full" tier: record a finding. Every free-text field is raw here and
+   * redacted in `enqueue`.
+   */
+  recordFinding(input: {
+    severity: unknown;
+    category: unknown;
+    title: unknown;
+    description: unknown;
+    evidence: unknown;
+    confidence: unknown;
+  }): void {
+    try {
+      if (!levelAtLeast(this.level, "full")) return;
+      const record: FindingRecord = {
+        severity: label(input.severity),
+        category: label(input.category),
+        titleRedacted: toText(input.title),
+        descriptionRedacted: toText(input.description),
+        evidenceRedacted: toText(input.evidence),
+        confidence: finiteNumber(input.confidence),
+      };
+      this.enqueue(record as unknown as Record<string, unknown>, "full");
+    } catch {
+      // Fail-soft.
+    }
   }
 
   // ── The choke point ───────────────────────────────────────────────────

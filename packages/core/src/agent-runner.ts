@@ -15,6 +15,7 @@ import { CLI_RUNTIME_TYPES } from "./shared-analysis.js";
 import { parseFindingsFromCliOutput } from "./findings-parser.js";
 import { estimateCost } from "./agent/cost.js";
 import { getCloudSinkConfig, postFinding } from "./cloud-sink.js";
+import { analyticsPipeline } from "./telemetry/analytics-pipeline.js";
 
 // ── Types ──
 
@@ -206,6 +207,24 @@ export async function runAnalysisAgent(opts: AnalysisAgentOptions): Promise<Anal
   // channel and bypasses ToolExecutor, so scoped audit/review work must use the
   // API loop where every filesystem operation crosses the scoped tool boundary.
   const scopedSourceAudit = scopePath.trim().length > 0;
+
+  // Analytics (FULL tier only): the engagement scope/target. This transmits
+  // redacted engagement data ONLY under the operator's explicit `full` opt-in
+  // — the pipeline drops it entirely below that tier and redacts every string
+  // it does send. Fire-and-forget + defensively wrapped so telemetry can never
+  // break or slow an audit; the raw target/path go straight to the choke
+  // point, never onto the shared event bus.
+  try {
+    analyticsPipeline.recordScope({
+      target,
+      kind: scopedSourceAudit ? "source-audit" : "target",
+    });
+    if (scopedSourceAudit) {
+      analyticsPipeline.recordScope({ target: scopePath, kind: "scope-path" });
+    }
+  } catch {
+    /* telemetry never breaks the audit path */
+  }
 
   const templatePrefix = `cli-${role}`;
   const requestedRuntime = config.runtime as RuntimeType | "auto" | undefined;
@@ -484,6 +503,21 @@ export async function runAnalysisAgent(opts: AnalysisAgentOptions): Promise<Anal
             data: finding,
           });
           void postFinding(finding, getCloudSinkConfig());
+          // Analytics (FULL tier only): redacted finding data, transmitted
+          // ONLY under the operator's explicit `full` opt-in. Fire-and-forget
+          // + wrapped so telemetry can never break or slow an audit.
+          try {
+            analyticsPipeline.recordFinding({
+              severity: finding.severity,
+              category: finding.category,
+              title: finding.title,
+              description: finding.description,
+              evidence: finding.evidence,
+              confidence: finding.confidence ?? 0,
+            });
+          } catch {
+            /* telemetry never breaks the audit path */
+          }
         },
         onTurn: (turn, toolCalls) => {
           if (toolCalls.length === 0) {
@@ -625,6 +659,21 @@ export async function runAnalysisAgent(opts: AnalysisAgentOptions): Promise<Anal
         data: finding,
       });
       void postFinding(finding, getCloudSinkConfig());
+      // Analytics (FULL tier only): redacted finding data, transmitted ONLY
+      // under the operator's explicit `full` opt-in. Fire-and-forget + wrapped
+      // so telemetry can never break or slow an audit.
+      try {
+        analyticsPipeline.recordFinding({
+          severity: finding.severity,
+          category: finding.category,
+          title: finding.title,
+          description: finding.description,
+          evidence: finding.evidence,
+          confidence: finding.confidence ?? 0,
+        });
+      } catch {
+        /* telemetry never breaks the audit path */
+      }
     },
   });
 

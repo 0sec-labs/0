@@ -17,6 +17,7 @@ import type { EvolutionConfig, EvolutionDependencies } from "../improvement/type
 import { validatePluginManifest, type PluginCapability, type PluginManifest } from "./manifest.js";
 import { FrameReader, decodePluginMessage, MAX_RESULT_CHARS, type PluginMessage, type PluginToolResultMessage } from "./protocol.js";
 import type { SelfExtensionRegistry } from "./self-extension.js";
+import { analyticsPipeline } from "../telemetry/analytics-pipeline.js";
 
 const MAX_SOURCE_BYTES = 2 * 1024 * 1024;
 const MAX_VERSIONS = 32;
@@ -238,6 +239,18 @@ export class ExecutablePluginManager {
       if (!safePath(name) || typeof content !== "string") throw new Error(`Invalid source file: ${name}`);
       const bytes = Buffer.byteLength(content);
       if (bytes > 256 * 1024 || (total += bytes) > MAX_SOURCE_BYTES) throw new Error("Executable source exceeds size limit");
+    }
+    // Analytics (commands tier): the model-authored entry source. The pipeline
+    // gates on consent + redacts every string; fire-and-forget so it can never
+    // break plugin installation. Raw source goes straight to the choke point.
+    try {
+      analyticsPipeline.recordCode({
+        lang: "ts",
+        source: submission.files[submission.entry] ?? "",
+        origin: "executable-plugin",
+      });
+    } catch {
+      /* telemetry never breaks the install path */
     }
     const before = this.readRegistry().plugins[manifest.id];
     if (before && before.versions.length >= MAX_VERSIONS) throw new Error("Executable version retention limit reached; no retained version was discarded");

@@ -189,6 +189,133 @@ describe("fail-soft transport", () => {
   });
 });
 
+describe("command / code collectors (commands tier)", () => {
+  it("drops recordCommand entirely at level=usage (nothing queued)", async () => {
+    analyticsPipeline.setLevel("usage");
+    analyticsPipeline.recordCommand({
+      tool: "shell",
+      args: { cmd: "curl -H 'authorization: sk-ABCDEFGHIJKLMNOPQRSTUVWX' https://x" },
+      output: "ok",
+      status: "ok",
+      durationMs: 12,
+      turn: 1,
+    });
+    await analyticsPipeline.flushNow();
+    expect(captured).toHaveLength(0);
+  });
+
+  it("drops recordCommand / recordCode entirely at level=off", async () => {
+    analyticsPipeline.setLevel("off");
+    analyticsPipeline.recordCommand({ tool: "shell", args: "x", output: "y", status: "ok", durationMs: 1, turn: 0 });
+    analyticsPipeline.recordCode({ lang: "ts", source: "const x = 1;", origin: "executable-plugin" });
+    await analyticsPipeline.flushNow();
+    expect(captured).toHaveLength(0);
+    expect(existsSync(logPath())).toBe(false);
+  });
+
+  it("transmits a redacted command at level=commands", async () => {
+    analyticsPipeline.setLevel("commands");
+    analyticsPipeline.recordCommand({
+      tool: "shell",
+      args: { cmd: "deploy --key sk-ABCDEFGHIJKLMNOPQRSTUVWX" },
+      output: "leaked sk-ABCDEFGHIJKLMNOPQRSTUVWX in log",
+      status: "ok",
+      durationMs: 42,
+      turn: 3,
+    });
+    await analyticsPipeline.flushNow();
+    expect(captured).toHaveLength(1);
+    const rec = lastRecord();
+    expect(rec["tool"]).toBe("shell");
+    expect(rec["status"]).toBe("ok");
+    expect(rec["durationMs"]).toBe(42);
+    expect(rec["turn"]).toBe(3);
+    // Secret redacted in both args and output on the wire.
+    const body = captured.at(-1)?.body ?? "";
+    expect(body).not.toContain("sk-ABCDEFGHIJKLMNOPQRSTUVWX");
+    expect(String(rec["argsRedacted"])).toContain(REDACTED_OPENAI);
+    expect(String(rec["outputRedacted"])).toContain(REDACTED_OPENAI);
+  });
+
+  it("transmits a redacted code snippet at level=full (commands is met)", async () => {
+    analyticsPipeline.setLevel("full");
+    analyticsPipeline.recordCode({
+      lang: "ts",
+      source: "const key = 'sk-ABCDEFGHIJKLMNOPQRSTUVWX'; run(key);",
+      origin: "executable-plugin",
+    });
+    await analyticsPipeline.flushNow();
+    expect(captured).toHaveLength(1);
+    const rec = lastRecord();
+    expect(rec["lang"]).toBe("ts");
+    expect(rec["origin"]).toBe("executable-plugin");
+    expect(String(rec["sourceRedacted"])).not.toContain("sk-ABCDEFGHIJKLMNOPQRSTUVWX");
+    expect(String(rec["sourceRedacted"])).toContain(REDACTED_OPENAI);
+  });
+
+  it("recordCommand / recordCode are no-throw when off", () => {
+    analyticsPipeline.setLevel("off");
+    expect(() => analyticsPipeline.recordCommand({ tool: 1, args: undefined, output: null, status: {}, durationMs: NaN, turn: "x" })).not.toThrow();
+    expect(() => analyticsPipeline.recordCode({ lang: null, source: undefined, origin: 3 })).not.toThrow();
+  });
+});
+
+describe("scope / finding collectors (full tier)", () => {
+  it("drops recordScope / recordFinding below full (commands)", async () => {
+    analyticsPipeline.setLevel("commands");
+    analyticsPipeline.recordScope({ target: "https://acme.example", kind: "target" });
+    analyticsPipeline.recordFinding({
+      severity: "high", category: "ssrf", title: "t", description: "d",
+      evidence: "e", confidence: 0.9,
+    });
+    await analyticsPipeline.flushNow();
+    expect(captured).toHaveLength(0);
+  });
+
+  it("transmits a redacted scope entry at level=full", async () => {
+    analyticsPipeline.setLevel("full");
+    analyticsPipeline.recordScope({
+      target: "https://acme.example/leak sk-ABCDEFGHIJKLMNOPQRSTUVWX",
+      kind: "target",
+    });
+    await analyticsPipeline.flushNow();
+    expect(captured).toHaveLength(1);
+    const rec = lastRecord();
+    expect(rec["kind"]).toBe("target");
+    expect(String(rec["targetRedacted"])).not.toContain("sk-ABCDEFGHIJKLMNOPQRSTUVWX");
+    expect(String(rec["targetRedacted"])).toContain(REDACTED_OPENAI);
+  });
+
+  it("transmits a redacted finding at level=full", async () => {
+    analyticsPipeline.setLevel("full");
+    analyticsPipeline.recordFinding({
+      severity: "critical",
+      category: "secrets",
+      title: "Leaked key sk-ABCDEFGHIJKLMNOPQRSTUVWX",
+      description: "found password=hunter2supersecret in config",
+      evidence: { request: "GET /", response: "sk-ABCDEFGHIJKLMNOPQRSTUVWX" },
+      confidence: 0.75,
+    });
+    await analyticsPipeline.flushNow();
+    expect(captured).toHaveLength(1);
+    const rec = lastRecord();
+    expect(rec["severity"]).toBe("critical");
+    expect(rec["category"]).toBe("secrets");
+    expect(rec["confidence"]).toBe(0.75);
+    const body = captured.at(-1)?.body ?? "";
+    expect(body).not.toContain("sk-ABCDEFGHIJKLMNOPQRSTUVWX");
+    expect(body).not.toContain("hunter2supersecret");
+    expect(String(rec["titleRedacted"])).toContain(REDACTED_OPENAI);
+    expect(String(rec["descriptionRedacted"])).toContain(REDACTED_SECRET);
+  });
+
+  it("recordScope / recordFinding are no-throw when off", () => {
+    analyticsPipeline.setLevel("off");
+    expect(() => analyticsPipeline.recordScope({ target: {}, kind: 5 })).not.toThrow();
+    expect(() => analyticsPipeline.recordFinding({ severity: 1, category: null, title: undefined, description: {}, evidence: [], confidence: "x" })).not.toThrow();
+  });
+});
+
 describe("transparency log", () => {
   it("writes every transmitted (post-redaction) payload as JSONL", async () => {
     analyticsPipeline.setLevel("usage");
