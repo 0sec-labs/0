@@ -707,11 +707,11 @@ describe("the empty / error state", () => {
 describe("hints and keys", () => {
   it("names the effectful action being confirmed", () => {
     // Every effectful action is confirmed, never silent — the verb tracks it.
-    expect(marketFooterHint("confirm")).toContain("y install");
+    expect(marketFooterHint("confirm")).toContain("[y] install");
     expect(marketFooterHint("confirm")).toContain("cancel");
-    expect(marketFooterHint("confirm", false, "enable")).toContain("y enable");
-    expect(marketFooterHint("confirm", false, "run")).toContain("y run");
-    expect(marketFooterHint("confirm", false, "activate")).toContain("y apply");
+    expect(marketFooterHint("confirm", false, "enable")).toContain("[y] enable");
+    expect(marketFooterHint("confirm", false, "run")).toContain("[y] run");
+    expect(marketFooterHint("confirm", false, "activate")).toContain("[y] apply");
   });
 
   it("maps each row's state to the action `enter` triggers", () => {

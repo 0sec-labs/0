@@ -657,7 +657,7 @@ export function MarketScreen({
 
   const hasFilter = filter.length > 0;
   const hint = rows.length === 0 && !hasFilter && mode === "browse"
-    ? "esc back · ctrl+c exit"
+    ? "[esc] back · [⌃C] exit"
     : marketFooterHint(mode, hasFilter, activeAction);
   return <>{frame({ body, hint })}</>;
 }

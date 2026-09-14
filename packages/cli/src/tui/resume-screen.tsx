@@ -236,7 +236,7 @@ export function ResumeScreen({
     ? (items.find((item) => item.id === pendingDelete)?.label ?? "this session")
     : "";
   const statusText = pendingDelete
-    ? `${symbols.warning} Delete "${pendingLabel}"? press del again to confirm · esc cancel`
+    ? `${symbols.warning} Delete "${pendingLabel}"? press del again to confirm · [esc] cancel`
     : deleteError
       ? deleteError
       : "";

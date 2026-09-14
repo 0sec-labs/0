@@ -33,10 +33,10 @@ describe("audit-switcher sidebar hint", () => {
 
   it("widens the legend as the pane grows", () => {
     // Narrowest realistic sidebar keeps the compact variant; a wide one gets more.
-    expect(fitHint(26, AUDIT_SWITCHER_HINT_VARIANTS)).toBe("↑↓ · N new · W close");
-    expect(fitHint(30, AUDIT_SWITCHER_HINT_VARIANTS)).toBe("↑↓ select · N new · W close");
+    expect(fitHint(26, AUDIT_SWITCHER_HINT_VARIANTS)).toBe("[↑↓] · [N] new · [W] close");
+    expect(fitHint(34, AUDIT_SWITCHER_HINT_VARIANTS)).toBe("[↑↓] select · [N] new · [W] close");
     expect(fitHint(60, AUDIT_SWITCHER_HINT_VARIANTS)).toBe(
-      "Ctrl+Alt: ↑↓ select · N new · W close · * unread",
+      "[⌃⌥↑↓] select · [N] new · [W] close · [*] unread",
     );
   });
 });

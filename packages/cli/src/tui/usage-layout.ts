@@ -694,6 +694,6 @@ export function usageDialogMeta(snapshot: UsageSnapshot = {}): string {
 /** The footer hint: contextual inspector — read-only, the keys are few. Only
  *  the keys the screen actually handles are named. */
 export function usageFooterHint(): string {
-  return ["esc back", "ctrl+c exit"].join(" · ");
+  return ["[esc] back", "[⌃C] exit"].join(" · ");
 }
 

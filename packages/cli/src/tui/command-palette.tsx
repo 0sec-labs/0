@@ -390,7 +390,7 @@ export function PaletteOverlay({
     : "no commands available";
 
   return (
-    <OverlayFrame title={title} footer="ctrl+p close · enter run · esc cancel">
+    <OverlayFrame title={title} footer="[⌃P] close · [⏎] run · [esc] cancel">
         <box flexDirection="row" width="100%" minWidth={0}>
           <text flexShrink={0} fg={theme.MUTED}>{queryLabel}</text>
           <box width={queryWidth} flexShrink={0} minWidth={0}>

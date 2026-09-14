@@ -169,7 +169,7 @@ function TimelineOverlay({
   );
 
   return (
-    <OverlayFrame title="TURN TIMELINE" footer="ctrl+j close · enter jump · esc cancel">
+    <OverlayFrame title="TURN TIMELINE" footer="ctrl+j close · [⏎] jump · [esc] cancel">
         {turns.slice(0, visibleTurns).map((turn, index) => {
           const active = index === selected;
           return (
@@ -193,7 +193,7 @@ function ComposeOverlay({ text }: { text: string }) {
   const inputWidth = Math.max(1, contentWidth - 3);
 
   return (
-    <OverlayFrame title="MESSAGE TO AGENT" footer="enter send · esc cancel">
+    <OverlayFrame title="MESSAGE TO AGENT" footer="[⏎] send · [esc] cancel">
       <text fg={theme.MUTED} wrapMode="word">{fitTuiText("will be injected at next turn boundary", contentWidth)}</text>
       <box flexDirection="row" marginTop={1} width="100%" minWidth={0}>
         <text width={2} flexShrink={0} fg={theme.PRIMARY}>&gt; </text>
@@ -948,10 +948,10 @@ export function SessionScreen({ state, onExit, shell, queueUserMessage }: { stat
       )}
       <FooterBar
         hint={reviewOpen
-          ? "ctrl+o or esc live · pgup/pgdn scroll"
+          ? "[⌃O]/[esc] live · [⇞⇟] scroll"
           : state.pendingUserMessages.length > 0
-            ? `message queued (${state.pendingUserMessages.length}) · ctrl+p commands`
-            : "i inject message · ctrl+p commands"}
+            ? `message queued (${state.pendingUserMessages.length}) · [⌃P] commands`
+            : "[i] inject message · [⌃P] commands"}
         status={summary ? <LiveBadge label={`ready · ${state.mode}`} active={false} /> : <LiveBadge label={`running · ${state.mode}`} />}
       />
     </ShellFrame>

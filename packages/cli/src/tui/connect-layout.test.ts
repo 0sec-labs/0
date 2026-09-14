@@ -469,11 +469,11 @@ describe("connected reporting, masks and hints", () => {
   });
 
   it("names the real keys in the footer hints", () => {
-    expect(connectFooterHint("browse")).toContain("enter connect");
-    expect(connectFooterHint("browse")).toContain("↑↓ select");
-    expect(connectFooterHint("browse", false)).toContain("esc back");
-    expect(connectFooterHint("browse", true)).toContain("esc clear filter");
-    expect(connectFooterHint("filter")).toContain("backspace");
+    expect(connectFooterHint("browse")).toContain("[⏎] connect");
+    expect(connectFooterHint("browse")).toContain("[↑↓] select");
+    expect(connectFooterHint("browse", false)).toContain("[esc] back");
+    expect(connectFooterHint("browse", true)).toContain("[esc] clear filter");
+    expect(connectFooterHint("filter")).toContain("[⌫]");
     expect(connectFooterHint("input")).toContain("save");
     expect(connectFooterHint("input")).toContain("cancel");
   });

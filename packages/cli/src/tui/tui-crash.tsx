@@ -413,7 +413,7 @@ function CrashPanel({ crash, onRestart, onQuit }: { crash: CrashInfo; onRestart:
   });
 
   const footerHint = view === "feedback"
-    ? "enter send · esc back · ctrl+c quit"
+    ? "[⏎] send · [esc] back · [⌃C] quit"
     : view === "submitting"
       ? "submitting feedback…"
       : "r restart · f feedback · q quit";

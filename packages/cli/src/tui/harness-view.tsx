@@ -183,7 +183,7 @@ export function HarnessViewPanel({ contentWidth, onBack }: { contentWidth: numbe
         minHeight={0}
         verticalScrollbarOptions={sleekScrollbar(theme)}
       ><ViewBlocks blocks={document.view.blocks} width={Math.max(1, innerWidth - 1)} /></scrollbox>
-      <text fg={theme.MUTED}>↑↓ / PgUp/PgDn scroll · Esc picker</text>
+      <text fg={theme.MUTED}>[↑↓] scroll · [esc] picker</text>
     </> : <>
       <DialogSelectBody items={items} cursor={Math.max(0, Math.min(cursor, items.length - 1))} panel={panel}
         query={query} placeholder="Find a view, command or setting" gutter emptyText="No contributions match this chat. Esc returns to controls."
@@ -195,7 +195,7 @@ export function HarnessViewPanel({ contentWidth, onBack }: { contentWidth: numbe
             : "Enter opens this view. Escape returns without changing the conversation.";
           return <text fg={theme.TEXT} wrapMode="word">{detail}</text>;
         }} />
-      <text fg={theme.MUTED} wrapMode="word">↑↓ choose · Enter open/change · type to find · Esc back</text>
+      <text fg={theme.MUTED} wrapMode="word">[↑↓] choose · [⏎] open/change · type to find · [esc] back</text>
     </>}
   </box>;
 }

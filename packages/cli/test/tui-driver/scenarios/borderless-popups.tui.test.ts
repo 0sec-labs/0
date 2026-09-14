@@ -26,7 +26,7 @@ test("slash command menu has no box borders", async () => {
 
   // The popup owns the rows from its header ("… all commands") down to its
   // key-hint footer ("… esc close"); the composer rule sits below that.
-  const popup = regionBetween(tui.rawFrame(), /all commands/, /esc close/);
+  const popup = regionBetween(tui.rawFrame(), /all commands/, /\[esc\] close/);
   const offenders = popup.filter((line) => BORDER_GLYPHS.test(line));
   expect(offenders, `border glyphs in slash popup:\n${offenders.join("\n")}`).toEqual([]);
 });
@@ -37,7 +37,7 @@ test("model picker has no box borders", async () => {
 
   // The picker owns the rows from its title ("◈ Models …") down to its
   // navigation hint ("↑↓ model …").
-  const picker = regionBetween(tui.rawFrame(), /Models · /, /↑↓ model/);
+  const picker = regionBetween(tui.rawFrame(), /Models · /, /\[↑↓\] model/);
   const offenders = picker.filter((line) => BORDER_GLYPHS.test(line));
   expect(offenders, `border glyphs in model picker:\n${offenders.join("\n")}`).toEqual([]);
 });

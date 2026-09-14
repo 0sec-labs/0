@@ -177,7 +177,7 @@ function ResetConfirmPopup({
       tone="danger"
       title={target.kind === "all" ? "Reset all settings" : "Reset setting"}
       titleMeta="esc"
-      footer="y confirm · n or esc cancel"
+      footer="[y] confirm · [n]/[esc] cancel"
       zIndex={api.zIndex}
       onClose={onCancel}
     >
@@ -657,7 +657,7 @@ export function SettingsScreen({ frame, onBack, onExit }: SettingsScreenProps) {
             placeholder="type to search every setting"
             isCurrent={(item) => item.current === true}
             renderDetail={renderDetail}
-            emptyText="No matching settings · ctrl+u clears search"
+            emptyText="No matching settings · [⌃U] clears search"
             onActivateRow={(itemIndex) => highlight(itemIndex)}
             onHoverRow={(itemIndex) => highlight(itemIndex)}
             onScroll={move}

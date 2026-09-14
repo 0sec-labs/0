@@ -557,8 +557,8 @@ export function DialogSelect({
   // command-palette icon special-case it always had.
   const titleText = `${operatorIcon(title.toLowerCase().includes("command") ? "commands" : title, symbols)} ${title}`;
   const footerHint = multiSelect
-    ? "↑↓ move · space toggle · enter confirm · esc back"
-    : "↑↓ select · enter run · ctrl+u clear · esc back";
+    ? "[↑↓] move · [space] toggle · [⏎] confirm · [esc] back"
+    : "[↑↓] select · [⏎] run · [⌃U] clear · [esc] back";
 
   return (
     <Popup

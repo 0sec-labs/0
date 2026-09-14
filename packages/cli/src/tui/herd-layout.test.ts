@@ -618,8 +618,8 @@ describe("steering composer helpers", () => {
 
   it("the composing footer hint names send and cancel", () => {
     const hint = herdComposerFooterHint();
-    expect(hint).toContain("enter send");
-    expect(hint).toContain("esc cancel");
+    expect(hint).toContain("[⏎] send");
+    expect(hint).toContain("[esc] cancel");
   });
 });
 
@@ -817,8 +817,8 @@ describe("focus content — header and transcript", () => {
     expect(herdFocusTranscriptTitle(0)).toBe("LIVE");
     expect(herdFocusTranscriptTitle(12)).toBe("LIVE 12");
     const hint = herdFocusFooterHint();
-    expect(hint).toContain("m steer");
-    expect(hint).toContain("esc back to list");
+    expect(hint).toContain("[m] steer");
+    expect(hint).toContain("[esc] back to list");
   });
 });
 

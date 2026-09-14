@@ -133,9 +133,9 @@ export function CommandMenu({
       )}
       <box width={innerWidth} flexShrink={0} minWidth={0}>
         <text fg={MUTED}>{fitHint(Math.max(1, innerWidth), [
-          "↑↓ select · tab complete · enter run · esc close",
-          "↑↓ select · tab · enter run · esc",
-          "↑↓ · tab · enter · esc",
+          "[↑↓] select · [⇥] complete · [⏎] run · [esc] close",
+          "[↑↓] select · [⇥] · [⏎] run · [esc]",
+          "[↑↓] · [⇥] · [⏎] · [esc]",
         ])}</text>
       </box>
     </box>  );

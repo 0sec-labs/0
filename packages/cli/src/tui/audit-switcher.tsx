@@ -16,9 +16,9 @@ import { fitHint, fitTuiText, sanitizeTuiText } from "./text.js";
  * ("Ctrl+Alt:" prefix, "* unread") and wording shrink.
  */
 export const AUDIT_SWITCHER_HINT_VARIANTS = [
-  "Ctrl+Alt: ↑↓ select · N new · W close · * unread",
-  "↑↓ select · N new · W close",
-  "↑↓ · N new · W close",
+  "[⌃⌥↑↓] select · [N] new · [W] close · [*] unread",
+  "[↑↓] select · [N] new · [W] close",
+  "[↑↓] · [N] new · [W] close",
 ] as const;
 
 /** The empty-state prompt, same adaptive treatment. */

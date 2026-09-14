@@ -283,5 +283,5 @@ export function UsageScreen({ frame, usage, onBack, onExit }: UsageScreenProps) 
     </box>
   );
 
-  return <>{frame({ body, hint: `${maxOffset > 0 ? "↑↓ scroll · " : ""}${usageFooterHint()}` })}</>;
+  return <>{frame({ body, hint: `${maxOffset > 0 ? "[↑↓] scroll · " : ""}${usageFooterHint()}` })}</>;
 }

@@ -912,15 +912,15 @@ export interface ModelDialogHintInput {
 export function modelDialogHint({ scope, role = null, hasFilter = false, canReload }: ModelDialogHintInput): string {
   const reload = canReload ?? scope === "hosted";
   return [
-    "↑↓ model",
-    "enter apply",
-    "ctrl+←/→ target",
-    "ctrl+s single",
-    role !== null ? "ctrl+backspace inherit" : undefined,
-    scope === "byok" ? "tab curated/all" : undefined,
-    reload ? "ctrl+r reload" : undefined,
-    hasFilter ? "ctrl+u clear" : "type to filter",
-    hasFilter ? "esc clear" : "esc back",
+    "[↑↓] model",
+    "[⏎] apply",
+    "[⌃←→] target",
+    "[⌃S] single",
+    role !== null ? "[⌃⌫] inherit" : undefined,
+    scope === "byok" ? "[⇥] curated/all" : undefined,
+    reload ? "[⌃R] reload" : undefined,
+    hasFilter ? "[⌃U] clear" : "type to filter",
+    hasFilter ? "[esc] clear" : "[esc] back",
   ]
     .filter((part): part is string => part !== undefined)
     .join(" · ");
@@ -1038,10 +1038,10 @@ export type ModelMode = "browse" | "filter";
 /** Contextual shortcuts for the model picker. */
 export function modelFooterHint(mode: ModelMode, hasFilter = false): string {
   return [
-    "↑↓ select",
-    "enter select for new chat",
-    "tab curated/all",
-    mode === "filter" || hasFilter ? "esc clear" : "esc back",
+    "[↑↓] select",
+    "[⏎] select for new chat",
+    "[⇥] curated/all",
+    mode === "filter" || hasFilter ? "[esc] clear" : "[esc] back",
   ].join(" · ");
 }
 

@@ -827,14 +827,14 @@ export function ModelScreen({
     : isByok
       ? modelFooterHint(mode, filter.length > 0)
       : [
-        "↑↓ model",
-        role !== null && rolesLive ? "enter apply" : "enter select",
-        rolesLive ? "ctrl+←/→ target" : undefined,
-        rolesLive && role !== null ? "ctrl+backspace inherit" : undefined,
-        singleModelLive ? "ctrl+s single" : undefined,
-        "ctrl+r reload",
-        filter.length > 0 ? "ctrl+u clear" : "type to filter",
-        filter.length > 0 ? "esc clear" : "esc back",
+        "[↑↓] model",
+        role !== null && rolesLive ? "[⏎] apply" : "[⏎] select",
+        rolesLive ? "[⌃←→] target" : undefined,
+        rolesLive && role !== null ? "[⌃⌫] inherit" : undefined,
+        singleModelLive ? "[⌃S] single" : undefined,
+        "[⌃R] reload",
+        filter.length > 0 ? "[⌃U] clear" : "type to filter",
+        filter.length > 0 ? "[esc] clear" : "[esc] back",
       ]
         .filter((part): part is string => part !== undefined)
         .join(" · ");

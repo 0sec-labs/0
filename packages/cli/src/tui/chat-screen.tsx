@@ -916,7 +916,7 @@ function parsePct(value: string): number {
 
 /** The inline transcript indicator text for a (non-degraded) compaction row. */
 function compactionIndicatorText(tokensBefore: number, tokensAfter?: number): string {
-  return `⊟ compacted · ${tokensBefore}→${tokensAfter ?? "?"} · ctrl+o`;
+  return `⊟ compacted · ${tokensBefore}→${tokensAfter ?? "?"} · [⌃O]`;
 }
 
 export function ChatScreen({
@@ -5156,8 +5156,8 @@ export function ChatScreen({
         ? queueLabel
         : busy
           ? settings.busyInputMode === "queue"
-            ? "type a follow-up · enter queues"
-            : "type a follow-up · enter steers main"
+            ? "type a follow-up · [⏎] queues"
+            : "type a follow-up · [⏎] steers main"
           : !session
             ? "connecting · type to queue a message"
             : "type to chat or / for commands";
@@ -5228,7 +5228,7 @@ export function ChatScreen({
           <box flexDirection="column" minWidth={0}>
             <text fg={WARNING}>
               {fitTuiText(
-                `${composerQueueLabel(queuedMessages.length)} · enter sends next · ctrl+y edit`,
+                `${composerQueueLabel(queuedMessages.length)} · [⏎] sends next · [⌃Y] edit`,
                 contentWidth,
               )}
             </text>
@@ -5321,7 +5321,7 @@ export function ChatScreen({
         <text fg={MUTED}>{fitTuiText(`Stored owner-only in your 0sec state dir and exported as ${secretPrompt.envVar}. Never transmitted by 0sec.`, approvalWidth, { mode: "middle" })}</text>
       </box>
       <box width={approvalWidth} flexShrink={0} minWidth={0}>
-        <text fg={MUTED}>{fitLegend(approvalWidth, "enter save · esc cancel")}</text>
+        <text fg={MUTED}>{fitLegend(approvalWidth, "[⏎] save · [esc] cancel")}</text>
       </box>
     </box>
   ) : null;
@@ -5334,7 +5334,7 @@ export function ChatScreen({
       activeIndex={picker.state.index}
       visibleRows={pickerVisibleRows}
       detail={pickerPlan.showDetail ? pickerDetail : undefined}
-      hint="↑↓ select · type to filter · enter apply · esc cancel"
+      hint="[↑↓] select · type to filter · [⏎] apply · [esc] cancel"
       emptyText={`no match for "${picker.state.query}"`}
       borderColor={MUTED}
       titleColor={PRIMARY}
@@ -5352,7 +5352,7 @@ export function ChatScreen({
       body={approvalBodyShown}
       choices={approvalItems}
       activeIndex={approvalState.index}
-      hint="↑↓ choose · enter confirm · esc decline"
+      hint="[↑↓] choose · [⏎] confirm · [esc] decline"
       accent={approvalPrompt.borderColor}
       severity={approvalPrompt.severity}
       contentWidth={contentWidth}
@@ -5412,8 +5412,8 @@ export function ChatScreen({
   const subagentHeaderText = subagentPanelCollapsed
     ? `${subagentToggleGlyph} ${summarizeRoster(subagentEntries.map(subagentEffectiveStatus))}`
     : agentNavIndex >= 0
-      ? `${subagentToggleGlyph} agents (${subagentEntries.length}) · ↑↓ select · enter open · esc back`
-      : `${subagentToggleGlyph} agents (${subagentEntries.length}) · ${runningWorkers} running · ↓ select`;
+      ? `${subagentToggleGlyph} agents (${subagentEntries.length}) · [↑↓] select · [⏎] open · [esc] back`
+      : `${subagentToggleGlyph} agents (${subagentEntries.length}) · ${runningWorkers} running · [↓] select`;
   const subagentNode = subagentBlockRows > 0 ? (
     <box flexDirection="column" width="100%" minWidth={0} height={subagentBlockRows} flexShrink={0} marginTop={1}>
       <box width={contentWidth} flexShrink={0} onMouseDown={() => {
@@ -5452,8 +5452,8 @@ export function ChatScreen({
       {subagentOverflowRow > 0 ? (
         <text fg={MUTED}>{fitTuiText(
           agentNavIndex >= 0
-            ? `${rosterStart + 1}–${rosterStart + subagentVisible.length}/${subagentEntries.length} · ↑↓ browse all`
-            : `+${subagentOverflow} more · ↓ browse all`,
+            ? `${rosterStart + 1}–${rosterStart + subagentVisible.length}/${subagentEntries.length} · [↑↓] browse all`
+            : `+${subagentOverflow} more · [↓] browse all`,
           contentWidth,
         )}</text>
       ) : null}
@@ -5572,7 +5572,7 @@ export function ChatScreen({
         <CloudHintCard hostedConnected={cloudConfigured} width={rightInner} rows={cloudHintRows} theme={theme}
           dismissed={cloudHintDismissed} onDismiss={() => setCloudHintDismissed(true)} onConnect={() => onNavigate("connect")} />
         <box width={rightInner} flexShrink={0} minWidth={0} onMouseDown={() => updateSetting("showRightSidebar", false)}>
-          <text fg={MUTED}>{fitLegend(rightInner, "Hide agents · ctrl+l")}</text>
+          <text fg={MUTED}>{fitLegend(rightInner, "Hide agents · [⌃L]")}</text>
         </box>
       </box>
     </box>
@@ -5855,7 +5855,7 @@ export function ChatScreen({
         </box>
       )}
       <text fg={MUTED} marginTop={1}>
-        {fitTuiText(`ctrl+o ${latestCompaction !== undefined ? "recap" : "transcript"} · ctrl+r ${workerDisplay.transcriptDetail === "expanded" ? "collapse" : "expand"} details · esc/← Main`, focusInner)}
+        {fitTuiText(`[⌃O] ${latestCompaction !== undefined ? "recap" : "transcript"} · [⌃R] ${workerDisplay.transcriptDetail === "expanded" ? "collapse" : "expand"} details · [esc]/[←] Main`, focusInner)}
       </text>
     </box>
   );
@@ -6079,7 +6079,7 @@ export function ChatScreen({
               {keyHintsLength(heroHintPairs, " · ") <= heroContentWidth ? (
                 <KeyHints pairs={heroHintPairs} theme={theme} />
               ) : (
-                <text fg={MUTED}>{fitLegend(heroContentWidth, "/connect · /resume · ctrl+p")}</text>
+                <text fg={MUTED}>{fitLegend(heroContentWidth, "/connect · /resume · [⌃P]")}</text>
               )}
             </box>
             <box height={heroBottomSpacer} flexShrink={0} minWidth={0} />

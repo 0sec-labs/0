@@ -778,7 +778,7 @@ export function ConnectScreen({ frame, onBack, onExit, recovery, onConnected, en
       if (provider.envVars.length > 0) {
         lines.push(...wrap(`Exported to the runtime as ${provider.envVars[0]}`, theme.MUTED));
       }
-      lines.push(blank(), ...wrap("enter save · esc cancel", theme.MUTED));
+      lines.push(blank(), ...wrap("[⏎] save · [esc] cancel", theme.MUTED));
     } else {
       const codexRecovery = recovery?.providerId === "chatgpt-codex";
       title = isCloud ? "0sec Cloud" : provider?.label ?? connectDetailTitleLabel();

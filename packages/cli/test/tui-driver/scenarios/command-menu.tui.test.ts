@@ -42,7 +42,7 @@ test("opening the command menu shows one row per command", async () => {
 
   // The popup owns the rows from its header ("… all commands") down to its
   // key-hint footer ("… esc close").
-  const popup = regionBetween(tui.rawFrame(), /all commands/, /esc close/);
+  const popup = regionBetween(tui.rawFrame(), /all commands/, /\[esc\] close/);
 
   // One row per command: `/help` and its registry description share a LINE.
   // In the old two-row layout the description lived on its own line below the

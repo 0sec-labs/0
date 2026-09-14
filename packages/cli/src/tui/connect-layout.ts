@@ -699,16 +699,16 @@ export function connectInputMask(secretLength: number): string {
 
 /** The footer hint, per mode. Names the real bindings. */
 export function connectFooterHint(mode: ConnectMode, hasFilter = false): string {
-  if (mode === "input") return "paste credential · enter save · esc cancel";
-  if (mode === "oauth") return "device sign-in running · esc cancel";
-  if (mode === "hosted") return "cloud sign-in running · esc cancel";
-  if (mode === "filter") return "type to filter · enter connect · esc done · backspace delete";
+  if (mode === "input") return "paste credential · [⏎] save · [esc] cancel";
+  if (mode === "oauth") return "device sign-in running · [esc] cancel";
+  if (mode === "hosted") return "cloud sign-in running · [esc] cancel";
+  if (mode === "filter") return "type to filter · [⏎] connect · [esc] done · [⌫] delete";
   return [
-    "↑↓ select",
-    "enter connect",
-    "/ filter",
-    hasFilter ? "esc clear filter" : "esc back",
-    "ctrl+c exit",
+    "[↑↓] select",
+    "[⏎] connect",
+    "[/] filter",
+    hasFilter ? "[esc] clear filter" : "[esc] back",
+    "[⌃C] exit",
   ].join(" · ");
 }
 

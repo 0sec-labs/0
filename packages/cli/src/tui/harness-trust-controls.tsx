@@ -79,7 +79,7 @@ export function HarnessControlsPanel({ contentWidth, onBack }: { contentWidth: n
   if (snapshot?.generationId || snapshot?.pendingGenerationId) hints.push("d disable");
   hints.push(`t ${harness.workspaceTrusted ? "revoke" : "grant"} trust`);
   if (snapshot) hints.push("l generation details");
-  hints.push("esc back");
+  hints.push("[esc] back");
 
   return <box flexDirection="column" width="100%" flexGrow={1} minHeight={0}>
     <HarnessTitle contentWidth={contentWidth} />

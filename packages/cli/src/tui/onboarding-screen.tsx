@@ -257,12 +257,12 @@ const STEP_LINES: Partial<Record<OnboardingStep, (width: number) => StepLine[]>>
 };
 
 const STEP_HINT: Record<OnboardingStep, string> = {
-  welcome: "enter begin · esc skip onboarding",
-  connect: "connect or esc to skip · ctrl+c cancel",
-  models: "select a model or esc to skip · ctrl+c cancel",
-  preferences: "←/→ change · enter confirm · s skip · esc cancel",
-  analytics: "↑/↓ choose · enter confirm · s skip · esc cancel",
-  done: "enter start working · esc review later",
+  welcome: "[⏎] begin · [esc] skip onboarding",
+  connect: "connect or [esc] to skip · [⌃C] cancel",
+  models: "select a model or [esc] to skip · [⌃C] cancel",
+  preferences: "[←→] change · [⏎] confirm · [s] skip · [esc] cancel",
+  analytics: "[↑↓] choose · [⏎] confirm · [s] skip · [esc] cancel",
+  done: "[⏎] start working · [esc] review later",
 };
 
 // ---------------------------------------------------------------------------
@@ -553,7 +553,7 @@ export function OnboardingScreen({
     return interactive ? (renderModels(subNav) as React.ReactElement) : null;
   }
 
-  const hint = STEP_HINT[currentStep] ?? "esc to dismiss";
+  const hint = STEP_HINT[currentStep] ?? "[esc] to dismiss";
 
   // Cap the card and center it on a wide surface, the way the overlay does, so
   // no line runs edge-to-edge. Fully responsive: on a narrow (~60 col) dialog

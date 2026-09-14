@@ -169,11 +169,11 @@ function SettingsRoute({ onExit, shell }: { onExit: () => void; shell?: ShellNav
           {shell ? (
             <box flexDirection="row">
               <text fg={theme.ACCENT} onMouseDown={() => shell.openHarness()}>
-                Live harness · ctrl+g
+                Live harness · [⌃G]
               </text>
               <text fg={theme.MUTED}>{"   "}</text>
               <text fg={theme.ACCENT} onMouseDown={() => shell.openKeybindings()}>
-                Keybindings · ctrl+k
+                Keybindings · [⌃K]
               </text>
             </box>
           ) : null}
