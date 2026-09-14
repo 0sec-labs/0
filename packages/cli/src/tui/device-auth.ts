@@ -32,8 +32,13 @@
  * `sleep`, `openBrowser`) so the whole engine is unit-testable offline.
  */
 
-import { createHash, randomBytes } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
+import { arch, hostname, platform, release, version as osVersion } from "node:os";
+import { join } from "node:path";
+
+import { homeStateDir } from "@0sec/shared";
 
 import { defaultOpenBrowser } from "../commands/auth.js";
 import {
@@ -117,6 +122,15 @@ export interface DeviceCodeProviderConfig extends DeviceAuthProviderConfigBase {
   tokenUrl: string;
   /** OAuth public client id for the device flow. */
   clientId: string;
+  /**
+   * Extra request headers merged into BOTH the device-code request and every
+   * token poll. Kimi's device flow requires a device fingerprint (the `X-Msh-*`
+   * headers) to bind the credential to this install, mirroring oh-my-pi's
+   * `kimi-fingerprint` headers-hook; providers without a fingerprint omit this.
+   * Receives the credential-store home dir so any persisted device id lands in
+   * the same `~/.0sec` state dir the tests can redirect.
+   */
+  buildHeaders?(homeDir?: string): Record<string, string>;
   /** Builds the stored account record from a successful token response. */
   toAccountRecord(tokenResponse: DeviceTokenResponse): AccountRecord;
 }
@@ -327,14 +341,19 @@ export function startDeviceAuth(
   };
 
   const requestDeviceCode = async (cfg: DeviceCodeProviderConfig): Promise<DeviceCodeResponse> => {
-    const body = new URLSearchParams({
-      client_id: cfg.clientId,
-      scope: cfg.scopes.join(" "),
-    }).toString();
+    // Match oh-my-pi engine/oauth-code.ts (fetched 2026-09-14): the `scope`
+    // param is sent ONLY when scopes are non-empty. Kimi's device flow carries
+    // no scope; xAI carries its scope string.
+    const params = new URLSearchParams({ client_id: cfg.clientId });
+    if (cfg.scopes.length > 0) params.set("scope", cfg.scopes.join(" "));
     const response = await doFetch(cfg.deviceCodeUrl, {
       method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded", Accept: "application/json" },
-      body,
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        Accept: "application/json",
+        ...cfg.buildHeaders?.(options.homeDir),
+      },
+      body: params.toString(),
     });
     if (!response.ok) {
       throw new Error(`Device code request failed (HTTP ${response.status}).`);
@@ -382,7 +401,11 @@ export function startDeviceAuth(
     try {
       response = await doFetch(cfg.tokenUrl, {
         method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded", Accept: "application/json" },
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+          Accept: "application/json",
+          ...cfg.buildHeaders?.(options.homeDir),
+        },
         body,
       });
     } catch (error) {
@@ -498,7 +521,10 @@ export function startDeviceAuth(
       response = await doFetch(cfg.keysUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json", Accept: "application/json" },
-        body: JSON.stringify({ code, code_verifier: verifier }),
+        // Matches oh-my-pi rules/auth/openrouter.kdl (fetched 2026-09-14): the
+        // keys exchange POSTs JSON { code, code_verifier, code_challenge_method }.
+        // https://github.com/can1357/oh-my-pi/blob/main/packages/catalog/src/compat/rules/auth/openrouter.kdl
+        body: JSON.stringify({ code, code_verifier: verifier, code_challenge_method: "S256" }),
       });
     } catch (error) {
       return { kind: "failed", message: error instanceof Error ? error.message : String(error) };
@@ -639,47 +665,124 @@ export function startDeviceAuth(
 }
 
 /**
- * Per-provider browser sign-in configuration, discriminated by `kind`.
- *
- * ⚠️ UNVERIFIED ENDPOINTS/CLIENT IDS. Every URL and client id below was
- * assembled from research and has NOT been confirmed against a live account.
- * They must be verified with a real sign-in before this flow is trusted — an
- * unverified endpoint will fail at the first POST (device-code) or at the
- * loopback exchange (pkce), and the engine will report that as a "failed" phase
- * rather than silently mis-authenticating. Treat these as placeholders pending
- * a live-flow check.
+ * The version reported to Kimi in the `X-Msh-Version`/User-Agent fingerprint.
+ * oh-my-pi sends its own package version here; the value is informational to
+ * Kimi's server (the load-bearing fields are `X-Msh-Platform` and the stable
+ * `X-Msh-Device-Id`), so it tracks the 0sec CLI version and is safe to bump.
+ */
+const KIMI_CLIENT_VERSION = "0.16.3";
+const KIMI_DEVICE_ID_FILENAME = "kimi-device-id";
+
+/**
+ * A stable per-install device id for Kimi, persisted best-effort under the
+ * `~/.0sec` state dir (redirectable via `homeDir` in tests). Mirrors oh-my-pi
+ * packages/ai/src/registry/oauth/kimi.ts: a missing/unwritable state dir must
+ * never break header construction — fall back to an ephemeral id.
+ */
+function kimiDeviceId(homeDir?: string): string {
+  const idPath = join(homeStateDir(homeDir), KIMI_DEVICE_ID_FILENAME);
+  try {
+    const existing = readFileSync(idPath, "utf8").trim();
+    if (existing) return existing;
+  } catch {
+    // Unreadable/missing → generate and persist below.
+  }
+  const deviceId = randomUUID().replace(/-/g, "");
+  try {
+    mkdirSync(homeStateDir(homeDir), { recursive: true });
+    writeFileSync(idPath, `${deviceId}\n`, { mode: 0o600 });
+  } catch {
+    // Persist failure → ephemeral id for this process.
+  }
+  return deviceId;
+}
+
+function sanitizeHeaderValue(value: string, fallback = "unknown"): string {
+  const sanitized = value.replace(/[^\x20-\x7E]/g, "").trim();
+  return sanitized || fallback;
+}
+
+/** Format the OS descriptor the way oh-my-pi's `getDeviceModel` does. */
+function kimiDeviceModel(): string {
+  const plat = platform();
+  const label = plat === "darwin" ? "macOS" : plat === "win32" ? "Windows" : plat === "linux" ? "Linux" : plat;
+  return [label, release(), arch()].filter(Boolean).join(" ").trim();
+}
+
+/**
+ * Kimi's device-flow fingerprint headers, matching oh-my-pi
+ * packages/ai/src/registry/oauth/kimi.ts `getKimiCommonHeaders` (fetched
+ * 2026-09-14):
+ * https://github.com/can1357/oh-my-pi/blob/main/packages/ai/src/registry/oauth/kimi.ts
+ * The `kimi-code.kdl` login applies these via its `headers-hook "kimi-fingerprint"`.
+ */
+function kimiFingerprintHeaders(homeDir?: string): Record<string, string> {
+  return {
+    "User-Agent": `KimiCLI/${KIMI_CLIENT_VERSION}`,
+    "X-Msh-Platform": "kimi_cli",
+    "X-Msh-Version": KIMI_CLIENT_VERSION,
+    "X-Msh-Device-Name": sanitizeHeaderValue(hostname()),
+    "X-Msh-Device-Model": sanitizeHeaderValue(kimiDeviceModel()),
+    "X-Msh-Os-Version": sanitizeHeaderValue(osVersion()),
+    "X-Msh-Device-Id": sanitizeHeaderValue(kimiDeviceId(homeDir)),
+  };
+}
+
+/**
+ * Per-provider browser sign-in configuration, discriminated by `kind`. Every
+ * endpoint, client id, scope, and field below is confirmed against oh-my-pi's
+ * and opencode's working implementations (fetched 2026-09-14); the per-provider
+ * citations are inline.
  */
 export const PROVIDER_DEVICE_AUTH: Record<string, DeviceAuthProviderConfig> = {
-  // ⚠️ UNVERIFIED: confirm against a live xAI account before trusting.
+  // Matches oh-my-pi rules/auth/xai-oauth.kdl and opencode packages/opencode/
+  // src/plugin/xai.ts (fetched 2026-09-14):
+  //   https://github.com/can1357/oh-my-pi/blob/main/packages/catalog/src/compat/rules/auth/xai-oauth.kdl
+  //   https://github.com/sst/opencode/blob/dev/packages/opencode/src/plugin/xai.ts
+  // Both use device url https://auth.x.ai/oauth2/device/code, token endpoint
+  // https://auth.x.ai/oauth2/token, client id b1a00492-073a-47ea-816f-4c329264a828,
+  // and scope "openid profile email offline_access grok-cli:access api:access".
+  // The token response's `access_token` is the credential (buildOAuthRecord).
   xai: {
     kind: "device-code",
     providerId: "xai",
     deviceCodeUrl: "https://auth.x.ai/oauth2/device/code",
     tokenUrl: "https://auth.x.ai/oauth2/token",
     clientId: "b1a00492-073a-47ea-816f-4c329264a828",
-    scopes: ["openid", "profile", "email", "offline_access", "api:access"],
+    scopes: ["openid", "profile", "email", "offline_access", "grok-cli:access", "api:access"],
     toAccountRecord: buildOAuthRecord,
   },
-  // ⚠️ UNVERIFIED: confirm against a live Kimi (Moonshot) account before trusting.
+  // Matches oh-my-pi rules/auth/kimi-code.kdl + packages/ai/src/registry/oauth/
+  // kimi.ts (fetched 2026-09-14):
+  //   https://github.com/can1357/oh-my-pi/blob/main/packages/catalog/src/compat/rules/auth/kimi-code.kdl
+  //   https://github.com/can1357/oh-my-pi/blob/main/packages/ai/src/registry/oauth/kimi.ts
+  // base-url https://auth.kimi.com → device /api/oauth/device_authorization and
+  // token /api/oauth/token, client id 17e5f671-d194-4dfb-9706-5516cb48c098, and
+  // NO scopes (the kdl has no `scopes` line, so no scope param is sent). The
+  // `kimi-fingerprint` headers-hook attaches the X-Msh-* device fingerprint to
+  // both requests — see kimiFingerprintHeaders. Token `access_token` is the
+  // credential (buildOAuthRecord).
   kimi: {
     kind: "device-code",
     providerId: "kimi",
     deviceCodeUrl: "https://auth.kimi.com/api/oauth/device_authorization",
     tokenUrl: "https://auth.kimi.com/api/oauth/token",
     clientId: "17e5f671-d194-4dfb-9706-5516cb48c098",
-    scopes: ["openid", "profile", "email", "offline_access"],
+    scopes: [],
+    buildHeaders: kimiFingerprintHeaders,
     toAccountRecord: buildOAuthRecord,
   },
-  // ⚠️ UNVERIFIED: OpenRouter PKCE browser sign-in. The authorize/keys URLs and
-  // the client-id-less, `callback_url`-named redirect param are RESEARCH values
-  // and must be confirmed against a live OpenRouter account before trusting.
-  //
-  // Flow: open https://openrouter.ai/auth?callback_url=<loopback>&code_challenge=<c>
-  // &code_challenge_method=S256 (no client_id — OpenRouter's PKCE is CLIENT-ID-LESS),
-  // then POST { code, code_verifier } to /api/v1/auth/keys, which PROVISIONS a
-  // durable `sk-or-...` API key (NOT OAuth tokens). That key is stored as an
-  // `api_key` record and written to OPENROUTER_API_KEY (envVars[0]) by
-  // accountEnvPatch, which llm-api already reads — so no llm-api change.
+  // Matches oh-my-pi rules/auth/openrouter.kdl (fetched 2026-09-14):
+  //   https://github.com/can1357/oh-my-pi/blob/main/packages/catalog/src/compat/rules/auth/openrouter.kdl
+  // login "oauth-code" pkce=#true, standard authorize params OFF: open
+  //   https://openrouter.ai/auth?callback_url=<loopback>&code_challenge=<c>&code_challenge_method=S256
+  // (CLIENT-ID-LESS — no client_id param), then POST JSON
+  //   { code, code_verifier, code_challenge_method: "S256" }
+  // to https://openrouter.ai/api/v1/auth/keys, which PROVISIONS a durable
+  // `sk-or-...` API key. The kdl's `credential { access "key" }` names the
+  // response field `key` (buildOpenRouterKeyRecord). Stored as an api_key record
+  // and written to OPENROUTER_API_KEY (envVars[0]) by accountEnvPatch, which
+  // llm-api already reads — so no llm-api change.
   openrouter: {
     kind: "pkce-loopback",
     providerId: "openrouter",
@@ -707,8 +810,9 @@ function buildOAuthRecord(tokenResponse: DeviceTokenResponse): AccountRecord {
  * tokens — so it is stored as an `api_key` record. accountEnvPatch then writes
  * `secret` to OPENROUTER_API_KEY (the provider's envVars[0]).
  *
- * ⚠️ UNVERIFIED: the `key` field name is a research value; confirm the real
- * response shape before trusting.
+ * The response field is `key`, confirmed by oh-my-pi rules/auth/openrouter.kdl
+ * `credential { access "key" }` (fetched 2026-09-14):
+ * https://github.com/can1357/oh-my-pi/blob/main/packages/catalog/src/compat/rules/auth/openrouter.kdl
  */
 function buildOpenRouterKeyRecord(exchange: PkceExchangeResponse): AccountRecord {
   const key = typeof exchange.key === "string" ? exchange.key : undefined;

@@ -52,6 +52,7 @@
  * for that move.
  */
 
+import { PROVIDER_DEVICE_AUTH } from "./device-auth.js";
 import { PROVIDERS, providerStates, type ProviderState } from "./provider-status.js";
 import type { DialogItem } from "./dialog-select-layout.js";
 import {
@@ -532,8 +533,12 @@ export function connectDetailLines(
   }
   separate();
 
+  // OpenRouter's OAuth is a browser (PKCE loopback) flow that mints an API key,
+  // not a device-code flow where the operator types a code — name it honestly.
+  const oauthVerb =
+    PROVIDER_DEVICE_AUTH[provider.id]?.kind === "pkce-loopback" ? "browser sign-in" : "device sign-in";
   push(
-    provider.auth === "oauth" ? `Auth: ${provider.label} device sign-in` : "Auth: API key",
+    provider.auth === "oauth" ? `Auth: ${provider.label} ${oauthVerb}` : "Auth: API key",
     "text",
   );
 
@@ -559,7 +564,7 @@ export function connectDetailLines(
   separate();
   push(
     provider.auth === "oauth"
-      ? `Enter: start ${provider.label} device sign-in. No API key or pasted token is used.`
+      ? `Enter: start ${provider.label} ${oauthVerb}. No API key or pasted token is used.`
       : "Enter: paste an API key. It is stored owner-only on this machine.",
     "muted",
   );

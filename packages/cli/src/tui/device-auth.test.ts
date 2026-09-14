@@ -300,10 +300,15 @@ describe("startDeviceAuth pkce-loopback (OpenRouter)", () => {
     pkce.redirect({ code: "auth-code-xyz" });
     await flush();
 
-    // The exchange POSTed { code, code_verifier } to the keys endpoint.
+    // The exchange POSTed { code, code_verifier, code_challenge_method } to the
+    // keys endpoint, matching oh-my-pi rules/auth/openrouter.kdl.
     expect(calls).toHaveLength(1);
     expect(calls[0]!.url).toBe(OPENROUTER.keysUrl);
-    expect(JSON.parse(calls[0]!.body)).toEqual({ code: "auth-code-xyz", code_verifier: "verifier-123" });
+    expect(JSON.parse(calls[0]!.body)).toEqual({
+      code: "auth-code-xyz",
+      code_verifier: "verifier-123",
+      code_challenge_method: "S256",
+    });
 
     expect(connected).toBe(1);
     expect(updates.at(-1)?.phase).toBe("connected");
