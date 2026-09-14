@@ -1,24 +1,27 @@
 /** @jsxImportSource @opentui/react */
 /**
- * The full-screen console settings surface.
+ * The settings dialog.
  *
- * `/settings` used to open a compact picker floating above the composer: ten
- * rows, a value each, and one line of description for whichever row was
- * highlighted. That shape competed with the transcript for the only scarce
- * resource a TUI has — rows — and it left no room for the thing a settings
- * screen is actually for, which is telling you what a setting *does* before
- * you change it.
+ * This is a pop-up, not a route: the host wraps it in `DialogSurface`, which
+ * owns the scrim, the rounded panel and the centring, and
+ * `useSurfaceDimensions` reports that panel's inner box so every row and cell
+ * budget here is measured against the dialog rather than the terminal.
  *
- * This screen is the replacement, and it is now a projection of the one shared
- * picker body, `DialogSelectBody`: the grouped, windowed list on the left and
- * the highlighted setting's detail plus a LIVE PREVIEW on the right, driven
- * inline (no scrim, no floating panel) inside the console shell. The same body
- * serves the modal `DialogSelect` overlay and the model screen; this file
- * supplies only the domain — which settings exist, how they group, what each
- * one's detail and preview say — and its own keyboard, which unlike a plain
- * picker edits a value in place rather than selecting and closing.
+ * The body is the console's one shared picker (`DialogSelectBody`) driven in
+ * inline `bodyRows` mode: an icon+title row, a search line, the whole settings
+ * table grouped under its category headings, the highlighted setting's prose
+ * and LIVE PREVIEW in the detail column beside it, and a status line. The
+ * footer of bindings is the HOST's single row, drawn from the `hint` this
+ * screen returns through `frame` — it is deliberately not drawn twice. When
+ * the surface is too narrow for two columns the detail stacks under the list
+ * instead, and when it is narrower still the list keeps every cell.
  *
- * Three properties are load-bearing:
+ * Groups, values and controls still come from `SETTING_DEFS` and the existing
+ * store, and every read and write goes through `settings-store.ts` exactly as
+ * before: saves notify subscribers immediately, and failed persistence stays
+ * visible rather than pretending the change was saved.
+ *
+ * Three properties stay load-bearing across that reshaping:
  *
  * 1. **Nothing here knows the settings.** The row model is derived from
  *    `SETTING_DEFS` on every render, so a def added to that table appears with
@@ -26,12 +29,12 @@
  *    changing. There is no list, no group order and no row count written down.
  *
  * 2. **This component does no arithmetic.** Every width, height, row count and
- *    window boundary comes off `dialog-select-layout.ts` via
- *    `computeDialogPanel`, where it is swept across widths and heights by a
- *    test. The reason is in `PRIMITIVES.md`: Yoga shrinks siblings rather than
- *    clipping them, so a row that claims one cell too many paints two strings
- *    on top of each other, and a bordered box one row short of its content
- *    paints its own border through that content.
+ *    window boundary comes off `settings-layout.ts` and
+ *    `dialog-select-layout.ts`, where it is swept across widths and heights by
+ *    a test. The reason is in `PRIMITIVES.md`: Yoga shrinks siblings rather
+ *    than clipping them, so a row that claims one cell too many paints two
+ *    strings on top of each other, and a bordered box one row short of its
+ *    content paints its own border through that content.
  *
  * 3. **Every change is persisted immediately, and a failed write is
  *    reported.** A settings screen that silently drops changes on a read-only
@@ -39,25 +42,26 @@
  */
 
 import React, { useMemo, useRef, useState } from "react";
-import { useKeyboard, usePaste, useTerminalDimensions } from "@opentui/react";
+import { useKeyboard, usePaste } from "@opentui/react";
 import { decodePasteBytes, TextAttributes } from "@opentui/core";
 
 import { Cells } from "./primitives.js";
-import { getSettings, setSettings, useSettings } from "./settings-store.js";
+import { getSettings, resetSettings, updateSetting, useSettings } from "./settings-store.js";
+import { useDialogSurface, useSurfaceDimensions } from "./dialog-surface.js";
+import { operatorIcon, operatorTitle } from "./operator-icons.js";
 import { useTheme, type Theme } from "./theme-context.js";
+import { useSymbols } from "./symbol-context.js";
 import { sanitizeTuiText } from "./text.js";
 import { DialogSelectBody, type DialogItem } from "./dialog-select.js";
 import {
   clampDialogSelection,
-  computeDialogPanel,
   moveDialogSelection,
 } from "./dialog-select-layout.js";
 import {
-  SETTINGS_TAB_GAP,
+  SETTINGS_DIALOG_HOST_ROWS,
   buildSettingsRows,
-  clipDetailLines,
+  computeSettingsLayout,
   cycleSetting,
-  groupsWithMatches,
   isFilterKey,
   isSettingModified,
   resetAllSettings,
@@ -66,9 +70,8 @@ import {
   settingValueLabel,
   settingsDetailLines,
   settingsFooterHint,
-  settingsGroups,
-  settingsTabBar,
   shellChromeRows,
+  titleColumns,
   type SettingsDetailTone,
   type SettingsMode,
   type SettingsRow,
@@ -79,9 +82,9 @@ import { SettingsPreview, previewRowCount } from "./settings-preview.js";
 /** How many rows page-up and page-down move. */
 const PAGE_STEP = 5;
 /** Rows kept for the setting's prose before any preview is lent room. */
-const MIN_TEXT_ROWS = 3;
-/** Rows the tab bar spends above the body. */
-const TAB_BAR_ROWS = 1;
+const MIN_TEXT_ROWS = 6;
+/** The dialog's own identity, from the shared operator icon/title table. */
+const SCREEN_KEY = "settings";
 
 export interface SettingsFrameInput {
   /** The settings body, already sized to the rows the frame left it. */
@@ -109,7 +112,7 @@ export interface SettingsScreenProps {
 }
 
 type PendingReset =
-  | { kind: "one"; key: string; label: string; value: string }
+  | { kind: "one"; key: keyof TuiSettings; label: string; value: string }
   | { kind: "all" };
 
 interface Notice {
@@ -133,6 +136,20 @@ function toneColor(tone: SettingsDetailTone, theme: Theme): string | undefined {
   }
 }
 
+/**
+ * A table key as a `TuiSettings` key.
+ *
+ * `SETTING_DEFS` is published under the deliberately loose `SettingDef`, whose
+ * `key` is a plain string, while the store's writes are keyed on
+ * `keyof TuiSettings`. One narrow, named cast here is better than the same
+ * assertion at four call sites, and every write still leaves through
+ * `normalizeSettings`, which is total — a key the interface does not have is
+ * repaired rather than trusted.
+ */
+function settingKey(key: string): keyof TuiSettings {
+  return key as keyof TuiSettings;
+}
+
 function settingsDialogItems(rows: SettingsRow[], settings: TuiSettings): DialogItem[] {
   return rows
     .filter((row): row is Extract<SettingsRow, { kind: "setting" }> => row.kind === "setting")
@@ -145,14 +162,38 @@ function settingsDialogItems(rows: SettingsRow[], settings: TuiSettings): Dialog
     }));
 }
 
+/** Display rows (category headings interleaved) the picker would render. */
+function displayRowCount(items: readonly DialogItem[]): number {
+  let count = 0;
+  let group = "";
+  for (const item of items) {
+    if (item.category && item.category !== group) {
+      group = item.category;
+      count += 1;
+    }
+    count += 1;
+  }
+  return count;
+}
+
+/** First index of the group `index` sits in. */
+function groupStart(items: readonly DialogItem[], index: number): number {
+  const category = items[index]?.category;
+  let at = index;
+  while (at > 0 && items[at - 1]?.category === category) at -= 1;
+  return at;
+}
+
 export function SettingsScreen({ frame, onBack, onExit }: SettingsScreenProps) {
-  const { width, height } = useTerminalDimensions();
+  const { width, height } = useSurfaceDimensions();
+  const inDialog = useDialogSurface();
   const theme = useTheme();
+  const symbols = useSymbols();
 
   // The live settings, read from the process-wide store. This screen is the
-  // writer: `setSettings` (the store's, imported above) persists AND notifies
-  // every other subscribed screen synchronously, so a change here takes effect
-  // on the chat screen without a remount.
+  // writer: the store's writes persist AND notify every other subscribed
+  // screen synchronously, so a change here takes effect on the chat screen
+  // without a remount.
   const settings = useSettings();
   const [filter, setFilter] = useState("");
   const [filtering, setFiltering] = useState(false);
@@ -167,46 +208,22 @@ export function SettingsScreen({ frame, onBack, onExit }: SettingsScreenProps) {
   const [pending, setPending] = useState<PendingReset | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
 
-  // The tab bar: one tab per group, in the table's first-appearance order. A
-  // live filter is a cross-group search, so it overrides the tabs — `searchMode`
-  // is the single switch between "the body shows the active tab" and "the body
-  // shows every match".
-  const groups = useMemo(() => settingsGroups(SETTING_DEFS), []);
-  const [activeGroup, setActiveGroup] = useState<string>(() => groups[0] ?? "");
-  const activeGroupRef = useRef(activeGroup);
-  const searchMode = filter.length > 0;
-
   // `buildSettingsRows` does the domain work — grouping by the table's group,
   // first-appearance order, and the AND-over-terms filter across key, label,
-  // group, description and choices. The screen keeps only its selectable
-  // setting rows and projects them onto `DialogItem`s: the group is the
-  // category (so the shared body draws a heading per group), the current value
-  // is the right-aligned meta, and a setting that differs from its default
-  // carries the current-value dot — the migration of the old accent-coloured
-  // value into the picker's gutter.
-  const settingsRows = useMemo(
-    () => buildSettingsRows(SETTING_DEFS, filter, searchMode ? undefined : activeGroup),
-    [filter, searchMode, activeGroup],
-  );
+  // group, description and choices. The dialog shows every group at once (the
+  // picker draws a heading per category), so no group is selected away and a
+  // search is always a search of the whole table. The screen keeps only the
+  // selectable setting rows and projects them onto `DialogItem`s: the group is
+  // the category, the current value is the right-aligned meta, and a setting
+  // that differs from its default carries the current-value gutter dot.
+  const settingsRows = useMemo(() => buildSettingsRows(SETTING_DEFS, filter), [filter]);
   const items = useMemo(() => settingsDialogItems(settingsRows, settings), [settingsRows, settings]);
   const defByKey = useMemo(() => {
     const map = new Map<string, SettingDef>();
     for (const def of SETTING_DEFS) map.set(def.key, def);
     return map;
   }, []);
-  // Display rows (headings interleaved) drive the panel's scroll/height math.
-  const totalRows = useMemo(() => {
-    let count = 0;
-    let group = "";
-    for (const item of items) {
-      if (item.category && item.category !== group) {
-        group = item.category;
-        count += 1;
-      }
-      count += 1;
-    }
-    return count;
-  }, [items]);
+  const totalRows = useMemo(() => displayRowCount(items), [items]);
 
   // The highlighted row can vanish from under the cursor as the filter narrows,
   // so the rendered cursor is always the clamped one.
@@ -225,8 +242,8 @@ export function SettingsScreen({ frame, onBack, onExit }: SettingsScreenProps) {
       : "browse";
 
   // The status line under the list carries the confirm prompt and any save
-  // failure. The filter now lives in the shared body's search line, so it no
-  // longer competes for this row. The line costs a row only when it has text.
+  // failure. The filter lives in the picker's search line, so it does not
+  // compete for this row.
   const statusText = pending
     ? pending.kind === "all"
       ? "Reset ALL settings to their defaults? y confirm / n cancel"
@@ -236,51 +253,26 @@ export function SettingsScreen({ frame, onBack, onExit }: SettingsScreenProps) {
       : `${items.length} setting${items.length === 1 ? "" : "s"} · ${modifiedCount} changed · changes save automatically`;
   const statusTone = pending ? theme.WARNING : notice?.tone === "error" ? theme.ERROR : theme.MUTED;
 
-  const contentWidth = Math.max(0, width - 4);
-  const bodyRows = Math.max(
-    0,
-    height - shellChromeRows(width) - TAB_BAR_ROWS - (statusText ? 1 : 0),
-  );
-  const panel = computeDialogPanel({
-    width: contentWidth,
-    height,
-    size: "large",
-    totalRows,
-    withDetail: true,
-    bodyRows,
-  });
-
-  // The tab bar spans the same inner width the body column does. In search mode
-  // no tab is "active" (the filter owns the body) and the groups a query cannot
-  // reach are dimmed; in tabbed mode the active group is highlighted and every
-  // tab reads as reachable.
-  const matchedGroups = useMemo(
-    () => (searchMode ? groupsWithMatches(SETTING_DEFS, filter) : null),
-    [searchMode, filter],
-  );
-  const tabs = settingsTabBar(
-    groups,
-    searchMode ? "" : activeGroup,
-    panel.innerWidth,
-    matchedGroups,
-  );
+  // Inside a dialog the surface IS the panel's inner box — the shell renders
+  // with `dialogContent`, so it has no header and no padding — and the only
+  // rows the host still spends are its one footer and the route's clickable
+  // harness line. Outside a dialog the legacy shell chrome still applies.
+  const layout = computeSettingsLayout(width, height, totalRows, inDialog
+    ? { chromeRows: SETTINGS_DIALOG_HOST_ROWS, chromeColumns: 0 }
+    : { chromeRows: shellChromeRows(width) });
+  const { panel, contentWidth } = layout;
 
   /**
-   * Applies a change and writes it through the store.
+   * Reports a failed persist without discarding the in-memory choice.
    *
-   * `setSettings` persists, updates the in-memory copy AND notifies every
-   * subscriber synchronously, then reports whether the disk write succeeded as
-   * its return value rather than throwing — because a read-only `$HOME` must not
-   * take the console down. What it must also not do is look like it worked: the
-   * change stays live for the session and the status line says so.
+   * The store's writes persist, update the in-memory copy AND notify every
+   * subscriber synchronously, then report whether the disk write succeeded as
+   * their return value rather than throwing — because a read-only `$HOME` must
+   * not take the console down. What they must also not do is look like they
+   * worked: the change stays live for the session and the status line says so.
    */
-  const commit = (next: TuiSettings) => {
+  const reportSave = (saved: boolean) => {
     setPending(null);
-    const saved = setSettings({
-      ...next,
-      diagnosticReportingPrompted:
-        next.diagnosticReportingPrompted || next.diagnosticReporting !== getSettings().diagnosticReporting,
-    });
     if (saved) {
       setNotice(null);
       return;
@@ -291,12 +283,21 @@ export function SettingsScreen({ frame, onBack, onExit }: SettingsScreenProps) {
     });
   };
 
-  const currentItems = () => filterRef.current === filter && activeGroupRef.current === activeGroup
+  /**
+   * Applies one change through the store's single-key write.
+   *
+   * `updateSetting` writes exactly the key that changed, into the layer that
+   * owns it. A whole-object `setSettings` would rewrite every other key at the
+   * same time and flatten the global/project layering, so the per-key write is
+   * the one the screen uses.
+   */
+  const commit = (next: TuiSettings, key: keyof TuiSettings) => {
+    reportSave(updateSetting(key, next[key]));
+  };
+
+  const currentItems = () => filterRef.current === filter
     ? items
-    : settingsDialogItems(
-      buildSettingsRows(SETTING_DEFS, filterRef.current, filterRef.current ? undefined : activeGroupRef.current),
-      getSettings(),
-    );
+    : settingsDialogItems(buildSettingsRows(SETTING_DEFS, filterRef.current), getSettings());
   const highlight = (next: number) => {
     selectedRef.current = next;
     setSelected(next);
@@ -307,7 +308,7 @@ export function SettingsScreen({ frame, onBack, onExit }: SettingsScreenProps) {
     const item = visible[clampDialogSelection(visible, selectedRef.current)];
     const activeDef = item ? defByKey.get(item.id) : undefined;
     if (!activeDef) return;
-    commit(cycleSetting(getSettings(), activeDef.key, delta));
+    commit(cycleSetting(getSettings(), activeDef.key, delta), settingKey(activeDef.key));
   };
 
   const move = (delta: number) => {
@@ -317,6 +318,30 @@ export function SettingsScreen({ frame, onBack, onExit }: SettingsScreenProps) {
     let next = clampDialogSelection(visible, selectedRef.current);
     for (let i = 0; i < Math.abs(delta); i += 1) next = moveDialogSelection(visible, next, dir);
     highlight(next);
+  };
+
+  /**
+   * Tab jumps the cursor to the next (or previous) group heading.
+   *
+   * The rail is gone and every group is on screen, so Tab is no longer a tab
+   * bar — it is the fast way down a long grouped list, and it wraps exactly as
+   * up/down do.
+   */
+  const jumpGroup = (dir: 1 | -1) => {
+    const visible = currentItems();
+    if (visible.length === 0) return;
+    const at = clampDialogSelection(visible, selectedRef.current);
+    const category = visible[at]?.category;
+    if (dir === 1) {
+      for (let index = at + 1; index < visible.length; index += 1) {
+        if (visible[index]?.category !== category) return highlight(index);
+      }
+      return highlight(0);
+    }
+    const start = groupStart(visible, at);
+    if (at !== start) return highlight(start);
+    if (start > 0) return highlight(groupStart(visible, start - 1));
+    return highlight(groupStart(visible, visible.length - 1));
   };
 
   const setQuery = (next: string) => {
@@ -332,17 +357,6 @@ export function SettingsScreen({ frame, onBack, onExit }: SettingsScreenProps) {
     setFilterMode(true);
     setQuery(filterRef.current + text);
   });
-
-  // Switch the active tab and reset the cursor to the new group's first setting,
-  // so the selection is always valid for the group on screen.
-  const switchTab = (dir: 1 | -1) => {
-    if (groups.length === 0) return;
-    const at = Math.max(0, groups.indexOf(activeGroupRef.current));
-    const next = ((at + dir) % groups.length + groups.length) % groups.length;
-    activeGroupRef.current = groups[next] ?? activeGroupRef.current;
-    setActiveGroup(activeGroupRef.current);
-    highlight(0);
-  };
 
   useKeyboard((key) => {
     const seq = typeof key.sequence === "string" ? key.sequence : "";
@@ -365,7 +379,18 @@ export function SettingsScreen({ frame, onBack, onExit }: SettingsScreenProps) {
     // explicit yes cancels, so a stray keystroke can only ever be a no.
     if (pending) {
       if (key.name === "return" || seq === "y" || seq === "Y") {
-        commit(pending.kind === "all" ? resetAllSettings() : resetSetting(getSettings(), pending.key));
+        // Only the keys the table actually shows are reset. The store's
+        // `resetSettings` writes exactly those and drops their project
+        // shadows, so hidden or metadata-only keys — the ones that record
+        // that an operator has already been asked something — survive a
+        // "reset all" instead of being re-armed by it.
+        const keys = pending.kind === "all"
+          ? SETTING_DEFS.map((def) => settingKey(def.key))
+          : [pending.key];
+        const next = pending.kind === "all"
+          ? resetAllSettings()
+          : resetSetting(getSettings(), pending.key);
+        reportSave(resetSettings(next, keys));
         return;
       }
       setPending(null);
@@ -403,12 +428,8 @@ export function SettingsScreen({ frame, onBack, onExit }: SettingsScreenProps) {
       return;
     }
 
-    // Tab selects a group; left/right always edit the highlighted value.
-    if (key.name === "tab") {
-      if (!filterRef.current) switchTab(key.shift ? -1 : 1);
-      return;
-    }
-    // A cross-group search keeps its query until explicitly cleared.
+    // Tab walks the groups; left/right always edit the highlighted value.
+    if (key.name === "tab") return jumpGroup(key.shift ? -1 : 1);
 
     // ── browse mode ──
     if (key.name === "escape") {
@@ -432,7 +453,7 @@ export function SettingsScreen({ frame, onBack, onExit }: SettingsScreenProps) {
       if (!activeDef) return;
       setPending({
         kind: "one",
-        key: activeDef.key,
+        key: settingKey(activeDef.key),
         label: activeDef.label,
         value: settingValueLabel(activeDef, activeDef.default),
       });
@@ -463,6 +484,10 @@ export function SettingsScreen({ frame, onBack, onExit }: SettingsScreenProps) {
    * width and the total row budget come off the shared body's `pane`; this is
    * the one split the screen performs on top, and the preview physically cannot
    * paint more rows than it is lent.
+   *
+   * Current/default values precede the prose, and the prose scrolls inside its
+   * own viewport rather than being cut, so a long description stays reachable
+   * on a short pane instead of ending at a clip marker.
    */
   const renderDetail = (item: DialogItem, pane: { width: number; height: number }) => {
     const def = defByKey.get(item.id);
@@ -477,20 +502,36 @@ export function SettingsScreen({ frame, onBack, onExit }: SettingsScreenProps) {
       if (previewRows < 2) previewRows = 0;
     }
     const textRows = pane.height - previewRows;
-    const compact = pane.height < 12;
-
-    const detailLines = clipDetailLines(
-      settingsDetailLines(def, value, pane.width, { compact }),
-      textRows,
-      pane.width,
-    );
+    const detailWidth = Math.max(1, pane.width - 1);
+    const detailLines = settingsDetailLines(def, value, detailWidth, { compact: pane.height < 12 });
     return (
       <>
-        {detailLines.map((line, index) => (
-          <Cells key={`detail-${index}`} width={pane.width} fg={toneColor(line.tone, theme)}>
-            {line.text}
-          </Cells>
-        ))}
+        <scrollbox
+          key={item.id}
+          width={pane.width}
+          height={textRows}
+          flexShrink={0}
+          scrollX={false}
+          verticalScrollbarOptions={{
+            trackOptions: {
+              backgroundColor: theme.PANEL,
+              foregroundColor: theme.MUTED,
+            },
+            arrowOptions: {
+              foregroundColor: theme.MUTED,
+              backgroundColor: theme.PANEL,
+            },
+          }}
+        >
+          <box width={detailWidth} flexDirection="column" flexShrink={0} minWidth={0}>
+            {detailLines.map((line, index) => (
+              <Cells key={`detail-${index}`} width={detailWidth} fg={toneColor(line.tone, theme)}
+                attributes={line.tone === "title" ? TextAttributes.BOLD : undefined}>
+                {line.text}
+              </Cells>
+            ))}
+          </box>
+        </scrollbox>
         {previewRows > 0 ? (
           <SettingsPreview
             def={def}
@@ -505,51 +546,56 @@ export function SettingsScreen({ frame, onBack, onExit }: SettingsScreenProps) {
     );
   };
 
-  const tabBar =
-    tabs.length > 0 ? (
-      <box flexDirection="row" width={panel.innerWidth} flexShrink={0} minWidth={0}>
-        {tabs.map((tab, index) => (
-          <React.Fragment key={tab.group}>
-            {index > 0 ? (
-              <Cells width={SETTINGS_TAB_GAP} bg={undefined}>
-                {""}
-              </Cells>
-            ) : null}
-            <Cells
-              width={tab.width}
-              bg={tab.active ? theme.PRIMARY : undefined}
-              fg={tab.active ? theme.CANVAS : tab.matched ? theme.TEXT : theme.MUTED}
-              attributes={tab.active ? TextAttributes.BOLD : undefined}
-            >
-              {tab.label}
-            </Cells>
-          </React.Fragment>
-        ))}
-      </box>
-    ) : null;
+  const hint = settingsFooterHint(mode, filter.length > 0);
+  const titleText = `${operatorIcon(SCREEN_KEY, symbols)} ${operatorTitle(SCREEN_KEY)}`;
+  const titleMeta = modifiedCount > 0
+    ? `${modifiedCount} changed`
+    : `${SETTING_DEFS.length} settings`;
+  const title = titleColumns(contentWidth, titleMeta.length);
+  const selectedItem = items[cursor];
 
   const body = (
-    <box flexDirection="column" width="100%" flexGrow={1} minWidth={0}>
-      {tabBar}
-      <DialogSelectBody
-        items={items}
-        cursor={cursor}
-        panel={panel}
-        query={filter}
-        placeholder="type to filter settings"
-        isCurrent={(item) => item.current === true}
-        renderDetail={renderDetail}
-        emptyText="no settings match this filter"
-      />
-      {statusText ? (
-        <box flexDirection="row" width="100%" flexShrink={0} minWidth={0}>
-          <Cells width={contentWidth} fg={statusTone}>
-            {statusText}
+    <box flexDirection="column" width={contentWidth} flexGrow={1} minWidth={0} overflow="hidden">
+      {layout.titleRows > 0 ? (
+        <box flexDirection="row" width={title.width} flexShrink={0} minWidth={0}>
+          <Cells width={title.titleWidth} fg={theme.PRIMARY} attributes={TextAttributes.BOLD}>
+            {titleText}
           </Cells>
+          {title.metaWidth > 0 ? (
+            <>
+              <Cells width={title.gap}>{""}</Cells>
+              <Cells width={title.metaWidth} align="right" fg={modifiedCount > 0 ? theme.ACCENT : theme.MUTED}>
+                {titleMeta}
+              </Cells>
+            </>
+          ) : null}
         </box>
       ) : null}
+      <box width={contentWidth} height={layout.bodyRows} flexDirection="column" flexShrink={0} minWidth={0}>
+        {layout.listRows >= 2 && contentWidth > 0 ? (
+          <DialogSelectBody
+            items={items}
+            cursor={cursor}
+            panel={panel}
+            query={filter}
+            placeholder="type to search every setting"
+            isCurrent={(item) => item.current === true}
+            renderDetail={renderDetail}
+            emptyText="No matching settings · ctrl+u clears search"
+            onActivateRow={(itemIndex) => highlight(itemIndex)}
+            onScroll={move}
+          />
+        ) : null}
+        {layout.stackedRows > 0 && selectedItem ? (
+          <box width={contentWidth} height={layout.stackedRows}
+            flexDirection="column" flexShrink={0} minWidth={0}>
+            {renderDetail(selectedItem, { width: contentWidth, height: layout.stackedRows })}
+          </box>
+        ) : null}
+      </box>
+      {layout.statusRows > 0 ? <Cells width={contentWidth} fg={statusTone}>{statusText}</Cells> : null}
     </box>
   );
 
-  return <>{frame({ body, hint: settingsFooterHint(mode, filter.length > 0) })}</>;
+  return <>{frame({ body, hint })}</>;
 }

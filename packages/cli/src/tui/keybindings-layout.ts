@@ -21,10 +21,15 @@
 import {
   KEYBINDINGS,
   keybindingsByCategory,
+  effectiveChords,
+  parseChord,
   type Keybinding,
+  type KeybindingCategory,
 } from "./keybindings.js";
+import { rankDialogItem, type DialogItem } from "./dialog-select-layout.js";
 import { shellChromeRows } from "./settings-layout.js";
-import { sanitizeTuiText } from "./text.js";
+import { SLASH_COMMANDS, type SlashCommand } from "./slash-commands.js";
+import { sanitizeTuiText, wrapText } from "./text.js";
 
 export { shellChromeRows };
 
@@ -178,6 +183,19 @@ export interface ShortcutsPane {
 export interface ShortcutsLayoutInput {
   width: number;
   height: number;
+  /**
+   * Rows the HOST frame spends around this screen's body, when the host is not
+   * the legacy full-screen shell. Inside a `DialogSurface` the shell renders
+   * with `dialogContent`: no outer header and no padding, and the surface
+   * dimensions are the panel interior, so the only row the host still spends is
+   * its one-row footer. Omit it and the legacy `shellChromeRows(width)` applies.
+   */
+  hostRows?: number;
+  /**
+   * Cells the HOST frame pads on EACH side. The legacy shell pads two; a dialog
+   * pads none. Omit it and the legacy padding applies.
+   */
+  hostPaddingX?: number;
 }
 
 export interface ShortcutsLayout {
@@ -218,13 +236,16 @@ function makePane(width: number, height: number, chromeH: number, chromeV: numbe
  * widest chord the caller passes so the chords align down the page.
  */
 export function computeShortcutsLayout(
-  { width, height }: ShortcutsLayoutInput,
+  { width, height, hostRows, hostPaddingX }: ShortcutsLayoutInput,
   maxKeysLength = 0,
 ): ShortcutsLayout {
   const terminalWidth = cells(width);
-  // `ShellFrame` pads two cells either side of every screen.
-  const contentWidth = Math.max(0, terminalWidth - 4);
-  const bodyRows = Math.max(0, cells(height) - shellChromeRows(terminalWidth));
+  // The legacy shell pads two cells either side and spends a header; a dialog
+  // host pads none and spends only its footer row.
+  const padding = hostPaddingX === undefined ? 2 : cells(hostPaddingX);
+  const chromeRows = hostRows === undefined ? shellChromeRows(terminalWidth) : cells(hostRows);
+  const contentWidth = Math.max(0, terminalWidth - padding * 2);
+  const bodyRows = Math.max(0, cells(height) - chromeRows);
 
   const bordered = bodyRows >= BORDERED_MIN_ROWS && contentWidth >= BORDERED_MIN_WIDTH;
   const chromeH = bordered ? 4 : 0;
@@ -268,7 +289,382 @@ export function shortcutsTitle(): string {
   return "KEYBOARD SHORTCUTS";
 }
 
-/** The footer hint: this screen is read-only, so the keys are few. */
+/** The footer hint: a read-only palette — search, move, leave. */
 export function shortcutsFooterHint(): string {
-  return ["esc back", "ctrl+c exit"].join(" · ");
+  return ["type to search", "↑/↓ move", "ctrl+u clear", "esc back", "ctrl+c exit"].join(" · ");
+}
+
+// ===========================================================================
+// COMMAND PALETTE — the searchable, grouped projection of the two registries
+// ===========================================================================
+//
+// `/shortcuts` is the route form of the console's help palette. It lists two
+// kinds of thing, and INVENTS NEITHER:
+//
+//   1. every chord in `keybindings.ts`, which is itself a hand-verified mirror
+//      of the real `useKeyboard` guards in `chat-screen.tsx`; and
+//   2. every slash command registered in `slash-commands.ts`.
+//
+// No aspirational binding, no "coming soon" row, no chord that is not in the
+// registry. A command's alias list, usage string and TUI-only flag are shown
+// only when the registry actually carries them. The palette is a REFERENCE: it
+// runs nothing, so it never implies Enter will.
+
+/** Title-case a slash-command category for a group heading. */
+function commandCategoryLabel(category: string): string {
+  const text = sanitizeTuiText(category);
+  return text.length === 0 ? "Commands" : `${text[0]?.toUpperCase() ?? ""}${text.slice(1)}`;
+}
+
+export interface PaletteInput {
+  bindings?: readonly Keybinding[];
+  commands?: readonly SlashCommand[];
+}
+
+/**
+ * The palette rows, as `DialogItem`s for the shared picker.
+ *
+ * Keybindings come first, grouped by their registry category with the chord in
+ * the right-aligned meta column; slash commands follow, grouped by their own
+ * category, with their aliases as meta. Group order and within-group order are
+ * the registries' own, so the palette reads the same way the source of truth
+ * does.
+ */
+export function buildPaletteItems({
+  bindings = KEYBINDINGS,
+  commands = SLASH_COMMANDS,
+}: PaletteInput = {}): DialogItem[] {
+  const items: DialogItem[] = [];
+  for (const [category, entries] of keybindingsByCategory(bindings)) {
+    for (const binding of entries) {
+      items.push({
+        id: `key:${binding.id}`,
+        label: sanitizeTuiText(binding.description),
+        meta: sanitizeTuiText(binding.keys),
+        category: `${category} keys`,
+      });
+    }
+  }
+  for (const command of commands) {
+    const aliases = command.aliases.map((alias) => `/${sanitizeTuiText(alias)}`).join(" ");
+    items.push({
+      id: `cmd:${command.name}`,
+      label: `/${sanitizeTuiText(command.name)}`,
+      description: sanitizeTuiText(command.description),
+      ...(aliases.length > 0 ? { meta: aliases } : {}),
+      category: `${commandCategoryLabel(command.category)} commands`,
+    });
+  }
+  return items;
+}
+
+export interface PaletteDetailLine {
+  text: string;
+  tone: ShortcutsTone;
+}
+
+/**
+ * The detail column for one palette row, wrapped to `width`.
+ *
+ * Every line is read off the registry entry the row was built from. A field the
+ * registry does not carry produces no line at all — there is no placeholder
+ * chord, no invented usage string, and the maintainer-only `handler` provenance
+ * is never shown to an operator.
+ */
+export function paletteDetailLines(
+  id: string,
+  width: number,
+  { bindings = KEYBINDINGS, commands = SLASH_COMMANDS }: PaletteInput = {},
+): PaletteDetailLine[] {
+  const room = cells(width);
+  if (room <= 0 || typeof id !== "string") return [];
+  const lines: PaletteDetailLine[] = [];
+  const push = (text: string, tone: ShortcutsTone) => {
+    for (const line of wrapText(sanitizeTuiText(text), room)) lines.push({ text: line, tone });
+  };
+
+  if (id.startsWith("key:")) {
+    const binding = bindings.find((entry) => `key:${entry.id}` === id);
+    if (!binding) return [];
+    push(binding.keys, "heading");
+    push(binding.category, "keys");
+    lines.push({ text: "", tone: "blank" });
+    push(binding.description, "description");
+    lines.push({ text: "", tone: "blank" });
+    push("Bound in the chat console.", "blank");
+    return lines;
+  }
+
+  if (id.startsWith("cmd:")) {
+    const command = commands.find((entry) => `cmd:${entry.name}` === id);
+    if (!command) return [];
+    push(`/${command.name}`, "heading");
+    if (command.aliases.length > 0) {
+      push(`Also: ${command.aliases.map((alias) => `/${alias}`).join(" ")}`, "keys");
+    }
+    lines.push({ text: "", tone: "blank" });
+    push(command.description, "description");
+    if (command.usage) {
+      lines.push({ text: "", tone: "blank" });
+      push(command.usage, "keys");
+    }
+    if (command.tuiOnly) {
+      lines.push({ text: "", tone: "blank" });
+      push("Console only: the readline client cannot run this one.", "blank");
+    }
+    lines.push({ text: "", tone: "blank" });
+    push("Type it in the chat composer to run it.", "blank");
+    return lines;
+  }
+
+  return [];
+}
+
+/**
+ * Fit detail lines to the rows the column actually has, marking the cut.
+ *
+ * Same contract as {@link clipShortcutsRows}: the overflow is cut rather than
+ * painted through the box below it, and the cut is visible rather than silent.
+ */
+export function clipPaletteLines(
+  lines: readonly PaletteDetailLine[],
+  limit: number,
+): PaletteDetailLine[] {
+  const room = cells(limit);
+  if (room <= 0) return [];
+  if (lines.length <= room) return [...lines];
+  const kept = lines.slice(0, room);
+  kept[room - 1] = { text: "…", tone: "blank" };
+  return kept;
+}
+
+/** The right-aligned count on the palette's title row. Never a rounded guess. */
+export function paletteCountMeta(shown: number, total: number): string {
+  const visible = cells(shown);
+  const all = cells(total);
+  if (visible === all) return `${all} entr${all === 1 ? "y" : "ies"}`;
+  return `${visible}/${all}`;
+}
+
+// ===========================================================================
+// KEYBINDINGS EDITOR — the editable projection of the rebindable set
+// ===========================================================================
+//
+// `/keybindings` is the write side of `/shortcuts`: the same registry, but the
+// rebindable View toggles can be re-captured and persisted. This module owns
+// the row model and the display formatting; the screen (`keybindings-editor-
+// screen.tsx`) draws it and captures keys, and `keybindings.ts` owns the chord
+// model, the resolver and the conflict rules. Nothing here is invented — every
+// row is a registry binding, and every chord shown is the effective one
+// (override ?? default).
+
+/** Human-facing names for the OpenTUI key names the chord model stores. */
+const CHORD_NAME_LABELS: Readonly<Record<string, string>> = {
+  return: "Enter",
+  escape: "Esc",
+  pageup: "PageUp",
+  pagedown: "PageDown",
+  up: "Up",
+  down: "Down",
+  left: "Left",
+  right: "Right",
+  tab: "Tab",
+  backspace: "Backspace",
+  delete: "Delete",
+  insert: "Insert",
+  home: "Home",
+  end: "End",
+  space: "Space",
+};
+
+/** Human-facing labels for the chord modifiers, in canonical display order. */
+const CHORD_MODIFIER_LABELS: readonly ["ctrl" | "shift" | "meta" | "option", string][] = [
+  ["ctrl", "Ctrl"],
+  ["shift", "Shift"],
+  ["meta", "Meta"],
+  ["option", "Alt"],
+];
+
+/**
+ * Render a canonical chord string ("ctrl+b", "pageup") as a display label
+ * ("Ctrl+B", "PageUp"). The inverse of the parser's normalisation, for the
+ * editor and any effective-chord reference. An unparseable string is shown
+ * verbatim rather than dropped, so the operator always sees what is stored.
+ */
+export function chordDisplay(chord: string): string {
+  const parsed = parseChord(chord);
+  if (!parsed) return chord;
+  const parts: string[] = [];
+  for (const [flag, label] of CHORD_MODIFIER_LABELS) {
+    if (parsed[flag]) parts.push(label);
+  }
+  const name = parsed.name;
+  const labelled =
+    CHORD_NAME_LABELS[name] ?? (name.length === 1 ? name.toUpperCase() : `${name[0]?.toUpperCase() ?? ""}${name.slice(1)}`);
+  parts.push(labelled);
+  return parts.join("+");
+}
+
+/**
+ * The effective chords of a binding, joined for display (" / " between
+ * alternates), applying any override. Used by the editor and — so the
+ * cheat-sheet reflects reality — the reference view when it is given the
+ * overrides map.
+ */
+export function effectiveKeysDisplay(
+  binding: Keybinding,
+  overrides?: Record<string, string>,
+): string {
+  return effectiveChords(binding, overrides).map(chordDisplay).join(" / ");
+}
+
+export interface KeybindingEditorRow {
+  kind: "heading" | "binding";
+  /** Heading text (category) for `heading` rows. */
+  label?: string;
+  /** Binding id for `binding` rows. */
+  id?: string;
+  description?: string;
+  category?: KeybindingCategory;
+  /** The effective chord label (override applied) for `binding` rows. */
+  chord?: string;
+  /**
+   * The binding's DEFAULT chord label, present on a `binding` row only when it
+   * is currently overridden — so the editor can show the default greyed beside
+   * the active override (e.g. `Ctrl+J  (was Ctrl+B)`).
+   */
+  defaultChord?: string;
+  /**
+   * The reason a locked (non-rebindable) row cannot be remapped — the binding's
+   * `lockReason` token ("text entry", "modal", "quit", "mode-cycle"). Present on
+   * locked binding rows only.
+   */
+  lockReason?: string;
+  /** Whether the operator may remap this row. */
+  rebindable?: boolean;
+  /** Whether an override is currently active for this row. */
+  overridden?: boolean;
+}
+
+/**
+ * The editor's flat row model: one heading per category, one row per binding,
+ * with the effective chord and the rebindable / overridden flags decided here
+ * so the screen draws no logic. Built from the shared registry via
+ * `keybindingsByCategory`, so order and grouping match the source of truth.
+ */
+export function buildKeybindingEditorRows(
+  overrides: Record<string, string> = {},
+  bindings: readonly Keybinding[] = KEYBINDINGS,
+): KeybindingEditorRow[] {
+  const rows: KeybindingEditorRow[] = [];
+  for (const [category, entries] of keybindingsByCategory(bindings)) {
+    rows.push({ kind: "heading", label: category.toUpperCase(), category });
+    for (const binding of entries) {
+      const overridden = binding.rebindable && typeof overrides[binding.id] === "string";
+      rows.push({
+        kind: "binding",
+        id: binding.id,
+        description: sanitizeTuiText(binding.description),
+        category,
+        chord: sanitizeTuiText(effectiveKeysDisplay(binding, overrides)),
+        // Only carry the default separately when it differs from what's shown
+        // (i.e. the row is overridden), so the screen can grey it beside the
+        // active chord without repeating it on every unmodified row.
+        ...(overridden
+          ? { defaultChord: sanitizeTuiText(binding.defaultChords.map(chordDisplay).join(" / ")) }
+          : {}),
+        ...(binding.rebindable ? {} : { lockReason: binding.lockReason }),
+        rebindable: binding.rebindable,
+        overridden,
+      });
+    }
+  }
+  return rows;
+}
+
+/**
+ * Filter the editor rows to those matching a search query, reusing the shared
+ * `dialog-select` fuzzy scorer so typing "sidebar" or "ctrl" narrows the list
+ * exactly as `/shortcuts` does. An empty query returns the rows untouched. A
+ * heading survives only when at least one of its binding rows matched, so no
+ * empty category is left behind. Binding-row order (and thus the source-of-truth
+ * ordering) is preserved.
+ */
+export function filterKeybindingEditorRows(
+  rows: readonly KeybindingEditorRow[],
+  query: string,
+): KeybindingEditorRow[] {
+  const needle = query.trim().toLowerCase();
+  if (needle.length === 0) return [...rows];
+
+  const matched = new Set<KeybindingEditorRow>();
+  for (const row of rows) {
+    if (row.kind !== "binding") continue;
+    const score = rankDialogItem(
+      {
+        id: row.id ?? "",
+        label: row.description ?? "",
+        meta: row.chord ?? "",
+        category: row.category ?? "",
+      },
+      needle,
+    );
+    if (Number.isFinite(score)) matched.add(row);
+  }
+
+  const result: KeybindingEditorRow[] = [];
+  for (let i = 0; i < rows.length; i += 1) {
+    const row = rows[i]!;
+    if (row.kind === "binding") {
+      if (matched.has(row)) result.push(row);
+      continue;
+    }
+    // A heading is kept only if a following binding row (before the next
+    // heading) matched.
+    let hasMatch = false;
+    for (let j = i + 1; j < rows.length && rows[j]!.kind === "binding"; j += 1) {
+      if (matched.has(rows[j]!)) {
+        hasMatch = true;
+        break;
+      }
+    }
+    if (hasMatch) result.push(row);
+  }
+  return result;
+}
+
+/** The indices of the editable (rebindable) binding rows, in row order. */
+export function rebindableRowIndices(rows: readonly KeybindingEditorRow[]): number[] {
+  const indices: number[] = [];
+  rows.forEach((row, index) => {
+    if (row.kind === "binding" && row.rebindable) indices.push(index);
+  });
+  return indices;
+}
+
+/**
+ * The editor's footer hint, depending on whether a chord is being captured.
+ *
+ * Idle mode advertises the search box (bare printable keys filter the list, the
+ * way `/shortcuts` does), so the per-row reset moved off bare `r` onto Ctrl+R
+ * (and reset-all onto Ctrl+Shift+R) — otherwise `r` could never be typed into a
+ * query. Esc clears the query first, then leaves.
+ */
+export function keybindingsEditorFooterHint(capturing: boolean): string {
+  return capturing
+    ? ["press a chord to bind", "esc cancel"].join(" · ")
+    : [
+        "type to search",
+        "↑/↓ move",
+        "enter rebind",
+        "ctrl+r reset",
+        "ctrl+shift+r reset all",
+        "esc back",
+        "ctrl+c exit",
+      ].join(" · ");
+}
+
+/** The editor's pane title. */
+export function keybindingsEditorTitle(): string {
+  return "KEYBINDINGS";
 }

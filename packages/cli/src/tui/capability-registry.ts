@@ -128,6 +128,15 @@ const CAPABILITIES: readonly CapabilityEntry[] = [
     safetyTier: "automatic",
     description: "Browse the roster of active subagent workers.",
   },
+  {
+    id: "comms",
+    label: "Agent Comms",
+    category: "engagement",
+    route: "comms",
+    outboundOrMutating: false,
+    safetyTier: "automatic",
+    description: "Watch the agent fleet and the messages flowing between agents.",
+  },
 
   // ── Findings / History / Replay ───────────────────────────────────────────
   {
@@ -224,6 +233,15 @@ const CAPABILITIES: readonly CapabilityEntry[] = [
     description: "Modify TUI, convergence, and security settings.",
   },
   {
+    id: "keybindings",
+    label: "Keybindings",
+    category: "settings",
+    route: "keybindings",
+    outboundOrMutating: true,
+    safetyTier: "operator-confirmed",
+    description: "View and rebind keyboard shortcuts.",
+  },
+  {
     id: "usage",
     label: "Usage Report",
     category: "settings",
@@ -234,12 +252,12 @@ const CAPABILITIES: readonly CapabilityEntry[] = [
   },
   {
     id: "market",
-    label: "Marketplace",
+    label: "Hackstore",
     category: "settings",
     route: "market",
     outboundOrMutating: true,
     safetyTier: "operator-confirmed",
-    description: "Browse and install plugins and themes.",
+    description: "Browse and install community extensions and themes from the Hackstore.",
   },
   {
     id: "doctor",

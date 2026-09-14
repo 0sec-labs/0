@@ -66,6 +66,15 @@ describe("normalizeSettings", () => {
     expect(loadSettings(home).allowModelSelfExtension).toBe(false);
   });
 
+  it("defaults allowDevSourceUpdates off and round-trips a global toggle", () => {
+    const home = makeHome();
+    expect(loadSettings(home).allowDevSourceUpdates).toBe(false);
+    saveSettings({ ...loadSettings(home), allowDevSourceUpdates: true }, home);
+    expect(loadSettings(home).allowDevSourceUpdates).toBe(true);
+    saveSettings({ ...loadSettings(home), allowDevSourceUpdates: false }, home);
+    expect(loadSettings(home).allowDevSourceUpdates).toBe(false);
+  });
+
   it("falls back per key when every value has the wrong type", () => {
     const raw = {
       showStatusBar: "yes",
@@ -128,20 +137,25 @@ describe("normalizeSettings", () => {
     expect(normalizeSettings({ transcriptDetail: "folded" }).transcriptDetail).toBe("expanded");
   });
 
-  it("keeps self-evolution disabled by default and accepts only explicit boolean gates", () => {
+  it("keeps security booleans disabled by default and accepts only explicit boolean gates", () => {
+    expect(DEFAULT_SETTINGS.allowDevSourceUpdates).toBe(false);
     expect(DEFAULT_SETTINGS.autoEvolveFinderLenses).toBe(false);
     expect(DEFAULT_SETTINGS.autoPromoteFinderLenses).toBe(false);
     expect(normalizeSettings({
+      allowDevSourceUpdates: true,
       autoEvolveFinderLenses: true,
       autoPromoteFinderLenses: true,
     })).toMatchObject({
+      allowDevSourceUpdates: true,
       autoEvolveFinderLenses: true,
       autoPromoteFinderLenses: true,
     });
     expect(normalizeSettings({
+      allowDevSourceUpdates: "yes",
       autoEvolveFinderLenses: "yes",
       autoPromoteFinderLenses: 1,
     })).toMatchObject({
+      allowDevSourceUpdates: false,
       autoEvolveFinderLenses: false,
       autoPromoteFinderLenses: false,
     });
@@ -449,12 +463,35 @@ describe("sidebar settings", () => {
     expect(configured.showContextMeter).toBe(false);
     expect(configured.transcriptStyle).toBe("rail");
   });
-  it("migrates persisted bubble style into the single Messenger style", () => {
+  it("migrates persisted messenger to bubble on read and preserves canonical bubble", () => {
     const home = makeHome();
-    const migrated = normalizeSettings({ transcriptStyle: "bubble" });
-    expect(migrated.transcriptStyle).toBe("messenger");
-    expect(saveSettings(migrated, home)).toBe(true);
-    expect(loadSettings(home).transcriptStyle).toBe("messenger");
+    // Canonical bubble value stays bubble through normalise+save+load.
+    const saved = normalizeSettings({ transcriptStyle: "bubble" });
+    expect(saved.transcriptStyle).toBe("bubble");
+    expect(saveSettings(saved, home)).toBe(true);
+    expect(loadSettings(home).transcriptStyle).toBe("bubble");
+    // Old messenger value from 0.16.3 is migrated to bubble on read.
+    writeFileSync(settingsFilePath(home), JSON.stringify({ transcriptStyle: "messenger" }), "utf8");
+    expect(loadSettings(home).transcriptStyle).toBe("bubble");
+  });
+  it("defaults transcriptStyle to the flat minimal style and offers it as a choice", () => {
+    // Minimal (the OpenCode / oh-my-pi flat look) is the new default.
+    expect(DEFAULT_SETTINGS.transcriptStyle).toBe("minimal");
+    const def = SETTING_DEFS.find((d) => d.key === "transcriptStyle");
+    expect(def?.default).toBe("minimal");
+    expect(def?.choices).toContain("minimal");
+    // The prior styles all remain selectable.
+    for (const style of ["bubble", "rail", "plain", "compact", "document"]) {
+      expect(def?.choices).toContain(style);
+    }
+    // A persisted minimal round-trips through normalise + save + load.
+    const home = makeHome();
+    const saved = normalizeSettings({ transcriptStyle: "minimal" });
+    expect(saved.transcriptStyle).toBe("minimal");
+    expect(saveSettings(saved, home)).toBe(true);
+    expect(loadSettings(home).transcriptStyle).toBe("minimal");
+    // An unset transcriptStyle falls back to the minimal default.
+    expect(normalizeSettings({}).transcriptStyle).toBe("minimal");
   });
 });
 
@@ -671,15 +708,18 @@ describe("operator-only privacy and updates", () => {
     writeProjectRaw(project, {
       diagnosticReporting: "off",
       diagnosticReportingPrompted: true,
-      updatePolicy: "automatic",
+      updatePolicy: "off",
+      allowDevSourceUpdates: true,
       showLogo: false,
     });
     const { settings, sources } = loadLayeredSettings({ homeDir: home, projectDir: project });
     expect(settings.diagnosticReporting).toBe("automatic");
     expect(settings.diagnosticReportingPrompted).toBe(false);
-    expect(settings.updatePolicy).toBe("off");
+    expect(settings.updatePolicy).toBe("automatic");
+    expect(settings.allowDevSourceUpdates).toBe(false);
     expect(sources.diagnosticReporting).toBe("default");
     expect(sources.updatePolicy).toBe("default");
+    expect(sources.allowDevSourceUpdates).toBe("default");
     expect(settings.showLogo).toBe(false);
   });
 
@@ -691,18 +731,22 @@ describe("operator-only privacy and updates", () => {
       diagnosticReporting: choice,
       diagnosticReportingPrompted: false,
       updatePolicy: false,
+      allowDevSourceUpdates: true,
     }));
     writeProjectRaw(project, {
       diagnosticReporting: "automatic",
       diagnosticReportingPrompted: true,
       updatePolicy: "automatic",
+      allowDevSourceUpdates: false,
     });
     const { settings, sources } = loadLayeredSettings({ homeDir: home, projectDir: project });
     expect(settings.diagnosticReporting).toBe("off");
     expect(settings.diagnosticReportingPrompted).toBe(false);
     expect(settings.updatePolicy).toBe("off");
+    expect(settings.allowDevSourceUpdates).toBe(true);
     expect(sources.diagnosticReporting).toBe("global");
     expect(sources.updatePolicy).toBe("global");
+    expect(sources.allowDevSourceUpdates).toBe("global");
   });
 
   it("persists an operator choice without allowing project consent overrides", () => {
@@ -710,6 +754,7 @@ describe("operator-only privacy and updates", () => {
     const project = makeProjectDir();
     saveSettings({
       ...DEFAULT_SETTINGS,
+      allowDevSourceUpdates: true,
       diagnosticReporting: "ask",
       diagnosticReportingPrompted: true,
       updatePolicy: "notify",
@@ -718,13 +763,16 @@ describe("operator-only privacy and updates", () => {
       diagnosticReporting: "automatic",
       diagnosticReportingPrompted: false,
       updatePolicy: "automatic",
+      allowDevSourceUpdates: false,
     });
     const settings = loadSettings(home, project);
+    expect(settings.allowDevSourceUpdates).toBe(true);
     expect(settings.diagnosticReporting).toBe("ask");
     expect(settings.diagnosticReportingPrompted).toBe(true);
     expect(settings.updatePolicy).toBe("notify");
-    saveSettings({ ...settings, diagnosticReporting: "automatic", updatePolicy: "automatic" }, home);
-    writeProjectRaw(project, { diagnosticReporting: "off", updatePolicy: "off" });
+    saveSettings({ ...settings, allowDevSourceUpdates: false, diagnosticReporting: "automatic", updatePolicy: "automatic" }, home);
+    writeProjectRaw(project, { allowDevSourceUpdates: true, diagnosticReporting: "off", updatePolicy: "off" });
+    expect(loadSettings(home, project).allowDevSourceUpdates).toBe(false);
     expect(loadSettings(home, project).diagnosticReporting).toBe("automatic");
     expect(loadSettings(home, project).updatePolicy).toBe("automatic");
   });
@@ -736,6 +784,7 @@ describe("operator-only privacy and updates", () => {
     expect(setProjectOverride("diagnosticReporting", "automatic", project)).toBe(false);
     expect(setProjectOverride("diagnosticReportingPrompted", true, project)).toBe(false);
     expect(setProjectOverride("updatePolicy", "automatic", project)).toBe(false);
+    expect(setProjectOverride("allowDevSourceUpdates", true, project)).toBe(false);
     expect(readProjectOverrides(project)).toEqual({ showLogo: false });
   });
 });
@@ -821,6 +870,11 @@ describe("project override writes", () => {
     expect(patch).toEqual({ showLogo: false, density: "compact" });
   });
 
+  it("drops operator-only allowDevSourceUpdates from project overrides", () => {
+    const patch = sanitizeOverrides({ allowDevSourceUpdates: true, showLogo: false });
+    expect(patch).toEqual({ showLogo: false });
+  });
+
   it("round-trips a sparse project override", () => {
     const project = makeProjectDir();
     expect(saveProjectOverrides({ showLogo: false }, project)).toBe(true);
@@ -856,5 +910,74 @@ describe("loadGlobalSettings", () => {
     writeGlobalFull(home, { ...DEFAULT_SETTINGS, showLogo: false });
     writeProjectRaw(project, { showLogo: true });
     expect(loadGlobalSettings(home).showLogo).toBe(false);
+  });
+});
+
+describe("keybindings overrides", () => {
+  it("defaults to an empty map", () => {
+    expect(DEFAULT_SETTINGS.keybindings).toEqual({});
+    expect(normalizeSettings({}).keybindings).toEqual({});
+    expect(normalizeSettings({ keybindings: {} }).keybindings).toEqual({});
+  });
+
+  it("keeps a valid override, canonicalised, and drops invalid ones", () => {
+    const normalized = normalizeSettings({
+      keybindings: {
+        "view.left-sidebar": "Ctrl+J", // valid, canonicalises to ctrl+j
+        "session.quit": "ctrl+x", // protected id — dropped
+        "view.right-sidebar": "k", // no modifier — dropped
+        "view.transcript-detail": "ctrl+c", // reserved chord — dropped
+      },
+    });
+    expect(normalized.keybindings).toEqual({ "view.left-sidebar": "ctrl+j" });
+  });
+
+  it("tolerates a non-object keybindings value", () => {
+    expect(normalizeSettings({ keybindings: "nope" }).keybindings).toEqual({});
+    expect(normalizeSettings({ keybindings: 42 }).keybindings).toEqual({});
+    expect(normalizeSettings({ keybindings: [] }).keybindings).toEqual({});
+    expect(normalizeSettings({ keybindings: null }).keybindings).toEqual({});
+  });
+
+  it("survives a save/normalise round-trip on disk", () => {
+    const home = makeHome();
+    saveSettings({ ...DEFAULT_SETTINGS, keybindings: { "view.left-sidebar": "ctrl+j" } }, home);
+    expect(loadSettings(home).keybindings).toEqual({ "view.left-sidebar": "ctrl+j" });
+  });
+
+  it("layers the map as a unit: a project map replaces the global one", () => {
+    const home = makeHome();
+    const project = makeProjectDir();
+    writeGlobalFull(home, { ...DEFAULT_SETTINGS, keybindings: { "view.left-sidebar": "ctrl+j" } });
+    writeProjectRaw(project, { keybindings: { "view.right-sidebar": "ctrl+shift+l" } });
+
+    const { settings, sources } = loadLayeredSettings({ homeDir: home, projectDir: project });
+    expect(settings.keybindings).toEqual({ "view.right-sidebar": "ctrl+shift+l" });
+    expect(sources.keybindings).toBe("project");
+  });
+
+  it("falls through to global when the project omits the key", () => {
+    const home = makeHome();
+    const project = makeProjectDir();
+    writeGlobalFull(home, { ...DEFAULT_SETTINGS, keybindings: { "view.left-sidebar": "ctrl+j" } });
+    writeProjectRaw(project, { showLogo: false });
+
+    const { settings, sources } = loadLayeredSettings({ homeDir: home, projectDir: project });
+    expect(settings.keybindings).toEqual({ "view.left-sidebar": "ctrl+j" });
+    expect(sources.keybindings).toBe("global");
+  });
+
+  it("defaults the map when neither layer sets it", () => {
+    const home = join(makeHome(), "empty");
+    const project = makeProjectDir();
+    const { settings, sources } = loadLayeredSettings({ homeDir: home, projectDir: project });
+    expect(settings.keybindings).toEqual({});
+    expect(sources.keybindings).toBe("default");
+  });
+
+  it("is a project-overridable setting (not operator-only)", () => {
+    const project = makeProjectDir();
+    expect(saveProjectOverrides({ keybindings: { "view.left-sidebar": "ctrl+j" } }, project)).toBe(true);
+    expect(readProjectOverrides(project).keybindings).toEqual({ "view.left-sidebar": "ctrl+j" });
   });
 });

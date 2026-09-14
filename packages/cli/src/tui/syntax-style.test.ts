@@ -5,6 +5,7 @@ import {
   codeTokenStyle,
   highlightCode,
   normalizeCodeLang,
+  parseDiffLine,
   toSyntaxStyleDefs,
   type CodeTokenKind,
 } from "./syntax-style.js";
@@ -32,6 +33,14 @@ describe("normalizeCodeLang", () => {
   it("is case- and whitespace-insensitive", () => {
     expect(normalizeCodeLang("  BASH ")).toBe("bash");
     expect(normalizeCodeLang("TypeScript")).toBe("ts");
+  });
+
+  it("folds python and diff aliases", () => {
+    for (const a of ["py", "python", "python3"]) expect(normalizeCodeLang(a)).toBe("python");
+    for (const a of ["diff", "patch"]) expect(normalizeCodeLang(a)).toBe("diff");
+    // A bare file extension resolves too, so an edit path's ext can drive it.
+    expect(normalizeCodeLang("ts")).toBe("ts");
+    expect(normalizeCodeLang("sh")).toBe("bash");
   });
 
   it("maps unknown or absent languages to plain", () => {
@@ -112,6 +121,54 @@ describe("highlightCode: json", () => {
     expect(kinds('"a": false', "json")).toContain("constant");
     expect(kinds('"a": -2.5', "json")).toContain("number");
     expect(highlightCode('"a": -2.5', "json").find((t) => t.kind === "number")?.text).toBe("-2.5");
+  });
+});
+
+describe("highlightCode: python", () => {
+  it("tags comments, strings, keywords, constants, numbers and calls", () => {
+    expect(kinds("# a comment", "python")).toEqual(["comment"]);
+    expect(kinds("def foo():", "python")).toContain("keyword");
+    expect(kinds("x = 'hi'", "python")).toContain("string");
+    expect(kinds("return None", "python")).toContain("constant");
+    expect(kinds("n = 42", "python")).toContain("number");
+    const call = highlightCode("print(x)", "python");
+    expect(call.find((t) => t.text === "print")?.kind).toBe("function");
+  });
+
+  it("rejoins to the exact input", () => {
+    const line = "async def run(self, x=1):  # go";
+    expect(rejoin(line, "python")).toBe(line);
+  });
+});
+
+describe("highlightCode: diff (coarse line-class mode)", () => {
+  it("classifies added, removed, context, hunk and marker lines", () => {
+    expect(kinds("+added line", "diff")).toEqual(["inserted"]);
+    expect(kinds("-removed line", "diff")).toEqual(["deleted"]);
+    expect(kinds(" context line", "diff")).toEqual(["plain"]);
+    expect(kinds("@@ -1,2 +1,3 @@", "diff")).toEqual(["meta"]);
+    expect(kinds("+++ b/file.ts", "diff")).toEqual(["meta"]);
+    expect(kinds("--- a/file.ts", "diff")).toEqual(["meta"]);
+  });
+
+  it("rejoins to the exact input", () => {
+    for (const line of ["+x", "-y", " z", "@@ hunk @@", "diff --git a b"]) {
+      expect(rejoin(line, "diff")).toBe(line);
+    }
+  });
+});
+
+describe("parseDiffLine", () => {
+  it("splits sign from content, and flags markers/hunks", () => {
+    expect(parseDiffLine("+new")).toEqual({ sign: "+", content: "new", raw: "+new" });
+    expect(parseDiffLine("-old")).toEqual({ sign: "-", content: "old", raw: "-old" });
+    expect(parseDiffLine(" ctx")).toEqual({ sign: " ", content: "ctx", raw: " ctx" });
+    expect(parseDiffLine("@@ -1 +1 @@").sign).toBe("@");
+    expect(parseDiffLine("+++ b/x").sign).toBe("meta");
+    expect(parseDiffLine("--- a/x").sign).toBe("meta");
+    expect(parseDiffLine("diff --git a b").sign).toBe("meta");
+    // A line with no diff sign is treated as context content.
+    expect(parseDiffLine("bare")).toEqual({ sign: "", content: "bare", raw: "bare" });
   });
 });
 

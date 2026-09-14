@@ -1,0 +1,16 @@
+# FoxGuard configuration for the 0sec repository.
+#
+# The PR security policy scans the whole repository, so without a baseline it
+# reports the entire pre-existing backlog on every pull request and blocks
+# changes that introduce nothing new. This baseline records the findings that
+# existed when it was generated; the PR gate then only blocks on findings a PR
+# *adds*. Regenerate after intentionally clearing debt:
+#   foxguard baseline --exclude .worktrees --exclude node_modules \
+#     --write-baseline .foxguard/baseline.json .
+scan:
+  baseline: .foxguard/baseline.json
+  exclude:
+    - .worktrees
+    - node_modules
+    - "**/dist/**"
+    - "**/*.min.js"

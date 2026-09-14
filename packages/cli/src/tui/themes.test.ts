@@ -13,6 +13,7 @@ import {
   MIN_SEMANTIC_CONTRAST,
   MIN_TEXT_CONTRAST,
   SEMANTIC_PAIRS,
+  SYNTAX_TOKENS,
   TEXT_TOKENS,
   THEMES,
   THEME_NAMES,
@@ -32,6 +33,7 @@ import {
   parseHex,
   recommendedThemeName,
   relativeLuminance,
+  resolveSyntaxColors,
   semanticSeparation,
   severityToneFor,
   validateTheme,
@@ -93,18 +95,26 @@ describe("token coverage", () => {
     expect([...THEME_TOKENS].sort()).toEqual(Object.keys(SHIPPED_PALETTE).sort());
   });
 
-  it.each(allThemes())("$name defines every token and no extras", ({ palette }) => {
-    // Driven off THEME_TOKENS, so adding a token to the type fails here for
-    // any theme that has not been updated.
-    expect(Object.keys(palette).sort()).toEqual([...THEME_TOKENS].sort());
+  it.each(allThemes())("$name defines every required token, extras only from the syntax group", ({ palette }) => {
+    // Every REQUIRED token is present and well-formed. Driven off THEME_TOKENS,
+    // so adding a required token to the type fails here for any theme that has
+    // not been updated.
     for (const token of THEME_TOKENS) {
       expect(isHexColor(palette[token])).toBe(true);
+    }
+    // The only keys a palette may carry beyond the required set are the
+    // optional syntax / diff tokens; anything else is a genuine typo.
+    const allowed = new Set<string>([...THEME_TOKENS, ...SYNTAX_TOKENS]);
+    for (const key of Object.keys(palette)) {
+      expect(allowed.has(key)).toBe(true);
     }
   });
 
   it.each(allThemes())("$name uses uppercase 6-digit hex throughout", ({ palette }) => {
-    for (const token of THEME_TOKENS) {
-      expect(palette[token]).toMatch(/^#[0-9A-F]{6}$/);
+    for (const token of [...THEME_TOKENS, ...SYNTAX_TOKENS]) {
+      const value = (palette as Record<string, string | undefined>)[token];
+      if (value === undefined) continue;
+      expect(value).toMatch(/^#[0-9A-F]{6}$/);
     }
   });
 
@@ -122,8 +132,8 @@ describe("default theme", () => {
   });
 
   it("is the fallback", () => {
-    expect(DEFAULT_THEME_NAME).toBe("midnight");
-    expect(getTheme(DEFAULT_THEME_NAME)).toBe(THEMES.midnight.palette);
+    expect(DEFAULT_THEME_NAME).toBe("opencode");
+    expect(getTheme(DEFAULT_THEME_NAME)).toBe(THEMES.opencode.palette);
   });
 
   it("reproduces severityTone's mapping", () => {
@@ -302,6 +312,7 @@ describe("contrast sweep", () => {
       paper: 5.16,
       "mono-dim": 4.5,
       swiss: 5.74,
+      opencode: 5.01,
     });
   });
 });
@@ -418,9 +429,12 @@ describe("semantic colours survive colour blindness", () => {
       paper: 1.162,
       "mono-dim": 1.165,
       swiss: 1.21,
+      opencode: 1.156,
     });
-    // Every theme clears the floor; paper is the tightest of the set.
-    expect(Math.min(...Object.values(achieved))).toBe(achieved.paper);
+    // Every theme clears the floor; opencode is the tightest of the set (its
+    // semantic hues are distinguished by colour rather than luminance, the
+    // OpenCode palette's own trade-off), just above paper.
+    expect(Math.min(...Object.values(achieved))).toBe(achieved.opencode);
     expect(Math.min(...Object.values(achieved))).toBeGreaterThanOrEqual(MIN_SEMANTIC_CONTRAST);
   });
 });
@@ -657,8 +671,8 @@ describe("degradePalette", () => {
     for (const { palette } of allThemes()) {
       for (const depth of ["ansi16", "ansi256"] as const) {
         const out = degradePalette(palette, depth);
-        expect(Object.keys(out).sort()).toEqual([...THEME_TOKENS].sort());
         for (const token of THEME_TOKENS) expect(isHexColor(out[token])).toBe(true);
+        for (const color of Object.values(out)) expect(isHexColor(color)).toBe(true);
       }
     }
   });
@@ -1005,5 +1019,64 @@ describe("swiss theme", () => {
     expect(red.r).toBeGreaterThan(red.b);
     expect(p.BRAND).toBe(p.PRIMARY);
     expect(p.ERROR).toBe(p.PRIMARY);
+  });
+});
+
+describe("syntax / diff sub-palette (additive optional group)", () => {
+  it("keeps the syntax tokens out of the strict required union", () => {
+    for (const token of SYNTAX_TOKENS) {
+      expect((THEME_TOKENS as readonly string[]).includes(token)).toBe(false);
+    }
+  });
+
+  it("validates a palette that omits the whole syntax group (backward compat)", () => {
+    // A user theme predating the group carries only the required tokens.
+    const bare: Record<string, string> = {};
+    for (const token of THEME_TOKENS) bare[token] = "#101010";
+    // Give it enough contrast to clear the sweep so only the token-shape rules
+    // are under test here.
+    bare.TEXT = "#FFFFFF";
+    bare.CANVAS = "#000000";
+    const issues = validateTheme(bare);
+    expect(issues.some((i) => i.kind === "extra")).toBe(false);
+    expect(issues.some((i) => i.kind === "missing")).toBe(false);
+  });
+
+  it("does not flag defined syntax tokens as extra, but rejects malformed ones", () => {
+    const good: Record<string, string> = { ...THEMES.slate.palette };
+    expect(validateTheme(good, { name: "slate" }).some((i) => i.kind === "extra")).toBe(false);
+
+    const bad: Record<string, unknown> = { ...THEMES.slate.palette, syntaxKeyword: "blue" };
+    const issues = validateTheme(bad);
+    expect(issues.some((i) => i.kind === "malformed" && i.token === "syntaxKeyword")).toBe(true);
+  });
+
+  it("resolves every colour from a bespoke palette when present", () => {
+    const colors = resolveSyntaxColors(THEMES.slate.palette);
+    expect(colors.keyword).toBe("#7AA2F7");
+    expect(colors.string).toBe("#9ECE6A");
+    expect(colors.diffAdd).toBe(THEMES.slate.palette.SUCCESS);
+    expect(colors.diffDel).toBe(THEMES.slate.palette.ERROR);
+  });
+
+  it("falls back to semantic tokens for a palette with no syntax group", () => {
+    // `dark` defines no syntax tokens, so the resolver reproduces the historical
+    // codeTokenStyle mapping exactly.
+    const p = THEMES.dark.palette;
+    const colors = resolveSyntaxColors(p);
+    expect(colors.keyword).toBe(p.PRIMARY);
+    expect(colors.string).toBe(p.SUCCESS);
+    expect(colors.number).toBe(p.WARNING);
+    expect(colors.comment).toBe(p.MUTED);
+    expect(colors.function).toBe(p.INFO);
+    expect(colors.type).toBe(p.BRAND);
+    expect(colors.diffAdd).toBe(p.SUCCESS);
+    expect(colors.diffDel).toBe(p.ERROR);
+  });
+
+  it("carries defined syntax tokens through an ansi degrade", () => {
+    const degraded = degradePalette(THEMES.slate.palette, "ansi16") as Record<string, string>;
+    expect(degraded.syntaxKeyword).toBeDefined();
+    expect(degraded.syntaxKeyword).toMatch(/^#[0-9A-F]{6}$/);
   });
 });

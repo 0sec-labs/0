@@ -13,6 +13,7 @@
  */
 import type { ToolDefinition } from "../types.js";
 import { reconToolDefinitions } from "./recon.js";
+import { browserToolDefinitions } from "./browser.js";
 import { findingsToolDefinitions } from "./findings.js";
 import { systemToolDefinitions } from "./system.js";
 import { accessControlToolDefinitions } from "./access-control.js";
@@ -31,6 +32,8 @@ import { pythonToolDefinitions } from "./python.js";
 import { binaryToolDefinitions, BINARY_TOOL_NAMES } from "./binary.js";
 import { askOperatorToolDefinitions } from "./ask-operator.js";
 import { todosToolDefinitions } from "./todos.js";
+import { evalToolDefinitions } from "./eval.js";
+import { proxyToolDefinitions } from "./proxy.js";
 
 export {
   SCANNER_TOOL_NAMES,
@@ -44,6 +47,7 @@ export {
 // each tool name is owned by exactly one domain module.
 const DOMAIN_DEFINITIONS: Record<string, ToolDefinition> = {
   ...reconToolDefinitions,
+  ...browserToolDefinitions,
   ...findingsToolDefinitions,
   ...systemToolDefinitions,
   ...accessControlToolDefinitions,
@@ -59,6 +63,8 @@ const DOMAIN_DEFINITIONS: Record<string, ToolDefinition> = {
   ...binaryToolDefinitions,
   ...askOperatorToolDefinitions,
   ...todosToolDefinitions,
+  ...evalToolDefinitions,
+  ...proxyToolDefinitions,
 };
 
 // Canonical registry order. getToolsForRole("audit"/"review") enumerates
@@ -110,6 +116,8 @@ const TOOL_REGISTRY_ORDER = [
   "oast_register",
   "oast_poll",
   "python_exec",
+  "js_eval",
+  "python_eval",
   "analyze_binary",
   "ask_operator",
   "update_todos",
@@ -120,6 +128,9 @@ const TOOL_REGISTRY_ORDER = [
   // set only when the operator enabled `allowModelSelfExtension` (default OFF).
   "self_extend",
   "remember_codebase",
+  // Burp-style intercepting HTTP(S) proxy (burp-network-20260913). Behind a
+  // lazy ProxyDriver seam; scope-gated like http_request/browser.
+  "proxy",
 ] as const;
 
 export const TOOL_DEFINITIONS: Record<string, ToolDefinition> = Object.fromEntries(

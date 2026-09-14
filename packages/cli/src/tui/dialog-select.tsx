@@ -20,12 +20,17 @@
  */
 
 import React, { useMemo, useRef, useState, type ReactNode, type SetStateAction } from "react";
-import { useKeyboard, usePaste, useTerminalDimensions } from "@opentui/react";
-import { TextAttributes, decodePasteBytes } from "@opentui/core";
+import { useKeyboard, usePaste } from "@opentui/react";
+import { TextAttributes, decodePasteBytes, RGBA, type MouseEvent as OpenTuiMouseEvent } from "@opentui/core";
 
 import { useTheme } from "./theme-context.js";
+import { useSymbols } from "./symbol-context.js";
 import { Cells, textCells } from "./primitives.js";
+import { wheelRowDelta } from "./mouse.js";
+import { isRightClick } from "./use-context-menu.js";
 import { sanitizeTuiText } from "./text.js";
+import { useSurfaceDimensions } from "./dialog-surface.js";
+import { operatorIcon } from "./operator-icons.js";
 import {
   buildDialogRows,
   clampDialogSelection,
@@ -143,6 +148,25 @@ export interface DialogSelectBodyProps {
   renderDetail?: DialogRenderDetail;
   /** Text shown in place of the list when there is nothing to choose from. */
   emptyText?: string;
+  /** Clicked selectable index in `items`; the caller retains activation authority. */
+  onActivateRow?: (itemIndex: number) => void;
+  /**
+   * Wheel-scroll over the list. The windowed list has no scroll position of its
+   * own — its highlight IS its position — so a wheel notch moves the cursor
+   * exactly as the arrow keys do. `rowDelta` is signed: positive advances
+   * toward later rows (wheel-down), negative retreats (wheel-up). The caller
+   * reuses its own keyboard move handler, so a filter burst / clamp stays in
+   * one place.
+   */
+  onScroll?: (rowDelta: number) => void;
+  /**
+   * A right-click (button 2) on a selectable row. Optional and additive: when
+   * omitted the row behaves exactly as before (any press activates); when
+   * given, a right press routes here (with the absolute cursor cell on the
+   * event) instead of activating, and a left press still activates. Lets a host
+   * pop a per-row context menu without touching the left-click path.
+   */
+  onRowContextMenu?: (itemIndex: number, event: OpenTuiMouseEvent) => void;
 }
 
 /**
@@ -174,6 +198,9 @@ export function DialogSelectBody({
   isCurrent,
   renderDetail,
   emptyText = "no matches",
+  onActivateRow,
+  onScroll,
+  onRowContextMenu,
 }: DialogSelectBodyProps) {
   const theme = useTheme();
 
@@ -222,8 +249,8 @@ export function DialogSelectBody({
     // On the PRIMARY highlight, CANVAS is the readable inverse (PRIMARY is a
     // TEXT token proven to clear contrast against every background token). Off
     // the highlight, disabled rows dim, everything else is body text.
-    const labelFg = isActive ? theme.CANVAS : item.disabled ? theme.MUTED : theme.TEXT;
-    const metaFg = isActive ? theme.CANVAS : theme.MUTED;
+    const labelFg = isActive ? theme.CANVAS : item.disabled ? theme.MUTED : item.tone ?? theme.TEXT;
+    const metaFg = isActive ? theme.CANVAS : item.disabled ? theme.MUTED : item.tone ?? theme.MUTED;
     const dotFg = isActive ? theme.CANVAS : theme.ACCENT;
 
     return (
@@ -234,6 +261,19 @@ export function DialogSelectBody({
         flexShrink={0}
         minWidth={0}
         backgroundColor={bg}
+        onMouseDown={
+          (onActivateRow || onRowContextMenu) && !item.disabled
+            ? (event: OpenTuiMouseEvent) => {
+                if (onRowContextMenu && isRightClick(event)) {
+                  event.stopPropagation?.();
+                  event.preventDefault?.();
+                  onRowContextMenu(row.itemIndex, event);
+                  return;
+                }
+                onActivateRow?.(row.itemIndex);
+              }
+            : undefined
+        }
       >
         {columns.gutterWidth > 0 ? (
           <Cells width={columns.gutterWidth} fg={dotFg} bg={bg}>
@@ -304,6 +344,10 @@ export function DialogSelectBody({
           height={panel.visibleRows}
           flexShrink={0}
           minWidth={0}
+          onMouseScroll={onScroll ? (event) => {
+            const delta = wheelRowDelta(event.scroll);
+            if (delta !== 0) onScroll(delta);
+          } : undefined}
         >
           {rows.length === 0 ? (
             <Cells width={panel.rowWidth} fg={theme.MUTED}>
@@ -349,7 +393,8 @@ export function DialogSelect({
   renderDetail,
 }: DialogSelectProps) {
   const theme = useTheme();
-  const { width, height } = useTerminalDimensions();
+  const symbols = useSymbols();
+  const { width, height } = useSurfaceDimensions();
 
   const initialSelected = useMemo(() => normalizeValue(value), [value]);
   const [query, setQuery] = useState("");
@@ -492,7 +537,7 @@ export function DialogSelect({
       left={0}
       width="100%"
       height="100%"
-      backgroundColor={theme.CANVAS}
+      backgroundColor={RGBA.fromInts(0, 0, 0, 150)}
       zIndex={1000}
     >
       <box
@@ -503,6 +548,7 @@ export function DialogSelect({
         flexShrink={0}
         flexDirection="column"
         border
+        borderStyle="rounded"
         borderColor={theme.BORDER}
         backgroundColor={theme.PANEL}
         paddingX={1}
@@ -510,9 +556,9 @@ export function DialogSelect({
         {/* Title + esc */}
         <box flexDirection="row" width={panel.innerWidth} flexShrink={0} minWidth={0} gap={titleGap}>
           <Cells width={titleWidth} fg={theme.PRIMARY} attributes={TextAttributes.BOLD}>
-            {title}
+            {`${operatorIcon(title.toLowerCase().includes("command") ? "commands" : title, symbols)} ${title}`}
           </Cells>
-          <Cells width={escWidth} align="right" fg={theme.MUTED}>
+          <Cells width={escWidth} align="right" fg={theme.MUTED} onMouseDown={onCancel}>
             {escLabel}
           </Cells>
         </box>
@@ -527,6 +573,8 @@ export function DialogSelect({
           gutter={hasGutter}
           isCurrent={isCurrent}
           renderDetail={renderDetail}
+          onActivateRow={moveTo}
+          onScroll={move}
         />
 
         {/* Footer hint */}

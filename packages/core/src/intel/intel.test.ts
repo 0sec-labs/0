@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { buildIntelDossier, inferTargetHistoryInputFromRepo, searchAdvisories, lookupCve, searchSimilar, searchTargetHistory } from "./index.js";
+import { advisorySweep, buildIntelDossier, inferTargetHistoryInputFromRepo, lookupAdvisory, searchAdvisories, lookupCve, searchSimilar, searchTargetHistory } from "./index.js";
 import { ToolExecutor } from "../agent/tools.js";
 import type { ToolContext } from "../agent/types.js";
 
@@ -157,6 +157,38 @@ describe("vulnerability intel", () => {
       { fetchImpl: fetchMock },
     );
     expect(result.advisories[0]?.summary).toContain("Path traversal");
+  });
+
+  it("falls back to NVD keyword search for Go standard-library advisory lookups", async () => {
+    const fetchMock = vi.fn(async (input: string | URL | Request) => {
+      const url = String(input);
+      if (url.startsWith("https://api.osv.dev/")) return json({ vulns: [] });
+      if (url.startsWith("https://api.github.com/advisories")) return json([]);
+      if (url.startsWith("https://services.nvd.nist.gov/")) {
+        const parsed = new URL(url);
+        expect(parsed.searchParams.get("keywordSearch")).toContain("golang");
+        expect(parsed.searchParams.get("keywordSearch")).toContain("standard library");
+        expect(parsed.searchParams.get("resultsPerPage")).toBe("20");
+        return json({
+          vulnerabilities: [{
+            cve: {
+              ...NVD_RESPONSE.vulnerabilities[0]!.cve,
+              descriptions: [{ lang: "en", value: "Vulnerability in the Go standard library net/http package" }],
+              references: [{ url: "https://groups.google.com/g/golang-announce/c/example", tags: ["Vendor Advisory"] }],
+            },
+          }],
+        });
+      }
+      throw new Error(`unexpected URL ${url}`);
+    }) as unknown as typeof fetch;
+
+    const result = await searchAdvisories(
+      { ecosystem: "Go", packageName: "stdlib", version: "1.28.0", enrich: false, cacheDir },
+      { fetchImpl: fetchMock },
+    );
+
+    expect(result.advisories[0]?.id).toBe("CVE-2024-0001");
+    expect(result.advisories[0]?.sources).toContain("nvd");
   });
 
   it("warns and returns partial advisory data when one package source fails", async () => {
@@ -584,6 +616,207 @@ describe("vulnerability intel", () => {
     expect(dossier.variantLeads).toHaveLength(0);
     expect(dossier.playbooks).toHaveLength(0);
     expect(dossier.auditGraph).toEqual({ entrypointNodeIds: [], nodes: [], edges: [] });
+  });
+
+  const GHSA_ADVISORY = {
+    ghsa_id: "GHSA-xxxx-yyyy-zzzz",
+    cve_id: null,
+    summary: "Prototype pollution in widget",
+    severity: "critical",
+    html_url: "https://github.com/advisories/GHSA-xxxx-yyyy-zzzz",
+    vulnerabilities: [
+      {
+        package: { ecosystem: "npm", name: "widget" },
+        vulnerable_version_range: "< 2.0.0",
+        first_patched_version: { identifier: "2.0.0" },
+      },
+    ],
+    cwes: [{ cwe_id: "CWE-1321" }],
+  };
+
+  it("looks up a specific GHSA id directly via GET /advisories/{id}", async () => {
+    const fetchMock = vi.fn(async (input: string | URL | Request) => {
+      const url = String(input);
+      expect(url).toBe("https://api.github.com/advisories/GHSA-XXXX-YYYY-ZZZZ");
+      return json(GHSA_ADVISORY);
+    }) as unknown as typeof fetch;
+
+    const advisory = await lookupAdvisory({ ghsaId: "ghsa-xxxx-yyyy-zzzz", cacheDir }, { fetchImpl: fetchMock });
+    expect(advisory?.id).toBe("GHSA-XXXX-YYYY-ZZZZ");
+    expect(advisory?.severity).toBe("critical");
+    expect(advisory?.cwes).toContain("CWE-1321");
+  });
+
+  it("returns null for an unknown GHSA id (404)", async () => {
+    const fetchMock = vi.fn(async () => new Response("{}", { status: 404 })) as unknown as typeof fetch;
+    const advisory = await lookupAdvisory({ ghsaId: "GHSA-0000-0000-0000", cacheDir }, { fetchImpl: fetchMock });
+    expect(advisory).toBeNull();
+  });
+
+  it("drops spurious substring matches but keeps whole-word target matches", async () => {
+    const noisyResponse = {
+      vulnerabilities: [
+        {
+          cve: {
+            ...NVD_RESPONSE.vulnerabilities[0]!.cve,
+            id: "CVE-2024-3001",
+            descriptions: [{ lang: "en", value: "Auth bypass in KrakenD API gateway" }],
+          },
+        },
+        {
+          cve: {
+            ...NVD_RESPONSE.vulnerabilities[0]!.cve,
+            id: "CVE-2024-3002",
+            descriptions: [{ lang: "en", value: "Kraken registry mishandles blob replication" }],
+          },
+        },
+      ],
+    };
+    const fetchMock = vi.fn(async (input: string | URL | Request) => {
+      const url = String(input);
+      if (url.startsWith("https://services.nvd.nist.gov/")) return json(noisyResponse);
+      throw new Error(`unexpected URL ${url}`);
+    }) as unknown as typeof fetch;
+
+    const history = await searchTargetHistory(
+      { product: "kraken", limit: 5, cacheDir },
+      { fetchImpl: fetchMock },
+    );
+
+    expect(history.summary.advisoryCount).toBe(1);
+    expect(history.advisories[0]?.id).toBe("CVE-2024-3002");
+    expect(history.advisories[0]?.matchConfidence).toBe("medium");
+    expect(history.summary.confidenceCounts).toEqual({ high: 0, medium: 1, low: 0 });
+  });
+
+  it("scores exact repository reference matches as high confidence", async () => {
+    const repoResponse = {
+      vulnerabilities: [
+        {
+          cve: {
+            ...NVD_RESPONSE.vulnerabilities[0]!.cve,
+            id: "CVE-2024-4001",
+            descriptions: [{ lang: "en", value: "Unrelated summary text" }],
+            references: [{ url: "https://github.com/org/zipper/issues/9", tags: [] }],
+          },
+        },
+      ],
+    };
+    const fetchMock = vi.fn(async (input: string | URL | Request) => {
+      const url = String(input);
+      if (url.startsWith("https://services.nvd.nist.gov/")) return json(repoResponse);
+      throw new Error(`unexpected URL ${url}`);
+    }) as unknown as typeof fetch;
+
+    const history = await searchTargetHistory(
+      { repository: "https://github.com/org/zipper", limit: 5, cacheDir },
+      { fetchImpl: fetchMock },
+    );
+    expect(history.advisories[0]?.matchConfidence).toBe("high");
+    expect(history.summary.confidenceCounts.high).toBe(1);
+  });
+
+  it("advisory_sweep fans out and returns a de-duped, confidence-ranked lead list", async () => {
+    const issuesResponse = {
+      total_count: 2,
+      items: [
+        { title: "Possible SSRF via blob fetch", html_url: "https://github.com/org/widget/issues/7", state: "open", number: 7, body: "report" },
+        { title: "Fix pollution", html_url: "https://github.com/org/widget/pull/8", state: "closed", number: 8, pull_request: {}, body: "patch" },
+      ],
+    };
+    const fetchMock = vi.fn(async (input: string | URL | Request) => {
+      const url = String(input);
+      if (url.startsWith("https://api.github.com/search/issues")) return json(issuesResponse);
+      if (url.startsWith("https://api.github.com/advisories/GHSA")) return json(GHSA_ADVISORY);
+      if (url.startsWith("https://api.github.com/advisories")) return json(GHSA_RESPONSE);
+      if (url.startsWith("https://api.osv.dev/")) return json({ vulns: [] });
+      throw new Error(`unexpected URL ${url}`);
+    }) as unknown as typeof fetch;
+
+    const result = await advisorySweep(
+      {
+        repository: "org/widget",
+        ecosystem: "npm",
+        packageName: "widget",
+        keywords: ["prototype pollution"],
+        ghsaIds: ["GHSA-xxxx-yyyy-zzzz"],
+        cacheDir,
+      },
+      { fetchImpl: fetchMock },
+    );
+
+    // 2 advisories (direct GHSA + package CVE-2024-0001) + 2 public reports.
+    expect(result.counts.advisories).toBe(2);
+    expect(result.counts.publicReports).toBe(2);
+    expect(result.counts.high).toBe(2);
+    expect(result.leads[0]?.confidence).toBe("high");
+    expect(result.leads.some((lead) => lead.id === "GHSA-XXXX-YYYY-ZZZZ")).toBe(true);
+    expect(result.leads.some((lead) => lead.kind === "public_report" && lead.url?.endsWith("/pull/8"))).toBe(true);
+    expect(result.provenance.unverified).toBe(true);
+    expect(result.caveat).toMatch(/not 'definitely unique'/i);
+  });
+
+  it("exposes a specific GHSA lookup through the intel tool", async () => {
+    const fetchMock = vi.fn(async (input: string | URL | Request) => {
+      const url = String(input);
+      if (url.startsWith("https://api.github.com/advisories/GHSA")) return json(GHSA_ADVISORY);
+      throw new Error(`unexpected URL ${url}`);
+    }) as unknown as typeof fetch;
+    vi.stubGlobal("fetch", fetchMock);
+    const ctx: ToolContext = {
+      target: "widget",
+      scanId: "scan-1",
+      findings: [],
+      attackResults: [],
+      targetInfo: {},
+      role: "audit",
+    };
+    const executor = new ToolExecutor(ctx, null);
+    const result = await executor.execute({
+      name: "intel",
+      arguments: { action: "lookup_cve", ghsa_id: "GHSA-xxxx-yyyy-zzzz" },
+    });
+    expect(result.success).toBe(true);
+    const output = result.output as { found: boolean; advisory: { id: string } };
+    expect(output.found).toBe(true);
+    expect(output.advisory.id).toBe("GHSA-XXXX-YYYY-ZZZZ");
+  });
+
+  it("exposes public-report (issue/PR) search through the intel tool", async () => {
+    const issuesResponse = {
+      total_count: 1,
+      items: [
+        { title: "ReplicateToRemote leaks blob", html_url: "https://github.com/uber/kraken/issues/1", state: "open", number: 1, body: "details" },
+      ],
+    };
+    const fetchMock = vi.fn(async (input: string | URL | Request) => {
+      const url = String(input);
+      if (url.startsWith("https://api.github.com/search/issues")) return json(issuesResponse);
+      throw new Error(`unexpected URL ${url}`);
+    }) as unknown as typeof fetch;
+    vi.stubGlobal("fetch", fetchMock);
+    const ctx: ToolContext = {
+      target: "uber/kraken",
+      scanId: "scan-1",
+      findings: [],
+      attackResults: [],
+      targetInfo: {},
+      role: "audit",
+    };
+    const executor = new ToolExecutor(ctx, null);
+    const result = await executor.execute({
+      name: "intel",
+      arguments: {
+        action: "search_public_reports",
+        repository: "uber/kraken",
+        terms: "ReplicateToRemote remote blob replicate",
+      },
+    });
+    expect(result.success).toBe(true);
+    const output = result.output as { count: number; reports: Array<{ url: string }>; note: string };
+    expect(output.count).toBe(1);
+    expect(output.reports[0]?.url).toBe("https://github.com/uber/kraken/issues/1");
+    expect(output.note).toMatch(/unverified/i);
   });
 
   it("exposes advisory search as an agent tool", async () => {

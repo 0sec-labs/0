@@ -1,6 +1,14 @@
 /** @jsxImportSource @opentui/react */
 /**
- * The full-screen model picker.
+ * The `/model` pop-up dialog.
+ *
+ * The screen is a dialog *body*: an icon+title row, the target / policy
+ * context rows, the shared grouped/searchable picker (`DialogSelectBody`) with
+ * a detail column beside it, and a status line. The scrim, the rounded panel
+ * and the footer hints are the host's — the surface is read through
+ * `useSurfaceDimensions`, which reports the panel's inner box when the screen
+ * is mounted inside a `DialogSurface` and the terminal otherwise, and the
+ * footer text still goes out through the injected `frame`.
  *
  * `/model` used to open a compact selector floating above the composer: a flat
  * list of every priced model, each with a `provider · price` caption. That
@@ -18,22 +26,60 @@
  * domain — which models exist, how they group, what their detail says — and its
  * own keyboard.
  *
- * Three properties are load-bearing:
+ * ## Two catalogues, never mixed
+ *
+ * A hosted runtime (`providerId === "hosted"`) is served by the account's own
+ * catalogue, read live through `loadHostedModelCatalog` and projected by
+ * `buildHostedModelCatalog`. A hosted id names a route on that account, so this
+ * path has no cache, no bundled floor and no BYOK fallback: when the live read
+ * fails the screen says so and offers a reload, because a Models.dev row of the
+ * same name describes a different thing — the public model — and showing its
+ * numbers under this account's route would be a fabrication. Every other
+ * runtime keeps the existing BYOK catalogue (`buildFullModelCatalog`, the
+ * pricing table plus the Models.dev sync).
+ *
+ * ## What this screen may say about a model
+ *
+ * Only what the authoritative catalogue reported. Every id on screen comes out
+ * of `buildFullModelCatalog` (BYOK) or `buildHostedModelCatalog` (hosted) —
+ * there is no hand-written model list anywhere in this file. Price comes from
+ * the pricing table or the hosted catalogue's own `pricing` block and reads
+ * "not published" / "unknown" when neither carried one. The BYOK context
+ * window comes from the synced Models.dev cache (`contextTokens`), keyed on
+ * provider AND id together, and the hosted one from the service's own
+ * `context_length`; both read "unknown" when absent. Nothing is derived from a
+ * sibling model, a vendor default, or the model's name, and there is no "free"
+ * or "optimized" claim this file authors: `free` is a catalogue stating both
+ * rates are zero.
+ *
+ * The hosted catalogue carries no availability, readiness or entitlement
+ * signal — canonical `InferenceModel` has none — so this screen makes no such
+ * claim either. Listed rows are OFFERED for explicit operator selection; no row
+ * is labelled qualified, ready, healthy or funded, and no row is drawn as
+ * disabled on a fact nobody reported.
+ *
+ * Every write is an explicit operator action staged for the next audit: the
+ * base model, one role's assignment, or the single-model policy. Loading,
+ * highlighting, filtering and background refreshing never call those callbacks,
+ * and no model is ever selected for the operator.
+ *
+ * Three further properties are load-bearing:
  *
  * 1. **Nothing here knows the models.** The row model is derived from
- *    `model-catalog.ts` — itself derived from the pricing table — and the
- *    provider facts from `provider-status.ts`. There is no list, no vendor
- *    order and no row count written down, so a model added to the pricing
- *    table appears here with its group, its price and its credential state
- *    without this file changing.
+ *    `model-catalog.ts` — itself derived from the pricing table or the account's
+ *    own catalogue — and the provider facts from `provider-status.ts`. There is
+ *    no list, no vendor order and no row count written down, so a model added
+ *    to the pricing table appears here with its group, its price and its
+ *    credential state without this file changing.
  *
  * 2. **This component does no arithmetic.** Every width, height, row count and
- *    window boundary comes off `dialog-select-layout.ts` via
- *    `computeDialogPanel`, where it is swept across widths and heights by a
- *    test. The reason is in `PRIMITIVES.md`: Yoga shrinks siblings rather than
- *    clipping them, so a row that claims one cell too many paints two strings
- *    on top of each other, and a bordered box one row short of its content
- *    paints its own border through that content.
+ *    window boundary comes off `model-layout.ts` via
+ *    `computeModelDialogLayout` (and `dialog-select-layout.ts` beneath it),
+ *    where it is swept across widths and heights by a test. The reason is in
+ *    `PRIMITIVES.md`: Yoga shrinks siblings rather than clipping them, so a
+ *    row that claims one cell too many paints two strings on top of each
+ *    other, and a bordered box one row short of its content paints its own
+ *    border through that content.
  *
  * 3. **Credential state is reported per provider, never per model.** A
  *    previous attempt annotated each row "no credentials" using the provider
@@ -46,42 +92,82 @@
  *    broken. What this screen states is what it can verify: which providers
  *    hold credentials, in the status line and in the detail pane. The operator
  *    judges.
+ *
+ * ## Only live bindings are advertised
+ *
+ * The role-assignment and single-model controls exist only when the router
+ * actually wired their callbacks. When it did not, the key is not bound, its
+ * row is not drawn and the footer does not name it — a control that cannot
+ * function is absent, never rendered-and-dead.
  */
 
 import React, { useEffect, useMemo, useRef, useState, type SetStateAction } from "react";
-import { useKeyboard, usePaste, useTerminalDimensions } from "@opentui/react";
-import { decodePasteBytes } from "@opentui/core";
+import { useKeyboard, usePaste } from "@opentui/react";
+import { decodePasteBytes, TextAttributes } from "@opentui/core";
 
 import { useTheme, type Theme } from "./theme-context.js";
-import { Cells } from "./primitives.js";
+import { useSymbols } from "./symbol-context.js";
+import { useDialogSurface, useSurfaceDimensions } from "./dialog-surface.js";
+import { Cells, textCells } from "./primitives.js";
 import { DialogSelectBody, type DialogItem } from "./dialog-select.js";
 import {
   clampDialogSelection,
-  computeDialogPanel,
   moveDialogSelection,
 } from "./dialog-select-layout.js";
 import {
-  buildModelRows,
+  buildContextWindowIndex,
   clipModelDetailLines,
+  computeModelDialogLayout,
+  contextWindowFor,
   configuredProviderLabels,
   credentialSummary,
+  hostedDetailLines,
   isFilterKey,
   modelDetailLines,
+  modelDialogCount,
+  modelDialogHint,
+  modelDialogTitle,
   modelFooterHint,
-  shellChromeRows,
+  modelTargetLine,
+  singleModelLine,
+  buildModelRows,
+  type ModelCatalogScope,
+  type ModelDetailLine,
   type ModelDetailTone,
   type ModelMode,
   type ModelRow,
 } from "./model-layout.js";
-import { buildFullModelCatalog, scopeModelCatalog } from "./model-catalog.js";
-import { syncModelCatalog } from "./model-catalog-sync.js";
+import {
+  buildFullModelCatalog,
+  buildHostedModelCatalog,
+  hostedModelDetails,
+  preferredHostedModel,
+  scopeModelCatalog,
+} from "./model-catalog.js";
+import {
+  syncModelCatalog,
+  loadCatalogModels,
+  loadHostedModelCatalog,
+  type HostedCatalogSnapshot,
+} from "./model-catalog-sync.js";
 import { providerStates } from "./provider-status.js";
 import { sanitizeTuiText } from "./text.js";
 
 /** How many rows page-up and page-down move. */
 const PAGE_STEP = 5;
-/** One scope row above the list and one credential row below it. */
-const STATUS_ROWS = 2;
+/**
+ * The runtime discriminator for the hosted service. It is the runtime's own
+ * `providerId`, not an upstream vendor name: a hosted route's upstream
+ * ("anthropic", "openai", …) lives in the catalogue row's `provider`, and
+ * comparing the two is a category error.
+ */
+const HOSTED_PROVIDER_ID = "hosted";
+/**
+ * The roles an audit can assign a model to. The list is the union of these and
+ * whatever keys the caller's map already carries, so a role the caller knows
+ * about is targetable even when it is not named here.
+ */
+const MODEL_ROLES = ["discovery", "attack", "verify", "report", "audit", "review"] as const;
 
 export interface ModelFrameInput {
   /** The screen body, already sized to the rows the frame left it. */
@@ -102,6 +188,24 @@ export interface ModelScreenProps {
   frame: (input: ModelFrameInput) => React.ReactNode;
   /** The model the session is currently running, when there is one. */
   currentModel?: string;
+  /**
+   * The runtime this picker is choosing for: `"hosted"` selects the account's
+   * own catalogue, anything else (including nothing) keeps the BYOK catalogue.
+   * Never invented — the router reports what the runtime says.
+   */
+  providerId?: string;
+  /** Per-role model assignments already staged for the next audit. */
+  agentModels?: Readonly<Record<string, string>>;
+  /** Whether the next audit is pinned to one model for every role. */
+  singleModel?: boolean;
+  /**
+   * Stage the full merged role map for the next audit. Optional: when the
+   * router does not supply it there is no role targeting at all — no Ctrl+←/→,
+   * no Ctrl+Backspace, no target row and no footer mention of either.
+   */
+  onAgentModelsChange?: (models: Readonly<Record<string, string>>) => void;
+  /** Stage the single-model policy. Optional on the same terms as above. */
+  onSingleModelChange?: (enabled: boolean) => void;
   /** Enter on a model row. The router decides what "select" means. */
   onSelect: (id: string) => void;
   /** Leave the screen — Esc, once any filter has been cleared. */
@@ -149,13 +253,44 @@ function modelDialogItems(rows: ModelRow[]): DialogItem[] {
 export function ModelScreen({
   frame,
   currentModel,
+  providerId,
+  agentModels,
+  singleModel = false,
+  onAgentModelsChange,
+  onSingleModelChange,
   onSelect,
   onBack,
   onExit,
   env,
 }: ModelScreenProps) {
   const theme = useTheme();
-  const { width, height } = useTerminalDimensions();
+  const symbols = useSymbols();
+  const { width, height } = useSurfaceDimensions();
+  const inDialog = useDialogSurface();
+
+  // A hosted runtime is the only thing that switches catalogues. Everything
+  // else — a named BYOK provider, or a router that did not say — keeps the
+  // BYOK catalogue this screen has always drawn.
+  const isHosted = providerId === HOSTED_PROVIDER_ID;
+  const isByok = !isHosted;
+  const scope: ModelCatalogScope = isHosted ? "hosted" : "byok";
+  // A control exists only when its callback does. These two flags gate the
+  // key, the row and the footer text together, so a binding is never named
+  // where it would do nothing.
+  const rolesLive = onAgentModelsChange !== undefined;
+  const singleModelLive = onSingleModelChange !== undefined;
+
+  const [role, setRole] = useState<string | null>(null);
+  const roles = useMemo(
+    () => [null, ...new Set<string>([...MODEL_ROLES, ...Object.keys(agentModels ?? {})])],
+    [agentModels],
+  );
+  // The model the picker is choosing FOR: the parent model, or the role's own
+  // assignment when it has one. A role with no assignment inherits, and the
+  // target row says so rather than showing the inherited id as an assignment.
+  const activeModel = role === null ? currentModel : (agentModels?.[role] ?? currentModel);
+  const [notice, setNotice] = useState("");
+  const [reload, setReload] = useState(0);
 
   const [filter, setFilter] = useState("");
   const [showAll, setShowAll] = useState(false);
@@ -168,34 +303,97 @@ export function ModelScreen({
   // keystroke would only make the filter slower.
   const states = useMemo(() => providerStates(env ?? process.env), [env]);
   const configured = useMemo(() => configuredProviderLabels(states), [states]);
-  // Refresh the Models.dev catalog cache in the background whenever the picker
-  // opens. Fire-and-forget: it never throws, no-ops when the cache is still
-  // fresh, and only affects the *next* open — this render reads whatever cache
-  // (or the bundled offline floor) is already on disk, so the list is instant.
-  // `catalogNonce` bumps once the refresh lands so an operator who leaves the
-  // picker open sees newly-synced models without reopening it.
+
+  // The identity of the connection this load belongs to. A hosted snapshot is
+  // only ever shown while it still matches — rows fetched for one account must
+  // never paint under another, and Ctrl+R bumps `reload` to force a re-read.
+  const source = useMemo(() => ({ providerId, env, reload }), [providerId, env, reload]);
+  const [hostedState, setHostedState] = useState<{
+    source: typeof source;
+    snapshot: HostedCatalogSnapshot | null;
+    error: string | null;
+  } | null>(null);
+  const hostedSnapshot = hostedState?.source === source ? hostedState.snapshot : null;
+  const hostedError = hostedState?.source === source ? hostedState.error : null;
+
+  // BYOK: refresh the Models.dev catalog cache in the background whenever the
+  // picker opens. Fire-and-forget: it never throws, no-ops when the cache is
+  // still fresh, and only affects the *next* open — this render reads whatever
+  // cache (or the bundled offline floor) is already on disk, so the list is
+  // instant. `catalogNonce` bumps once the refresh lands so an operator who
+  // leaves the picker open sees newly-synced models without reopening it.
+  //
+  // Hosted: read the account's own catalogue live. There is nothing to cache
+  // and nothing to fall back to, so a failure is reported as a failure.
   const [catalogNonce, setCatalogNonce] = useState(0);
   useEffect(() => {
     let alive = true;
-    void syncModelCatalog().then((updated) => {
-      if (alive) {
+    setRefreshing(true);
+    if (isHosted) {
+      void loadHostedModelCatalog({ env })
+        .then((snapshot) => {
+          // Project before publishing: a malformed catalogue (an id-less or
+          // duplicated row) throws here and stays an error rather than being
+          // half-drawn.
+          buildHostedModelCatalog(snapshot.models);
+          if (alive) setHostedState({ source, snapshot, error: null });
+        })
+        .catch((error: unknown) => {
+          if (alive) {
+            setHostedState({
+              source,
+              snapshot: null,
+              error: sanitizeTuiText(
+                error instanceof Error ? error.message : "Hosted catalog failed",
+              ),
+            });
+          }
+        })
+        .finally(() => {
+          if (alive) setRefreshing(false);
+        });
+    } else {
+      void syncModelCatalog().then((updated) => {
+        if (!alive) return;
         if (updated) setCatalogNonce((n) => n + 1);
         setRefreshing(false);
-      }
-    });
+      });
+    }
     return () => {
       alive = false;
     };
-  }, []);
+  }, [source, isHosted, env]);
+
+  const hostedCatalog = useMemo(
+    () => (hostedSnapshot ? buildHostedModelCatalog(hostedSnapshot.models) : []),
+    [hostedSnapshot],
+  );
   const catalog = useMemo(
-    () => buildFullModelCatalog(currentModel),
+    () => (isByok ? buildFullModelCatalog(activeModel) : []),
     // catalogNonce forces a re-read after a background sync writes the cache.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [currentModel, catalogNonce],
+    [isByok, activeModel, catalogNonce],
+  );
+  // BYOK context windows come straight off the synced Models.dev cache (or its
+  // bundled offline floor). `CatalogModel` does not carry the field, and
+  // `model-catalog.ts` is not this lane's to widen, so the lookup is built
+  // here from the same rows the catalogue itself was built from.
+  //
+  // The index is keyed on **provider and id together**: the same id exists
+  // under more than one provider with different windows, so an id-only lookup
+  // would report another provider's number as this model's. A pair the feed
+  // never described, or one it described inconsistently, is simply not in the
+  // index and renders "unknown" — never inferred from a sibling row. The
+  // hosted path never consults it: a hosted route's window is the service's
+  // own `context_length` or nothing.
+  const contextIndex = useMemo(
+    () => (isByok ? buildContextWindowIndex(loadCatalogModels().models) : new Map<string, number>()),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [isByok, catalogNonce],
   );
   const scopedCatalog = useMemo(
-    () => scopeModelCatalog(catalog, { showAll, filter, currentModel }),
-    [catalog, currentModel, filter, showAll],
+    () => isByok ? scopeModelCatalog(catalog, { showAll, filter, currentModel: activeModel }) : [],
+    [catalog, activeModel, filter, isByok, showAll],
   );
 
   // `buildModelRows` does all the domain work — grouping by provider, credential
@@ -205,21 +403,44 @@ export function ModelScreen({
   // shared body draws a heading per provider), the price is the right-aligned
   // meta, and the running model carries the current-value dot.
   const modelRows = useMemo(
-    () => buildModelRows({ catalog: scopedCatalog, states, filter, activeModel: currentModel }),
-    [scopedCatalog, states, filter, currentModel],
+    () => buildModelRows({ catalog: scopedCatalog, states, filter, activeModel }),
+    [scopedCatalog, states, filter, activeModel],
   );
+  // The hosted list has no provider-credential story to group by — the account
+  // holds the keys — so it groups by upstream vendor and filters over the
+  // fields the service actually published.
+  const hostedItems = (query: string): DialogItem[] => {
+    const terms = query.toLowerCase().trim().split(/\s+/).filter(Boolean);
+    return hostedCatalog
+      .filter((model) =>
+        terms.every((term) =>
+          `${model.id} ${model.provider} ${model.catalog.upstream_model}`
+            .toLowerCase()
+            .includes(term),
+        ),
+      )
+      .map((model) => ({
+        id: model.id,
+        label: model.id,
+        meta: model.price,
+        category: `Hosted · ${model.provider}`,
+        current: model.id === activeModel,
+      }));
+  };
   const modelOnlyRows = useMemo(
-    () =>
-      modelRows.filter(
-        (row): row is Extract<ModelRow, { kind: "model" }> => row.kind === "model",
-      ),
+    () => modelRows.filter((row): row is Extract<ModelRow, { kind: "model" }> => row.kind === "model"),
     [modelRows],
   );
-  const items = useMemo(() => modelDialogItems(modelOnlyRows), [modelOnlyRows]);
-  // Keyed by item, not model id: ids repeat across providers.
+  const byokItems = useMemo(() => modelDialogItems(modelOnlyRows), [modelOnlyRows]);
+  const items = isHosted ? hostedItems(filter) : byokItems;
+  const hostedById = useMemo(
+    () => new Map(hostedCatalog.map((model) => [model.id, model])),
+    [hostedCatalog],
+  );
+  // Item identity preserves the provider's own price, window and credential facts.
   const rowByItem = useMemo(
-    () => new Map(items.map((item, index) => [item, modelOnlyRows[index]] as const)),
-    [items, modelOnlyRows],
+    () => new Map(byokItems.map((item, index) => [item, modelOnlyRows[index]])),
+    [byokItems, modelOnlyRows],
   );
   // Display rows (headings interleaved) drive the panel's scroll/height math.
   const totalRows = useMemo(() => {
@@ -235,54 +456,76 @@ export function ModelScreen({
     return count;
   }, [items]);
 
-  // Index into `items`, not a model id: ids repeat across providers, and an
-  // id lookup snaps the highlight back to the first duplicate.
-  const [selected, setSelected] = useState(() =>
-    Math.max(0, modelOnlyRows.findIndex((row) => row.model.id === currentModel)),
-  );
-  const selectedRef = useRef(selected);
-  const cursor = clampDialogSelection(items, selected);
+  // Match provider and id so duplicates remain navigable across catalog refreshes.
+  const [selectedItem, setSelectedItem] = useState<DialogItem>();
+  const selectedItemRef = useRef(selectedItem);
+  // On the hosted path the opening highlight is the operator's pin resolved
+  // against the account's own catalogue: `preferredHostedModel` returns that
+  // row, or nothing when the pinned id is not in this account's list. It never
+  // substitutes another model, so an unlisted pin simply leaves the cursor on
+  // the first row instead of silently pointing at a different one.
+  const offeredId = preferredHostedModel(hostedCatalog, activeModel)?.id;
+  const selectionIndex = (visible: DialogItem[], selection = selectedItemRef.current) =>
+    clampDialogSelection(visible, visible.findIndex((item) =>
+      item.id === (selection?.id ?? (isHosted ? offeredId : activeModel)) &&
+      (!selection || item.category === selection.category),
+    ));
+  const cursor = selectionIndex(items, selectedItem);
 
-  const contentWidth = Math.max(0, width - 4);
-  const bodyRows = Math.max(0, height - shellChromeRows(width) - STATUS_ROWS);
-  const panel = computeDialogPanel({
-    width: contentWidth,
-    height,
-    size: "large",
-    totalRows,
-    withDetail: true,
-    bodyRows,
-  });
+  // Every width and row count comes off the layout module, from the surface
+  // box the dialog handed down — never from `useTerminalDimensions` and never
+  // computed here (PRIMITIVES.md: Yoga shrinks siblings rather than clipping).
+  const layout = computeModelDialogLayout({ width, height, totalRows, inDialog });
+  const { contentWidth, panel, stackedRows } = layout;
+  const listRows = layout.bodyRows - stackedRows;
 
   const mode: ModelMode = filter ? "filter" : "browse";
   // The always-on status line carries the one statement this screen can always
-  // make. It matters most for the operator whose only credential is ChatGPT
-  // Codex: the catalogue has no chatgpt-codex models to group under, so no
-  // heading names them, and without this line that reads as "nothing works".
-  const statusText = credentialSummary(states);
+  // make. On BYOK it matters most for the operator whose only credential is
+  // ChatGPT Codex: the catalogue has no chatgpt-codex models to group under, so
+  // no heading names them, and without this line that reads as "nothing works".
+  // On hosted it names the host the rows came from and how many were listed —
+  // a count of rows, not a verdict on any of them.
+  const statusText = hostedError
+    ? `${symbols.warning} Hosted catalog error: ${hostedError} · Ctrl+R reload`
+    : isHosted && !hostedSnapshot
+      ? "Loading the account's hosted model catalog…"
+      : isHosted && hostedSnapshot
+        ? `${hostedSnapshot.host} · ${hostedCatalog.length} model${hostedCatalog.length === 1 ? "" : "s"} listed for this account`
+        : credentialSummary(states);
+  // When there is no list to draw, the reason takes the list's place. It is the
+  // whole explanation, so it is wrapped and scrolled rather than clipped.
+  const connectionMessage = hostedError
+    ? `${statusText}. No cached, offline or BYOK models are substituted for a hosted route.`
+    : isHosted && hostedSnapshot && hostedCatalog.length === 0
+      ? "The hosted service listed no models for this account. Check the connection, then Ctrl+R to reload. No fallback model will be substituted."
+      : null;
 
-  const currentItems = () => filterRef.current === filter && showAllRef.current === showAll
-    ? items
-    : modelDialogItems(buildModelRows({
-      catalog: scopeModelCatalog(catalog, {
-        showAll: showAllRef.current,
+  const currentItems = () => isHosted
+    ? hostedItems(filterRef.current)
+    : filterRef.current === filter && showAllRef.current === showAll
+      ? items
+      : modelDialogItems(buildModelRows({
+        catalog: scopeModelCatalog(catalog, {
+          showAll: showAllRef.current,
+          filter: filterRef.current,
+          currentModel: activeModel,
+        }),
+        states,
         filter: filterRef.current,
-        currentModel,
-      }),
-      states,
-      filter: filterRef.current,
-      activeModel: currentModel,
-    }));
+        activeModel,
+      }));
   const highlight = (index: number) => {
-    selectedRef.current = index;
-    setSelected(index);
+    const item = currentItems()[index];
+    selectedItemRef.current = item;
+    setSelectedItem(item);
   };
 
   const move = (delta: number) => {
     const visible = currentItems();
     if (visible.length === 0) return;
     const dir: 1 | -1 = delta >= 0 ? 1 : -1;
-    let next = clampDialogSelection(visible, selectedRef.current);
+    let next = selectionIndex(visible);
     for (let i = 0; i < Math.abs(delta); i += 1) next = moveDialogSelection(visible, next, dir);
     highlight(next);
   };
@@ -307,6 +550,33 @@ export function ModelScreen({
     }
 
     if (key.ctrl && key.name === "u") return setQuery("");
+    // Role targeting, single-model policy and inheritance exist only while
+    // their callbacks do; without them these keys are not bound at all.
+    if (rolesLive && key.ctrl && (key.name === "left" || key.name === "right")) {
+      const index = roles.indexOf(role);
+      const next = roles[(index + (key.name === "right" ? 1 : -1) + roles.length) % roles.length] ?? null;
+      setRole(next);
+      setNotice("");
+      const target = next === null ? currentModel : (agentModels?.[next] ?? currentModel);
+      highlight(currentItems().findIndex((item) => item.id === target));
+      return;
+    }
+    if (singleModelLive && key.ctrl && key.name === "s") {
+      onSingleModelChange?.(!singleModel);
+      setNotice("Single-model policy staged for the next audit; the running audit is unchanged.");
+      return;
+    }
+    if (isHosted && key.ctrl && key.name === "r") {
+      setReload((value) => value + 1);
+      return;
+    }
+    if (rolesLive && key.ctrl && key.name === "backspace" && role !== null) {
+      const next = { ...agentModels };
+      delete next[role];
+      onAgentModelsChange?.(next);
+      setNotice(`${role} will inherit the parent model in the next audit.`);
+      return;
+    }
     if (key.ctrl || key.meta || key.option) return;
     if (key.name === "up") return move(-1);
     if (key.name === "down") return move(1);
@@ -315,14 +585,25 @@ export function ModelScreen({
     if (key.name === "home") return highlight(0);
     if (key.name === "end") return highlight(Math.max(0, currentItems().length - 1));
     if (key.name === "tab") {
+      // Curated/all is a property of the BYOK superset; the hosted catalogue is
+      // whatever the account listed, so there is nothing to widen.
+      if (isHosted) return;
       showAllRef.current = !showAllRef.current;
       setShowAll(showAllRef.current);
       return;
     }
     if (key.name === "return") {
       const visible = currentItems();
-      const activeItem = visible[clampDialogSelection(visible, selectedRef.current)];
-      if (activeItem) onSelect(activeItem.id);
+      const activeItem = visible[selectionIndex(visible)];
+      if (!activeItem) return;
+      if (role !== null && rolesLive) {
+        onAgentModelsChange?.({ ...agentModels, [role]: activeItem.id });
+        setNotice(
+          `${role}: ${activeItem.id} staged for the next audit${singleModel ? "; single-model mode still takes precedence" : ""}.`,
+        );
+        return;
+      }
+      onSelect(activeItem.id);
       return;
     }
     if (key.name === "escape") {
@@ -341,20 +622,90 @@ export function ModelScreen({
     }
   });
 
-  // The detail pane shows the highlighted model's full provider/credential
-  // story, fitted to the exact box the shared body hands it.
+  // The detail pane shows the highlighted model's full story — what the
+  // catalogue reported and nothing else — fitted to the exact box the shared
+  // body hands it. Both branches end in a bounded box, so the pane physically
+  // cannot paint more rows than it was given.
   const renderDetail = (item: DialogItem, pane: { width: number; height: number }) => {
-    const row = rowByItem.get(item);
+
     const compact = pane.height < 12;
-    const lines = clipModelDetailLines(
-      modelDetailLines({ row, configured, compact }, pane.width),
+
+    if (isHosted) {
+      const hosted = hostedById.get(item.id);
+      if (!hosted) return null;
+      // Every string below is the hosted service's own report of this model.
+      const details = hostedModelDetails(hosted);
+      if (role !== null && rolesLive) {
+        details.splice(
+          1,
+          0,
+          `Role advice: ${role} inherits the parent unless you explicitly assign a model.`,
+          `Enter stages this exact model for ${role}; Ctrl+Backspace restores inheritance. The running audit is unchanged.`,
+        );
+      }
+      // The hosted report is the account's own description of the route, and
+      // all of it was reachable before this dialog existed. Clipping it away
+      // would delete catalogue metadata rather than fit it, so the pane keeps
+      // its scrollbox: the box is still bounded to `pane`, but the overflow
+      // scrolls instead of vanishing. The inner column gives up one cell for
+      // the scrollbar.
+      const inner = Math.max(1, pane.width - 1);
+      const lines = hostedDetailLines(details, inner, compact);
+      return (
+        <scrollbox
+          key={item.id}
+          width={pane.width}
+          height={pane.height}
+          flexShrink={0}
+          scrollX={false}
+          verticalScrollbarOptions={{
+            trackOptions: {
+              backgroundColor: theme.PANEL,
+              foregroundColor: theme.MUTED,
+            },
+            arrowOptions: {
+              foregroundColor: theme.MUTED,
+              backgroundColor: theme.PANEL,
+            },
+          }}
+        >
+          <box width={inner} flexDirection="column" flexShrink={0} minWidth={0}>
+            {lines.map((line, index) => (
+              <Cells
+                key={`detail-${index}`}
+                width={inner}
+                fg={toneColor(theme, line.tone)}
+                attributes={line.tone === "title" ? TextAttributes.BOLD : undefined}
+              >
+                {line.text}
+              </Cells>
+            ))}
+          </box>
+        </scrollbox>
+      );
+    }
+
+    // The BYOK pane is short and bounded — id, provider, price, context, the
+    // credential story — and is clipped with a visible marker rather than
+    // scrolled. Nothing that was reachable before is dropped.
+    const row = rowByItem.get(item);
+    const contextTokens = row?.kind === "model"
+      ? contextWindowFor(contextIndex, row.model.provider, row.model.id)
+      : null;
+    const lines: ModelDetailLine[] = clipModelDetailLines(
+      modelDetailLines({ row, configured, compact, contextTokens }, pane.width, symbols),
       pane.height,
       pane.width,
     );
     return (
       <>
         {lines.map((line, index) => (
-          <Cells key={`detail-${index}`} width={pane.width} fg={toneColor(theme, line.tone)}>
+          <Cells
+            key={`detail-${index}`}
+            width={pane.width}
+            fg={toneColor(theme, line.tone)}
+            attributes={line.tone === "title" ? TextAttributes.BOLD : undefined}
+          >
             {line.text}
           </Cells>
         ))}
@@ -362,29 +713,151 @@ export function ModelScreen({
     );
   };
 
+  // ── Title row: glyph + label on the left, the live row count on the right.
+  // Split explicitly so the two leaves can never be handed overlapping cells.
+  const titleText = modelDialogTitle({ scope, providerId, showAll: showAll || !!filter.trim() });
+  const countText = modelDialogCount(items.length, refreshing);
+  const countWidth = Math.min(contentWidth, textCells(countText));
+  const titleWidth = Math.max(0, contentWidth - countWidth - (countWidth > 0 ? 1 : 0));
+
+  // The footer names bindings, so it is composed from what is actually bound.
+  // `modelDialogHint` names Ctrl+←/→ and Ctrl+S unconditionally, so it is used
+  // only when both of those callbacks exist; `modelFooterHint` names Tab, so it
+  // is used only on the BYOK path. The hosted path without a role layer is
+  // neither, and is listed explicitly rather than borrowing a line that
+  // advertises a key it does not implement.
+  const hint = rolesLive && singleModelLive
+    ? modelDialogHint({ scope, role, hasFilter: filter.length > 0 })
+    : isByok
+      ? modelFooterHint(mode, filter.length > 0)
+      : [
+        "↑↓ model",
+        role !== null && rolesLive ? "enter stage" : "enter select",
+        rolesLive ? "ctrl+←/→ target" : undefined,
+        rolesLive && role !== null ? "ctrl+backspace inherit" : undefined,
+        singleModelLive ? "ctrl+s single" : undefined,
+        "ctrl+r reload",
+        filter.length > 0 ? "ctrl+u clear" : "type to filter",
+        filter.length > 0 ? "esc clear" : "esc back",
+      ]
+        .filter((part): part is string => part !== undefined)
+        .join(" · ");
+
+  // The meta rows, in priority order: what the next Enter will change, then
+  // the policy that governs it, then which slice of the BYOK superset is on
+  // show. `computeModelDialogLayout` hands out 0, 1 or 2 of them, and each row
+  // that names a key is only present when that key is bound.
+  const metaLines: { text: string; fg: string }[] = [];
+  if (rolesLive) {
+    metaLines.push({
+      text: `${modelTargetLine(role, activeModel, role !== null && agentModels?.[role] !== undefined, symbols)} · Ctrl+←/→ target`,
+      fg: theme.ACCENT,
+    });
+  }
+  if (singleModelLive) {
+    metaLines.push({ text: `${singleModelLine(singleModel)} · Ctrl+S toggle`, fg: theme.MUTED });
+  }
+  if (isByok) {
+    metaLines.push({
+      text: `${showAll || filter.trim() ? "All models" : "Curated models"} · ${items.length} of ${scopedCatalog.length} · Tab ${showAll ? "curated" : "all models"}${refreshing ? " · refreshing…" : ""}`,
+      fg: theme.ACCENT,
+    });
+  }
+  const visibleMetaLines = metaLines.slice(0, layout.metaRows);
+
+  // The connection/failure notice is wrapped, not clipped: it is the whole
+  // explanation of why there is no list. One cell goes to the scrollbar.
+  const messageWidth = Math.max(1, contentWidth - 1);
+  const messageLines = connectionMessage && contentWidth > 0
+    ? hostedDetailLines([sanitizeTuiText(connectionMessage)], messageWidth, true)
+    : [];
+
   const body = (
-    <box flexDirection="column" width="100%" flexGrow={1} minWidth={0}>
-      <Cells width={contentWidth} fg={theme.ACCENT}>
-        {`\uec19 New chat model · ${showAll || filter.trim() ? "All" : "Curated"} · ${items.length}/${scopedCatalog.length}${refreshing ? " ⟳" : ""}`}
-      </Cells>
-      <DialogSelectBody
-        items={items}
-        cursor={cursor}
-        panel={panel}
-        query={filter}
-        placeholder={"\uf002 Find a model or provider"}
-        gutter
-        isCurrent={(item) => item.current === true}
-        renderDetail={renderDetail}
-        emptyText={showAll || filter ? "\uf002 No matches — Ctrl+U clears" : "\uf002 No matches — Tab to browse all models"}
-      />
-      <box flexDirection="row" width="100%" flexShrink={0} minWidth={0}>
-        <Cells width={contentWidth} fg={theme.MUTED}>
-          {statusText}
+    <box flexDirection="column" width="100%" flexGrow={1} minWidth={0} overflow="hidden">
+      {layout.titleRows > 0 && contentWidth > 0 ? (
+        <box flexDirection="row" width={contentWidth} height={1} flexShrink={0} minWidth={0}>
+          <Cells width={titleWidth} fg={theme.PRIMARY} attributes={TextAttributes.BOLD}>
+            {titleText}
+          </Cells>
+          {countWidth > 0 ? (
+            <>
+              {titleWidth > 0 ? <Cells width={1}>{""}</Cells> : null}
+              <Cells width={countWidth} align="right" fg={theme.MUTED}>
+                {countText}
+              </Cells>
+            </>
+          ) : null}
+        </box>
+      ) : null}
+
+      {contentWidth > 0
+        ? visibleMetaLines.map((line, index) => (
+          <Cells key={`meta-${index}`} width={contentWidth} fg={line.fg}>
+            {line.text}
+          </Cells>
+        ))
+        : null}
+
+      {listRows < 2 || contentWidth < 1 ? null : connectionMessage ? (
+        <scrollbox
+          width={contentWidth}
+          height={listRows}
+          flexShrink={0}
+          scrollX={false}
+          verticalScrollbarOptions={{
+            trackOptions: {
+              backgroundColor: theme.PANEL,
+              foregroundColor: theme.MUTED,
+            },
+            arrowOptions: {
+              foregroundColor: theme.MUTED,
+              backgroundColor: theme.PANEL,
+            },
+          }}
+        >
+          <box width={messageWidth} flexDirection="column" flexShrink={0} minWidth={0}>
+            {messageLines.map((line, index) => (
+              <Cells key={`msg-${index}`} width={messageWidth} fg={hostedError ? theme.ERROR : theme.MUTED}>
+                {line.text}
+              </Cells>
+            ))}
+          </box>
+        </scrollbox>
+      ) : (
+        <DialogSelectBody
+          items={items}
+          cursor={cursor}
+          panel={panel}
+          query={filter}
+          placeholder={`${symbols.fieldSearch} Find a model or provider`}
+          gutter
+          isCurrent={(item) => item.current === true}
+          renderDetail={renderDetail}
+          onActivateRow={highlight}
+          onScroll={move}
+          emptyText={isHosted
+            ? refreshing
+              ? "Loading the hosted catalog"
+              : "No hosted models matched; no fallback catalog is used"
+            : showAll || filter.trim()
+              ? "No matches. Ctrl+U clears search."
+              : "No matches. Tab searches all models; Ctrl+U clears."}
+        />
+      )}
+
+      {stackedRows > 0 && !connectionMessage && items[cursor] ? (
+        <box width={contentWidth} height={stackedRows} flexDirection="column" flexShrink={0} minWidth={0}>
+          {renderDetail(items[cursor]!, { width: contentWidth, height: stackedRows })}
+        </box>
+      ) : null}
+
+      {layout.statusRows > 0 && contentWidth > 0 ? (
+        <Cells width={contentWidth} fg={hostedError ? theme.ERROR : theme.MUTED}>
+          {hostedError ? statusText : notice || statusText}
         </Cells>
-      </box>
+      ) : null}
     </box>
   );
 
-  return <>{frame({ body, hint: modelFooterHint(mode, filter.length > 0) })}</>;
+  return <>{frame({ body, hint })}</>;
 }

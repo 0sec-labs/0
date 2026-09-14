@@ -36,6 +36,7 @@
  * should be replaced by the import.
  */
 
+import type { DialogItem } from "./dialog-select-layout.js";
 import { borderChrome, computeListWindow, computePaneSplit, makePane } from "./pane-layout.js";
 import { fitTuiText, sanitizeTuiText, wrapText } from "./text.js";
 
@@ -110,6 +111,31 @@ export const HERD_STATUS_ORDER: readonly HerdStatus[] = [
   "idle",
   "blocked",
   "done",
+  "stale",
+];
+
+/**
+ * How the roster (and the comms fleet — see `agents-comms-layout.ts`) is
+ * ordered. `"status"` is the historical fixed lifecycle order; `"attention"`
+ * floats the agents that need the operator to the top. The setting
+ * (`rosterSort`) is resolved by the screen and passed into the PURE builders —
+ * neither module reads settings itself.
+ */
+export type RosterSort = "status" | "attention";
+
+/**
+ * Attention-first group order: the agents that need the operator lead. A
+ * `blocked` (needs-input) peer is surfaced first, then the actively `working`
+ * ones, then settled `done`, then merely `idle`, and finally `stale`. Mirrors
+ * the comms fleet's attention ranking (failed/parked → running → completed →
+ * queued). Empty groups are omitted from the row model, exactly as with
+ * {@link HERD_STATUS_ORDER}; within a group, provider order is preserved.
+ */
+export const HERD_ATTENTION_ORDER: readonly HerdStatus[] = [
+  "blocked",
+  "working",
+  "done",
+  "idle",
   "stale",
 ];
 
@@ -247,15 +273,18 @@ export type HerdRow =
  * Flattens a roster into a renderable list of status headings and peer rows.
  *
  * Peers are bucketed by {@link herdStatusOf} and emitted group-by-group in the
- * fixed {@link HERD_STATUS_ORDER}. A heading is emitted only for a group with
- * at least one peer — an empty group is a row of noise. Within a group, peers
- * keep the order the provider handed them (the registry preserves entry order
- * across heartbeats), so the list does not reshuffle on every poll.
+ * chosen order — the historical {@link HERD_STATUS_ORDER} for `"status"`, or
+ * the operator-first {@link HERD_ATTENTION_ORDER} for `"attention"` (the
+ * default). A heading is emitted only for a group with at least one peer — an
+ * empty group is a row of noise. Within a group, peers keep the order the
+ * provider handed them (the registry preserves entry order across heartbeats),
+ * so the list is stable within a bucket and does not reshuffle on every poll.
  */
 export function buildHerdRows(
   peers: readonly HerdPeer[],
   now: number,
   ttlMs?: number,
+  sort: RosterSort = "status",
 ): HerdRow[] {
   const byStatus = new Map<HerdStatus, HerdPeer[]>();
   for (const peer of peers) {
@@ -265,8 +294,9 @@ export function buildHerdRows(
     byStatus.get(status)?.push(peer);
   }
 
+  const order = sort === "attention" ? HERD_ATTENTION_ORDER : HERD_STATUS_ORDER;
   const rows: HerdRow[] = [];
-  for (const status of HERD_STATUS_ORDER) {
+  for (const status of order) {
     const group = byStatus.get(status);
     if (!group || group.length === 0) continue;
     rows.push({ kind: "heading", status, count: group.length });
@@ -307,6 +337,27 @@ export function firstSelectableIndex(rows: readonly HerdRow[]): number {
 export function lastSelectableIndex(rows: readonly HerdRow[]): number {
   for (let index = rows.length - 1; index >= 0; index--) {
     if (rows[index]?.kind === "peer") return index;
+  }
+  return -1;
+}
+
+/**
+ * Row index of the N-th selectable (peer) row, counting peers only and
+ * skipping headings, for a 1-based `n` (so `n = 1` is the first agent in the
+ * current ordering). Returns -1 when `n` is out of range, non-integer, or
+ * below 1. This is the pure index→agent map the roster views use to jump
+ * directly to an agent by number, independent of how headings interleave the
+ * rows.
+ */
+export function nthPeerRowIndex(rows: readonly HerdRow[], n: number): number {
+  if (!Number.isInteger(n) || n < 1) return -1;
+  const target = n;
+  let seen = 0;
+  for (let index = 0; index < rows.length; index++) {
+    if (rows[index]?.kind === "peer") {
+      seen += 1;
+      if (seen === target) return index;
+    }
   }
   return -1;
 }
@@ -464,6 +515,19 @@ export interface HerdLayoutInput {
   height: number;
   /** 1 when a notice occupies a row above the footer. */
   noticeRows?: number;
+  /**
+   * Rows the HOST frame spends around this screen's body, when the host is not
+   * the legacy full-screen shell. Inside a `DialogSurface` the shell renders
+   * with `dialogContent`: no outer header and no padding, and the surface
+   * dimensions are the panel interior, so the only row the host still spends is
+   * its one-row footer. Omit it and the legacy `shellChromeRows(width)` applies.
+   */
+  hostRows?: number;
+  /**
+   * Cells the HOST frame pads on EACH side. The legacy shell pads two; a dialog
+   * pads none. Omit it and the legacy padding applies.
+   */
+  hostPaddingX?: number;
 }
 
 export interface HerdLayout {
@@ -514,12 +578,22 @@ function computeRowLayout(innerWidth: number): HerdRowLayout {
  * entirely rather than rendered at a height that would push its border through
  * its own text.
  */
-export function computeHerdLayout({ width, height, noticeRows = 0 }: HerdLayoutInput): HerdLayout {
+export function computeHerdLayout({
+  width,
+  height,
+  noticeRows = 0,
+  hostRows,
+  hostPaddingX,
+}: HerdLayoutInput): HerdLayout {
   const terminalWidth = cells(width);
-  const contentWidth = Math.max(0, terminalWidth - SHELL_HORIZONTAL_PADDING * 2);
+  // The legacy shell pads two cells either side and spends a header; a dialog
+  // host pads none and spends only its footer row.
+  const padding = hostPaddingX === undefined ? SHELL_HORIZONTAL_PADDING : cells(hostPaddingX);
+  const chromeRows = hostRows === undefined ? shellChromeRows(terminalWidth) : cells(hostRows);
+  const contentWidth = Math.max(0, terminalWidth - padding * 2);
   const bodyRows = Math.max(
     0,
-    cells(height) - shellChromeRows(terminalWidth) - Math.min(1, cells(noticeRows)),
+    cells(height) - chromeRows - Math.min(1, cells(noticeRows)),
   );
 
   const split = computePaneSplit(contentWidth, bodyRows, {
@@ -561,6 +635,55 @@ export function formatRelativeAge(lastSeen: number, now: number): string {
   if (hours < 24) return `${hours}h ago`;
   const days = Math.floor(hours / 24);
   return `${days}d ago`;
+}
+
+/**
+ * Compact token count — "1.2k" / "980" / "" — for a stat chip. Returns "" for a
+ * missing or zero total so the caller drops the chip rather than showing "0 tok".
+ * Lives here (rather than agents-comms-layout) so both the comms and herd layers
+ * share one formatter without a module cycle; comms re-exports it.
+ */
+export function formatTokens(total: number | undefined): string {
+  if (typeof total !== "number" || !Number.isFinite(total) || total <= 0) return "";
+  const n = Math.trunc(total);
+  if (n < 1000) return `${n}`;
+  if (n < 1_000_000) return `${(n / 1000).toFixed(n < 10_000 ? 1 : 0)}k`;
+  return `${(n / 1_000_000).toFixed(1)}m`;
+}
+
+/**
+ * Compact elapsed duration — "4.2s" / "1m03s" / "2h" — for a stat chip. Returns
+ * "" for a missing / non-positive duration so the caller omits it.
+ */
+export function formatElapsed(ms: number | undefined): string {
+  if (typeof ms !== "number" || !Number.isFinite(ms) || ms <= 0) return "";
+  const seconds = Math.floor(ms / 1000);
+  if (seconds < 60) return `${(ms / 1000).toFixed(1)}s`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m${String(seconds % 60).padStart(2, "0")}s`;
+  return `${Math.floor(minutes / 60)}h${String(minutes % 60).padStart(2, "0")}m`;
+}
+
+/**
+ * The parenthetical completion-reason NOTE to show alongside a terminal status,
+ * e.g. `done (turn_limit)`. Returns "" for a missing reason OR a clean `done`
+ * (the status word already says "done", so "(done)" would be noise) — MEASURED,
+ * never inferred. The reason is a fixed enum from the lifecycle payload; an
+ * unknown value passes through control-stripped so a new Core reason still shows.
+ */
+export function completionReasonNote(reason: string | undefined): string {
+  if (typeof reason !== "string") return "";
+  const r = sanitizeHerdText(reason);
+  if (r.length === 0 || r === "done") return "";
+  return r;
+}
+
+/**
+ * Tone for a completion reason: a `turn_limit`/`cost_limit`/`error` reason is a
+ * curtailed run and reads WARNING; `early_stop` and a clean `done` read MUTED.
+ */
+export function completionReasonTone(reason: string | undefined): HerdDetailTone {
+  return reason === "turn_limit" || reason === "cost_limit" || reason === "error" ? "warn" : "muted";
 }
 
 /**
@@ -783,6 +906,110 @@ export function herdListHeading(window: HerdWindow, peerCount: number): { title:
 
 export { paneTitleColumns, type PaneTitleColumns } from "./pane-layout.js";
 
+// ---------------------------------------------------------------------------
+// Projection onto the shared picker
+// ---------------------------------------------------------------------------
+
+/**
+ * Project herd rows onto the shared `DialogItem` shape.
+ *
+ * The roster is the console's grouped chooser over live peers, so it renders
+ * through `DialogSelectBody` like every other chooser rather than hand-rolling
+ * a second list. The projection reports only what the ROSTER RECORD carries —
+ * the peer's own name/task label, the status the record's heartbeat and
+ * lifecycle imply, and the activity line it last emitted. No peer is invented,
+ * no status is upgraded, and nothing here starts, stops or owns an agent's
+ * lifetime: the agents run on their own and this list only observes them.
+ *
+ * `rowIndexOfItem[i]` is the index in `rows` of the row item `i` came from, so
+ * selection keeps moving over the existing row model (headings skipped by
+ * {@link moveHerdSelection}) with no second cursor to keep in sync.
+ */
+export interface HerdDialogOptions {
+  /** The peer currently drilled into, if any — it carries the current dot. */
+  focusedId?: string;
+  /** Authoritative audit outcomes, joined independently of the process roster. */
+  workers?: Readonly<HerdSubagentMap>;
+  /**
+   * The unselected row colour for one peer, so the list keeps the lifecycle
+   * colouring it had before it moved onto the shared body (working, blocked,
+   * stale, failed, operator-stopped). Pure: the caller owns the theme, this
+   * module owns the classification. Returning `undefined` leaves the row at
+   * the picker's default text colour.
+   */
+  toneFor?: (peer: HerdPeer, status: HerdStatus) => string | undefined;
+}
+
+/** The lifecycle class a row's colour comes from. Pure; no theme here. */
+export type HerdRowTone = "failed" | "settled" | "working" | "attention" | "idle";
+
+function settledWorkerState(worker: HerdSubagentRecord | undefined): "stopped" | "incomplete" | undefined {
+  if (worker?.operatorStopped === true) return "stopped";
+  if (worker?.status === "completed" && worker.done === false) return "incomplete";
+  return undefined;
+}
+
+/**
+ * Confirmed operator stops and unfinished workers are settled/dim, including
+ * cancellations reported as failed by the worker loop. Other failures retain
+ * failure styling; working processes are accented and blocked/stale ones need attention.
+ *
+ * The two inputs are deliberately separate concepts, and are NOT merged:
+ * `status` is the ROSTER phase of a process (a {@link HerdPeer} is a process on
+ * the machine), while `worker` is the WORKER LIFECYCLE record joined to that
+ * row by id. A row with no live worker record passes `undefined` and is
+ * classified on its roster phase alone.
+ *
+ * An operator stop is "settled", never "failed" and never a completed/green
+ * state: a worker the operator stopped did not fail and did not succeed.
+ */
+export function herdRowTone(worker: HerdSubagentRecord | undefined, status: HerdStatus): HerdRowTone {
+  if (settledWorkerState(worker)) return "settled";
+  if (status !== "stale" && worker?.status === "failed") return "failed";
+  if (status === "working") return "working";
+  if (status === "blocked" || status === "stale") return "attention";
+  return "idle";
+}
+
+export function herdDialogItems(
+  rows: readonly HerdRow[],
+  options: HerdDialogOptions = {},
+): { items: DialogItem[]; rowIndexOfItem: number[] } {
+  const { focusedId, toneFor } = options;
+  const items: DialogItem[] = [];
+  const rowIndexOfItem: number[] = [];
+  rows.forEach((row, index) => {
+    if (row.kind !== "peer") return;
+    const tone = toneFor?.(row.peer, row.status);
+    const settled = settledWorkerState(options.workers?.[row.peer.id]);
+    items.push({
+      id: row.peer.id,
+      label: `${settled ? "■ " : ""}${herdRowLabelText(row.peer)}`,
+      meta: settled ?? herdRowStatusText(row.peer, row.status),
+      category: settled ? "Idle" : herdStatusLabel(row.status),
+      current: focusedId !== undefined && row.peer.id === focusedId,
+      ...(tone === undefined ? {} : { tone }),
+    });
+    rowIndexOfItem.push(index);
+  });
+  return { items, rowIndexOfItem };
+}
+
+/**
+ * The right-aligned meta on the herd dialog's title row.
+ *
+ * Counts the peers actually in the merged roster — never a fabricated total.
+ * An empty roster says so; the hub has no producer wired yet, and that is the
+ * normal state today.
+ */
+export function herdDialogMeta(shown: number, total: number): string {
+  const visible = cells(shown);
+  const all = cells(total);
+  if (all === 0) return "none";
+  if (visible === all) return `${all} agent${all === 1 ? "" : "s"}`;
+  return `${visible}/${all}`;
+}
+
 /**
  * The honest empty-state line. The roster has no producer yet, so an empty
  * roster is the NORMAL state today — this says so plainly rather than implying
@@ -910,12 +1137,34 @@ export interface HerdSubagentRecord {
   readonly parentScanId: string;
   readonly task: string;
   readonly status: SubagentStatus;
+  /**
+   * Whether a `completed` worker actually signalled completion. Projected by
+   * the HOST from the lifecycle payload it already holds — the pure reducers do
+   * not read it, so `undefined` means "not reported", never "false".
+   * `status === "completed" && done === false` is the incomplete case.
+   */
+  readonly done?: boolean;
+  /**
+   * The operator stopped this worker. Set by the HOST, and ONLY after a
+   * confirmed Core stop acknowledgment; epoch-scoped, so it never survives
+   * into a later worker epoch. Optional, so every existing construction site
+   * still compiles. Nothing in this module synthesises it: the pure reducers
+   * cannot infer an operator stop from a bus event.
+   */
+  readonly operatorStopped?: boolean;
   readonly maxTurns: number;
   readonly turn?: number;
   readonly turns?: number;
   readonly findings?: number;
   readonly summary?: string;
   readonly error?: string;
+  /**
+   * Why a terminal worker stopped, straight off the lifecycle payload's
+   * `completion_reason` ("done"|"turn_limit"|"cost_limit"|"early_stop"|"error").
+   * `undefined` means "not reported", never a synthesised default — a curtailed
+   * run (turn_limit/cost_limit) reads distinctly from a clean `done`.
+   */
+  readonly completionReason?: string;
   /** Latest tool the child ran, mirrored onto the roster row's activity. */
   readonly tool?: string;
   /** Latest note the child authored. */
@@ -927,6 +1176,43 @@ export interface HerdSubagentRecord {
 
 /** A live subagent map, keyed by `agentId`. */
 export type HerdSubagentMap = Record<string, HerdSubagentRecord>;
+
+/**
+ * MEASURED per-agent telemetry the focus header renders — every field optional
+ * and, when present, actually reported (the `usage` counts + `contextTokens` +
+ * `durationMs` + `model` come off `subagent_lifecycle`/`subagent_message`'s
+ * `SubagentTelemetry`). Absent → "not reported", so the header omits the line
+ * rather than showing a zero. Keyed elsewhere by `agent_id`.
+ */
+export interface FocusTelemetry {
+  inputTokens?: number;
+  outputTokens?: number;
+  cachedInputTokens?: number;
+  contextTokens?: number;
+  durationMs?: number;
+  model?: string;
+}
+
+/**
+ * Read a MEASURED telemetry snapshot off a `subagent_lifecycle` or
+ * `subagent_message` payload (both extend `SubagentTelemetry`). Returns
+ * `undefined` when nothing measurable is present, so a caller merges only real
+ * data. Mirrors the comms screen's `readTelemetry`, plus cached + context.
+ */
+export function readFocusTelemetry(payload: Record<string, unknown>): FocusTelemetry | undefined {
+  const snap: FocusTelemetry = {};
+  const usage = payload["usage"];
+  if (usage && typeof usage === "object") {
+    const u = usage as Record<string, unknown>;
+    if (typeof u["inputTokens"] === "number") snap.inputTokens = u["inputTokens"];
+    if (typeof u["outputTokens"] === "number") snap.outputTokens = u["outputTokens"];
+    if (typeof u["cachedInputTokens"] === "number") snap.cachedInputTokens = u["cachedInputTokens"];
+  }
+  if (typeof payload["contextTokens"] === "number") snap.contextTokens = payload["contextTokens"];
+  if (typeof payload["durationMs"] === "number") snap.durationMs = payload["durationMs"];
+  if (typeof payload["model"] === "string") snap.model = payload["model"];
+  return Object.keys(snap).length > 0 ? snap : undefined;
+}
 
 // -- Defensive coercion of bus payload fields (payloads arrive as records) --
 
@@ -981,6 +1267,7 @@ export function applySubagentLifecycle(
   const findings = pickFiniteInt(payload["findings"]) ?? prev?.findings;
   const summary = pickString(payload["summary"]) ?? prev?.summary;
   const error = pickString(payload["error"]) ?? prev?.error;
+  const completionReason = pickString(payload["completion_reason"]) ?? prev?.completionReason;
 
   const entry: SubagentActivityEntry = {
     kind: "lifecycle",
@@ -1003,6 +1290,7 @@ export function applySubagentLifecycle(
     findings,
     summary,
     error,
+    ...(completionReason ? { completionReason } : {}),
     tool: prev?.tool,
     note: prev?.note,
     lastSeen: ts,
@@ -1048,6 +1336,7 @@ export function applySubagentProgress(
     findings: prev?.findings,
     summary: prev?.summary,
     error: prev?.error,
+    ...(prev?.completionReason ? { completionReason: prev.completionReason } : {}),
     tool: tool ?? prev?.tool,
     note: note ?? prev?.note,
     lastSeen: ts,
@@ -1108,7 +1397,7 @@ export function subagentPeers(map: HerdSubagentMap, _now: number): HerdPeer[] {
       lastSeen: record.lastSeen,
       label: record.task || undefined,
       activity: {
-        phase: statusPhase(record.status),
+        phase: settledWorkerState(record) ? "idle" : statusPhase(record.status),
         turn: record.turn,
         maxTurns: record.maxTurns > 0 ? record.maxTurns : undefined,
         tool: record.tool,
@@ -1202,10 +1491,18 @@ export function focusHeaderLines(
     compact = false,
     siblingIndex,
     siblingTotal,
-  }: { compact?: boolean; siblingIndex?: number; siblingTotal?: number } = {},
+    telemetry,
+  }: {
+    compact?: boolean;
+    siblingIndex?: number;
+    siblingTotal?: number;
+    /** MEASURED usage/duration/model for this agent, joined by `agent_id`. */
+    telemetry?: FocusTelemetry;
+  } = {},
 ): HerdDetailLine[] {
   const limit = cells(width);
   if (!peer || limit <= 0) return [];
+  const settled = settledWorkerState(record);
   const lines: HerdDetailLine[] = [];
   const push = (value: string, tone: HerdDetailTone) => {
     for (const text of wrapCells(value, limit)) lines.push({ text, tone });
@@ -1215,7 +1512,7 @@ export function focusHeaderLines(
   };
   if (compact && record) {
     push(record.name ?? peer.id, "title");
-    push(`${subagentStatusLabel(record.status)} · ${record.turns ?? record.turn ?? 0} turns${record.findings !== undefined ? ` · ${record.findings} findings` : ""}`, "text");
+    push(`${settled ?? subagentStatusLabel(record.status)} · ${record.turns ?? record.turn ?? 0} turns${record.findings !== undefined ? ` · ${record.findings} findings` : ""}`, settled ? "muted" : "text");
     if (record.note && record.status === "running") push(record.note, "muted");
     return lines;
   }
@@ -1228,7 +1525,18 @@ export function focusHeaderLines(
   separate();
 
   if (record) {
-    push(`${herdRowMarker(statusPhase(record.status))} ${subagentStatusLabel(record.status)}`, focusStatusTone(record.status));
+    // Status, with the completion reason appended for a terminal worker
+    // (`done (turn_limit)`). A curtailed run (turn_limit/cost_limit/error) reads
+    // WARNING; a clean done shows no parenthetical and keeps its muted tone.
+    const reasonNote = completionReasonNote(record.completionReason);
+    const statusWord = settled ?? subagentStatusLabel(record.status);
+    const statusText = reasonNote ? `${statusWord} (${reasonNote})` : statusWord;
+    const statusTone: HerdDetailTone = reasonNote
+      ? completionReasonTone(record.completionReason)
+      : settled
+        ? "muted"
+        : focusStatusTone(record.status);
+    push(`Status: ${statusText}`, statusTone);
     // Show turn progress as a plain count, not `turn/maxTurns` — the budget cap
     // is an internal guardrail, and surfacing it here reads as an arbitrary
     // "limit" on the subagent rather than useful progress.
@@ -1242,12 +1550,32 @@ export function focusHeaderLines(
     if (typeof record.findings === "number") push(`Findings: ${record.findings}`, "text");
     if (record.tool) push(`Tool: ${record.tool}`, "text");
     if (record.note) push(`Note: ${record.note}`, "text");
+    // MEASURED telemetry — every line only when the datum was actually reported
+    // (never a zero). No cost/$ line: 0sec has no pricing, so it is not shown.
+    if (telemetry?.model) push(`Model: ${telemetry.model}`, "muted");
+    if (typeof telemetry?.inputTokens === "number" || typeof telemetry?.outputTokens === "number") {
+      const inTok = formatTokens(telemetry.inputTokens);
+      const outTok = formatTokens(telemetry.outputTokens);
+      const cached = formatTokens(telemetry.cachedInputTokens);
+      const tokenBits: string[] = [];
+      if (inTok) tokenBits.push(`${inTok} in`);
+      if (outTok) tokenBits.push(`${outTok} out`);
+      if (cached) tokenBits.push(`${cached} cached`);
+      if (tokenBits.length > 0) push(`Tokens: ${tokenBits.join(" / ")}`, "text");
+    }
+    const contextTok = formatTokens(telemetry?.contextTokens);
+    if (contextTok) push(`Context: ${contextTok}`, "text");
+    const elapsed = formatElapsed(telemetry?.durationMs);
+    if (elapsed) push(`Elapsed: ${elapsed}`, "text");
+    // Lineage: the spawning parent scan, when known. The full spawn-tree
+    // overview is a follow-up — this is just the one-line ancestry pointer.
+    if (record.parentScanId) push(`Parent: ${record.parentScanId}`, "muted");
     push(`Last seen: ${formatRelativeAge(record.lastSeen, now)}`, "muted");
     if (record.status === "completed" && record.summary) {
       separate();
       push(`Summary: ${record.summary}`, "text");
     }
-    if (record.status === "failed" && record.error) {
+    if (record.status === "failed" && !record.operatorStopped && record.error) {
       separate();
       push(`Error: ${record.error}`, "warn");
     }
@@ -1363,12 +1691,16 @@ export function computeHerdFocusLayout({
   width,
   height,
   noticeRows = 0,
+  hostRows,
+  hostPaddingX,
 }: HerdLayoutInput): HerdFocusLayout {
   const terminalWidth = cells(width);
-  const contentWidth = Math.max(0, terminalWidth - SHELL_HORIZONTAL_PADDING * 2);
+  const padding = hostPaddingX === undefined ? SHELL_HORIZONTAL_PADDING : cells(hostPaddingX);
+  const chromeRows = hostRows === undefined ? shellChromeRows(terminalWidth) : cells(hostRows);
+  const contentWidth = Math.max(0, terminalWidth - padding * 2);
   const bodyRows = Math.max(
     0,
-    cells(height) - shellChromeRows(terminalWidth) - Math.min(1, cells(noticeRows)),
+    cells(height) - chromeRows - Math.min(1, cells(noticeRows)),
   );
 
   const bordered = bodyRows >= BORDERED_MIN_ROWS && contentWidth >= DETAIL_MIN_WIDTH + 4;

@@ -1,6 +1,13 @@
 /**
- * Layout, grouping and detail-pane arithmetic for the full-screen "resume a
- * session" browser.
+ * Layout, grouping and detail-pane arithmetic for the "resume a saved audit"
+ * pop-up dialog.
+ *
+ * The screen is a dialog body — an icon+title row, the shared grouped and
+ * searchable picker with a detail column beside it, a status line and a footer
+ * of action hints, inside a panel someone else drew. Every width and row count
+ * it renders comes out of `computeResumeDialogLayout` below, measured against
+ * the *surface* box (`useSurfaceDimensions`) rather than the terminal, so the
+ * same arithmetic serves the dialog and a bare full-screen route.
  *
  * This is `model-layout.ts` / `settings-layout.ts` for the resume screen, and it
  * exists for the same reason spelled out in `PRIMITIVES.md`: OpenTUI lays rows
@@ -24,7 +31,10 @@
  *     session was *about*;
  *   - the detail pane (`resumeDetailLines`): the objective/preview in full,
  *     then a metadata block, as flat tone-tagged lines the component only has
- *     to colour.
+ *     to colour;
+ *   - the pending-resume protection marker, which rides on the row label and
+ *     on the detail pane so a live audit's history reads as protected before
+ *     the delete key is pressed, not only after it refuses.
  *
  * `shellChromeRows` and `wrapCells` are imported from `settings-layout.ts`
  * rather than copied — the honest long-term home for both is a shared
@@ -32,12 +42,32 @@
  * imports React, OpenTUI, or touches I/O.
  */
 
+import { computeDialogPanel, type DialogItem, type DialogPanel } from "./dialog-select-layout.js";
+import { operatorIcon, operatorTitle } from "./operator-icons.js";
 import { relativeAge, type StoredSessionMeta } from "./session-store.js";
 import { shellChromeRows, wrapCells } from "./settings-layout.js";
+import { getSymbols, type SymbolTable } from "./symbols.js";
 import { sanitizeTuiText } from "./text.js";
-import type { DialogItem } from "./dialog-select-layout.js";
+
+/** Module-default table (Unicode) for callers that pass no `symbols`. */
+const DEFAULT_SYMBOLS = getSymbols("unicode");
 
 export { shellChromeRows, wrapCells };
+
+// ---------------------------------------------------------------------------
+// Glyphs
+// ---------------------------------------------------------------------------
+//
+// The dialog's own title glyph and label come from the shared
+// `operator-icons.ts` registry, and the label is always rendered beside the
+// glyph — there is no icon font behind these code points. The field markers
+// below share the plain-text vocabulary used by the other operator screens.
+
+/** A live audit whose history cannot be deleted. */
+export const ICON_PROTECTED = "⊘";
+export const ICON_SEARCH = "⌕";
+export const ICON_CWD = "⌂";
+export const ICON_WARN = "!";
 
 // ---------------------------------------------------------------------------
 // Numeric hygiene
@@ -132,6 +162,18 @@ export interface ResumeItemsInput {
   now: number;
   /** AND-over-terms filter, matched against `summary` + `preview` only. */
   filter?: string;
+  /**
+   * Sessions whose transcript is protected because their audit is still live.
+   *
+   * They stay in the list and stay resumable — protection is about deletion,
+   * not about reach — but their row carries the lock marker so the operator
+   * can see the state before pressing a destructive key, not only after the
+   * screen refuses. The screen enforces the refusal itself; this flag only
+   * makes the same fact visible.
+   */
+  protectedSessionIds?: ReadonlySet<string>;
+  /** Active glyph preset; absent, the width-safe Unicode default is used. */
+  symbols?: SymbolTable;
 }
 
 /**
@@ -150,7 +192,10 @@ export function resumeItems({
   currentCwd,
   now,
   filter = "",
+  protectedSessionIds,
+  symbols = DEFAULT_SYMBOLS,
 }: ResumeItemsInput): DialogItem[] {
+  const ICON_PROTECTED = symbols.fieldProtected;
   const terms = sanitizeTuiText(filter).toLowerCase().split(" ").filter(Boolean);
   const matched = sessions.filter((session) => {
     if (terms.length === 0) return true;
@@ -168,13 +213,20 @@ export function resumeItems({
   }
   const ordered = currentCwd ? [...here, ...elsewhere] : matched;
 
-  return ordered.map((session) => ({
-    id: session.id,
-    label: sessionLabel(session),
-    meta: sessionMeta(session, now),
-    category: sessionCategory(session, currentCwd),
-    current: currentId !== undefined && session.id === currentId,
-  }));
+  return ordered.map((session) => {
+    // The lock leads the label rather than riding in the meta column: the meta
+    // is right-aligned and capped at a share of the row, so on a narrow list
+    // it is the first thing to be truncated, and a protection marker that
+    // disappears when the panel narrows is worse than none at all.
+    const locked = protectedSessionIds?.has(session.id) === true;
+    return {
+      id: session.id,
+      label: locked ? `${ICON_PROTECTED} ${sessionLabel(session)}` : sessionLabel(session),
+      meta: sessionMeta(session, now),
+      category: sessionCategory(session, currentCwd),
+      current: currentId !== undefined && session.id === currentId,
+    };
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -220,6 +272,14 @@ export interface ResumeDetailInput {
   now: number;
   /** Omit the blank separator rows. Set when the pane is short of rows. */
   compact?: boolean;
+  /**
+   * Whether this session's history is protected because its audit is live.
+   *
+   * Stated only when the caller passed the protected set — the pane never
+   * infers protection from the record, because a stored session file says
+   * nothing about whether its audit is still running.
+   */
+  isProtected?: boolean;
 }
 
 /**
@@ -235,11 +295,13 @@ export interface ResumeDetailInput {
  * away and the label would fuse to its value.
  */
 export function resumeDetailLines(
-  { session, now, compact = false }: ResumeDetailInput,
+  { session, now, compact = false, isProtected = false }: ResumeDetailInput,
   width: number,
+  symbols: SymbolTable = DEFAULT_SYMBOLS,
 ): ResumeDetailLine[] {
   const limit = cells(width);
   if (!session || limit <= 0) return [];
+  const ICON_PROTECTED = symbols.fieldProtected;
 
   const lines: ResumeDetailLine[] = [];
   const push = (value: string, tone: ResumeDetailTone) => {
@@ -265,6 +327,20 @@ export function resumeDetailLines(
     push(preview, "text");
   } else {
     push("(no prompt recorded)", "muted");
+  }
+
+  // The protection notice leads the metadata rather than trailing it. A short
+  // pane clips from the bottom, and "this history cannot be deleted" is the
+  // one line that must survive the cut — an operator who never sees it reads
+  // the refusal as a bug. It states the rule the screen enforces and nothing
+  // more: the audit has to close on its own before the history can be removed,
+  // and this screen has no power to close it.
+  if (isProtected) {
+    separate();
+    push(
+      `${ICON_PROTECTED} Protected: this audit is still live. Its history cannot be deleted until the audit closes. Opening it is unaffected.`,
+      "accent",
+    );
   }
 
   separate();
@@ -322,6 +398,137 @@ export function clipResumeDetailLines(
 }
 
 // ---------------------------------------------------------------------------
+// Dialog geometry
+// ---------------------------------------------------------------------------
+
+export interface ResumeDialogLayoutInput {
+  /** The surface's inner width — the dialog panel's box, or the terminal. */
+  width: number;
+  /** The surface's inner height. */
+  height: number;
+  /** Display rows (category headings interleaved) the list would render. */
+  totalRows: number;
+  /** True when the screen is mounted inside a `DialogSurface` panel. */
+  inDialog?: boolean;
+  /** Whether the confirm/error line is currently showing. */
+  hasStatus?: boolean;
+}
+
+export interface ResumeDialogLayout {
+  /** Cells every row of the body may occupy. */
+  contentWidth: number;
+  /** 1 when there is room for the icon+title row, else 0. */
+  titleRows: number;
+  /** 1 when the confirm/error line is showing and there is room for it. */
+  statusRows: number;
+  /** 1 when there is room for the footer hint row, else 0. */
+  footerRows: number;
+  /** Rows the picker body (search line + list + detail) may occupy. */
+  bodyRows: number;
+  /** Rows of stacked detail below the list when the pane could not sit beside it. */
+  stackedRows: number;
+  /** Geometry for `DialogSelectBody`, in inline `bodyRows` mode. */
+  panel: DialogPanel;
+}
+
+/** A picker body narrower than this cannot host a stacked detail block. */
+const STACKED_MIN_WIDTH = 24;
+/** Rows the list keeps for itself before a stacked detail block is affordable. */
+const STACKED_MIN_LIST_ROWS = 6;
+/** A stacked detail block never grows past this. */
+const STACKED_MAX_ROWS = 8;
+
+/**
+ * Every width and row count the resume dialog renders, from the surface box.
+ *
+ * Unlike `/model`, this screen draws its own footer — the route hands it no
+ * `frame` — so inside a dialog panel the whole inner box is its own and there
+ * is no host chrome to reserve. Rows go to the picker first and to the title
+ * last, so a very short surface degrades to "just the list" rather than to
+ * "chrome with no list", and the parts sum to at most the rows available,
+ * which is what keeps the body from painting through the panel border
+ * (PRIMITIVES.md: Yoga shrinks siblings rather than clipping them).
+ */
+export function computeResumeDialogLayout({
+  width,
+  height,
+  totalRows,
+  inDialog = false,
+  hasStatus = false,
+}: ResumeDialogLayoutInput): ResumeDialogLayout {
+  const surfaceWidth = cells(width);
+  const surfaceHeight = cells(height);
+  // Inside a dialog the panel already paid for its border and padding; on a
+  // bare terminal the shell's own horizontal padding still has to come off.
+  const contentWidth = Math.max(0, surfaceWidth - (inDialog ? 0 : 4));
+  const available = Math.max(0, surfaceHeight - (inDialog ? 0 : shellChromeRows(surfaceWidth)));
+
+  const footerRows = available >= 3 ? 1 : 0;
+  const statusRows = hasStatus && available >= 4 ? 1 : 0;
+  const titleRows = available >= 6 ? 1 : 0;
+  const bodyRows = Math.max(0, available - footerRows - statusRows - titleRows);
+
+  const panelFor = (rows: number): DialogPanel =>
+    computeDialogPanel({
+      width: contentWidth,
+      height: surfaceHeight,
+      size: "large",
+      totalRows,
+      withDetail: true,
+      bodyRows: rows,
+    });
+
+  let panel = panelFor(bodyRows);
+  let stackedRows = 0;
+  if (
+    !panel.showDetail &&
+    contentWidth >= STACKED_MIN_WIDTH &&
+    bodyRows >= STACKED_MIN_LIST_ROWS + 3
+  ) {
+    stackedRows = Math.min(STACKED_MAX_ROWS, bodyRows - STACKED_MIN_LIST_ROWS);
+    panel = panelFor(bodyRows - stackedRows);
+  }
+
+  return { contentWidth, titleRows, statusRows, footerRows, bodyRows, stackedRows, panel };
+}
+
+// ---------------------------------------------------------------------------
+// Title and counter
+// ---------------------------------------------------------------------------
+
+/**
+ * The dialog's title row: the shared glyph, the shared label, then the scope
+ * the list is currently showing.
+ *
+ * The glyph and label come from `operator-icons.ts` so this dialog is stamped
+ * exactly like every other one, and the label is always beside the glyph.
+ * "This project" is named only when the screen actually knows its working
+ * directory — with no `currentCwd` the list is not split, and claiming a scope
+ * it did not apply would be a lie about what is on screen.
+ */
+export function resumeDialogTitle(
+  scope: "project" | "all",
+  scoped: boolean,
+  symbols: SymbolTable = DEFAULT_SYMBOLS,
+): string {
+  const head = `${operatorIcon("resume", symbols)} ${operatorTitle("resume")}`;
+  if (!scoped) return head;
+  return `${head} · ${scope === "project" ? "this project" : "all projects"}`;
+}
+
+/** The right-aligned counter beside the title: rows actually on screen. */
+export function resumeDialogCount(
+  matched: number,
+  protectedCount = 0,
+  symbols: SymbolTable = DEFAULT_SYMBOLS,
+): string {
+  const count = cells(matched);
+  const locked = cells(protectedCount);
+  const head = `${count} audit${count === 1 ? "" : "s"}`;
+  return locked > 0 ? `${head} · ${symbols.fieldProtected} ${locked} live` : head;
+}
+
+// ---------------------------------------------------------------------------
 // Hints and keys
 // ---------------------------------------------------------------------------
 
@@ -341,19 +548,28 @@ export function resumeFooterHint(
   hasSessions = true,
   scope: "project" | "all" = "project",
   sessionCount?: number,
+  /**
+   * Whether the highlighted row is protected. The delete key is then named as
+   * what it will actually do — refuse — rather than as an action that works.
+   * The screen still enforces the refusal; this only stops the footer from
+   * advertising a deletion that cannot happen.
+   */
+  highlightProtected = false,
+  symbols: SymbolTable = DEFAULT_SYMBOLS,
 ): string {
-  const count = sessionCount !== undefined ? `${sessionCount} session${sessionCount === 1 ? "" : "s"}` : undefined;
+  const ICON_PROTECTED = symbols.fieldProtected;
+  const count = sessionCount !== undefined ? `${sessionCount} audit${sessionCount === 1 ? "" : "s"}` : undefined;
 
   switch (mode) {
     case "filter":
-      return "type to filter · enter resume · esc cancel · backspace delete";
+      return "type to filter · enter open · esc cancel · backspace delete a character";
     case "confirm-delete":
       return "del confirm delete · esc cancel";
     default:
       return [
         "↑↓",
-        hasSessions ? "enter resume" : undefined,
-        "del delete",
+        hasSessions ? "enter open" : undefined,
+        highlightProtected ? `${ICON_PROTECTED} del protected` : "del delete",
         "/ filter",
         `tab ${scope === "project" ? "all" : "project"}`,
         count,

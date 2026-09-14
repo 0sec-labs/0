@@ -15,12 +15,22 @@
 
 import {
   budgetWrappedRows,
+  buildSidebarSectionHeader,
+  sidebarBadgeCells,
   wrapCells,
   DEFAULT_WRAP_LINES,
+  SIDEBAR_SECTION_HEADER_ROWS,
   type SidebarRowBudget,
 } from "./todos-sidebar-layout.js";
 
-export { budgetWrappedRows, wrapCells, DEFAULT_WRAP_LINES };
+export {
+  budgetWrappedRows,
+  buildSidebarSectionHeader,
+  sidebarBadgeCells,
+  wrapCells,
+  DEFAULT_WRAP_LINES,
+  SIDEBAR_SECTION_HEADER_ROWS,
+};
 export type { SidebarRowBudget };
 
 /** The minimal finding shape the sidebar renders (a structural subset of the
@@ -34,15 +44,13 @@ export interface SidebarFinding {
 }
 
 /**
- * Cells the trailing severity badge claims on a finding's FIRST line. The badge
- * is capped so the title always keeps a workable slice of the column (at least
- * four cells), and collapses to 0 in a column too narrow to carry both — the
- * caller then draws the title alone. Mirrors the cap the inline block used.
+ * Cells the trailing severity badge claims on a finding's FIRST line. A thin
+ * naming wrapper over the shared {@link sidebarBadgeCells} rhythm, so the
+ * FINDINGS severity badge and the AGENTS status badge are budgeted by exactly
+ * the same arithmetic and the two sections line up.
  */
 export function findingSeverityCells(severity: string, columnWidth: number): number {
-  const width = Math.max(0, Math.floor(columnWidth));
-  const len = Math.max(0, severity.length);
-  return Math.min(len, Math.max(0, width - 4));
+  return sidebarBadgeCells(severity, columnWidth);
 }
 
 /**

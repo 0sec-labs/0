@@ -61,7 +61,11 @@ function errOf(deps: ConfigCommandDeps): (line: string) => void {
 }
 
 function renderValue(value: unknown): string {
-  return typeof value === "boolean" ? (value ? "on" : "off") : String(value);
+  if (typeof value === "boolean") return value ? "on" : "off";
+  // Non-scalar settings (the keybindings overrides map) render as compact JSON
+  // rather than "[object Object]".
+  if (value !== null && typeof value === "object") return JSON.stringify(value);
+  return String(value);
 }
 
 // ── show ──────────────────────────────────────────────────────────────────────

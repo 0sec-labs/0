@@ -132,6 +132,19 @@ interface Generation {
   order: MountedProvider[]; leases: number; drained: Array<() => void>; views: HarnessSnapshot["views"];
   trusted: boolean; disposed: boolean; cleanupErrors: string[];
 }
+/** Serializable snapshot of live harness state for handoff between host instances. */
+export const liveHarnessCheckpointSchema = z.object({
+  activeId: z.string().uuid().nullable(),
+  previousId: z.string().nullable(),
+  pending: z.string().nullable().optional(),
+  providerStates: z.record(z.string(), z.unknown()),
+  lastInput: z.object({
+    sessionId: z.string(), phase: z.enum(["idle", "working"]), iterations: z.number(), tokensUsed: z.number(), tokenBudget: z.number(),
+  }).strict(),
+  failedUiGenerations: z.array(z.string()),
+}).strict();
+export type LiveHarnessCheckpoint = z.infer<typeof liveHarnessCheckpointSchema>;
+
 export interface LiveHarnessOptions {
   executablePlugins: ExecutablePluginManager; root: string; workspaceRoot: string;
   allowTrusted: () => boolean; onChange?: (snapshot: HarnessSnapshot) => void;
@@ -152,6 +165,7 @@ export class LiveHarnessHost {
   private error?: string;
   private lane: Promise<void> = Promise.resolve();
   private controls: Promise<unknown> = Promise.resolve();
+  private controlsQueued = 0;
   private gates = 0;
   private closing = false;
   private closePromise?: Promise<void>;
@@ -229,47 +243,52 @@ export class LiveHarnessHost {
 
   control(request: HarnessControl): Promise<HarnessSnapshot> {
     this.assertOpen();
+    this.controlsQueued++;
     const operation = this.controls.then(async () => {
-      this.assertOpen();
-      switch (request.action) {
-        case "list": return this.snapshot();
-        case "submit": {
-          const spec = parseHarnessGenerationSpec(request.generation);
-          if (this.retained.size >= MAX_GENERATIONS) throw new Error("Harness generation retention limit (32) reached; active generation remains usable. Start a new engine process to reclaim compiled ESM.");
-          if (spec.providers.some(provider => provider.source.kind === "trusted") && !this.options.allowTrusted()) throw new Error("Explicit workspace trust grant required for host ESM");
-          await this.options.executablePlugins.ready;
-          const sources: Record<string, SourceSnapshot> = {};
-          for (const provider of spec.providers) {
-            if (provider.source.kind === "sandboxed") {
-              const { toolName } = provider.source;
-              const version = this.options.executablePlugins.inspectVersion(provider.source.pluginId, provider.source.versionId);
-              if (!version?.manifest.tools.some(tool => tool.name === toolName)) throw new Error(`Unknown retained executable service: ${provider.id}`);
-              continue;
-            }
-            const temporary = await mkdtemp(join(tmpdir(), "0sec-harness-source-"));
-            try {
-              for (const [path, source] of Object.entries(provider.source.files)) {
-                await mkdir(dirname(join(temporary, path)), { recursive: true, mode: 0o700 });
-                await writeFile(join(temporary, path), source, { mode: 0o600 });
+      try {
+        this.assertOpen();
+        switch (request.action) {
+          case "list": return this.snapshot();
+          case "submit": {
+            const spec = parseHarnessGenerationSpec(request.generation);
+            if (this.retained.size >= MAX_GENERATIONS) throw new Error("Harness generation retention limit (32) reached; active generation remains usable. Start a new engine process to reclaim compiled ESM.");
+            if (spec.providers.some(provider => provider.source.kind === "trusted") && !this.options.allowTrusted()) throw new Error("Explicit workspace trust grant required for host ESM");
+            await this.options.executablePlugins.ready;
+            const sources: Record<string, SourceSnapshot> = {};
+            for (const provider of spec.providers) {
+              if (provider.source.kind === "sandboxed") {
+                const { toolName } = provider.source;
+                const version = this.options.executablePlugins.inspectVersion(provider.source.pluginId, provider.source.versionId);
+                if (!version?.manifest.tools.some(tool => tool.name === toolName)) throw new Error(`Unknown retained executable service: ${provider.id}`);
+                continue;
               }
-              sources[provider.id] = await snapshotEvolutionSource({ sourceRoot: temporary, storePath: this.root, sourcePaths: Object.keys(provider.source.files), maxSourceBytes: 2 * 1024 * 1024 });
-            } finally { await rm(temporary, { recursive: true, force: true }); }
+              const temporary = await mkdtemp(join(tmpdir(), "0sec-harness-source-"));
+              try {
+                for (const [path, source] of Object.entries(provider.source.files)) {
+                  await mkdir(dirname(join(temporary, path)), { recursive: true, mode: 0o700 });
+                  await writeFile(join(temporary, path), source, { mode: 0o600 });
+                }
+                sources[provider.id] = await snapshotEvolutionSource({ sourceRoot: temporary, storePath: this.root, sourcePaths: Object.keys(provider.source.files), maxSourceBytes: 2 * 1024 * 1024 });
+              } finally { await rm(temporary, { recursive: true, force: true }); }
+            }
+            this.assertOpen();
+            const retained = { id: randomUUID(), spec, sources };
+            publishEvolutionArtifact(join(this.root, "generations", `${retained.id}.json`), retained);
+            this.retained.set(retained.id, retained); this.pending = retained.id;
+            break;
           }
-          this.assertOpen();
-          const retained = { id: randomUUID(), spec, sources };
-          publishEvolutionArtifact(join(this.root, "generations", `${retained.id}.json`), retained);
-          this.retained.set(retained.id, retained); this.pending = retained.id;
-          break;
+          case "rollback": {
+            const id = request.generationId ?? this.previousId;
+            if (!id || !this.retained.has(id)) throw new Error("No retained harness generation to roll back to");
+            this.pending = id; break;
+          }
+          case "disable": this.pending = null; break;
+          default: throw new Error("Unknown harness control");
         }
-        case "rollback": {
-          const id = request.generationId ?? this.previousId;
-          if (!id || !this.retained.has(id)) throw new Error("No retained harness generation to roll back to");
-          this.pending = id; break;
-        }
-        case "disable": this.pending = null; break;
-        default: throw new Error("Unknown harness control");
+        this.state = "pending"; this.error = undefined; this.publish(); return this.snapshot();
+      } finally {
+        this.controlsQueued--;
       }
-      this.state = "pending"; this.error = undefined; this.publish(); return this.snapshot();
     });
     this.controls = operation.catch(() => {});
     return operation;
@@ -311,14 +330,16 @@ export class LiveHarnessHost {
     });
   }
 
-  private async prepare(retained: RetainedGeneration): Promise<Generation> {
+  /** @param seedStates - optional provider state overrides from an exported checkpoint. */
+  private async prepare(retained: RetainedGeneration, seedStates?: Record<string, unknown>): Promise<Generation> {
     const generation: Generation = { retained, context: new Context(), abort: new AbortController(), providers: new Map(), order: [], leases: 0, drained: [], views: [], trusted: retained.spec.providers.some(provider => provider.source.kind === "trusted"), disposed: false, cleanupErrors: [] };
     const signal = AbortSignal.any([generation.abort.signal, this.shutdown.signal]);
     try {
       this.checkTrust(generation);
       for (const spec of orderProviders(retained.spec.providers)) {
         this.checkTrust(generation);
-        const provider: MountedProvider = { spec, state: copyJson(this.active?.providers.get(spec.id)?.state ?? null), implementation: {} };
+        const initialState = seedStates !== undefined && Object.hasOwn(seedStates, spec.id) ? copyJson(seedStates[spec.id]) : copyJson(this.active?.providers.get(spec.id)?.state ?? null);
+        const provider: MountedProvider = { spec, state: initialState, implementation: {} };
         generation.providers.set(spec.id, provider); generation.order.push(provider);
         const fiber = generation.context.plugin({ name: `harness:${spec.id}`, inject: (spec.requires ?? []).map(serviceKey), apply: async (ctx: Context) => {
           const owned = (dispose: () => void | Promise<void>): (() => Promise<void>) => ctx.effect(() => async () => {
@@ -566,5 +587,83 @@ export class LiveHarnessHost {
       } finally { this.finishCleanup(); }
     });
     return this.closePromise;
+  }
+
+  /** Serialise active/pending harness state for handoff to a fresh host. Fields that
+   *  may differ after restore (provider states, rendered views) are documented for
+   *  exclusion from the caller's roundtrip equality gate. */
+  exportCheckpoint(): LiveHarnessCheckpoint {
+    if (this.closing) throw new Error("Cannot export checkpoint: live harness is closing");
+    if (this.active?.leases) throw new Error("Cannot export checkpoint: active generation has outstanding leases");
+    if (this.gates) throw new Error("Cannot export checkpoint: serialized work in progress");
+    if (this.controlsQueued) throw new Error("Cannot export checkpoint: queued control work exists");
+    const active = this.active;
+    const providerStates: Record<string, unknown> = {};
+    if (active) {
+      for (const [id, provider] of active.providers) {
+        providerStates[id] = copyJson(provider.state);
+      }
+    }
+    return {
+      activeId: active?.retained.id ?? null,
+      previousId: this.previousId,
+      pending: this.pending,
+      providerStates,
+      lastInput: copyJson(this.lastInput),
+      failedUiGenerations: [...this.failedUiGenerations],
+    };
+  }
+
+  /** Recreate the active generation and pending state from a previously exported
+   *  checkpoint. Provider states are passed as seeds to `prepare` so lifecycle
+   *  `activate` can update them. Pending replacement is preserved but NOT committed —
+   *  the caller awaits old-engine retirement, then triggers a normal `checkpoint`.
+   *  Failure disposes only the candidate; the old host remains usable. */
+  async restoreCheckpoint(checkpoint: LiveHarnessCheckpoint): Promise<void> {
+    const state = liveHarnessCheckpointSchema.parse(checkpoint);
+    this.assertOpen();
+    if (this.active || this.pending !== undefined || this.previousId !== null ||
+        this.state !== "builtin" || this.gates || this.controlsQueued) {
+      throw new Error("Harness checkpoint restoration requires a fresh, idle host");
+    }
+    return this.serialize(async () => {
+      await this.options.executablePlugins.ready;
+      this.assertOpen();
+      if (this.active || this.pending !== undefined || this.controlsQueued || this.gates !== 1) {
+        throw new Error("Harness changed during checkpoint restoration");
+      }
+      for (const id of [state.activeId, state.previousId, state.pending, ...state.failedUiGenerations]) {
+        if (id != null && !this.retained.has(id)) throw new Error(`Generation ${id} not found in retained history`);
+      }
+      const retained = state.activeId === null ? undefined : this.retained.get(state.activeId)!;
+      const providers = retained?.spec.providers ?? [];
+      if (Object.keys(state.providerStates).length !== providers.length ||
+          providers.some(provider => !Object.hasOwn(state.providerStates, provider.id))) {
+        throw new Error("Harness checkpoint does not contain every active provider's state");
+      }
+      this.lastInput = copyJson(state.lastInput);
+      this.failedUiGenerations.clear();
+      for (const id of state.failedUiGenerations) this.failedUiGenerations.add(id);
+      this.previousId = state.previousId;
+      this.pending = state.pending;
+      let candidate: Generation | undefined;
+      try {
+        if (retained) {
+          candidate = await this.prepare(retained, state.providerStates);
+          this.checkTrust(candidate);
+        }
+        this.assertOpen();
+        this.active = candidate;
+        this.state = this.pending !== undefined ? "pending" : candidate ? "active" : "builtin";
+        this.error = undefined;
+        this.publish();
+      } catch (error) {
+        if (candidate) await this.dispose(candidate);
+        this.error = message(error);
+        this.state = "failed";
+        this.publish();
+        throw error;
+      }
+    });
   }
 }

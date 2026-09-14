@@ -18,6 +18,7 @@ export type {
   ConsoleTurnBudget,
   ConsoleUsageReport,
 } from "./turn-engine.js";
+export type { ConsoleSessionCheckpoint } from "./session-checkpoint.js";
 export {
   deriveObjectiveHeuristic,
   createSessionObjectiveService,

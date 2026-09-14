@@ -4,10 +4,12 @@ import {
   formatToolArgs,
   formatToolResult,
   toolResultDetail,
+  projectToolPreview,
   MAX_SUMMARY_CHARS,
   type ToolCallLike,
   type ToolResultLike,
 } from "./tool-format.js";
+import { toolActionTitle } from "./chat/card-layout.js";
 
 /** Assert a value is a single, control-free line within the summary cap. */
 function assertBounded(value: string): void {
@@ -45,6 +47,33 @@ describe("formatToolArgs — covered tools", () => {
     expect(
       formatToolArgs({ name: "run_command", arguments: { command: "rg --files ." } }),
     ).toBe("rg --files .");
+  });
+
+  it("retains a command in the collapsed title when structured metadata is absent", () => {
+    const title = toolActionTitle({
+      turn: 1,
+      id: "tool-1",
+      kind: "tool",
+      text: "run_command",
+      metaKind: "command",
+      toolArgs: formatToolArgs({ name: "run_command", arguments: { command: "pwd" } }),
+    });
+    expect(title).toContain("pwd");
+  });
+
+  it("retains an edit summary when a single structured path is unavailable", () => {
+    const title = toolActionTitle({
+      id: "tool-edit",
+      kind: "tool",
+      turn: 1,
+      text: "apply_patch",
+      metaKind: "edit",
+      toolArgs: formatToolArgs({
+        name: "apply_patch",
+        arguments: { patch: "*** Add File: a.ts\n*** Update File: b.ts" },
+      }),
+    });
+    expect(title).toContain("2 files");
   });
 
   it("http_request shows method and url, defaulting to POST", () => {
@@ -468,5 +497,28 @@ describe("toolResultDetail", () => {
       { success: true, output: { files: ["x/".repeat(500), "y\nz", "ok.ts"], truncated: false } },
     );
     for (const l of detail) assertBounded(l);
+  });
+});
+
+describe("actual tool output previews — undefined vs null", () => {
+  it("omits a field explicitly set to undefined but preserves a real null", () => {
+    const output = { mode: null, madeExecutable: undefined, name: "run.sh" };
+    const text = projectToolPreview({ name: "chmod" }, { success: true, output }).lines.join("\n");
+    expect(text).not.toContain("undefined");
+    expect(text).not.toContain("madeExecutable");
+    expect(text).toContain("mode: null"); // meaningful null is kept
+    expect(text).toContain("name: run.sh");
+  });
+
+  it("keeps tree branch connectors correct when the last key is undefined-valued", () => {
+    // `gone` filters out entirely, so `mode` becomes the last visible child and
+    // must render with the └─ connector, not a dangling ├─.
+    const output = { name: "run.sh", mode: null, gone: undefined };
+    const text = projectToolPreview({ name: "chmod" }, { success: true, output }).lines.join("\n");
+    expect(text).not.toContain("undefined");
+    expect(text).not.toContain("gone");
+    expect(text).toContain("├─ name: run.sh");
+    expect(text).toContain("└─ mode: null");
+    expect(text).not.toContain("├─ mode: null");
   });
 });

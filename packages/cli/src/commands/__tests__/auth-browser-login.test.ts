@@ -14,7 +14,6 @@ vi.mock("node:child_process", async (importOriginal) => ({
   ...await importOriginal<typeof import("node:child_process")>(),
   spawn: browserProcess.spawn,
 }));
-
 const homes: string[] = [];
 const token = "fixture-cloud-token-never-expose";
 function options(): HostedBrowserLoginOptions & { homeDir: string } {
@@ -56,7 +55,6 @@ describe("neutral Cloud login", () => {
       /^https:\/\/fixture\.invalid\/&calc&\/cli-auth\?session=[A-Za-z0-9_-]+$/,
     );
   });
-
   it.each(["sleep", "fetch", "body"] as const)("cancels a pending %s without waiting for that operation or persisting credentials", async (boundary) => {
     const opts = options();
     const entered = Promise.withResolvers<void>();

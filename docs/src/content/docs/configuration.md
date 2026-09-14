@@ -3,6 +3,8 @@ title: Configuration
 description: Runtime modes, scan modes, depth settings, state paths, env vars, feature flags, and diagnostics.
 ---
 
+> Status: 2026-09-13. Living document.
+
 Configure command options, provider credentials, console settings and run storage
 separately. Each section below gives its precedence rules.
 
@@ -295,14 +297,14 @@ Settings are resolved per-key, highest-priority first:
 
 On load, settings are normalized against the schema: unknown keys are dropped
 and invalid values reset to defaults. Saving writes the normalized object.
-Persisted `bubble` framing migrates to `messenger`. Other saved styles and
+Persisted `messenger` framing migrates to `bubble`. Other saved styles and
 explicit off settings remain effective.
 
 ### Security-gated import
 
-`0sec config import` refuses to change any security-sensitive setting
-(`allowModelSelfExtension`, `allowSubagentPeerMessaging`,
-`allowSubagentOperatorMessaging`) unless `--yes` is passed. The specific
+`0sec config import` refuses to change security-sensitive settings, including
+`allowModelSelfExtension`, `allowDevSourceUpdates`, `allowSubagentPeerMessaging`
+and `allowSubagentOperatorMessaging`, unless `--yes` is passed. The specific
 changes are printed so you know what was rejected.
 
 ### Settings reference
@@ -318,7 +320,7 @@ changes are printed so you know what was rejected.
 | `showScope` | boolean | `true` | Header include/exclude scope; absent and explicitly empty scope remain distinct |
 | `density` | `comfortable`, `compact` | `comfortable` | Transcript spacing |
 | `composerStyle` | `border`, `rail`, `plain` | `border` | Input frame |
-| `transcriptStyle` | `messenger`, `rail`, `plain`, `compact`, `document` | `messenger` | Right-aligned operator messages and left-aligned answers, with alternative layouts |
+| `transcriptStyle` | `bubble`, `rail`, `plain`, `compact`, `document` | `bubble` | Right-aligned operator messages and left-aligned answers, with alternative layouts |
 | `roleLabelStyle` | `full`, `short`, `glyph`, `off` | `full` | Speaker label treatment |
 | `toolCardStyle` | `compact`, `rail`, `inline`, `hidden` | `compact` | Successful tool/subagent-card treatment; failures always show |
 | `richToolCards` | boolean | `true` | Render shell and edit results as rich cards |
@@ -330,7 +332,8 @@ changes are printed so you know what was rejected.
 | `allowSubagentPeerMessaging` | boolean | `true` | Allow direct sibling-subagent messages |
 | `allowSubagentOperatorMessaging` | boolean | `true` | Allow sanitized child-to-operator transcript messages |
 | `allowModelSelfExtension` | boolean | `true` | Enable sandboxed model self-extension for new sessions, subject to role and capability gates |
-| `theme` | built-in or installed theme ID | `midnight` | Colour palette; installed themes live in `~/.0sec/themes` |
+| `allowDevSourceUpdates` | boolean | `false` | Globally authorize trusted development-engine replacement between turns; requires `0SEC_DEV_SOURCE_ROOT` |
+| `theme` | built-in or installed theme ID | `slate` | Colour palette; installed themes live in `~/.0sec/themes` |
 | `showTokenUsage` | boolean | `true` | Per-turn input/output token line |
 | `showCost` | boolean | `true` | Estimated dollar cost, per turn and in the status bar |
 | `showContextMeter` | boolean | `true` | Context-usage bar; missing context-window data displays unavailable |
@@ -348,6 +351,32 @@ Autonomy, self-extension and host trust are separate controls. Desktop retains
 unscoped-standard and scoped-YOLO authorization.
 See [self-evolution](/improvement-plane/) for details.
 
+### Development engine updates
+
+This is separate from sandboxed self-extension. Enable **Development engine
+updates** in global settings only for a trusted source checkout. Project settings
+cannot grant it. Loading that code runs with the console process's host
+permissions, including credential access.
+
+Start a new development console from the built checkout:
+
+```bash
+env 0SEC_DEV_SOURCE_ROOT="$PWD" bun packages/cli/dist/index.js console
+```
+
+A configured `0dev` launcher can set the same variable. Existing sessions that
+started without this source-update wrapper cannot acquire it retroactively.
+
+When enabled, changed Core source is built into an immutable generation and
+activated at an idle boundary. Conversation, scope decisions, task progress and
+usage survive the handoff. A build or checkpoint rejection leaves the current
+engine active. Disabling the setting stops later replacements; it does not
+revert an already-active generation.
+
+The terminal/UI shell, injected provider and MCP clients, and shared package
+dependencies are not reloaded. Changes to those still require a rebuild and a
+new process. See [development engine replacement](/improvement-plane/#development-engine-replacement).
+
 ## Console credential store
 
 In the hosted-enabled CLI candidate, `/connect` offers **0sec Cloud → Sign in**,
@@ -359,8 +388,9 @@ Keys are stored in plaintext at `~/.0sec/credentials.json` by default, with
 `0600` file and `0700` directory permissions. Explicit environment values win.
 See [credential storage](/api-keys/#console-credential-store).
 
-In `/model`, **Tab** opens the full catalog. Check credentials and account access.
-Treat missing price data as unknown.
+In the BYOK `/model` picker, **Tab** opens the full catalog and a nonblank query
+searches it from either view. Check credentials and account access.
+Treat missing price data as unknown. See [Model picker](/console/#model-picker).
 For an existing chat, `/connect` and `/model` configure the next `/new-chat`.
 The current runtime, conversation and live harness stay unchanged.
 

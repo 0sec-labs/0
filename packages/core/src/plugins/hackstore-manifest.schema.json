@@ -1,0 +1,102 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://raw.githubusercontent.com/0sec-labs/hackstore/main/hackstore-manifest.schema.json",
+  "title": "Hackstore extension manifest",
+  "description": "A Hackstore extension's manifest.json: a PluginManifest declaring one or more tools, each gated by a closed set of capabilities. Mirrors validatePluginManifest in @0sec/core (packages/core/src/plugins/manifest.ts). Themes and config artifacts use a different shape and are out of scope for this schema.",
+  "type": "object",
+  "required": ["id", "name", "version", "tools"],
+  "additionalProperties": true,
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "Optional pointer to this JSON Schema, so an editor's language server offers completion and validation."
+    },
+    "kind": {
+      "const": "tool",
+      "description": "Optional. When present must be \"tool\"; a tool manifest is the default when omitted. Theme/config artifacts (kind \"theme\"/\"config\") are validated by a different shape and rejected by validatePluginManifest."
+    },
+    "id": {
+      "type": "string",
+      "description": "Namespaced identifier, e.g. \"acme.sqli-pack\". Lowercase, dotted/hyphenated. Never reaches the model prompt or a dispatch key.",
+      "minLength": 1,
+      "maxLength": 64,
+      "pattern": "^[a-z][a-z0-9]*([._-][a-z0-9]+)*$"
+    },
+    "name": {
+      "type": "string",
+      "description": "Human-readable display name.",
+      "minLength": 1,
+      "maxLength": 2000
+    },
+    "version": {
+      "type": "string",
+      "description": "Semver-like MAJOR.MINOR.PATCH with an optional -prerelease / +build tail.",
+      "pattern": "^\\d+\\.\\d+\\.\\d+(?:[-+][0-9A-Za-z.-]+)?$"
+    },
+    "minCoreVersion": {
+      "type": "string",
+      "description": "Optional minimum @0sec/core version this extension requires.",
+      "pattern": "^\\d+\\.\\d+\\.\\d+(?:[-+][0-9A-Za-z.-]+)?$"
+    },
+    "tools": {
+      "type": "array",
+      "description": "The tools this extension contributes. At least one, at most 64.",
+      "minItems": 1,
+      "maxItems": 64,
+      "items": { "$ref": "#/definitions/tool" }
+    }
+  },
+  "definitions": {
+    "capability": {
+      "type": "string",
+      "description": "A capability from the closed set. Each maps onto a concrete authorization gate the console already enforces for built-in tools.",
+      "enum": [
+        "compute",
+        "model-call",
+        "network",
+        "filesystem-read",
+        "filesystem-write",
+        "process-exec",
+        "findings-write"
+      ]
+    },
+    "tool": {
+      "type": "object",
+      "required": ["name", "description", "parameters", "capabilities"],
+      "additionalProperties": true,
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Dispatch key + prompt-facing + UI-facing tool name. Lowercase ASCII letters, digits and underscore, not starting with a digit. Must not be __proto__/prototype/constructor, and must not collide with a built-in tool name.",
+          "minLength": 1,
+          "maxLength": 48,
+          "pattern": "^[a-z][a-z0-9_]*$"
+        },
+        "description": {
+          "type": "string",
+          "description": "What the tool does. Shown to the model and the operator.",
+          "minLength": 1,
+          "maxLength": 2000
+        },
+        "parameters": {
+          "type": "object",
+          "description": "A JSON-schema-ish properties bag (a map of parameter name to a schema object or boolean), passed through to the tool definition. This is a properties bag, not a complete JSON Schema.",
+          "additionalProperties": {
+            "type": ["object", "boolean"]
+          }
+        },
+        "required": {
+          "type": "array",
+          "description": "Optional list of parameter names that are required.",
+          "items": { "type": "string" }
+        },
+        "capabilities": {
+          "type": "array",
+          "description": "MANDATORY and non-empty. Declares what the tool actually does; drives the authorization gates. \"No capabilities\" is not expressible.",
+          "minItems": 1,
+          "items": { "$ref": "#/definitions/capability" }
+        }
+      }
+    }
+  }
+}

@@ -2,7 +2,9 @@
 import React from "react";
 import { TextAttributes } from "@opentui/core";
 import type { Theme } from "../theme-context.js";
+import { useSymbols, type SymbolTable } from "../symbol-context.js";
 import { fitTuiText } from "../text.js";
+import { sidebarBadgeCells } from "./todos-sidebar-layout.js";
 
 /**
  * ONE agent-row look, shared by the inline ACTIVE SUBAGENTS list below the
@@ -24,21 +26,16 @@ export interface AgentRowView {
   name: string;
   /** One-line task/description, rendered muted and truncated to fit. */
   task: string;
+  /** Actual assigned role, when reported by the producer. */
+  role?: string;
+  /** Current activity, separate from the assigned task. */
+  activity?: string;
+  /** Shared frame counter; omit when motion is disabled. */
+  animationFrame?: number;
   /** Lifecycle status; drives the bullet glyph and its colour. */
   status: string;
   /** Optional right-aligned meta, e.g. "3/8" or "3/8 · 1f". */
   meta?: string;
-  /**
-   * What the agent is doing right now, distinct from its assigned `task`.
-   * Shown alongside task when space permits; never hides the task.
-   */
-  activity?: string;
-  /**
-   * Monotonically advancing frame counter for animated glyphs.
-   * Only a "running" status animates (spinner cycle); undefined or
-   * non-running statuses stay static (reduceMotion / truthful display).
-   */
-  animationFrame?: number;
   /**
    * Stable per-agent accent colour (from `agentAccent(id)`), used for the NAME so
    * the same agent reads in the same hue here and in the inter-agent chat log.
@@ -61,27 +58,50 @@ export function shortAgentName(id: string): string {
   return n || "agent";
 }
 
-/**
- * Bullet glyph + colour for a lifecycle status. Only "running" animates with
- * the provided `animationFrame` (a quarter-block spinner). Failed keeps red
- * "×", completed "✓", parked "◌", and everything else (queued, idle, done,
- * stale) stays "·" — no pretend activity after settlement.
- */
-function statusMark(status: string, theme: Theme, animationFrame?: number): { glyph: string; color: string } {
-  if (status === "failed") return { glyph: "×", color: theme.ERROR };
-  if (status === "completed") return { glyph: "✓", color: theme.SUCCESS };
-  if (status === "running") {
-    if (typeof animationFrame === "number") {
-      const spinners = ["▖", "▘", "▝", "▗"];
-      return { glyph: spinners[animationFrame % spinners.length], color: theme.ACCENT };
-    }
-    // Static fallback when reduceMotion (no frame supplied).
-    return { glyph: "▶", color: theme.ACCENT };
+/** Lifecycle mark: only active work animates; settled outcomes remain distinct. */
+function statusMark(
+  status: string,
+  theme: Theme,
+  symbols: SymbolTable,
+  animationFrame?: number,
+): { glyph: string; color: string } {
+  if (status === "failed") return { glyph: symbols.cross, color: theme.ERROR };
+  if (status === "cancelled" || status === "canceled") return { glyph: symbols.stopped, color: theme.MUTED };
+  if (status === "completed" || status === "done") return { glyph: symbols.check, color: theme.SUCCESS };
+  if (status === "running" || status === "working") {
+    // The animated quarter-block ring is motion-gated and single-cell; the
+    // static fallback (no frame) follows the preset's "running" glyph.
+    return { glyph: animationFrame === undefined ? symbols.running : "▖▘▝▗"[animationFrame % 4], color: theme.ACCENT };
   }
   // Parked: finished its task but still alive, ready to be revived.
-  if (status === "parked") return { glyph: "◌", color: theme.MUTED };
-  // queued / idle / done / stale → static muted dot, no animation.
-  return { glyph: "·", color: theme.MUTED };
+  if (status === "parked") return { glyph: symbols.parked, color: theme.MUTED };
+  return { glyph: symbols.queued, color: theme.MUTED };
+}
+
+/**
+ * The status word as it is shown in the trailing badge: the producer's own
+ * status, lowercased with underscores opened out ("in_progress" reads
+ * "in progress"). Nothing is inferred or prettified beyond that — an unknown
+ * status word is shown as the producer wrote it rather than remapped to a
+ * status we would prefer it to be.
+ */
+export function agentStatusLabel(status: string): string {
+  return String(status ?? "").toLowerCase().replace(/_/g, " ").trim();
+}
+
+/**
+ * The one-line description beside/below the name: the agent's assigned role and
+ * task, plus — only while it is genuinely active — what it is doing right now.
+ * Every part is omitted when the producer did not supply it; nothing is
+ * substituted. `compact` drops the "Latest activity" wording for the narrow
+ * sidebar column, where the words would cost more cells than the value.
+ */
+export function agentTaskLabel(view: AgentRowView, compact: boolean): string {
+  const isActive = view.status === "running" || view.status === "working";
+  const activity = isActive && view.activity
+    ? (compact ? `now ${view.activity}` : `Latest activity: ${view.activity}`)
+    : undefined;
+  return [view.role, view.task, activity].filter(Boolean).join(" · ");
 }
 
 /**
@@ -106,13 +126,15 @@ export function AgentTreeRow({
   isLast: boolean;
   onSelect?: () => void;
 }) {
+  const symbols = useSymbols();
   const { MUTED, ACCENT, PANEL_ALT } = theme;
-  const mark = statusMark(view.status, theme, view.animationFrame);
+  const mark = statusMark(view.status, theme, symbols, view.animationFrame);
   const bg = selected ? PANEL_ALT : undefined;
-  const meta = view.meta ?? "";
-  // Bound meta to at most 30% of row width so the name column is never eaten.
-  const maxMeta = Math.max(0, Math.floor(width * 0.3));
-  const metaCells = Math.min(meta.length, maxMeta);
+  const meta = agentStatusLabel(view.status);
+  // The status badge is budgeted by the SAME arithmetic as the FINDINGS
+  // severity badge, so the two sections keep one trailing-badge rhythm; the
+  // inline row additionally caps it at 30% so the wide row keeps its task.
+  const metaCells = Math.min(sidebarBadgeCells(meta, width), Math.max(0, Math.floor(width * 0.3)));
   // connector(2) + gap(1) + bullet(1) + gap(1) + [name + task] + [gap + meta].
   const reserved = 2 + 1 + 1 + 1 + (metaCells > 0 ? metaCells + 1 : 0);
   const bodyWidth = Math.max(1, width - reserved);
@@ -121,36 +143,34 @@ export function AgentTreeRow({
   const connector = selected ? "▸ " : isLast ? "└─" : "├─";
   const nameFg = view.accent ?? ACCENT;
 
-  // Build task label: append activity only when the agent is actively working.
-  // Completed/failed/parked keep the activity field out of the task display so
-  // an old tool is never presented as current work.
-  const isActive = view.status === "running" || view.status === "queued" || view.status === "working" || view.status === "idle";
-  const taskLabel = isActive && view.activity
-    ? `${view.activity} · ${view.task}`
-    : view.task;
+  const taskLabel = agentTaskLabel(view, false);
+  // Colour carries the same meaning here as in FINDINGS: the status word wears
+  // its own tone (red only for a real failure), never a decorative one.
+  const metaFg = selected ? MUTED : mark.color;
 
   return (
     <box
       flexDirection="row"
       width={width}
+      height={1}
       flexShrink={0}
       minWidth={0}
       backgroundColor={bg}
       onMouseDown={onSelect ? (() => onSelect()) : undefined}
     >
-      <text width={2} flexShrink={0} fg={selected ? ACCENT : MUTED} bg={bg}>{connector}</text>
-      <text width={1} flexShrink={0} marginLeft={1} fg={mark.color} bg={bg}>{mark.glyph}</text>
-      <box width={nameCells} flexShrink={0} minWidth={0} marginLeft={1} backgroundColor={bg}>
+      <text width={2} height={1} flexShrink={0} wrapMode="none" truncate fg={selected ? ACCENT : MUTED} bg={bg}>{connector}</text>
+      <text width={1} height={1} flexShrink={0} marginLeft={1} wrapMode="none" truncate fg={mark.color} bg={bg}>{mark.glyph}</text>
+      <box width={nameCells} height={1} flexShrink={0} minWidth={0} marginLeft={1} backgroundColor={bg}>
         <text width={nameCells} height={1} wrapMode="none" truncate fg={nameFg} attributes={TextAttributes.BOLD} bg={bg}>{fitTuiText(view.name, nameCells)}</text>
       </box>
       {taskCells > 0 ? (
-        <box width={taskCells} flexShrink={0} minWidth={0} backgroundColor={bg}>
-          <text width={taskCells} height={1} wrapMode="none" truncate fg={MUTED} bg={bg}>{fitTuiText(`: ${taskLabel}`, taskCells)}</text>
+        <box width={taskCells} height={1} flexShrink={0} minWidth={0} backgroundColor={bg}>
+          <text width={taskCells} height={1} wrapMode="none" truncate fg={MUTED} bg={bg}>{fitTuiText(taskLabel ? `: ${taskLabel}` : "", taskCells)}</text>
         </box>
       ) : null}
       {metaCells > 0 ? (
-        <box width={metaCells} flexShrink={0} minWidth={0} marginLeft={1} backgroundColor={bg}>
-          <text width={metaCells} height={1} wrapMode="none" truncate fg={MUTED} bg={bg}>{fitTuiText(meta, metaCells)}</text>
+        <box width={metaCells} height={1} flexShrink={0} minWidth={0} marginLeft={1} backgroundColor={bg}>
+          <text width={metaCells} height={1} wrapMode="none" truncate fg={metaFg} bg={bg}>{fitTuiText(meta, metaCells)}</text>
         </box>
       ) : null}
     </box>
@@ -179,46 +199,43 @@ export function AgentSidebarRow({
   selected: boolean;
   onSelect?: () => void;
 }) {
+  const symbols = useSymbols();
   const { MUTED, ACCENT, PANEL_ALT } = theme;
-  const mark = statusMark(view.status, theme, view.animationFrame);
+  const mark = statusMark(view.status, theme, symbols, view.animationFrame);
   const bg = selected ? PANEL_ALT : undefined;
-  const meta = view.meta ?? "";
-  // Bound meta to at most 30% of row width so the name column is never eaten.
-  const maxMeta = Math.max(0, Math.floor(width * 0.3));
-  const metaCells = Math.min(meta.length, maxMeta);
+  const meta = agentStatusLabel(view.status);
+  // Share the findings badge budget, keeping both sidebar sections aligned.
+  const metaCells = sidebarBadgeCells(meta, width);
   const nameCells = Math.max(1, width - 2 - (metaCells > 0 ? metaCells + 1 : 0));
   const taskCells = Math.max(1, width - 2);
   const nameFg = view.accent ?? ACCENT;
+  const metaFg = selected ? MUTED : mark.color;
 
-  // Build task label: only show activity for actively-working statuses so a
-  // completed/failed/parked agent's old tool is never presented as current work.
-  const isActive = view.status === "running" || view.status === "queued" || view.status === "working" || view.status === "idle";
-  const taskLabel = isActive && view.activity
-    ? `${view.activity} · ${view.task}`
-    : view.task;
+  const taskLabel = agentTaskLabel(view, true);
 
   return (
     <box
       flexDirection="column"
       width={width}
+      height={AGENT_SIDEBAR_ROWS}
       flexShrink={0}
       minWidth={0}
       backgroundColor={bg}
       onMouseDown={onSelect ? (() => onSelect()) : undefined}
     >
-      <box flexDirection="row" width={width} flexShrink={0} minWidth={0}>
-        <text width={1} flexShrink={0} fg={selected ? ACCENT : mark.color} bg={bg}>{selected ? "▸" : mark.glyph}</text>
-        <box width={nameCells} flexShrink={0} minWidth={0} marginLeft={1} backgroundColor={bg}>
+      <box flexDirection="row" width={width} height={1} flexShrink={0} minWidth={0}>
+        <text width={1} height={1} flexShrink={0} wrapMode="none" truncate fg={mark.color} bg={bg}>{mark.glyph}</text>
+        <box width={nameCells} height={1} flexShrink={0} minWidth={0} marginLeft={1} backgroundColor={bg}>
           <text width={nameCells} height={1} wrapMode="none" truncate fg={nameFg} attributes={TextAttributes.BOLD} bg={bg}>{fitTuiText(view.name, nameCells)}</text>
         </box>
         {metaCells > 0 ? (
-          <box width={metaCells} flexShrink={0} minWidth={0} marginLeft={1} backgroundColor={bg}>
-            <text width={metaCells} height={1} wrapMode="none" truncate fg={MUTED} bg={bg}>{fitTuiText(meta, metaCells)}</text>
+          <box width={metaCells} height={1} flexShrink={0} minWidth={0} marginLeft={1} backgroundColor={bg}>
+            <text width={metaCells} height={1} wrapMode="none" truncate fg={metaFg} bg={bg}>{fitTuiText(meta, metaCells)}</text>
           </box>
         ) : null}
       </box>
-      <box flexDirection="row" width={width} flexShrink={0} minWidth={0}>
-        <box width={taskCells} flexShrink={0} minWidth={0} marginLeft={2} backgroundColor={bg}>
+      <box flexDirection="row" width={width} height={1} flexShrink={0} minWidth={0}>
+        <box width={taskCells} height={1} flexShrink={0} minWidth={0} marginLeft={2} backgroundColor={bg}>
           <text width={taskCells} height={1} wrapMode="none" truncate fg={MUTED} bg={bg}>{fitTuiText(taskLabel, taskCells)}</text>
         </box>
       </box>

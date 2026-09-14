@@ -28,12 +28,18 @@
 
 import { MODEL_PRICING, type ModelRates, type TokenUsageForPricing } from "@0sec/shared";
 
+import { getSymbols, type SymbolTable } from "./symbols.js";
 import { fitTuiText } from "./text.js";
+
+/** Module-default table (Unicode) for callers that pass no `symbols`. */
+const DEFAULT_SYMBOLS = getSymbols("unicode");
 
 export type StatusSegmentKind =
   | "model"
   | "effort"
   | "mode"
+  | "elapsed"
+  | "activity"
   | "evolution"
   | "cwd"
   | "branch"
@@ -62,6 +68,8 @@ export type StatusColorRole =
   | "model"
   | "effort"
   | "mode"
+  | "elapsed"
+  | "activity"
   | "evolution"
   | "cwd"
   | "branch"
@@ -96,6 +104,17 @@ export interface StatusBarInput {
   effort?: string;
   /** Autonomy mode label already humanized, e.g. "Standard". */
   mode?: string;
+  /** Wall-clock elapsed for the active turn; omitted while idle or unknown. */
+  turnElapsedMs?: number;
+  /**
+   * A live "what it's doing" one-liner, already composed by the caller from the
+   * TRUTHFUL in-flight source — the active tool name and its argument preview
+   * (`runningTool` + `runningEntry.toolArgs` in chat-screen). This module never
+   * invents it: no summarizer is wired into the TUI, so an absent activity means
+   * "nothing running", not "unknown". Omitted while idle. The caller owns any
+   * pre-truncation (the fitters still clamp it to the row width regardless).
+   */
+  activity?: string;
   cwd?: string;
   /** TUI-owned self-evolution state; omitted when the watcher is disabled. */
   evolution?: string;
@@ -141,18 +160,21 @@ export interface StatusBarInput {
   showCost?: boolean;
   /** Already formatted authoritative Cloud account state, never a quota estimate. */
   hostedBalance?: string;
+  /**
+   * Active glyph preset. Resolved by the screen via `useSymbols()` and threaded
+   * through; absent, the width-safe Unicode default is used, so the bar is
+   * unchanged until the caller wires it.
+   */
+  symbols?: SymbolTable;
 }
 
 /**
  * Drop order, lowest first. 0 is reserved for "never drop".
  *
- * The ranking answers one question: at 40 columns, what is still worth a
- * cell? The model and the autonomy mode are the two facts that change what
- * happens when the user presses enter, so they survive longest — mode
- * especially, because not knowing you are in an auto-approving mode is a
- * safety problem, not an inconvenience. The identity of the model is the
- * single thing the bar exists to show, so it alone is undroppable and is
- * truncated instead.
+ * The permission mode is the last surviving fact: this bar is its only
+ * persistent indicator. When no mode is supplied, the model remains the
+ * undroppable fallback. Exactly one segment is undroppable so the fitting
+ * functions can truncate it safely on narrow terminals.
  *
  * At the other end, the cwd is the cheapest thing to lose: it is the
  * longest segment by far and the user's terminal title, shell prompt and
@@ -175,14 +197,29 @@ const PRIORITY: Record<StatusSegmentKind, number> = {
   context: 6,
   meter: 6,
   branch: 7,
-  mode: 8,
+  mode: 0,
+  elapsed: 11,
+  // The live activity line is the most incidental pill: it is a transient
+  // "what it's doing" that the spinner line already echoes, so it sheds before
+  // anything the operator relies on to read (cwd, git, tokens, mode).
+  activity: 2,
   evolution: 8,
   cloud: 9,
   model: 0,
 };
 
-/** Segment order on screen, independent of drop priority. */
+/**
+ * Segment order on screen, independent of drop priority.
+ *
+ * `elapsed` leads so its pill lands immediately after the bottom-left spinner
+ * icon (`loadingLabel`, drawn before every pill by the renderer) — a compact,
+ * clock-glyphed turn timer right next to the working indicator. `activity`
+ * trails so the live "what it's doing" line reads as the rightmost pill,
+ * matching OMP's "live text lives at the right end" geometry within our
+ * single left-anchored row (a true flush-right cluster is a renderer change).
+ */
 const ORDER: StatusSegmentKind[] = [
+  "elapsed",
   "model",
   "effort",
   "mode",
@@ -196,33 +233,45 @@ const ORDER: StatusSegmentKind[] = [
   "context",
   "meter",
   "plan",
+  "activity",
 ];
 
 /**
- * OMP-style Nerd Font BMP glyphs. Their width is included in the status-row
- * budget alongside the label.
+ * Text glyphs that retain their labels and require no patched icon font. Their
+ * width is included in the status-row budget alongside the label.
  */
-const ICON: Record<StatusSegmentKind, string> = {
-  model: "\uec19",
-  effort: "\uee9c",
-  mode: "\uf14e",
-  evolution: "",
-  cwd: "\uf115",
-  branch: "\uf126",
-  dirty: "±",
-  tokens: "\ue26b",
-  cost: "\uf155",
-  cloud: "",
-  context: "\ue70f",
-  meter: "\ue70f",
-  plan: "\uf2d2",
-};
+function iconMap(symbols: SymbolTable): Record<StatusSegmentKind, string> {
+  return {
+    model: symbols.fieldModel,
+    effort: symbols.fieldEffort,
+    mode: symbols.fieldMode,
+    // A single-cell clock glyph so the timer reads as its own pill next to the
+    // spinner. Hard-coded rather than symbol-preset-driven: the symbol table has
+    // no time/clock field, and this module may not edit it. One BMP code point,
+    // matching the module's "cell width == UTF-16 length" rule.
+    elapsed: "◷",
+    // Small forward triangle marking the live "what it's doing" line.
+    activity: "▸",
+    evolution: "",
+    cwd: symbols.fieldCwd,
+    branch: symbols.fieldBranch,
+    dirty: symbols.fieldDirty,
+    tokens: symbols.fieldTokens,
+    cost: symbols.fieldCost,
+    cloud: "",
+    context: symbols.fieldContext,
+    meter: symbols.fieldContext,
+    plan: symbols.fieldPlan,
+  };
+}
 
 /** Semantic colour role per kind; the meter shares the plain percent's role. */
 const COLOR_ROLE: Record<StatusSegmentKind, StatusColorRole> = {
   model: "model",
   effort: "effort",
   mode: "mode",
+  elapsed: "elapsed",
+  activity: "activity",
   evolution: "evolution",
   cwd: "cwd",
   branch: "branch",
@@ -295,8 +344,6 @@ function label(value: string | null | undefined): string {
 
 /** Cells in the visual context bar; matches the `▰▰▰▱▱▱` reference width. */
 const METER_CELLS = 6;
-const METER_FILLED = "▰";
-const METER_EMPTY = "▱";
 
 /**
  * A compact unicode usage bar plus the percent and window, e.g.
@@ -304,10 +351,10 @@ const METER_EMPTY = "▱";
  * artefact can never paint a seventh cell or a negative one. The renderer picks
  * the colour off the `meter` segment kind, matching the existing pattern.
  */
-function contextMeter(percent: number, contextWindow: number): string {
+function contextMeter(percent: number, contextWindow: number, symbols: SymbolTable): string {
   const fraction = Math.max(0, Math.min(1, percent / 100));
   const filled = Math.max(0, Math.min(METER_CELLS, Math.round(fraction * METER_CELLS)));
-  const bar = METER_FILLED.repeat(filled) + METER_EMPTY.repeat(METER_CELLS - filled);
+  const bar = symbols.meterFilled.repeat(filled) + symbols.meterEmpty.repeat(METER_CELLS - filled);
   return `${bar} ${percent}% of ${formatTokenCount(contextWindow)}`;
 }
 
@@ -386,6 +433,8 @@ function dirtyText(modified: number, untracked: number): string {
  * from a bar reporting the truth, which makes the whole line untrustworthy.
  */
 export function buildStatusSegments(input: StatusBarInput): StatusSegment[] {
+  const symbols = input.symbols ?? DEFAULT_SYMBOLS;
+  const ICON = iconMap(symbols);
   const texts = new Map<StatusSegmentKind, string>();
   if (input.hostedBalance) texts.set("cloud", input.hostedBalance);
 
@@ -401,6 +450,21 @@ export function buildStatusSegments(input: StatusBarInput): StatusSegment[] {
 
   const mode = label(input.mode);
   if (mode) texts.set("mode", mode);
+
+  if (typeof input.turnElapsedMs === "number" && Number.isFinite(input.turnElapsedMs) && input.turnElapsedMs >= 0) {
+    const seconds = Math.floor(input.turnElapsedMs / 1000);
+    const elapsed = seconds < 60 ? `${seconds}s`
+      : seconds < 3600 ? `${Math.floor(seconds / 60)}m`
+      : `${Math.floor(seconds / 3600)}h`;
+    // Time only — the clock glyph carries the "elapsed" meaning, so no "running
+    // for " prefix: "4s" / "3m" / "1h", compact, sitting next to the spinner.
+    texts.set("elapsed", elapsed);
+  }
+
+  // The live "what it's doing" line: a caller-composed one-liner from the active
+  // tool. Never invented here — an absent value emits no segment.
+  const activity = label(input.activity);
+  if (activity) texts.set("activity", activity);
 
   const evolution = label(input.evolution);
   if (evolution) texts.set("evolution", evolution);
@@ -457,12 +521,23 @@ export function buildStatusSegments(input: StatusBarInput): StatusSegment[] {
     const used = Math.max(0, input.contextUsed as number);
     const percent = roundForDisplay((used / contextWindow) * 100);
     if (input.showContextMeter) {
-      texts.set("meter", `Context: ${contextMeter(percent, contextWindow)}`);
+      texts.set("meter", `Context: ${contextMeter(percent, contextWindow, symbols)}`);
     } else {
       texts.set("context", `${percent}%/${formatTokenCount(contextWindow)}`);
     }
+  } else if (contextWindow > 0 && input.showContextMeter) {
+    // Window known but no turn has reported usage yet (a fresh session). Show
+    // the meter at 0% rather than "unavailable" — the capacity is real and
+    // known even before the first token is spent. (The compact non-meter
+    // percentage still waits for real usage; a bare "0%" there reads as noise.)
+    texts.set("meter", `Context: ${contextMeter(0, contextWindow, symbols)}`);
+  } else if (hasUsage && input.showContextMeter) {
+    // Window unknown (e.g. a model absent from the catalog) but we still know
+    // how many tokens the turn consumed — show that instead of a dead label.
+    const used = Math.max(0, input.contextUsed as number);
+    texts.set("meter", `Context: ${formatTokenCount(used)} used`);
   } else if (input.showContextMeter) {
-    texts.set("meter", "Context: unavailable");
+    texts.set("meter", "Context usage unavailable");
   }
 
   const plan = label(input.plan);
@@ -475,7 +550,7 @@ export function buildStatusSegments(input: StatusBarInput): StatusSegment[] {
       segments.push({
         kind,
         text,
-        priority: PRIORITY[kind],
+        priority: kind === "model" && mode ? 10 : PRIORITY[kind],
         colorRole: COLOR_ROLE[kind],
         icon: ICON[kind],
       });

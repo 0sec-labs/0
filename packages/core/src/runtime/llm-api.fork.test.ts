@@ -64,7 +64,7 @@ describe("isolated child runtimes", () => {
     expect(children[0]!.resolvedModel()).toBe("hosted-pinned");
   });
 
-  it("keeps a child's explicitly configured fallback cursor independent of its parent and sibling", async () => {
+  it("keeps child failures on the parent account while preserving the root's configured fallback", async () => {
     vi.stubEnv("0SEC_LLM_429_MAX_RETRIES", "0");
     const parent = new LlmApiRuntime({ type: "api", provider: "openai", model: "primary", timeout: 1000, env: { ...environment(), OPENAI_API_KEY: "primary-key", OPENAI_BASE_URL: "https://primary.fixture/v1", "0SEC_LLM_FALLBACK": "deepseek:secondary", DEEPSEEK_API_KEY: "secondary-key", DEEPSEEK_BASE_URL: "https://secondary.fixture/v1" } });
     const [first, second] = await Promise.all([parent.forkForSubagent(1000), parent.forkForSubagent(1000)]);
@@ -72,10 +72,117 @@ describe("isolated child runtimes", () => {
       const body = JSON.parse(String(init?.body));
       return body.model === "primary" ? new Response("quota", { status: 429 }) : Response.json({ output_text: "fallback accepted" });
     });
-    expect(await first!.execute("fixture")).toMatchObject({ exitCode: 0, output: "fallback accepted" });
-    expect(first!.resolvedModel()).toBe("secondary");
+    expect(await first!.execute("fixture")).toMatchObject({ exitCode: 1 });
+    expect(first!.resolvedModel()).toBe("primary");
     expect(second!.resolvedModel()).toBe("primary");
     expect(parent.resolvedModel()).toBe("primary");
+    expect(await parent.execute("fixture")).toMatchObject({ exitCode: 0, output: "fallback accepted" });
+    expect(parent.resolvedModel()).toBe("secondary");
+  });
+
+  it("rejects unapproved catalog models and freezes approved role routing to the same hosted account", async () => {
+    const agentModels = { review: "approved" };
+    const parent = new LlmApiRuntime({ type: "api", provider: "hosted", model: "parent", agentModels, timeout: 1000, env: { ...environment(), "0SEC_CLOUD_HOST": "http://127.0.0.1:12345", "0SEC_CLOUD_TOKEN": "operator-account", "0SEC_REASONING_EFFORT": "high" } });
+    agentModels.review = "premium";
+    const submitted: Array<{ url: string; body: Record<string, unknown> }> = [];
+    vi.stubGlobal("fetch", async (input: string | URL | Request, init?: RequestInit) => {
+      const url = String(input);
+      if (new Headers(init?.headers).get("authorization") !== "Bearer operator-account") return new Response(null, { status: 401 });
+      if (url.endsWith("/models")) return Response.json({ data: [
+        { id: "parent", wire_api: "responses", max_output_tokens: 64 },
+        { id: "approved", wire_api: "chat_completions", max_output_tokens: 32 },
+        { id: "premium", wire_api: "responses", max_output_tokens: 128 },
+      ] });
+      const body = JSON.parse(String(init?.body));
+      submitted.push({ url, body });
+      return completion("approved role completed");
+    });
+    await expect(parent.forkForSubagent(1000, { model: "premium" })).rejects.toThrow("not operator-approved");
+    expect(submitted).toEqual([]);
+    vi.stubEnv("0SEC_CLOUD_TOKEN", "unrelated-account");
+    vi.stubEnv("0SEC_CLOUD_HOST", "https://unrelated.fixture");
+    const child = await parent.forkForSubagent(1000, { role: "review" });
+    const result = await child.executeNative("fresh child system", messages, []);
+    expect(result.content).toEqual([{ type: "text", text: "approved role completed" }]);
+    expect(submitted).toEqual([{
+      url: "http://127.0.0.1:12345/api/inference/v1/chat/completions",
+      body: expect.objectContaining({ model: "approved", max_tokens: 32 }),
+    }]);
+    expect(submitted[0]!.body).not.toHaveProperty("reasoning_effort");
+    expect(submitted[0]!.body).not.toHaveProperty("previous_response_id");
+    expect(parent.resolvedModel()).toBe("parent");
+  });
+
+  it("applies approved overrides before role routing, inherits unmapped roles, and forces single-model descendants", async () => {
+    const config = { type: "api" as const, provider: "openai" as const, model: "parent", agentModels: { review: "review-model", work: "work-model" }, timeout: 1000, env: { ...environment(), OPENAI_API_KEY: "same-account", OPENAI_BASE_URL: "https://selection.fixture/v1", OPENAI_WIRE_API: "chat_completions" } };
+    const parent = new LlmApiRuntime(config);
+    const forced = new LlmApiRuntime({ ...config, singleModel: true });
+    vi.stubGlobal("fetch", async (_input: string | URL | Request, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body));
+      return completion(`executed ${body.model}`);
+    });
+    const selected = await parent.forkForSubagent(1000, { role: "review", model: "work-model" });
+    const forcedChild = await forced.forkForSubagent(1000, { role: "review", model: "unapproved" });
+    const children = [
+      selected,
+      await parent.forkForSubagent(1000, { role: "unknown" }),
+      await parent.forkForSubagent(1000, { role: "toString" }),
+      forcedChild,
+      await selected.forkForSubagent(1000, { role: "review" }),
+      await forcedChild.forkForSubagent(1000, { role: "work" }),
+    ];
+    const results = await Promise.all(children.map(child => child.executeNative("system", messages, [])));
+    expect(results.map(result => result.content)).toEqual([
+      [{ type: "text", text: "executed work-model" }],
+      [{ type: "text", text: "executed parent" }],
+      [{ type: "text", text: "executed parent" }],
+      [{ type: "text", text: "executed parent" }],
+      [{ type: "text", text: "executed review-model" }],
+      [{ type: "text", text: "executed parent" }],
+    ]);
+  });
+
+  it("rejects an approved hosted model missing from the canonical catalog without substitution", async () => {
+    const parent = new LlmApiRuntime({ type: "api", provider: "hosted", model: "parent", agentModels: { review: "removed" }, timeout: 1000, env: { ...environment(), "0SEC_CLOUD_HOST": "http://127.0.0.1:12345", "0SEC_CLOUD_TOKEN": "same-account" } });
+    let inferenceRequests = 0;
+    vi.stubGlobal("fetch", async (input: string | URL | Request) => {
+      if (String(input).endsWith("/models")) return Response.json({ data: [{ id: "parent", wire_api: "chat_completions", max_output_tokens: 64 }] });
+      inferenceRequests++;
+      return completion("must not execute");
+    });
+    await expect(parent.forkForSubagent(1000, { role: "review" })).rejects.toThrow('Hosted model "removed" is unavailable');
+    expect(inferenceRequests).toBe(0);
+    expect(parent.resolvedModel()).toBe("parent");
+  });
+
+  it("reselects the child wire without changing the pinned provider or the parent's model", async () => {
+    const parent = new LlmApiRuntime({
+      type: "api", provider: "azure", model: "gpt-5.6-sol", timeout: 1000,
+      agentModels: { review: "azure-chat" },
+      env: { ...environment(), AZURE_OPENAI_API_KEY: "azure-account", AZURE_OPENAI_BASE_URL: "https://azure.fixture/openai/v1", AZURE_OPENAI_WIRE_API: "chat_completions", OPENAI_API_KEY: "unrelated-account" },
+    });
+    vi.stubGlobal("fetch", async (input: string | URL | Request, init?: RequestInit) => {
+      const url = String(input);
+      if (new Headers(init?.headers).get("api-key") !== "azure-account") return new Response(null, { status: 401 });
+      const body = JSON.parse(String(init?.body));
+      if (url === "https://azure.fixture/openai/v1/chat/completions" && body.model === "azure-chat") return completion("child chat accepted");
+      if (url === "https://azure.fixture/openai/v1/responses" && body.model === "gpt-5.6-sol") {
+        const events = [
+          { type: "response.output_text.delta", delta: "parent responses accepted" },
+          { type: "response.completed", response: {
+            output: [{ type: "message", content: [{ type: "output_text", text: "parent responses accepted" }] }],
+            usage: { input_tokens: 1, output_tokens: 1 },
+          } },
+        ];
+        return new Response(events.map(event => `data: ${JSON.stringify(event)}\n\n`).join(""), {
+          headers: { "content-type": "text/event-stream" },
+        });
+      }
+      return new Response(null, { status: 400 });
+    });
+    const child = await parent.forkForSubagent(1000, { role: "review" });
+    expect(await child.executeNative("system", messages, [])).toMatchObject({ content: [{ type: "text", text: "child chat accepted" }] });
+    expect(await parent.executeNative("system", messages, [])).toMatchObject({ content: [{ type: "text", text: "parent responses accepted" }] });
   });
 
   it("cannot extend the parent request timeout", async () => {

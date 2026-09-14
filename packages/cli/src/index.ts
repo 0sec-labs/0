@@ -117,6 +117,7 @@ import {
   registerThemeCommand,
   registerEvolveCommand,
   registerConfigCommand,
+  registerHackstoreCommand,
 } from "./commands/index.js";
 import { detectAndRoute } from "./routing.js";
 import { runStartupUpdate } from "./utils/update-check.js";
@@ -191,6 +192,7 @@ registerPluginCommand(program);
 registerThemeCommand(program);
 registerEvolveCommand(program);
 registerConfigCommand(program);
+registerHackstoreCommand(program);
 
 
 // ── Interactive menu ──
@@ -224,7 +226,7 @@ async function showInteractiveMenu(): Promise<void> {
 
 // ── Entry point ──
 const userArgs = process.argv.slice(2);
-const knownCommands = ["scan", "resume", "replay", "history", "findings", "review", "fix", "file-review", "audit", "doctor", "dashboard", "tui", "watch", "orchestrate", "db", "mcp-server", "eval", "bench", "ingest", "kernel", "disclose", "verify", "exploit", "hunt", "recency-hunt", "deep-review", "lens-synth", "memsafety", "assumption-hunt", "specdrift", "protocol-check", "cve", "upgrade", "h1", "auth", "login", "models", "balance", "intel", "recon", "js-recon", "npm-discovery", "identity", "adgraph", "entragraph", "cloud", "xnu-fuzz", "research", "timeline", "console", "agent-assure", "binary", "plugin", "theme", "config", "evolve", "help"];
+const knownCommands = ["scan", "resume", "replay", "history", "findings", "review", "fix", "file-review", "audit", "doctor", "dashboard", "tui", "watch", "orchestrate", "db", "mcp-server", "eval", "bench", "ingest", "kernel", "disclose", "verify", "exploit", "hunt", "recency-hunt", "deep-review", "lens-synth", "memsafety", "assumption-hunt", "specdrift", "protocol-check", "cve", "upgrade", "h1", "auth", "login", "models", "balance", "intel", "recon", "js-recon", "npm-discovery", "identity", "adgraph", "entragraph", "cloud", "xnu-fuzz", "research", "timeline", "console", "agent-assure", "binary", "plugin", "theme", "config", "evolve", "hackstore", "hack", "store", "help"];
 
 if (userArgs.length === 0) {
   showInteractiveMenu().catch((err) => {

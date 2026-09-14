@@ -1,11 +1,16 @@
 /** @jsxImportSource @opentui/react */
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { useKeyboard, usePaste, useTerminalDimensions } from "@opentui/react";
+import { useKeyboard, usePaste } from "@opentui/react";
 import { decodePasteBytes } from "@opentui/core";
 import type { ScrollBoxRenderable } from "@opentui/core";
 import type { HarnessSetting, HarnessView, HarnessViewBlock } from "@0sec/shared";
 import { useHarness } from "./harness-context.js";
 import { useTheme } from "./theme-context.js";
+import { useSymbols } from "./symbol-context.js";
+import { useDialogSurface, useSurfaceDimensions } from "./dialog-surface.js";
+import { operatorIcon, operatorTitle } from "./operator-icons.js";
+import { Cells } from "./primitives.js";
+import { paneTitleColumns } from "./pane-layout.js";
 import { DialogSelectBody } from "./dialog-select.js";
 import type { DialogItem } from "./dialog-select.js";
 import { computeDialogPanel } from "./dialog-select-layout.js";
@@ -31,22 +36,36 @@ function ViewBlocks({ blocks, width }: { blocks: HarnessViewBlock[]; width: numb
         : block.tone === "success" ? theme.SUCCESS : block.tone === "muted" ? theme.MUTED : theme.TEXT;
       return <text key={index} fg={color} wrapMode="word">{sanitizeTuiText(block.text)}</text>;
     }
-    if (block.type === "progress") return <text key={index} wrapMode="word">{`${block.label}: ${block.value} / ${block.max}`}</text>;
+    if (block.type === "progress") return <text key={index} fg={theme.TEXT} wrapMode="word">{`${block.label}: ${block.value} / ${block.max}`}</text>;
     if (block.type === "action") return <text key={index} fg={theme.MUTED} wrapMode="word">{`${block.label} — select its action in the picker to stage a draft`}</text>;
     // Stack cells on narrow terminals rather than truncating data or overflowing.
     return <box key={index} flexDirection="column" width="100%">
       {block.rows.map((row, rowIndex) => <box key={rowIndex} flexDirection="column" marginBottom={1}>
-        {block.columns.map((column, columnIndex) => <text key={columnIndex} wrapMode="word">{`${column}: ${row[columnIndex] ?? ""}`}</text>)}
+        {block.columns.map((column, columnIndex) => <text key={columnIndex} fg={theme.TEXT} wrapMode="word">{`${column}: ${row[columnIndex] ?? ""}`}</text>)}
       </box>)}
     </box>;
   })}</>;
 }
 
-/** One contextual picker over the host catalog; it never executes contributed source. */
+/**
+ * One contextual picker over the host catalog; it never executes contributed
+ * source.
+ *
+ * Presented as a dialog body: an icon+title row, the shared grouped/searchable
+ * `DialogSelectBody` (grouped by contributing provider), a detail column for
+ * the highlighted contribution when the surface is wide enough, and a footer
+ * of action hints. Every width comes off the surface the host gave it — the
+ * supplied `contentWidth` is clamped to the surface so a panel sized against
+ * the terminal can never paint through a narrower dialog panel.
+ */
 export function HarnessViewPanel({ contentWidth, onBack }: { contentWidth: number; onBack: () => void }) {
   const harness = useHarness();
   const theme = useTheme();
-  const { height } = useTerminalDimensions();
+  const symbols = useSymbols();
+  const surface = useSurfaceDimensions();
+  const inDialog = useDialogSurface();
+  const height = surface.height;
+  const innerWidth = Math.max(1, Math.min(Math.trunc(contentWidth) || 1, surface.width));
   const generationId = harness.snapshot?.generationId;
   const [query, setQuery] = useState("");
   const [cursor, setCursor] = useState(0);
@@ -123,16 +142,55 @@ export function HarnessViewPanel({ contentWidth, onBack }: { contentWidth: numbe
     else if (!key.ctrl && !key.meta && isFilterKey(sequence)) { setQuery(previous => previous + sanitizeComposerText(sequence)); setCursor(0); }
   });
   const totalRows = items.reduce((count, item, index) => count + 1 + (index === 0 || items[index - 1]?.category !== item.category ? 1 : 0), 0);
-  const panel = computeDialogPanel({ width: contentWidth, height, size: "large", totalRows, withDetail: true, bodyRows: Math.max(1, height - 10) });
+  // Rows this panel spends on itself: its title row, its footer hint, and the
+  // error line when the harness has one. Inside a dialog that is the whole
+  // cost — the host reserves NOTHING for this screen (`ShellFrame` renders
+  // with `dialogContent`: no outer header, no padding, and the surface is the
+  // panel interior). Outside a dialog the legacy shell header and padding
+  // still apply, so their rows come off as they always did.
+  const OWN_ROWS = 2 + (harness.error ? 1 : 0);
+  const LEGACY_SHELL_ROWS = 9;
+  const bodyRows = Math.max(1, height - OWN_ROWS - (inDialog ? 0 : LEGACY_SHELL_ROWS));
+  const panel = computeDialogPanel({ width: innerWidth, height, size: "large", totalRows, withDetail: true, bodyRows });
+  // Title row: glyph + label on the left, an honest count of what the live
+  // harness actually contributes on the right. Never a fabricated provider.
+  const title = `${operatorIcon("commands", symbols)} ${operatorTitle("commands")}`;
+  const meta = items.length === rows.length
+    ? `${rows.length} contribution${rows.length === 1 ? "" : "s"}`
+    : `${items.length}/${rows.length}`;
+  const titleCols = paneTitleColumns(innerWidth, meta.length);
   return <box flexDirection="column" width="100%" flexGrow={1} minHeight={0}>
+    <box flexDirection="row" width={innerWidth} flexShrink={0} minWidth={0}>
+      <Cells width={titleCols.titleWidth} fg={theme.PRIMARY}>{title}</Cells>
+      <Cells width={titleCols.gap}>{""}</Cells>
+      <Cells width={titleCols.metaWidth} align="right" fg={theme.MUTED}>{meta}</Cells>
+    </box>
     {harness.error ? <text fg={theme.ERROR} wrapMode="word">{harness.error}</text> : null}
     {edit ? <>
-      <text wrapMode="word">{edit.row.label}</text>
+      <text fg={theme.TEXT} wrapMode="word">{edit.row.label}</text>
       <text fg={theme.ACCENT} wrapMode="word">{edit.value || " "}</text>
       <text fg={theme.MUTED}>Enter save · Esc cancel · Ctrl+U clear</text>
     </> : document?.kind === "view" ? <>
       <text fg={theme.PRIMARY} wrapMode="word">{document.label}</text>
-      <scrollbox ref={scroll} flexGrow={1} minHeight={0}><ViewBlocks blocks={document.view.blocks} width={contentWidth} /></scrollbox>
+      {/* The scrollbar occupies the last column, so the blocks below are
+          budgeted one cell narrower. Without that, word-wrapped block text runs
+          under the bar — invisible while the bar was unthemed, plainly wrong
+          now that it is painted. */}
+      <scrollbox
+        ref={scroll}
+        flexGrow={1}
+        minHeight={0}
+        verticalScrollbarOptions={{
+          trackOptions: {
+            backgroundColor: theme.PANEL,
+            foregroundColor: theme.MUTED,
+          },
+          arrowOptions: {
+            foregroundColor: theme.MUTED,
+            backgroundColor: theme.PANEL,
+          },
+        }}
+      ><ViewBlocks blocks={document.view.blocks} width={Math.max(1, innerWidth - 1)} /></scrollbox>
       <text fg={theme.MUTED}>↑↓ / PgUp/PgDn scroll · Esc picker</text>
     </> : <>
       <DialogSelectBody items={items} cursor={Math.max(0, Math.min(cursor, items.length - 1))} panel={panel}
@@ -143,7 +201,7 @@ export function HarnessViewPanel({ contentWidth, onBack }: { contentWidth: numbe
             : row?.kind === "command" ? row.description ?? "Run this contributed command. Returned prompts stage for review."
             : row?.kind === "setting" ? `${row.setting.description ?? row.label}\nCurrent: ${String(row.setting.value)}`
             : "Enter opens this view. Escape returns without changing the conversation.";
-          return <text wrapMode="word">{detail}</text>;
+          return <text fg={theme.TEXT} wrapMode="word">{detail}</text>;
         }} />
       <text fg={theme.MUTED} wrapMode="word">↑↓ choose · Enter open/change · type to find · Esc back</text>
     </>}

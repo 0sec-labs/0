@@ -16,6 +16,20 @@
 /** The lifecycle phase of a toast at a given instant. */
 export type ToastPhase = "hidden" | "enter" | "hold" | "exit";
 
+/**
+ * What kind of thing the toast is reporting. PRESENTATION ONLY — it changes the
+ * pill's colour and glyph in `toast.tsx` and nothing about the envelope, the
+ * timing or the queue.
+ *
+ * It is deliberately OPTIONAL and has no default: a caller that does not say
+ * what happened gets the neutral pill, not a green one. Claiming "success" for
+ * a message that never claimed it is exactly the kind of invented status the
+ * rest of this TUI refuses to render, and a failure that arrives dressed as a
+ * neutral notice is worse still — so `error` is something a caller opts into,
+ * never something inferred from the message text.
+ */
+export type ToastTone = "info" | "success" | "warning" | "error";
+
 /** Durations, in milliseconds, of the three envelope phases. */
 export interface ToastEnvelope {
   /** Fade/scale-in ramp. */
@@ -71,6 +85,8 @@ export interface ToastShow {
   message: string;
   /** Time (ms) the toast was shown, on the same clock passed to the readers. */
   shownAt: number;
+  /** Presentation tone; absent when the caller did not state one. */
+  tone?: ToastTone;
 }
 
 /** The renderable state of a toast at an instant. */
@@ -86,6 +102,8 @@ export interface ToastFrame {
   progress: number;
   /** Convenience: `phase !== "hidden"`. When false, render nothing. */
   visible: boolean;
+  /** The tone the caller stated, carried through verbatim; absent if none. */
+  tone?: ToastTone;
 }
 
 const HIDDEN_FRAME: ToastFrame = {
@@ -122,8 +140,8 @@ export function toastDurationMs(config: ToastConfig = {}): number {
  * below consume. `message` is coerced to a string; rendering-time sanitation
  * (control chars, width) is the component's job.
  */
-export function showToast(message: unknown, now: number): ToastShow {
-  return { message: String(message ?? ""), shownAt: coerceMs(now) };
+export function showToast(message: unknown, now: number, tone?: ToastTone): ToastShow {
+  return { message: String(message ?? ""), shownAt: coerceMs(now), tone };
 }
 
 /** True once the toast's full envelope has elapsed and it should be dropped. */
@@ -157,7 +175,7 @@ export function toastFrameAt(
   const holdEnd = enterEnd + env.holdMs;
   const exitEnd = holdEnd + env.exitMs;
 
-  if (elapsed >= exitEnd) return { ...HIDDEN_FRAME, message: show.message };
+  if (elapsed >= exitEnd) return { ...HIDDEN_FRAME, message: show.message, tone: show.tone };
 
   if (elapsed < enterEnd) {
     // enterMs > 0 here (elapsed >= 0 and < enterEnd implies enterEnd > 0).
@@ -166,11 +184,12 @@ export function toastFrameAt(
       message: show.message,
       progress: ease(elapsed / env.enterMs),
       visible: true,
+      tone: show.tone,
     };
   }
 
   if (elapsed < holdEnd) {
-    return { phase: "hold", message: show.message, progress: 1, visible: true };
+    return { phase: "hold", message: show.message, progress: 1, visible: true, tone: show.tone };
   }
 
   // exit phase; env.exitMs > 0 here (else exitEnd === holdEnd and we'd be hidden).
@@ -180,5 +199,6 @@ export function toastFrameAt(
     message: show.message,
     progress: ease(1 - exitProgress),
     visible: true,
+    tone: show.tone,
   };
 }

@@ -1,6 +1,11 @@
 /**
- * Layout, navigation and windowing arithmetic for the full-screen settings
- * surface.
+ * Layout, navigation and windowing arithmetic for the settings dialog.
+ *
+ * The settings surface is a pop-up dialog now, not a full-screen route: the
+ * host wraps it in `DialogSurface`, `useSurfaceDimensions` reports the panel's
+ * inner box, and the groups that used to be a category rail with one tab
+ * selected at a time are the picker's own category headings, so the whole
+ * table is on screen at once and searchable.
  *
  * Every number the settings screen renders with is computed here, for the
  * reason spelled out in `PRIMITIVES.md`: OpenTUI lays rows out with Yoga, and
@@ -34,6 +39,7 @@ import {
   type TuiSettings,
 } from "./settings.js";
 import { sanitizeTuiText, wrapText } from "./text.js";
+import { computeDialogPanel } from "./dialog-select-layout.js";
 
 // ---------------------------------------------------------------------------
 // Numeric hygiene
@@ -111,6 +117,167 @@ export function shellChromeRows(width: number): number {
   // 1 row of top padding, the header box (two borders + content + margin),
   // and the footer.
   return 1 + (headerContentRows + 3) + footerRows;
+}
+
+// ---------------------------------------------------------------------------
+// Dialog geometry
+// ---------------------------------------------------------------------------
+
+/**
+ * Rows the dialog host spends on its footer, and only its footer.
+ *
+ * The host contract is settled: inside `DialogSurface` the shell renders with
+ * `dialogContent`, which means no outer header, no horizontal padding and no
+ * top padding, so `useSurfaceDimensions()` IS the full panel interior and
+ * nothing of `shellChromeRows` applies. What the host still draws is exactly
+ * one `FooterBar` row, carrying the `hint` the screen hands back through
+ * `frame` — which is also why a screen must NOT draw a hint row of its own.
+ *
+ * Outside a dialog the legacy shell (header, padding, footer) still applies
+ * and `shellChromeRows` is still the right subtraction; every screen gates on
+ * `useDialogSurface()`.
+ */
+export const DIALOG_HOST_FOOTER_ROWS = 1;
+
+/**
+ * Rows the settings route's host spends inside a dialog: the footer, plus the
+ * one clickable "Live harness · ctrl+g" line the route renders above the body.
+ */
+export const SETTINGS_DIALOG_HOST_ROWS = DIALOG_HOST_FOOTER_ROWS + 1;
+
+export interface DialogScreenLayoutOptions {
+  /** Rows the host chrome takes off the surface. Defaults to the full shell. */
+  chromeRows?: number;
+  /** Cells the host chrome takes off the surface width (both sides summed). */
+  chromeColumns?: number;
+}
+
+export interface DialogScreenLayout {
+  /** Cells the dialog body may paint across. */
+  contentWidth: number;
+  /** Cells the list+detail region occupies. Equal to `contentWidth`. */
+  mainWidth: number;
+  /** Rows left after the host chrome. The three row budgets sum to this. */
+  availableRows: number;
+  /** The icon+title row. 0 on a surface too short to afford it. */
+  titleRows: number;
+  /** Rows the picker body (search line, list, detail column) may fill. */
+  bodyRows: number;
+  /** Rows of `bodyRows` the picker itself takes. */
+  listRows: number;
+  /** Rows of `bodyRows` lent to a detail stacked UNDER the list. */
+  stackedRows: number;
+  /** The status/confirm line. */
+  statusRows: number;
+  /** Inline picker geometry for `DialogSelectBody`. */
+  panel: ReturnType<typeof computeDialogPanel>;
+}
+
+/**
+ * The dialog's row and column budget.
+ *
+ * There is no category rail any more: the groups are the picker's own category
+ * headings, so every group is on screen at once and searchable, and the cells
+ * the rail used to take go to the list and its detail column. What remains is
+ * a strict partition — title, body, status — that always sums to the rows the
+ * host left, and a body that splits into a list and a detail column
+ * (or, when the surface is too narrow for two columns, a list with the detail
+ * stacked beneath it).
+ */
+export function computeDialogScreenLayout(
+  width: number,
+  height: number,
+  totalRows: number,
+  options: DialogScreenLayoutOptions = {},
+): DialogScreenLayout {
+  const chromeColumns = cells(options.chromeColumns ?? SHELL_HORIZONTAL_PADDING * 2);
+  const chromeRows = cells(options.chromeRows ?? shellChromeRows(width));
+  const contentWidth = Math.max(0, cells(width) - chromeColumns);
+  const availableRows = Math.max(0, cells(height) - chromeRows);
+  // There is no hint row here: the host draws exactly one footer inside the
+  // dialog from the `hint` the screen returns through `frame`, and a second
+  // would duplicate it. So the partition is title, body and status, and on a
+  // very short surface the title gives way before the status line — the status
+  // line is what carries a failed save.
+  const titleRows = availableRows >= 4 ? 1 : 0;
+  const statusRows = availableRows >= 3 ? 1 : 0;
+  const bodyRows = Math.max(0, availableRows - titleRows - statusRows);
+  const mainWidth = contentWidth;
+  let panel = computeDialogPanel({ width: mainWidth, height, totalRows, withDetail: true, bodyRows });
+  const stackedRows = !panel.showDetail && mainWidth >= 24 && bodyRows >= 7
+    ? Math.min(10, Math.max(3, Math.floor(bodyRows * 0.45))) : 0;
+  const listRows = bodyRows - stackedRows;
+  if (stackedRows) panel = computeDialogPanel({ width: mainWidth, height, totalRows, withDetail: true, bodyRows: listRows });
+  return {
+    contentWidth,
+    mainWidth,
+    availableRows,
+    titleRows,
+    bodyRows,
+    listRows,
+    stackedRows,
+    statusRows,
+    panel,
+  };
+}
+
+/**
+ * The settings dialog's own budget.
+ *
+ * A named alias for `computeDialogScreenLayout`, which every dialog-shaped
+ * screen in this console now shares (the connect dialog reaches it through
+ * `connect-layout.ts`, exactly as it already reaches `shellChromeRows` and
+ * `wrapCells` here). One implementation means one sweep.
+ */
+export function computeSettingsLayout(
+  width: number,
+  height: number,
+  totalRows: number,
+  options: DialogScreenLayoutOptions = {},
+): DialogScreenLayout {
+  return computeDialogScreenLayout(width, height, totalRows, options);
+}
+
+export type SettingsLayoutOptions = DialogScreenLayoutOptions;
+export type SettingsLayout = DialogScreenLayout;
+
+// ---------------------------------------------------------------------------
+// Title row
+// ---------------------------------------------------------------------------
+
+/** A dialog title never shrinks below this; the meta gives way first. */
+const TITLE_MIN_WIDTH = 6;
+
+/** A dialog header split into a left title and a right-aligned meta column. */
+export interface TitleColumns {
+  /** Total cells the header row occupies; equals the body's inner width. */
+  width: number;
+  titleWidth: number;
+  gap: number;
+  /** Right-aligned summary column. 0 when the row cannot spare it. */
+  metaWidth: number;
+}
+
+/**
+ * Splits a dialog header into a left title and a right-aligned meta.
+ *
+ * The title outranks the meta: on a narrow header the meta gives way whole
+ * rather than crushing the title, and the columns always sum to exactly the
+ * width handed in, so the header claims every cell it was given and never one
+ * more. The separator is a real gap, never a padded literal —
+ * `sanitizeTuiText` trims, so a literal space would fuse the two.
+ */
+export function titleColumns(
+  innerWidth: number,
+  metaLength: number,
+  minTitleWidth = TITLE_MIN_WIDTH,
+): TitleColumns {
+  const width = cells(innerWidth);
+  if (width <= 0) return { width: 0, titleWidth: 0, gap: 0, metaWidth: 0 };
+  const wanted = cells(metaLength);
+  const metaWidth = Math.min(wanted, Math.max(0, width - cells(minTitleWidth) - 1));
+  const gap = metaWidth > 0 ? 1 : 0;
+  return { width, titleWidth: Math.max(0, width - metaWidth - gap), gap, metaWidth };
 }
 
 // ---------------------------------------------------------------------------
@@ -458,7 +625,7 @@ export function settingsFooterHint(mode: SettingsMode, hasFilter = false): strin
       return [
         "up/down move",
         "left/right change",
-        "tab group",
+        "tab next group",
         "enter/space change",
         "/ search",
         "r reset",

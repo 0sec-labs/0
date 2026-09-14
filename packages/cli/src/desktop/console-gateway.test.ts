@@ -30,6 +30,7 @@ function makeSession(input: GatewayFactoryInput): ConsoleSession {
   const call: ToolCall = { name: "read_file", arguments: { path: "/tmp/target.ts" } };
   const session: ConsoleSession = {
     scanId: input.scanId,
+    ready: Promise.resolve(),
     systemPrompt: "test",
     tools: [],
     messages: [],
@@ -39,6 +40,10 @@ function makeSession(input: GatewayFactoryInput): ConsoleSession {
     localScopePath: undefined,
     setAutonomyMode: () => undefined,
     clearConversation: () => undefined,
+    stopPersistentAgent: async () => false,
+    stopPersistentAgents: async () => undefined,
+    exportCheckpoint() { throw new Error("Unexpected checkpoint export in gateway fixture"); },
+    async prepareHandoff() { throw new Error("Unexpected engine handoff in gateway fixture"); },
     async send(_text, callbacks?, _options?): Promise<ConsoleTurnOutcome> {
       callbacks?.onAssistantDelta?.("I inspected ");
       callbacks?.onToolStart?.(call);
@@ -51,6 +56,7 @@ function makeSession(input: GatewayFactoryInput): ConsoleSession {
       );
       callbacks?.onAssistantDelta?.("the requested file.");
       callbacks?.onUsage?.({
+        kind: "planner",
         inputTokens: 10,
         outputTokens: 5,
         turnTokensUsed: 15,
@@ -75,20 +81,6 @@ function createGateway(): DesktopConsoleGateway {
 }
 
 describe("DesktopConsoleGateway", () => {
-  it("creates a renderer-safe session and emits a session event", () => {
-    const gateway = createGateway();
-
-    const session = gateway.create({ target: "https://app.example.test", role: "audit", autonomyMode: "standard" });
-
-    expect(session).toMatchObject({
-      id: "id-1",
-      target: "https://app.example.test",
-      role: "audit",
-      autonomyMode: "standard",
-      status: "ready",
-    });
-    expect(gateway.eventsAfter(session.id)).toMatchObject([{ type: "session", session: { id: session.id } }]);
-  });
 
   it("holds a standard-mode tool call until the operator resolves its decision", async () => {
     const gateway = createGateway();

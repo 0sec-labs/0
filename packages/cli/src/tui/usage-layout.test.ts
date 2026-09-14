@@ -286,8 +286,9 @@ describe("cost resolution (mirrors status-bar.ts)", () => {
 const textOf = (rows: UsageReportRow[]): string =>
   rows.map((row) => `${row.label ?? ""} ${row.value ?? ""}`).join("\n");
 
+/** Remove the single-glyph row marker without depending on the selected preset. */
 const labelOf = (row: UsageReportRow): string | undefined =>
-  row.label?.replace(/^[\p{Co}\s]+/u, "");
+  row.label?.replace(/^.\s+/u, "");
 
 describe("buildUsageReport", () => {
   it("returns an empty snapshot from the lazy default and never fabricates", () => {
@@ -343,14 +344,14 @@ describe("buildUsageReport", () => {
       model: "claude-sonnet-4-6",
       session: { inputTokens: 1_000_000, outputTokens: 0 },
     });
-    const estimate = priced.find((row) => labelOf(row) === "session");
+    const estimate = priced.find((row) => labelOf(row) === "session estimate");
     expect(estimate?.value).toMatch(/^\$\d/);
 
     const unpriced = buildUsageReport({
       model: "some-unlisted-model",
       session: { inputTokens: 1_000_000, outputTokens: 0 },
     });
-    expect(unpriced.find((row) => labelOf(row) === "session")?.value).toBe("$—");
+    expect(unpriced.find((row) => labelOf(row) === "session estimate")?.value).toBe("$—");
   });
 
   it("prices per-model when the session used more than one model", () => {
@@ -380,7 +381,7 @@ describe("buildUsageReport", () => {
 
   it("names the active model and derives its provider", () => {
     const rows = buildUsageReport({ model: "claude-sonnet-4-6" });
-    expect(rows.find((row) => labelOf(row) === "model")?.value).toBe("claude-sonnet-4-6");
+    expect(rows.find((row) => labelOf(row) === "active")?.value).toBe("claude-sonnet-4-6");
     expect(rows.find((row) => labelOf(row) === "provider")?.value).toBe("anthropic");
   });
 

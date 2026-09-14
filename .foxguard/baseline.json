@@ -1,0 +1,4871 @@
+{
+  "version": 1,
+  "entries": [
+    {
+      "fingerprint": "6b821903f44343b5ba182918bde163fbfb0b299da938465434e6f463c6f17bcc",
+      "rule_id": "c/taint-buffer-overflow",
+      "file": "0verse/benchmarks/clean_safe_malloc.c",
+      "line": 25
+    },
+    {
+      "fingerprint": "43e7ec5cc1fb4a94005649f7d75d2239e9c0a75d7d98ad9488ef5d030db906d1",
+      "rule_id": "c/taint-command-injection",
+      "file": "0verse/benchmarks/cmdi.c",
+      "line": 7
+    },
+    {
+      "fingerprint": "d764db7c1d90ebf6d33d1058a0e0bb28bf88439bc1fe50a8d9536058d1e2434e",
+      "rule_id": "c/taint-buffer-overflow",
+      "file": "0verse/benchmarks/cve2026/sources/cve_2026_32740_libheif_copy.c",
+      "line": 68
+    },
+    {
+      "fingerprint": "ae70b7751f2062631cdfc881eedb328f35c2f8a2d626c77557b62c2ad227b461",
+      "rule_id": "c/taint-buffer-overflow",
+      "file": "0verse/benchmarks/cve2026/sources/cve_2026_4775_libtiff_ycbcr.c",
+      "line": 62
+    },
+    {
+      "fingerprint": "acb760ebbcc7c87f9f4bbdac6a07b7694a9c4cb531911cd8359188d8d5874d83",
+      "rule_id": "c/taint-buffer-overflow",
+      "file": "0verse/benchmarks/cve2026/sources/cve_2026_6192_openjpeg_pi.c",
+      "line": 65
+    },
+    {
+      "fingerprint": "7adc07c21f35bc9bc88a926e3e15e7695b80a887fbb3fc302fab14502ce73036",
+      "rule_id": "c/taint-buffer-overflow",
+      "file": "0verse/benchmarks/cve2026/sources/cve_2026_8461_ffmpeg_magicyuv.c",
+      "line": 70
+    },
+    {
+      "fingerprint": "82aef5a11607ca99ed6278c0290d576d0015d1536280113eba39daff20456208",
+      "rule_id": "c/taint-format-string",
+      "file": "0verse/benchmarks/fmtstring.c",
+      "line": 13
+    },
+    {
+      "fingerprint": "9a0432553189e29959f3f5cd74652b893cdc08c8530a561377566e761bacef02",
+      "rule_id": "c/taint-buffer-overflow",
+      "file": "0verse/benchmarks/groundtruth/sources/cve_2004_0597_pngtrns.c",
+      "line": 46
+    },
+    {
+      "fingerprint": "9e460a8697ab6d98529a13b1afc259b76e16fbc7deb60a94f992dc211ddfae2d",
+      "rule_id": "c/taint-format-string",
+      "file": "0verse/benchmarks/groundtruth/sources/cve_2012_0809_sudofmt.c",
+      "line": 33
+    },
+    {
+      "fingerprint": "61f750888cf6eb6c1463fef12d59e9a9dd1a69abfd1e89e9c3532b7d22ac3496",
+      "rule_id": "c/taint-buffer-overflow",
+      "file": "0verse/benchmarks/groundtruth/sources/cve_2017_9047_xmlcontent.c",
+      "line": 35
+    },
+    {
+      "fingerprint": "737ec3d998f34b9c47b637e02ccde95749518ecf823bb5385aaaede1d93a57e3",
+      "rule_id": "c/taint-buffer-overflow",
+      "file": "0verse/benchmarks/groundtruth/sources/cve_2017_9047_xmlcontent.c",
+      "line": 41
+    },
+    {
+      "fingerprint": "7cef4c29229a96a03cdd2b795c80f4fc7a2ca8b60a95506e1cf746510966e956",
+      "rule_id": "c/taint-buffer-overflow",
+      "file": "0verse/benchmarks/heap_overflow.c",
+      "line": 17
+    },
+    {
+      "fingerprint": "e0babfc0d0d1b1f96dafa91ed3a0753dcd545be5803d90a7f9fcd112cb71851d",
+      "rule_id": "c/taint-buffer-overflow",
+      "file": "0verse/benchmarks/intoverflow.c",
+      "line": 23
+    },
+    {
+      "fingerprint": "a5aea7a244b67b7f9f644256c00a36a8f4facf65a34772947185cd35e133c300",
+      "rule_id": "py/no-command-injection",
+      "file": "0verse/benchmarks/m2_proof.py",
+      "line": 110
+    },
+    {
+      "fingerprint": "21d2e1cd19e9253434190845dd1f98bcab7c3cb4fe152ebd7439ba1c0f222e64",
+      "rule_id": "py/no-command-injection",
+      "file": "0verse/benchmarks/m3_arm64_proof.py",
+      "line": 110
+    },
+    {
+      "fingerprint": "40f8d0686b10e5b27569b19e29cde8d2bd8a7293ccf5221f6502d8dead464254",
+      "rule_id": "py/no-command-injection",
+      "file": "0verse/benchmarks/m4_proof.py",
+      "line": 59
+    },
+    {
+      "fingerprint": "16572b830a12eeccaf5006d600aaef012db260815b57595ce7dccb649a43cd65",
+      "rule_id": "c/taint-buffer-overflow",
+      "file": "0verse/benchmarks/overflow.c",
+      "line": 11
+    },
+    {
+      "fingerprint": "ce2aa8546f4816fc4ad54b0639e5d48267f0121e91f360376059c2712118e5f6",
+      "rule_id": "py/no-command-injection",
+      "file": "0verse/docker/shared_library_harness_e2e.py",
+      "line": 63
+    },
+    {
+      "fingerprint": "9e4a327976d37d4d494a516eaa4538d14ba7e81c1fa74b0a425df053dbcd4a74",
+      "rule_id": "manifest/cargo-pq-vulnerable-dep",
+      "file": "0verse/native/windows-token-capture/Cargo.lock",
+      "line": 363
+    },
+    {
+      "fingerprint": "e5d5486e95b8698ff9b85dcc6c99b8fbe4c55c24476198fb069d286b25dda039",
+      "rule_id": "manifest/cargo-pq-vulnerable-dep",
+      "file": "0verse/native/windows-token-capture/Cargo.lock",
+      "line": 639
+    },
+    {
+      "fingerprint": "55a721ed951f717612b810fa5715b7abadf353acd5ed3c465c42336d37a3bc54",
+      "rule_id": "manifest/cargo-pq-vulnerable-dep",
+      "file": "0verse/native/windows-token-capture/Cargo.lock",
+      "line": 742
+    },
+    {
+      "fingerprint": "45be9ed0104ccf06845b33b72a95dc1f80e7a57583c6908227f44a5a46f09e56",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/authority.rs",
+      "line": 523
+    },
+    {
+      "fingerprint": "a554700b4f05eb5884a2a2aba9ef2a849e2d41e7acb9115fc0e9d4828e63b491",
+      "rule_id": "rs/no-unwrap-in-lib",
+      "file": "0verse/native/windows-token-capture/src/authority.rs",
+      "line": 1481
+    },
+    {
+      "fingerprint": "145151903268a262d5e30b724fc05120baba510fd70da93b8ba6da15d6918bfa",
+      "rule_id": "rs/no-unwrap-in-lib",
+      "file": "0verse/native/windows-token-capture/src/authority.rs",
+      "line": 1489
+    },
+    {
+      "fingerprint": "2a835e533a81dd8f536de9002f12426381759efd6555c21b656aaffa9cb8163d",
+      "rule_id": "rs/pq-vulnerable-crypto",
+      "file": "0verse/native/windows-token-capture/src/device_open_authority.rs",
+      "line": 166
+    },
+    {
+      "fingerprint": "84e979bc541b785f74ee1c8eab8cc5e180cf4a22bb90306a723524ccb6523c9a",
+      "rule_id": "rs/pq-vulnerable-crypto",
+      "file": "0verse/native/windows-token-capture/src/device_open_store.rs",
+      "line": 795
+    },
+    {
+      "fingerprint": "e9a2217c5992f25d6a3919e908a7dbdb20e732b8d61aeb8b5c744db21c029d44",
+      "rule_id": "rs/pq-vulnerable-crypto",
+      "file": "0verse/native/windows-token-capture/src/device_open_store.rs",
+      "line": 808
+    },
+    {
+      "fingerprint": "51b0c4a2465349979680c10eac8d471a7e18b7db170bb07029bf938b9966d6c8",
+      "rule_id": "rs/pq-vulnerable-crypto",
+      "file": "0verse/native/windows-token-capture/src/device_open_store.rs",
+      "line": 809
+    },
+    {
+      "fingerprint": "a0c345e95ab72fb8e8442a052a8b246b9a105928099c99d94ad0a74c0a243e91",
+      "rule_id": "rs/pq-vulnerable-crypto",
+      "file": "0verse/native/windows-token-capture/src/device_open_store.rs",
+      "line": 1100
+    },
+    {
+      "fingerprint": "36f45b6cb378a0b9898c4a5b3cbdce952139f1631e9bae17dd73af71a15878c8",
+      "rule_id": "rs/pq-vulnerable-crypto",
+      "file": "0verse/native/windows-token-capture/src/device_open_store.rs",
+      "line": 1101
+    },
+    {
+      "fingerprint": "fbe7063666b95af2c42c899541559930329265d294275fd1884851ef840802e3",
+      "rule_id": "rs/pq-vulnerable-crypto",
+      "file": "0verse/native/windows-token-capture/src/device_open_store.rs",
+      "line": 1102
+    },
+    {
+      "fingerprint": "caafc3323e4035278031be1af30638dc787855e9ba7a47c2cf5bc301ebb185a1",
+      "rule_id": "rs/no-unwrap-in-lib",
+      "file": "0verse/native/windows-token-capture/src/fixed_adapter_ipc.rs",
+      "line": 185
+    },
+    {
+      "fingerprint": "00b6e7b9600effd201bd0b46a01b94624db362b8796f9d3f2fd922949cc125b1",
+      "rule_id": "rs/no-unwrap-in-lib",
+      "file": "0verse/native/windows-token-capture/src/fixed_adapter_ipc.rs",
+      "line": 274
+    },
+    {
+      "fingerprint": "09c13b5a2170d2088995bcbe7b485cdfa90622eab31acb8a7277cb730c8a5c98",
+      "rule_id": "rs/no-unwrap-in-lib",
+      "file": "0verse/native/windows-token-capture/src/fixed_adapter_ipc.rs",
+      "line": 278
+    },
+    {
+      "fingerprint": "4a11c5f283359387df5d185772b8060bf475257aef55fad0bf4d1b9e48681fce",
+      "rule_id": "rs/no-unwrap-in-lib",
+      "file": "0verse/native/windows-token-capture/src/service_store.rs",
+      "line": 328
+    },
+    {
+      "fingerprint": "1309e73895b48e376e57568cd907de1545d795060bf6b0af48152e2d5b77a4e4",
+      "rule_id": "rs/no-unwrap-in-lib",
+      "file": "0verse/native/windows-token-capture/src/service_store.rs",
+      "line": 681
+    },
+    {
+      "fingerprint": "c442e7135463a48aa3f82a84170eb26dbd0f9877584c89f706afd5be76b7bc8f",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/service_store.rs",
+      "line": 834
+    },
+    {
+      "fingerprint": "08fe22903a3a704ed42f43d1274e1a46aabdccd516bd88b549369eabc3c68ca1",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/service_store.rs",
+      "line": 845
+    },
+    {
+      "fingerprint": "3a5c8533f0dffea9f0fb976713dd782fc187320614599aa1f59e4457c49d4c58",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/service_store.rs",
+      "line": 856
+    },
+    {
+      "fingerprint": "c521cad47af857b516a42bc6e163ef3a83733a31c393ef4916e3d2b647588513",
+      "rule_id": "rs/no-unwrap-in-lib",
+      "file": "0verse/native/windows-token-capture/src/service_store.rs",
+      "line": 1215
+    },
+    {
+      "fingerprint": "18a77c311efbd3fb943d6266a2caddffe57f3e149ad024bef26736ca815e0cd6",
+      "rule_id": "rs/no-unwrap-in-lib",
+      "file": "0verse/native/windows-token-capture/src/service_store.rs",
+      "line": 1244
+    },
+    {
+      "fingerprint": "852c9687cf77dc7d2f84effe334b06d8cced2716018be7cdf3ec3f606856f7e2",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/service_store.rs",
+      "line": 1251
+    },
+    {
+      "fingerprint": "e0a37eeef9f8cbb2d26137c72926044854e426f19acf0660a76d83d82fb6e9bd",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/service_store.rs",
+      "line": 1264
+    },
+    {
+      "fingerprint": "be6032565c29c1ed8294189ad0765b45c13a55f0f33f16d9a1479d31e401ca66",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/service_store.rs",
+      "line": 1277
+    },
+    {
+      "fingerprint": "304fbd439c73f87e88eb09534640333a088f8454bb9572a42802a27278dad954",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/service_store.rs",
+      "line": 1291
+    },
+    {
+      "fingerprint": "d9c73cb8e17acc3ab3dee44ac84e88b443fae5334dc6a6d3533a4e9f0da42997",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/service_store.rs",
+      "line": 1307
+    },
+    {
+      "fingerprint": "021a057f03df175d650a23f5cb41dc44f1758352941d4176e1086a213cce6fb3",
+      "rule_id": "rs/no-path-traversal",
+      "file": "0verse/native/windows-token-capture/src/service_store.rs",
+      "line": 1314
+    },
+    {
+      "fingerprint": "d0387e1c2e65accc829b57f58c1a6d3d8ca4965c825944a3a4c498c2ba394813",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/service_store.rs",
+      "line": 1314
+    },
+    {
+      "fingerprint": "6f1dd21cf385934ddf0d0f1323d1f012ca03465707cd476b14fe42936d9563e2",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/service_store.rs",
+      "line": 1319
+    },
+    {
+      "fingerprint": "90454ebb74c9c71ace7331e2c9f49460de72d7f5a426f161511f5c315da4d9bb",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/service_store.rs",
+      "line": 1334
+    },
+    {
+      "fingerprint": "3cac77c49ec5e665e89886233101e20ef7dc8b45ccdd52f42dc35d82b9bb6194",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/service_store.rs",
+      "line": 1347
+    },
+    {
+      "fingerprint": "794910d82fcf48e202bc2a455a19cc82bba3ee2ff34d14ec5b86a1bb29d7f534",
+      "rule_id": "rs/no-unwrap-in-lib",
+      "file": "0verse/native/windows-token-capture/src/service_store.rs",
+      "line": 1351
+    },
+    {
+      "fingerprint": "26f5fac63f3e72044c598a18e389b680448c56c0cef3f4d7ebfb069218d23fe0",
+      "rule_id": "rs/no-unwrap-in-lib",
+      "file": "0verse/native/windows-token-capture/src/service_store.rs",
+      "line": 1356
+    },
+    {
+      "fingerprint": "2ba77db842544f75886db93f5fd72e6abab510def8f46c129464d97a55c37aeb",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/service_store.rs",
+      "line": 1374
+    },
+    {
+      "fingerprint": "c156faff95d790cef61684ce7e345420446271307b1a40d3f7f5864511c29d63",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/service_store.rs",
+      "line": 1399
+    },
+    {
+      "fingerprint": "55e97adfdd54a0b9756fbf7eb44d4f8c7f0211f4637261b238dad360ba3c0439",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/service_store.rs",
+      "line": 1412
+    },
+    {
+      "fingerprint": "c8947892807339647d3a5a14c94142a151603e06df174646db513ef8d58f197e",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/service_store.rs",
+      "line": 1427
+    },
+    {
+      "fingerprint": "c7eff0627bd27bc42b3481df2906e2a69e2681fbc23f4e6720d0b9359819f7f1",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/service_store.rs",
+      "line": 1430
+    },
+    {
+      "fingerprint": "026b648c3ee38dba0e676a1c25b063a4529ddaf63603e8bc68bf513f3309c070",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/service_store.rs",
+      "line": 1449
+    },
+    {
+      "fingerprint": "6c5b68528085255f1f93210bb103b46eeec397654137d367967411b6431a6de5",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/service_store.rs",
+      "line": 1451
+    },
+    {
+      "fingerprint": "c013cdcc9a402655cb045104c2669f84b05e0e8ad4df280d9bbafbfb25ed526f",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/service_store.rs",
+      "line": 1494
+    },
+    {
+      "fingerprint": "e3945269f8a5895c4d7b05fe2b95cf2ca8af1b1d3b48a4d19a4dda16b6811b33",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/service_store.rs",
+      "line": 1528
+    },
+    {
+      "fingerprint": "f3b1cacd0fdfae444e58ed2000cebc40d1bc8730297904b387ab1eb04a0ed4ec",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/service_store.rs",
+      "line": 1556
+    },
+    {
+      "fingerprint": "a6c6682377960396ed4163a77731b85b29cf78b988e032f5e01aad1be6951a6f",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/service_store.rs",
+      "line": 1571
+    },
+    {
+      "fingerprint": "316702e7af5b9d0d48c339d7019a1da70ea357c2a9b45dc0a6e68283be330cb0",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/service_store.rs",
+      "line": 1587
+    },
+    {
+      "fingerprint": "633e7879cfb0a170bd4ea85e87cf6224e908e782b538b4f8cd91868418571ae9",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/service_store.rs",
+      "line": 1600
+    },
+    {
+      "fingerprint": "0b887070eb53e9b0ebe3090a373840793f6cdf4fd56679d2acd3b93a32388f48",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/service_store.rs",
+      "line": 1602
+    },
+    {
+      "fingerprint": "2910447877958ee51b1c450fc4cd465e2a2d39c37ee605422f8a6d479b93cb20",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/service_store.rs",
+      "line": 1622
+    },
+    {
+      "fingerprint": "1132e7447df310e94e8fcdc93c9ffabf1ba2f6140455ce1110f1a115c241e595",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/service_store.rs",
+      "line": 1625
+    },
+    {
+      "fingerprint": "a36a232d21882cc78f73623490275f0fb81a3df4ca006796898d036279916116",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/service_store.rs",
+      "line": 1633
+    },
+    {
+      "fingerprint": "50651dca45ac39dbeece5256646fcca090fdc895ae31168b1af561794ff8f280",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/service_store.rs",
+      "line": 1650
+    },
+    {
+      "fingerprint": "de6f44de0ba1a81eb3105263afe6b60a730a299f7f8cded997dbd10c69c49529",
+      "rule_id": "rs/no-unwrap-in-lib",
+      "file": "0verse/native/windows-token-capture/src/service_store.rs",
+      "line": 1654
+    },
+    {
+      "fingerprint": "b0d17d52c7e13da124af28f0dddd99c3308b641367cb39c494e159f119721143",
+      "rule_id": "rs/no-unwrap-in-lib",
+      "file": "0verse/native/windows-token-capture/src/service_store.rs",
+      "line": 1661
+    },
+    {
+      "fingerprint": "89e6a1bfcd991a3e91bec02e0a52bb12ff2c829b74c1c63df6bee031431ad3aa",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/service_store.rs",
+      "line": 1680
+    },
+    {
+      "fingerprint": "1e51833a499995dc2e6e2b5539b1936287aacbb74921947fda880455761125e6",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/service_store.rs",
+      "line": 1698
+    },
+    {
+      "fingerprint": "92fb7b6b41802858c35b9dada71885ca906147df0bfaf2377803dd8c36c71d47",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/service_store.rs",
+      "line": 1712
+    },
+    {
+      "fingerprint": "75faa7d791a9d467167a55570c4cc1ce5acab874e5940f36a473d5e71dd5d46d",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/service_store.rs",
+      "line": 1734
+    },
+    {
+      "fingerprint": "929a1f1c8411039270727442c6c75ab17165c08bb7a0ccd367e95e053ad7c45d",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/service_store.rs",
+      "line": 1740
+    },
+    {
+      "fingerprint": "b102460fb76fba2a9b626ab28e23e6e9966007ae3e8624e1b629fa7989e5ccf7",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/service_store.rs",
+      "line": 1749
+    },
+    {
+      "fingerprint": "4ffed0410509d29d1378fce7e39a4908affe3be067a26257c513118bed2f13cd",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/service_store.rs",
+      "line": 1765
+    },
+    {
+      "fingerprint": "882c749d90381257221f1b56f659fcdb9a5eb24adbe710a2d6cbedc603034339",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/service_store.rs",
+      "line": 1777
+    },
+    {
+      "fingerprint": "6d4d61639d27d7a861a09bec66cd763289cf77ce481e6df0c5eaac66ee420d20",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/service_store.rs",
+      "line": 1778
+    },
+    {
+      "fingerprint": "13d18e8d10588ea8dcd3859c14cff835213a0fad57cd15f59c54f3aa5f0fc60d",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/service_store.rs",
+      "line": 1788
+    },
+    {
+      "fingerprint": "dc19aa339e3610f3e658e608f9f45ea0cc5134291a6fee8bbc28c3a256540e07",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/service_store.rs",
+      "line": 1802
+    },
+    {
+      "fingerprint": "23be52235f9e05301b77c49a3cc0bd1cf1a6e9ddd2613f35ee40164c2ac09ea3",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/service_store.rs",
+      "line": 1826
+    },
+    {
+      "fingerprint": "862b5366b195c24a78eb0e08c96a31ebf7ab6c4e66450479a3728259d6270e5c",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/service_store.rs",
+      "line": 1844
+    },
+    {
+      "fingerprint": "16e65038d6dc0112a8f24f09e43a43a588923e16530c52bfa341f514c16b3e0d",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/service_store.rs",
+      "line": 2087
+    },
+    {
+      "fingerprint": "5310f22fc81a90329905e661da8af582662f4e3c2e43fcb53fd0e9e4a8a290f3",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/service_store.rs",
+      "line": 2105
+    },
+    {
+      "fingerprint": "24b3314fd60c3b93cacef81605cb0d3084f405ae5707a126e748ae26d901c731",
+      "rule_id": "rs/pq-vulnerable-crypto",
+      "file": "0verse/native/windows-token-capture/src/sshsig.rs",
+      "line": 356
+    },
+    {
+      "fingerprint": "4d20f5e407f00f52c3107ebd81c12ad0fcd7fb24608dd53d1ea7aa1f283eec5b",
+      "rule_id": "rs/pq-vulnerable-crypto",
+      "file": "0verse/native/windows-token-capture/src/sshsig.rs",
+      "line": 357
+    },
+    {
+      "fingerprint": "7bf7418b2fbbb20ecefa17a4ae94362a61cf44e668816d902cf3bf91dacab421",
+      "rule_id": "rs/pq-vulnerable-crypto",
+      "file": "0verse/native/windows-token-capture/src/sshsig.rs",
+      "line": 359
+    },
+    {
+      "fingerprint": "fbcb2022f51faac5da5b42f3227649663a1941210940cb95804e3bc09e1a18e1",
+      "rule_id": "rs/pq-vulnerable-crypto",
+      "file": "0verse/native/windows-token-capture/src/sshsig.rs",
+      "line": 360
+    },
+    {
+      "fingerprint": "a54a6bb6816f1bdcbd78e4896c23250438956d4b33c089b24fa0a2ccd8a95e8b",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows.rs",
+      "line": 104
+    },
+    {
+      "fingerprint": "6d536e450358277407a8c24558a15a53e83b16af9b498ddab451829ce70610b2",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows.rs",
+      "line": 138
+    },
+    {
+      "fingerprint": "81c1452db6c806967efb6e8dee46c6ba69b0af9b5d3b8e24f6dd8829420344b9",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows.rs",
+      "line": 145
+    },
+    {
+      "fingerprint": "6692f5f2976b6a266b8cad3901b7fe2fc81962b1cb50dd96f4ddbdaecb08875e",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows.rs",
+      "line": 149
+    },
+    {
+      "fingerprint": "4f653122df0875eb24949a4ce01446d084570634500f88a600d1e0b369910944",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows.rs",
+      "line": 153
+    },
+    {
+      "fingerprint": "8b45433ce22f08920ca23f801271ee1025b67901ca5445289411f3e7066e5af6",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows.rs",
+      "line": 168
+    },
+    {
+      "fingerprint": "4e98b5864903f10dc6e0d64a460bae275bf4555cc85b973aca90ac31edbfe465",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows.rs",
+      "line": 173
+    },
+    {
+      "fingerprint": "d5f86fb212c0b4244f1afc0338ee5870f05df68e1da8e852dd03eceea43b44c2",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows.rs",
+      "line": 179
+    },
+    {
+      "fingerprint": "891f9660d725e9e624299ea7b183003ad6c59842f494e72f8833cae660b72c0a",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows.rs",
+      "line": 189
+    },
+    {
+      "fingerprint": "6b947ae5fcecb1b29d8c12e2a3d7e8a40e25740aa7155acf4411dc0c7caa55ff",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows.rs",
+      "line": 199
+    },
+    {
+      "fingerprint": "fda6648ca51f79d3ed4d78414a021ff2690d1ab3799b2f499a3fe0c196f38d0e",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows.rs",
+      "line": 211
+    },
+    {
+      "fingerprint": "23fa9844a3ae0a0500f97031c176b3a7fbc001b9a8517751c86526f692ec2dca",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows.rs",
+      "line": 225
+    },
+    {
+      "fingerprint": "b1a464fd3775c309191be577f11c0b45e49cc4ba66737973ccb17e2b8a60822c",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows.rs",
+      "line": 232
+    },
+    {
+      "fingerprint": "982555c3652405553021d8922e54a4e34dcb9e552b26828d9999c45396bd61c6",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows.rs",
+      "line": 243
+    },
+    {
+      "fingerprint": "fd7ac9bb8e55e85edbe77f1771fba344ff0174601cfd2feb32f88c2f01f7202f",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows.rs",
+      "line": 269
+    },
+    {
+      "fingerprint": "3d31c64aa3201aac03b177a4e1b814982242696058ceca912d1fa1bed279fc34",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows.rs",
+      "line": 278
+    },
+    {
+      "fingerprint": "239e95a728177e9d4c13be54592cc4873109b345f32a545cedd5cfc0996a3beb",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows.rs",
+      "line": 296
+    },
+    {
+      "fingerprint": "3c65b461cedfe7349cad8c05efdba818364ce7c06e5eb9f6db4636dd033299f7",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows.rs",
+      "line": 317
+    },
+    {
+      "fingerprint": "7d781cf24014d4ff22093ce62e788dc2b8f02e36dffddcc12d797f3a2da47f20",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows.rs",
+      "line": 322
+    },
+    {
+      "fingerprint": "c8b26398e51f2a996be4c4defdf7743b586019b51aef90fa1696b77fc2351123",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows.rs",
+      "line": 328
+    },
+    {
+      "fingerprint": "3a86dc3ec7d611b2bccb7957214b28b0cdf48de019a3f753667b685456c05eab",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows.rs",
+      "line": 335
+    },
+    {
+      "fingerprint": "bf8520fbcc8000c0064feac13e39df8b10b5dcd32b39b7f482820157f2dae64a",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows.rs",
+      "line": 339
+    },
+    {
+      "fingerprint": "c6047b2467fe787d7b019408f4007fd1fa2895ff78f7f750ffb0207b809bd22f",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows.rs",
+      "line": 354
+    },
+    {
+      "fingerprint": "58062d903a2d072c416d58de5b0e28aa5b7fd2190f4a1af8b73af7a5ce946075",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows.rs",
+      "line": 358
+    },
+    {
+      "fingerprint": "5736665d13d5bbee8beecc45c600e7f66eb3bb90879b8c5c9151ae8a00226a7b",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows.rs",
+      "line": 363
+    },
+    {
+      "fingerprint": "44344dc7bc0e6626e6c951da9d51e31920a6ac331d840df34bc37d9da23b5a05",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows.rs",
+      "line": 368
+    },
+    {
+      "fingerprint": "51bd1f8fd7e9f72bbd9d5c8ef3a9faf5a7cb5787b15809b359e2e6cf07512e9c",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows.rs",
+      "line": 373
+    },
+    {
+      "fingerprint": "2ff623ce98d2e8387fcedaa754e965c50b386a02d7a05d53dcaef77e8d6f91a6",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows.rs",
+      "line": 417
+    },
+    {
+      "fingerprint": "2493410b9d37a025c174f3aad6bfa31df7e75e9be3f8f0a4a5433d062756b84a",
+      "rule_id": "rs/no-unwrap-in-lib",
+      "file": "0verse/native/windows-token-capture/src/windows.rs",
+      "line": 422
+    },
+    {
+      "fingerprint": "ef06d7d1b7ec2694139d13c779791eeffeaf3ed3f2c297556dc0321bf287c093",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows.rs",
+      "line": 428
+    },
+    {
+      "fingerprint": "b0d3ccc10f9ed547925211cf07354422e35bd27b410c841199eab96859af8585",
+      "rule_id": "rs/no-unwrap-in-lib",
+      "file": "0verse/native/windows-token-capture/src/windows.rs",
+      "line": 441
+    },
+    {
+      "fingerprint": "c64a0b24ba4525a1b3390c5527168c2880d5bd2f21738a6d25444986af0d7d52",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows.rs",
+      "line": 470
+    },
+    {
+      "fingerprint": "996860fed3b81a61dd7522ba24907553e380dab296974849d9a0ab971874523d",
+      "rule_id": "rs/no-unwrap-in-lib",
+      "file": "0verse/native/windows-token-capture/src/windows.rs",
+      "line": 483
+    },
+    {
+      "fingerprint": "cbcc2f5f6b7f93c164adf5f640e185974cd975f9084d219c277e7f7a54e06b8f",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows.rs",
+      "line": 485
+    },
+    {
+      "fingerprint": "4be945ce3bf86082018fee4d0474b524f8daa11a0f1dad0a7804f59db62b43dd",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows.rs",
+      "line": 507
+    },
+    {
+      "fingerprint": "2d78998d2f359e6c957d49a56221696a7434885b98e551c16ce6e35c551de3d0",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows.rs",
+      "line": 511
+    },
+    {
+      "fingerprint": "43529e4e0246d158b7a81662860120ed1a3c0df4eee3819514b177983a26b561",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows.rs",
+      "line": 558
+    },
+    {
+      "fingerprint": "63e08fcea45413a0d3b509118674ce5a001145d0196e89091bdecf30da4e5e21",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows.rs",
+      "line": 580
+    },
+    {
+      "fingerprint": "9804601af545e2488ea757b5f9307cf8a1f5ac3985ff6cec0d7858890218c4c2",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows.rs",
+      "line": 585
+    },
+    {
+      "fingerprint": "3a75052673c0d99795cb7a7fdd7aa44785870f7475f859f3d38e117832c5c1b4",
+      "rule_id": "rs/no-unwrap-in-lib",
+      "file": "0verse/native/windows-token-capture/src/windows.rs",
+      "line": 592
+    },
+    {
+      "fingerprint": "476d73558f1df57999e835ad0e5b0bcec7e5ef7074d9946850cb36109cbf9afc",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows.rs",
+      "line": 594
+    },
+    {
+      "fingerprint": "3f71c30e849cae85becb0c505b97a31c039195a6e3a7ac30877247ee2632da95",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows.rs",
+      "line": 695
+    },
+    {
+      "fingerprint": "e828bae668842922948d2f07004c32eebfbf73d963dc6decc2e0bc98c3a5aaca",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows.rs",
+      "line": 760
+    },
+    {
+      "fingerprint": "a0400ba161f1299402b48e1af1ec239b36c37a989484a896f837fc1739d15c66",
+      "rule_id": "rs/no-unwrap-in-lib",
+      "file": "0verse/native/windows-token-capture/src/windows.rs",
+      "line": 764
+    },
+    {
+      "fingerprint": "273368f9ca94d3f988f260b2459e960e8c20a590df3c7a18910efc7ce6843e9e",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows.rs",
+      "line": 781
+    },
+    {
+      "fingerprint": "80346e4ab42f96382e940d441ed7aa0cdfe354a28fb6fc74b741833a7cdea40d",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows.rs",
+      "line": 797
+    },
+    {
+      "fingerprint": "e70bb0d94ed31f1887e9a655fc99c120bc89be30770512599576a872f0e1e2d6",
+      "rule_id": "rs/no-path-traversal",
+      "file": "0verse/native/windows-token-capture/src/windows.rs",
+      "line": 804
+    },
+    {
+      "fingerprint": "ab481b62797f33fcb9f5c94bb3f1124f64188959e722dc665d8d0789aa00597e",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows.rs",
+      "line": 804
+    },
+    {
+      "fingerprint": "6091acbc01961d96aefcdf851e1ea4e9a9463b961671e9fda4f99b4a838a735e",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows.rs",
+      "line": 809
+    },
+    {
+      "fingerprint": "919a012bc9b38d38ba98626ae8bafc84f089b45238a935960fdc669057e1d47b",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows.rs",
+      "line": 818
+    },
+    {
+      "fingerprint": "013974177b50e60daddc109215e9f12792f326f5c7c49ca92f73c9b517655e30",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows.rs",
+      "line": 833
+    },
+    {
+      "fingerprint": "115a4299d0700d9f343484039b4c0113d7d7d78b84578f65cf27d63c2a441b8e",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows.rs",
+      "line": 841
+    },
+    {
+      "fingerprint": "4c24b70154e28fcaf8de531bfe5fb8f800f72d0cc3c8f11d6926fe5f73b56b66",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows.rs",
+      "line": 965
+    },
+    {
+      "fingerprint": "fb3ac5cc78bb835d32e66c6a0db53006c5e183a334914f923fd3d060b71b7e23",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows.rs",
+      "line": 968
+    },
+    {
+      "fingerprint": "65bd1689346fe5cb9038b382638199b897f4ddf208d2fc2ed1d14f333a82ddc7",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows.rs",
+      "line": 972
+    },
+    {
+      "fingerprint": "8747e2c9d282d5f8fb8b5b36caa81cd7cba119ba921a892e24428a3417c5cb48",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows.rs",
+      "line": 978
+    },
+    {
+      "fingerprint": "b9b479141663fcf9d1f46325fcf048632a8b6ed899ed8ce6698a4a6c5061417e",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/device_open.rs",
+      "line": 109
+    },
+    {
+      "fingerprint": "2bc493bbce0412f911d6847166efc68da4aa47f3fea4b5e2944404ac533e4827",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/device_open.rs",
+      "line": 129
+    },
+    {
+      "fingerprint": "0ab80cd22b41acaa15fb17bc25dcc5c26c4b3cab4e9d235f2121002b5fcd8d89",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/device_open.rs",
+      "line": 159
+    },
+    {
+      "fingerprint": "9394ee1356c8c7ecdc6d547db6160cb601279dce57bb4993503448f08075c1e6",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/device_open.rs",
+      "line": 176
+    },
+    {
+      "fingerprint": "2b18da8f8be67ad32f6588d7d8894cdbcd9f63c1427a6f3fa9124b61b8820aac",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/device_open.rs",
+      "line": 198
+    },
+    {
+      "fingerprint": "486331f9d483dc94b748da1f9eafa80c2673dc3cfefa47a28be8cf59d5a7b20b",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/device_open.rs",
+      "line": 221
+    },
+    {
+      "fingerprint": "bfd6db5b65fe2d8700994afa1934e65a787df1ae6638d933f74a2fa64231dd57",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/device_open.rs",
+      "line": 242
+    },
+    {
+      "fingerprint": "a0f0b7a0789f3a78a8bc0639ebedc567be92e144e6df2d6f4130a4106f18c46e",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/device_open.rs",
+      "line": 256
+    },
+    {
+      "fingerprint": "99de0c9a03cee472811ecc8d248d7d918a8745331a7d6313d3a8725861ca0c9a",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/device_open.rs",
+      "line": 271
+    },
+    {
+      "fingerprint": "ae8ea85d675d37d860c1d527e77cb96a178db16383adb50eb62e78fa65952e31",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/device_open.rs",
+      "line": 288
+    },
+    {
+      "fingerprint": "586b89818b9823b070290a0d6544d57843ac8034606c16b01ab823e77bd9cb95",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/device_open.rs",
+      "line": 315
+    },
+    {
+      "fingerprint": "fe4ebc8029cba7fd4bb6bd06c4cf16587cdc63f7e26eb79a41c3ebf7befbabe8",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/device_open.rs",
+      "line": 322
+    },
+    {
+      "fingerprint": "cfd6f9f8e02ab9cff92111c2c35ce2445059581cef481656dcf13ac7d23d9931",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/device_open.rs",
+      "line": 343
+    },
+    {
+      "fingerprint": "26d675e152e7ca3be3fa8d022070195c501d79f2eed739204ad954389e028abb",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/device_open.rs",
+      "line": 365
+    },
+    {
+      "fingerprint": "975d5ccafe8280bdd872d003afac542c34129077ee1183efa919dbb1e6146578",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/device_open.rs",
+      "line": 368
+    },
+    {
+      "fingerprint": "313d6ebb98b579c6d071579210bb1ef0d9baa18425f44773a08f2cb407a38774",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/device_open.rs",
+      "line": 373
+    },
+    {
+      "fingerprint": "b9055981e16a1bab2bd45993b05c28526e2c1896a974ff34a7dbafab07629f98",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/device_open.rs",
+      "line": 385
+    },
+    {
+      "fingerprint": "337a3cffeb4abede795d113dcbb5d03a82d681e44d2ff644f2273059dfb7c924",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/device_open.rs",
+      "line": 398
+    },
+    {
+      "fingerprint": "6c297c48ab9ff0aba5493938f3a33d4c6db7d94a44c8209b100adc644a19869c",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/device_open.rs",
+      "line": 403
+    },
+    {
+      "fingerprint": "6322ed37c52e38e09106056ac0a3194c497bb682c1d2dac7151817155a72f058",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/device_open.rs",
+      "line": 407
+    },
+    {
+      "fingerprint": "62f695205629a69e3e41cbb0890f0ad24527d0278fb5f86a30995a6195d4081c",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/device_open.rs",
+      "line": 418
+    },
+    {
+      "fingerprint": "571ce5601daf88be86625d551f00772fbe889d116e0f0a9349b5a719c626ca6f",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/device_open.rs",
+      "line": 444
+    },
+    {
+      "fingerprint": "e7221b65c3b5a8f94aedf70818725eb8ff386ed39e11554d0921fdede69a3ca3",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/device_open.rs",
+      "line": 470
+    },
+    {
+      "fingerprint": "fdb7bdd11de0770c486050bc8367d16c97f83b3369e521f4937c5812de3c714b",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/device_open.rs",
+      "line": 540
+    },
+    {
+      "fingerprint": "522447ecbe43322f3e7ca0eac15bb4e2eb366d8e0196b951fd32b6f9fa13190b",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/device_open.rs",
+      "line": 561
+    },
+    {
+      "fingerprint": "19c1dd97ed1e0485368a22cad1b231e652c27ade0edd048217c4358deaf7fa9c",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/device_open.rs",
+      "line": 590
+    },
+    {
+      "fingerprint": "89f6d7075dfb2bdaf8a6b236df56b65b27ba4d01264c716098298d102958183b",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/device_open.rs",
+      "line": 601
+    },
+    {
+      "fingerprint": "301b7915b533075a20238c6a05b9fcb16088a386947b200ab39e0fe2452723c5",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/device_open.rs",
+      "line": 617
+    },
+    {
+      "fingerprint": "76a37d0fbc73358e1a8205dc51ca730fedf7f678aae2e22ea8ad1cb16360ef07",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/device_open.rs",
+      "line": 626
+    },
+    {
+      "fingerprint": "ae79fec70d057ae58b2a1861ef6b4f72effc03d28c4f386f61faf9eff1aedd53",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/device_open.rs",
+      "line": 649
+    },
+    {
+      "fingerprint": "674200b63c2c2e8a27b3bae53e7d67733125cb3eb6d38cd1c865ed850a2d0bea",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/device_open.rs",
+      "line": 673
+    },
+    {
+      "fingerprint": "5e1a9c2056f13f66f56d501334e266b501d53388f3b436930d8fee90ec1a19ff",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/device_open.rs",
+      "line": 694
+    },
+    {
+      "fingerprint": "db2485121a4873166fe37580b06c60557262b02e8bf7175e4459f05c36486fac",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/device_open.rs",
+      "line": 705
+    },
+    {
+      "fingerprint": "4ce6fa7e2a550b1053a472175201bfd287c6448baf63449f3b00de9be665fc02",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/device_open.rs",
+      "line": 762
+    },
+    {
+      "fingerprint": "b0399738fcd18fe3aaf1ea4c82e4a0f07e64a0f8ba3c60182a6eb1d752c90d71",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/device_open.rs",
+      "line": 773
+    },
+    {
+      "fingerprint": "01fdc40fcb1606cba343196af05c2afa43c7078061c89994e3f702ec90611f05",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/device_open.rs",
+      "line": 825
+    },
+    {
+      "fingerprint": "77840bdcaab8618463bf1074ccb6bbbade5b42822619640d6d2a1a7aee2b087c",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/driver_file.rs",
+      "line": 53
+    },
+    {
+      "fingerprint": "d1205ca82fec9322f3480aff61790cab98cbf21abed1d4752f39218269e16489",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/driver_file.rs",
+      "line": 72
+    },
+    {
+      "fingerprint": "1e308f9120461839ae809202a0adb8be7d99b62ac6b45a9176467acbd2458aed",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/driver_file.rs",
+      "line": 79
+    },
+    {
+      "fingerprint": "4cc2354efad20ba5637daf4fbbe4d0f05689a7b94b4c6fab9d7306dcda9c8090",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/driver_file.rs",
+      "line": 86
+    },
+    {
+      "fingerprint": "8692ac125367aa1b1658fa72787618c4ccd8ec133ff68946ae0b340334fa2b79",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/driver_file.rs",
+      "line": 94
+    },
+    {
+      "fingerprint": "ec86f1b7f35b90d08155734af86b364ecb5dab46598839660c0967b757f75402",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/driver_file.rs",
+      "line": 99
+    },
+    {
+      "fingerprint": "ce76d304d86f48062c8e544b482fd3879d505799ebb4553a34287d5b5833139e",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/driver_file.rs",
+      "line": 118
+    },
+    {
+      "fingerprint": "6b3efef2172624026b5f2cb5350954fa370699defc02c08ae4384590c5b4cc0d",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/driver_file.rs",
+      "line": 130
+    },
+    {
+      "fingerprint": "d09b06b5b3a82dec1ee568cdabe7123431efbbd27d6bfb305041bbb73afdf29c",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/driver_file.rs",
+      "line": 147
+    },
+    {
+      "fingerprint": "d4b3c07ab82049289916b088e818be553724e2ee777027dbdb8d63e48003849b",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/driver_file.rs",
+      "line": 167
+    },
+    {
+      "fingerprint": "313820cbd745ceff2c06f6c89a81808642bcc7746ecc4fb1682051f134e08e2f",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/driver_file.rs",
+      "line": 237
+    },
+    {
+      "fingerprint": "6b0ff7200e4205787285c5233a8e9e5c0b53c18c7215c992576953b1f3c5cdb1",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/driver_file.rs",
+      "line": 255
+    },
+    {
+      "fingerprint": "4e2ca44b9485c6bdb65f75e8ef4e4ec920602b4f595f7045612605e8b0a2d138",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/driver_file.rs",
+      "line": 305
+    },
+    {
+      "fingerprint": "28f3d09af97dc6b13493d2ef883ad2325c7126de51d1a247c0637a03af5f6337",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/driver_file.rs",
+      "line": 313
+    },
+    {
+      "fingerprint": "6850a98b1a5d7633306ca79a549cab8a7832fbf14bc3b3a9b563a94410366373",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/driver_file.rs",
+      "line": 330
+    },
+    {
+      "fingerprint": "5830775e9344d371fd58a8dc4c5228958c5f7e287eb88771bc8dee338845f852",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/driver_file.rs",
+      "line": 343
+    },
+    {
+      "fingerprint": "d4154c32779e31769594f8927cb6cb2900bd95545124298a84edfe8317da6ccc",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/driver_file.rs",
+      "line": 366
+    },
+    {
+      "fingerprint": "894605d2ef350e44c21eaa83a5b409d61703887ea0734998a789de2d2641433e",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/driver_file.rs",
+      "line": 375
+    },
+    {
+      "fingerprint": "4ab3fa8ea33cc1c6fb2317b9f62ae38e46d599a2655462edd703ceb51ba26560",
+      "rule_id": "rs/no-unwrap-in-lib",
+      "file": "0verse/native/windows-token-capture/src/windows/driver_file.rs",
+      "line": 379
+    },
+    {
+      "fingerprint": "b8955c9a0da8787260782534099b500e9ea7ec07bf6e89d4f0d2fdb515a98c6f",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/driver_file.rs",
+      "line": 417
+    },
+    {
+      "fingerprint": "8d43b72b4f68171498c0172baa050ac5563df51973355d75df987fbb8ea09b0e",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/driver_file.rs",
+      "line": 443
+    },
+    {
+      "fingerprint": "37a6ad94e24a5fb2adf884729c226d02292ce8e4aa071d54af67b62460480698",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/driver_file.rs",
+      "line": 452
+    },
+    {
+      "fingerprint": "c7767f09f0d4e8224166b076db22bc700ab7fdbb0b709ea2c61740ff4855cbf6",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/live_facts.rs",
+      "line": 87
+    },
+    {
+      "fingerprint": "da3b3a871a4e14d92867d66a7c70d3cf7c6bec69be0239ec8945ea6540fe087f",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/live_facts.rs",
+      "line": 98
+    },
+    {
+      "fingerprint": "4462067f894514b167d03e1eff90df6eb022b52a7f129e57132c58bd2e245ef8",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/live_facts.rs",
+      "line": 114
+    },
+    {
+      "fingerprint": "acc6c6aec6501a67659577e8a48595d6abbd0107cfb58043dc981966e66bbd64",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/live_facts.rs",
+      "line": 154
+    },
+    {
+      "fingerprint": "707e332736e785c90a9f4b30c4440fa115650348a985be73e70c747c2b53a08e",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/live_facts.rs",
+      "line": 165
+    },
+    {
+      "fingerprint": "eb073d0941be2052551c12ac0b483a1e211e934190f8a7e5c6823f38a44b4b90",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/live_facts.rs",
+      "line": 180
+    },
+    {
+      "fingerprint": "1ce31c11057ffcc8536ee0153cf034de1f443301ade26910762e07e8129efa7b",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/live_facts.rs",
+      "line": 230
+    },
+    {
+      "fingerprint": "69687b3dae6746e8172260434a47b03a5c68c0f9e904370ca29c885ba317c082",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/live_facts.rs",
+      "line": 254
+    },
+    {
+      "fingerprint": "1938b5c97dee996163d3ca34b386404dd992bb09e7ca94f177a69b1ee21ec1c6",
+      "rule_id": "rs/no-unwrap-in-lib",
+      "file": "0verse/native/windows-token-capture/src/windows/live_facts.rs",
+      "line": 292
+    },
+    {
+      "fingerprint": "9151f74399508c2f3fbf885d4520ba9639896b47b0c632ebf8418d9584615a4c",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/live_facts.rs",
+      "line": 295
+    },
+    {
+      "fingerprint": "87e70dad09bf35281d9d7fbfe6e62354f9f901ec5516d24d05640fed2b46b055",
+      "rule_id": "rs/no-unwrap-in-lib",
+      "file": "0verse/native/windows-token-capture/src/windows/live_facts.rs",
+      "line": 311
+    },
+    {
+      "fingerprint": "588c8f6921aa470ec41e192ee964ef571385611bbb38ecb4d72cc76bb676f06e",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/live_facts.rs",
+      "line": 364
+    },
+    {
+      "fingerprint": "1fae7c4c813ff0d7d35af66723e54d07d48ecae43c7de0a69d562a7bb19eddfe",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/live_facts.rs",
+      "line": 419
+    },
+    {
+      "fingerprint": "73e32fcf5420b24354107869ce74d270a9ccf46f0a801ebcba26474e6461afae",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/live_facts.rs",
+      "line": 440
+    },
+    {
+      "fingerprint": "737a79c8c23861f5bcf4945d203e7f2c7b6c301e674e48efa96469527db2b76e",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/live_facts.rs",
+      "line": 453
+    },
+    {
+      "fingerprint": "8966c3ee75ff9647300e6049974f74c4ec0d1c0ada8609309aa99aa1c5b5e72e",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/live_facts.rs",
+      "line": 474
+    },
+    {
+      "fingerprint": "78f882c0cc4fa9f463485194eb081d7f175c320037684b3ca9d28263cfeeaf9d",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/live_facts.rs",
+      "line": 494
+    },
+    {
+      "fingerprint": "9ccb67ff7f1880a8a2fa9d99ec8cde3dda50fa88bfe482dc543a57d0b2dbcfa5",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/live_facts.rs",
+      "line": 498
+    },
+    {
+      "fingerprint": "a458e66e93e1abc6be8d10898d2271fb42e96b0c923df66bf9625efe8f03452e",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/live_facts.rs",
+      "line": 505
+    },
+    {
+      "fingerprint": "538d1d2c3ddf83ba87aa71265e6e5864ea1d6705bf4fd4a0da2500c4c866214d",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/live_facts.rs",
+      "line": 518
+    },
+    {
+      "fingerprint": "b3a12008f02cfdcd3c4b511899520bc44793904b5a45f6e423c11129ec4e65f3",
+      "rule_id": "rs/no-unwrap-in-lib",
+      "file": "0verse/native/windows-token-capture/src/windows/live_facts.rs",
+      "line": 522
+    },
+    {
+      "fingerprint": "ea56a9b94331a9a96407c4800062c2254248c7742419d905c75c39e80cbb86c7",
+      "rule_id": "rs/no-unwrap-in-lib",
+      "file": "0verse/native/windows-token-capture/src/windows/live_facts.rs",
+      "line": 533
+    },
+    {
+      "fingerprint": "105bfe9b439469996b0d1e1f34973696029f35debf8e97dcd29935e1ad4ba94b",
+      "rule_id": "rs/no-unwrap-in-lib",
+      "file": "0verse/native/windows-token-capture/src/windows/live_facts.rs",
+      "line": 535
+    },
+    {
+      "fingerprint": "d0257f7acd2e6c505c96b11f52407772db53150b002b5a18448b0e049ef7a015",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/pipe.rs",
+      "line": 29
+    },
+    {
+      "fingerprint": "3e14980f5a13f6a9dcfc003537c59993320d4f76105adadc4ff7e3856359c587",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/pipe.rs",
+      "line": 38
+    },
+    {
+      "fingerprint": "dd8af8fa12325d9479e036d5732e2796df9c634cbc39edb5f37684b34c60b16a",
+      "rule_id": "rs/no-unwrap-in-lib",
+      "file": "0verse/native/windows-token-capture/src/windows/pipe.rs",
+      "line": 52
+    },
+    {
+      "fingerprint": "70235a27f3751f623597702d4004d1eb19ab2c6841bc6ef3f6c4dc93c5c14637",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/pipe.rs",
+      "line": 60
+    },
+    {
+      "fingerprint": "8b4b3491acad5a926fb0f015a671a83a5af7a76d062abb4f89a81da144693e1b",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/pipe.rs",
+      "line": 73
+    },
+    {
+      "fingerprint": "c85e7b9bfb9c2aba183dd4550739e2719886afe51f86fd2a01b38e6535566a5e",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/protected_store.rs",
+      "line": 68
+    },
+    {
+      "fingerprint": "d0850d05cf019305c95117d8ea308bacd0267363b432445da993ed630668cd30",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/protected_store.rs",
+      "line": 79
+    },
+    {
+      "fingerprint": "ff6067332a3e9f83d05a4317966a4e8fdfa00dc2200df1f8834401c7abfec569",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/protected_store.rs",
+      "line": 90
+    },
+    {
+      "fingerprint": "8b1ff60435f2b89db487e5f6c35fbceaa2a222769578c5c42a98b47dc9543e9a",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/protected_store.rs",
+      "line": 239
+    },
+    {
+      "fingerprint": "5340b508929a79c8addbb67c326f720b002309c0ee9fd3d61d56f7960ae0b9e8",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/protected_store.rs",
+      "line": 252
+    },
+    {
+      "fingerprint": "576fd603da7c9775ddbdd85154c5079eea13754c2aa7858398b719031e9f609c",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/protected_store.rs",
+      "line": 265
+    },
+    {
+      "fingerprint": "ff1e6adae9a24cb2c3c78605cd668eef7df5664aed5566c71d24cec9f98858be",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/protected_store.rs",
+      "line": 281
+    },
+    {
+      "fingerprint": "1417e438085c51855f1608cb4dd7984c72f64314cb43dc839f37f4d09bb8d342",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/protected_store.rs",
+      "line": 295
+    },
+    {
+      "fingerprint": "a06789b8a61002fbcf027cd390804c3e3d67c0c42d82083599a5c12443660c0e",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/protected_store.rs",
+      "line": 319
+    },
+    {
+      "fingerprint": "135d39add9fecbda18835715dec989cbed2e6a8eb1c631e3f5fbe657b87b3f23",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/protected_store.rs",
+      "line": 338
+    },
+    {
+      "fingerprint": "4072b6a3f28d1879e4be89de6ed251a73a9f945897bf6b90b98b83b01fabed3e",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/protected_store.rs",
+      "line": 375
+    },
+    {
+      "fingerprint": "ffeed31fbbb3defa6648c0ac98c7e0f33418b88b2cf57e7551eeca159ab96147",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/protected_store.rs",
+      "line": 393
+    },
+    {
+      "fingerprint": "0ae6aa9b1b05cf23a9161cd0b276386007d0b20358f24d0ee4342b38ee98d5c8",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/protected_store.rs",
+      "line": 661
+    },
+    {
+      "fingerprint": "4efdf358366c46359ba5518abe2efb030c15f4d3ab6c8f073e0b8ccfd8071a1b",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/protected_store.rs",
+      "line": 677
+    },
+    {
+      "fingerprint": "7e7635131c0310340db96148e0024b3cd5a18898a88a356bf839f7e20e26375d",
+      "rule_id": "rs/no-path-traversal",
+      "file": "0verse/native/windows-token-capture/src/windows/protected_store.rs",
+      "line": 684
+    },
+    {
+      "fingerprint": "a8b9be1f12d482fa301fc829f7181dde162784f2440bfb338e6d7969c4cc4ee6",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/protected_store.rs",
+      "line": 684
+    },
+    {
+      "fingerprint": "0ece0ecf15d4ab9e89c3469a7189b2f23601e9e22969c3146d1eac253959e6e9",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/protected_store.rs",
+      "line": 689
+    },
+    {
+      "fingerprint": "156f5a4257fb44b3e74d17f7ebf1b131e2ecd6c2f9919ef457797f9e080022e8",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/protected_store.rs",
+      "line": 704
+    },
+    {
+      "fingerprint": "47d77360c4e1fe0824ea2336a42af05f8e9aaac5226b18889ada67df18d79f5b",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/protected_store.rs",
+      "line": 721
+    },
+    {
+      "fingerprint": "63dced71627344c8e8fbdb383c1bb4c58a62e4a2c3f5ff30e6a2e59aa2552ef7",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/protected_store.rs",
+      "line": 743
+    },
+    {
+      "fingerprint": "9cc7121b166f3cc4ad712d59f5579c09d12c579bff5c8350f35e870c0bb5d782",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/protected_store.rs",
+      "line": 768
+    },
+    {
+      "fingerprint": "cbecfb20284923734e7ffce24f6e1ee9e157965b94bf04b09198f5ce3a38d6a7",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/protected_store.rs",
+      "line": 781
+    },
+    {
+      "fingerprint": "b720e22a0cb43f73342f136dbca8ee96cb69e7d67d1e449b2f7af6ed49bcab26",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/protected_store.rs",
+      "line": 796
+    },
+    {
+      "fingerprint": "d6a12bb4d352ad9ae42ba071deb2257ab2cc618d8262bb540b0372905ee35a72",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/protected_store.rs",
+      "line": 799
+    },
+    {
+      "fingerprint": "140814816c4d90582770fe179d4db794c556baf91a652a10e2c586f64ee4aa6a",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/protected_store.rs",
+      "line": 818
+    },
+    {
+      "fingerprint": "513b88735b496af0692969809c0221b541b71db0a858be4f4d1a5f8780890b7d",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/protected_store.rs",
+      "line": 820
+    },
+    {
+      "fingerprint": "90a7f5a836055c34416377e1be19f41ba3b3cf447b15d922633a8a52a30447b3",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/protected_store.rs",
+      "line": 837
+    },
+    {
+      "fingerprint": "4364d790773e7a7a224ed54228b17fd7d3a2d0869f013e4a9bb7d50ff16e6084",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/protected_store.rs",
+      "line": 873
+    },
+    {
+      "fingerprint": "07a033d6757cd4fe5bcdee01f55aed7ac10ee60cc6e5eebfdd1b9048898f7861",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/protected_store.rs",
+      "line": 900
+    },
+    {
+      "fingerprint": "fd1c1a37ba1642af1423b656a01cbd1286f14f0e1d5d6165387e0136ffd69919",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/protected_store.rs",
+      "line": 915
+    },
+    {
+      "fingerprint": "164e077789e0373a70bba1d0f31f19c9688689781d25e9d066b228394e479cdd",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/protected_store.rs",
+      "line": 933
+    },
+    {
+      "fingerprint": "bf5525a09b6785e53b32335c341c574b3ddb1a240a001dd717d28fdc1c4e69ca",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/protected_store.rs",
+      "line": 946
+    },
+    {
+      "fingerprint": "a50c4a41f8003e40468edf3b73ec516e12c083686b4c2bcce8b932067b104132",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/protected_store.rs",
+      "line": 949
+    },
+    {
+      "fingerprint": "e86837fbd90dda554b06d81ecad50af3ef80ec0272e00c5836e3185aaa26b78d",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/protected_store.rs",
+      "line": 967
+    },
+    {
+      "fingerprint": "ec1cb0c3a56409f60bfbb028ac5cdea7a4dff0c568d98e986dc2ba00ac3fa837",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/protected_store.rs",
+      "line": 969
+    },
+    {
+      "fingerprint": "d37f7d2837d731edf3477d1cae0636c87b40bc41ab65ddfd8002c366cbfb6ae3",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/protected_store.rs",
+      "line": 977
+    },
+    {
+      "fingerprint": "adb19a52a9a90aa6f003a22f74b6f301efc6917527cb302bcfb56c8157e79ccc",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/protected_store.rs",
+      "line": 993
+    },
+    {
+      "fingerprint": "5a9762c524a83dfe38c26ae0caf51cdfaa256c715d9ee271f0b4cd7d2bad67a3",
+      "rule_id": "rs/no-unwrap-in-lib",
+      "file": "0verse/native/windows-token-capture/src/windows/protected_store.rs",
+      "line": 997
+    },
+    {
+      "fingerprint": "9a5403be32a715020d4fa240547acdf3081fc3a2f863db495c99777cc153f49e",
+      "rule_id": "rs/no-unwrap-in-lib",
+      "file": "0verse/native/windows-token-capture/src/windows/protected_store.rs",
+      "line": 1004
+    },
+    {
+      "fingerprint": "9e362d1926856da8f2451a1059bc83f23bc42eabcb16f55b3ae5008f7c1e70eb",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/protected_store.rs",
+      "line": 1023
+    },
+    {
+      "fingerprint": "20aec23bff3e3c4598d5c9b7f8127cabe676990ffc0dfeecf8e57b007724f4d2",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/protected_store.rs",
+      "line": 1041
+    },
+    {
+      "fingerprint": "2f1b2bb98f5f83a815cdadb08d85de262a988b4a1828188f276b6235a461ba28",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/protected_store.rs",
+      "line": 1054
+    },
+    {
+      "fingerprint": "de5f392c25432b955c1f1fed5f9c5769aeb3beac6149921dedbc9d89cfdfe2c2",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/service.rs",
+      "line": 42
+    },
+    {
+      "fingerprint": "2047484cdc280683934a52f2b03eee5bca5f1c0ba7de86d1eb36e0781ad5f49b",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/service.rs",
+      "line": 48
+    },
+    {
+      "fingerprint": "4c8aee36c8abbee4971b67363132a8a6af754c4e1801fdd21bdd72e00237a37b",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/service.rs",
+      "line": 80
+    },
+    {
+      "fingerprint": "d708278420a7f470539eeb9e3937d9362a2d198233fbeb1b3a3c936abf5fb67b",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/store_e2e_service.rs",
+      "line": 55
+    },
+    {
+      "fingerprint": "4aa3b491de321c64dcdcfe9591a09ae03746245a11d4ce70b213eb1d129c5d07",
+      "rule_id": "rs/no-path-traversal",
+      "file": "0verse/native/windows-token-capture/src/windows/store_e2e_service.rs",
+      "line": 75
+    },
+    {
+      "fingerprint": "13f777d64aee14a80438152f225c8572fcdc511f479f17c931a01f76edcff725",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/store_e2e_service.rs",
+      "line": 90
+    },
+    {
+      "fingerprint": "1875514eed27cf3cb8c87b86604bd8785677d8dc3b3978f2e82d0456343e442d",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/store_e2e_service.rs",
+      "line": 111
+    },
+    {
+      "fingerprint": "4d8d97ecefa68aa3df7242bea06a49967a2c32e1cfe44ce696566d5f89eb74c1",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/store_e2e_service.rs",
+      "line": 149
+    },
+    {
+      "fingerprint": "1cace4d319e1326e5c7c659878104e80e69c289621ffb8a0e1478a607be019f9",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/trusted_child_e2e.rs",
+      "line": 60
+    },
+    {
+      "fingerprint": "7da956b0d8af4da613ca7f038f3e0281c9a777d2c326ca0e6313c7e41e2b0b58",
+      "rule_id": "rs/no-path-traversal",
+      "file": "0verse/native/windows-token-capture/src/windows/trusted_child_e2e.rs",
+      "line": 154
+    },
+    {
+      "fingerprint": "605478811039c599080c0b173b1846a88efcd4231d8a72a4e97135de94c2fb8b",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/trusted_child_e2e.rs",
+      "line": 350
+    },
+    {
+      "fingerprint": "a5dc96a3b6bdb8cbdbd02e9281f6dc0ae8b778ec9a3f7f1acfce80fe656fab87",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/trusted_child_e2e.rs",
+      "line": 412
+    },
+    {
+      "fingerprint": "175c4c5bc85b9fef963986a532b4ec1cf37d4ab8205d20942a65fd35534ec024",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/trusted_child_e2e.rs",
+      "line": 429
+    },
+    {
+      "fingerprint": "d4261ffa3d88abe1df99160cd067fc116df24211f4c7c8d2fff70e3283c88878",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/trusted_child_e2e.rs",
+      "line": 453
+    },
+    {
+      "fingerprint": "cb87a311b3f5fbe3a2712c22ab4e01bdd1947657dd9b725a856eebb766668202",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/trusted_child_e2e.rs",
+      "line": 455
+    },
+    {
+      "fingerprint": "b190bd1472707beaadac48829f3d435e83a587f5c173760ddf2955147df46939",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/trusted_child_e2e.rs",
+      "line": 462
+    },
+    {
+      "fingerprint": "6576976ce6221ff5afde1256c0df114a8a1a5373e9049adc1d2a90ea1fdb9969",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/trusted_child_e2e.rs",
+      "line": 525
+    },
+    {
+      "fingerprint": "b7dbfd8d53fec73ae292b2e2c2c203e6a5d5709e52ca39df5419dc126ce21605",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/trusted_child_e2e.rs",
+      "line": 541
+    },
+    {
+      "fingerprint": "4fd4f749ec2a634dd9e43693bd8940fc5dab84fe2e23e38412cd674c23def42e",
+      "rule_id": "rs/no-unwrap-in-lib",
+      "file": "0verse/native/windows-token-capture/src/windows/trusted_child_e2e.rs",
+      "line": 545
+    },
+    {
+      "fingerprint": "e7f7ba6182d226c64aa27a9009dc4d3c8d6612b7c52af3c1672a23a5677f2aec",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/trusted_child_e2e.rs",
+      "line": 556
+    },
+    {
+      "fingerprint": "22e813fcfac4b873daa4a5ee3f015fc67b3138e90dd76e7ff88348587cc3975b",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/trusted_child_e2e.rs",
+      "line": 564
+    },
+    {
+      "fingerprint": "93e1539dca88134a947592922b16102c774f75a9e151a65e00ddc0f54c592a3c",
+      "rule_id": "rs/no-unwrap-in-lib",
+      "file": "0verse/native/windows-token-capture/src/windows/trusted_child_e2e.rs",
+      "line": 593
+    },
+    {
+      "fingerprint": "9c698006d90b9aeabbd2d302293cff3a1d5c257011c6a2c1ad7481276910b976",
+      "rule_id": "rs/no-unwrap-in-lib",
+      "file": "0verse/native/windows-token-capture/src/windows/trusted_child_e2e.rs",
+      "line": 598
+    },
+    {
+      "fingerprint": "15759d5aaaf2d9387acd4963ed94468220b6882283f8bc33b98bf731a3f146cb",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/trusted_child_e2e.rs",
+      "line": 604
+    },
+    {
+      "fingerprint": "71d3413e723bc35dffd7014a486837d2ada48b2b3086eae94f76f2975d0553c5",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/trusted_child_e2e.rs",
+      "line": 610
+    },
+    {
+      "fingerprint": "638a62e6609bd1cafa06ac2d66cf105135d3858b109e9139bd2e6c6e434b1b43",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/trusted_child_e2e.rs",
+      "line": 611
+    },
+    {
+      "fingerprint": "397a98ff7496bfec8facebe10bb28498f55d02d39b11f174ec427378e9b08a93",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/trusted_child_e2e.rs",
+      "line": 612
+    },
+    {
+      "fingerprint": "e169d3aad63d031558aaafb1c69b30bde434b7229366a0a2a939221c8c18fb78",
+      "rule_id": "rs/no-command-injection",
+      "file": "0verse/native/windows-token-capture/src/windows/trusted_child_e2e.rs",
+      "line": 672
+    },
+    {
+      "fingerprint": "42ad370a0fc25f917cc8b8677d645f93aeb6b0b1d610288975619434b82d6ca6",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/trusted_child_e2e.rs",
+      "line": 727
+    },
+    {
+      "fingerprint": "85274e34f655f6a5852ef2d9a906de6e317207bafd20b4d60e3fafb9b6e56eee",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/trusted_child_e2e.rs",
+      "line": 755
+    },
+    {
+      "fingerprint": "c1b8b4e50c6de6b0d5bb5555c6ad932eb312ca48fcbf3d19428550b606276369",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/trusted_child_e2e.rs",
+      "line": 780
+    },
+    {
+      "fingerprint": "655d1f70877dcd614286ccd63cc8718137121ba1136a38235df9c8e0acd6a961",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/witness_child.rs",
+      "line": 79
+    },
+    {
+      "fingerprint": "3c956f32052b27803ff81d6907ad5ceee476099eb6625c77c8c7e37db8649f87",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/witness_child.rs",
+      "line": 97
+    },
+    {
+      "fingerprint": "ce8b76f98e269c924c2576e8c90c8d3d4d1578256d12106d513077ce54a32f01",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/witness_child.rs",
+      "line": 105
+    },
+    {
+      "fingerprint": "2b1e30c82faf66e831b10a4f698318d9e76eacbe91c68108cdda5e95ef04639d",
+      "rule_id": "rs/no-unwrap-in-lib",
+      "file": "0verse/native/windows-token-capture/src/windows/witness_child.rs",
+      "line": 123
+    },
+    {
+      "fingerprint": "858f29a5efbd8e93e4f18791aa820cebc4c1b6547c1dd3b377a543da9e712fba",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/witness_child.rs",
+      "line": 132
+    },
+    {
+      "fingerprint": "3b35e868bdd4b80910d058e6b66b4c9c272272003ca30b4d6cf23923eb5cf65c",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/witness_child.rs",
+      "line": 147
+    },
+    {
+      "fingerprint": "1b6b02ad2b076c2f8cbda9446a614083a78048318d9b8e3e98fcad4584d3e869",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/witness_child.rs",
+      "line": 153
+    },
+    {
+      "fingerprint": "a5093233d3e1210f29849e7670fc9b153009b1be35f3fba24385b0b43c63edb7",
+      "rule_id": "rs/no-path-traversal",
+      "file": "0verse/native/windows-token-capture/src/windows/witness_child.rs",
+      "line": 155
+    },
+    {
+      "fingerprint": "4a883ae2ef874205e100fdeb50ef52287b272730034eee5c0801bdf109958b75",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/witness_child.rs",
+      "line": 157
+    },
+    {
+      "fingerprint": "cfef80c7cbe0a5412d5ea069518dfc0e1d4b8842ded48699533b3be8fee0d042",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/witness_child.rs",
+      "line": 166
+    },
+    {
+      "fingerprint": "4e5b4bd7837ad3c295bb86186250c26424597a814f1016a179019b63575ab3e9",
+      "rule_id": "rs/no-unwrap-in-lib",
+      "file": "0verse/native/windows-token-capture/src/windows/witness_child.rs",
+      "line": 170
+    },
+    {
+      "fingerprint": "84b3cae4a6a1c926fe6547c8987baa10acd14eead31c8c5d16e69a95490b4838",
+      "rule_id": "rs/no-unwrap-in-lib",
+      "file": "0verse/native/windows-token-capture/src/windows/witness_child.rs",
+      "line": 181
+    },
+    {
+      "fingerprint": "aabdf7f5a6176dd7ecd96293fda769b9ab23fe07d01802f5ca43541913adbcd7",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/witness_child.rs",
+      "line": 188
+    },
+    {
+      "fingerprint": "dba90561b42eaac6adc10841b5ed292efef6eef6f3129779b17d52f4fa029798",
+      "rule_id": "rs/no-unwrap-in-lib",
+      "file": "0verse/native/windows-token-capture/src/windows/witness_child.rs",
+      "line": 192
+    },
+    {
+      "fingerprint": "dd4ba86632b6f8ecc4cc953477d73a5e2cce1b65563289194add7dee000f7f5f",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/witness_child.rs",
+      "line": 216
+    },
+    {
+      "fingerprint": "da911aeb9d79c1cb6d86c4f67f34a8734f3a095cedb11432ffcbbb2f2fb3ade9",
+      "rule_id": "rs/no-unwrap-in-lib",
+      "file": "0verse/native/windows-token-capture/src/windows/witness_child.rs",
+      "line": 221
+    },
+    {
+      "fingerprint": "2d91cc5630ffecbc6de2f2577f50474d17c981a6c7767d5cbebbe2975e362f66",
+      "rule_id": "rs/no-unwrap-in-lib",
+      "file": "0verse/native/windows-token-capture/src/windows/witness_child.rs",
+      "line": 247
+    },
+    {
+      "fingerprint": "3c7ea8489c0e55a3ed5f2cd5c3100829c1a427afb823d39afbee66b1788372a9",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/witness_child.rs",
+      "line": 298
+    },
+    {
+      "fingerprint": "bfed742094a25f659e38d1368a91a258497599653d262563da052aec980d6806",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/witness_child.rs",
+      "line": 305
+    },
+    {
+      "fingerprint": "18ee051037df946f4df7cdd620897bbe40efd53eff38f0c42c81106951c70ec8",
+      "rule_id": "rs/no-unwrap-in-lib",
+      "file": "0verse/native/windows-token-capture/src/windows/witness_child.rs",
+      "line": 335
+    },
+    {
+      "fingerprint": "af14fdd633e32f31d0f529b1b1f4d1a6c48ff395864f5daadb59161b2f37282c",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/witness_child.rs",
+      "line": 415
+    },
+    {
+      "fingerprint": "7648319da108ee92b01554a48788feca21a4b0cc6fd95221dc2abc25f6c504f6",
+      "rule_id": "rs/no-unwrap-in-lib",
+      "file": "0verse/native/windows-token-capture/src/windows/witness_child.rs",
+      "line": 471
+    },
+    {
+      "fingerprint": "f58677c49a8818b6ea5d47d8c88269148e8c5bb14b3d3b87607999653719f519",
+      "rule_id": "rs/no-unwrap-in-lib",
+      "file": "0verse/native/windows-token-capture/src/windows/witness_child.rs",
+      "line": 478
+    },
+    {
+      "fingerprint": "6356151db24a6378bff451e453d1b88d1c6bcfc3277a40c7993ece2b95ccf232",
+      "rule_id": "rs/no-unwrap-in-lib",
+      "file": "0verse/native/windows-token-capture/src/windows/witness_child.rs",
+      "line": 480
+    },
+    {
+      "fingerprint": "a0486fb28095a8cf3ce226747e78fb485ba2949e41a1dc1b906b37df86d3a6ca",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/witness_child.rs",
+      "line": 486
+    },
+    {
+      "fingerprint": "da72ca49e5446ddfb40de91349a2f0855ab04a9045a39887aef0214bde96cf7a",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/witness_child.rs",
+      "line": 487
+    },
+    {
+      "fingerprint": "871cfa983081e990b006781e7497afd27f5af9cbe958d7148922a8678d421005",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/witness_child.rs",
+      "line": 497
+    },
+    {
+      "fingerprint": "bb1ce2cf9b83986c426c732292b4621102575dcd59b0eac84c4fce18af9e7144",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/witness_child.rs",
+      "line": 498
+    },
+    {
+      "fingerprint": "e25d68d8106a46041c15e8f626a1c353efd9f4bf3726fbf73eb97cb135a4af7a",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/witness_child.rs",
+      "line": 524
+    },
+    {
+      "fingerprint": "b1276271e28a5d4da31a520cb579fc47740b7895d5197146cb04f3ff1766f299",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/witness_child.rs",
+      "line": 530
+    },
+    {
+      "fingerprint": "77b2ece36fdde430b3f5d4440ca92c7a2a7877717956ee3d7a92ae44d939f79f",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/witness_child.rs",
+      "line": 538
+    },
+    {
+      "fingerprint": "3743d85457b632b5b211ea427d66e2cddfbd9f2eaf3b56e11b164c370a525798",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/witness_child.rs",
+      "line": 545
+    },
+    {
+      "fingerprint": "6b4049da96f63702076837b5879ca563fe526ac86c1c6b983ab7d8d3c5ead7e4",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/witness_child.rs",
+      "line": 555
+    },
+    {
+      "fingerprint": "b9c38bb5c6034eacfb4cdda29dd1d20f97478268e00a7111b68d500c0dd908fb",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/witness_child.rs",
+      "line": 567
+    },
+    {
+      "fingerprint": "f666e9541f74fa63bde5cc086a4bffa01616a3459ee90ce904d705c1ffd02811",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/witness_child.rs",
+      "line": 581
+    },
+    {
+      "fingerprint": "0a58dd0d876e58b5e0f8fa134a551bf6d6b2f280dd073e84c9c211a7a2709708",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/witness_child.rs",
+      "line": 592
+    },
+    {
+      "fingerprint": "05e5109947fe62ac0e93663c4c48cf14099ee3b2a3a48ce30dde4fd9070d9953",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/witness_child.rs",
+      "line": 604
+    },
+    {
+      "fingerprint": "ecf84f9eab9cf99893b38d08afa7ae6f8029e0b7ce57fdfdb08970d8253a66f0",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/witness_child.rs",
+      "line": 713
+    },
+    {
+      "fingerprint": "1db7c61e60807c98d70bc4fc2a832a23631372208183c51006a8b739637c78fd",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/witness_child.rs",
+      "line": 729
+    },
+    {
+      "fingerprint": "eafc62af775a4ebce0e3c390bb655c5af222df0501a8bba6802b7f26e774f94d",
+      "rule_id": "rs/no-unwrap-in-lib",
+      "file": "0verse/native/windows-token-capture/src/windows/witness_child.rs",
+      "line": 735
+    },
+    {
+      "fingerprint": "e5a774599ea21a47f0bf6d579c5fda3640a9790240faeea0c484d78233a74079",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/witness_child.rs",
+      "line": 764
+    },
+    {
+      "fingerprint": "46c5398e58f5b858c1b483c0e4f25ad8c7b8833955667e38c93f0847bc4f9907",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/witness_child.rs",
+      "line": 776
+    },
+    {
+      "fingerprint": "eae9ae67664b8d0f3a386c049356602711b5c9b41a5649d3580df4f6888e8bf5",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/witness_child.rs",
+      "line": 837
+    },
+    {
+      "fingerprint": "695346435ff513e043d3703a5d557111e05a481e4aa8ecb8c7004ebcf35c1191",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/witness_child.rs",
+      "line": 853
+    },
+    {
+      "fingerprint": "d34cde08ff75aa159b91a9c38cd07695d51acbecc024ae47e77398c4a642065e",
+      "rule_id": "rs/no-unwrap-in-lib",
+      "file": "0verse/native/windows-token-capture/src/windows/witness_child.rs",
+      "line": 858
+    },
+    {
+      "fingerprint": "a3f7fb729b79e477db8c5f9f04baa08a8e5175fa8793586a3390e4d39e7c39d7",
+      "rule_id": "rs/no-unwrap-in-lib",
+      "file": "0verse/native/windows-token-capture/src/windows/witness_child.rs",
+      "line": 866
+    },
+    {
+      "fingerprint": "5e20f3664af645ccf30ef2268c1963d9945d204a218e881c30a74756c82cbe8c",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/witness_child.rs",
+      "line": 868
+    },
+    {
+      "fingerprint": "6c53126dab6162c2d022ab5001825cfcfc3ce2caff49453131c2fe1cff6f7aa8",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/witness_child.rs",
+      "line": 899
+    },
+    {
+      "fingerprint": "9f6137c9bc62c8a104e97c9496c06631e7675a9dc4c813dc5a8654ab31a49531",
+      "rule_id": "rs/no-path-traversal",
+      "file": "0verse/native/windows-token-capture/src/windows/witness_child.rs",
+      "line": 908
+    },
+    {
+      "fingerprint": "a79625cef3d6c769ea27a066877ecae08ea2bc3c14528980f506e21300aca9d0",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/witness_child.rs",
+      "line": 910
+    },
+    {
+      "fingerprint": "fb764f49a08f362c3223d16837e6373c4898ba059e299c28388dc87bc27c4da1",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/witness_child.rs",
+      "line": 1018
+    },
+    {
+      "fingerprint": "89f10f26c76e68a599919b4ac3834b23aabb67eac922e74efc33b7fb82e634cb",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/witness_child.rs",
+      "line": 1022
+    },
+    {
+      "fingerprint": "138f238026bbcc7d1b8ecbecb6c3a387476b2bac98b9fe7325aee653cd8253e6",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/witness_child.rs",
+      "line": 1072
+    },
+    {
+      "fingerprint": "4babdfb0e6fb1edc121628e8ad5e9abf01ebeb0a284cdb8c381a96f6cc8a7eb3",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/witness_child.rs",
+      "line": 1076
+    },
+    {
+      "fingerprint": "ccd101140e314185c8c75e924840b540489b53429b44a38e75b837e3d68eb619",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/witness_child.rs",
+      "line": 1122
+    },
+    {
+      "fingerprint": "43219e390f502e2336c462a1bd667462a0dca9816cd534f96e61ce7d5aa08e5d",
+      "rule_id": "rs/no-unwrap-in-lib",
+      "file": "0verse/native/windows-token-capture/src/windows/witness_child.rs",
+      "line": 1132
+    },
+    {
+      "fingerprint": "6fe8edd82a0b64f335bb76701384bf803909db1502ac552c71ae140bf203481e",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/witness_child.rs",
+      "line": 1160
+    },
+    {
+      "fingerprint": "9aecf1416e03f52b510a0b2580bc0146e01b9f6e375cce7f4a8c0ac675e3e763",
+      "rule_id": "rs/no-unwrap-in-lib",
+      "file": "0verse/native/windows-token-capture/src/windows/witness_child.rs",
+      "line": 1172
+    },
+    {
+      "fingerprint": "763e9f117759ad20b48154a1a336a66d67c6a31ee34c176cb363e4997919f7ec",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/witness_child.rs",
+      "line": 1177
+    },
+    {
+      "fingerprint": "ad7a60d6fe4d7ff1ca12862f33a930139931ba73dcf90a5c9e7c68da6ee9f0aa",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/witness_child.rs",
+      "line": 1209
+    },
+    {
+      "fingerprint": "2576b919c056285c4e8d27fa41010e7bb02e265c40428173dfbb0ef33d74c090",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/witness_child.rs",
+      "line": 1213
+    },
+    {
+      "fingerprint": "2144a6119016e3623191682042d83791152a00f4379c6d51ac06edf2aceae2ce",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/witness_child.rs",
+      "line": 1219
+    },
+    {
+      "fingerprint": "cc5e32372d438a7767ee69c0ab3efa98b57ac58af3cfa108b49a82155864c7b4",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/witness_child.rs",
+      "line": 1226
+    },
+    {
+      "fingerprint": "1c787221d124324e28affc3a244e48d22d503ac881bfd1bb160e2ce54ed5160d",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/witness_child.rs",
+      "line": 1241
+    },
+    {
+      "fingerprint": "7a71c02a00da3a9017a45d45def7dda6976d35af16e85e5def58ad16acb49278",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/witness_child.rs",
+      "line": 1242
+    },
+    {
+      "fingerprint": "d846e1ba34a620814b89fe50beb64e4ba24eaf2b374c2e95ab4a24d0925d31ab",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/witness_child.rs",
+      "line": 1243
+    },
+    {
+      "fingerprint": "0440e2c14018ddeca58cc5f492d7a7115e0afebabf50dc3fc6f6e576090c4fd0",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/witness_child.rs",
+      "line": 1244
+    },
+    {
+      "fingerprint": "20221e27f8ff6edf9d07433b9e87c76fb517b977b363d3ef71c575f9c6f23ea5",
+      "rule_id": "rs/no-unwrap-in-lib",
+      "file": "0verse/native/windows-token-capture/src/windows/witness_child.rs",
+      "line": 1261
+    },
+    {
+      "fingerprint": "99f51d8f7bf5d176d69a3474f9ea800a8462938075882387878f354d6198fe18",
+      "rule_id": "rs/no-unwrap-in-lib",
+      "file": "0verse/native/windows-token-capture/src/windows/witness_child.rs",
+      "line": 1265
+    },
+    {
+      "fingerprint": "5d383003be68ad47800adc46632825aa931197f2fd9427396ce90add4d30f07a",
+      "rule_id": "rs/no-unwrap-in-lib",
+      "file": "0verse/native/windows-token-capture/src/windows/witness_child.rs",
+      "line": 1272
+    },
+    {
+      "fingerprint": "cff49e7d6628a99e5ae3f6ea1f952e619fedda743fddc6ada77da006ed59d8d4",
+      "rule_id": "rs/no-unwrap-in-lib",
+      "file": "0verse/native/windows-token-capture/src/windows/witness_child.rs",
+      "line": 1279
+    },
+    {
+      "fingerprint": "7b11885b38a283a43a2f1a2fc16e4387893a3faea79903807040a5b021e1a7a7",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/witness_child.rs",
+      "line": 1294
+    },
+    {
+      "fingerprint": "ca1a30a2de1f65446bc74d473b5ca4cfc3952f1a6868af0717eee5969439764b",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/witness_child.rs",
+      "line": 1295
+    },
+    {
+      "fingerprint": "56eb52c6374092f8a3652cf60ef73d9de0e00de563c9c63f3ff80239b23160c8",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/witness_child.rs",
+      "line": 1296
+    },
+    {
+      "fingerprint": "51da744da24f6f0d73485cc27b048981522ca376f5bbf77281637dd65cbfdb85",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/witness_child.rs",
+      "line": 1303
+    },
+    {
+      "fingerprint": "56204434b4af2d8b163f3be53464bed187e93196d327f3ee5692c6022bd30bf8",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/witness_rendezvous.rs",
+      "line": 62
+    },
+    {
+      "fingerprint": "5d86cfa144a5a354dcde92f02c05263362645772d3e9a5f8314040bb516692f0",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/witness_rendezvous.rs",
+      "line": 71
+    },
+    {
+      "fingerprint": "35c1e8d391924a77380a974f2c94e7bed0aecd401447929689d5b406c4ae2ea9",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/witness_rendezvous.rs",
+      "line": 76
+    },
+    {
+      "fingerprint": "f5d4e7e8fe28c02b263f94c77979402e67321a1267b789526bfb72df7a425ff4",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/witness_rendezvous.rs",
+      "line": 78
+    },
+    {
+      "fingerprint": "9b07c8cc66558af5301b5950f54aeb480cf736bb16a4fd0157ba2ca1fe2151ac",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/witness_rendezvous.rs",
+      "line": 80
+    },
+    {
+      "fingerprint": "4bbe3df0440fb8e4880194e281cedb280a7287956abbb5647fcade09c043a48a",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/witness_rendezvous.rs",
+      "line": 88
+    },
+    {
+      "fingerprint": "64c3c54f1cfb6803512729b46c584e5756e42a56712b2015e0df60b4e595502c",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/witness_rendezvous.rs",
+      "line": 95
+    },
+    {
+      "fingerprint": "9102ebb7460ecfbd8218e4735c3bb6c161d2721febcf7f9363ab22b59c65e80f",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/witness_rendezvous.rs",
+      "line": 99
+    },
+    {
+      "fingerprint": "9301029b85d1181e181fd880c88a9bd185d90c3e301b259553b1936d7e801437",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/witness_rendezvous.rs",
+      "line": 120
+    },
+    {
+      "fingerprint": "fb975da2d17d28ac84ef0a950c90f035255243d477be8dddda2dedd922fc8677",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/witness_rendezvous.rs",
+      "line": 123
+    },
+    {
+      "fingerprint": "a1cd75468e506db77fc3972400021ff891d13a8bd4e3c8847ac4e0878f0bbfa3",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/witness_rendezvous.rs",
+      "line": 136
+    },
+    {
+      "fingerprint": "a67f2a36283b8437f7ec8c452ba162251c2f4b0f24eb32a5961f03228da59e1c",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/witness_rendezvous.rs",
+      "line": 147
+    },
+    {
+      "fingerprint": "f6cdd5e30227e66d4113a470f5de7847693ed7f7929f15507f85dcab10c705d1",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/witness_rendezvous.rs",
+      "line": 159
+    },
+    {
+      "fingerprint": "776b75b20880379ef243de7e259ecbacd9a2b2f53312ddd0a2abf8b67c0568bb",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/witness_rendezvous.rs",
+      "line": 181
+    },
+    {
+      "fingerprint": "c2b6a76cd0da3baca4a55ada6afdf09b1b328a8801472c53b9eddfd352e86d5f",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/witness_rendezvous.rs",
+      "line": 183
+    },
+    {
+      "fingerprint": "7036a0e757b2337a7961f61e7822951c72e114916464cd67dc55e356c596a97d",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/witness_rendezvous.rs",
+      "line": 193
+    },
+    {
+      "fingerprint": "249cf312d679d05c1b28b34d779e69ffc27d55afcb0a9adddfa33cd556d4d03c",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/witness_rendezvous.rs",
+      "line": 194
+    },
+    {
+      "fingerprint": "f27b7cb1f049a346430caeb6079375a6a4b7832dcb2b3989c49fdfff3b3f9546",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/witness_rendezvous.rs",
+      "line": 212
+    },
+    {
+      "fingerprint": "4e221352004d5d4fb533d5f72b5fb3ee75e751675294a379ad3707fc11f8c36b",
+      "rule_id": "rs/no-unwrap-in-lib",
+      "file": "0verse/native/windows-token-capture/src/windows/witness_rendezvous.rs",
+      "line": 214
+    },
+    {
+      "fingerprint": "3bc2e5c2ef4df8df54f697c266061e52d5e713778cf24525066b28cdf51c7e86",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/witness_rendezvous.rs",
+      "line": 231
+    },
+    {
+      "fingerprint": "60abe545846b82e6bf80e44cb2dad3bfd42f90c2595f2017c03be47e8ac3a73d",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/witness_rendezvous.rs",
+      "line": 243
+    },
+    {
+      "fingerprint": "26e5a7c47bf8e63416994a29a83e8715cef20d912b016cdbf72f555f04ee98ef",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/witness_rendezvous.rs",
+      "line": 258
+    },
+    {
+      "fingerprint": "cdf72c832826c0c972231abc40353d2d607e81a787e4af2736bc6b1d823b1750",
+      "rule_id": "rs/no-unwrap-in-lib",
+      "file": "0verse/native/windows-token-capture/src/windows/witness_rendezvous.rs",
+      "line": 260
+    },
+    {
+      "fingerprint": "5eb93f1d448b2cc2af622c54b19247ff5131b2add58483d115cd641efae49e07",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/witness_rendezvous.rs",
+      "line": 279
+    },
+    {
+      "fingerprint": "ada30904231f422e0d48658b80476306d856cf29110800bff2d17834768ee50f",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/witness_rendezvous.rs",
+      "line": 291
+    },
+    {
+      "fingerprint": "a1b1d6c0bcf13bae3c554611a77bd919bd542337cf18ab5af54ec6fc4cacf863",
+      "rule_id": "rs/no-unwrap-in-lib",
+      "file": "0verse/native/windows-token-capture/src/windows/witness_rendezvous.rs",
+      "line": 303
+    },
+    {
+      "fingerprint": "4a9e0d2003eb07aa06e55b5f6f1d17519f15a74215d2c0372e123cc07f11f89d",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/witness_rendezvous.rs",
+      "line": 308
+    },
+    {
+      "fingerprint": "e245a1c0280814b0ed1b336afd42cfb3dfa2dfb7793b0d9a6c30baae7f61be36",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/witness_rendezvous.rs",
+      "line": 322
+    },
+    {
+      "fingerprint": "a8669ecdf0a051e047c7a5bbf53ce1ee78a8acaebb9f406fcb84f768555a03cc",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/witness_rendezvous.rs",
+      "line": 360
+    },
+    {
+      "fingerprint": "b331b06a5e1a42a7515027d98ea3d8a1406f22bad780a9073df844bd2395191f",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/witness_rendezvous.rs",
+      "line": 375
+    },
+    {
+      "fingerprint": "806fd124dbc43830b9b9ae3c6afc33cb5b12d30886fcf0e14855410c844af9d0",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/witness_rendezvous.rs",
+      "line": 418
+    },
+    {
+      "fingerprint": "5f8905ad0b2a96b684cbaa2398800997623bbbafb15d3c82d5280457a4b9f51e",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/witness_rendezvous.rs",
+      "line": 430
+    },
+    {
+      "fingerprint": "92b66e58850366902b932e4747e73fe0d22f6b41ea6c844ef80dc79d7f1b11eb",
+      "rule_id": "rs/no-unwrap-in-lib",
+      "file": "0verse/native/windows-token-capture/src/windows/witness_rendezvous.rs",
+      "line": 553
+    },
+    {
+      "fingerprint": "d17ad8766e2307fab2508ab6f6c4fed7e10ce0d0028fe1b6c0f4b7e9e25de9d8",
+      "rule_id": "rs/no-unwrap-in-lib",
+      "file": "0verse/native/windows-token-capture/src/windows/witness_rendezvous.rs",
+      "line": 560
+    },
+    {
+      "fingerprint": "3ee2401acfea5fd086b14214226ba17918c8e80d032390f76f4bd6d830ebef58",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/witness_rendezvous.rs",
+      "line": 562
+    },
+    {
+      "fingerprint": "0be313669f3a9970846afdf126629ce228280342742057cea9a0942092e45d67",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/witness_rendezvous.rs",
+      "line": 574
+    },
+    {
+      "fingerprint": "c8d6f5280a3fa415b8326240f39646b05509eac109079931b0745b0ef398f15e",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/witness_rendezvous.rs",
+      "line": 761
+    },
+    {
+      "fingerprint": "d419e9e3681eab73680a917ccbe7d12bf73aee1e6e54cb17dad14bb6387ffd4f",
+      "rule_id": "rs/no-unwrap-in-lib",
+      "file": "0verse/native/windows-token-capture/src/windows/witness_rendezvous.rs",
+      "line": 775
+    },
+    {
+      "fingerprint": "15146e0043efbe72ada927f7007ad6eb8e79bd1a50f7572027ece3b5169698a7",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/witness_rendezvous.rs",
+      "line": 782
+    },
+    {
+      "fingerprint": "ca5868c6bc579ceba8a2b66b393889666bb5523fdac30c096726f5a3b30325f9",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/witness_rendezvous.rs",
+      "line": 794
+    },
+    {
+      "fingerprint": "726d76c6b8381313d5a0135ab57249e827c56d6175756577c4fea77e0001defd",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/witness_rendezvous.rs",
+      "line": 796
+    },
+    {
+      "fingerprint": "5658d555de8ec5d520e959a5f28a77401feac0f9fa093dd7450ee544b68b4079",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/witness_rendezvous.rs",
+      "line": 821
+    },
+    {
+      "fingerprint": "2aa6727b4d36798b407dac2442fb603db59dcac72c34a9734f716a55117e6da9",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/witness_rendezvous.rs",
+      "line": 847
+    },
+    {
+      "fingerprint": "3499fe369b7fa39420b0c895f89ddac698cc222ec9125f09907d9638e1ec9c0d",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/witness_rendezvous.rs",
+      "line": 882
+    },
+    {
+      "fingerprint": "1079bc223d8ee4d830f4af9cbdf849f577aa56983255584eda2de497f625a61f",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/witness_rendezvous.rs",
+      "line": 904
+    },
+    {
+      "fingerprint": "f95a30c59cf0bc4499c48b564d92a8ab515066e4a0d58bcf1b3f0fc4790259f7",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/witness_rendezvous.rs",
+      "line": 905
+    },
+    {
+      "fingerprint": "bfd7af12e336cf8312f2aece76abf6d45fd326a7f7b35cc9b39ef8e64c75498c",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/witness_rendezvous.rs",
+      "line": 940
+    },
+    {
+      "fingerprint": "6012b26410711a05f9f3a462d1a2f6bf58416de97a7b480aa07e6bd78e3e15b2",
+      "rule_id": "rs/no-unwrap-in-lib",
+      "file": "0verse/native/windows-token-capture/src/windows/witness_rendezvous.rs",
+      "line": 944
+    },
+    {
+      "fingerprint": "be1820f3abe64332d5eccdef95b1593d26a1a330f0e420111ca6b41e0838c3a9",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/witness_rendezvous.rs",
+      "line": 952
+    },
+    {
+      "fingerprint": "4428e6192a98735f1b2dba390c374529eccbac3f957209475bb758d80b2f0727",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/witness_rendezvous.rs",
+      "line": 994
+    },
+    {
+      "fingerprint": "df0eecfd361fa9385813f3d62e2cee7936e61a987e37916afbbb861c730826b5",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/witness_rendezvous.rs",
+      "line": 999
+    },
+    {
+      "fingerprint": "ef5a7eaf9adf866ec0bd9a6f2999dbf265c3f4d59e8d69b931779aa53495afa6",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/witness_rendezvous.rs",
+      "line": 1035
+    },
+    {
+      "fingerprint": "b6c3b8ee861677d0c892b15fc679e93692ffbffe71ca6fdac8092a5a4c781890",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/witness_rendezvous.rs",
+      "line": 1042
+    },
+    {
+      "fingerprint": "931e1bf99191f51ea13f20384654f09ad37d289888a5d94e5b0297b05c7fdfd1",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/witness_rendezvous.rs",
+      "line": 1050
+    },
+    {
+      "fingerprint": "2d8ccd82bba61527a65f82f229c688b0d2e5fa3e1ca7734bbd9fff0c1eb4666e",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/witness_rendezvous.rs",
+      "line": 1062
+    },
+    {
+      "fingerprint": "4c10f98ad7f969f25e46e752fba92b6c98e140c584466329066a919f373408e0",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/witness_rendezvous.rs",
+      "line": 1069
+    },
+    {
+      "fingerprint": "86197b55dfe05bc710dd32f487e968357199eb85ae87ae53e5a6f853de96f479",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/witness_rendezvous.rs",
+      "line": 1076
+    },
+    {
+      "fingerprint": "1472834d5d307efad5ec5ac49959e8fa410efef4f9e8a679cefc7992a0867f8a",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/windows/witness_rendezvous.rs",
+      "line": 1091
+    },
+    {
+      "fingerprint": "b84d982cb2e2b305bd40e2cebbb415a8b556594db0bf6b5803b050ff230978a1",
+      "rule_id": "rs/no-unwrap-in-lib",
+      "file": "0verse/native/windows-token-capture/src/witness.rs",
+      "line": 137
+    },
+    {
+      "fingerprint": "a9026b6579721847ea3a493ec20d583b3597956ab9275c50ddc9025e242f6413",
+      "rule_id": "rs/no-unwrap-in-lib",
+      "file": "0verse/native/windows-token-capture/src/witness.rs",
+      "line": 183
+    },
+    {
+      "fingerprint": "57b1742e200f583d294a492158070428b15bd1cec128c52a963a29a65282cdb8",
+      "rule_id": "rs/no-unwrap-in-lib",
+      "file": "0verse/native/windows-token-capture/src/witness.rs",
+      "line": 193
+    },
+    {
+      "fingerprint": "5392564d54528e539aeb0bd1b9d625eb1d4c5a1ce49e185a3887819a2923972c",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/witness.rs",
+      "line": 330
+    },
+    {
+      "fingerprint": "02491e57fc5ce8946ae8ff26accb966a549c15b50e92cdaa72340abffb1dc80d",
+      "rule_id": "rs/unsafe-block",
+      "file": "0verse/native/windows-token-capture/src/witness.rs",
+      "line": 449
+    },
+    {
+      "fingerprint": "f01db2caae901b9ccb153205339a1be3b2b06ea2243531701f8aaefcdaf9ae4e",
+      "rule_id": "rs/no-path-traversal",
+      "file": "0verse/native/windows-token-capture/src/witness.rs",
+      "line": 452
+    },
+    {
+      "fingerprint": "1d5cbc975693cc3cf5450badccedc8d7ec3446e6aa9a00b9f2bfc2b3849688b0",
+      "rule_id": "rs/no-unwrap-in-lib",
+      "file": "0verse/rust/src/lib.rs",
+      "line": 43
+    },
+    {
+      "fingerprint": "e34457e3b29a76938a46ceb5f6eaefb1c03b0510cb928725469528ea30eae4c3",
+      "rule_id": "py/no-weak-crypto",
+      "file": "0verse/src/zeroverse/api.py",
+      "line": 174
+    },
+    {
+      "fingerprint": "5379d88b725ab26db381b198a38ed3df811aee1879aa5fbb0b369574558c4723",
+      "rule_id": "py/no-sql-injection",
+      "file": "0verse/src/zeroverse/bugclasses.py",
+      "line": 1493
+    },
+    {
+      "fingerprint": "63092c19516b51bc7deb0d161dae2fcdc4bcd0c02f3102072bb41cdfbcb5c1a8",
+      "rule_id": "py/no-ssrf",
+      "file": "0verse/src/zeroverse/cloud_sink.py",
+      "line": 394
+    },
+    {
+      "fingerprint": "daaf362ebd26ada67c2c792773acbc0a4b653240e84b5d74e8a9b3fa43c7b514",
+      "rule_id": "py/no-ssrf",
+      "file": "0verse/src/zeroverse/cve_kb/embed.py",
+      "line": 76
+    },
+    {
+      "fingerprint": "18c112de7bc97f9b41fb1e9a27b44087d39c1001fb4a6442406b3a4d4dcacfc4",
+      "rule_id": "py/no-ssrf",
+      "file": "0verse/src/zeroverse/cve_kb/ingest.py",
+      "line": 47
+    },
+    {
+      "fingerprint": "1331f762402637afb836b6688040c9be2cc5088d8bc276abfd8574f7a315a692",
+      "rule_id": "py/no-ssrf",
+      "file": "0verse/src/zeroverse/cve_kb/ingest.py",
+      "line": 59
+    },
+    {
+      "fingerprint": "d20ed9e36c651eef38eb939a446bb63416d10d9e00d451d835626488b8a4730a",
+      "rule_id": "py/no-ssrf",
+      "file": "0verse/src/zeroverse/cve_kb/ingest.py",
+      "line": 221
+    },
+    {
+      "fingerprint": "b6b9d726d4d515debd658886e63893561d4eb26f019c18ef8fce2e0f266c89f5",
+      "rule_id": "py/no-weak-crypto",
+      "file": "0verse/src/zeroverse/dataset.py",
+      "line": 158
+    },
+    {
+      "fingerprint": "a72830d1314e64a993d2828440aada352a01da031beb1c3837830b9add921b96",
+      "rule_id": "py/no-command-injection",
+      "file": "0verse/src/zeroverse/fuzz/aflpp.py",
+      "line": 773
+    },
+    {
+      "fingerprint": "9a40cce6a669406254c27cdfffaaccae3763cfc044ab0fd9d4731439dd64e530",
+      "rule_id": "py/no-command-injection",
+      "file": "0verse/src/zeroverse/fuzz/coverage.py",
+      "line": 128
+    },
+    {
+      "fingerprint": "5eab978b059d581453e89f441941d07a17b571817a798684d5e6c632a887dd94",
+      "rule_id": "py/no-command-injection",
+      "file": "0verse/src/zeroverse/fuzz/harness.py",
+      "line": 678
+    },
+    {
+      "fingerprint": "6f8051532820f319c47a23eaf2cb363f0828ad8b2aac4c74bda40ff94e6adc11",
+      "rule_id": "py/no-command-injection",
+      "file": "0verse/src/zeroverse/fuzz/harness.py",
+      "line": 949
+    },
+    {
+      "fingerprint": "a44d033b47e1c999f7c677b84f09c148e082266182924b3537c57f818d0376eb",
+      "rule_id": "py/no-command-injection",
+      "file": "0verse/src/zeroverse/fuzz/orchestrator.py",
+      "line": 1537
+    },
+    {
+      "fingerprint": "c9296a58699bbf8f96b6e8d21df4c51e9d58bfbedaf963468301e644661fca30",
+      "rule_id": "py/no-command-injection",
+      "file": "0verse/src/zeroverse/installer_unpack.py",
+      "line": 169
+    },
+    {
+      "fingerprint": "c49993cee4883f5c41da9901ba2c45fdbb8586063cd444bf6e00125ff884959a",
+      "rule_id": "py/no-ssrf",
+      "file": "0verse/src/zeroverse/llm/codex_llm.py",
+      "line": 140
+    },
+    {
+      "fingerprint": "1d62bf1cb5c71e861e137c62731aa90922ea0ca14b7b8038f156645ae1a7b187",
+      "rule_id": "py/no-ssrf",
+      "file": "0verse/src/zeroverse/llm/codex_llm.py",
+      "line": 193
+    },
+    {
+      "fingerprint": "302b84729d3e5ba346f6b10133a1c56c6a07d21cf9a8ac48ac89b2f8ff7bbf33",
+      "rule_id": "py/no-command-injection",
+      "file": "0verse/src/zeroverse/oracle.py",
+      "line": 929
+    },
+    {
+      "fingerprint": "6b471f9ee321c9d3c97b9fe15bbae90402652289c8ed7be90fe5af3ff477d998",
+      "rule_id": "py/no-command-injection",
+      "file": "0verse/src/zeroverse/oracle.py",
+      "line": 1648
+    },
+    {
+      "fingerprint": "6f9bd379a270d5c0502b553c9e361766556a3ccac6594e8192afa25ddd518cca",
+      "rule_id": "py/no-command-injection",
+      "file": "0verse/src/zeroverse/runtime_probe.py",
+      "line": 137
+    },
+    {
+      "fingerprint": "c0c9392b1fe3014d3d486dd3a4e2a23268c8d7e50c43ffdbd997b7b30e9ac3d1",
+      "rule_id": "py/no-command-injection",
+      "file": "0verse/src/zeroverse/runtime_probe.py",
+      "line": 358
+    },
+    {
+      "fingerprint": "c37baff2dc16f91e5614f65db7ee2af48a473134743fc445f88d17d97faed9e2",
+      "rule_id": "py/no-command-injection",
+      "file": "0verse/src/zeroverse/runtime_probe.py",
+      "line": 381
+    },
+    {
+      "fingerprint": "35f40078fda353fe8021b8447aa45d30217f74bea4e949ba5548b2e880b377cd",
+      "rule_id": "py/no-command-injection",
+      "file": "0verse/src/zeroverse/runtime_probe.py",
+      "line": 456
+    },
+    {
+      "fingerprint": "7cea0e70ac9ee798ecb7c56cad22caea0cc544c91abb8ce46ef1acc1e2321e8f",
+      "rule_id": "py/no-sql-injection",
+      "file": "0verse/src/zeroverse/sandbox_exec.py",
+      "line": 222
+    },
+    {
+      "fingerprint": "1c404fa9e552155d1cb62e7c5c20b14efcfc2e989dd560ab0e064bf1ca154bfc",
+      "rule_id": "py/no-sql-injection",
+      "file": "0verse/src/zeroverse/sandbox_exec.py",
+      "line": 228
+    },
+    {
+      "fingerprint": "6b76dcc0bf2f7da3766af1c74cf0f1e015e7f77dabc53e3aed49ab4b2321744f",
+      "rule_id": "py/no-sql-injection",
+      "file": "0verse/src/zeroverse/sandbox_exec.py",
+      "line": 287
+    },
+    {
+      "fingerprint": "5977c419ac9bec56103241dac72713f7da98a5f9f611bc0ad54c4b31049d75fb",
+      "rule_id": "py/no-sql-injection",
+      "file": "0verse/src/zeroverse/sandbox_exec.py",
+      "line": 344
+    },
+    {
+      "fingerprint": "c65b1f53e9d2897c6ec77cba5c4f4b2ac94fe003aaf55cb1b7d5e809ec392564",
+      "rule_id": "py/no-sql-injection",
+      "file": "0verse/src/zeroverse/sandbox_exec.py",
+      "line": 356
+    },
+    {
+      "fingerprint": "d38071cce9215dd8d5403e66491740e8de695b442cd9bad7bf4e7d166b6a3ba6",
+      "rule_id": "py/no-sql-injection",
+      "file": "0verse/src/zeroverse/sandbox_exec.py",
+      "line": 357
+    },
+    {
+      "fingerprint": "4ea0a4d2e444210b4d39e5ac174132650a6cd02c5696bc4d25b66d058cab9919",
+      "rule_id": "py/no-sql-injection",
+      "file": "0verse/src/zeroverse/sandbox_exec.py",
+      "line": 358
+    },
+    {
+      "fingerprint": "5f343c42f1799fe6b34819e288f2defd383c4b5730c2790e511cfa1db9eeb0ca",
+      "rule_id": "py/no-sql-injection",
+      "file": "0verse/src/zeroverse/sandbox_exec.py",
+      "line": 369
+    },
+    {
+      "fingerprint": "f5b60b6eeb851931f296e2a3d76134e705cfbe4641f4b1cc2e953300421a9ade",
+      "rule_id": "py/no-sql-injection",
+      "file": "0verse/src/zeroverse/sandbox_exec.py",
+      "line": 381
+    },
+    {
+      "fingerprint": "be8d74e6ee4624b2c860edeea11160e4f4ec7657e3c725e0cc328838bfe672fc",
+      "rule_id": "py/no-command-injection",
+      "file": "0verse/src/zeroverse/sink_basin.py",
+      "line": 230
+    },
+    {
+      "fingerprint": "d8ceea9446e13be7c640efd8ebe961b335107ce3f2859c7d63e82db0a85f9a3b",
+      "rule_id": "py/no-command-injection",
+      "file": "0verse/src/zeroverse/sink_basin.py",
+      "line": 249
+    },
+    {
+      "fingerprint": "d7da03a75b4affdeee68dea82a9411e63ff33c867793361488e3b820b161def7",
+      "rule_id": "py/no-command-injection",
+      "file": "0verse/src/zeroverse/static_prepass.py",
+      "line": 121
+    },
+    {
+      "fingerprint": "98193d0161e8f07e7a27bb29e1c1eef0a1742db96e2fe5da4c906fee84434d61",
+      "rule_id": "py/no-weak-crypto",
+      "file": "0verse/src/zeroverse/static_prepass.py",
+      "line": 141
+    },
+    {
+      "fingerprint": "5be9286ef141f80f15bce97f1393bc536f42e16ee75937db330f029560b0a910",
+      "rule_id": "py/no-eval",
+      "file": "0verse/src/zeroverse/taint.py",
+      "line": 54
+    },
+    {
+      "fingerprint": "e10388da2bfe7ca8e94b6a6e6edb733958269d98fc87c579c16e47f3c0b7aded",
+      "rule_id": "py/no-command-injection",
+      "file": "0verse/src/zeroverse/windows_driver_entry_bridge.py",
+      "line": 1129
+    },
+    {
+      "fingerprint": "587b4d70e91e4b9af7f462d3cb871b00f69b94a5e12e88e818fccf48e7df4791",
+      "rule_id": "py/no-command-injection",
+      "file": "0verse/tests/test_acquisition_manifest.py",
+      "line": 345
+    },
+    {
+      "fingerprint": "f2b6361c013efc61b6426902b57b7aa67913a53c5783c62570eae47645ba640a",
+      "rule_id": "py/no-command-injection",
+      "file": "0verse/tests/test_browser_campaign_supervisor.py",
+      "line": 101
+    },
+    {
+      "fingerprint": "e7f55b9822e21500cb7fa876d623958dcdd518a05424283e3ce52fd595a9166c",
+      "rule_id": "py/no-command-injection",
+      "file": "0verse/tests/test_browser_replay_helper.py",
+      "line": 93
+    },
+    {
+      "fingerprint": "9ac09c083b30db428c16adff4b18e6da9b26d69df4d038e9d581ec8567f72aaf",
+      "rule_id": "py/no-command-injection",
+      "file": "0verse/tests/test_harness.py",
+      "line": 357
+    },
+    {
+      "fingerprint": "06f4e17e548b48671c92973cfb07d63bf063e23a7fa6fe614e0b305317b5e72e",
+      "rule_id": "py/no-command-injection",
+      "file": "0verse/tests/test_oracle_asan.py",
+      "line": 58
+    },
+    {
+      "fingerprint": "c5e663d8ac534df5d01f0e7856ce75363e66b338213713981f7faf619a03e2f7",
+      "rule_id": "py/no-command-injection",
+      "file": "0verse/tests/test_oracle_asan.py",
+      "line": 186
+    },
+    {
+      "fingerprint": "93d8e4d5542b4512e8b049a90b5ef4a621987d56ced4ea854435eba2fb95c049",
+      "rule_id": "py/no-command-injection",
+      "file": "0verse/tests/test_scout_evidence.py",
+      "line": 496
+    },
+    {
+      "fingerprint": "45b474732d25afb8d68292455aaf49bc898dafe6bb17fda84820a58d5750fc89",
+      "rule_id": "py/no-command-injection",
+      "file": "0verse/tests/test_windows_afd_handler_cfg_ssa_bundle.py",
+      "line": 118
+    },
+    {
+      "fingerprint": "7876c9ce6b6759a6452c5df5eb2d565460f0638ee9a96d61fc2d7bfa0598d1e3",
+      "rule_id": "py/no-command-injection",
+      "file": "0verse/tests/test_windows_afd_handler_cfg_ssa_bundle.py",
+      "line": 136
+    },
+    {
+      "fingerprint": "2ab8aa70984e4ae943e03b6d6fb15d6d2f383732c549c1789d7054f43dba4650",
+      "rule_id": "py/no-command-injection",
+      "file": "0verse/tests/test_windows_afd_handler_cfg_ssa_bundle.py",
+      "line": 165
+    },
+    {
+      "fingerprint": "5dc2807e1c7c8ef0f1c238636fd6db5a651648c725c191eb63c806a1d75ac2f3",
+      "rule_id": "py/no-command-injection",
+      "file": "0verse/tests/test_windows_trust_windows.py",
+      "line": 163
+    },
+    {
+      "fingerprint": "6aa1e8661072bb1baa78b9cbcf88f62cf279cee26856fcf24b528bbb72cc4745",
+      "rule_id": "js/no-path-traversal",
+      "file": "assets/cli-launch/film-reset/generate-audio.mjs",
+      "line": 36
+    },
+    {
+      "fingerprint": "2d6c9f6e88ae900a5050df4adc6b4bd0b570088efdcfd48d23cbf3b09b1ca48f",
+      "rule_id": "js/no-ssrf",
+      "file": "assets/cli-launch/film-reset/generate-audio.mjs",
+      "line": 41
+    },
+    {
+      "fingerprint": "be2580e4babbede1882b50a3c62c387f3f27fac72f910f2f8ab7b514bb492bd1",
+      "rule_id": "py/no-path-traversal",
+      "file": "assets/cli-launch/hyperframes/generate-sound.py",
+      "line": 1357
+    },
+    {
+      "fingerprint": "e48c428395a78620d8af2e45227d0eac7bf8e207991d5011b1492b3d856f144a",
+      "rule_id": "js/no-path-traversal",
+      "file": "assets/cli-launch/launch-film/generate-elevenlabs.mjs",
+      "line": 40
+    },
+    {
+      "fingerprint": "08061cac6225462ead98cf3840abb68c47c9676cbacdee29f8a9b0fb501346ca",
+      "rule_id": "js/no-ssrf",
+      "file": "assets/cli-launch/launch-film/generate-elevenlabs.mjs",
+      "line": 49
+    },
+    {
+      "fingerprint": "1c486f8f2cf90acbea0b69513ed4e5559f391b92de321a283ac3a05836f4d2e3",
+      "rule_id": "js/no-unsafe-regex",
+      "file": "assets/cli-launch/out/0sec-launch-film-picture-review-bundle/161.bundle.js",
+      "line": 1131
+    },
+    {
+      "fingerprint": "48e682beed97479c3e1a7a7f5cc6ceafc6d722eeaf8f5d7dcbf5b149f6830e02",
+      "rule_id": "js/no-unsafe-regex",
+      "file": "assets/cli-launch/out/0sec-launch-film-picture-review-bundle/161.bundle.js",
+      "line": 1145
+    },
+    {
+      "fingerprint": "0d0f91849defb99e1ea163b6f1f5517ecf3e4933d6d754e90858baa2fda10c41",
+      "rule_id": "js/no-unsafe-regex",
+      "file": "assets/cli-launch/out/0sec-launch-film-picture-review-bundle/864.bundle.js",
+      "line": 4780
+    },
+    {
+      "fingerprint": "07cf510393731bed3168f6de10cdeb163d9db9c5604169f60fb882ca40d43776",
+      "rule_id": "js/no-unsafe-regex",
+      "file": "assets/cli-launch/out/0sec-launch-film-picture-review-bundle/864.bundle.js",
+      "line": 4784
+    },
+    {
+      "fingerprint": "14825fbf1cc1fb32615e0f8778097cce2799f89046b93b2ae55090a9e14fedda",
+      "rule_id": "js/no-unsafe-regex",
+      "file": "assets/cli-launch/out/0sec-launch-film-picture-review-bundle/864.bundle.js",
+      "line": 4803
+    },
+    {
+      "fingerprint": "e1284c21b69d7330078cbba996e989352d8789d92c71b370c693e6f5bcaf6813",
+      "rule_id": "js/no-unsafe-regex",
+      "file": "assets/cli-launch/out/hybrid-bundle/161.bundle.js",
+      "line": 1131
+    },
+    {
+      "fingerprint": "4c5f75d4bd7ff4d0378d9f7b1e5b5288d8f5dfad5e12b67b6e5b203283a054fe",
+      "rule_id": "js/no-unsafe-regex",
+      "file": "assets/cli-launch/out/hybrid-bundle/161.bundle.js",
+      "line": 1145
+    },
+    {
+      "fingerprint": "f78ea87b81b628f93b7b5c965457c2f28105b9e935c82b3efc0ed874d8505609",
+      "rule_id": "js/no-unsafe-regex",
+      "file": "assets/cli-launch/out/hybrid-bundle/864.bundle.js",
+      "line": 4780
+    },
+    {
+      "fingerprint": "ecc6a06b5c5ac650f119891bcbbb5858d49b7384ae3eb139ccbca3380e7e515e",
+      "rule_id": "js/no-unsafe-regex",
+      "file": "assets/cli-launch/out/hybrid-bundle/864.bundle.js",
+      "line": 4784
+    },
+    {
+      "fingerprint": "73c858e32c0815217456cf20b7d61ad7d00f67670395a0150ea8f78ed95c4fbf",
+      "rule_id": "js/no-unsafe-regex",
+      "file": "assets/cli-launch/out/hybrid-bundle/864.bundle.js",
+      "line": 4803
+    },
+    {
+      "fingerprint": "686c49cf45a87b597485c985d0bdd97a439e08d50ddceddd27d96dc8190d20fc",
+      "rule_id": "js/no-command-injection",
+      "file": "assets/cli-launch/render-film.mjs",
+      "line": 24
+    },
+    {
+      "fingerprint": "9ce727e5078166606124fbd147e84557f85dcdf7a2692568f080ef84eac37a57",
+      "rule_id": "js/no-command-injection",
+      "file": "packages/benchmark/craft-agent.ts",
+      "line": 32
+    },
+    {
+      "fingerprint": "3e3862c188a685fd01101fdade9230e3219a657ecad1bdaa6d236bfe8305b323",
+      "rule_id": "js/no-path-traversal",
+      "file": "packages/benchmark/craft-agent.ts",
+      "line": 45
+    },
+    {
+      "fingerprint": "9634282bb060dbf37537e3ef5e0e452f07914375a5879f47e81c6e649b615068",
+      "rule_id": "js/no-path-traversal",
+      "file": "packages/benchmark/craft-agent.ts",
+      "line": 46
+    },
+    {
+      "fingerprint": "e81357f7ab0a5762a3ddefffdad454a7425c0741a67d2927e73bd14b727a4b45",
+      "rule_id": "js/no-path-traversal",
+      "file": "packages/benchmark/craft-arvo10400.ts",
+      "line": 30
+    },
+    {
+      "fingerprint": "449aec48c28d7c2c99c49d3e889b624d914fb50162a8e5de46ddd30186589061",
+      "rule_id": "js/no-path-traversal",
+      "file": "packages/benchmark/craft-arvo10400.ts",
+      "line": 33
+    },
+    {
+      "fingerprint": "9f0fca4def388a1165d19f60b6a6c9af974b401c93bc1181a923cb1915565278",
+      "rule_id": "js/no-path-traversal",
+      "file": "packages/benchmark/craft-arvo10400.ts",
+      "line": 53
+    },
+    {
+      "fingerprint": "5458a7d99f2d41ccd0eac4ae7546c885979ca909adfe85aa50b57d055a568c13",
+      "rule_id": "js/no-command-injection",
+      "file": "packages/benchmark/craft-task.ts",
+      "line": 31
+    },
+    {
+      "fingerprint": "5e6b75c05bbc0e298470b6ad4d5b4b0df50c137f4f9363eea31a7e7278acbcad",
+      "rule_id": "js/no-path-traversal",
+      "file": "packages/benchmark/craft-task.ts",
+      "line": 46
+    },
+    {
+      "fingerprint": "eea24c74b104060944bd7ce364c947945504de71b5e46db8ab576eb7908adfc0",
+      "rule_id": "js/no-path-traversal",
+      "file": "packages/benchmark/craft-task.ts",
+      "line": 95
+    },
+    {
+      "fingerprint": "b4f4eebadf71d1d68ef5c296ae58b01de9a7f73217b2c482b83779ff2400465f",
+      "rule_id": "js/no-command-injection",
+      "file": "packages/benchmark/honest-eval.ts",
+      "line": 97
+    },
+    {
+      "fingerprint": "3c28b4ac90f3d9c26f40b3c374ede831af16d5151db6441663423aaaff5f140b",
+      "rule_id": "js/no-command-injection",
+      "file": "packages/benchmark/honest-eval.ts",
+      "line": 194
+    },
+    {
+      "fingerprint": "f27c34080c2ee4ea0b8897446bd9c1e81de8b57e2c89bd52cf3c095f1c620624",
+      "rule_id": "js/no-command-injection",
+      "file": "packages/benchmark/honest-eval.ts",
+      "line": 261
+    },
+    {
+      "fingerprint": "3d101868f8992722553c83ebe9fa8605a279eed3980fde367016df6c2a997bf6",
+      "rule_id": "py/no-ssrf",
+      "file": "packages/benchmark/scripts/cybergym-oracle-bridge.py",
+      "line": 58
+    },
+    {
+      "fingerprint": "df52d176f67201ffef105076bdde87945239bf3deac68900b3e5e075d92a5d03",
+      "rule_id": "py/no-command-injection",
+      "file": "packages/benchmark/scripts/train/active_learning_loop.py",
+      "line": 291
+    },
+    {
+      "fingerprint": "b1015a1992861e182bb8c2b3912fe53ca27825862d609bcfa5660a180a43f4a8",
+      "rule_id": "py/no-ssrf",
+      "file": "packages/benchmark/scripts/train/crossref_syzbot_cve.py",
+      "line": 65
+    },
+    {
+      "fingerprint": "c71d8d4720033f6632531a30daee0ba18702387432c5d8eb237d70e3d38f0323",
+      "rule_id": "py/no-path-traversal",
+      "file": "packages/benchmark/scripts/train/crossref_syzbot_cve.py",
+      "line": 91
+    },
+    {
+      "fingerprint": "b955a2080225883efa2ee33f848ab07d1e87e95ce8ef2ac63dfcb005864c93dd",
+      "rule_id": "py/no-path-traversal",
+      "file": "packages/benchmark/scripts/train/crossref_syzbot_cve.py",
+      "line": 160
+    },
+    {
+      "fingerprint": "72b6c04e4648e38c380836397b4d46020ad1e8a9956b5e7cf892d6a329910cd5",
+      "rule_id": "py/no-path-traversal",
+      "file": "packages/benchmark/scripts/train/crossref_syzbot_cve.py",
+      "line": 214
+    },
+    {
+      "fingerprint": "7ba3e6933e06a373da4f46faf821bfd7a0d734d91e09e460da951794f569f605",
+      "rule_id": "py/no-path-traversal",
+      "file": "packages/benchmark/scripts/train/crossref_syzbot_cve.py",
+      "line": 323
+    },
+    {
+      "fingerprint": "663b541ae9a41d0a82b0674dc8e711b8cf75a1074513910493987bc888c57e00",
+      "rule_id": "py/no-path-traversal",
+      "file": "packages/benchmark/scripts/train/crossref_syzbot_cve.py",
+      "line": 470
+    },
+    {
+      "fingerprint": "329bbe34c0b99b114596baad3db03e15b162fec1a81aa918da6f7dbe57dca398",
+      "rule_id": "py/no-path-traversal",
+      "file": "packages/benchmark/scripts/train/exploitability_with_code.py",
+      "line": 46
+    },
+    {
+      "fingerprint": "aed5e96b5f5c234ae78bcf245cbec1d0c23ac19e6576f34acaf8f68c64263e81",
+      "rule_id": "py/no-path-traversal",
+      "file": "packages/benchmark/scripts/train/exploitability_with_code.py",
+      "line": 64
+    },
+    {
+      "fingerprint": "ac18eba0a1fd86f82b756948c1d704bf4d995da839dc7cf646d34ec6399baa3b",
+      "rule_id": "py/no-ssrf",
+      "file": "packages/benchmark/scripts/train/exploitability_with_code.py",
+      "line": 82
+    },
+    {
+      "fingerprint": "ec8108ce625a27d2cda428aa27138dbd4218bcff7c7a0301e30af554e1666cc4",
+      "rule_id": "py/no-ssrf",
+      "file": "packages/benchmark/scripts/train/exploitability_with_code.py",
+      "line": 157
+    },
+    {
+      "fingerprint": "1e488af1eede39f0ea5a5906b371f4e4400d90377623e12ca7ba7b6084eafbb4",
+      "rule_id": "py/no-path-traversal",
+      "file": "packages/benchmark/scripts/train/llm_triage_benchmark.py",
+      "line": 166
+    },
+    {
+      "fingerprint": "26a2d551dc7f5d568e51cf5a4f261799c784aa5d46a6e3352186a2d16be26ec8",
+      "rule_id": "py/no-path-traversal",
+      "file": "packages/benchmark/scripts/train/llm_triage_benchmark.py",
+      "line": 385
+    },
+    {
+      "fingerprint": "50c79bee1f6c06c0c74f42c371146a0fd2a06f6fee27a95d184d45367bc69ded",
+      "rule_id": "py/no-ssrf",
+      "file": "packages/benchmark/scripts/train/scrape_syzbot.py",
+      "line": 24
+    },
+    {
+      "fingerprint": "886311a3562ff91c8b3c208e80c5533e1507243bdaf32597baf78120860db089",
+      "rule_id": "py/no-ssrf",
+      "file": "packages/benchmark/scripts/train/scrape_syzbot.py",
+      "line": 33
+    },
+    {
+      "fingerprint": "7de98063d92e3ed5eeda89e2c31a52dc23b0062dcc1fc99caacdfeb0bcacb731",
+      "rule_id": "py/no-path-traversal",
+      "file": "packages/benchmark/scripts/train/train_exploitability.py",
+      "line": 228
+    },
+    {
+      "fingerprint": "348f0dc165270b441ca37cbc96da9f03958270988ee2b5b31a89fae63c0a1297",
+      "rule_id": "py/no-path-traversal",
+      "file": "packages/benchmark/scripts/train/train_triage_v2.py",
+      "line": 40
+    },
+    {
+      "fingerprint": "dc2659df671244c4b4f5a6f7f656c1aa5bd35b62ee60a877c7d55c7a40727067",
+      "rule_id": "py/no-path-traversal",
+      "file": "packages/benchmark/scripts/train/train_triage_v2.py",
+      "line": 454
+    },
+    {
+      "fingerprint": "d02e8b62bb769e8fcc5d637e93143691bc2d71a445902e55fe21489bf8148c42",
+      "rule_id": "js/no-command-injection",
+      "file": "packages/benchmark/src/argus-runner.ts",
+      "line": 102
+    },
+    {
+      "fingerprint": "6ff5e80659c3cae168d6eab15e023b1a0255f2d981484f197dc0e10916f772d8",
+      "rule_id": "js/no-unsafe-regex",
+      "file": "packages/benchmark/src/argus-runner.ts",
+      "line": 283
+    },
+    {
+      "fingerprint": "128ee27d9004a3e320ee0b92b73443541a2bd04e5163d08ef5f770866cc36749",
+      "rule_id": "js/no-command-injection",
+      "file": "packages/benchmark/src/argus-runner.ts",
+      "line": 384
+    },
+    {
+      "fingerprint": "9f8dbece303d8e47c2c8b5a159da8a794eb3b85e88ded9d34ad28df0a7eee4bc",
+      "rule_id": "js/no-command-injection",
+      "file": "packages/benchmark/src/argus-runner.ts",
+      "line": 401
+    },
+    {
+      "fingerprint": "359ec5e27aa9d8ca465b16de1df68064398ab758ffba9f3964a30765fb9edaff",
+      "rule_id": "js/no-command-injection",
+      "file": "packages/benchmark/src/argus-runner.ts",
+      "line": 409
+    },
+    {
+      "fingerprint": "9adadd56eda3725f2ca9438903a30b2b9f2523cf2ec2fc806d16ba365ee88b33",
+      "rule_id": "js/no-command-injection",
+      "file": "packages/benchmark/src/argus-runner.ts",
+      "line": 416
+    },
+    {
+      "fingerprint": "de889dc9e4090d220d11397f6f26b79b936c250b39be2025c9d9d123df5baedf",
+      "rule_id": "js/no-command-injection",
+      "file": "packages/benchmark/src/argus-runner.ts",
+      "line": 439
+    },
+    {
+      "fingerprint": "57d5833ede88dd9268dab9c8ab8407f637a9be483e4323527cd0a177969b5c4c",
+      "rule_id": "js/no-command-injection",
+      "file": "packages/benchmark/src/argus-runner.ts",
+      "line": 457
+    },
+    {
+      "fingerprint": "81937b97565040fb01527b9afa1bdd4392e0e2b345d2054abc030c0d139837f1",
+      "rule_id": "js/no-command-injection",
+      "file": "packages/benchmark/src/autopenbench-runner.ts",
+      "line": 189
+    },
+    {
+      "fingerprint": "97912d4bf71f1991957ce754b5bdd6b53ae7946915493e788ef1b4b59a2e3053",
+      "rule_id": "js/no-command-injection",
+      "file": "packages/benchmark/src/autopenbench-runner.ts",
+      "line": 239
+    },
+    {
+      "fingerprint": "4597f5a836255111308fe4fbb5d8074fca878b9dffbc6d949bd52a08e9361792",
+      "rule_id": "js/no-command-injection",
+      "file": "packages/benchmark/src/autopenbench-runner.ts",
+      "line": 251
+    },
+    {
+      "fingerprint": "dae5c477cde5000228138d9d246729e9c0f84c30c61e413a6953cd432327189b",
+      "rule_id": "js/no-command-injection",
+      "file": "packages/benchmark/src/autopenbench-runner.ts",
+      "line": 271
+    },
+    {
+      "fingerprint": "6bdd96be0467e669b9fa9debb6281799a25dfd59c2d78562c585698f438afda0",
+      "rule_id": "js/no-ssrf",
+      "file": "packages/benchmark/src/benchmark-json.test.ts",
+      "line": 31
+    },
+    {
+      "fingerprint": "ef5b81253fd66ce2cba0bba858f7f986b0a5faa50a433aa07fbbf4a9a97213cb",
+      "rule_id": "js/no-ssrf",
+      "file": "packages/benchmark/src/benchmark-json.test.ts",
+      "line": 40
+    },
+    {
+      "fingerprint": "1891b22a9ade4363eb46178f3f7cefc54b434709008195f89500cea7d7d1efc6",
+      "rule_id": "js/no-cors-star",
+      "file": "packages/benchmark/src/challenges/index.ts",
+      "line": 248
+    },
+    {
+      "fingerprint": "7e2977c9b4f5e730dcb57b1fe664cafc0d46e8923ef493a59536af6821e765b2",
+      "rule_id": "js/no-command-injection",
+      "file": "packages/benchmark/src/cybergym-runner.ts",
+      "line": 402
+    },
+    {
+      "fingerprint": "2b2b1cff4d4f9d688c2aceb1afee2e60e0a77d2f45d34b3916b635f3eb82fd70",
+      "rule_id": "js/no-command-injection",
+      "file": "packages/benchmark/src/cybergym-runner.ts",
+      "line": 422
+    },
+    {
+      "fingerprint": "b0361130588ef7ab5cfda6169030f92ba0471c6d225c6c48250ccb6b68718bf9",
+      "rule_id": "js/no-command-injection",
+      "file": "packages/benchmark/src/hackbench-runner.ts",
+      "line": 357
+    },
+    {
+      "fingerprint": "3a02e919e1a862aacc835476eaf08fd06651955ad8678846e5b8638adc736872",
+      "rule_id": "js/no-command-injection",
+      "file": "packages/benchmark/src/hackbench-runner.ts",
+      "line": 362
+    },
+    {
+      "fingerprint": "8162bcdcd48900c004d68645f3083988434e1ab59438ddd5265cc4ae2fe545ca",
+      "rule_id": "js/no-command-injection",
+      "file": "packages/benchmark/src/hackbench-runner.ts",
+      "line": 429
+    },
+    {
+      "fingerprint": "95adcd3ee86234080a205e1aa28e2dea777597928aef79dbfb766e2ed26ecda4",
+      "rule_id": "js/no-command-injection",
+      "file": "packages/benchmark/src/hackbench-runner.ts",
+      "line": 443
+    },
+    {
+      "fingerprint": "b6fdc1ffd36b3fdb33cf693c18346e7e2c7de4d8eca511f72cf8cf88584e1bad",
+      "rule_id": "js/no-command-injection",
+      "file": "packages/benchmark/src/hackbench-runner.ts",
+      "line": 473
+    },
+    {
+      "fingerprint": "823dada42b95aa27cd120ed3ea2ce16c4e999f4bc627dbfa3912549dc126b028",
+      "rule_id": "js/no-ssrf",
+      "file": "packages/benchmark/src/htb-challenges-runner.ts",
+      "line": 145
+    },
+    {
+      "fingerprint": "1ab2e0a5767212926a92e61557be0e82def92f911eb1ab8bcbbd7e3f7a436f19",
+      "rule_id": "js/no-ssrf",
+      "file": "packages/benchmark/src/htb-challenges-runner.ts",
+      "line": 170
+    },
+    {
+      "fingerprint": "760a08d29b98da2bd466a3abc7b958fcebb0afe0771397eb5665e8a08d204144",
+      "rule_id": "js/no-command-injection",
+      "file": "packages/benchmark/src/htb-challenges-runner.ts",
+      "line": 269
+    },
+    {
+      "fingerprint": "3bb23ed38b5bcec493fdaeb98d2e0d073cd642ad3f82ba18669aae7ac2681e7c",
+      "rule_id": "js/no-command-injection",
+      "file": "packages/benchmark/src/htb-challenges-runner.ts",
+      "line": 410
+    },
+    {
+      "fingerprint": "2624e51dd9cfc842b794c1b372d9eaaa2a3e2c6274e56bd8e8b3f94bae2c6807",
+      "rule_id": "js/no-ssrf",
+      "file": "packages/benchmark/src/htb-runner.ts",
+      "line": 123
+    },
+    {
+      "fingerprint": "473b2399019b53b737ffd70b6a2030b66669b6895b19c882c63c84bd3dd64076",
+      "rule_id": "js/no-command-injection",
+      "file": "packages/benchmark/src/htb-runner.ts",
+      "line": 194
+    },
+    {
+      "fingerprint": "c87e3766b54d5dbf41c4ce7659c88bba323dd15a08517374e60003da717d141e",
+      "rule_id": "js/no-ssrf",
+      "file": "packages/benchmark/src/portswigger-runner.ts",
+      "line": 132
+    },
+    {
+      "fingerprint": "4d616c65bb1ff9313c67adc0d6f78f8318f2e8805e3aa71d484b69170777f058",
+      "rule_id": "js/no-ssrf",
+      "file": "packages/benchmark/src/portswigger-runner.ts",
+      "line": 242
+    },
+    {
+      "fingerprint": "1f887c610758a7098b5799c1c08dfd5c1996f7e4e11ee3eb4e67bd1ca33c981e",
+      "rule_id": "js/no-ssrf",
+      "file": "packages/benchmark/src/portswigger-runner.ts",
+      "line": 279
+    },
+    {
+      "fingerprint": "9104acb4a8cae275954f53eb0570b9f719a19d69c5d1a3145b8eb777d3ef153b",
+      "rule_id": "js/no-ssrf",
+      "file": "packages/benchmark/src/portswigger-runner.ts",
+      "line": 306
+    },
+    {
+      "fingerprint": "38559b13da5406de4bc306f661eb8306daacc199947baec68363b305de9e9d6f",
+      "rule_id": "js/no-ssrf",
+      "file": "packages/benchmark/src/portswigger-runner.ts",
+      "line": 347
+    },
+    {
+      "fingerprint": "3b5cb2610d79dc621ef5ab8af32650c0cefe4b9981c668790a281b2c6cb71ce6",
+      "rule_id": "js/no-ssrf",
+      "file": "packages/benchmark/src/portswigger-runner.ts",
+      "line": 383
+    },
+    {
+      "fingerprint": "5a692c4f384e33eb9dd150df042eeba5a5a5b3bf72a85b67807c81c4a1b9bfd6",
+      "rule_id": "js/no-ssrf",
+      "file": "packages/benchmark/src/portswigger-runner.ts",
+      "line": 408
+    },
+    {
+      "fingerprint": "ee176acf5dceb35efd2b12defd7eaacc9ab66e05c2d56f6e2bee912f6cd7e909",
+      "rule_id": "js/no-ssrf",
+      "file": "packages/benchmark/src/portswigger-runner.ts",
+      "line": 461
+    },
+    {
+      "fingerprint": "922ca4697757c4efd0a075ab2c9878741ac223db92d51234d9f0d535c982599c",
+      "rule_id": "js/no-ssrf",
+      "file": "packages/benchmark/src/portswigger-runner.ts",
+      "line": 470
+    },
+    {
+      "fingerprint": "08b8156011641e2be85354e665976438cc9e141a9a3ad1d10c0c679f93833a37",
+      "rule_id": "js/no-prototype-pollution",
+      "file": "packages/benchmark/src/windows-ioctl-benchmark-observation.test.ts",
+      "line": 217
+    },
+    {
+      "fingerprint": "0bcc555ad2083b57d822cd3279ccbde07e0248cf3da1d25c44f40706338fe592",
+      "rule_id": "js/no-unsafe-regex",
+      "file": "packages/benchmark/src/xbow-runner.ts",
+      "line": 349
+    },
+    {
+      "fingerprint": "50bb82b3fdd6a11fdb888b7670b7484b823eab8b5ac4db9d8bbd043cb5d912c5",
+      "rule_id": "js/no-command-injection",
+      "file": "packages/benchmark/src/xbow-runner.ts",
+      "line": 375
+    },
+    {
+      "fingerprint": "af1b6f8e6e0e36d9bbdac62267fe17af3805fb6b6acbb03cdca896b8e84d734f",
+      "rule_id": "js/no-command-injection",
+      "file": "packages/benchmark/src/xbow-runner.ts",
+      "line": 425
+    },
+    {
+      "fingerprint": "adda7453d6f56c7e81fab0e06c439390f1b6c22289c227c82b4971e9c43445f3",
+      "rule_id": "js/no-hardcoded-secret",
+      "file": "packages/cli/src/codex-auth.ts",
+      "line": 26
+    },
+    {
+      "fingerprint": "29814b05fbe646c1f4de9b9fbe0522df3b002c6e0d3733d6bd6445389968a274",
+      "rule_id": "js/no-hardcoded-secret",
+      "file": "packages/cli/src/codex-auth.ts",
+      "line": 34
+    },
+    {
+      "fingerprint": "a838ebe9bde8d5c45a89e42b0f7c35e61e27f51aa75d832b49ec29b1218716a6",
+      "rule_id": "js/no-command-injection",
+      "file": "packages/cli/src/commands/dashboard.ts",
+      "line": 177
+    },
+    {
+      "fingerprint": "4a96651e30dc957ac465e59b75fd1210b05dd608ecb24f3158441790c00bbd97",
+      "rule_id": "js/no-command-injection",
+      "file": "packages/cli/src/commands/dashboard.ts",
+      "line": 905
+    },
+    {
+      "fingerprint": "a13740fa46fe32c58d93df188e65681665e7571a4080531d93cae7bad234e15e",
+      "rule_id": "js/no-command-injection",
+      "file": "packages/cli/src/commands/dashboard.ts",
+      "line": 1011
+    },
+    {
+      "fingerprint": "b2bde38e72c17b9b3bd27f84f76b23e5eba70bc1a75d31d2915f7ccb9561102e",
+      "rule_id": "js/no-path-traversal",
+      "file": "packages/cli/src/commands/dashboard.ts",
+      "line": 1793
+    },
+    {
+      "fingerprint": "7caa25ae678eab4c5867da5209e2073933fd402ecb022ed1631eb119f362f475",
+      "rule_id": "js/no-path-traversal",
+      "file": "packages/cli/src/commands/dashboard.ts",
+      "line": 1803
+    },
+    {
+      "fingerprint": "55051df34931908410f1a383e833706086c34dab47ffbee5e10df60091e4e605",
+      "rule_id": "js/no-sql-injection",
+      "file": "packages/cli/src/commands/evolve.ts",
+      "line": 411
+    },
+    {
+      "fingerprint": "93884238fa0a22d9efc71e90255401c7a76579d0d117892b1401ba1f1e9527f8",
+      "rule_id": "js/no-command-injection",
+      "file": "packages/cli/src/commands/exploit-agent.ts",
+      "line": 64
+    },
+    {
+      "fingerprint": "0e19000cb792c532b67b0f70952f787b8b36e6b5fb68e084b47db2bbc73dd632",
+      "rule_id": "js/no-command-injection",
+      "file": "packages/cli/src/commands/exploit-autoclimb.ts",
+      "line": 50
+    },
+    {
+      "fingerprint": "df5bd0ce65c05eeea57eb069c62adab52315f307b5c34a3be4c4d818cf56c88f",
+      "rule_id": "js/no-unsafe-regex",
+      "file": "packages/cli/src/commands/hackstore.test.ts",
+      "line": 220
+    },
+    {
+      "fingerprint": "49341073bd6fc9ffdcad0cdbcceb3e476fd8c016742c5a5105df6576338e1734",
+      "rule_id": "js/no-hardcoded-secret",
+      "file": "packages/cli/src/commands/identity.ts",
+      "line": 12
+    },
+    {
+      "fingerprint": "939af261cc6ab5b754ec018b0486ac67b2eb8fa163fcafc79043e907cedeea7d",
+      "rule_id": "js/no-ssrf",
+      "file": "packages/cli/src/commands/identity.ts",
+      "line": 116
+    },
+    {
+      "fingerprint": "554bbfd53da8752993eefe97f0d4385c243a4d0a8e45dd3437b54aede2108a83",
+      "rule_id": "js/no-ssrf",
+      "file": "packages/cli/src/commands/run.ts",
+      "line": 402
+    },
+    {
+      "fingerprint": "50216c909f57b85436ac020b42a27fb557314f8a40f4394cf932d1f000bb0dd1",
+      "rule_id": "js/no-command-injection",
+      "file": "packages/cli/src/commands/run.ts",
+      "line": 706
+    },
+    {
+      "fingerprint": "0edbf0f9e3c53837454e73a594216c0bc162a27a0b3c5bb1772507325097b4db",
+      "rule_id": "js/no-path-traversal",
+      "file": "packages/cli/src/dev-engine-updates.ts",
+      "line": 200
+    },
+    {
+      "fingerprint": "230cbc357de5557982713ba6c65775bbf0d576b75620a341eac75b7cec26c7df",
+      "rule_id": "js/no-ssrf",
+      "file": "packages/cli/src/exporters/github-issues.ts",
+      "line": 90
+    },
+    {
+      "fingerprint": "b20abb4c5271189aa27b4f9cc1578a7359d11ee694d8ea7ef440ee6efaea766d",
+      "rule_id": "js/no-command-injection",
+      "file": "packages/cli/src/tui/clipboard.ts",
+      "line": 272
+    },
+    {
+      "fingerprint": "c74cada03cda56bb988e6f0473e5ccf39ab2f1c567c58844cd6289fa78705382",
+      "rule_id": "js/no-command-injection",
+      "file": "packages/cli/src/tui/clipboard.ts",
+      "line": 292
+    },
+    {
+      "fingerprint": "2266542894db8e09f9fb67329ef425315256c6290650f227f3d2aa0f15120098",
+      "rule_id": "js/no-command-injection",
+      "file": "packages/cli/src/tui/codex-device-auth.ts",
+      "line": 47
+    },
+    {
+      "fingerprint": "be85b53e39f87dffd5e870f63a1b3f2ee87a5e4a84408e0112835f1eed4783ff",
+      "rule_id": "js/no-hardcoded-secret",
+      "file": "packages/cli/src/tui/credential-store.ts",
+      "line": 61
+    },
+    {
+      "fingerprint": "5ddb3345259f9e9c3bf6ddeab005e3f35b0abf65d9fbd0e59b48dc6672d67411",
+      "rule_id": "js/no-hardcoded-secret",
+      "file": "packages/cli/src/tui/feedback.test.ts",
+      "line": 605
+    },
+    {
+      "fingerprint": "84776d24d7dd7bfe6947206b077e0044c4dd068d00c1f5f8d6b51ffd9c3685aa",
+      "rule_id": "js/no-hardcoded-secret",
+      "file": "packages/cli/src/tui/git-status.ts",
+      "line": 59
+    },
+    {
+      "fingerprint": "a9af4128c39a9881eb4a30f590a5a4db94307435dc9c99298f3076aa69499d65",
+      "rule_id": "js/no-unsafe-regex",
+      "file": "packages/cli/src/tui/plugin-service.test.ts",
+      "line": 50
+    },
+    {
+      "fingerprint": "9cb34b6d8433ac9214afc92b8183f0f463327e83c12d21daeb78578cbcea165a",
+      "rule_id": "js/no-unsafe-regex",
+      "file": "packages/cli/src/tui/session-plugin-host.test.ts",
+      "line": 65
+    },
+    {
+      "fingerprint": "13cfb1f4f18c8e20c39ff6644f259d8eaf1f007f4a5a5340862f25f63243e3e4",
+      "rule_id": "js/no-hardcoded-secret",
+      "file": "packages/cli/src/tui/themes.test.ts",
+      "line": 1035
+    },
+    {
+      "fingerprint": "e9707d4bbd7cc2c2d78d615a11cf680f558e95cb33f7970df587ec3960e3b3d4",
+      "rule_id": "js/no-unsafe-regex",
+      "file": "packages/cli/src/tui/themes.ts",
+      "line": 1330
+    },
+    {
+      "fingerprint": "69319d3e3c504f30c956fe191268c5c4ed7a916a0e1d14b929e83d6246410423",
+      "rule_id": "js/no-unsafe-regex",
+      "file": "packages/cli/src/utils/update-check.ts",
+      "line": 43
+    },
+    {
+      "fingerprint": "bdff81090e72f9c07ddf10dc9644768c827945bfeb27339f163c9d5723f88c5c",
+      "rule_id": "js/no-ssrf",
+      "file": "packages/cli/src/utils/update-check.ts",
+      "line": 123
+    },
+    {
+      "fingerprint": "6b1054a00f72a5bedebee37bc955ea765152d555d5c4f2270da95009a9f81b00",
+      "rule_id": "js/no-path-traversal",
+      "file": "packages/core/eval/intended-use.eval.mjs",
+      "line": 14
+    },
+    {
+      "fingerprint": "2ff14b50b5e488e3e03372b4c08ac56e7f346fb3dfa0cb2a3f14e3910b5a7570",
+      "rule_id": "bash/taint-path-traversal",
+      "file": "packages/core/scripts/provision-cpg.sh",
+      "line": 88
+    },
+    {
+      "fingerprint": "146fa3e652cb596093a3564d42368b2947cfd0a3666cce7598ada9f062220e6d",
+      "rule_id": "js/no-hardcoded-secret",
+      "file": "packages/core/src/agent-runner.error-exit.test.ts",
+      "line": 46
+    },
+    {
+      "fingerprint": "2b4305daecc37e1e6ef96400e719a97ee7e029fa11eba9a02cc0ffb1bee4176c",
+      "rule_id": "js/no-hardcoded-secret",
+      "file": "packages/core/src/agent/auth-boundary-prober.test.ts",
+      "line": 34
+    },
+    {
+      "fingerprint": "9833dd410d8712fd57d6430074ccbc6564e21f46e76427888221ffb55685d8cc",
+      "rule_id": "js/no-hardcoded-secret",
+      "file": "packages/core/src/agent/auth-redaction.ts",
+      "line": 3
+    },
+    {
+      "fingerprint": "8a173e1db681ad96cb236d3e686d2c43a52678db33d1020f30917fc204c2d4b8",
+      "rule_id": "js/no-ssrf",
+      "file": "packages/core/src/agent/cloud-inbox.ts",
+      "line": 44
+    },
+    {
+      "fingerprint": "ba32536adbc4d8528a29bc7f7c7fe5b9589766646e9712c230cdc88a28612838",
+      "rule_id": "js/no-ssrf",
+      "file": "packages/core/src/agent/cloud-surface.ts",
+      "line": 76
+    },
+    {
+      "fingerprint": "356c3a6fc17e5ab68deca0140cff347d34ca82cb12021d3a19c4c07515128fe3",
+      "rule_id": "js/no-hardcoded-secret",
+      "file": "packages/core/src/agent/credential-store.test.ts",
+      "line": 39
+    },
+    {
+      "fingerprint": "e83b4dc94701cb7e3289e97a2c85688c351d515eb243630b9942b14ca4c4a6ef",
+      "rule_id": "js/no-command-injection",
+      "file": "packages/core/src/agent/process-manager.ts",
+      "line": 193
+    },
+    {
+      "fingerprint": "462f294b2964aada4d997b3d0b3e450143c70d289fba42bf5399c30ba7af01c0",
+      "rule_id": "js/no-sql-injection",
+      "file": "packages/core/src/agent/prompts.ts",
+      "line": 902
+    },
+    {
+      "fingerprint": "cfdb25799755f193916ee92fc210936149587d42d95a7bdaaad576bd2a769c0b",
+      "rule_id": "js/no-sql-injection",
+      "file": "packages/core/src/agent/python-kernel.ts",
+      "line": 254
+    },
+    {
+      "fingerprint": "51be742a45694360ad35e70537d19f11279ee034737457e660e1a00adabe2118",
+      "rule_id": "js/no-unsafe-regex",
+      "file": "packages/core/src/agent/repository-acquisition.ts",
+      "line": 23
+    },
+    {
+      "fingerprint": "d8872bed813696c2bdbd405fb3a5b02d3fdb64207e32cea2c79260bbfe3acee2",
+      "rule_id": "js/no-hardcoded-secret",
+      "file": "packages/core/src/agent/tools.test.ts",
+      "line": 1393
+    },
+    {
+      "fingerprint": "a54f210cbcbd492e3c42455f8fda666df233699a8725318dd8b2962f5755acb6",
+      "rule_id": "js/no-hardcoded-secret",
+      "file": "packages/core/src/agent/tools.test.ts",
+      "line": 1429
+    },
+    {
+      "fingerprint": "dedaa5b886683f9ca4caadeb037d79fc8890e4106b07b23fb32d8640c5673d1a",
+      "rule_id": "js/no-command-injection",
+      "file": "packages/core/src/agent/tools.ts",
+      "line": 1187
+    },
+    {
+      "fingerprint": "c569bac014b3983c18f2ceecb96a012d474c4950f1822cb19d77663add16c4fc",
+      "rule_id": "js/no-ssrf",
+      "file": "packages/core/src/agent/tools/orchestrator.ts",
+      "line": 101
+    },
+    {
+      "fingerprint": "4949960c586c0e7fe4a27e8b7af2c4fbf77ceabaafc32616ac0af19a167a5016",
+      "rule_id": "js/no-unsafe-regex",
+      "file": "packages/core/src/agent/wp-vuln-db.ts",
+      "line": 203
+    },
+    {
+      "fingerprint": "d0dd7b82d82c2bc3756ff41aa64638a4c4f842742a0e33e0144135de09fe2ae1",
+      "rule_id": "js/no-hardcoded-secret",
+      "file": "packages/core/src/agentic-scanner.events.test.ts",
+      "line": 193
+    },
+    {
+      "fingerprint": "95bdc7d2a9bc619d70224261073cbb35804a3ade3aa420cebf4d243b9642d573",
+      "rule_id": "js/no-hardcoded-secret",
+      "file": "packages/core/src/agentic-scanner.events.test.ts",
+      "line": 278
+    },
+    {
+      "fingerprint": "3f36f7408ebf8467025454313ca383c361f7c109fb11968f7fefa87635dca0b5",
+      "rule_id": "js/no-sql-injection",
+      "file": "packages/core/src/analysis-prompts.ts",
+      "line": 303
+    },
+    {
+      "fingerprint": "2fdf45f1d98908affa41bd3485f2d63595fc7663c97d41bf88ca02695d47e157",
+      "rule_id": "js/no-hardcoded-secret",
+      "file": "packages/core/src/cloud-sink.test.ts",
+      "line": 53
+    },
+    {
+      "fingerprint": "0f51a8a812c18d7dc159b0891b971de6accf356abea06b140bb4c49bdb670ba2",
+      "rule_id": "js/no-hardcoded-secret",
+      "file": "packages/core/src/cloud-sink.test.ts",
+      "line": 71
+    },
+    {
+      "fingerprint": "411d402f5c5b18ea633f882e6655cdf3a348b0b5fd6e34400f8bdd2e080a2479",
+      "rule_id": "js/no-hardcoded-secret",
+      "file": "packages/core/src/cloud-sink.test.ts",
+      "line": 743
+    },
+    {
+      "fingerprint": "7343c2b678ef68b82af8dc616bae2dfeca6000ed08ee382c9d0aab12a7ec122f",
+      "rule_id": "js/no-ssrf",
+      "file": "packages/core/src/cloud-sink.ts",
+      "line": 120
+    },
+    {
+      "fingerprint": "17cb188be90d7460abec3deea0f871c6b916fec695be855b834ab20c8def7f9f",
+      "rule_id": "js/no-hardcoded-secret",
+      "file": "packages/core/src/cloud/client.test.ts",
+      "line": 10
+    },
+    {
+      "fingerprint": "1a0b5c889ee3f030fe83e7a90b9a48f370277002d272a4a0695b6e5430e80464",
+      "rule_id": "js/no-hardcoded-secret",
+      "file": "packages/core/src/cloud/credentials.test.ts",
+      "line": 118
+    },
+    {
+      "fingerprint": "674a997e4250734bab0b697ec669292a7fe152baa1455e69ab00117c65315c72",
+      "rule_id": "js/no-path-traversal",
+      "file": "packages/core/src/craft-memory/store.ts",
+      "line": 98
+    },
+    {
+      "fingerprint": "f04e548cc408d88970736b538901f8bbaaba45a323217dbe629eb0f852e34f2e",
+      "rule_id": "js/no-path-traversal",
+      "file": "packages/core/src/craft-memory/store.ts",
+      "line": 200
+    },
+    {
+      "fingerprint": "7bdddccc47696dd0b8a9af19935e853fd418fa8df114089aac7e4a978303a254",
+      "rule_id": "js/no-hardcoded-secret",
+      "file": "packages/core/src/cve/poc-fetcher.test.ts",
+      "line": 173
+    },
+    {
+      "fingerprint": "fbe4d9eb5ee6f35c1752dc4e9a81b103a84adf9132c81b10b7da1e420a9e52b2",
+      "rule_id": "js/no-unsafe-regex",
+      "file": "packages/core/src/diagnostics/channel.ts",
+      "line": 165
+    },
+    {
+      "fingerprint": "77225973d76fd8b15fb96b81df8ba63815332c8c3577709530d3f786f019088d",
+      "rule_id": "js/no-command-injection",
+      "file": "packages/core/src/disclose/poc-runtime.ts",
+      "line": 808
+    },
+    {
+      "fingerprint": "81b05a114218b0cf0406772d9b30460334eb3920ea0d181f8aa0f7765ff0e4b6",
+      "rule_id": "js/no-command-injection",
+      "file": "packages/core/src/disclose/screenshots.ts",
+      "line": 64
+    },
+    {
+      "fingerprint": "99de41e5339d361b85c3a3988523f50f03e0e53a0a86838e2fc3bbff5107b592",
+      "rule_id": "js/no-command-injection",
+      "file": "packages/core/src/disclose/screenshots.ts",
+      "line": 224
+    },
+    {
+      "fingerprint": "4da7b02a97f1183d9b738fa5218fb569ed40d24e2fac13007cbd7ac9cf81d145",
+      "rule_id": "js/no-path-traversal",
+      "file": "packages/core/src/emit/pr-emitter.ts",
+      "line": 488
+    },
+    {
+      "fingerprint": "143b5851d3abe852093153ebcfc88dd0af86e80dd031e9510e442ecd54848468",
+      "rule_id": "js/no-path-traversal",
+      "file": "packages/core/src/emit/pr-emitter.ts",
+      "line": 500
+    },
+    {
+      "fingerprint": "8888ba642a876f84a92873fe79b48e9adac56a5cd78650f19de0831f4b3362ad",
+      "rule_id": "js/no-path-traversal",
+      "file": "packages/core/src/emit/pr-emitter.ts",
+      "line": 522
+    },
+    {
+      "fingerprint": "7cedede43a1b733dbcee4b993746a1ef2a9ff0df07e26f85186ec159009b9b2b",
+      "rule_id": "js/no-unsafe-regex",
+      "file": "packages/core/src/file-review/inventory.ts",
+      "line": 23
+    },
+    {
+      "fingerprint": "d05e2a3a0ce7a4db293cd8ceb6b525cb6b3382e5195d0cefed79a374495447e4",
+      "rule_id": "js/no-unsafe-regex",
+      "file": "packages/core/src/file-review/scan.ts",
+      "line": 72
+    },
+    {
+      "fingerprint": "9727fcffab5ee39f38bd5759aa9eef9cb04c87321ed8fa443cb59b6895ce23a3",
+      "rule_id": "js/no-hardcoded-secret",
+      "file": "packages/core/src/h1/client.test.ts",
+      "line": 11
+    },
+    {
+      "fingerprint": "8210dfa13a70cf5175f8631d8ce55ae447b7fab3b57ec60ed0f59dfd1aa0961c",
+      "rule_id": "js/no-hardcoded-secret",
+      "file": "packages/core/src/h1/credentials.test.ts",
+      "line": 111
+    },
+    {
+      "fingerprint": "22b3897b88f6903622a7d7bee47911a353416bd45482ff624747aaec8e535a9b",
+      "rule_id": "js/no-hardcoded-secret",
+      "file": "packages/core/src/identity/identity.test.ts",
+      "line": 1059
+    },
+    {
+      "fingerprint": "87441609e55dddcf34588b5821bd0764ef00ba2076d8017e72093b8bd5fe4f47",
+      "rule_id": "js/no-path-traversal",
+      "file": "packages/core/src/improvement/sandbox-process.test.ts",
+      "line": 54
+    },
+    {
+      "fingerprint": "142969cb24aaa073db28abc78a93fbd1749e4fc9bd99dd958a50a2d9a6953847",
+      "rule_id": "js/no-sql-injection",
+      "file": "packages/core/src/improvement/sandbox.ts",
+      "line": 62
+    },
+    {
+      "fingerprint": "8858433ad40841f3a84f0d1537373ca6d903be583b7a1687194c12631bc07cae",
+      "rule_id": "js/no-command-injection",
+      "file": "packages/core/src/improvement/sandbox.ts",
+      "line": 95
+    },
+    {
+      "fingerprint": "9f1256714c15fc7735dd45f5b22eafea8f73c16869684ec2f13071eeab5a5de5",
+      "rule_id": "js/no-sql-injection",
+      "file": "packages/core/src/improvement/sandbox.ts",
+      "line": 163
+    },
+    {
+      "fingerprint": "16d5ef9c3d9b6457e2152908755cd8de67b9267f906182b6906524541116cd84",
+      "rule_id": "js/no-command-injection",
+      "file": "packages/core/src/improvement/sandbox.ts",
+      "line": 219
+    },
+    {
+      "fingerprint": "550e72081277a46a8128dc337f5d6d1fd3be31bafc2e423a88d01565a58277fa",
+      "rule_id": "js/no-unsafe-regex",
+      "file": "packages/core/src/ingest/review-subsystem.ts",
+      "line": 61
+    },
+    {
+      "fingerprint": "384a6a64fa44ed6aea0af157e33c46b5abcb45bcc0bbc2118c5ebffaf1c8225f",
+      "rule_id": "js/no-unsafe-regex",
+      "file": "packages/core/src/ingest/review-subsystem.ts",
+      "line": 62
+    },
+    {
+      "fingerprint": "5533ea5851d047b719be82d9cda97146b690172fc07cf70374a7f55938f05e8a",
+      "rule_id": "js/no-command-injection",
+      "file": "packages/core/src/kernel/checker-synthesis.ts",
+      "line": 248
+    },
+    {
+      "fingerprint": "d7a8aa813186e35dfbbd96983f37b13a87cd8e940c826232ba13c3791111b275",
+      "rule_id": "js/no-command-injection",
+      "file": "packages/core/src/kernel/exploit/executor-vm-runner.ts",
+      "line": 148
+    },
+    {
+      "fingerprint": "072b842df7d448c74269061204e391ea389992f3faa9b59ff5aa03d9b5896e25",
+      "rule_id": "js/no-command-injection",
+      "file": "packages/core/src/kernel/exploit/introspect.ts",
+      "line": 43
+    },
+    {
+      "fingerprint": "c75c0dd20b53c16ef95c2758ac7717ad7e5e59d173990968cd93c37cf338960e",
+      "rule_id": "js/no-command-injection",
+      "file": "packages/core/src/kernel/patch-gap-check.ts",
+      "line": 91
+    },
+    {
+      "fingerprint": "7b3e69c8a2be8c56690cad1c1ee2cc496246b313b7e57796b168475727e38014",
+      "rule_id": "js/no-command-injection",
+      "file": "packages/core/src/kernel/patch-gap-check.ts",
+      "line": 100
+    },
+    {
+      "fingerprint": "81867ccfe56b4dd88b34794f642af8719f9b645e16f9c13fe92f2386631bce1c",
+      "rule_id": "js/no-command-injection",
+      "file": "packages/core/src/kernel/patch-gap-check.ts",
+      "line": 110
+    },
+    {
+      "fingerprint": "56c318ea6a73d52dfcd1bc85e894a088d2d9a5f67f9fb0af405d1f2f9ba05a7b",
+      "rule_id": "js/no-command-injection",
+      "file": "packages/core/src/kernel/patch-gap-check.ts",
+      "line": 199
+    },
+    {
+      "fingerprint": "ae4edd4a6e0a7a7bacb62e42c1481b88c1d474f101db6554a8a0b149838bb9cb",
+      "rule_id": "js/no-prototype-pollution",
+      "file": "packages/core/src/malicious-detector.ts",
+      "line": 210
+    },
+    {
+      "fingerprint": "69a38e43229330a8349019e45d2874b1e075864a0feee786617f913246a85499",
+      "rule_id": "js/no-prototype-pollution",
+      "file": "packages/core/src/malicious-detector.ts",
+      "line": 215
+    },
+    {
+      "fingerprint": "97e1c7eb84520dc2d659a7df6a8a5e97f24b8fdd50ab713054b229e0ec62639f",
+      "rule_id": "js/no-prototype-pollution",
+      "file": "packages/core/src/malicious-detector.ts",
+      "line": 227
+    },
+    {
+      "fingerprint": "c9c554e2ce7bdb72d4118d739155e66e8dc822189b3237022faa50de9ea6df9a",
+      "rule_id": "js/no-ssrf",
+      "file": "packages/core/src/mcp.ts",
+      "line": 182
+    },
+    {
+      "fingerprint": "f28c6d34a41a25757f6507fc5302a5a93e938b30af4ab7a8dfffd208fa9da0b3",
+      "rule_id": "js/no-unsafe-regex",
+      "file": "packages/core/src/mobile/intake.ts",
+      "line": 419
+    },
+    {
+      "fingerprint": "52fd09f1ad9bc2c17a920e99a06f27aeebb1fd9b88dba5dbc9d71e95520b1e7c",
+      "rule_id": "js/no-command-injection",
+      "file": "packages/core/src/package-ecosystems.ts",
+      "line": 768
+    },
+    {
+      "fingerprint": "0cd4ffd8a2c663bf2e28ce0e54be01851edff65dee6463f99e64f0d6fb6c0449",
+      "rule_id": "js/no-unsafe-regex",
+      "file": "packages/core/src/plugins/loader.ts",
+      "line": 155
+    },
+    {
+      "fingerprint": "73b4b0a31d8a381a110ae59f72d81db5448ce3c3374641cc3fb8e7dfb1ef9a30",
+      "rule_id": "js/no-command-injection",
+      "file": "packages/core/src/plugins/loader.ts",
+      "line": 397
+    },
+    {
+      "fingerprint": "c04ecf84abf81e56dd4aa53689f832b832b7e46372cfdd9044d6008362b0b3c4",
+      "rule_id": "js/no-unsafe-regex",
+      "file": "packages/core/src/plugins/manifest.ts",
+      "line": 134
+    },
+    {
+      "fingerprint": "fc509fe2f1eb0a467333209179d9e012660f9f0d5f8b13ebf24a3342a87b2e3d",
+      "rule_id": "js/no-ssrf",
+      "file": "packages/core/src/prepare.ts",
+      "line": 142
+    },
+    {
+      "fingerprint": "e383b01653e09fbe1590f14ec8d88fd27c9b88bfbacfeb7e3c45697dcbe31b31",
+      "rule_id": "js/no-ssrf",
+      "file": "packages/core/src/protocol/http-sender.ts",
+      "line": 70
+    },
+    {
+      "fingerprint": "ff813a995799ddaa8321644261969335600b057daff213814f3152148dd6143d",
+      "rule_id": "js/no-command-injection",
+      "file": "packages/core/src/review/c-cpp-profile.test.ts",
+      "line": 352
+    },
+    {
+      "fingerprint": "e5b336f7eb8eaed96831abf3c4d1c56af6d2154697ac6df3b36f6aa490c7c38a",
+      "rule_id": "js/no-command-injection",
+      "file": "packages/core/src/review/c-cpp-profile.ts",
+      "line": 452
+    },
+    {
+      "fingerprint": "8916aa334c3e6f633f580ec080ed35bf359b543eb2515fed70c4ae6120037d9f",
+      "rule_id": "js/no-command-injection",
+      "file": "packages/core/src/review/haskell-seeds.ts",
+      "line": 193
+    },
+    {
+      "fingerprint": "7ac8d1327cb2779a3ce2ad154c6d2a09173e9df4f4e9dc9ecdc49b2bafc91464",
+      "rule_id": "js/no-command-injection",
+      "file": "packages/core/src/runtime/cli-native.ts",
+      "line": 83
+    },
+    {
+      "fingerprint": "e4f58293d89aa76c01e32a6efe8adc474ab9aaa7063d9dce13da2559b32ad91b",
+      "rule_id": "js/no-command-injection",
+      "file": "packages/core/src/runtime/cli-native.ts",
+      "line": 157
+    },
+    {
+      "fingerprint": "d5e6d96e494e86b7244c6b04a97966630dcdc5bd07dae0bbb7e7d37d5a1b907a",
+      "rule_id": "js/no-hardcoded-secret",
+      "file": "packages/core/src/runtime/llm-api.anthropic-wire.test.ts",
+      "line": 52
+    },
+    {
+      "fingerprint": "302650c96d15936159ae677eee476692978765460043cec82d8a8b77788ca66c",
+      "rule_id": "js/no-hardcoded-secret",
+      "file": "packages/core/src/runtime/llm-api.anthropic-wire.test.ts",
+      "line": 67
+    },
+    {
+      "fingerprint": "aa4c424caa64068fa34ab87eb7754ae1998be1159a40d35874a1be1ed0cdc4c7",
+      "rule_id": "js/no-hardcoded-secret",
+      "file": "packages/core/src/runtime/llm-api.anthropic-wire.test.ts",
+      "line": 130
+    },
+    {
+      "fingerprint": "c67a688a1b7d762dfde69e03f220bf0236353f83350dbfd139cc92bafc86ec5c",
+      "rule_id": "js/no-hardcoded-secret",
+      "file": "packages/core/src/runtime/llm-api.anthropic-wire.test.ts",
+      "line": 206
+    },
+    {
+      "fingerprint": "77afe714cd65b18085986555bf570180e98d0ec607376cb96c6770be29363614",
+      "rule_id": "js/no-hardcoded-secret",
+      "file": "packages/core/src/runtime/llm-api.codex-refresh.test.ts",
+      "line": 172
+    },
+    {
+      "fingerprint": "6317ca6b51d2427e09f8165d339688579e0ce380c1267b4e897f108cd1839379",
+      "rule_id": "js/no-hardcoded-secret",
+      "file": "packages/core/src/runtime/llm-api.delta.test.ts",
+      "line": 48
+    },
+    {
+      "fingerprint": "19f25d36eca28b124c94d447561992dcbe2381ae26a6d1b999223fb1455ec0f8",
+      "rule_id": "js/no-hardcoded-secret",
+      "file": "packages/core/src/runtime/llm-api.fork.test.ts",
+      "line": 21
+    },
+    {
+      "fingerprint": "90fb34658dec2ed44b1d1850d43ad0f9a7558fd8d0bbe648aa7f5f7d4321f147",
+      "rule_id": "js/no-hardcoded-secret",
+      "file": "packages/core/src/runtime/llm-api.prompt-cache.test.ts",
+      "line": 57
+    },
+    {
+      "fingerprint": "7f7e80b6c5c053b62cb97614a365b2233c3b6e9e2fae86e098493ab40503d788",
+      "rule_id": "js/no-hardcoded-secret",
+      "file": "packages/core/src/runtime/llm-api.reasoning-echo.test.ts",
+      "line": 80
+    },
+    {
+      "fingerprint": "ecc714c371618b603b256cd468588d8cc394fcc7a3beadf5286f0a386d90f154",
+      "rule_id": "js/no-hardcoded-secret",
+      "file": "packages/core/src/runtime/llm-api.reasoning-echo.test.ts",
+      "line": 434
+    },
+    {
+      "fingerprint": "578ec73988b3b1b6e0544000422ebf19428e35101d59ffd23364a4671430f66a",
+      "rule_id": "js/no-hardcoded-secret",
+      "file": "packages/core/src/runtime/llm-api.test.ts",
+      "line": 97
+    },
+    {
+      "fingerprint": "dfcafd247ffaa5cf52df27a8acc9ab57f69f2cfb0250d186ff22919cc9beffb8",
+      "rule_id": "js/no-hardcoded-secret",
+      "file": "packages/core/src/runtime/llm-api.test.ts",
+      "line": 99
+    },
+    {
+      "fingerprint": "4da0276158649186b5b302b9b4921d42e9dff964929d4654b336f1b7bd95df0d",
+      "rule_id": "js/no-hardcoded-secret",
+      "file": "packages/core/src/runtime/llm-api.test.ts",
+      "line": 136
+    },
+    {
+      "fingerprint": "0752bb83af5b82984efc3ae9d551504e886d4021708c0f339778aead6c771a67",
+      "rule_id": "js/no-hardcoded-secret",
+      "file": "packages/core/src/runtime/llm-api.test.ts",
+      "line": 143
+    },
+    {
+      "fingerprint": "83136584119728980b45a39f88b09ba2e5cd6eeb2bf0ce3ff33cf3196dc3e538",
+      "rule_id": "js/no-hardcoded-secret",
+      "file": "packages/core/src/runtime/llm-api.test.ts",
+      "line": 152
+    },
+    {
+      "fingerprint": "a66faf57e819206f8066b005dd0a6a4e9521c0b8977575f74990f077151353d7",
+      "rule_id": "js/no-hardcoded-secret",
+      "file": "packages/core/src/runtime/llm-api.test.ts",
+      "line": 175
+    },
+    {
+      "fingerprint": "1633c0349947ed62b29248ee69081b5dd26e650bf89573f5721308047856ba61",
+      "rule_id": "js/no-hardcoded-secret",
+      "file": "packages/core/src/runtime/llm-api.test.ts",
+      "line": 176
+    },
+    {
+      "fingerprint": "a6fbf64d21f565e2a931c435744959fd124d96ffb1b340a431be53e0126c8277",
+      "rule_id": "js/no-hardcoded-secret",
+      "file": "packages/core/src/runtime/llm-api.test.ts",
+      "line": 263
+    },
+    {
+      "fingerprint": "bc8a8ae8c4d9979f5ab3de44f6ef06d1d5134961002800715e0d6d7a3bd583d1",
+      "rule_id": "js/no-hardcoded-secret",
+      "file": "packages/core/src/runtime/llm-api.test.ts",
+      "line": 270
+    },
+    {
+      "fingerprint": "5c98b341ead865fa85ec82f7e8524066eeb6f39d339e24c15b6ae92ae96df14c",
+      "rule_id": "js/no-hardcoded-secret",
+      "file": "packages/core/src/runtime/llm-api.test.ts",
+      "line": 271
+    },
+    {
+      "fingerprint": "a224c1b1445fae6ea6aa555b94f230cc145d3fd0ccac7446bc0524edb20c7022",
+      "rule_id": "js/no-hardcoded-secret",
+      "file": "packages/core/src/runtime/llm-api.test.ts",
+      "line": 278
+    },
+    {
+      "fingerprint": "f8f8a8e81f8b8807f1d45ea7f4fe10277d31cce832c9ac20e1abf9c1cadf320d",
+      "rule_id": "js/no-hardcoded-secret",
+      "file": "packages/core/src/runtime/llm-api.test.ts",
+      "line": 290
+    },
+    {
+      "fingerprint": "87e36f6eac51eda1647e6027af833f68476b26678b1d2c1fd144a4c42752d770",
+      "rule_id": "js/no-hardcoded-secret",
+      "file": "packages/core/src/runtime/llm-api.test.ts",
+      "line": 300
+    },
+    {
+      "fingerprint": "571f0bafcfd9fa98f3496afa2d33382fb9124068cac069abfc1af575980fc4b7",
+      "rule_id": "js/no-hardcoded-secret",
+      "file": "packages/core/src/runtime/llm-api.test.ts",
+      "line": 358
+    },
+    {
+      "fingerprint": "6f81cb57993319c543aa7aa3a99ae21b53bdf81cb58a92e5f2d9aab33e53d0b6",
+      "rule_id": "js/no-hardcoded-secret",
+      "file": "packages/core/src/runtime/llm-api.test.ts",
+      "line": 543
+    },
+    {
+      "fingerprint": "58e1c6ed02ccdd7179c188be07c57d40f0ceb2937b810be423f2d38984b40246",
+      "rule_id": "js/no-hardcoded-secret",
+      "file": "packages/core/src/runtime/llm-api.test.ts",
+      "line": 544
+    },
+    {
+      "fingerprint": "f23184e50dbef411f23b336f5b6bac4b0484f6910ed5be98e1103e4ed6241e8e",
+      "rule_id": "js/no-hardcoded-secret",
+      "file": "packages/core/src/runtime/llm-api.test.ts",
+      "line": 565
+    },
+    {
+      "fingerprint": "8337a1237a27298e4a057a1c8fbfac57af8e312257536c3aa82a4861cebd8199",
+      "rule_id": "js/no-hardcoded-secret",
+      "file": "packages/core/src/runtime/llm-api.test.ts",
+      "line": 578
+    },
+    {
+      "fingerprint": "b7452e4a0a1e3174d7d5aa81101d17bf00ed4e05031ed1d8305f0be93b02fcdf",
+      "rule_id": "js/no-hardcoded-secret",
+      "file": "packages/core/src/runtime/llm-api.test.ts",
+      "line": 595
+    },
+    {
+      "fingerprint": "0ce479b613d46e0f9d7267ad27c73cd1fb1dcfd347191735cc25eeb450b065b9",
+      "rule_id": "js/no-hardcoded-secret",
+      "file": "packages/core/src/runtime/llm-api.test.ts",
+      "line": 819
+    },
+    {
+      "fingerprint": "0ce428c838fdbe4f0a7deee2d3625ec2a07eeb497af6fa013d73108e4a062b45",
+      "rule_id": "js/no-hardcoded-secret",
+      "file": "packages/core/src/runtime/llm-api.test.ts",
+      "line": 1133
+    },
+    {
+      "fingerprint": "989531123459236d670c9b0306ef2a131f0b3bb55804b7a5f28a833b0b32b4a6",
+      "rule_id": "js/no-hardcoded-secret",
+      "file": "packages/core/src/runtime/llm-api.test.ts",
+      "line": 1177
+    },
+    {
+      "fingerprint": "53b7bdc7e4fac0b7ba30169b3fba463e6c8c2e258afb50696ddf94626587e3e1",
+      "rule_id": "js/no-hardcoded-secret",
+      "file": "packages/core/src/runtime/llm-api.test.ts",
+      "line": 1255
+    },
+    {
+      "fingerprint": "1e268b26e65aa0d5c1f22a0ca015168e3494c2221626a6bee931fbd2b53b31ce",
+      "rule_id": "js/no-hardcoded-secret",
+      "file": "packages/core/src/runtime/llm-api.test.ts",
+      "line": 1282
+    },
+    {
+      "fingerprint": "41988271356732ac88d7c648d0dc18c590a6ee6f066319cf658fc9a15d426141",
+      "rule_id": "js/no-hardcoded-secret",
+      "file": "packages/core/src/runtime/llm-api.test.ts",
+      "line": 1994
+    },
+    {
+      "fingerprint": "fad1679fc47610dd98dfc8235c6ebeee0598c704dca913455fd58bb2cf71824d",
+      "rule_id": "js/no-hardcoded-secret",
+      "file": "packages/core/src/runtime/llm-api.test.ts",
+      "line": 2172
+    },
+    {
+      "fingerprint": "b13ebb8b777d056a5ce2b66eeee9c0b7fbd2df7334fe3a30d9bc74418ea61166",
+      "rule_id": "js/no-hardcoded-secret",
+      "file": "packages/core/src/runtime/llm-api.test.ts",
+      "line": 2180
+    },
+    {
+      "fingerprint": "c8093d4aa195c7084c5f682588e42e89d5efb8ffeb59ae50fafedc310f7efff0",
+      "rule_id": "js/no-hardcoded-secret",
+      "file": "packages/core/src/runtime/llm-api.test.ts",
+      "line": 2188
+    },
+    {
+      "fingerprint": "2dbdcf4269e29bc2a26ee1d9299ec4511e21e37e3af4dd8360bb7db9f7f538e8",
+      "rule_id": "js/no-hardcoded-secret",
+      "file": "packages/core/src/runtime/llm-api.test.ts",
+      "line": 2197
+    },
+    {
+      "fingerprint": "3aeb805eab7e3fa504230fd4cf641f3ba6018728b2331a2dc64ba45a677f9d6b",
+      "rule_id": "js/no-hardcoded-secret",
+      "file": "packages/core/src/runtime/llm-api.test.ts",
+      "line": 2204
+    },
+    {
+      "fingerprint": "88a71ea20af7b5efa18a3914ba92eada4c1feb824a719b45500dcf68e0bb910b",
+      "rule_id": "js/no-hardcoded-secret",
+      "file": "packages/core/src/runtime/llm-api.test.ts",
+      "line": 2316
+    },
+    {
+      "fingerprint": "a5a7a0e16ababc3e2872e4f40101f1e63fa1af775261d5edcfffe253a92e7ee6",
+      "rule_id": "js/no-hardcoded-secret",
+      "file": "packages/core/src/runtime/llm-api.test.ts",
+      "line": 2317
+    },
+    {
+      "fingerprint": "e9f017a798d812a5f45aba710934809abf736793b7eee910653e62789844fa84",
+      "rule_id": "js/no-hardcoded-secret",
+      "file": "packages/core/src/runtime/llm-api.test.ts",
+      "line": 2424
+    },
+    {
+      "fingerprint": "d6bb9bca8cefe96e78a407d3f4f8d920743c6017dc390838bb2f50ee38b5a921",
+      "rule_id": "js/no-hardcoded-secret",
+      "file": "packages/core/src/runtime/llm-api.test.ts",
+      "line": 2425
+    },
+    {
+      "fingerprint": "1a5a8f944883dacd084d37aaf36a18826dbb9b9c687c592c12c7f4af1d6a108b",
+      "rule_id": "js/no-hardcoded-secret",
+      "file": "packages/core/src/runtime/llm-api.test.ts",
+      "line": 2480
+    },
+    {
+      "fingerprint": "3163196bde9df3bed74ed8565d6e95e99a2655621b13e611a6510b02f5f2e212",
+      "rule_id": "js/no-hardcoded-secret",
+      "file": "packages/core/src/runtime/llm-api.test.ts",
+      "line": 2481
+    },
+    {
+      "fingerprint": "6e961616ab2deab4d520e644f1b758030baf9c78ce2eb1747ee7dd579c59416e",
+      "rule_id": "js/no-hardcoded-secret",
+      "file": "packages/core/src/runtime/llm-api.ts",
+      "line": 767
+    },
+    {
+      "fingerprint": "d29af25877618a5532d5e6d466b9b551501a283a2648e1cd885334ef8cec5619",
+      "rule_id": "js/no-ssrf",
+      "file": "packages/core/src/runtime/llm-api.ts",
+      "line": 1299
+    },
+    {
+      "fingerprint": "df30ff5768eb7e09463cda98ac90ae9570ce508372eb31abf38270e9a48c224a",
+      "rule_id": "js/no-ssrf",
+      "file": "packages/core/src/runtime/llm-api.ts",
+      "line": 2700
+    },
+    {
+      "fingerprint": "688e6ce2de6e7a4e0302f44ae42fa06d4ec3bd1dcd27f2a600e645b29c1d8c19",
+      "rule_id": "js/no-command-injection",
+      "file": "packages/core/src/runtime/process.ts",
+      "line": 399
+    },
+    {
+      "fingerprint": "ae336482be5c344323029e0903e5f0b0836e62d5456e93bb129337cb851c5c65",
+      "rule_id": "js/no-command-injection",
+      "file": "packages/core/src/runtime/process.ts",
+      "line": 523
+    },
+    {
+      "fingerprint": "ad19052e7d7b13173a58ae49c0273522673951df9db0d99677802c729af7350c",
+      "rule_id": "js/no-hardcoded-secret",
+      "file": "packages/core/src/runtime/responses-provider.test.ts",
+      "line": 76
+    },
+    {
+      "fingerprint": "e50353f7dfa8e778c10402831663bb05201b33056fc3ddc47fd523bee0a95207",
+      "rule_id": "js/no-hardcoded-secret",
+      "file": "packages/core/src/runtime/responses-provider.test.ts",
+      "line": 98
+    },
+    {
+      "fingerprint": "77f697986a9e7318bb95d86ad10cbe33697df8d554bebcf16f9bbe7b8cb5f0ee",
+      "rule_id": "js/no-hardcoded-secret",
+      "file": "packages/core/src/runtime/responses-provider.test.ts",
+      "line": 136
+    },
+    {
+      "fingerprint": "d3ce8effe41528c3deefbf4b14db554b41f2019b276ed83227c810ea4ffe238b",
+      "rule_id": "js/no-hardcoded-secret",
+      "file": "packages/core/src/runtime/responses-provider.test.ts",
+      "line": 159
+    },
+    {
+      "fingerprint": "ef1dac2848daebe7a14b2daeb86388355af4cff968004eae9e698502239b5ae6",
+      "rule_id": "js/no-command-injection",
+      "file": "packages/core/src/runtime/smolvm.ts",
+      "line": 110
+    },
+    {
+      "fingerprint": "bd8829d391e7c6f9202f870831345534eca90f22d8b175493e42d74188e2d3a7",
+      "rule_id": "js/no-path-traversal",
+      "file": "packages/core/src/runtime/smolvm.ts",
+      "line": 127
+    },
+    {
+      "fingerprint": "d38c4d147eb4e891c46462bb0b8907fafbe1ec8a2884b168d2cb4383bc6b8a9b",
+      "rule_id": "js/no-path-traversal",
+      "file": "packages/core/src/runtime/smolvm.ts",
+      "line": 130
+    },
+    {
+      "fingerprint": "aee50b3fed7bec0f1212cfb878ef1f40b15835285baa524e4b82eeae4ff3a047",
+      "rule_id": "js/no-hardcoded-secret",
+      "file": "packages/core/src/scope/attribution.ts",
+      "line": 81
+    },
+    {
+      "fingerprint": "f192ad0a394e89248879d40e6c329daf4439345881556f144fe6ad2e68b2dc46",
+      "rule_id": "js/no-unsafe-regex",
+      "file": "packages/core/src/specdrift/extract.ts",
+      "line": 33
+    },
+    {
+      "fingerprint": "74e8b6ca4d4cfd76e5639693130ed77a05929068f93f37205f91e459d6dced8d",
+      "rule_id": "js/no-unsafe-regex",
+      "file": "packages/core/src/specdrift/extract.ts",
+      "line": 49
+    },
+    {
+      "fingerprint": "dee0c8b910e5d6eb4900783680fed091395d5ce7389e959be6911159b1e05f58",
+      "rule_id": "js/no-unsafe-regex",
+      "file": "packages/core/src/stages/archetype-catalog.ts",
+      "line": 316
+    },
+    {
+      "fingerprint": "8000614fc203ab25330e9b428188a325d1e1044f468eaa7a086f3cd861262f0c",
+      "rule_id": "js/no-hardcoded-secret",
+      "file": "packages/core/src/stages/craft-scan.test.ts",
+      "line": 41
+    },
+    {
+      "fingerprint": "ee763a8909fb88b4047491f8dad05eff80cc7a837c4ba3b3ce6221c93b19e70a",
+      "rule_id": "js/no-hardcoded-secret",
+      "file": "packages/core/src/stages/craft-scan.test.ts",
+      "line": 176
+    },
+    {
+      "fingerprint": "aeff02c1bc7690d4c965fa97bd8f2f3cd62737893d597e355511e3b28619f358",
+      "rule_id": "js/no-hardcoded-secret",
+      "file": "packages/core/src/stages/craft-scan.test.ts",
+      "line": 211
+    },
+    {
+      "fingerprint": "a30f6fd10621431cb9f661f40a3f39886b1544bba28dd4357c6d2d1e407be469",
+      "rule_id": "js/no-hardcoded-secret",
+      "file": "packages/core/src/stages/craft-scan.test.ts",
+      "line": 212
+    },
+    {
+      "fingerprint": "05db6a651e8712c43f7cf46dd7e4536dcf71694b7c9aabf1cda396d8ce3dde10",
+      "rule_id": "js/no-command-injection",
+      "file": "packages/core/src/stages/craft-scan.ts",
+      "line": 402
+    },
+    {
+      "fingerprint": "0b494fdd63307067f6de3e0306e0fd1fde91f30f832776f1cde931639bfcaae6",
+      "rule_id": "js/no-command-injection",
+      "file": "packages/core/src/stages/exploit-scan.ts",
+      "line": 465
+    },
+    {
+      "fingerprint": "e5bf5ef43ba074feebd1031bc9a31e2e67685d214cf7a717cf5fb07794f5b38a",
+      "rule_id": "js/no-command-injection",
+      "file": "packages/core/src/stages/exploit-scan.ts",
+      "line": 787
+    },
+    {
+      "fingerprint": "f59a1494558645282663f0f03e0f7b534fcb0a4ce0dce8532c11ecc864facbde",
+      "rule_id": "js/no-command-injection",
+      "file": "packages/core/src/stages/exploit-scan.ts",
+      "line": 790
+    },
+    {
+      "fingerprint": "0d94cfe78c477f2f3d39b0e20ee8d65b82baa7a013092ec11d2cfbe33fded16f",
+      "rule_id": "js/no-command-injection",
+      "file": "packages/core/src/stages/exploit-scan.ts",
+      "line": 799
+    },
+    {
+      "fingerprint": "b1476c3614c66442edd7369ff57ac5334619c850be995fa80d38150a74a54fff",
+      "rule_id": "js/no-command-injection",
+      "file": "packages/core/src/stages/exploit-scan.ts",
+      "line": 833
+    },
+    {
+      "fingerprint": "647a40246c60befc7f53b39d80cee3c36789b547430056c7349b4c28a5911ca9",
+      "rule_id": "js/no-command-injection",
+      "file": "packages/core/src/stages/exploit-scan.ts",
+      "line": 918
+    },
+    {
+      "fingerprint": "83378831906a198e1f7d6c1f74161845c9aab8667d923642d19c125d88ba18ac",
+      "rule_id": "js/no-command-injection",
+      "file": "packages/core/src/stages/exploit-scan.ts",
+      "line": 923
+    },
+    {
+      "fingerprint": "c854211927e30f261fd246cebab97776bc7c095b8bd941cbee26bd38d2d1d057",
+      "rule_id": "js/no-unsafe-regex",
+      "file": "packages/core/src/stages/novelty-check.ts",
+      "line": 235
+    },
+    {
+      "fingerprint": "ab758917b41ba8e09e2da823e4548098ae0544e0e87d94ae7dcd5e5483fd8940",
+      "rule_id": "js/no-unsafe-regex",
+      "file": "packages/core/src/stages/novelty-check.ts",
+      "line": 237
+    },
+    {
+      "fingerprint": "5695fa76a4c783f22b01bdef160b8040d2f93804e5c33729db0abf8227129c63",
+      "rule_id": "js/no-unsafe-regex",
+      "file": "packages/core/src/stages/novelty-check.ts",
+      "line": 253
+    },
+    {
+      "fingerprint": "d19ca8effab9a69994e50bbcbc067a7118c4fd77297f999631d62c351d4b506f",
+      "rule_id": "js/no-hardcoded-secret",
+      "file": "packages/core/src/stages/npm-detectors/sandbox-probe.test.ts",
+      "line": 200
+    },
+    {
+      "fingerprint": "9b6e4091f1829973f1b20a3125a302ed1f09a48506a06e10d62dfc25b1e9b488",
+      "rule_id": "js/no-hardcoded-secret",
+      "file": "packages/core/src/stages/npm-detectors/sandbox-probe.test.ts",
+      "line": 201
+    },
+    {
+      "fingerprint": "ceefcdcbd26075bf0562293bd8c0ab8e13fec2ea8893889ce9c724c35e5be4e8",
+      "rule_id": "js/no-command-injection",
+      "file": "packages/core/src/stages/npm-detectors/sandbox-probe.ts",
+      "line": 124
+    },
+    {
+      "fingerprint": "4a553821a744bac8f54a008af637c427f83f9b514892a0352f4ccf470803c049",
+      "rule_id": "js/no-hardcoded-secret",
+      "file": "packages/core/src/stages/runtime-verify.test.ts",
+      "line": 50
+    },
+    {
+      "fingerprint": "1c5c2090194fcb3f9130e7b557af37140cae3da949d79dfbf9962b5d06cc627a",
+      "rule_id": "js/no-hardcoded-secret",
+      "file": "packages/core/src/stages/runtime-verify.test.ts",
+      "line": 76
+    },
+    {
+      "fingerprint": "3f37615d091cd78f2c3496ad5573b760e4c83cc0e2d3c5daaae0dfc33926d51b",
+      "rule_id": "js/no-hardcoded-secret",
+      "file": "packages/core/src/stages/runtime-verify.test.ts",
+      "line": 92
+    },
+    {
+      "fingerprint": "0f1d246257658944e0e80aa5f4c8e353ebe4f4b6ea9941df16d7ed2bb5d3d59f",
+      "rule_id": "js/no-ssrf",
+      "file": "packages/core/src/stages/web.ts",
+      "line": 372
+    },
+    {
+      "fingerprint": "cf32f108b8858739060bb447d918c244fe09943ab17d2ba5ad0baa7873abfc9a",
+      "rule_id": "js/no-command-injection",
+      "file": "packages/core/src/triage/kernel-vm-runner.ts",
+      "line": 1274
+    },
+    {
+      "fingerprint": "5d2546b89a51d5ec949ecceab0b17b7c57b113c1e65fb3731943bdb9c8ee4213",
+      "rule_id": "js/no-command-injection",
+      "file": "packages/core/src/triage/kernel-vm-runner.ts",
+      "line": 1377
+    },
+    {
+      "fingerprint": "c69cc3ffed96033a8e12f0b9638e0cbe24fc7eb56c9ec7c452e9e9e209f727fd",
+      "rule_id": "js/no-unsafe-regex",
+      "file": "packages/core/src/triage/multi-modal.ts",
+      "line": 101
+    },
+    {
+      "fingerprint": "42b2f29136c8e63c5ee15649db6832a6d08ab9a6a3e23e1681454fb3a5a9e74b",
+      "rule_id": "js/no-ssrf",
+      "file": "packages/core/src/triage/oracles.ts",
+      "line": 181
+    },
+    {
+      "fingerprint": "f597ffe90cd61b8b84337c68997d1428f268d7add586cd034ead905036d2b587",
+      "rule_id": "js/no-sql-injection",
+      "file": "packages/core/src/triage/oracles.ts",
+      "line": 289
+    },
+    {
+      "fingerprint": "b9bcd70d1dde6d552b3a31deeea459560458ad1b3fcef3467fce1dfe953dc69b",
+      "rule_id": "js/no-ssrf",
+      "file": "packages/core/src/triage/pov-gate.ts",
+      "line": 538
+    },
+    {
+      "fingerprint": "893ab35a7688b36baee344f12d3a7f41bed9260ec97c3ee388dd8fb005e5d13b",
+      "rule_id": "js/no-unsafe-regex",
+      "file": "packages/core/src/triage/publishability-sources.ts",
+      "line": 381
+    },
+    {
+      "fingerprint": "e7d60644aa688ce454c20a20bc7d25dd6195282cf01f6e287d90f6906b18ec7c",
+      "rule_id": "js/no-unsafe-regex",
+      "file": "packages/core/src/triage/publishability-sources.ts",
+      "line": 536
+    },
+    {
+      "fingerprint": "6228878c30bc5b648c7d8696341da9319000c67107641ebf1e3d692ad4a6106b",
+      "rule_id": "js/no-hardcoded-secret",
+      "file": "packages/core/src/triage/userspace-fuzz-runner.test.ts",
+      "line": 645
+    },
+    {
+      "fingerprint": "387b56ae9a7d2fa95862cab7e07e767cf48d885e2e5ab9c6d9454bfe893440fc",
+      "rule_id": "js/no-hardcoded-secret",
+      "file": "packages/core/src/triage/userspace-fuzz-runner.test.ts",
+      "line": 646
+    },
+    {
+      "fingerprint": "49b697ab5730830ef17cd61d133b6ede5ffe9a58af12447df58e1baae8b77dd5",
+      "rule_id": "js/no-command-injection",
+      "file": "packages/core/src/triage/userspace-fuzz-runner.ts",
+      "line": 131
+    },
+    {
+      "fingerprint": "cacd528b01962db889155ae881cedba4d2a8e2d6dd8737d8734000cc61028f43",
+      "rule_id": "js/no-command-injection",
+      "file": "packages/core/src/triage/userspace-fuzz-runner.ts",
+      "line": 409
+    },
+    {
+      "fingerprint": "2c9cdf52536cbb1deee06c1d79434eab23c86d5502107426c7085394ab836013",
+      "rule_id": "js/no-command-injection",
+      "file": "packages/core/src/verification-spec/cli-path-traversal-fixture.ts",
+      "line": 121
+    },
+    {
+      "fingerprint": "1457ea046def6c559a551c451b7547a7c5b4f9a9d7931c605ef77fb15d7eab56",
+      "rule_id": "js/no-hardcoded-secret",
+      "file": "packages/core/src/verify/replay-runner.test.ts",
+      "line": 78
+    },
+    {
+      "fingerprint": "ab9e933ea32afd33ff2f895ef4b04269316e6a905fd0fc60b921c4d200d75096",
+      "rule_id": "js/no-hardcoded-secret",
+      "file": "packages/core/src/verify/replay-runner.test.ts",
+      "line": 79
+    },
+    {
+      "fingerprint": "676dcb605027c4124e201854aba6d5021af99de930c45057d01961234511dce3",
+      "rule_id": "js/no-hardcoded-secret",
+      "file": "packages/core/src/verify/replay-runner.test.ts",
+      "line": 388
+    },
+    {
+      "fingerprint": "c777ac922be4e3b8622de29953e8932674bc16ea7d9c1b304fda8ae6b3a4efa4",
+      "rule_id": "js/no-command-injection",
+      "file": "packages/core/src/verify/replay-runner.ts",
+      "line": 643
+    },
+    {
+      "fingerprint": "0011440eddf70ce31d2c36235cbc0850cd3a747559221c00bb80bb048b173462",
+      "rule_id": "js/no-command-injection",
+      "file": "packages/core/src/verify/replay-runner.ts",
+      "line": 719
+    },
+    {
+      "fingerprint": "18fd7cdf9089e325b2c9ee251d6ccda2e374b187a57ba4835592874e5648dc2f",
+      "rule_id": "js/no-command-injection",
+      "file": "packages/core/src/verify/replay-runner.ts",
+      "line": 1071
+    },
+    {
+      "fingerprint": "300c60aa14d567297d727d2548cd499b09f0774f215b220f86c3c3e144e04eda",
+      "rule_id": "js/no-command-injection",
+      "file": "packages/core/src/xnu-fuzz/harness.ts",
+      "line": 175
+    },
+    {
+      "fingerprint": "f3fef0b933f76a313857646d1b70fb4b8831e51409479326972fcae052902f48",
+      "rule_id": "js/no-ssrf",
+      "file": "packages/dashboard/src/api.ts",
+      "line": 27
+    },
+    {
+      "fingerprint": "6a6e6933ef8d2e0f01f637650108ff8b9c65584e6fa1ccc4cf67937db30b2666",
+      "rule_id": "js/no-sql-injection",
+      "file": "packages/db/src/database.ts",
+      "line": 1675
+    },
+    {
+      "fingerprint": "57c1d45b4d95a4999cb5ab3a1c9e36aa7b8648ee92ea150bdf44aa53c1e36966",
+      "rule_id": "js/no-sql-injection",
+      "file": "packages/db/src/database.ts",
+      "line": 1876
+    },
+    {
+      "fingerprint": "6a0376ea6a1e44aa6a8fc7bbee8c5e37e56ea95b68a7fe0f94148215b5b55c46",
+      "rule_id": "js/no-sql-injection",
+      "file": "packages/db/src/database.ts",
+      "line": 2126
+    },
+    {
+      "fingerprint": "43dd64065516d9386dc34622429db866b3172eafa5e052316ae059758d524a58",
+      "rule_id": "js/no-sql-injection",
+      "file": "packages/db/src/database.ts",
+      "line": 2218
+    },
+    {
+      "fingerprint": "ba4ee36afc19f83fbaaad89eee74fdad42fedf7626de70ab387cbbb30e3e482b",
+      "rule_id": "js/no-sql-injection",
+      "file": "packages/db/src/database.ts",
+      "line": 2323
+    },
+    {
+      "fingerprint": "1a4bda2eb1e80fd76601173c62558f365362c8f7cdb6f23ea9203e71599504c8",
+      "rule_id": "js/no-path-traversal",
+      "file": "packages/desktop/src/main/preferences.ts",
+      "line": 49
+    },
+    {
+      "fingerprint": "a28ca4550a6ea247847d38e496ab765f8406ab6b13aef5e54be04179bcbb9ceb",
+      "rule_id": "js/no-command-injection",
+      "file": "packages/desktop/src/main/sidecar.ts",
+      "line": 258
+    },
+    {
+      "fingerprint": "2307a2b2b3da93c1f7dd6c01c44daa52d51995f04baf3b17f3dceae646dcfe6a",
+      "rule_id": "js/no-ssrf",
+      "file": "packages/desktop/src/renderer/api.ts",
+      "line": 33
+    },
+    {
+      "fingerprint": "b5e755a1aaad992c117a799b004bf17a0c90926dad60af09bb7cf5e2fdd6ae90",
+      "rule_id": "manifest/pnpm-pq-vulnerable-dep",
+      "file": "pnpm-lock.yaml",
+      "line": 2780
+    },
+    {
+      "fingerprint": "97d496a0730bdf3a712e7284587d06b54385e36061ad258004dd5ebaace27367",
+      "rule_id": "manifest/pnpm-pq-vulnerable-dep",
+      "file": "pnpm-lock.yaml",
+      "line": 4051
+    },
+    {
+      "fingerprint": "052229fb1d42a341a2a94a570dd8b12f46aee53973de90f1fd5933d3e47f280e",
+      "rule_id": "js/no-path-traversal",
+      "file": "scripts/bundle-cli.mjs",
+      "line": 223
+    },
+    {
+      "fingerprint": "eea138157d8a5b008339e9ba16203f42a81567d155d3e748966e5e397fa6791c",
+      "rule_id": "js/no-command-injection",
+      "file": "scripts/dsh-0sec-mcp.e2e.mjs",
+      "line": 118
+    },
+    {
+      "fingerprint": "8762542eb5196fc61adc11c561d1dd5d3397560224c19ce1eaf4c236143800fe",
+      "rule_id": "js/no-command-injection",
+      "file": "scripts/dsh-0sec-mcp.mjs",
+      "line": 221
+    },
+    {
+      "fingerprint": "04dfeb49a9e57e2c9207055fbe78bc67f75b7dabad47491c8306a860ea51ee2a",
+      "rule_id": "js/no-hardcoded-secret",
+      "file": "scripts/smoke-docker-replay.mjs",
+      "line": 16
+    },
+    {
+      "fingerprint": "e1903821b412b2792262a77c0dc17c050b612920e3b9d3b89bdb808e416cd364",
+      "rule_id": "js/no-command-injection",
+      "file": "scripts/smoke-smolvm-toolbox.mjs",
+      "line": 47
+    },
+    {
+      "fingerprint": "4fbb0cb028019c0f9229ded71bf9499c7da289ddd26bb8254842c360a8768fee",
+      "rule_id": "js/no-ssrf",
+      "file": "scripts/smoke-smolvm.mjs",
+      "line": 77
+    },
+    {
+      "fingerprint": "89c1fd592f3c74cf49b52dbbe960d3e855718fcdc5f6f67b9f115a4ed549e60e",
+      "rule_id": "js/no-command-injection",
+      "file": "scripts/smoke-source-evolution.mjs",
+      "line": 120
+    },
+    {
+      "fingerprint": "bfaf12042c38e23b90fa0ea6c6c3c98cb6834bfc36a32fd565f5ee469f67549e",
+      "rule_id": "js/no-unsafe-regex",
+      "file": "scripts/sync-cli-docs.mjs",
+      "line": 64
+    },
+    {
+      "fingerprint": "f99c78b9b639cb97e21305b256d83c58d2b510da25b4d2330fb77f5463622616",
+      "rule_id": "js/no-command-injection",
+      "file": "test-targets/src/cli.test.ts",
+      "line": 28
+    },
+    {
+      "fingerprint": "c3fc53e27ec57992e7be99aac29db876f24f17d1715dc8738f924c53899c88ae",
+      "rule_id": "js/no-ssrf",
+      "file": "test-targets/src/scan.test.ts",
+      "line": 47
+    },
+    {
+      "fingerprint": "bdd774743fe323e5ad38aa3f9d6d6bea13db1f71343bf56387aec1eefdc5ede4",
+      "rule_id": "js/no-ssrf",
+      "file": "test-targets/src/scan.test.ts",
+      "line": 57
+    },
+    {
+      "fingerprint": "89491a19b4a2c64a2f373bd75670606c7becf8009809dced4b0efc36515edc7d",
+      "rule_id": "js/no-cors-star",
+      "file": "test-targets/src/scan.test.ts",
+      "line": 143
+    },
+    {
+      "fingerprint": "1882140107fdfb1d6e9d1c7a129a4424e6ae1c6de6d8abd4c54387a5eb137bab",
+      "rule_id": "js/no-cors-star",
+      "file": "test-targets/src/scan.test.ts",
+      "line": 153
+    }
+  ]
+}

@@ -3,6 +3,7 @@ import type {
   NativeRuntime,
   NativeStreamCallbacks,
   RuntimeConfig,
+  SubagentModelSelection,
   RuntimeContext,
   RuntimeResult,
   NativeMessage,
@@ -234,6 +235,82 @@ export function isRetryableHttpStatus(status: number): boolean {
     status === 503 ||
     status === 504
   );
+}
+
+// ── Transient empty-stream retry (streaming ended with NO final response) ───
+//
+// Distinct from the HTTP-status retry above. Some providers — the ChatGPT
+// (Codex) backend especially — occasionally accept the request, open the SSE
+// stream, and then close it WITHOUT ever sending the terminal
+// `response.completed` frame (or send a bare `response.failed`). The wire
+// returned HTTP 200, so `isRetryableHttpStatus` never fired; `consumeResponsesStream`
+// surfaced `stopReason:"error"` with "stream completed without final response"
+// (or, for OpenRouter, "response stream failed"). That is a transient empty
+// stream, not a real API rejection: nothing usable was produced, so the whole
+// request is safe to re-issue. A genuine 4xx/auth/validation error, a timeout,
+// an operator cancellation, or ANY outcome that already produced tool calls is
+// NOT retried here.
+
+/**
+ * Substrings that identify a transient "the stream ended without a usable final
+ * response" outcome — the ONLY error class {@link shouldRetryNativeStream}
+ * retries. These are produced verbatim by {@link LlmApiRuntime.consumeResponsesStream}.
+ */
+export const TRANSIENT_STREAM_ERROR_PATTERNS: readonly string[] = [
+  "stream completed without final response",
+  "response stream failed",
+];
+
+/** Total attempts for a transient empty stream (1 initial + retries). `0SEC_LLM_STREAM_MAX_ATTEMPTS` (default 3). */
+export function llmStreamMaxAttempts(): number {
+  const raw = process.env["0SEC_LLM_STREAM_MAX_ATTEMPTS"];
+  if (raw == null || raw.trim() === "") return 3;
+  const n = Number.parseInt(raw, 10);
+  // At least 1 (a value of 1 disables retrying); cap at 5 so a misconfig can't
+  // wedge a turn behind a long retry chain.
+  return Number.isFinite(n) && n >= 1 ? Math.min(n, 5) : 3;
+}
+
+/** Backoff before the Nth retry (1-based): ~500ms, then ~1s, then ~1s… */
+export function streamRetryBackoffMs(retry: number): number {
+  return retry <= 1 ? 500 : 1000;
+}
+
+/** Sleep `ms`, resolving early (never rejecting) if `signal` aborts first. */
+function delayWithAbort(ms: number, signal?: AbortSignal): Promise<void> {
+  if (signal?.aborted) return Promise.resolve();
+  return new Promise<void>((resolve) => {
+    const timer = setTimeout(() => {
+      signal?.removeEventListener("abort", onAbort);
+      resolve();
+    }, ms);
+    const onAbort = (): void => {
+      clearTimeout(timer);
+      resolve();
+    };
+    signal?.addEventListener("abort", onAbort, { once: true });
+  });
+}
+
+/**
+ * Pure decision: should this native result be retried as a transient empty
+ * stream? True ONLY when the runtime reported `stopReason:"error"`, the error
+ * message matches a {@link TRANSIENT_STREAM_ERROR_PATTERNS} substring, the call
+ * was NOT an operator cancellation, and nothing usable was produced (no
+ * tool_use blocks). A 4xx/auth/validation error ("API error 400: …"), a
+ * timeout, a stall, a quota exhaustion, or an outcome carrying tool calls all
+ * return false so genuine failures fail fast and useful work is never repeated.
+ */
+export function shouldRetryNativeStream(result: NativeRuntimeResult): boolean {
+  if (result.stopReason !== "error") return false;
+  if (result.cancelled) return false;
+  const error = result.error ?? "";
+  if (!TRANSIENT_STREAM_ERROR_PATTERNS.some((pattern) => error.includes(pattern))) return false;
+  // Defensive: a partial stream that still yielded tool calls is usable work —
+  // never repeat it. (The transient returns carry no tool_use today, but this
+  // keeps the predicate correct regardless of how the return is shaped.)
+  if (result.content.some((block) => block.type === "tool_use")) return false;
+  return true;
 }
 
 /** Network errors that can clear after DNS/proxy/TCP backoff. */
@@ -1910,7 +1987,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
   private hostedMaxOutputTokens: number | undefined;
 
   constructor(config: RuntimeConfig, inherited?: LlmApiRuntime) {
-    // Fork construction must never rediscover an account, endpoint or model.
+    // Fork construction must never rediscover an account or endpoint.
     // The inherited runtime is host-internal; no credential snapshot is exported.
     if (inherited) {
       const timeout = config.timeout ?? inherited.config.timeout ?? 120_000;
@@ -1920,31 +1997,44 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
       if (inherited.provider === "hosted" && inherited.hostedMaxOutputTokens === undefined) {
         throw new Error("Hosted model catalog must resolve before creating a subagent");
       }
+      const model = config.model ?? inherited.model;
+      const modelChanged = model !== inherited.model;
       this.config = {
         type: "api",
-        model: inherited.model,
+        model,
+        agentModels: inherited.config.agentModels,
+        singleModel: inherited.config.singleModel,
         timeout: Math.min(timeout, inherited.config.timeout || 120_000),
       };
       this.env = inherited.env;
       this.provider = inherited.provider;
       this.apiKey = inherited.apiKey;
       this.baseUrl = inherited.baseUrl;
-      this.model = inherited.model;
+      this.model = model;
       this.wireApi = inherited.wireApi;
-      this.reasoningEffort = inherited.reasoningEffort;
+      if (modelChanged) {
+        if (this.provider === "opencode") this.wireApi = opencodeWireApiForModel(model);
+        if (this.provider === "openai") this.wireApi = openAICompatibleWireApi(this.env, "OPENAI_WIRE_API");
+        if (this.provider === "azure") this.wireApi = openAICompatibleWireApi(this.env, "AZURE_OPENAI_WIRE_API", inherited.azureConfig.wireApi);
+        this.applyModelWireApi();
+      }
+      this.reasoningEffort = modelChanged ? undefined : inherited.reasoningEffort;
       this.azureConfig = { ...inherited.azureConfig };
       this.serverCompactionTokens = inherited.serverCompactionTokens;
       if (inherited.codexAuthState) this.codexAuthState = inherited.codexAuthState;
-      this.fallbackChain = inherited.provider === "hosted" ? [] : inherited.fallbackChain.map((entry) => ({
-        ...entry,
-        ...(entry.credentials ? { credentials: { ...entry.credentials } } : {}),
-      }));
-      this.fallbackIndex = inherited.provider === "hosted" ? 0 : inherited.fallbackIndex;
-      this.hostedMaxOutputTokens = inherited.hostedMaxOutputTokens;
-      this.hostedCatalogPromise = inherited.hostedCatalogPromise;
+      // Model selection never grants a child cross-account fallback authority.
+      this.fallbackChain = [];
+      this.fallbackIndex = 0;
+      if (!modelChanged) {
+        this.hostedMaxOutputTokens = inherited.hostedMaxOutputTokens;
+        this.hostedCatalogPromise = inherited.hostedCatalogPromise;
+      }
       return;
     }
-    this.config = { ...config };
+    this.config = {
+      ...config,
+      ...(config.agentModels ? { agentModels: Object.freeze({ ...config.agentModels }) } : {}),
+    };
     this.env = Object.freeze({ ...process.env, ...config.env });
     this.azureConfig = parseCodexAzureConfig(this.env);
     this.fallbackChain = getFallbackChain(this.env).map(entry => ({
@@ -1987,13 +2077,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
     // /chat/completions. The Responses endpoint supports the agent loop, so
     // upgrade only the exact provider/model pairs rather than changing every
     // OpenAI-compatible deployment's requested wire API.
-    const normalizedModel = this.model.toLowerCase();
-    const requiresResponses =
-      (this.provider === "azure" && normalizedModel === "gpt-5.6-sol") ||
-      (this.provider === "openai" && normalizedModel === "gpt-5.6-luna");
-    if (requiresResponses && this.wireApi === "chat_completions") {
-      this.wireApi = "responses";
-    }
+    this.applyModelWireApi();
 
     // Fire-and-forget startup banner. For Azure, this probes `/models`
     // once for the x-ms-region header so operators can see where their
@@ -2015,13 +2099,42 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
     }
   }
 
+  /** Exact deployments requiring Responses for tools, shared by roots and forks. */
+  private applyModelWireApi(): void {
+    const normalizedModel = this.model.toLowerCase();
+    if (this.wireApi === "chat_completions" &&
+      ((this.provider === "azure" && normalizedModel === "gpt-5.6-sol") ||
+       (this.provider === "openai" && normalizedModel === "gpt-5.6-luna"))) {
+      this.wireApi = "responses";
+    }
+  }
+
   /** Isolated child inference, bound to this runtime's resolved account and route. */
-  async forkForSubagent(timeoutMs: number): Promise<LlmApiRuntime> {
+  async forkForSubagent(timeoutMs: number, selection?: SubagentModelSelection): Promise<LlmApiRuntime> {
     if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
       throw new Error("Subagent timeout must be a positive finite number");
     }
     await this.ensureHostedModel();
-    return new LlmApiRuntime({ type: "api", timeout: timeoutMs }, this);
+    const configuredModel = selection?.role !== undefined && this.config.agentModels &&
+      Object.hasOwn(this.config.agentModels, selection.role)
+      ? this.config.agentModels[selection.role]
+      : undefined;
+    const selectedModel = this.config.singleModel
+      ? this.model
+      : selection?.model ?? configuredModel ?? this.model;
+    if (typeof selectedModel !== "string" || !selectedModel.trim()) {
+      throw new Error("Subagent model must be a non-empty model ID");
+    }
+    const model = this.provider === "opencode" ? opencodeModelId(selectedModel) : selectedModel;
+    const approved = model === this.model || Object.values(this.config.agentModels ?? {}).some(
+      id => (this.provider === "opencode" ? opencodeModelId(id) : id) === model,
+    );
+    if (!approved) {
+      throw new Error(`Subagent model "${selectedModel}" is not operator-approved. Configure agentModels before selecting it.`);
+    }
+    const child = new LlmApiRuntime({ type: "api", timeout: timeoutMs, model }, this);
+    await child.ensureHostedModel();
+    return child;
   }
 
   /** The server catalog is authoritative even when a model was selected explicitly. */
@@ -3003,7 +3116,51 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
     };
   }
 
+  /**
+   * Public entry point. Runs {@link executeNativeAttempt} and, ONLY for a
+   * transient empty stream (see {@link shouldRetryNativeStream}), re-issues the
+   * whole request up to {@link llmStreamMaxAttempts} times with a short backoff.
+   * Every other outcome — success, a real API error, a timeout, an operator
+   * cancellation — is returned from the first attempt untouched, preserving the
+   * existing behaviour exactly.
+   */
   async executeNative(
+    system: string,
+    messages: NativeMessage[],
+    tools: NativeToolDef[],
+    callbacks?: NativeStreamCallbacks,
+    signal?: AbortSignal,
+  ): Promise<NativeRuntimeResult> {
+    const maxAttempts = llmStreamMaxAttempts();
+    let result!: NativeRuntimeResult;
+    let attempt = 0;
+    for (attempt = 1; attempt <= maxAttempts; attempt++) {
+      result = await this.executeNativeAttempt(system, messages, tools, callbacks, signal);
+      // Last attempt, a non-transient outcome, or an operator cancel arrived
+      // between attempts: stop and return whatever we have.
+      if (attempt >= maxAttempts || !shouldRetryNativeStream(result) || signal?.aborted) break;
+
+      const backoff = streamRetryBackoffMs(attempt);
+      diag.warn(
+        "stream_retry",
+        `${this.providerLabel} stream ended without a final response — retrying (attempt ${attempt + 1}/${maxAttempts}) after ${backoff}ms`,
+        { provider: this.providerLabel, attempt: attempt + 1, max_attempts: maxAttempts, backoff_ms: backoff },
+      );
+      await delayWithAbort(backoff, signal);
+      if (signal?.aborted) break;
+    }
+
+    // Genuinely exhausted the retry budget on a still-transient outcome (as
+    // opposed to breaking early for an abort): keep failing the turn but make
+    // the message say it retried, so the operator (and the logs) can tell a
+    // persistent empty stream from a one-off blip.
+    if (attempt >= maxAttempts && maxAttempts > 1 && shouldRetryNativeStream(result)) {
+      return { ...result, error: `${result.error} (retried ${maxAttempts} times)` };
+    }
+    return result;
+  }
+
+  private async executeNativeAttempt(
     system: string,
     messages: NativeMessage[],
     tools: NativeToolDef[],

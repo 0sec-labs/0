@@ -4,6 +4,7 @@ import {
   SETTINGS_TAB_GAP,
   buildSettingsRows,
   clipDetailLines,
+  computeSettingsLayout,
   cycleSetting,
   groupsWithMatches,
   isFilterKey,
@@ -15,6 +16,7 @@ import {
   settingsDetailLines,
   settingsGroups,
   settingsTabBar,
+  shellChromeRows,
   wrapCells,
   type SettingsRow,
 } from "./settings-layout.js";
@@ -521,5 +523,69 @@ describe("mutation", () => {
       expect(settingValue(DEFAULT_SETTINGS, def), `${def.key} had no value`).toBe(def.default);
     }
     expect(settingValue(DEFAULT_SETTINGS, undefined)).toBeUndefined();
+  });
+});
+
+describe("the settings dialog layout", () => {
+  it("keeps details accessible when a narrow surface cannot fit a side column", () => {
+    const narrow = computeSettingsLayout(48, 36, 40);
+    expect(narrow.panel.showDetail).toBe(false);
+    expect(narrow.stackedRows).toBeGreaterThanOrEqual(4);
+    expect(narrow.listRows).toBeGreaterThanOrEqual(2);
+    const wide = computeSettingsLayout(140, 36, 40);
+    expect(wide.panel.showDetail).toBe(true);
+    expect(wide.stackedRows).toBe(0);
+    expect(wide.panel.detailWidth).toBeGreaterThan(0);
+  });
+
+  it("partitions exactly the rows and cells the host left it", () => {
+    for (const width of [0, 1, 24, 48, 80, 108, 140, 200]) {
+      for (const height of [0, 1, 10, 18, 36, 44, 80]) {
+        const layout = computeSettingsLayout(width, height, 100);
+        expect(layout.contentWidth).toBe(Math.max(0, width - 4));
+        expect(layout.mainWidth).toBe(layout.contentWidth);
+        expect(layout.availableRows).toBe(Math.max(0, height - shellChromeRows(width)));
+        expect(layout.titleRows + layout.bodyRows + layout.statusRows)
+          .toBe(layout.availableRows);
+        expect(layout.listRows + layout.stackedRows).toBe(layout.bodyRows);
+        // Nothing the picker paints may exceed the column it was handed.
+        expect(layout.panel.listWidth + layout.panel.detailGap + layout.panel.detailWidth)
+          .toBeLessThanOrEqual(Math.max(1, layout.mainWidth));
+        expect(layout.panel.rowWidth).toBeLessThanOrEqual(layout.panel.listWidth);
+        // The picker body (its search line plus its rows) fits the list budget.
+        if (layout.listRows > 0) {
+          expect(layout.panel.visibleRows + 1).toBeLessThanOrEqual(Math.max(2, layout.listRows));
+        }
+      }
+    }
+  });
+
+  it("spends the host chrome the caller declares, not the console shell's", () => {
+    // Inside a dialog the surface is already the panel's inner box, so only the
+    // host frame's own rows come off it — the body keeps the rest.
+    // The settings host spends two rows: its footer and the harness line.
+    const dialog = computeSettingsLayout(92, 40, 100, { chromeRows: 2, chromeColumns: 0 });
+    expect(dialog.contentWidth).toBe(92);
+    expect(dialog.availableRows).toBe(38);
+    expect(dialog.titleRows + dialog.bodyRows + dialog.statusRows).toBe(38);
+    expect(dialog.bodyRows).toBeGreaterThan(computeSettingsLayout(92, 40, 100).bodyRows);
+  });
+
+  it("drops its own rows in order rather than overflowing a tiny surface", () => {
+    for (let height = 0; height <= 6; height += 1) {
+      const layout = computeSettingsLayout(80, height, 40, { chromeRows: 0, chromeColumns: 0 });
+      expect(layout.availableRows).toBe(height);
+      expect(layout.titleRows + layout.bodyRows + layout.statusRows).toBe(height);
+      expect(layout.bodyRows).toBeGreaterThanOrEqual(0);
+    }
+    // The title gives way before the status line, which carries a failed save.
+    expect(computeSettingsLayout(80, 3, 40, { chromeRows: 0 }).titleRows).toBe(0);
+    expect(computeSettingsLayout(80, 3, 40, { chromeRows: 0 }).statusRows).toBe(1);
+    expect(computeSettingsLayout(80, 4, 40, { chromeRows: 0 }).titleRows).toBe(1);
+  });
+
+  it("never budgets a hint row of its own — the host draws exactly one", () => {
+    const layout = computeSettingsLayout(92, 40, 100, { chromeRows: 2, chromeColumns: 0 });
+    expect(layout).not.toHaveProperty("footerRows");
   });
 });

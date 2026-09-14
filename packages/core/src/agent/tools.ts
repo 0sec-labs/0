@@ -1,8 +1,9 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { readFileSync, statSync, existsSync, writeFileSync } from "node:fs";
 import { spawnSync, spawn } from "node:child_process";
 import { isAbsolute, resolve, join } from "node:path";
+
 import type {
   Finding,
   AttackResult,
@@ -21,7 +22,7 @@ import type {
   OperatorQuestionOption,
   OperatorQuestionRequest,
 } from "./types.js";
-import type { NativeRuntime } from "../runtime/types.js";
+import type { NativeRuntime, SubagentModelSelection } from "../runtime/types.js";
 import type { LootKind } from "./loot.js";
 import { applyPlanAction, validatePlanArgs } from "./task-ledger.js";
 import type { OastHandle } from "../oast/types.js";
@@ -156,7 +157,7 @@ import type {
 } from "../events/bus.js";
 import { ToolHealthTracker } from "./tool-health.js";
 import type { ToolHealthRecordInput, ToolHealthSummary } from "./tool-health.js";
-import { TodoTracker, validateUpdateTodosArgs, buildTodosPayload } from "./todos.js";
+import { TodoTracker, validateUpdateTodosArgs, buildTodosPayload, todoInputSchema, MAX_TODOS } from "./todos.js";
 import type { TodoSnapshot } from "./todos.js";
 import {
   drainInbox,
@@ -166,7 +167,8 @@ import {
   type HubMessage,
 } from "../hub/mailbox.js";
 import { PRIMARY_AGENT_NAME, assignAgentName, uniquifyAgentName } from "../hub/name-generator.js";
-import { DetachedAgentSupervisor, runPersistentAgent } from "../hub/supervisor.js";
+import { runPersistentAgent } from "../hub/supervisor.js";
+import { AuditWorkerTree } from "./worker-tree.js";
 import { ProcessManager, probePort, type ReadyGate } from "./process-manager.js";
 import { MCP_TOOL_PREFIX } from "./mcp-adapt.js";
 import type { McpHost } from "./mcp-host.js";
@@ -186,8 +188,10 @@ import {
 } from "./agent-messaging.js";
 import { mapWithConcurrency } from "../concurrency.js";
 import { executeIntel } from "./tools/intel.js";
+import { executeBrowser, type BrowserDriverHost } from "./tools/browser.js";
 import { resolveScopedPath } from "./tools/scope-path.js";
 import { windowFileContent } from "./tools/read-file-window.js";
+import { buildEvalCommand, parseEvalArgs, type EvalLanguage } from "./tools/eval.js";
 import { executeOverseScan, validateOverseArgs } from "./tools/0verse.js";
 
 
@@ -217,6 +221,7 @@ export {
   BINARY_TOOL_NAMES,
 };
 import { executeStartScan } from "./tools/orchestrator.js";
+import { executeProxy, type ProxyHost } from "./tools/proxy.js";
 
 // Tool-name → handler-method-name routing table (0sec#614), assembled from
 // per-domain `*Dispatch` maps. `ToolExecutor._dispatch` resolves the handler
@@ -1345,6 +1350,7 @@ function validateScopedCommand(tokens: string[], scopePath?: string): string[] {
 }
 
 
+
 function isLocalHostname(hostname: string): boolean {
   const normalized = normalizeScopeHostname(hostname);
   return normalized === "localhost" || normalized.endsWith(".localhost");
@@ -2297,6 +2303,14 @@ export function buildSendMessageTool(rt: MessagingRuntime | undefined): ToolDefi
   };
 }
 
+/** Keep generated peer ids within the mailbox's 64-character identity limit. */
+function subagentSiblingPrefix(scanId: string): string {
+  const namespace = scanId.length <= 23 && isValidPeerId(scanId)
+    ? scanId
+    : createHash("sha256").update(scanId).digest("hex").slice(0, 23);
+  return `${namespace}-sub-`;
+}
+
 /**
  * Seed the child↔child (sibling) messaging runtimes for ONE concurrent
  * `spawn_agents` batch, BEFORE any child starts, so siblings can address each
@@ -2305,7 +2319,7 @@ export function buildSendMessageTool(rt: MessagingRuntime | undefined): ToolDefi
  * The returned array is index-aligned with `agentIds`: entry `i` is the runtime
  * for the child whose lifecycle `agent_id` is `agentIds[i]`. Each runtime:
  *   - carries that child's own `agent_id` as `selfId` (the id it sends as);
- *   - shares the scan-wide `<scanId>-sub-` `siblingPrefix` (the shape guard);
+ *   - shares the bounded scan-wide `siblingPrefix` (the shape guard);
  *   - lists the OTHER children of THIS batch as `knownPeerIds` — this is the
  *     DISCOVERY seed (a sibling can otherwise never learn a sibling's id) and,
  *     because `decideAddressing` now requires a sibling `to` to be on
@@ -2333,7 +2347,7 @@ export function buildSiblingMessagingBatch(params: {
   operatorId?: string;
   operatorChannelEnabled?: boolean;
 }): MessagingRuntime[] {
-  const siblingPrefix = `${params.scanId}-sub-`;
+  const siblingPrefix = subagentSiblingPrefix(params.scanId);
   return params.agentIds.map((selfId) => ({
     selfId,
     selfRole: "child" as const,
@@ -2409,13 +2423,30 @@ const PERSIST_IDLE_TTL_MS = 300_000;
 /** Hard cap on how many times a persistent agent may be revived. */
 const PERSIST_MAX_REVIVES = 25;
 
+const subagentModelSelectionSchema = z.object({
+  role: z.string().min(1).optional(),
+  model: z.string().min(1).optional(),
+});
+
+/**
+ * First non-empty trimmed line of a subagent `task` brief, clipped to ~64 chars
+ * for the Task card's sub-report bullet (mirrors OMP's `taskFirstLine`). Used
+ * only for the display-only meta sidecar.
+ */
+function subagentTaskFirstLine(task: string): string {
+  const trimmed = task.trim();
+  const newline = trimmed.indexOf("\n");
+  const firstLine = newline === -1 ? trimmed : trimmed.slice(0, newline);
+  return firstLine.length > 64 ? `${firstLine.slice(0, 63)}…` : firstLine;
+}
+
 /**
  * `spawn_persistent_agent` argument schema — validate-then-reject before any side
  * effect, mirroring the `kernel_run` discipline (see agent/CLAUDE.md). `.strip()`
  * drops unknown keys a model might emit.
  */
-const spawnPersistentAgentArgsSchema = z
-  .object({
+const spawnPersistentAgentArgsSchema = subagentModelSelectionSchema
+  .extend({
     task: z
       .string({ required_error: "task is required", invalid_type_error: "task must be a string" })
       .min(1, "task must not be empty"),
@@ -2427,7 +2458,7 @@ const spawnPersistentAgentArgsSchema = z
 export function validateSpawnPersistentAgentArgs(
   raw: unknown,
 ):
-  | { ok: true; args: { task: string; name?: string; maxTurns: number } }
+  | { ok: true; args: { task: string; name?: string; maxTurns: number } & SubagentModelSelection }
   | { ok: false; error: string } {
   if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
     return { ok: false, error: "arguments must be an object" };
@@ -2436,10 +2467,10 @@ export function validateSpawnPersistentAgentArgs(
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues[0]?.message ?? "invalid arguments" };
   }
-  const { task, name, max_turns } = parsed.data;
+  const { task, name, max_turns, role, model } = parsed.data;
   // Clamp the turn budget to the same [1,25] band spawn_agent uses.
   const maxTurns = Math.min(25, Math.max(1, max_turns ?? 15));
-  return { ok: true, args: { task, ...(name ? { name } : {}), maxTurns } };
+  return { ok: true, args: { task, ...(name ? { name } : {}), maxTurns, ...(role !== undefined ? { role } : {}), ...(model !== undefined ? { model } : {}) } };
 }
 
 /* ------------------------------------------------------------- monitor (processes) */
@@ -2778,28 +2809,80 @@ export function buildOperatorQuestionRequest(
   return { ok: true, request: { requestId: idFactory(), questions } };
 }
 
+const oastProtocolCheckpointSchema = z.enum(["dns", "http", "smtp", "ldap"]);
+const oastInteractionCheckpointSchema = z.object({
+  protocol: oastProtocolCheckpointSchema,
+  timestamp: z.string(),
+  queryName: z.string(),
+  path: z.string().optional(),
+  method: z.string().optional(),
+  remoteAddress: z.string().optional(),
+  raw: z.string().optional(),
+}).strict();
+
+/** Data-only handoff ABI. Authority fields are required, never defaulted. */
+export const toolExecutorCheckpointSchema = z.object({
+  credentialTarget: z.string(),
+  rejectedDecoyFlags: z.array(z.string()),
+  scopedAuditGrants: z.array(z.string()),
+  scopedAuditDenials: z.array(z.string()),
+  assignedAgentNames: z.array(z.string()),
+  oastHandles: z.array(z.object({
+    id: z.string(),
+    handle: z.object({
+      id: z.string(), token: z.string(), host: z.string(),
+      httpUrl: z.string(), dnsHost: z.string(), createdAt: z.string(),
+    }).strict(),
+  }).strict()),
+  oastCandidates: z.array(z.object({ id: z.string(), candidate: z.string() }).strict()),
+  oastVerified: z.array(z.object({
+    id: z.string(),
+    oastClass: z.enum(["blind-ssrf", "blind-xss", "jndi", "oob-rce", "oob-sqli", "xxe-oob"]),
+    verdict: z.object({
+      verified: z.boolean(), confidence: z.number().min(0).max(1),
+      protocol: oastProtocolCheckpointSchema.nullable(),
+      evidence: z.string(), reason: z.string(),
+      interaction: oastInteractionCheckpointSchema.nullable(),
+    }).strict(),
+  }).strict()),
+  startedAt: z.number().finite().nonnegative(),
+  sourceFilesRead: z.array(z.string()),
+  totalNonDoneToolCalls: z.number().int().nonnegative(),
+  doneRejections: z.number().int().nonnegative(),
+  msgDrainTurn: z.number().int().min(-1),
+  msgDrainCount: z.number().int().nonnegative(),
+  todos: z.object({
+    items: z.array(todoInputSchema.required({ status: true }).extend({ id: z.string() }).strict()).max(MAX_TODOS),
+    revision: z.number().int().nonnegative(),
+  }).strict(),
+  toolHealth: z.array(z.object({
+    tool: z.string(),
+    category: z.enum(["missing-binary", "buffer-limit", "wrong-lockfile", "policy-denied", "scope-denied", "error"]),
+    message: z.string(), remedy: z.string().optional(),
+    count: z.number().int().positive(),
+    firstSeen: z.number().finite(), lastSeen: z.number().finite(),
+  }).strict()),
+}).strict();
+
+export type ToolExecutorCheckpoint = z.infer<typeof toolExecutorCheckpointSchema>;
+
 export class ToolExecutor {
   private db: osecDB | null;
   private ctx: ToolContext;
   private readonly _credentialTarget: string;
-  private _browser: any = null;
-  private _browserPage: any = null;
-  private _browserActionContext: {
-    active: boolean;
-    signal?: AbortSignal;
-    assertAuthority?: () => void;
-  } | undefined;
-  private _browserDialogs: string[] = [];
-  private _browserConsole: string[] = [];
+  /**
+   * Cross-call holder for the next-gen browser driver (tools/browser.ts). The
+   * multi-tab driver is created lazily on the first `browser` call and cached
+   * here so tabs live across turns; disposed in {@link cleanup}. Replaces the
+   * old single-page `_browser`/`_browserPage`/`_browserActionContext` fields.
+   */
+  private _browserHost: BrowserDriverHost = {};
   private _playwrightAvailable: boolean | null = null;
   private _ptyManager: PtySessionManager | null = null;
   private _pyKernel: PythonKernelManager | null = null;
-  /**
-   * Owns this session's detached persistent agents (spawn_persistent_agent), so
-   * they are tracked and aborted together on cleanup. Lazily created; session-
-   * scoped like the executor. See `hub/supervisor.ts`.
-   */
-  private _detachedSupervisor: DetachedAgentSupervisor | null = null;
+  private readonly _workerTree: AuditWorkerTree;
+  private readonly _ownsWorkerTree: boolean;
+  private readonly _workerFindings: Finding[];
   /**
    * Supervises this session's background processes (the `monitor` tool). Lazily
    * created; every live process is killed in cleanup() so none outlives the
@@ -2807,12 +2890,19 @@ export class ToolExecutor {
    */
   private _processManager: ProcessManager | null = null;
   /**
+   * Per-session intercepting-proxy state (burp-network-20260913). Holds the
+   * running ProxyDriver, the in-memory HTTP-history store, the bound port, and
+   * installed match/replace rules across turns. The driver's listener is torn
+   * down in cleanup() so no proxy outlives the session. See `tools/proxy.ts`.
+   */
+  private _proxyHost: ProxyHost = {};
+  /**
    * Set of proposed flag strings that the `done` tool rejected once as
    * likely decoys. A second `done` call with the same flag passes through
    * — the anti-honeypot heuristic is a speed bump, not a hard wall.
    * See GitHub issue #82.
    */
-  private _rejectedDecoyFlags: Set<string> = new Set();
+  private _rejectedDecoyFlags: Set<string>;
 
   /**
    * Per-session memory for the scoped-source-audit escalation gate
@@ -2824,8 +2914,8 @@ export class ToolExecutor {
    * In-memory only; the executor is constructed once per console session and
    * discarded with it, so these are session-scoped and never persisted.
    */
-  private _scopedAuditGrants: Set<string> = new Set();
-  private _scopedAuditDenials: Set<string> = new Set();
+  private _scopedAuditGrants: Set<string>;
+  private _scopedAuditDenials: Set<string>;
 
   /**
    * Per-turn `check_messages` drain accounting. A child must not be able to
@@ -2842,7 +2932,7 @@ export class ToolExecutor {
    * reserved primary name "Main". Used to uniquify each spawned agent's
    * AdjectiveNoun name so no two agents in the fleet collide. Session-scoped.
    */
-  private _assignedAgentNames = new Set<string>([PRIMARY_AGENT_NAME]);
+  private _assignedAgentNames: Set<string>;
 
   /**
    * OAST interaction handles minted this scan, plus verified callback verdicts
@@ -2858,8 +2948,8 @@ export class ToolExecutor {
   // Populated incrementally inside `execute()` so `markDone` can refuse
   // calls from audit / review sub-agents that haven't inspected any
   // source. See `evaluateDoneCoverageGate` above.
-  private _startedAt: number = Date.now();
-  private _sourceFilesRead: Set<string> = new Set();
+  private _startedAt: number;
+  private _sourceFilesRead: Set<string>;
   private _totalNonDoneToolCalls: number = 0;
   private _doneRejections: number = 0;
 
@@ -2890,7 +2980,7 @@ export class ToolExecutor {
    * Received as the fourth constructor argument. Without this capability,
    * child construction fails closed rather than rediscovering credentials.
    */
-  private _childRuntimeFactory: ((timeoutMs: number) => Promise<NativeRuntime>) | undefined;
+  private _childRuntimeFactory: NativeRuntime["forkForSubagent"];
 
   /**
    * Tool-health recorder (0sec#tool-reliability). Uses the shared tracker on
@@ -2913,16 +3003,27 @@ export class ToolExecutor {
     ctx: ToolContext,
     db: osecDB | null = null,
     idFactory: () => string = () => randomUUID(),
-    childRuntimeFactory?: (timeoutMs: number) => Promise<NativeRuntime>,
+    childRuntimeFactory?: NativeRuntime["forkForSubagent"],
+    initialCheckpoint?: ToolExecutorCheckpoint,
   ) {
     this.ctx = ctx;
-    this._credentialTarget = ctx.target;
+    this._credentialTarget = initialCheckpoint?.credentialTarget ?? ctx.target;
+    this._rejectedDecoyFlags = new Set(initialCheckpoint?.rejectedDecoyFlags);
+    this._scopedAuditGrants = new Set(initialCheckpoint?.scopedAuditGrants);
+    this._scopedAuditDenials = new Set(initialCheckpoint?.scopedAuditDenials);
+    this._assignedAgentNames = new Set(initialCheckpoint?.assignedAgentNames ?? [PRIMARY_AGENT_NAME]);
+    this._sourceFilesRead = new Set(initialCheckpoint?.sourceFilesRead);
+    this._startedAt = initialCheckpoint?.startedAt ?? Date.now();
     this.db = db;
     this._idFactory = idFactory;
     this._childRuntimeFactory = childRuntimeFactory;
+    this._workerTree = ctx.workerTree ?? new AuditWorkerTree(ctx.scanId);
+    this._ownsWorkerTree = ctx.workerTree === undefined;
+    this._workerFindings = ctx.workerTree ? (ctx.workerFindings ?? ctx.findings) : ctx.findings;
     this._toolHealth =
       ctx.toolHealth ??
       new ToolHealthTracker({
+        seed: initialCheckpoint?.toolHealth,
         emit: (event) => {
           eventBus.emit("tool_health", {
             tool: event.tool,
@@ -2936,10 +3037,80 @@ export class ToolExecutor {
     this._todos =
       ctx.todos ??
       new TodoTracker({
+        seed: initialCheckpoint?.todos,
         emit: (snap) => {
-          eventBus.emit("todos", buildTodosPayload(snap));
+          eventBus.emit("todos", { ...buildTodosPayload(snap), scan_id: this.ctx.scanId });
         },
       });
+
+    if (initialCheckpoint) {
+      for (const { id, handle } of initialCheckpoint.oastHandles) this._oastHandles.set(id, structuredClone(handle));
+      for (const { id, candidate } of initialCheckpoint.oastCandidates) this._oastCandidates.set(id, candidate);
+      for (const { id, oastClass, verdict } of initialCheckpoint.oastVerified) {
+        this._oastVerified.set(id, { oastClass, verdict: structuredClone(verdict) });
+      }
+      this._totalNonDoneToolCalls = initialCheckpoint.totalNonDoneToolCalls;
+      this._doneRejections = initialCheckpoint.doneRejections;
+      this._msgDrainTurn = initialCheckpoint.msgDrainTurn;
+      this._msgDrainCount = initialCheckpoint.msgDrainCount;
+    }
+  }
+
+  // ── Checkpoint export (engine replacement boundary) ──────────────────
+
+  /**
+   * Produce a defensively-copied snapshot of this executor's memory state,
+   * suitable for JSON-serialization and later restoration into a new executor
+   * via the fifth constructor argument.
+   *
+   * **Explicitly excluded** (live resources drained by the caller / old engine):
+   *   - `_browserHost` (BrowserDriverHost — live browser tabs)
+   *   - `_playwrightAvailable` (lazily recomputed on the new instance)
+   *   - `_ptyManager` / `_pyKernel` (live PTY / Python kernel sessions)
+   *   - `_workerTree` / `_ownsWorkerTree` / `_workerFindings` (worker subprocesses)
+   *   - `_processManager` (ProcessManager — supervised monitor processes)
+   *   - `_executionContext` (AsyncLocalStorage — per-execution, not per-session)
+   *   - `db` / `ctx` (caller-provided, re-passed to the new constructor)
+   *   - `_idFactory` / `_childRuntimeFactory` (caller-provided, re-passed)
+   *
+   * The returned data is a plain struct — Set/Map fields are flattened to
+   * JSON-safe arrays. Callers should pass it through
+   * `toolExecutorCheckpointSchema` for structural validation.
+   */
+  exportCheckpoint(): ToolExecutorCheckpoint {
+    // Background agents/workers can mutate findings, authority memory, and
+    // identifier state after the snapshot is taken but before the old engine
+    // retires. Reject the checkpoint while owned workers are still live so
+    // callers (turn-engine) wait for worker completion or operator intervention
+    // before the handoff. Borrowed trees (owned by a parent executor) are not
+    // checked — the parent is responsible for its own liveness gate.
+    if (this._ownsWorkerTree && this._workerTree.hasLiveWorkers()) {
+      throw new Error(
+        "Cannot export checkpoint while owned background agents are still running. " +
+        "Wait for workers to complete or stop them before the engine replacement.",
+      );
+    }
+    return {
+      credentialTarget: this._credentialTarget,
+      rejectedDecoyFlags: [...this._rejectedDecoyFlags],
+      scopedAuditGrants: [...this._scopedAuditGrants],
+      scopedAuditDenials: [...this._scopedAuditDenials],
+      assignedAgentNames: [...this._assignedAgentNames],
+      oastHandles: [...this._oastHandles.entries()].map(([id, handle]) => ({ id, handle: structuredClone(handle) })),
+      oastCandidates: [...this._oastCandidates.entries()].map(([id, candidate]) => ({ id, candidate })),
+      oastVerified: [...this._oastVerified.entries()].map(([id, value]) => ({ id, oastClass: value.oastClass, verdict: structuredClone(value.verdict) })),
+      startedAt: this._startedAt,
+      sourceFilesRead: [...this._sourceFilesRead],
+      totalNonDoneToolCalls: this._totalNonDoneToolCalls,
+      doneRejections: this._doneRejections,
+      msgDrainTurn: this._msgDrainTurn,
+      msgDrainCount: this._msgDrainCount,
+      todos: {
+        items: this._todos.list(),
+        revision: this._todos.revision,
+      },
+      toolHealth: this._toolHealth.list().map(event => ({ ...event })),
+    };
   }
 
   /**
@@ -3015,7 +3186,6 @@ export class ToolExecutor {
   }
 
   private usesTargetIdentity(url: string): boolean {
-    if (!this.ctx.publicNetwork) return true;
     try {
       return new URL(url, this._credentialTarget).origin === new URL(this._credentialTarget).origin;
     } catch {
@@ -3029,15 +3199,15 @@ export class ToolExecutor {
    * When a stateful `SessionEngine` is wired into the context, this returns the
    * active identity's static credential merged with any cookies its jar has
    * captured this scan. With no session it falls back to the legacy stateless
-   * `buildAuthHeaders(authConfig)` path — byte-identical for single-credential
-   * scans. The target host keys the jar (every tool request is same-origin per
-   * `validateTargetUrl`, so the target host is always the right jar key).
+   * `buildAuthHeaders(authConfig)` path. Credentials and cookie jars remain
+   * bound to the executor's original target origin, even after a target or
+   * autonomy-mode change; scope grants never authorize credential forwarding.
    */
   private activeAuthHeaders(url = this.ctx.target): Record<string, string> {
     if (!this.usesTargetIdentity(url)) return {};
     const session = this.ctx.session;
     if (session) {
-      return session.headersFor(session.activeLabel, this.ctx.publicNetwork ? this._credentialTarget : this.ctx.target);
+      return session.headersFor(session.activeLabel, this._credentialTarget);
     }
     return buildAuthHeaders(this.ctx.authConfig);
   }
@@ -3050,7 +3220,7 @@ export class ToolExecutor {
     if (!this.usesTargetIdentity(url)) return;
     const session = this.ctx.session;
     if (!session) return;
-    const identityTarget = this.ctx.publicNetwork ? this._credentialTarget : this.ctx.target;
+    const identityTarget = this._credentialTarget;
     session.capture(session.activeLabel, res.headers, identityTarget);
     session.handleAuthStatus(session.activeLabel, res.status, identityTarget);
   }
@@ -3061,7 +3231,7 @@ export class ToolExecutor {
    */
   private buildAuthEnvVars(): Record<string, string> {
     const auth = this.ctx.authConfig;
-    if (!auth) return {};
+    if (!auth || !this.usesTargetIdentity(this.ctx.target)) return {};
 
     const headers = buildAuthHeaders(auth);
     const entries = Object.entries(headers);
@@ -3076,16 +3246,23 @@ export class ToolExecutor {
     };
   }
 
+  /** Stop an owned subtree; completion means all worker cleanup has drained. */
+  async stopPersistentAgent(agentId: string): Promise<boolean> {
+    return this._workerTree.stop(agentId, this.ctx.scanId);
+  }
+
+  /** Stop owned workers while retaining the conversation and root executor. */
+  async stopPersistentAgents(): Promise<void> {
+    await this._workerTree.stopAll(this.ctx.scanId);
+  }
+
   /** Clean up browser and PTY resources. Call when the agent loop ends. */
   async cleanup(): Promise<void> {
+    if (this._ownsWorkerTree) await this._workerTree.close();
     try {
-      if (this._browserPage) {
-        await this._browserPage.close().catch(() => {});
-        this._browserPage = null;
-      }
-      if (this._browser) {
-        await this._browser.close().catch(() => {});
-        this._browser = null;
+      if (this._browserHost.driver) {
+        await this._browserHost.driver.dispose().catch(() => {});
+        this._browserHost.driver = null;
       }
       if (this._ptyManager) {
         this._ptyManager.cleanup();
@@ -3095,16 +3272,16 @@ export class ToolExecutor {
         this._pyKernel.cleanup();
         this._pyKernel = null;
       }
-      if (this._detachedSupervisor) {
-        // Abort every parked/running persistent agent and await them settling so
-        // no detached loop outlives the session.
-        await this._detachedSupervisor.abortAll();
-        this._detachedSupervisor = null;
-      }
       if (this._processManager) {
         // Kill every background process the monitor tool started.
         this._processManager.killAll();
         this._processManager = null;
+      }
+      if (this._proxyHost.driver) {
+        // Tear down the intercepting proxy listener so no port outlives the
+        // session (captured history is discarded with the executor).
+        await this._proxyHost.driver.stop().catch(() => {});
+        this._proxyHost.driver = null;
       }
     } catch {
       // Best-effort cleanup
@@ -5195,6 +5372,19 @@ export class ToolExecutor {
   }
 
   /**
+   * burp-network-20260913 — Burp-style intercepting HTTP(S) proxy. Thin
+   * delegate to executeProxy (agent/tools/proxy.ts), threading this session's
+   * cross-turn {@link ProxyHost} (running driver + in-memory HTTP-history store
+   * + installed match/replace rules). The real proxy server lives behind a
+   * lazy, guarded ProxyDriver seam; egress is scope-gated through
+   * `this.ctx` exactly like http_request. The listener is torn down in
+   * cleanup().
+   */
+  private async proxyAction(args: Record<string, unknown>): Promise<ToolResult> {
+    return executeProxy(this.ctx, args, { host: this._proxyHost });
+  }
+
+  /**
    * #925 — test S3 buckets for public access + orphaned-bucket takeover.
    * Anonymous, read-only: GET / and GET /?acl per bucket. NoSuchBucket (404)
    * is classified as takeover-able (the BCG orphaned-integration finding) but
@@ -5673,254 +5863,125 @@ export class ToolExecutor {
     };
   }
 
-  // ── Browser automation (Playwright) ──
+  // ── Code eval (js_eval / python_eval) ──
 
-  private async ensureBrowser(): Promise<{ page: any }> {
-    if (this._browserPage) return { page: this._browserPage };
-
-    // @ts-ignore — playwright is an optional dependency
-    const { chromium } = await import("playwright");
-    this._browser = await chromium.launch({ headless: true });
-    // Attribution-header injection (0sec#216). Playwright doesn't run
-    // through `applyAttribution` — it has its own request pipeline — so
-    // we set `extraHTTPHeaders` on the context, which Chrome attaches to
-    // every outgoing request. The browser only navigates to in-scope
-    // hosts (validateTargetUrl is enforced before goto), so attribution
-    // here is bounded to in-scope traffic in the same way as the fetch
-    // sites. Same UA-override rule: when an engagement token is set, it
-    // replaces the default `0sec-browser/1.0`.
-    const attribution = this.ctx.publicNetwork ? undefined : this.ctx.attribution;
-    const browserUa = attribution?.userAgentToken
-      ? formatUserAgent(attribution.userAgentToken)
-      : "0sec-browser/1.0";
-    const context = await this._browser.newContext({
-      ignoreHTTPSErrors: true,
-      ...(this.ctx.publicNetwork ? { serviceWorkers: "block" } : {}),
-      userAgent: browserUa,
-      ...(attribution && Object.keys(attribution.headers).length > 0
-        ? { extraHTTPHeaders: attribution.headers }
-        : {}),
-    });
-    // Opted-in browsing uses the same pinned transport for every page resource,
-    // including redirects. Never let Chromium resolve an unchecked destination.
-    await context.route("**/*", async (route: any) => {
-      if (!this.ctx.publicNetwork) return route.continue();
-      const authority = this._browserActionContext;
-      const assertRouteAuthority = () => {
-        if (!authority?.active || this._browserActionContext !== authority) {
-          throw new Error("Browser action authority has ended.");
-        }
-        authority.signal?.throwIfAborted();
-        authority.assertAuthority?.();
-      };
-      const abortRoute = () => { void route.abort("blockedbyclient").catch(() => {}); };
-      authority?.signal?.addEventListener("abort", abortRoute, { once: true });
-      try {
-        assertRouteAuthority();
-        const request = route.request();
-        const requestHeaders = await request.allHeaders();
-        assertRouteAuthority();
-        const response = await this._executionContext.run({
-          signal: authority!.signal, assertAuthority: assertRouteAuthority,
-        }, () => this.fetchTarget(request.url(), {
-          method: request.method(), headers: requestHeaders, signal: authority!.signal,
-          body: request.postDataBuffer() ?? undefined, redirect: "manual",
-        }));
-        const headers = Object.fromEntries(response.headers.entries());
-        delete headers["content-encoding"];
-        delete headers["content-length"];
-        const body = Buffer.from(await response.arrayBuffer());
-        assertRouteAuthority();
-        await route.fulfill({ status: response.status, headers, body });
-      } catch {
-        await route.abort("blockedbyclient").catch(() => {});
-      } finally {
-        authority?.signal?.removeEventListener("abort", abortRoute);
-      }
-    });
-    this._browserPage = await context.newPage();
-
-    // Capture dialogs (alert/confirm/prompt) — key XSS signal
-    this._browserPage.on("dialog", async (dialog: any) => {
-      this._browserDialogs.push(`${dialog.type()}: ${dialog.message()}`);
-      await dialog.dismiss().catch(() => {});
-    });
-
-    // Capture console messages
-    this._browserPage.on("console", (msg: any) => {
-      if (this._browserConsole.length < 50) {
-        this._browserConsole.push(`[${msg.type()}] ${msg.text()}`);
-      }
-    });
-
-    return { page: this._browserPage };
+  /** `js_eval` handler — evaluate a JavaScript snippet with Node.js. */
+  private async jsEval(args: Record<string, unknown>): Promise<ToolResult> {
+    return this.codeEval("javascript", args);
   }
 
-  private async browserAction(args: Record<string, unknown>): Promise<ToolResult> {
-    const action = args.action as string;
-    if (!action) {
-      return { success: false, output: null, error: "action is required" };
-    }
+  /** `python_eval` handler — evaluate a Python 3 snippet. */
+  private async pythonEval(args: Record<string, unknown>): Promise<ToolResult> {
+    return this.codeEval("python", args);
+  }
 
-    if (!(await this.isPlaywrightAvailable())) {
-      return {
-        success: false,
-        output: null,
-        error: "playwright is not installed. Install it with: npm i playwright && npx playwright install chromium",
-      };
-    }
+  /**
+   * Shared runtime for the two eval tools. It is a THIN WRAPPER over
+   * {@link shellExec}: it builds a quoted-heredoc `node` / `python3` command and
+   * delegates, so every scope / egress / auth-header / rate-limit guard and the
+   * wallclock ceiling that protect `bash` apply here unchanged — this adds NO
+   * new execution or sandbox-escape path. It then re-labels the result's
+   * display-only `meta` from a `command` card to a `code` card carrying the
+   * language, source, output, exit code, and duration; the model-facing
+   * `output` / `error` are passed through untouched.
+   */
+  private async codeEval(language: EvalLanguage, args: Record<string, unknown>): Promise<ToolResult> {
+    const parsed = parseEvalArgs(args);
+    if (!parsed.ok) return { success: false, output: null, error: parsed.error };
+    const { code, timeout } = parsed.value;
 
-    // Clear per-action dialog/console buffers
-    this._browserDialogs = [];
-    this._browserConsole = [];
+    const command = buildEvalCommand(language, code);
+    const result = await this.shellExec({ command, ...(timeout != null ? { timeout } : {}) });
 
-    const ACTION_TIMEOUT = 10_000;
-    const execution = this._executionContext.getStore();
-    const actionContext = {
-      active: true, signal: execution?.signal, assertAuthority: execution?.assertAuthority,
+    // shellExec attaches a `command`-kind meta (durationMs / exitCode / stdout).
+    // Reuse its measurements but present a `code` card instead.
+    const cmdMeta = result.meta && result.meta.kind === "command" ? result.meta : undefined;
+    const output = cmdMeta?.stdout ?? (typeof result.output === "string" ? result.output : "");
+    return {
+      ...result,
+      meta: {
+        kind: "code",
+        language,
+        code,
+        output,
+        exitCode: cmdMeta?.exitCode ?? null,
+        ...(cmdMeta?.durationMs != null ? { durationMs: cmdMeta.durationMs } : {}),
+      },
     };
-    this._browserActionContext = actionContext;
+  }
 
-    try {
-      const { page } = await this.ensureBrowser();
+  // ── Browser automation (multi-tab, tools/browser.ts) ──
 
-      let result: unknown;
+  /**
+   * Scope-pinned request transport handed to the browser driver as its
+   * `interceptor`. Mirrors the old `context.route("**\/*") -> fetchTarget`
+   * block: for a public-network scan it fetches every page resource through
+   * the scope-checked `fetchTarget` sink (so no sub-resource escapes scope and
+   * attribution is applied) and hands the fulfilled response back to the
+   * driver; for a normal scoped/unscoped scan it returns `null`, letting the
+   * request continue directly (Chromium reaches only the in-scope host that
+   * `executeBrowser`'s pre-`goto` + post-redirect scope gate already vetted).
+   */
+  private _browserInterceptor = async (req: {
+    url: string;
+    method: string;
+    headers: Record<string, string>;
+    body?: Uint8Array;
+  }): Promise<{ status: number; headers: Record<string, string>; body: Uint8Array } | null> => {
+    // Only the public-network path pins the transport, exactly as before.
+    if (!this.ctx.publicNetwork) return null;
+    const execution = this._executionContext.getStore();
+    const response = await this.fetchTarget(req.url, {
+      method: req.method,
+      headers: req.headers,
+      body: req.body ? Buffer.from(req.body) : undefined,
+      redirect: "manual",
+      signal: execution?.signal,
+    });
+    const headers = Object.fromEntries(response.headers.entries());
+    delete headers["content-encoding"];
+    delete headers["content-length"];
+    const body = new Uint8Array(await response.arrayBuffer());
+    return { status: response.status, headers, body };
+  };
 
-      switch (action) {
-        case "navigate": {
-          const rawNavUrl = args.url as string;
-          if (!rawNavUrl) return { success: false, output: null, error: "url is required for navigate" };
-          // Validate against same-origin policy (same as http_request/submit_form)
-          let url: string;
-          try {
-            url = validateTargetUrl(this.ctx.target, rawNavUrl, this.ctx.scope, this.ctx.enforcement, this.ctx.publicNetwork);
-          } catch (err) {
-            return { success: false, output: null, error: err instanceof Error ? err.message : `Invalid URL: ${rawNavUrl}` };
-          }
-          const response = await page.goto(url, { timeout: ACTION_TIMEOUT, waitUntil: "domcontentloaded" });
-          // Post-navigation scope re-check (0sec#218 review).
-          // `validateTargetUrl` only vets the requested URL; `page.goto`
-          // follows redirects, so an in-scope URL that 302s off-origin
-          // leaves the browser sitting on a foreign page that subsequent
-          // click/content/evaluate calls would then operate on. Compare
-          // the post-navigation URL against scope and refuse if it
-          // drifted off-host before returning success.
-          const finalUrl = page.url();
-          const browserScope = this.ctx.publicNetwork ? this.ctx.publicNetwork.scope : this.ctx.scope;
-          if (browserScope && finalUrl) {
-            const verdict = browserScope.match(finalUrl);
-            if (!verdict.allowed) {
-              return {
-                success: false,
-                output: null,
-                error: `navigate refused: redirected to out-of-scope URL '${finalUrl}' (${verdict.reason})`,
-              };
-            }
-          }
-          result = {
-            url: finalUrl,
-            status: response?.status() ?? null,
-            title: await page.title(),
-            dialogs: [...this._browserDialogs],
-            console: this._browserConsole.slice(0, 20),
-          };
-          break;
-        }
+  /**
+   * The `browser` tool handler. Delegates to the next-gen multi-tab driver in
+   * tools/browser.ts (`executeBrowser`), holding the driver across calls in
+   * `_browserHost` and passing the scope-pinned interceptor + attribution
+   * UA/headers. The method name is unchanged so dispatch (`browser ->
+   * browserAction`) is untouched. Scope gating (pre-`goto` + post-redirect
+   * re-check, 0sec#218) lives inside `executeBrowser`, and a missing backend
+   * degrades to a clear install hint there rather than throwing here.
+   */
+  private async browserAction(args: Record<string, unknown>): Promise<ToolResult> {
+    // Attribution: Playwright has its own request pipeline (not applyAttribution),
+    // so the UA + headers are pinned on the browser context. Out-of-scope hosts
+    // are never reached (scope gate + interceptor), so this stays in-scope-only —
+    // and public-network browsing carries no attribution, as before.
+    const attribution = this.ctx.publicNetwork ? undefined : this.ctx.attribution;
+    const userAgent = attribution?.userAgentToken
+      ? formatUserAgent(attribution.userAgentToken)
+      : "0sec-browser/1.0";
+    const extraHeaders =
+      attribution && Object.keys(attribution.headers).length > 0 ? attribution.headers : undefined;
 
-        case "click": {
-          const selector = args.selector as string;
-          if (!selector) return { success: false, output: null, error: "selector is required for click" };
-          await page.click(selector, { timeout: ACTION_TIMEOUT });
-          // Wait briefly for any navigation or DOM updates
-          await page.waitForTimeout(500);
-          result = {
-            clicked: selector,
-            url: page.url(),
-            title: await page.title(),
-            dialogs: [...this._browserDialogs],
-            console: this._browserConsole.slice(0, 20),
-          };
-          break;
-        }
+    const result = await executeBrowser(this.ctx, args, {
+      host: this._browserHost,
+      userAgent,
+      extraHeaders,
+      interceptor: this._browserInterceptor,
+    });
 
-        case "fill": {
-          const selector = args.selector as string;
-          const value = args.value as string;
-          if (!selector) return { success: false, output: null, error: "selector is required for fill" };
-          if (value === undefined) return { success: false, output: null, error: "value is required for fill" };
-          await page.fill(selector, value, { timeout: ACTION_TIMEOUT });
-          result = {
-            filled: selector,
-            value,
-            dialogs: [...this._browserDialogs],
-          };
-          break;
-        }
-
-        case "evaluate": {
-          const expression = args.value as string;
-          if (!expression) return { success: false, output: null, error: "value (JavaScript) is required for evaluate" };
-          const evalResult = await page.evaluate(expression).catch((e: Error) => `Error: ${e.message}`);
-          result = {
-            result: typeof evalResult === "object" ? JSON.stringify(evalResult) : String(evalResult),
-            dialogs: [...this._browserDialogs],
-            console: this._browserConsole.slice(0, 20),
-          };
-          break;
-        }
-
-        case "content": {
-          const html = await page.content();
-          // Extract visible text for readability
-          const text = await page.evaluate(() => document.body?.innerText?.slice(0, 5000) ?? "").catch(() => "");
-          result = {
-            url: page.url(),
-            title: await page.title(),
-            html: html.slice(0, 10_000),
-            text: (text as string).slice(0, 5_000),
-            dialogs: [...this._browserDialogs],
-          };
-          break;
-        }
-
-        case "screenshot": {
-          const buffer = await page.screenshot({ type: "png", fullPage: false });
-          const base64 = buffer.toString("base64").slice(0, 50_000); // cap at ~37KB image
-          result = {
-            url: page.url(),
-            title: await page.title(),
-            screenshot_base64: base64,
-            dialogs: [...this._browserDialogs],
-          };
-          break;
-        }
-
-        default:
-          return {
-            success: false,
-            output: null,
-            error: `Unknown browser action: ${action}. Valid: navigate, click, fill, evaluate, content, screenshot`,
-          };
-      }
-
+    // Evidence trail: persist the action + resulting URL, as the old handler did.
+    if (result.success) {
+      const out = result.output as { url?: string } | null;
       this.persistToolArtifact("browser", {
-        action,
-        url: (args.url as string) ?? page.url(),
-        dialogs: [...this._browserDialogs],
+        action: (args.action as string) ?? "",
+        url: (args.url as string) ?? out?.url ?? this.ctx.target,
       });
-
-      return { success: true, output: result };
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      return {
-        success: false,
-        output: { dialogs: [...this._browserDialogs], console: this._browserConsole.slice(0, 10) },
-        error: msg.slice(0, 2_000),
-      };
-    } finally {
-      actionContext.active = false;
-      if (this._browserActionContext === actionContext) this._browserActionContext = undefined;
     }
+    return result;
   }
 
   /**
@@ -5940,7 +6001,7 @@ export class ToolExecutor {
           ...(this.ctx.scope.raw.out_of_scope ?? []),
         ]
       : undefined;
-    const agent_id = `${this.ctx.scanId}-sub-${randomUUID()}`;
+    const agent_id = `${subagentSiblingPrefix(this.ctx.scanId)}${randomUUID()}`;
     // A stable AdjectiveNoun name from the id, uniquified against every name this
     // executor has already handed out (which starts with the reserved "Main"), so
     // no two agents in the fleet ever share a display name.
@@ -5990,45 +6051,40 @@ export class ToolExecutor {
     base: SubagentLifecycleBase,
     deps?: SubagentDeps,
     messagingOverride?: MessagingRuntime,
+    selection?: SubagentModelSelection,
+    admittedLease?: ReturnType<AuditWorkerTree["acquire"]>,
+    sharedContext?: string,
   ): Promise<SubagentOutcome> {
     const startedAt = Date.now();
+    let lease = admittedLease;
     try {
+      lease ??= this._workerTree.acquire(base.agent_id, this.ctx.scanId);
+      const callerSignal = this._executionContext.getStore()?.signal;
+      const signal = callerSignal ? AbortSignal.any([callerSignal, lease.signal]) : lease.signal;
+      signal.throwIfAborted();
       if (!this._childRuntimeFactory) throw new Error("Parent runtime does not support subagent inference");
       // Single-child path resolves deps here (inside the try, so an import
       // failure still emits `failed`); the concurrent batch pre-resolves once
       // and passes them in to stay off the per-child first-import path.
       const { runNativeAgentLoop } = deps ?? (await this.loadSubagentDeps());
+      signal.throwIfAborted();
 
-      const rt = await this._childRuntimeFactory(60_000);
+      const rt = await this._childRuntimeFactory(60_000, selection);
+      signal.throwIfAborted();
       if (!(await rt.isAvailable())) {
-        eventBus.emit("subagent_lifecycle", {
-          ...base,
-          status: "failed" as const,
-          error: "No API key available for sub-agent",
-        });
+        eventBus.emit("subagent_lifecycle", { ...base,
+        status: "failed" as const,
+        error: "No API key available for sub-agent", });
         return { ok: false, agent_id: base.agent_id, error: "No API key available for sub-agent" };
       }
+      signal.throwIfAborted();
 
-      // DEPTH GUARD (single-level nesting): the child tool set is hardcoded to
-      // ["bash","save_finding","done"] and deliberately EXCLUDES spawn_agent /
-      // spawn_agents. A subagent therefore cannot spawn its own subagents, so
-      // fan-out is bounded to one level and can never recurse into an
-      // unbounded tree of sessions. Do NOT add any spawn tool here.
-      //
-      // `report_status` (Task 2) is appended as the sole EXCEPTION: it is a
-      // child-only, strictly NON-PRIVILEGED status channel (no filesystem, no
-      // network, no subprocess, no spawn) that only lets a child narrate what it
-      // is doing. It does NOT widen the depth guard — it cannot spawn — and it
-      // is not in the global registry, so no other loop gains it.
-      //
-      // `send_message` / `check_messages` are appended for the same reason: they
-      // are child-only, route via CHILD_LOCAL_DISPATCH, and — critically — do
-      // NOT let a child spawn. They only exchange inert prose with the parent
-      // (or an enabled sibling / the operator) over the local hub spool. The
-      // addressing policy and inbound sanitization live in `agent-messaging.ts`.
+      // Child tools retain the canonical no-spawn guard. Internally owned
+      // descendants share audit admission and lifetime ownership. Messaging
+      // remains scoped to explicit parent/operator and enabled sibling peers.
       // Thread the child's messaging identity + policy onto its context. The
       // child's stable peer id is its lifecycle `agent_id` (unique per child);
-      // its parent is always addressable; siblings share the `<scanId>-sub-`
+      // its parent is always addressable; siblings share a bounded namespace
       // prefix and the operator is a single explicit id — both of those channels
       // are operator settings, mirrored from the parent's runtime rather than
       // decided here. If this parent has no messaging runtime (messaging not
@@ -6055,7 +6111,7 @@ export class ToolExecutor {
               selfRole: "child",
               parentId: parentMessaging.selfId,
               operatorId: parentMessaging.operatorId,
-              siblingPrefix: `${this.ctx.scanId}-sub-`,
+              siblingPrefix: subagentSiblingPrefix(this.ctx.scanId),
               siblingChannelEnabled: parentMessaging.siblingChannelEnabled,
               operatorChannelEnabled: parentMessaging.operatorChannelEnabled,
               projectPath: parentMessaging.projectPath,
@@ -6069,10 +6125,8 @@ export class ToolExecutor {
         .concat(REPORT_STATUS_TOOL, buildSendMessageTool(childMessaging), CHECK_MESSAGES_TOOL);
 
       // running — immediately before the agent loop starts
-      eventBus.emit("subagent_lifecycle", {
-        ...base,
-        status: "running" as const,
-      });
+      eventBus.emit("subagent_lifecycle", { ...base,
+      status: "running" as const, });
 
       // 0sec#218 review: propagate scope + auth to the spawned loop so
       // the sub-agent's bash/http_request gates use the same policy as
@@ -6087,16 +6141,23 @@ export class ToolExecutor {
       // state — so header building stays stateless per child (matching the
       // single-child path). `db: null` keeps children out of the SQLite writer
       // (no concurrent writers); findings merge-back is the sole durability sink.
+      // The batch's shared context (`spawn_agents` `# Goal / # Constraints /
+      // # Contract`) is prepended to THIS child's job so the promise made in the
+      // tool description — that it applies to every agent — is actually honoured
+      // in child-visible input, not merely echoed onto the display card.
+      const jobText = sharedContext ? `${sharedContext}\n\n${task}` : task;
       const state = await runNativeAgentLoop({
         config: {
           role: "attack",
-          systemPrompt: `You are a focused exploitation agent. Your ONLY job:\n\n${task}\n\nUse bash to run curl, python3, or any command. Save findings with save_finding. Call done when finished.${renderSubagentMessagingPrompt(childMessaging)}`,
+          systemPrompt: `You are a focused exploitation agent. Your ONLY job:\n\n${jobText}\n\nUse bash to run curl, python3, or any command. Save findings with save_finding. Call done when finished.${renderSubagentMessagingPrompt(childMessaging)}`,
           tools: subTools,
           maxTurns,
           target: this.ctx.target,
           scanId: base.agent_id,
+          workerTree: this._workerTree,
+          workerFindings: this._workerFindings,
           scope: this.ctx.scope,
-          authConfig: this.ctx.authConfig,
+          authConfig: this.usesTargetIdentity(this.ctx.target) ? this.ctx.authConfig : undefined,
           costLedger: this.ctx.costLedger,
           costCeilingUsd: this.ctx.costCeilingUsd,
           costModel: rt.resolvedModel?.() ?? this.ctx.costModel,
@@ -6115,11 +6176,12 @@ export class ToolExecutor {
         } as Parameters<typeof runNativeAgentLoop>[0]["config"],
         runtime: rt,
         db: null,
-        signal: this._executionContext.getStore()?.signal,
+        signal,
         getPendingUserMessages: childMessaging
           ? () => renderInboundBatch(drainInbox(childMessaging.projectPath, base.agent_id, childMessaging.homeDir)).rendered.map((message) => message.text)
           : undefined,
         onToolUpdate: (turn, toolCalls, toolResults, assistantText, telemetry) => {
+          if (signal.aborted) return;
           eventBus.emit("subagent_message", buildSubagentMessage(base, turn, assistantText, toolCalls, toolResults, Date.now(), {
             ...telemetry, partial: true, durationMs: Date.now() - startedAt, model: rt.resolvedModel?.(),
           }));
@@ -6133,6 +6195,7 @@ export class ToolExecutor {
         // not in the child's own tool handlers. `buildSubagentProgress` reads
         // only tool NAMES + the report_status line — never args or output.
         onTurn: (turn, toolCalls, toolResults, assistantText, telemetry) => {
+          if (signal.aborted) return;
           eventBus.emit(
             "subagent_progress",
             buildSubagentProgress(base, turn, maxTurns, toolCalls),
@@ -6149,20 +6212,20 @@ export class ToolExecutor {
         },
       });
 
+      signal.throwIfAborted();
+
       // A finished invocation is not necessarily a fulfilled task.
-      eventBus.emit("subagent_lifecycle", {
-        ...base,
-        status: state.errorExit ? "failed" as const : "completed" as const,
-        turns: state.turnCount,
-        findings: state.findings.length,
-        summary: state.summary,
-        done: state.done,
-        completion_reason: state.errorExit ? "error" : state.costCeilingExceeded ? "cost_limit" : state.earlyStopNoProgress ? "early_stop" : state.done ? "done" : "turn_limit",
-        ...(state.errorExit ? { error: state.errorExit.error } : {}),
-        ...(state.totalUsage && (state.totalUsage.inputTokens > 0 || state.totalUsage.outputTokens > 0) ? { usage: state.totalUsage } : {}),
-        durationMs: Date.now() - startedAt,
-        model: rt.resolvedModel?.(),
-      });
+      eventBus.emit("subagent_lifecycle", { ...base,
+      status: state.errorExit ? "failed" as const : "completed" as const,
+      turns: state.turnCount,
+      findings: state.findings.length,
+      summary: state.summary,
+      done: state.done,
+      completion_reason: state.errorExit ? "error" : state.costCeilingExceeded ? "cost_limit" : state.earlyStopNoProgress ? "early_stop" : state.done ? "done" : "turn_limit",
+      ...(state.errorExit ? { error: state.errorExit.error } : {}),
+      ...(state.totalUsage && (state.totalUsage.inputTokens > 0 || state.totalUsage.outputTokens > 0) ? { usage: state.totalUsage } : {}),
+      durationMs: Date.now() - startedAt,
+      model: rt.resolvedModel?.(), });
       if (state.errorExit) {
         return { ok: false, agent_id: base.agent_id, error: state.errorExit.error, findings: state.findings, turns: state.turnCount };
       }
@@ -6178,20 +6241,15 @@ export class ToolExecutor {
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       const truncated = msg.slice(0, 500);
-      eventBus.emit("subagent_lifecycle", {
-        ...base,
-        status: "failed" as const,
-        error: truncated,
-      });
+      eventBus.emit("subagent_lifecycle", { ...base,
+      status: "failed" as const,
+      error: truncated, });
       return { ok: false, agent_id: base.agent_id, error: truncated };
+    } finally {
+      if (!admittedLease) lease?.release();
     }
   }
 
-  /** Session-scoped supervisor for detached persistent agents (lazy). */
-  private detachedSupervisor(): DetachedAgentSupervisor {
-    if (!this._detachedSupervisor) this._detachedSupervisor = new DetachedAgentSupervisor();
-    return this._detachedSupervisor;
-  }
 
   /**
    * Run ONE task/revive of a persistent agent through the native loop — the
@@ -6210,12 +6268,18 @@ export class ToolExecutor {
     task?: string,
     messages?: readonly HubMessage[],
     turnOffset = 0,
+    selection?: SubagentModelSelection,
+    signal?: AbortSignal,
   ): Promise<SubagentRunReport> {
     const startedAt = Date.now();
+    signal?.throwIfAborted();
     if (!this._childRuntimeFactory) throw new Error("Parent runtime does not support subagent inference");
     const { runNativeAgentLoop } = await this.loadSubagentDeps();
-    const rt = await this._childRuntimeFactory(60_000);
+    signal?.throwIfAborted();
+    const rt = await this._childRuntimeFactory(60_000, selection);
+    signal?.throwIfAborted();
     if (!(await rt.isAvailable())) throw new Error("No API key available for persistent agent");
+    signal?.throwIfAborted();
 
     const subTools: ToolDefinition[] = ["bash", "save_finding", "done"]
       .map((n) => TOOL_DEFINITIONS[n])
@@ -6237,8 +6301,10 @@ export class ToolExecutor {
         maxTurns,
         target: this.ctx.target,
         scanId: base.agent_id,
+        workerTree: this._workerTree,
+        workerFindings: this._workerFindings,
         scope: this.ctx.scope,
-        authConfig: this.ctx.authConfig,
+        authConfig: this.usesTargetIdentity(this.ctx.target) ? this.ctx.authConfig : undefined,
         costLedger: this.ctx.costLedger,
         costCeilingUsd: this.ctx.costCeilingUsd,
         costModel: rt.resolvedModel?.() ?? this.ctx.costModel,
@@ -6254,16 +6320,18 @@ export class ToolExecutor {
       } as Parameters<typeof runNativeAgentLoop>[0]["config"],
       runtime: rt,
       db: null,
-      signal: this._executionContext.getStore()?.signal,
+      signal,
       getPendingUserMessages: childMessaging
         ? () => renderInboundBatch(drainInbox(childMessaging.projectPath, base.agent_id, childMessaging.homeDir)).rendered.map((message) => message.text)
         : undefined,
       onToolUpdate: (turn, toolCalls, toolResults, assistantText, telemetry) => {
+        if (signal?.aborted) return;
         eventBus.emit("subagent_message", buildSubagentMessage(base, turnOffset + turn, assistantText, toolCalls, toolResults, Date.now(), {
           ...telemetry, partial: true, durationMs: Date.now() - startedAt, model: rt.resolvedModel?.(),
         }));
       },
       onTurn: (turn, toolCalls, toolResults, assistantText, telemetry) => {
+        if (signal?.aborted) return;
         eventBus.emit("subagent_progress", buildSubagentProgress(base, turnOffset + turn, maxTurns, toolCalls));
         eventBus.emit(
           "subagent_message",
@@ -6274,7 +6342,12 @@ export class ToolExecutor {
       },
     });
 
-    if (state.findings?.length) this.ctx.findings.push(...state.findings);
+    signal?.throwIfAborted();
+    for (const finding of state.findings ?? []) {
+      if (!this._workerFindings.some(existing => existing.id === finding.id)) {
+        this._workerFindings.push(finding);
+      }
+    }
     if (state.errorExit) throw new Error(state.errorExit.error);
     return {
       turns: turnOffset + state.turnCount, summary: state.summary, done: state.done,
@@ -6287,11 +6360,9 @@ export class ToolExecutor {
   /**
    * `spawn_persistent_agent` — spawn a DETACHED long-lived agent that runs its
    * task, PARKS, and is REVIVED by messages (see `hub/supervisor.ts`). Returns
-   * immediately with the agent's id + name; the run is tracked by the session
-   * supervisor and aborted on cleanup. Deliberately separate from the synchronous
-   * `spawn_agents` fan-out — the parent does not block on it. Subagents never get
-   * this tool (the child tool set in `runOneSubagent` excludes it), so it cannot
-   * recurse.
+   * immediately with the agent's id + name. Its lifetime belongs to the audit,
+   * not a transient spawning invocation. Stops drain its owned subtree.
+   * The model-facing child tool set retains the canonical no-spawn guard.
    */
   private async spawnPersistentAgent(args: Record<string, unknown>): Promise<ToolResult> {
     const parsed = validateSpawnPersistentAgentArgs(args);
@@ -6303,7 +6374,8 @@ export class ToolExecutor {
       });
       return { success: false, output: null, error: parsed.error };
     }
-    const { task, name, maxTurns } = parsed.args;
+    const { task, name, maxTurns, role, model } = parsed.args;
+    const selection: SubagentModelSelection = { role, model };
 
     const base = this.buildSubagentLifecycleBase(task, maxTurns);
     let displayName = base.name;
@@ -6320,7 +6392,7 @@ export class ToolExecutor {
           selfRole: "child",
           parentId: parentMessaging.selfId,
           operatorId: parentMessaging.operatorId,
-          siblingPrefix: `${this.ctx.scanId}-sub-`,
+          siblingPrefix: subagentSiblingPrefix(this.ctx.scanId),
           siblingChannelEnabled: parentMessaging.siblingChannelEnabled,
           operatorChannelEnabled: parentMessaging.operatorChannelEnabled,
           projectPath: parentMessaging.projectPath,
@@ -6328,14 +6400,22 @@ export class ToolExecutor {
         }
       : undefined;
 
-    const supervisor = this.detachedSupervisor();
-    let aborted = false;
+    const lifetime = this._workerTree.acquire(base.agent_id, this.ctx.scanId);
     let lastRun: SubagentRunReport = {};
 
     const run = runPersistentAgent(task, {
       now: () => Date.now(),
-      sleep: (ms) => new Promise<void>((resolve) => setTimeout(resolve, ms)),
-      aborted: () => aborted,
+      sleep: (ms) => new Promise<void>((resolve) => {
+        if (lifetime.signal.aborted) { resolve(); return; }
+        const finish = () => {
+          clearTimeout(timer);
+          lifetime.signal.removeEventListener("abort", finish);
+          resolve();
+        };
+        const timer = setTimeout(finish, ms);
+        lifetime.signal.addEventListener("abort", finish, { once: true });
+      }),
+      aborted: () => lifetime.signal.aborted,
       park: { pollMs: PERSIST_POLL_MS, idleTtlMs: PERSIST_IDLE_TTL_MS, maxRevives: PERSIST_MAX_REVIVES },
       drain: () =>
         childMessaging ? drainInbox(childMessaging.projectPath, base.agent_id, childMessaging.homeDir) : [],
@@ -6344,7 +6424,7 @@ export class ToolExecutor {
       },
       runLoop: async ({ task: t, messages }) => {
         try {
-          lastRun = await this.runPersistentLoopOnce(persistentBase, maxTurns, childMessaging, t, messages, lastRun.turns ?? 0);
+          lastRun = await this.runPersistentLoopOnce(persistentBase, maxTurns, childMessaging, t, messages, lastRun.turns ?? 0, selection, lifetime.signal);
         } catch (error) {
           lastRun = { ...lastRun, done: false, completion_reason: "error", summary: error instanceof Error ? error.message : String(error) };
           throw error;
@@ -6360,9 +6440,7 @@ export class ToolExecutor {
         }
       },
     });
-    supervisor.register(base.agent_id, displayName, run, () => {
-      aborted = true;
-    });
+    void run.then(lifetime.release, lifetime.release);
 
     return {
       success: true,
@@ -6518,14 +6596,18 @@ export class ToolExecutor {
   private async spawnAgent(args: Record<string, unknown>): Promise<ToolResult> {
     const task = args.task as string;
     if (!task) return { success: false, output: null, error: "Task description is required" };
+    const selection = subagentModelSelectionSchema.safeParse(args);
+    if (!selection.success) return { success: false, output: null, error: selection.error.issues[0]?.message ?? "Invalid model selection" };
 
     const maxTurns = Math.min((args.max_turns as number) ?? 15, 25);
     const base = this.buildSubagentLifecycleBase(task, maxTurns);
 
+    const lease = this._workerTree.acquire(base.agent_id, this.ctx.scanId);
+    try {
     // queued — before any async setup
     eventBus.emit("subagent_lifecycle", { ...base, status: "queued" as const });
 
-    const outcome = await this.runOneSubagent(task, maxTurns, base);
+    const outcome = await this.runOneSubagent(task, maxTurns, base, undefined, undefined, selection.data, lease);
     // Preserve accepted findings even if a later model request failed.
     for (const finding of outcome.findings ?? []) this.ctx.findings.push(finding);
     if (!outcome.ok) {
@@ -6543,6 +6625,9 @@ export class ToolExecutor {
         done: outcome.done,
       },
     };
+    } finally {
+      lease.release();
+    }
   }
 
   /**
@@ -6574,8 +6659,12 @@ export class ToolExecutor {
       };
     }
 
+    // Batch shared-context Markdown (`# Goal / # Constraints / # Contract`),
+    // mirrored onto the display-only Task card. Never touches execution.
+    const batchContext = typeof args.context === "string" && args.context.trim() ? args.context : undefined;
+
     // Normalize + validate each task entry before any side effect.
-    const specs: Array<{ task: string; maxTurns: number; base: SubagentLifecycleBase }> = [];
+    const specs: Array<{ task: string; maxTurns: number; base: SubagentLifecycleBase; selection: SubagentModelSelection; lease?: ReturnType<AuditWorkerTree["acquire"]> }> = [];
     for (let i = 0; i < rawTasks.length; i++) {
       const entry = rawTasks[i] as Record<string, unknown> | undefined;
       const task = entry?.task;
@@ -6586,9 +6675,17 @@ export class ToolExecutor {
           error: `tasks[${i}].task is required and must be a non-empty string`,
         };
       }
+      const selection = subagentModelSelectionSchema.safeParse(entry);
+      if (!selection.success) return { success: false, output: null, error: `tasks[${i}]: ${selection.error.issues[0]?.message ?? "Invalid model selection"}` };
       const maxTurns = Math.min((entry?.max_turns as number) ?? 15, 25);
-      specs.push({ task, maxTurns, base: this.buildSubagentLifecycleBase(task, maxTurns) });
+      specs.push({ task, maxTurns, base: this.buildSubagentLifecycleBase(task, maxTurns), selection: selection.data });
     }
+
+    // Reserve queued work too, so stop-all cannot miss later concurrency waves.
+    try {
+      for (const spec of specs) {
+        spec.lease = this._workerTree.acquire(spec.base.agent_id, this.ctx.scanId);
+      }
 
     // Resolve the shared deps ONCE before fanning out, so no child sits on the
     // concurrent first-`import()` path.
@@ -6642,11 +6739,16 @@ export class ToolExecutor {
           spec.base,
           deps,
           messagingById.get(spec.base.agent_id),
+          spec.selection,
+          spec.lease,
+          batchContext,
         ),
     );
 
     // Merge findings AFTER the pool has fully joined — single-threaded, in
     // index order — so concurrent children never race on `this.ctx.findings`.
+    // Keep admission leases until publication ends: a resolved stop must not
+    // be followed by a late merge from an already completed concurrency wave.
     const perChild = outcomes.map((outcome, index) => {
       for (const finding of outcome.findings ?? []) this.ctx.findings.push(finding);
       if (outcome.ok) {
@@ -6664,6 +6766,25 @@ export class ToolExecutor {
     });
 
     const succeeded = perChild.filter((c) => c.ok).length;
+    // Display-only Task card sidecar (never serialized to the model — see
+    // ToolResult.meta). Sub-report bullets come from the dispatched specs; the
+    // TODO tree reuses the live plan snapshot verbatim so the CLI can feed it
+    // straight into `buildTodoTreeRows`.
+    const todosPayload = buildTodosPayload(this._todos.snapshot()).todos;
+    const meta: ToolResultMeta = {
+      kind: "task",
+      taskLabel: `${specs.length} ${specs.length === 1 ? "agent" : "agents"}`,
+      ...(batchContext !== undefined ? { taskContext: batchContext } : {}),
+      subReports: specs.map((s) => {
+        const brief = subagentTaskFirstLine(s.task);
+        return {
+          name: s.base.name,
+          ...(s.selection.role ? { agent: s.selection.role } : {}),
+          ...(brief ? { brief } : {}),
+        };
+      }),
+      ...(todosPayload.length > 0 ? { todos: todosPayload } : {}),
+    };
     return {
       success: true,
       output: {
@@ -6672,7 +6793,11 @@ export class ToolExecutor {
         failed: specs.length - succeeded,
         agents: perChild,
       },
+      meta,
     };
+    } finally {
+      for (const spec of specs) spec.lease?.release();
+    }
   }
 
   private async saveFinding(args: Record<string, unknown>): Promise<ToolResult> {
@@ -9029,6 +9154,11 @@ export function getToolsForRole(role: string, opts?: { hasScope?: boolean; webMo
     "access_control_probe",
     "access_control_workflow",
     "bash",
+    // js_eval / python_eval are thin, effectful wrappers over the same guarded
+    // shellExec path as bash — advertised to the network roles alongside it,
+    // and (like bash) NOT part of the read-only scoped-source-audit set.
+    "js_eval",
+    "python_eval",
     ...browserTools,
     ...webSearchTools,
     ...ptyTools,
@@ -9087,7 +9217,15 @@ export function getToolsForRole(role: string, opts?: { hasScope?: boolean; webMo
     // role. It is a runtime-gated capability (`allowModelSelfExtension`, default
     // OFF), not a feature flag, so native-loop injects it into the model-facing
     // tool set explicitly when enabled — it must never leak in by omission here.
-    && name !== "self_extend" && name !== "remember_codebase",
+    && name !== "self_extend" && name !== "remember_codebase"
+    // burp-network-20260913 — the intercepting `proxy` tool is registered +
+    // dispatchable + unit-tested, but NOT YET advertised by any role. It is a
+    // powerful effectful capability (a local MITM proxy + a generated CA); like
+    // OAST/cloud/fan-out it must reach the model behind an explicit opt-in
+    // feature flag once the transport backend lands (WIRING TODO: add a
+    // `featureFlags.proxy` gate + `"proxy"` to networkTools). Excluded by
+    // omission here so it never leaks into the audit/review "everything" set.
+    && name !== "proxy",
   );
   const scopedSourceTools = Object.keys(SCOPED_SOURCE_AUDIT_TOOLS).filter((name) =>
     name !== "remember_codebase" && (featureFlags.zeroverse || name !== "analyze_binary"),

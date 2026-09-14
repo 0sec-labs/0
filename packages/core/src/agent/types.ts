@@ -48,6 +48,45 @@ export interface ToolCall {
   arguments: Record<string, unknown>;
 }
 
+/**
+ * A bounded, static classification of a destructive operation. The
+ * operator-facing label for each is a fixed string derived from this enum, so
+ * the approval surface can name the danger WITHOUT echoing the command text
+ * (which may carry secrets). New members are added deliberately, never derived
+ * from free text.
+ */
+export type DestructiveCategory =
+  | "recursive-delete"
+  | "disk-write"
+  | "filesystem-format"
+  | "process-kill"
+  | "repo-history-rewrite";
+
+/**
+ * The risk levels the classifier emits. There is deliberately NO `"safe"`:
+ * an arbitrary shell invocation whose effect cannot be POSITIVELY verified as
+ * destructive stays `"unknown"`, never downgraded to a safety claim. Only a
+ * positively-matched destructive operation is `"destructive"`. `"unknown"` is
+ * therefore the honest default, distinct from safe.
+ */
+export type ToolRiskLevel = "destructive" | "unknown";
+
+/**
+ * A risk assessment carried ALONGSIDE a {@link ToolCall} at the approval
+ * boundary — a sibling value, never a mutation of the call. It is
+ * PRESENTATION-ONLY: it changes how an approval is surfaced to the operator
+ * (a distinct tone + glyph, a deny-first selection) and NEVER whether the gate
+ * is raised, what is authorized, or the scope. A `"destructive"` result is a
+ * cue to look carefully, not a claim that every destructive command is caught
+ * — obfuscated or unrecognized commands remain `"unknown"` and still gate
+ * normally.
+ */
+export interface ToolRisk {
+  level: ToolRiskLevel;
+  /** Set only when `level === "destructive"`; identifies the matched category. */
+  category?: DestructiveCategory;
+}
+
 export interface ToolResult {
   success: boolean;
   output: unknown;
@@ -72,8 +111,13 @@ export interface ToolResult {
  * can render a rich card. NOT seen by the model (see {@link ToolResult.meta}).
  */
 export interface ToolResultMeta {
-  /** Which card the UI should draw. `command` → bash/run_command; `edit` → apply_patch; `web` → web_search. */
-  kind?: "command" | "edit" | "web";
+  /**
+   * Which card the UI should draw. `command` → bash/run_command; `edit` →
+   * apply_patch; `web` → web_search; `task` → subagent launch (spawn_agents);
+   * `code` → js_eval / python_eval (the code block + its output).
+   * `image` → an inline screenshot (browser tool).
+   */
+  kind?: "command" | "edit" | "web" | "task" | "code" | "image";
   // ── command card ──
   /** The command that was executed (header line `$ <command>`). */
   command?: string;
@@ -96,6 +140,27 @@ export interface ToolResultMeta {
   removed?: number;
   /** A diff body (hunk lines) for the card, when available. */
   diff?: string;
+  // ── image card (kind: "image") ──
+  /**
+   * An inline image the tool captured — a browser screenshot, chiefly. The
+   * base64 payload is display-only (like the whole `meta` sidecar) and is
+   * NEVER serialized into the model's tool_result, so the full-resolution PNG
+   * can ride here without inflating the model-facing string. The TUI renders
+   * it as an ImageCard (dimensions + inline draw where the terminal supports
+   * it, a compact caption placeholder otherwise).
+   */
+  image?: {
+    /** Base64 PNG/image bytes, no `data:` prefix. */
+    imageBase64: string;
+    /** Media type, e.g. "image/png". */
+    mimeType: string;
+    /** Pixel width, decoded from the image header. */
+    width: number;
+    /** Pixel height, decoded from the image header. */
+    height: number;
+    /** Optional caption (e.g. the page URL the shot was taken on). */
+    caption?: string;
+  };
   // ── web card ──
   /** Search provider name (header line `⌕ Web Search: <provider>`). */
   provider?: string;
@@ -105,6 +170,59 @@ export interface ToolResultMeta {
   answer?: string;
   /** The result sources: title (optional), url, and an optional relative age. */
   sources?: Array<{ title?: string; url: string; age?: string }>;
+  // ── task card (subagent launch: spawn_agents) ──
+  /**
+   * Card title suffix — e.g. the batch label or single agent name. Rendered
+   * after the `Task` headline as `Task • <label>`.
+   */
+  taskLabel?: string;
+  /**
+   * Batch shared-context Markdown — the model-authored `# Goal / # Constraints
+   * / # Contract` headings (mirrors OMP's freeform `context` string). Stored
+   * verbatim; the renderer splits it on those H1 headings into sections.
+   */
+  taskContext?: string;
+  /**
+   * Optional pre-split sections when a producer already parsed them out. When
+   * present the renderer draws these instead of re-parsing {@link taskContext}.
+   */
+  goal?: string;
+  constraints?: string;
+  contract?: string;
+  /**
+   * Per-agent assignment brief Markdown (single-agent `# Target / # Change /
+   * # Acceptance`). Mirrors OMP's freeform `task` string.
+   */
+  assignment?: string;
+  /** The dispatched sub-reports — one bullet each (mirrors OMP's task item rows). */
+  subReports?: Array<{
+    /** e.g. "ExtensionReadiness" — rendered bold/accent. */
+    name: string;
+    /** e.g. "scout" — rendered as a `(…)` badge. */
+    agent?: string;
+    /** Task first line, rendered muted after the name. */
+    brief?: string;
+    /** True → `[isolated]` suffix (dedicated worktree). */
+    isolated?: boolean;
+  }>;
+  /**
+   * Phase/checkbox plan snapshot, reusing the todos model verbatim so the CLI
+   * can pass it straight into `buildTodoTreeRows` with no adaptation.
+   */
+  todos?: Array<{
+    id: string;
+    content: string;
+    status: "pending" | "in_progress" | "completed";
+    group?: string;
+  }>;
+  // ── code card (js_eval / python_eval) ──
+  /** Highlighter language for the code block. */
+  language?: "javascript" | "python";
+  /** The source that was evaluated (rendered as a syntax-highlighted block). */
+  code?: string;
+  /** The evaluated program's combined stdout/stderr (the Output section). */
+  output?: string;
+  // `durationMs` (execution time, header badge) and `exitCode` above are reused.
 }
 
 // ── Console autonomy (scoped source-audit gate) ──
@@ -341,6 +459,10 @@ export interface AgentState {
 export interface ToolContext {
   target: string;
   scanId: string;
+  /** Shared audit-owned worker lifetimes; child executors borrow this tree. */
+  workerTree?: import("./worker-tree.js").AuditWorkerTree;
+  /** Audit-level sink for detached results whose parent invocation has ended. */
+  workerFindings?: Finding[];
   findings: Finding[];
   attackResults: AttackResult[];
   targetInfo: Partial<TargetInfo>;

@@ -88,6 +88,32 @@ describe("scoped HTTP physical network boundary", () => {
     expect(hits).toEqual([]);
   });
 
+  it("blocks shared-address-space targets unless explicitly anchored", async () => {
+    const target = "http://100.64.0.1/";
+    const admitted = new Error("explicit internal target admitted");
+    await expect(fetchScoped(target, {}, {
+      baseUrl: "", allowPublicNetwork: true,
+      beforeRequest: () => { throw admitted; },
+    })).rejects.toThrow(/Local\/internal HTTP/);
+    await expect(fetchScoped(target, {}, {
+      baseUrl: target,
+      beforeRequest: () => { throw admitted; },
+    })).rejects.toBe(admitted);
+    expect(hits).toEqual([]);
+  });
+
+  it("rejects mixed DNS answers containing mapped shared-address space", async () => {
+    dns.lookup.mockResolvedValue([
+      { address: "93.184.216.34", family: 4 },
+      { address: "::ffff:647f:ffff", family: 6 },
+    ]);
+    await expect(fetchScoped("https://public.invalid/", {}, {
+      baseUrl: "", allowPublicNetwork: true,
+      beforeRequest: () => { throw new Error("must not admit shared-address-space DNS"); },
+    })).rejects.toThrow(/Local\/internal DNS/);
+    expect(hits).toEqual([]);
+  });
+
   it("honors equivalent native IPv6 exclusions before dispatch admission", async () => {
     dns.lookup.mockResolvedValue([{ address: "2606:4700:4700::1111", family: 6 }]);
     const target = "http://public.invalid/";

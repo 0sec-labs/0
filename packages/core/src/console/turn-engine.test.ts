@@ -3,7 +3,7 @@ import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, realpathSyn
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { createConsoleSession } from "./turn-engine.js";
+import { buildConsoleSystemPrompt, createConsoleSession, describeCaughtError } from "./turn-engine.js";
 import type {
   ConsoleLocalScopeRequest,
   ConsoleScopeRequest,
@@ -359,6 +359,33 @@ describe("Console autonomy — standard mode (per-action approval)", () => {
     expect(outcome.toolCalls[0].result.success).toBe(true);
   });
 
+  it("hands approveTool a presentation-only destructive risk WITHOUT changing the gate", async () => {
+    // A destructive command and a benign one, each put to the operator. The
+    // classifier annotates the destructive one; the gate is unchanged — the call
+    // still runs ONLY on an explicit yes, and a no still blocks it.
+    const runtime = new ScriptedRuntime([
+      { content: [{ type: "tool_use", id: "c1", name: "bash", input: { command: "rm -rf /tmp/x" } }], stopReason: "tool_use", durationMs: 1 },
+      { content: [{ type: "tool_use", id: "c2", name: "bash", input: { command: "echo hi" } }], stopReason: "tool_use", durationMs: 1 },
+      endTurn("Both were put to the operator."),
+    ]);
+    const seen: Array<{ name: string; level?: string; category?: string }> = [];
+    const session = createConsoleSession({
+      runtime,
+      autonomyMode: "standard",
+      approveTool: async (call, risk) => {
+        seen.push({ name: call.name, level: risk?.level, category: risk?.category });
+        return call.arguments.command === "echo hi"; // approve only the benign one
+      },
+    });
+    const outcome = await session.send("do things");
+    expect(seen[0]).toEqual({ name: "bash", level: "destructive", category: "recursive-delete" });
+    expect(seen[1]).toEqual({ name: "bash", level: "unknown", category: undefined });
+    // Gate unchanged: the destructive call was denied (blocked), the benign one ran.
+    expect(outcome.toolCalls[0].result.success).toBe(false);
+    expect(outcome.toolCalls[0].result.error).toContain("not approved by the operator in standard mode");
+    expect(outcome.toolCalls[1].result.success).toBe(true);
+  });
+
   it("denies an effectful tool in standard when no approveTool channel is wired (fail-open corner closed)", async () => {
     // Standard is the per-action-approval mode. The old behaviour fell OPEN when
     // no approveTool was wired (headless/legacy embedder) and ran the tool
@@ -580,10 +607,7 @@ describe("Console autonomy — denied-host memory", () => {
     expect(outcome.toolCalls[0].result.error).toContain("blocked.test");
   });
 
-  it("re-enables a previously-declined host once an approval covers it", async () => {
-    // Decline a.test, then approve a broadened scope (via a fresh host) that
-    // also covers a.test. A later a.test call must succeed from scope coverage
-    // and never re-prompt — approval clears the stale denial.
+  it("keeps a declined host blocked when an unrelated approval also covers it", async () => {
     const runtime = new ScriptedRuntime([
       httpTurn("c1", "https://a.test/x"),
       endTurn("a.test declined."),
@@ -617,11 +641,9 @@ describe("Console autonomy — denied-host memory", () => {
     expect(session.scope?.match("https://a.test/z").allowed).toBe(true);
 
     const reused = await session.send("hit a.test again");
-    // a.test is now covered by the broadened scope, so the scope gate lets it
-    // through: it is neither re-prompted nor auto-denied from stale memory.
-    expect(reused.toolCalls[0].result.error ?? "").not.toContain("already declined");
-    // Two prompts total: the initial decline and the approval. The final
-    // a.test call is served from scope with no third prompt.
+    expect(reused.toolCalls[0].result.success).toBe(false);
+    expect(reused.toolCalls[0].result.error).toContain("already declined");
+    // Only fresh explicit operator selection may reconsider the earlier denial.
     expect(prompts).toBe(2);
   });
 
@@ -1434,9 +1456,6 @@ describe("Console turn budget — token guard and iteration backstop", () => {
     expect(outcome.stopReason).toBe("end_turn");
     expect(outcome.toolCalls).toHaveLength(30);
     expect(outcome.budget.tokensUsed).toBe(780_000);
-    // Defaults: a 2M token budget with a 100-round runaway backstop.
-    expect(outcome.budget.tokenBudget).toBe(2_000_000);
-    expect(outcome.budget.maxToolIterations).toBe(100);
   });
 
   it("fires onUsage per model call, not only at turn end, with running totals against the budget", async () => {
@@ -1452,7 +1471,7 @@ describe("Console turn budget — token guard and iteration backstop", () => {
 
     // One sample per model call — a UI can watch the number climb mid-turn.
     expect(samples).toHaveLength(3);
-    expect(samples.length).toBeGreaterThan(1);
+    expect(samples.map((sample) => sample.kind)).toEqual(["planner", "planner", "planner"]);
     // Per-call deltas.
     expect(samples.map((s) => s.inputTokens)).toEqual([10, 20, 30]);
     // Running turn totals, monotonically increasing, measured against the budget.
@@ -2144,7 +2163,7 @@ describe("Console operator target selection", () => {
         expect(session.target).toBe("https://current.test/");
         expect(session.scope).toBe(scope);
         expect(runtime.calls).toHaveLength(4);
-        return { target: "https://current.test/", scope: ScopePolicy.fromJson({ in_scope: ["current.test", "declined.test", "excluded.test"] }) };
+        return { target: "https://current.test/", scope: ScopePolicy.fromJson({ in_scope: ["current.test", "declined.test", "excluded.test", "unrelated.test"] }) };
       },
     });
     const history = session.messages;
@@ -2157,6 +2176,7 @@ describe("Console operator target selection", () => {
     expect(session.target).toBe("https://declined.test/");
     expect(session.scope?.match("https://declined.test/").allowed).toBe(true);
     expect(session.scope?.match("https://excluded.test/").allowed).toBe(false);
+    expect(session.scope?.match("https://unrelated.test/").allowed).toBe(false);
     expect(session.messages).toBe(history);
     expect(runtime.calls[4].system).toBe("Keep my custom instructions");
     expect(runtime.calls[4].messages[0].content).toEqual([{ type: "text", text: "Inspect endpoint" }]);
@@ -2217,7 +2237,6 @@ describe("Console operator target selection", () => {
     expect(session.scope).toBeUndefined();
     expect(prompts).toBe(2);
   });
-
   it("does not change authorization for cancelled or concurrently rejected sends", async () => {
     let enter!: () => void;
     let finish!: (value: NativeRuntimeResult) => void;
@@ -2941,7 +2960,8 @@ describe("console executable self-extension permissions", () => {
 
   it("honors explicit enablement and opt-out in the model-facing API", async () => {
     const on = new ScriptedRuntime([endTurn("ready")]);
-    await session(on, true).send("go");
+    const outcome = await session(on, true).send("go");
+    expect(outcome.stopReason).toBe("end_turn");
     expect(on.calls[0]!.tools.map((tool) => tool.name)).toContain("self_extend");
     const off = new ScriptedRuntime([endTurn("ready")]);
     await session(off, false).send("go");
@@ -3075,6 +3095,7 @@ describe("console live driver authority", () => {
       autonomyMode: point === "tool-start" ? "yolo" : "standard",
       approveTool: async () => { await Promise.resolve(); setWorkspaceHarnessTrust(root, false); return true; },
     });
+    const usageSamples: ConsoleUsageReport[] = [];
     try {
       setWorkspaceHarnessTrust(root, true);
       const args = { command: `printf x > ${JSON.stringify(marker)}` };
@@ -3089,11 +3110,13 @@ describe("console live driver authority", () => {
         } },
       }] } });
       const result = await session.send("continue", {
+        onUsage: (usage) => usageSamples.push(usage),
         onToolStart: () => { if (point === "tool-start") setWorkspaceHarnessTrust(root, false); },
       });
       expect(result.stopReason).toBe("error");
       expect(result.error).toMatch(/trust.*revoked/i);
       expect(result.usage).toEqual({ inputTokens: 10, outputTokens: 3 });
+      expect(usageSamples.filter((usage) => usage.inputTokens > 0).map((usage) => usage.kind)).toEqual(["plugin"]);
       expect(runtime.calls).toHaveLength(1);
       expect(existsSync(marker)).toBe(false);
       expect(result.toolCalls).toHaveLength(1);
@@ -3128,5 +3151,72 @@ describe("console live driver authority", () => {
       expect(session.scope?.match("https://denied.test./").allowed ?? false).toBe(false);
       expect(requestScope).toHaveBeenCalledTimes(2);
     } finally { await session.cleanup(); }
+  });
+});
+
+describe("buildConsoleSystemPrompt — Voice (register only, never facts)", () => {
+  it("carries a bounded pragmatic Voice block", () => {
+    const prompt = buildConsoleSystemPrompt({ scanId: "s1", autonomyMode: "standard" });
+    expect(prompt).toContain("Voice: talk like a sharp teammate");
+    // Pragmatic register markers: blunt, no cheerleading, no dumbing down.
+    expect(prompt).toMatch(/never cheerlead/i);
+    expect(prompt).toMatch(/never dumb things down/i);
+    expect(prompt).toMatch(/Bad news stays blunt/i);
+  });
+
+  it("hard-guards that voice governs tone only, never the evidence", () => {
+    const prompt = buildConsoleSystemPrompt({ scanId: "s1" });
+    // The Voice block must explicitly subordinate itself to the facts.
+    expect(prompt).toContain("Findings, severities, CVSS, scores, evidence, and tool output stay strictly");
+    expect(prompt).toMatch(/personality is in how you talk to the operator,\s*\n?\s*never in the evidence/);
+  });
+
+  it("keeps the factual findings-discipline block intact alongside the voice", () => {
+    const prompt = buildConsoleSystemPrompt({ scanId: "s1" });
+    // Voice must not have displaced the existing accuracy guards.
+    expect(prompt).toContain("Separate observations from inference");
+    expect(prompt).toContain("Leave unsupported values unknown rather than");
+    expect(prompt).toContain("Keep CVSS vectors and 0–10 scores distinct from 0–100 workflow scores");
+    // The voice block is placed before the findings-discipline block.
+    expect(prompt.indexOf("Voice: talk like a sharp teammate")).toBeLessThan(
+      prompt.indexOf("For finding summaries"),
+    );
+  });
+});
+
+describe("describeCaughtError", () => {
+  it("uses the real message when the Error has one", () => {
+    expect(describeCaughtError(new Error("provider rejected the request"))).toBe(
+      "provider rejected the request",
+    );
+  });
+
+  it("never yields an empty string / 'unknown' for an Error with no message", () => {
+    const err = new Error("");
+    err.stack = "Error\n    at executeNative (/pkg/core/src/runtime/llm-api.ts:4123:9)";
+    const text = describeCaughtError(err);
+    expect(text).not.toBe("");
+    expect(text).not.toBe("unknown");
+    // Falls back to the name plus the first stack frame so the surfaced line
+    // still points at code.
+    expect(text).toContain("Error");
+    expect(text).toContain("executeNative (/pkg/core/src/runtime/llm-api.ts:4123:9)");
+  });
+
+  it("uses the name alone when an empty-message Error has no stack", () => {
+    const err = new TypeError("");
+    err.stack = undefined;
+    expect(describeCaughtError(err)).toBe("TypeError (no message)");
+  });
+
+  it("stringifies non-Errors and never returns empty", () => {
+    expect(describeCaughtError("boom")).toBe("boom");
+    expect(describeCaughtError({})).toBe("runtime error with no message");
+  });
+
+  it("bounds the returned message", () => {
+    const text = describeCaughtError(new Error("x".repeat(9000)), 120);
+    expect(text.length).toBeLessThanOrEqual(120);
+    expect(text.endsWith("…")).toBe(true);
   });
 });

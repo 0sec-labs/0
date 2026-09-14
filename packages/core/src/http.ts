@@ -22,7 +22,7 @@ export interface ScopedHttpPolicy {
 
 const privateNetworks = new BlockList();
 for (const [address, prefix] of [
-  ["0.0.0.0", 8], ["10.0.0.0", 8], ["127.0.0.0", 8], ["169.254.0.0", 16],
+  ["0.0.0.0", 8], ["10.0.0.0", 8], ["100.64.0.0", 10], ["127.0.0.0", 8], ["169.254.0.0", 16],
   ["172.16.0.0", 12], ["192.168.0.0", 16],
 ] as const) privateNetworks.addSubnet(address, prefix, "ipv4");
 privateNetworks.addAddress("::", "ipv6");

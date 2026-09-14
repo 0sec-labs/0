@@ -37,6 +37,14 @@ export interface TranscriptEntry {
    * collapse keeps working past the second repeat.
    */
   repeat?: number;
+  /**
+   * Inline images the entry carries. Only its LENGTH matters here: an entry
+   * that carries pictures never collapses into a previous one, because the
+   * payload lives outside `text`/`detail` and two screenshots that happen to
+   * share a caption are two different pictures. Merging them would silently
+   * drop one from the transcript.
+   */
+  images?: readonly unknown[];
 }
 
 // ---------------------------------------------------------------------------
@@ -70,6 +78,9 @@ export function isConsecutiveDuplicate(
 ): boolean {
   if (!previous) return false;
   if (NEVER_COLLAPSE.has(next.kind)) return false;
+  // Pictures live outside `text`/`detail`, so the comparison below cannot see
+  // them; an entry carrying any never merges into another.
+  if ((previous.images?.length ?? 0) > 0 || (next.images?.length ?? 0) > 0) return false;
   return (
     previous.kind === next.kind
     && previous.text === next.text

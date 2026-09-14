@@ -1,60 +1,114 @@
 /** @jsxImportSource @opentui/react */
-import React, { useState } from "react";
+import React, { useEffect, useReducer, useRef, useState } from "react";
 import { TextAttributes } from "@opentui/core";
-import type { TodosEventPayload, TodoStatus } from "@0sec/core";
+import type { TodosEventPayload } from "@0sec/core";
 import { fitTuiText } from "../text.js";
 import type { Theme } from "../theme-context.js";
+import { useSymbols } from "../symbol-context.js";
 import {
-  todoTextWidth,
-  wrapCells,
-  DEFAULT_WRAP_LINES,
-  sidebarItemPriority,
+  buildPlanOverflowFooter,
   buildSidebarHeader,
+  buildTodoTreeRows,
+  isClosedTodo,
+  selectEphemeralTodos,
+  windowTodoTree,
+  SIDEBAR_SECTION_HEADER_ROWS,
+  type EphemeralTodoSelection,
+  type TodoTreeRow,
 } from "./todos-sidebar-layout.js";
 
 /**
- * The live plan tree from the `update_todos` tool (the `todos` bus event). It
- * renders as a compact checklist: a `Todos · done/total` header, then each
- * declared GROUP as a phase (I./II./III. …) with its items beneath, a checkbox
- * glyph per status. Ungrouped items render flush under the header with no phase
- * heading. Everything is fitted to the transcript width so no row overflows, and
- * the whole block lives inside the scrolling transcript column, so a long plan
- * scrolls rather than squeezing the surface.
+ * The ephemeral-plan driver (oh-my-pi's self-pruning HUD, adapted to our TUI).
  *
- * The glyphs: ☐ pending, ◐ in-progress, ☑ completed — the same "empty / half /
- * full" reading the operator already knows from the herd views.
+ * It remembers WHEN each todo first closed — the one piece of state the pure
+ * {@link selectEphemeralTodos} policy needs but cannot derive from a payload
+ * snapshot — and feeds it, with `now`, to that policy every render. The policy
+ * hands back which rows to show, the strike-reveal fraction for any row still
+ * flashing, whether the settled plan has now cleared, and `nextChangeInMs`: the
+ * one moment a further paint is due. We schedule exactly that paint with a
+ * single self-terminating timeout — not a standing global ticker. While a turn
+ * is running the host already re-renders us on its animation frame, so the
+ * flash usually rides that cadence for free; the timeout only covers the quiet
+ * gaps (notably the post-settle wait before the whole HUD clears).
+ *
+ * The completion stamps live in a ref, so they survive re-renders but not a
+ * hide/show remount of the sidebar — which is harmless and intended: a reopened
+ * plan simply shows its settled end-state rather than replaying old flashes,
+ * exactly like the expansion state this column already treats as disposable.
  */
+function useEphemeralPlan(todos: TodosEventPayload["todos"]): EphemeralTodoSelection {
+  const stamps = useRef(new Map<string, number>());
+  const [tick, bump] = useReducer((n: number) => (n + 1) % 1_000_000, 0);
+  const now = Date.now();
 
-const STATUS_GLYPH: Record<TodoStatus, string> = {
-  pending: "☐",
-  in_progress: "◐",
-  completed: "☑",
-};
-
-/** Roman numerals for the first handful of phases; falls back to arabic. */
-const ROMAN = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X", "XI", "XII"];
-function phaseNumeral(index: number): string {
-  return ROMAN[index] ?? String(index + 1);
-}
-
-interface TodoGroupView {
-  group: string;
-  items: TodosEventPayload["todos"];
-}
-
-/** Bucket the flat todo list into groups, preserving declared order. */
-function groupTodos(todos: TodosEventPayload["todos"]): TodoGroupView[] {
-  const order: string[] = [];
-  const byGroup = new Map<string, TodosEventPayload["todos"]>();
+  // Diff the snapshot against what we last saw: stamp newly-closed todos, void
+  // the stamp of any that reopened, and forget ids that left the plan.
+  const present = new Set<string>();
   for (const item of todos) {
-    const key = item.group ?? "";
-    if (!byGroup.has(key)) {
-      byGroup.set(key, []);
-      order.push(key);
+    present.add(item.id);
+    if (isClosedTodo(item.status)) {
+      if (!stamps.current.has(item.id)) stamps.current.set(item.id, now);
+    } else {
+      stamps.current.delete(item.id);
     }
-    byGroup.get(key)!.push(item);
   }
-  return order.map((group) => ({ group, items: byGroup.get(group)! }));
+  for (const id of [...stamps.current.keys()]) if (!present.has(id)) stamps.current.delete(id);
+
+  const selection = selectEphemeralTodos(todos, { now, completedAt: stamps.current });
+
+  useEffect(() => {
+    if (selection.nextChangeInMs === undefined) return;
+    const timer = setTimeout(bump, selection.nextChangeInMs);
+    return () => clearTimeout(timer);
+    // `tick` re-arms the timeout each frame while a change is still pending —
+    // during a smooth reveal `nextChangeInMs` is constant, so it alone would
+    // fire only once.
+  }, [selection.nextChangeInMs, tick]);
+
+  return selection;
+}
+
+/** One phase-aware tree shared by the transcript and bounded sidebar. */
+export function TodoTree({ rows, width, theme, strike }: { rows: readonly TodoTreeRow[]; width: number; theme: Theme; strike?: ReadonlyMap<string, number> }) {
+  return <>{rows.map(row => {
+    const active = row.status === "in_progress";
+    const prefixWidth = Math.min(width, row.prefix.length);
+    const glyphWidth = Math.min(Math.max(0, width - prefixWidth), row.todoId ? 2 : 0);
+    const textWidth = Math.max(0, width - prefixWidth - glyphWidth);
+    const background = active ? theme.PANEL_ALT : undefined;
+    const glyphColor = row.status === "completed" ? theme.SUCCESS : active ? theme.ACCENT : theme.MUTED;
+    // A closed row mid-flash: its text glows SUCCESS and a strike-through sweeps
+    // across it (STRIKETHROUGH on a struck prefix, plain suffix) before the row
+    // self-prunes on the next selection. The reveal fraction is split by code
+    // point, which matches how fitTuiText budgets cells here (1 char ≈ 1 cell).
+    const reveal = row.todoId && row.first ? strike?.get(row.todoId) : undefined;
+    let textCell: React.ReactNode = null;
+    if (textWidth > 0) {
+      if (reveal !== undefined) {
+        const chars = [...fitTuiText(row.text, textWidth)];
+        const struck = Math.min(chars.length, Math.max(0, Math.round(reveal * chars.length)));
+        const head = chars.slice(0, struck).join("");
+        const tail = chars.slice(struck).join("");
+        const headWidth = struck;
+        const tailWidth = chars.length - struck;
+        textCell = (
+          <box flexDirection="row" width={textWidth} height={1} flexShrink={0} minWidth={0} backgroundColor={background}>
+            {headWidth > 0 ? <text width={headWidth} height={1} wrapMode="none" truncate fg={theme.SUCCESS} bg={background} attributes={TextAttributes.STRIKETHROUGH}>{head}</text> : null}
+            {tailWidth > 0 ? <text width={tailWidth} height={1} wrapMode="none" truncate fg={theme.SUCCESS} bg={background}>{tail}</text> : null}
+          </box>
+        );
+      } else {
+        textCell = <text width={textWidth} height={1} wrapMode="none" truncate fg={active ? theme.TEXT : theme.MUTED} bg={background} attributes={active || !row.todoId ? TextAttributes.BOLD : undefined}>{fitTuiText(row.text, textWidth)}</text>;
+      }
+    }
+    return (
+      <box key={row.key} flexDirection="row" width={width} height={1} flexShrink={0} minWidth={0} backgroundColor={background}>
+        {prefixWidth > 0 ? <text width={prefixWidth} height={1} wrapMode="none" truncate fg={active ? theme.ACCENT : theme.MUTED} bg={background}>{fitTuiText(row.prefix, prefixWidth)}</text> : null}
+        {glyphWidth > 0 ? <text width={glyphWidth} height={1} wrapMode="none" truncate fg={glyphColor} bg={background}>{fitTuiText(`${row.glyph} `, glyphWidth)}</text> : null}
+        {textCell}
+      </box>
+    );
+  })}</>;
 }
 
 export function Todos({
@@ -66,155 +120,51 @@ export function Todos({
   width: number;
   theme: Theme;
 }) {
-  const { MUTED, TEXT, ACCENT, SUCCESS, PRIMARY } = theme;
-  if (payload.total <= 0) return null;
-  const groups = groupTodos(payload.todos);
-  const header = payload.line || `Todos · ${payload.done}/${payload.total}`;
-  // A phase heading is only drawn for a real (non-empty) group name; index is
-  // tracked separately so the numerals stay contiguous across named phases.
-  let phaseIndex = -1;
+  const columns = Number.isFinite(width) ? Math.max(0, Math.floor(width)) : 0;
+  // Ephemeral pass first: it prunes finished rows and, once the plan is fully
+  // settled, clears the whole HUD after a short delay (`cleared`). The header
+  // count stays keyed to the FULL payload so "PLAN 5/5" is honest while the
+  // finished plan lingers, not "PLAN 0/0" as its rows drain away.
+  const plan = useEphemeralPlan(payload.todos);
+  if (plan.cleared || plan.todos.length === 0 || columns === 0) return null;
+  const done = payload.todos.filter(item => item.status === "completed").length;
   return (
-    <box flexDirection="column" minWidth={0} marginTop={1}>
-      <text fg={PRIMARY}>{fitTuiText(header, Math.max(1, width))}</text>
-      {groups.map((view, groupIdx) => {
-        const groupDone = view.items.filter((i) => i.status === "completed").length;
-        const groupTotal = view.items.length;
-        const groupProgress =
-          groupTotal > 0 && groupDone > 0 ? ` (${groupDone}/${groupTotal})` : "";
-        const heading = view.group
-          ? `${phaseNumeral((phaseIndex += 1))}. ${view.group}${groupProgress}`
-          : "";
-        return (
-          <box key={`todo-group-${groupIdx}`} flexDirection="column" minWidth={0}>
-            {heading ? (
-              <text fg={ACCENT} marginTop={groupIdx > 0 ? 1 : 0}>
-                {fitTuiText(heading, Math.max(1, width))}
-              </text>
-            ) : null}
-            {view.items.map((item) => {
-              const glyph = STATUS_GLYPH[item.status] ?? STATUS_GLYPH.pending;
-              const done = item.status === "completed";
-              const active = item.status === "in_progress";
-              const glyphColor = done ? SUCCESS : active ? ACCENT : MUTED;
-              // Completed items read as "done" at a glance: the WHOLE row goes
-              // green and is struck through (glyph + text), the way a checked-off
-              // checklist reads. Active is the accent tone; pending stays muted.
-              const textColor = done ? SUCCESS : active ? TEXT : MUTED;
-              return (
-                <box key={item.id} flexDirection="row" minWidth={0}>
-                  <box width={2} flexShrink={0} minWidth={0}>
-                    <text fg={glyphColor}>{glyph}</text>
-                  </box>
-                  <box flexGrow={1} minWidth={0}>
-                    <text
-                      fg={textColor}
-                      attributes={done ? TextAttributes.STRIKETHROUGH : undefined}
-                    >
-                      {item.content}
-                    </text>
-                  </box>
-                </box>
-              );
-            })}
-          </box>
-        );
-      })}
+    <box flexDirection="column" width={columns} minWidth={0} marginTop={1}>
+      <text width={columns} height={1} wrapMode="none" truncate fg={theme.MUTED}>{buildSidebarHeader(done, payload.todos.length, columns)}</text>
+      <TodoTree rows={buildTodoTreeRows(plan.todos, columns)} width={columns} theme={theme} strike={plan.strike} />
     </box>
   );
 }
 
-/**
- * Narrow, one-line-per-item glyphs for the sidebar variant. Unlike the panel's
- * ☐/◐/☑ checkboxes, the sidebar reads as a sibling of the AGENTS/FINDINGS
- * sections: a muted dot for pending, an accent half-circle for the active item,
- * a muted check for done — the "empty / active / done" reading in one cell.
- */
-const SIDEBAR_STATUS_GLYPH: Record<TodoStatus, string> = {
-  pending: "·",
-  in_progress: "◐",
-  completed: "✓",
-};
-
-/** Rows the sidebar section spends on its header (the "PLAN done/total" line). */
-export const TODOS_SIDEBAR_HEADER_ROWS = 1;
-
-// ── Sidebar display-row model ────────────────────────────────────────────────
-
-/** A row the sidebar paints: either a phase/group label, or one todo item. */
-interface SidebarDisplayRow {
-  kind: "group" | "item";
-  /** `"group"` → the group label. */
-  label?: string;
-  /** `"item"` → the item data. */
-  item?: TodosEventPayload["todos"][number];
-  /** `"item"` → pre-wrapped text lines. */
-  lines?: string[];
-}
+export const TODOS_SIDEBAR_HEADER_ROWS = SIDEBAR_SECTION_HEADER_ROWS;
 
 /**
- * Build the sidebar's ordered display-row array from the flat payload.
- * Items are sorted within each declared group by status priority
- * (in_progress first, then pending, then completed, preserving original order
- * within each tier). Phase/group labels are inserted as separate rows before
- * the first item of each named group, so context is visible without reading
- * the transcript and phase labels are never lost when prioritizing active work.
+ * The PLAN section of the RIGHT sidebar — the third sibling of AGENTS and
+ * FINDINGS, and written to read as one of them: the same muted `PLAN done/total`
+ * header line, the same status colours (SUCCESS for completed, ACCENT for the
+ * task in flight, MUTED for everything not started), and the same `+N more`
+ * overflow tail rather than a differently-worded footer.
+ *
+ * It differs in exactly one way, deliberately: the header is clickable and
+ * carries a caret, because the plan is the only section that expands in place.
+ * The caret is the ONLY accent on the line, so the affordance reads without the
+ * section shouting louder than its siblings.
+ *
+ * EXPANSION STATE: prefer the CONTROLLED form — pass `expanded` and `onToggle`
+ * and hold the flag on the persistent chat screen. This column is unmounted and
+ * remounted whenever the right sidebar is hidden and reopened, so any state
+ * living inside it is lost on that cycle. The uncontrolled `useState` fallback
+ * below is kept only because losing it is harmless: it collapses back to the
+ * default view and every hidden item is one click away again. Never put state
+ * here that must SURVIVE a hide/show — a dismissal, an acknowledgement, or
+ * anything the operator would have to redo — it belongs to the host.
+ *
+ * HEIGHT: the section paints EXACTLY `rows` rows and never one more — a leading
+ * separator row (only when there is room for it), the header, the tree body,
+ * and the footer. Every row is explicitly sized, because an overflowing section
+ * in this column paints straight through the CloudHintCard beneath it.
  */
-function buildSidebarRows(
-  payload: TodosEventPayload,
-  textCells: number,
-  maxLines: number = DEFAULT_WRAP_LINES,
-): SidebarDisplayRow[] {
-  const groups = groupTodos(payload.todos);
-  const rows: SidebarDisplayRow[] = [];
-
-  for (const { group, items } of groups) {
-    // Sort items within this group: active → pending → completed
-    const sorted = [...items].sort(
-      (a, b) => sidebarItemPriority(a.status) - sidebarItemPriority(b.status),
-    );
-    if (group) {
-      rows.push({ kind: "group", label: group });
-    }
-    for (const item of sorted) {
-      rows.push({
-        kind: "item",
-        item,
-        lines: wrapCells(item.content, textCells, maxLines),
-      });
-    }
-  }
-
-  return rows;
-}
-
-/**
- * The RIGHT-sidebar variant of the plan: a compact section that preserves
- * declared phase-group order so the tree structure is readable at a glance.
- * Within each phase, items are sorted by status priority so in-progress work
- * is always visible before pending or completed items. Phase/group labels
- * appear as compact muted headings before the first item of each named group.
- *
- * The section header reflects the honest status composition:
- *   - All completed:        "PLAN ● 5/5" header + "● All 5 tasks completed"
- *   - Normal:               "PLAN 3/5"
- *
- * The collapsed overflow tail describes hidden items by status rather than a
- * bare count: "+3 remaining", "+2 remaining, 1 done", "+2 done"
- *
- * Accepts optional `expanded`/`onToggle` for parent-driven expansion. When no
- * parent wiring is provided, uses internal disclosure state — the sidebar
- * starts collapsed and the toggle indicator replaces the overflow summary.
- *
- * Expanded mode shows EVERY item with full-text wrapping inside a scrollbox,
- * so all declared work is reachable without overflowing the sidebar boundary.
- *
- * `rows` is the WHOLE section's row budget (header included). `width` is the
- * sidebar's inner content width (`sidebars.rightInnerWidth`). Renders nothing
- * when the plan is empty or the budget leaves no room for the header.
- */
-export function TodosSidebar({
-  payload, width, rows, theme, expanded: expandedProp, onToggle,
-}: {
+export function TodosSidebar({ payload, width, rows, theme, expanded: expandedProp, onToggle }: {
   payload: TodosEventPayload;
   width: number;
   rows: number;
@@ -222,37 +172,72 @@ export function TodosSidebar({
   expanded?: boolean;
   onToggle?: (expanded: boolean) => void;
 }) {
+  const symbols = useSymbols();
   const [internalExpanded, setInternalExpanded] = useState(false);
   const expanded = expandedProp ?? internalExpanded;
-  const toggle = () => onToggle ? onToggle(!expanded) : setInternalExpanded(!expanded);
-  if (payload.total <= 0 || rows < 3) return null;
-  const bodyWidth = Math.max(3, width - (expanded ? 1 : 0));
-  const textCells = todoTextWidth(bodyWidth);
-  const allRows = buildSidebarRows(payload, textCells, expanded ? Number.MAX_SAFE_INTEGER : DEFAULT_WRAP_LINES)
-    .flatMap((row) => row.kind === "group"
-      ? [{ key: `phase-${row.label}`, text: row.label ?? "", glyph: "", color: theme.ACCENT }]
-      : (row.lines ?? []).map((text, index) => ({
-          key: `${row.item!.id}-${index}`, text,
-          glyph: index === 0 ? SIDEBAR_STATUS_GLYPH[row.item!.status] : "",
-          color: row.item!.status === "completed" ? theme.SUCCESS : row.item!.status === "in_progress" ? theme.TEXT : theme.MUTED,
-        })));
-  const capacity = Math.max(1, rows - 2);
-  const visible = expanded ? allRows : allRows.slice(0, capacity);
-  const body = visible.map((row) => (
-    <box key={row.key} flexDirection="row" width={bodyWidth} flexShrink={0}>
-      <text width={2} flexShrink={0} fg={row.color}>{row.glyph}</text>
-      <text width={textCells} flexShrink={0} fg={row.color}>{row.text}</text>
-    </box>
-  ));
+  const toggle = () => {
+    if (onToggle) onToggle(!expanded);
+    else if (expandedProp === undefined) setInternalExpanded(!expanded);
+  };
+  // Ephemeral pass: prune finished rows, flash fresh completions, and clear the
+  // whole section a short beat after every task settles. Called before any early
+  // return so the hook order stays fixed across renders.
+  const plan = useEphemeralPlan(payload.todos);
+  const columns = Number.isFinite(width) ? Math.max(0, Math.floor(width)) : 0;
+  const height = Number.isFinite(rows) ? Math.max(0, Math.floor(rows)) : 0;
+  if (plan.cleared || plan.todos.length === 0 || height < 3 || columns === 0) return null;
+  // The blank separator row that sets AGENTS and FINDINGS apart, spent from
+  // THIS section's own budget rather than added on top of it — a marginTop
+  // would push the section one row past what the column granted it.
+  const spacerRows = height >= 5 ? 1 : 0;
+  const bodyWidth = Math.max(1, columns - (expanded ? 1 : 0));
+  const capacity = Math.max(1, height - TODOS_SIDEBAR_HEADER_ROWS - 1 - spacerRows);
+  const tree = buildTodoTreeRows(plan.todos, bodyWidth);
+  const window = windowTodoTree(tree, capacity);
+  // Progress stays keyed to the FULL payload so the header is honest while the
+  // pruned rows drain out from under it.
+  const done = payload.todos.filter(item => item.status === "completed").length;
+  // The same tail language as FINDINGS ("+N more"). Hidden work is never
+  // silently dropped: the tail states how much is hidden, how much of it is
+  // ACTIVE, and — whenever the column can carry the words — that expanding
+  // reaches it. The header caret is the affordance at every width, so nothing
+  // the collapsed view hides is unreachable.
+  const footer = expanded
+    ? "scroll · click PLAN to collapse"
+    : window.hiddenTodos > 0
+      ? buildPlanOverflowFooter(window.hiddenTodos, window.hiddenActive, columns)
+      : "click PLAN to expand";
+  const caret = expanded ? symbols.caretOpen : symbols.caretClosed;
+  const caretCells = Math.min(columns, 2);
+  const labelCells = Math.max(0, columns - caretCells);
   return (
-    <box flexDirection="column" width={width} flexShrink={0} marginTop={1}>
-      <box width={width} flexShrink={0} onMouseDown={toggle}>
-        <text fg={theme.ACCENT}>{fitTuiText(`${expanded ? "▾" : "▸"} ${buildSidebarHeader(payload.done, payload.total, Math.max(1, width - 2))}`, width)}</text>
+    <box flexDirection="column" width={columns} height={height} flexShrink={0} minWidth={0}>
+      {spacerRows === 1 ? <box width={columns} height={1} flexShrink={0} minWidth={0} /> : null}
+      <box flexDirection="row" width={columns} height={TODOS_SIDEBAR_HEADER_ROWS} flexShrink={0} minWidth={0} onMouseDown={toggle}>
+        <text width={caretCells} height={1} wrapMode="none" truncate fg={theme.ACCENT}>{fitTuiText(`${caret} `, caretCells)}</text>
+        {labelCells > 0 ? (
+          <text width={labelCells} height={1} wrapMode="none" truncate fg={theme.MUTED}>{buildSidebarHeader(done, payload.todos.length, labelCells)}</text>
+        ) : null}
       </box>
       {expanded
-        ? <scrollbox width={width} height={capacity} flexShrink={0} scrollX={false}><box width={bodyWidth} flexDirection="column" flexShrink={0}>{body}</box></scrollbox>
-        : body}
-      <text fg={theme.MUTED}>{fitTuiText(expanded ? "scroll · click PLAN to collapse" : allRows.length > visible.length ? `+${allRows.length - visible.length} lines · click PLAN to expand` : "click PLAN to expand", width)}</text>
+        ? <scrollbox
+            width={columns}
+            height={capacity}
+            flexShrink={0}
+            scrollX={false}
+            verticalScrollbarOptions={{
+              trackOptions: {
+                backgroundColor: theme.PANEL,
+                foregroundColor: theme.MUTED,
+              },
+              arrowOptions: {
+                foregroundColor: theme.MUTED,
+                backgroundColor: theme.PANEL,
+              },
+            }}
+          ><box width={bodyWidth} flexDirection="column" flexShrink={0}><TodoTree rows={tree} width={bodyWidth} theme={theme} strike={plan.strike} /></box></scrollbox>
+        : <box flexDirection="column" width={columns} height={capacity} flexShrink={0} minWidth={0}><TodoTree rows={window.rows} width={bodyWidth} theme={theme} strike={plan.strike} /></box>}
+      <text width={columns} height={1} wrapMode="none" truncate fg={theme.MUTED}>{fitTuiText(footer, columns)}</text>
     </box>
   );
 }

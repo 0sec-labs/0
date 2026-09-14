@@ -53,3 +53,4 @@ export { registerPluginCommand } from "./plugin.js";
 export { registerThemeCommand } from "./theme.js";
 export { registerEvolveCommand } from "./evolve.js";
 export { registerConfigCommand } from "./config.js";
+export { registerHackstoreCommand } from "./hackstore.js";

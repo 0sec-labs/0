@@ -52,7 +52,13 @@ describe("provider Responses selection", () => {
   beforeEach(() => {
     originalEnv = process.env;
     home = mkdtempSync(join(tmpdir(), "0sec-responses-provider-"));
-    process.env = { HOME: home, "0SEC_SKIP_PROVIDER_BANNER": "1" };
+    // This suite asserts single-request WIRE shaping (usage retention, tool
+    // non-promotion, terminal-event handling). The transient empty-stream retry
+    // added in executeNative would otherwise re-issue the "response stream
+    // failed" / truncated-stream fixtures 3x, firing onUsage repeatedly and
+    // breaking toHaveBeenCalledOnce. Pin one attempt here; the retry loop itself
+    // is covered by llm-api.stream-retry.test.ts.
+    process.env = { HOME: home, "0SEC_SKIP_PROVIDER_BANNER": "1", "0SEC_LLM_STREAM_MAX_ATTEMPTS": "1" };
     __resetFallbackChainForTests();
     // Every request is intercepted; no operator credentials or external network.
     fetchMock = vi.fn<typeof fetch>(async () => { throw new Error("Unexpected network request"); });

@@ -19,6 +19,10 @@ import {
   parseFeedbackCommand,
   submitFeedback,
   MAX_DIAGNOSTIC_MESSAGE_BYTES,
+  buildDiagnosticReview,
+  diagnosticErrorText,
+  LOCAL_DETAIL_NOTICE,
+  MAX_LOCAL_DETAIL_CHARS,
   type DiagnosticInfo,
   type FeedbackPayload,
 } from "./feedback.js";
@@ -636,5 +640,119 @@ describe("buildDiagnosticFeedback", () => {
     expect(result.message).toContain("Error: unknown");
     expect(result.message).not.toContain("private");
     expect(Buffer.byteLength(result.message)).toBeLessThanOrEqual(MAX_DIAGNOSTIC_MESSAGE_BYTES);
+  });
+
+  it("classifies string/tool failures into a finite mode instead of 'unknown', leaking no raw text", () => {
+    const cases: [unknown, string][] = [
+      ["exited 1: /home/dev/secret/target scan failed", "Error: nonzero-exit"],
+      ["ENOENT: no such file /etc/private/target.conf", "Error: not-found"],
+      ["connect ETIMEDOUT 10.0.0.5:443", "Error: timeout"],
+      ["fetch failed: ECONNREFUSED https://target.internal", "Error: network"],
+      ["permission denied opening /root/.ssh/id_rsa", "Error: permission"],
+      ["429 Too Many Requests", "Error: rate-limit"],
+      ["unexpected token < in JSON at position 0", "Error: parse"],
+      ["stream completed without final response", "Error: stream-incomplete"],
+      ["something totally unrecognised happened", "Error: tool-error"],
+      [new Error("exited 2: nmap crashed"), "Error: Error:nonzero-exit"],
+    ];
+    for (const [error, expected] of cases) {
+      const result = buildDiagnosticFeedback(diagInfo({ error, kind: "tool" }));
+      expect(result.message).toContain(expected);
+      // No raw path/host/text from the input leaks into the finite wire body.
+      for (const secret of ["/home/dev/secret", "/etc/private", "10.0.0.5", "target.internal", "/root/.ssh", "nmap"]) {
+        expect(result.message).not.toContain(secret);
+      }
+      expect(Buffer.byteLength(result.message)).toBeLessThanOrEqual(MAX_DIAGNOSTIC_MESSAGE_BYTES);
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Operator-facing local detail (never transmitted)
+// ---------------------------------------------------------------------------
+
+describe("diagnosticErrorText", () => {
+  it("returns the real message for a string error instead of a category", () => {
+    expect(diagnosticErrorText("self_extend build failed: exited 1: gcc: fatal error")).toBe(
+      "self_extend build failed: exited 1: gcc: fatal error",
+    );
+  });
+
+  it("uses a thrown Error's message, falling back to its name when empty", () => {
+    expect(diagnosticErrorText(new TypeError("bad arg"))).toBe("bad arg");
+    expect(diagnosticErrorText(new TypeError(""))).toBe("TypeError");
+  });
+
+  it("returns empty string only when there is genuinely nothing", () => {
+    expect(diagnosticErrorText(undefined)).toBe("");
+    expect(diagnosticErrorText(null)).toBe("");
+    expect(diagnosticErrorText("   ")).toBe("");
+    expect(diagnosticErrorText({})).toBe("");
+  });
+
+  it("survives a hostile proxy", () => {
+    const hostile = new Proxy({}, { get() { throw new Error("private"); } });
+    expect(() => diagnosticErrorText(hostile)).not.toThrow();
+  });
+});
+
+describe("buildDiagnosticReview", () => {
+  it("shows the real error message locally while keeping the wire body coarse", () => {
+    const real = "self_extend build failed: exited 2: undefined reference to `foo`";
+    const { payload, localDetail } = buildDiagnosticReview(diagInfo({
+      toolName: "self_extend",
+      error: real,
+    }));
+    // Operator sees the full detail...
+    expect(localDetail).toContain(real);
+    expect(localDetail).toContain("Tool: self_extend");
+    expect(localDetail).not.toContain("Error: unknown");
+    // ...but the transmit-safe payload stays a finite CATEGORY (the failure
+    // mode, "nonzero-exit"), never "unknown" and never the raw message.
+    expect(payload.message).toContain("Error: nonzero-exit");
+    expect(payload.message).not.toContain("Error: unknown");
+    expect(JSON.stringify(payload)).not.toContain(real);
+    expect(JSON.stringify(payload)).not.toContain("foo");
+  });
+
+  it("is byte-identical on the wire to buildDiagnosticFeedback", () => {
+    const info = diagInfo({ toolName: "http_request", error: "url is required" });
+    expect(buildDiagnosticReview(info).payload).toEqual(buildDiagnosticFeedback(info));
+  });
+
+  it("never shows a bare 'unknown' when a real message exists", () => {
+    const { localDetail } = buildDiagnosticReview(diagInfo({ error: "url is required" }));
+    expect(localDetail).toBe("Error: url is required");
+  });
+
+  it("falls back to an honest named line when there is truly no message", () => {
+    const { localDetail } = buildDiagnosticReview(diagInfo({ kind: "tool", error: undefined }));
+    expect(localDetail).toBe("Error: tool failed without an error message");
+    expect(localDetail).not.toContain("unknown");
+  });
+
+  it("appends separately-carried exit output but not when already folded in", () => {
+    const withSeparate = buildDiagnosticReview(diagInfo({
+      error: "command failed",
+      exitOutput: "exited 1: permission denied",
+    }));
+    expect(withSeparate.localDetail).toContain("command failed");
+    expect(withSeparate.localDetail).toContain("exited 1: permission denied");
+
+    const alreadyFolded = buildDiagnosticReview(diagInfo({
+      error: "command failed (exited 1: permission denied)",
+      exitOutput: "exited 1: permission denied",
+    }));
+    // The exit summary appears once (already inside the error), not twice.
+    expect(alreadyFolded.localDetail.match(/permission denied/g)).toHaveLength(1);
+  });
+
+  it("bounds the local detail length", () => {
+    const { localDetail } = buildDiagnosticReview(diagInfo({ error: "x".repeat(MAX_LOCAL_DETAIL_CHARS * 2) }));
+    expect(localDetail.length).toBeLessThanOrEqual(MAX_LOCAL_DETAIL_CHARS);
+  });
+
+  it("exposes a local-only notice for the UI to display", () => {
+    expect(LOCAL_DETAIL_NOTICE.toLowerCase()).toContain("not transmitted");
   });
 });

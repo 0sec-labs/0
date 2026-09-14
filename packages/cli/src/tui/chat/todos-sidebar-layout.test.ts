@@ -6,8 +6,19 @@ import {
   wrapCells,
   buildSidebarOverflowText,
   buildSidebarHeader,
+  isClosedTodo,
+  selectEphemeralTodos,
+  TODO_STRIKE_HOLD_MS,
+  TODO_STRIKE_REVEAL_MS,
+  TODO_STRIKE_TOTAL_MS,
+  TODO_CLEAR_DELAY_MS,
 } from "./todos-sidebar-layout.js";
 import { fitTuiText } from "../text.js";
+import type { TodosEventPayload } from "@0sec/core";
+
+type Todo = TodosEventPayload["todos"][number];
+const todo = (id: string, status: Todo["status"], content = id): Todo => ({ id, content, status });
+const ids = (sel: { todos: readonly Todo[] }): string[] => sel.todos.map(t => t.id);
 
 describe("budgetSidebarRows", () => {
   it("shows everything when the list fits, with no tail", () => {
@@ -201,5 +212,108 @@ describe("buildSidebarHeader", () => {
   it("fits result to width", () => {
     const text = buildSidebarHeader(5, 5, 5);
     expect(text.length).toBeLessThanOrEqual(5);
+  });
+});
+
+describe("isClosedTodo", () => {
+  it("treats completed and abandoned as closed, everything else as open", () => {
+    expect(isClosedTodo("completed")).toBe(true);
+    expect(isClosedTodo("abandoned")).toBe(true);
+    expect(isClosedTodo("pending")).toBe(false);
+    expect(isClosedTodo("in_progress")).toBe(false);
+    expect(isClosedTodo("blocked")).toBe(false);
+  });
+});
+
+describe("selectEphemeralTodos", () => {
+  const NOW = 1_000_000;
+
+  it("returns nothing to draw and no clear for an empty plan", () => {
+    const sel = selectEphemeralTodos([], { now: NOW, completedAt: new Map() });
+    expect(sel.todos).toEqual([]);
+    expect(sel.cleared).toBe(false);
+    expect(sel.strike.size).toBe(0);
+    expect(sel.nextChangeInMs).toBeUndefined();
+  });
+
+  it("keeps a just-completed row as a flashing lead while open work remains", () => {
+    const todos = [todo("a", "completed"), todo("b", "in_progress"), todo("c", "pending")];
+    const completedAt = new Map([["a", NOW - 10]]); // 10ms ago → inside the flash
+    const sel = selectEphemeralTodos(todos, { now: NOW, completedAt });
+    expect(ids(sel)).toEqual(["a", "b", "c"]);
+    expect(sel.strike.has("a")).toBe(true);
+    expect(sel.cleared).toBe(false);
+    expect(sel.nextChangeInMs).toBeGreaterThan(0);
+  });
+
+  it("self-prunes a completed row once its flash has elapsed", () => {
+    const todos = [todo("a", "completed"), todo("b", "in_progress")];
+    const completedAt = new Map([["a", NOW - TODO_STRIKE_TOTAL_MS - 1]]);
+    const sel = selectEphemeralTodos(todos, { now: NOW, completedAt });
+    expect(ids(sel)).toEqual(["b"]); // "a" has vanished
+    expect(sel.strike.has("a")).toBe(false);
+    expect(sel.cleared).toBe(false);
+    expect(sel.nextChangeInMs).toBeUndefined(); // nothing left animating
+  });
+
+  it("hides a completed row that carries no timestamp (restored already-done)", () => {
+    const todos = [todo("a", "completed"), todo("b", "pending")];
+    const sel = selectEphemeralTodos(todos, { now: NOW, completedAt: new Map() });
+    expect(ids(sel)).toEqual(["b"]);
+    expect(sel.cleared).toBe(false);
+  });
+
+  it("progressively reveals the strike across the reveal window", () => {
+    const todos = [todo("a", "completed"), todo("b", "in_progress")];
+    const midReveal = NOW - (TODO_STRIKE_HOLD_MS + TODO_STRIKE_REVEAL_MS / 2);
+    const sel = selectEphemeralTodos(todos, { now: NOW, completedAt: new Map([["a", midReveal]]) });
+    const fraction = sel.strike.get("a");
+    expect(fraction).toBeDefined();
+    expect(fraction!).toBeGreaterThan(0.3);
+    expect(fraction!).toBeLessThan(0.7);
+  });
+
+  it("holds the strike at zero during the initial hold beat", () => {
+    const todos = [todo("a", "completed"), todo("b", "in_progress")];
+    const sel = selectEphemeralTodos(todos, { now: NOW, completedAt: new Map([["a", NOW - 1]]) });
+    expect(sel.strike.get("a")).toBe(0);
+  });
+
+  it("keeps a fully-settled plan visible during the linger, then schedules the clear", () => {
+    const todos = [todo("a", "completed"), todo("b", "completed")];
+    const completedAt = new Map([["a", NOW - 4_000], ["b", NOW - 1_000]]);
+    const sel = selectEphemeralTodos(todos, { now: NOW, completedAt });
+    expect(ids(sel)).toEqual(["a", "b"]); // still shown while it lingers
+    expect(sel.cleared).toBe(false);
+    // Clear is due clearDelay after the LATEST settle ("b", 1s ago).
+    expect(sel.nextChangeInMs).toBe(TODO_CLEAR_DELAY_MS - 1_000);
+  });
+
+  it("clears the whole HUD once the settle delay has elapsed", () => {
+    const todos = [todo("a", "completed"), todo("b", "completed")];
+    const completedAt = new Map([["a", NOW - TODO_CLEAR_DELAY_MS - 1], ["b", NOW - TODO_CLEAR_DELAY_MS - 1]]);
+    const sel = selectEphemeralTodos(todos, { now: NOW, completedAt });
+    expect(sel.todos).toEqual([]);
+    expect(sel.cleared).toBe(true);
+    expect(sel.nextChangeInMs).toBeUndefined();
+  });
+
+  it("clears a restored, already-finished plan immediately (no timestamps)", () => {
+    const todos = [todo("a", "completed"), todo("b", "completed")];
+    const sel = selectEphemeralTodos(todos, { now: NOW, completedAt: new Map() });
+    expect(sel.cleared).toBe(true);
+    expect(sel.todos).toEqual([]);
+  });
+
+  it("honours overridden timing windows", () => {
+    const todos = [todo("a", "completed"), todo("b", "in_progress")];
+    // With a 10ms total window, a 20ms-old completion is already pruned.
+    const sel = selectEphemeralTodos(todos, {
+      now: NOW,
+      completedAt: new Map([["a", NOW - 20]]),
+      holdMs: 0,
+      revealMs: 10,
+    });
+    expect(ids(sel)).toEqual(["b"]);
   });
 });

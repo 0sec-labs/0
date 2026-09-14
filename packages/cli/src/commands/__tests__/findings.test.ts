@@ -176,6 +176,9 @@ vi.mock("../../tui/runtime.js", () => ({
 }));
 
 const { registerFindingsCommand } = await import("../findings.js");
+// Resolve the real provenance dependency during fixture setup, not while the
+// first detail-view command's behavioral deadline is running.
+await import("@0sec/core");
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 

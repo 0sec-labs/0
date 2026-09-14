@@ -145,6 +145,8 @@ export const systemToolDefinitions: Record<string, ToolDefinition> = {
     parameters: {
       task: { type: "string", description: "What the sub-agent should do. Be specific: include the target URL, the vulnerability found, and what to extract." },
       max_turns: { type: "number", description: "Turn budget for the sub-agent (default 15, max 25)" },
+      role: { type: "string", description: "Optional operator-configured worker model role." },
+      model: { type: "string", description: "Optional model from the parent's approved model configuration." },
     },
     required: ["task"],
   },
@@ -154,6 +156,11 @@ export const systemToolDefinitions: Record<string, ToolDefinition> = {
     description:
       "Spawn MULTIPLE focused sub-agents that run CONCURRENTLY (bounded), each with fresh context and its own turn budget. Use to fan out independent exploitation tasks in parallel (e.g. probe several endpoints or leads at once) instead of one-at-a-time spawn_agent. Returns each sub-agent's findings and summary. Max 8 tasks per call.",
     parameters: {
+      context: {
+        type: "string",
+        description:
+          "Optional shared background applied to the whole batch (do not duplicate it into individual tasks). Author it as Markdown with these H1 headings:\n# Goal — what the batch accomplishes\n# Constraints — rules and session decisions every agent must respect\n# Contract — shared interfaces one agent implements and another consumes.",
+      },
       tasks: {
         type: "array",
         description:
@@ -164,12 +171,14 @@ export const systemToolDefinitions: Record<string, ToolDefinition> = {
             task: {
               type: "string",
               description:
-                "What this sub-agent should do. Be specific: include the target URL, the vulnerability, and what to extract.",
+                "What this sub-agent should do. Be specific and self-contained. Author it as Markdown with these H1 headings:\n# Target — exact files and symbols; explicit non-goals\n# Change — step-by-step add/remove/rename; APIs and patterns\n# Acceptance — the observable result. Include the target URL, the vulnerability, and what to extract.",
             },
             max_turns: {
               type: "number",
               description: "Turn budget for this sub-agent (default 15, max 25)",
             },
+            role: { type: "string", description: "Optional operator-configured worker model role." },
+            model: { type: "string", description: "Optional model from the parent's approved model configuration." },
           },
           required: ["task"],
         },
@@ -211,6 +220,8 @@ export const systemToolDefinitions: Record<string, ToolDefinition> = {
       task: { type: "string", description: "The initial task for the persistent agent. Be specific: target, goal, and what to report back." },
       name: { type: "string", description: "Optional display name (else an auto AdjectiveNoun name is assigned)." },
       max_turns: { type: "number", description: "Turn budget per task/revive (default 15, max 25)." },
+      role: { type: "string", description: "Optional operator-configured worker model role." },
+      model: { type: "string", description: "Optional model from the parent's approved model configuration." },
     },
     required: ["task"],
   },

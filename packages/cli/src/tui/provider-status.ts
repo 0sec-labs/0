@@ -18,13 +18,35 @@
  * this table by re-reading that file rather than by analogy.
  */
 
+/** The credential protocols a provider can be authenticated with. */
+export type AuthMethod = "api-key" | "oauth";
+
 export interface ProviderInfo {
   /** Provider id as the runtime names it, e.g. "anthropic". */
   id: string;
   /** Human label, e.g. "Anthropic". */
   label: string;
-  /** Credential protocol; OAuth providers must never be treated as key fields. */
-  auth: "api-key" | "oauth";
+  /**
+   * Every credential protocol this provider accepts, most-preferred first. A
+   * provider can support more than one (e.g. a subscription OAuth flow *and* a
+   * pasted API key). Today `chatgpt-codex` is `["oauth"]` and everyone else is
+   * `["api-key"]`, but the schema is deliberately plural so the login feature
+   * can add OAuth to a key provider without another shape change here.
+   *
+   * OAuth methods must never be treated as key fields: a token is not a secret
+   * an operator types into a key box, and the credential store tags each
+   * stored account with its kind rather than inferring it from this list.
+   */
+  methods: readonly AuthMethod[];
+  /**
+   * Back-compat view of {@link methods}: the single most-preferred method.
+   *
+   * DERIVED, never authored — `PROVIDERS` computes it from `methods[0]` so the
+   * two can never disagree. It exists only because callers outside this
+   * workstream (e.g. `connect-layout.ts`) still read a scalar `provider.auth`;
+   * new code should branch on `methods` / {@link providerSupportsMethod}.
+   */
+  auth: AuthMethod;
   /** Every env var that can supply credentials, most-preferred first. */
   envVars: readonly string[];
   /** How to configure it, one line, operator-facing. */
@@ -53,11 +75,11 @@ export interface ProviderState extends ProviderInfo {
  * DIFFERENT order; the code above is what actually runs, so this follows it.
  */
 
-export const PROVIDERS: readonly ProviderInfo[] = [
+const PROVIDER_DEFS: readonly Omit<ProviderInfo, "auth">[] = [
   {
     id: "chatgpt-codex",
     label: "ChatGPT Codex",
-    auth: "oauth",
+    methods: ["oauth"],
     // OAuth, not an API key. Both tokens are accepted and the access token is
     // read first (llm-api.ts L874-875, L1386-1394), so it leads the list.
     envVars: ["0SEC_CHATGPT_ACCESS_TOKEN", "0SEC_CHATGPT_OAUTH_REFRESH_TOKEN"],
@@ -67,21 +89,21 @@ export const PROVIDERS: readonly ProviderInfo[] = [
   {
     id: "deepseek",
     label: "DeepSeek",
-    auth: "api-key",
+    methods: ["api-key"],
     envVars: ["DEEPSEEK_API_KEY"],
     hint: "set DEEPSEEK_API_KEY (endpoint override: DEEPSEEK_BASE_URL)",
   },
   {
     id: "openrouter",
     label: "OpenRouter",
-    auth: "api-key",
+    methods: ["api-key"],
     envVars: ["OPENROUTER_API_KEY"],
     hint: "set OPENROUTER_API_KEY=sk-or-... from openrouter.ai/keys",
   },
   {
     id: "azure",
     label: "Azure OpenAI",
-    auth: "api-key",
+    methods: ["api-key"],
     // Only the Azure key authenticates; the deployment URL comes from
     // AZURE_OPENAI_BASE_URL / OPENAI_BASE_URL / ~/.codex/config.toml
     // (L1435-1445). A key with no reachable base URL still counts as
@@ -92,53 +114,83 @@ export const PROVIDERS: readonly ProviderInfo[] = [
   {
     id: "openai",
     label: "OpenAI",
-    auth: "api-key",
+    methods: ["api-key"],
     envVars: ["OPENAI_API_KEY"],
     hint: "set OPENAI_API_KEY=sk-... from platform.openai.com/api-keys",
   },
   {
     id: "z-ai",
     label: "Z.ai GLM",
-    auth: "api-key",
+    methods: ["api-key"],
     envVars: ["Z_AI_API_KEY"],
     hint: "set Z_AI_API_KEY from your Z.ai Coding Plan (endpoint override: Z_AI_BASE_URL)",
   },
   {
     id: "kimi",
     label: "Moonshot Kimi",
-    auth: "api-key",
+    methods: ["api-key"],
     envVars: ["KIMI_API_KEY"],
     hint: "set KIMI_API_KEY from your Kimi coding plan (endpoint override: KIMI_BASE_URL)",
   },
   {
     id: "qwen",
     label: "Alibaba Qwen",
-    auth: "api-key",
+    methods: ["api-key"],
     envVars: ["QWEN_API_KEY"],
     hint: "set QWEN_API_KEY from Alibaba Model Studio (endpoint override: QWEN_BASE_URL)",
   },
   {
     id: "xai",
     label: "xAI Grok",
-    auth: "api-key",
+    methods: ["api-key"],
     envVars: ["XAI_API_KEY"],
     hint: "set XAI_API_KEY from console.x.ai (endpoint override: XAI_BASE_URL)",
   },
   {
     id: "opencode",
     label: "OpenCode Zen",
-    auth: "api-key",
+    methods: ["api-key"],
     envVars: ["OPENCODE_API_KEY"],
     hint: "set OPENCODE_API_KEY from opencode.ai/auth (endpoint override: OPENCODE_BASE_URL)",
   },
   {
     id: "anthropic",
     label: "Anthropic",
-    auth: "api-key",
+    // API key only for now. The schema supports OAuth, but Anthropic/Claude
+    // subscription OAuth is deliberately deferred — do not add "oauth" here
+    // until that workstream lands.
+    methods: ["api-key"],
     envVars: ["ANTHROPIC_API_KEY"],
     hint: "set ANTHROPIC_API_KEY=sk-ant-... from console.anthropic.com",
   },
 ];
+
+/**
+ * The most-preferred authentication method — the scalar `auth` value. `methods`
+ * is authored non-empty for every provider; the fallback only keeps a
+ * hand-edited empty list from producing `undefined`.
+ */
+function primaryMethod(methods: readonly AuthMethod[]): AuthMethod {
+  return methods[0] ?? "api-key";
+}
+
+/**
+ * The provider table, with the derived scalar `auth` attached to each entry so
+ * the plural `methods` is the single authored source of truth and legacy
+ * `provider.auth` readers keep working. Frozen entries: `providerStates`
+ * spreads a copy before returning, but the table itself is shared and must not
+ * be mutated in place.
+ */
+export const PROVIDERS: readonly ProviderInfo[] = PROVIDER_DEFS.map((def) => ({
+  ...def,
+  auth: primaryMethod(def.methods),
+}));
+
+/** Does this provider accept the given authentication method? */
+export function providerSupportsMethod(providerId: string, method: AuthMethod): boolean {
+  const info = PROVIDERS.find((candidate) => candidate.id === providerId);
+  return info !== undefined && info.methods.includes(method);
+}
 
 /**
  * An exported-but-empty variable is the classic way this breaks: `export

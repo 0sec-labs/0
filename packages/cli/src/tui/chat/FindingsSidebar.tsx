@@ -5,9 +5,11 @@ import type { Theme } from "../theme-context.js";
 import { severityToneFor } from "../themes.js";
 import {
   budgetWrappedRows,
+  buildSidebarSectionHeader,
   findingTitleFirstWidth,
   wrapFinding,
   DEFAULT_WRAP_LINES,
+  SIDEBAR_SECTION_HEADER_ROWS,
   type SidebarFinding,
 } from "./findings-sidebar-layout.js";
 
@@ -31,7 +33,7 @@ import {
  */
 
 /** Rows the section spends on its header (the "FINDINGS n" line). */
-export const FINDINGS_SIDEBAR_HEADER_ROWS = 1;
+export const FINDINGS_SIDEBAR_HEADER_ROWS = SIDEBAR_SECTION_HEADER_ROWS;
 
 export function FindingsSidebar({
   findings,
@@ -50,8 +52,10 @@ export function FindingsSidebar({
   if (rows < FINDINGS_SIDEBAR_HEADER_ROWS + 1) return null;
 
   const header = (
-    <box width={width} flexShrink={0} minWidth={0} marginTop={1}>
-      <text fg={MUTED}>{fitTuiText(`FINDINGS ${findings.length}`, width)}</text>
+    <box width={width} height={1} flexShrink={0} minWidth={0} marginTop={1}>
+      <text width={width} height={1} wrapMode="none" truncate fg={MUTED}>
+        {buildSidebarSectionHeader("FINDINGS", findings.length, width)}
+      </text>
     </box>
   );
 
@@ -59,8 +63,8 @@ export function FindingsSidebar({
     return (
       <box flexDirection="column" flexShrink={0} minWidth={0}>
         {header}
-        <box width={width} flexShrink={0} minWidth={0}>
-          <text fg={MUTED}>{fitTuiText("none yet", width)}</text>
+        <box width={width} height={1} flexShrink={0} minWidth={0}>
+          <text width={width} height={1} wrapMode="none" truncate fg={MUTED}>{fitTuiText("none yet", width)}</text>
         </box>
       </box>
     );
@@ -101,19 +105,19 @@ export function FindingsSidebar({
           >
             {lines.map((line, lineIdx) =>
               lineIdx === 0 ? (
-                <box key={lineIdx} flexDirection="row" width={width} flexShrink={0} minWidth={0}>
-                  <box width={firstWidth} flexShrink={0} minWidth={0}>
-                    <text fg={TEXT}>{fitTuiText(line, firstWidth)}</text>
+                <box key={lineIdx} flexDirection="row" width={width} height={1} flexShrink={0} minWidth={0}>
+                  <box width={firstWidth} height={1} flexShrink={0} minWidth={0}>
+                    <text width={firstWidth} height={1} wrapMode="none" truncate fg={TEXT}>{fitTuiText(line, firstWidth)}</text>
                   </box>
                   {severityCells > 0 ? (
-                    <box width={severityCells} flexShrink={0} minWidth={0} marginLeft={1}>
-                      <text fg={sevColor}>{fitTuiText(finding.severity, severityCells)}</text>
+                    <box width={severityCells} height={1} flexShrink={0} minWidth={0} marginLeft={1}>
+                      <text width={severityCells} height={1} wrapMode="none" truncate fg={sevColor}>{fitTuiText(finding.severity, severityCells)}</text>
                     </box>
                   ) : null}
                 </box>
               ) : (
-                <box key={lineIdx} width={width} flexShrink={0} minWidth={0}>
-                  <text fg={TEXT}>{fitTuiText(line, width)}</text>
+                <box key={lineIdx} width={width} height={1} flexShrink={0} minWidth={0}>
+                  <text width={width} height={1} wrapMode="none" truncate fg={TEXT}>{fitTuiText(line, width)}</text>
                 </box>
               ),
             )}
@@ -121,8 +125,8 @@ export function FindingsSidebar({
         );
       })}
       {overflowCount > 0 ? (
-        <box width={width} flexShrink={0} minWidth={0}>
-          <text fg={MUTED}>{fitTuiText(`+${overflowCount} more`, width)}</text>
+        <box width={width} height={1} flexShrink={0} minWidth={0}>
+          <text width={width} height={1} wrapMode="none" truncate fg={MUTED}>{fitTuiText(`+${overflowCount} more`, width)}</text>
         </box>
       ) : null}
     </box>

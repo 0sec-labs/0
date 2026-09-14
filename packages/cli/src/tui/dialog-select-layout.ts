@@ -40,6 +40,8 @@ export interface DialogItem {
   current?: boolean;
   /** Rendered dimmed and skipped by navigation when true. */
   disabled?: boolean;
+  /** Unselected lifecycle colour; selection and disabled contrast take precedence. */
+  tone?: string;
 }
 
 /** A row in the rendered list: either a group heading or a selectable item. */

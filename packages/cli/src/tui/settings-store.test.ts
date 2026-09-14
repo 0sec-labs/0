@@ -340,6 +340,24 @@ describe("store: write target", () => {
     expect(loadGlobalSettings(home).density).toBe(DEFAULT_SETTINGS.density);
   });
 
+  it("persists onboarding globally without promoting or trusting project state", () => {
+    const home = makeHome();
+    const project = makeProjectDir();
+    writeProjectRaw(project, { onboardingCompleted: true, density: "compact" });
+    configureSettingsStore({ homeDir: home, projectDir: project });
+
+    expect(getSettings().onboardingCompleted).toBe(false);
+    expect(updateSetting("onboardingCompleted", true, { scope: "project" })).toBe(false);
+    expect(getSettings().onboardingCompleted).toBe(false);
+    expect(updateSetting("onboardingCompleted", true)).toBe(true);
+    expect(loadGlobalSettings(home).onboardingCompleted).toBe(true);
+    expect(loadGlobalSettings(home).density).toBe(DEFAULT_SETTINGS.density);
+    expect(readProjectOverrides(project)).toEqual({ density: "compact" });
+    expect(reloadSettings().onboardingCompleted).toBe(true);
+    expect(getSettingSources().onboardingCompleted).toBe("global");
+    expect(getSettings().density).toBe("compact");
+  });
+
   it("persists operator consent globally even inside a configured project", () => {
     const home = makeHome();
     const project = makeProjectDir();
@@ -358,7 +376,7 @@ describe("store: write target", () => {
   it("rejects project consent writes without changing effective policy or notifying", () => {
     const home = makeHome();
     const project = makeProjectDir();
-    saveGlobalSettings({ ...DEFAULT_SETTINGS, diagnosticReporting: "off" }, home);
+    saveGlobalSettings({ ...DEFAULT_SETTINGS, diagnosticReporting: "off", updatePolicy: "off" }, home);
     writeProjectRaw(project, { density: "compact" });
     configureSettingsStore({ homeDir: home, projectDir: project });
     const before = getSettings();
@@ -394,5 +412,34 @@ describe("previewSetting", () => {
     // Not durable: a fresh read from disk restores the original theme.
     expect(reloadSettings().theme).toBe(original);
     unsub();
+  });
+});
+
+describe("updateSetting for the keybindings map", () => {
+  it("round-trips a valid override and notifies subscribers", () => {
+    configureSettingsStore({ homeDir: makeHome() });
+    const seen: TuiSettings[] = [];
+    const unsubscribe = subscribeSettings((s) => seen.push(s));
+
+    expect(updateSetting("keybindings", { "view.left-sidebar": "ctrl+j" })).toBe(true);
+    expect(getSettings().keybindings).toEqual({ "view.left-sidebar": "ctrl+j" });
+    expect(seen.at(-1)?.keybindings).toEqual({ "view.left-sidebar": "ctrl+j" });
+
+    unsubscribe();
+    // Survives a reload from disk.
+    reloadSettings();
+    expect(getSettings().keybindings).toEqual({ "view.left-sidebar": "ctrl+j" });
+  });
+
+  it("sanitises an invalid override on the way in", () => {
+    configureSettingsStore({ homeDir: makeHome() });
+    // A protected id and a reserved chord are both dropped by the store's
+    // normalise-on-write, leaving only the valid entry.
+    updateSetting("keybindings", {
+      "view.left-sidebar": "Ctrl+J",
+      "session.quit": "ctrl+x",
+      "view.right-sidebar": "ctrl+c",
+    } as Record<string, string>);
+    expect(getSettings().keybindings).toEqual({ "view.left-sidebar": "ctrl+j" });
   });
 });

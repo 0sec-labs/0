@@ -174,7 +174,7 @@ describe("accessControlProbe integration (0sec#564)", () => {
 
   it("reports no break when the server correctly denies identity B", async () => {
     vi.mocked(fetchScoped).mockImplementation(async (url: string, init: RequestInit) => {
-      const auth = (init.headers as Record<string, string> | undefined)?.Authorization ?? "";
+      const auth = new Headers(init.headers).get("authorization") ?? "";
       if (auth.includes("alice-tok")) {
         return new Response('{"id":1,"owner":"alice"}', {
           status: 200,
@@ -241,7 +241,7 @@ describe("accessControlProbe integration (0sec#564)", () => {
   it("sends each identity its OWN credential when replaying", async () => {
     const seenAuth: string[] = [];
     vi.mocked(fetchScoped).mockImplementation(async (_url: string, init: RequestInit) => {
-      seenAuth.push(((init.headers as Record<string, string>)?.Authorization as string) ?? "");
+      seenAuth.push(new Headers(init.headers).get("authorization") ?? "");
       return new Response('{"id":1}', {
         status: 200,
         headers: { "content-type": "application/json" },

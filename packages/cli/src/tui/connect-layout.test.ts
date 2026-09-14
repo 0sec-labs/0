@@ -5,27 +5,24 @@ import {
   authHintLabel,
   authKindFor,
   buildConnectRows,
-  clampSelection,
   clipConnectDetailLines,
   computeConnectLayout,
   computeConnectTitleLayout,
-  computeConnectWindow,
+  connectConnectedCounts,
   connectDetailLines,
   connectDetailTitleLabel,
   connectDetailTitleMeta,
+  connectDialogItems,
+  connectDisplayRowCount,
   connectFooterHint,
   connectInputMask,
+  connectRowForId,
   connectStatusLine,
-  firstSelectableIndex,
   hasAnyConnection,
-  indexOfProvider,
   isFilterKey,
   isInputKey,
-  lastSelectableIndex,
-  moveSelection,
   pastableChars,
   shellChromeRows,
-  type ConnectLayout,
   type ConnectRow,
 } from "./connect-layout.js";
 import { PROVIDERS, providerStates } from "./provider-status.js";
@@ -48,185 +45,71 @@ const EMPTY = providerStates({});
 const LIT_PROVIDER = PROVIDERS.find((info) => info.id === "anthropic") ?? PROVIDERS[0];
 const LIT = providerStates({ [LIT_PROVIDER?.envVars[0] ?? "ANTHROPIC_API_KEY"]: "sk-test" });
 
-function layoutNumbers(layout: ConnectLayout): [string, number][] {
-  return [
-    ["contentWidth", layout.contentWidth],
-    ["bodyRows", layout.bodyRows],
-    ["paneGap", layout.paneGap],
-    ["list.width", layout.list.width],
-    ["list.innerWidth", layout.list.innerWidth],
-    ["list.height", layout.list.height],
-    ["list.bodyRows", layout.list.bodyRows],
-    ["detail.width", layout.detail.width],
-    ["detail.innerWidth", layout.detail.innerWidth],
-    ["detail.height", layout.detail.height],
-    ["detail.bodyRows", layout.detail.bodyRows],
-    ["row.width", layout.row.width],
-    ["row.markerWidth", layout.row.markerWidth],
-    ["row.markerGap", layout.row.markerGap],
-    ["row.checkWidth", layout.row.checkWidth],
-    ["row.checkGap", layout.row.checkGap],
-    ["row.labelWidth", layout.row.labelWidth],
-    ["row.authGap", layout.row.authGap],
-    ["row.authWidth", layout.row.authWidth],
-    ["heading.width", layout.heading.width],
-    ["heading.labelWidth", layout.heading.labelWidth],
-    ["heading.gap", layout.heading.gap],
-    ["heading.stateWidth", layout.heading.stateWidth],
-    ["visibleRows", layout.visibleRows],
-  ];
-}
-
-// ---------------------------------------------------------------------------
-
-describe("computeConnectLayout — the sweep", () => {
-  it("never lets a pane, a row or a column exceed what it was given", () => {
+describe("computeConnectLayout — the dialog sweep", () => {
+  it("partitions exactly the rows and cells the host left it", () => {
     for (const width of sweepAxis(0, 200, 3)) {
       for (const height of sweepAxis(0, 80, 2)) {
-        for (const noticeRows of [0, 1]) {
-          const layout = computeConnectLayout({ width, height, noticeRows });
-          const at = `${width}x${height} (notice ${noticeRows})`;
-
-          for (const [name, value] of layoutNumbers(layout)) {
+        // In a dialog the host spends one row on its footer and nothing else.
+        for (const options of [undefined, { chromeRows: 1, chromeColumns: 0 }]) {
+          const layout = computeConnectLayout(width, height, 40, options);
+          const at = `${width}x${height} ${options ? "in a dialog" : "on a terminal"}`;
+          for (const [name, value] of Object.entries(layout)) {
+            if (typeof value !== "number") continue;
             expect(isInteger(value), `${name} was ${value} at ${at}`).toBe(true);
           }
-
-          // -- horizontal --
-          expect(layout.contentWidth, `contentWidth exceeded width at ${at}`).toBeLessThanOrEqual(
-            Math.max(0, width),
-          );
-          if (layout.stacked) {
-            expect(layout.list.width).toBeLessThanOrEqual(layout.contentWidth);
-            expect(layout.detail.width).toBeLessThanOrEqual(layout.contentWidth);
-            expect(layout.paneGap, `stacked panes had a gap at ${at}`).toBe(0);
-          } else {
-            const claimed = layout.list.width + layout.paneGap + layout.detail.width;
-            expect(
-              claimed,
-              `panes claimed ${claimed} of ${layout.contentWidth} at ${at}`,
-            ).toBeLessThanOrEqual(layout.contentWidth);
-          }
-
-          // -- list row columns sum EXACTLY to the row width --
-          const row = layout.row;
-          expect(row.width, `row wider than the list pane at ${at}`).toBe(layout.list.innerWidth);
-          const rowClaimed =
-            row.markerWidth +
-            row.markerGap +
-            row.checkWidth +
-            row.checkGap +
-            row.labelWidth +
-            row.authGap +
-            row.authWidth;
-          expect(rowClaimed, `row claimed ${rowClaimed} of ${row.width} at ${at}`).toBe(row.width);
-
-          // -- heading columns sum EXACTLY --
-          const heading = layout.heading;
-          expect(heading.width).toBe(layout.list.innerWidth);
-          const headingClaimed = heading.labelWidth + heading.gap + heading.stateWidth;
+          expect(layout.contentWidth, `content wider than the surface at ${at}`)
+            .toBeLessThanOrEqual(Math.max(0, width));
           expect(
-            headingClaimed,
-            `heading claimed ${headingClaimed} of ${heading.width} at ${at}`,
-          ).toBe(heading.width);
-          if (heading.stateWidth > 0) {
-            expect(heading.gap).toBe(1);
-            expect(heading.labelWidth).toBeGreaterThan(0);
+            layout.titleRows + layout.bodyRows + layout.statusRows,
+            `rows did not sum to the budget at ${at}`,
+          ).toBe(layout.availableRows);
+          expect(layout.availableRows, `body taller than the surface at ${at}`)
+            .toBeLessThanOrEqual(Math.max(0, height));
+          if (!options) {
+            // On a bare terminal the console shell still takes its chrome.
+            expect(layout.availableRows, `shell chrome not paid for at ${at}`)
+              .toBe(Math.max(0, Math.trunc(height) - shellChromeRows(width)));
           }
-
-          // -- vertical --
-          expect(layout.list.height).toBeLessThanOrEqual(layout.bodyRows);
-          expect(layout.detail.height).toBeLessThanOrEqual(layout.bodyRows);
-          if (layout.stacked) {
-            const rows = layout.list.height + layout.detail.height;
-            expect(
-              rows,
-              `stacked panes claimed ${rows} of ${layout.bodyRows} rows at ${at}`,
-            ).toBeLessThanOrEqual(layout.bodyRows);
-          }
-          expect(layout.visibleRows).toBeLessThanOrEqual(layout.list.bodyRows);
-
-          for (const pane of [layout.list, layout.detail]) {
-            if (pane.width > 0) expect(pane.innerWidth).toBeGreaterThan(0);
-            if (pane.height > 0) expect(pane.bodyRows).toBeGreaterThan(0);
-            expect(pane.innerWidth).toBeLessThanOrEqual(pane.width);
-            expect(pane.bodyRows).toBeLessThanOrEqual(pane.height);
-            if (pane.height > 0) {
-              const paneChromeRows = (layout.bordered ? 2 : 0) + (pane.hasTitle ? 1 : 0);
-              expect(pane.height - pane.bodyRows, `pane chrome miscounted at ${at}`).toBe(
-                paneChromeRows,
-              );
-              expect(pane.width - pane.innerWidth).toBe(layout.bordered ? 4 : 0);
-            }
-          }
+          expect(layout.listRows + layout.stackedRows).toBe(layout.bodyRows);
+          expect(
+            layout.panel.listWidth + layout.panel.detailGap + layout.panel.detailWidth,
+            `picker columns overflowed the content width at ${at}`,
+          ).toBeLessThanOrEqual(Math.max(1, layout.contentWidth));
+          expect(layout.panel.rowWidth).toBeLessThanOrEqual(layout.panel.listWidth);
         }
       }
     }
   });
 
-  it("keeps the body inside the terminal once the shell has taken its chrome", () => {
-    for (let width = 0; width <= 200; width++) {
-      for (let height = 0; height <= 80; height++) {
-        const layout = computeConnectLayout({ width, height, noticeRows: 1 });
-        expect(
-          layout.bodyRows + shellChromeRows(width),
-          `body plus chrome overflowed ${width}x${height}`,
-        ).toBeLessThanOrEqual(Math.max(height, shellChromeRows(width)));
-      }
-    }
+  it("keeps the whole surface when the host is a dialog panel", () => {
+    // Inside a dialog the surface already IS the panel's inner box.
+    const dialog = computeConnectLayout(92, 40, 40, { chromeRows: 1, chromeColumns: 0 });
+    expect(dialog.contentWidth).toBe(92);
+    expect(dialog.availableRows).toBe(39);
+    expect(dialog.panel.showDetail).toBe(true);
+    expect(computeConnectLayout(92, 40, 40).bodyRows).toBeLessThan(dialog.bodyRows);
+  });
+
+  it("drops the detail column rather than shrinking it below its floor", () => {
+    const narrow = computeConnectLayout(48, 36, 40, { chromeRows: 0, chromeColumns: 0 });
+    expect(narrow.panel.showDetail).toBe(false);
+    expect(narrow.panel.detailWidth).toBe(0);
+    expect(narrow.stackedRows).toBeGreaterThan(0);
+    const wide = computeConnectLayout(120, 36, 40, { chromeRows: 0, chromeColumns: 0 });
+    expect(wide.panel.showDetail).toBe(true);
+    expect(wide.stackedRows).toBe(0);
   });
 
   it("survives garbage geometry without throwing or producing garbage", () => {
-    for (const width of [Number.NaN, Number.POSITIVE_INFINITY, -100, 0.5, -0]) {
-      for (const height of [Number.NaN, Number.POSITIVE_INFINITY, -100, 0.5, -0]) {
-        const layout = computeConnectLayout({ width, height });
-        for (const [name, value] of layoutNumbers(layout)) {
+    for (const width of [Number.NaN, Number.POSITIVE_INFINITY, -10, 1.5]) {
+      for (const height of [Number.NaN, Number.NEGATIVE_INFINITY, -4, 2.7]) {
+        const layout = computeConnectLayout(width as number, height as number, 40);
+        for (const [name, value] of Object.entries(layout)) {
+          if (typeof value !== "number") continue;
           expect(isInteger(value), `${name} was ${value} at ${width}x${height}`).toBe(true);
         }
       }
     }
-  });
-
-  it("stacks the detail pane under the list on a narrow terminal, beside on a wide one", () => {
-    expect(computeConnectLayout({ width: 60, height: 40 }).stacked).toBe(true);
-    expect(computeConnectLayout({ width: 79, height: 40 }).stacked).toBe(true);
-    expect(computeConnectLayout({ width: 80, height: 40 }).stacked).toBe(false);
-    const wide = computeConnectLayout({ width: 120, height: 40 });
-    expect(wide.paneGap).toBe(1);
-    expect(wide.list.width + wide.paneGap + wide.detail.width).toBe(wide.contentWidth);
-  });
-
-  it("drops pane borders before it drops rows of content", () => {
-    expect(computeConnectLayout({ width: 120, height: 40 }).bordered).toBe(true);
-    const short = computeConnectLayout({ width: 120, height: 16 });
-    expect(short.bordered).toBe(false);
-    expect(short.detailCompact).toBe(true);
-    expect(short.list.innerWidth).toBe(short.list.width);
-  });
-
-  it("degrades the row one column at a time as the pane narrows", () => {
-    const at = (innerWidth: number) => computeConnectLayout({ width: innerWidth + 4, height: 40 }).row;
-    const wide = at(120);
-    expect(wide.markerWidth).toBe(1);
-    expect(wide.checkWidth).toBe(1);
-    expect(wide.authWidth).toBeGreaterThan(0);
-
-    let sawNoAuth = false;
-    let sawNoCheck = false;
-    for (let innerWidth = 60; innerWidth >= 1; innerWidth--) {
-      const row = at(innerWidth);
-      if (row.authWidth === 0) sawNoAuth = true;
-      if (row.checkWidth === 0) sawNoCheck = true;
-      if (sawNoCheck) expect(row.authWidth, `auth outlived the check at ${innerWidth}`).toBe(0);
-      if (row.width > 0) expect(row.labelWidth, `label vanished at ${innerWidth}`).toBeGreaterThan(0);
-    }
-    expect(sawNoAuth).toBe(true);
-    expect(sawNoCheck).toBe(true);
-  });
-
-  it("spends a row on the status line only when there is one", () => {
-    const quiet = computeConnectLayout({ width: 120, height: 40, noticeRows: 0 });
-    const noisy = computeConnectLayout({ width: 120, height: 40, noticeRows: 1 });
-    expect(noisy.bodyRows).toBe(quiet.bodyRows - 1);
   });
 });
 
@@ -285,7 +168,7 @@ describe("pane header labels and meta", () => {
 describe("buildConnectRows", () => {
   it("keeps Cloud first, BYOK second and subscription sign-in independent", () => {
     const rows = buildConnectRows({ states: EMPTY });
-    expect(rows[firstSelectableIndex(rows)]?.kind).toBe("cloud");
+    expect(rows[0]?.kind).toBe("cloud");
     const providers = rows.filter((row) => row.kind === "provider");
     expect(providers[0]?.provider.auth).toBe("api-key");
     expect(new Set(providers.map((row) => row.provider.id))).toEqual(new Set(PROVIDERS.map((provider) => provider.id)));
@@ -294,11 +177,26 @@ describe("buildConnectRows", () => {
     expect(subscription.map((row) => row.provider.id)).toEqual(["chatgpt-codex"]);
     expect(providers.filter((row) => row.group.id !== "subscription").every((row) => row.provider.auth === "api-key")).toBe(true);
     expect(providers.every((row) => !row.provider.connected)).toBe(true);
+
+    // The headings still arrive in a fixed order, and the groups stay disjoint.
+    const headings = rows.filter(
+      (row): row is Extract<ConnectRow, { kind: "heading" }> => row.kind === "heading",
+    );
+    expect(headings.map((row) => row.group.id)).toEqual(["popular", "all", "subscription"]);
+    const idsIn = (group: string) =>
+      providers.filter((row) => row.group.id === group).map((row) => row.provider.id);
+    const popular = idsIn("popular");
+    const all = idsIn("all");
+    expect(popular).toEqual(RECOMMENDED_IDS.filter((id) => PROVIDERS.some((p) => p.id === id)));
+    expect(popular.filter((id) => all.includes(id))).toEqual([]);
+    expect([...popular, ...all].filter((id) => subscription.some((row) => row.provider.id === id))).toEqual([]);
   });
 
   it("emits a subtitle row under recommended providers that have one", () => {
     const rows = buildConnectRows({ states: EMPTY });
-    const at = indexOfProvider(rows, RECOMMENDED_IDS[0]);
+    const at = rows.findIndex(
+      (row) => row.kind === "provider" && row.provider.id === RECOMMENDED_IDS[0],
+    );
     expect(rows[at + 1]?.kind).toBe("subtitle");
     // Subtitles never appear in the All group.
     for (const row of rows) {
@@ -358,88 +256,100 @@ describe("buildConnectRows", () => {
 
 // ---------------------------------------------------------------------------
 
-describe("navigation", () => {
-  const rows = buildConnectRows({ states: EMPTY });
-
-  it("never lands on a heading or a subtitle, up or down through the list twice", () => {
-    let index = firstSelectableIndex(rows);
-    expect(rows[index]?.kind).toBe("cloud");
-    for (let step = 0; step < rows.length * 2; step++) {
-      index = moveSelection(rows, index, 1);
-      expect(["cloud", "provider"], `down landed on a non-action at step ${step}`).toContain(rows[index]?.kind);
+describe("connectDialogItems — the projection onto the shared picker", () => {
+  it("keeps Cloud first and groups every provider under its own category", () => {
+    const rows = buildConnectRows({ states: EMPTY });
+    const items = connectDialogItems({ rows });
+    expect(items[0]?.id).toBe("hosted");
+    expect(items[0]?.category).toBe("0sec Cloud");
+    // Every provider row reaches the picker exactly once, under its group.
+    const providers = rows.filter((row) => row.kind === "provider");
+    expect(items).toHaveLength(providers.length + 1);
+    for (const row of providers) {
+      const item = items.find((candidate) => candidate.id === row.provider.id);
+      expect(item, `${row.provider.id} never reached the picker`).toBeDefined();
+      expect(item?.category).toBe(row.group.label);
+      expect(item?.label).toBe(row.provider.label);
     }
-    index = lastSelectableIndex(rows);
-    for (let step = 0; step < rows.length * 2; step++) {
-      index = moveSelection(rows, index, -1);
-      expect(["cloud", "provider"], `up landed on a non-action at step ${step}`).toContain(rows[index]?.kind);
-    }
+    // A subtitle row becomes the item's description, not a row of its own.
+    const recommended = items.find((item) => item.id === RECOMMENDED_IDS[0]);
+    expect(recommended?.description).toBeTruthy();
   });
 
-  it("wraps from last to first and back", () => {
-    const first = firstSelectableIndex(rows);
-    const last = lastSelectableIndex(rows);
-    expect(moveSelection(rows, last, 1)).toBe(first);
-    expect(moveSelection(rows, first, -1)).toBe(last);
-  });
-
-  it("finds every provider by id and pulls stray selections onto a real row", () => {
-    for (const info of PROVIDERS) {
-      const at = indexOfProvider(rows, info.id);
-      expect(at, `${info.id} unreachable`).toBeGreaterThanOrEqual(0);
-      expect(rows[at]?.kind).toBe("provider");
-    }
-    expect(clampSelection(rows, -50)).toBe(0);
-    expect(clampSelection(rows, 9999)).toBe(lastSelectableIndex(rows));
-    expect(clampSelection(rows, Number.NaN)).toBe(0);
-    expect(indexOfProvider(rows, undefined)).toBe(-1);
-  });
-
-  it("returns -1 for navigation over an empty list", () => {
-    expect(firstSelectableIndex([])).toBe(-1);
-    expect(clampSelection([], 3)).toBe(-1);
-    expect(moveSelection([], 0, 1)).toBe(-1);
-  });
-});
-
-// ---------------------------------------------------------------------------
-
-describe("computeConnectWindow", () => {
-  const rows = buildConnectRows({ states: EMPTY });
-
-  it("keeps the highlighted row visible from any anchor at any capacity", () => {
-    for (let visible = 0; visible <= rows.length + 4; visible++) {
-      for (let selected = 0; selected < rows.length; selected++) {
-        if (rows[selected]?.kind !== "provider") continue;
-        for (const anchor of [0, 3, 7, rows.length, rows.length * 2]) {
-          const win = computeConnectWindow({ rows, selected, visible, anchor });
-          expect(win.count).toBeLessThanOrEqual(Math.max(0, visible));
-          expect(win.count).toBe(win.end - win.start);
-          expect(win.end).toBeLessThanOrEqual(rows.length);
-          if (win.count === 0) continue;
-          expect(
-            selected >= win.start && selected < win.end,
-            `row ${selected} outside ${win.start}..${win.end} (visible ${visible}, anchor ${anchor})`,
-          ).toBe(true);
-        }
-      }
+  it("marks an item connected only when a credential was actually found", () => {
+    const items = connectDialogItems({ rows: buildConnectRows({ states: LIT }) });
+    const lit = items.find((item) => item.id === LIT_PROVIDER?.id);
+    expect(lit?.current).toBe(true);
+    expect(lit?.meta).toBe("connected");
+    for (const item of items) {
+      if (item.id === LIT_PROVIDER?.id || item.id === "hosted") continue;
+      expect(item.current, `${item.id} claimed a connection it does not have`).toBe(false);
+      expect(item.meta).not.toBe("connected");
     }
   });
 
-  it("brings the heading along when the cursor is the first provider of a group", () => {
-    const headingIndex = rows.findIndex(
-      (row, index) => row.kind === "heading" && rows[index + 1]?.kind === "provider" && index > 0,
-    );
-    if (headingIndex > 0) {
-      const win = computeConnectWindow({
-        rows,
-        selected: headingIndex + 1,
-        visible: 4,
-        anchor: rows.length,
-      });
-      expect(win.start).toBe(headingIndex);
-    }
+  it("never marks the provider being repaired as connected", () => {
+    const rows = buildConnectRows({ states: LIT });
+    const items = connectDialogItems({ rows, recoveryProviderId: LIT_PROVIDER?.id });
+    const lit = items.find((item) => item.id === LIT_PROVIDER?.id);
+    expect(lit?.current).toBe(false);
+    expect(lit?.meta).toBe("reconnect");
   });
 
+  it("reports the cloud row's own state and never assumes it", () => {
+    const rows = buildConnectRows({ states: EMPTY });
+    expect(connectDialogItems({ rows })[0]?.current).toBe(false);
+    expect(connectDialogItems({ rows })[0]?.meta).toBe("sign in");
+    const signedIn = connectDialogItems({ rows, cloudConnected: true })[0];
+    expect(signedIn?.current).toBe(true);
+    expect(signedIn?.meta).toBe("login saved");
+    const repairing = connectDialogItems({ rows, cloudConnected: true, recoveryProviderId: "hosted" })[0];
+    expect(repairing?.current).toBe(false);
+    expect(repairing?.meta).toBe("reconnect");
+  });
+
+  it("carries the two lifecycle colours the list used to draw, and only those", () => {
+    const rows = buildConnectRows({ states: LIT });
+    const items = connectDialogItems({
+      rows,
+      tones: { connected: "#green", recovering: "#red" },
+    });
+    expect(items.find((item) => item.id === LIT_PROVIDER?.id)?.tone).toBe("#green");
+    for (const item of items) {
+      if (item.current) continue;
+      expect(item.tone, `${item.id} was coloured without a state to justify it`).toBeUndefined();
+    }
+    const repairing = connectDialogItems({
+      rows,
+      tones: { connected: "#green", recovering: "#red" },
+      recoveryProviderId: LIT_PROVIDER?.id,
+    });
+    expect(repairing.find((item) => item.id === LIT_PROVIDER?.id)?.tone).toBe("#red");
+    // No palette supplied -> no colour invented.
+    expect(connectDialogItems({ rows }).every((item) => item.tone === undefined)).toBe(true);
+  });
+
+  it("carries no secret onto an item", () => {
+    const items = connectDialogItems({ rows: buildConnectRows({ states: LIT }) });
+    const serialised = JSON.stringify(items);
+    expect(serialised).not.toContain("sk-test");
+  });
+
+  it("counts the display rows the picker will render", () => {
+    const items = connectDialogItems({ rows: buildConnectRows({ states: EMPTY }) });
+    const categories = new Set(items.map((item) => item.category));
+    expect(connectDisplayRowCount(items)).toBe(items.length + categories.size);
+    expect(connectDisplayRowCount([])).toBe(0);
+  });
+
+  it("finds the row behind an item id, cloud included", () => {
+    const rows = buildConnectRows({ states: LIT });
+    expect(connectRowForId(rows, "hosted")?.kind).toBe("cloud");
+    const row = connectRowForId(rows, LIT_PROVIDER?.id);
+    expect(row?.kind === "provider" && row.provider.id).toBe(LIT_PROVIDER?.id);
+    expect(connectRowForId(rows, undefined)).toBeUndefined();
+    expect(connectRowForId(rows, "no-such-provider")).toBeUndefined();
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -522,9 +432,15 @@ describe("connected reporting, masks and hints", () => {
 
   it("summarises how many providers are connected", () => {
     expect(connectStatusLine(buildConnectRows({ states: EMPTY }))).toContain("no providers connected");
-    const line = connectStatusLine(buildConnectRows({ states: LIT }));
+    const rows = buildConnectRows({ states: LIT });
+    const line = connectStatusLine(rows);
     expect(line).toMatch(/connected: 1 of \d+ providers/);
     expect(connectStatusLine([])).toBe("no providers to connect");
+    // The title meta counts the same rows, and never counts the cloud row.
+    const counts = connectConnectedCounts(rows);
+    expect(counts.connected).toBe(1);
+    expect(counts.total).toBe(PROVIDERS.length);
+    expect(connectConnectedCounts([])).toEqual({ connected: 0, total: 0 });
   });
 
   it("never echoes the credential and caps the mask length it leaks", () => {

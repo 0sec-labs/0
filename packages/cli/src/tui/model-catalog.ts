@@ -10,6 +10,7 @@
  */
 
 import { MODEL_PRICING, getRates, modelProvider } from "@0sec/shared";
+import type { InferenceModel } from "@0sec/core";
 
 import type { SelectorItem } from "./selector.js";
 import { loadCatalogModels, type CatalogSyncOptions } from "./model-catalog-sync.js";
@@ -151,4 +152,150 @@ export function scopeModelCatalog(
     curated.sort(compareCatalogRows(current));
   }
   return curated;
+}
+
+// ── Hosted catalogue ──────────────────────────────────────────────────────────
+//
+// The BYOK catalogue above is derived from the pricing table plus the
+// Models.dev sync. The hosted catalogue is a different kind of thing: it is
+// the account's OWN model list, fetched from the service that will actually
+// run the request (see `loadHostedModelCatalog` in model-catalog-sync.ts), and
+// nothing in this section may borrow a BYOK number to fill a hosted gap. A
+// hosted id that the service did not describe reads `unknown`.
+//
+// What the hosted catalogue does NOT carry is any availability, readiness,
+// entitlement or qualification signal: canonical `InferenceModel` has no such
+// field, and the account response carries only a balance. So this projection
+// makes no claim of that kind — not a synthesised reason string and not a
+// constant-true flag, because a field that is always true still asserts that
+// something was checked. Membership in the list is exactly one fact: the
+// service listed this route for this account. Listed rows may be OFFERED for
+// explicit operator selection; they are not described as qualified, entitled,
+// ready, healthy, verified or funded anywhere in this module.
+
+export interface HostedCatalogModel extends CatalogModel {
+  /** The service's own row, verbatim. Never reshaped, never defaulted. */
+  catalog: InferenceModel;
+  /** `context_length` when it is a positive finite number, else null. */
+  contextTokens: number | null;
+  /** `max_output_tokens` under the same rule. */
+  maxOutputTokens: number | null;
+}
+
+/**
+ * A token count the catalogue actually reported. Zero, a negative, NaN, or a
+ * non-number are all "the service did not tell us", which is `null` — never 0
+ * and never a floor, because a consumer that renders 0 states a window the
+ * service never published.
+ */
+function hostedTokens(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : null;
+}
+
+/**
+ * Price the hosted row off its own `pricing` block. "free" only when both
+ * published rates are genuinely zero (that is `formatModelPrice`'s rule, the
+ * same one the BYOK rows use); "unknown" when either rate is absent, not a
+ * number, not finite, or negative — a negative rate is not a rate.
+ */
+function hostedPrice(model: InferenceModel): string {
+  const input = model.pricing?.input_per_million_usd;
+  const output = model.pricing?.output_per_million_usd;
+  if (typeof input !== "number" || !Number.isFinite(input) || input < 0) return "unknown";
+  if (typeof output !== "number" || !Number.isFinite(output) || output < 0) return "unknown";
+  return formatModelPrice(input, output);
+}
+
+/** `$5` for a published rate, `unknown` for anything the row did not publish. */
+function hostedRate(value: unknown): string {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0
+    ? `$${formatRate(value)}`
+    : "unknown";
+}
+
+/**
+ * Project the account's live catalogue onto rows the picker can draw.
+ *
+ * One argument on purpose: the canonical account response carries a balance
+ * and nothing per-model, so a second `account` parameter would be decorative.
+ *
+ * Malformed input is rejected rather than absorbed. A row with a missing or
+ * non-string id cannot be selected (there is nothing to send), and two rows
+ * sharing an id are two different routes that the picker would silently
+ * collapse into one — so both throw. The caller's job is to report the failure;
+ * there is deliberately no partial catalogue and no fallback list.
+ */
+export function buildHostedModelCatalog(models: readonly InferenceModel[]): HostedCatalogModel[] {
+  const seen = new Set<string>();
+  return models.map((model) => {
+    if (!model || typeof model.id !== "string" || model.id.length === 0) {
+      throw new Error("Hosted model catalog contains a row with no usable model id");
+    }
+    if (seen.has(model.id)) {
+      throw new Error(`Hosted model catalog contains duplicate model id: ${model.id}`);
+    }
+    seen.add(model.id);
+    return {
+      id: model.id,
+      provider: model.provider,
+      price: hostedPrice(model),
+      catalog: model,
+      contextTokens: hostedTokens(model.context_length),
+      maxOutputTokens: hostedTokens(model.max_output_tokens),
+    };
+  });
+}
+
+/**
+ * Which hosted row the picker should open on. A highlight only — it never
+ * writes a model, a role assignment or a policy.
+ *
+ * An explicit model is a pin the operator set, so it wins outright: if the
+ * pinned id is in the catalogue that row is returned, and if it is NOT, the
+ * answer is `undefined`. Substituting a different model for an explicit choice
+ * would silently run a model the operator did not pick, which is the worst
+ * thing this function could do, so there is no default and no fallback row.
+ * `preferredId` is consulted only when nothing is pinned.
+ */
+export function preferredHostedModel(
+  models: readonly HostedCatalogModel[],
+  explicitModel: string | undefined,
+  preferredId?: string,
+): HostedCatalogModel | undefined {
+  if (explicitModel !== undefined) return models.find((model) => model.id === explicitModel);
+  if (preferredId === undefined) return undefined;
+  return models.find((model) => model.id === preferredId);
+}
+
+/**
+ * The detail column's lines for one hosted row.
+ *
+ * Every line is a canonical field of the service's own row — provider,
+ * upstream model, wire API, context length, max output tokens and the three
+ * published rates — and anything the row did not carry reads `unknown`. There
+ * is no readiness, state, route-identity, allowance or entitlement line here,
+ * because canonical carries none of those and inventing one would put a claim
+ * on screen that nothing in this tree can back.
+ */
+export function hostedModelDetails(model: HostedCatalogModel): string[] {
+  const { catalog } = model;
+  const provider = typeof catalog.provider === "string" && catalog.provider.length > 0
+    ? catalog.provider
+    : "unknown";
+  const upstream = typeof catalog.upstream_model === "string" && catalog.upstream_model.length > 0
+    ? catalog.upstream_model
+    : "unknown";
+  const wire = typeof catalog.wire_api === "string" && catalog.wire_api.length > 0
+    ? catalog.wire_api
+    : "unknown";
+  return [
+    model.id,
+    `Upstream: ${provider} / ${upstream}`,
+    `Wire API: ${wire}`,
+    `Context: ${model.contextTokens ?? "unknown"} · output limit: ${model.maxOutputTokens ?? "unknown"}`,
+    `Catalog rates: ${model.price}`,
+    `Input / 1M: ${hostedRate(catalog.pricing?.input_per_million_usd)}`,
+    `Output / 1M: ${hostedRate(catalog.pricing?.output_per_million_usd)}`,
+    `Cached input / 1M: ${hostedRate(catalog.pricing?.cached_input_per_million_usd)}`,
+  ];
 }

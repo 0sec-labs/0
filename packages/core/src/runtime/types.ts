@@ -2,12 +2,22 @@ import type { AuthConfig } from "@0sec/shared";
 
 export type RuntimeType = "api" | "claude" | "codex" | "gemini" | "ollama";
 
+/** Routing labels only; selecting a model never changes agent permissions. */
+export interface SubagentModelSelection {
+  readonly role?: string;
+  readonly model?: string;
+}
+
 export interface RuntimeConfig {
   type: RuntimeType;
   timeout: number;
   cwd?: string;
   env?: Record<string, string>;
   model?: string;
+  /** Operator-approved role models and override allowlist; unmapped roles inherit. */
+  agentModels?: Readonly<Record<string, string>>;
+  /** Force children to use the resolved parent model regardless of selection. */
+  singleModel?: boolean;
   /** Explicit provider for this new runtime; conflicting FORCE pins fail closed. */
   provider?: "openrouter" | "anthropic" | "openai" | "azure" | "deepseek" | "chatgpt-codex" | "z-ai" | "kimi" | "qwen" | "xai" | "opencode" | "hosted";
   apiKey?: string;
@@ -43,8 +53,8 @@ export interface Runtime {
   readonly type: RuntimeType;
   execute(prompt: string, context?: RuntimeContext): Promise<RuntimeResult>;
   isAvailable(): Promise<boolean>;
-  /** Fork the resolved parent identity without ambient provider/credential discovery. */
-  forkForSubagent?(timeoutMs: number): Promise<NativeRuntime>;
+  /** Fork the parent account; model overrides require operator consent, never account failover. */
+  forkForSubagent?(timeoutMs: number, selection?: SubagentModelSelection): Promise<NativeRuntime>;
 }
 
 export interface RuntimeContext {
@@ -205,8 +215,8 @@ export interface NativeRuntime {
     signal?: AbortSignal,
   ): Promise<NativeRuntimeResult>;
   isAvailable(): Promise<boolean>;
-  /** Fork the resolved parent identity with independent request state and a capped timeout. */
-  forkForSubagent?(timeoutMs: number): Promise<NativeRuntime>;
+  /** Fork the parent account with independent request state; model overrides require operator consent. */
+  forkForSubagent?(timeoutMs: number, selection?: SubagentModelSelection): Promise<NativeRuntime>;
   /** Current model identifier; not a per-request billing identity or rate receipt. */
   resolvedModel?(): string;
 }

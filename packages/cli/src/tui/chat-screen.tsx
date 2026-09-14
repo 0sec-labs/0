@@ -7,6 +7,7 @@ import React, {
   useState,
 } from "react";
 import { createLocalConsoleSession } from "../console-session.js";
+import type { AuditActivity } from "./audit-workspace.js";
 import { HarnessPresentation, useHarness } from "./harness-context.js";
 import { loadFindingFocus, buildFindingChatPrompt } from "../finding-focus.js";
 import { exportChatConversation } from "./chat-export.js";
@@ -42,6 +43,8 @@ import {
   type TodosEventPayload,
   type SessionObjectivePayload,
   type ToolCall,
+  type ToolRisk,
+  describeDestructiveCategory,
   sendOperatorMessage,
   renderInboundMessage,
   type MessagingRuntime,
@@ -94,14 +97,15 @@ import {
   type FeedbackPayload,
 } from "./feedback.js";
 import {
+  base64ByteLength,
   formatToolArgs,
   formatToolResult,
+  projectToolPreview,
 } from "./tool-format.js";
 import {
-  listSessions,
+
   pruneSessions,
   saveSession,
-  type StoredSessionMeta,
 } from "./session-store.js";
 import type { SessionPluginHostManager } from "./session-plugin-host.js";
 import { reportOperatorGate } from "../herdr-state.js";
@@ -133,6 +137,7 @@ import {
   recallNext,
   recallPrev,
 } from "./composer-history.js";
+import { suggestCompletion } from "./composer-suggest.js";
 import {
   buildCapabilityPanel,
   buildHelpPanel,
@@ -154,7 +159,7 @@ import {
   composerQueueLabel,
   dequeueComposerInput,
   enqueueComposerInput,
-  shouldFlushQueuedInput,
+  queuedInputAction,
 } from "./composer-queue.js";
 import {
   LEDGER_MARK_ROWS,
@@ -182,6 +187,7 @@ import {
   HERD_FOCUS_EMPTY_TEXT,
   type HerdSubagentMap,
 } from "./herd-layout.js";
+import { clampScrollOffset, wheelOffsetStep } from "./mouse.js";
 import {
   computeLogoFrame,
   logoAnimationFrameCount,
@@ -224,6 +230,13 @@ import {
 } from "./transcript-style.js";
 import { useSelectionCopy, type SelectionCopyFn } from "./use-selection-copy.js";
 import { useToast, Toast } from "./toast.js";
+import { ContextMenu } from "./context-menu.js";
+import {
+  useContextMenu,
+  isRightClick,
+  type ContextMenuItem,
+} from "./use-context-menu.js";
+import { firstCodeBlock } from "./markdown.js";
 import {
   copyToClipboard,
   defaultSpawn,
@@ -231,6 +244,7 @@ import {
 } from "./clipboard.js";
 import type {
   ChatEntry,
+  ChatImageAttachment,
   EntryDisplay,
   KeyHint,
 } from "./chat/types.js";
@@ -255,7 +269,14 @@ import { TranscriptReview } from "./chat/TranscriptReview.js";
 import type { TranscriptReviewRenderable } from "./transcript-review-renderable.js";
 import { Todos, TodosSidebar } from "./chat/Todos.js";
 import { FindingsSidebar, FINDINGS_SIDEBAR_HEADER_ROWS } from "./chat/FindingsSidebar.js";
-import { ComposerFrame, ComposerInput } from "./chat/Composer.js";
+import { ComposerFrame, ComposerInput, composerContentRows } from "./chat/Composer.js";
+import { autonomyFooterText, isAutonomyCycleKey, nextAutonomyMode } from "./composer-mode.js";
+import { matchesBinding } from "./keybindings.js";
+import { resolveContextLimit } from "./context-window.js";
+import { buildHostedModelCatalog, type HostedCatalogModel } from "./model-catalog.js";
+import { CloudHintCard, shouldOfferCloudHint } from "./chat/CloudHintCard.js";
+import { textCells } from "./primitives.js";
+import { buildSidebarSectionHeader } from "./chat/todos-sidebar-layout.js";
 import {
   KeyHints,
   keyHintsLength,
@@ -280,12 +301,13 @@ import {
   AGENT_SIDEBAR_ROWS,
   AgentSidebarRow,
   AgentTreeRow,
-  shortAgentName,
   type AgentRowView,
 } from "./chat/AgentRow.js";
 import { agentAccentFor } from "./agent-color.js";
+import { summarizeAgentActivity, summarizeRoster } from "./agents-panel-model.js";
+import { appendTuiCrash, appendTuiEvent, serializeError, logProblem, describeErrorForSurface, tuiLogPath } from "./tui-crash.js";
 
-export type ChatDestination = "launcher" | "ops" | "history" | "findings" | "doctor" | "replay" | "settings" | "harness" | "new-chat" | "models" | "market" | "usage" | "connect" | "herd" | "finding" | "resume";
+export type ChatDestination = "launcher" | "ops" | "history" | "findings" | "doctor" | "replay" | "settings" | "keybindings" | "harness" | "new-chat" | "models" | "market" | "usage" | "connect" | "herd" | "comms" | "finding" | "resume" | "audits" | "onboard";
 
 /**
  * Map a status pill's semantic colour role onto the live palette. Kept theme-
@@ -302,7 +324,7 @@ export type ChatDestination = "launcher" | "ops" | "history" | "findings" | "doc
  * Typed structurally so this module needs no extra core-type import.
  */
 interface ToolCardMeta {
-  kind?: "command" | "edit" | "web";
+  kind?: "command" | "edit" | "web" | "task" | "code" | "image";
   command?: string;
   exitCode?: number | null;
   durationMs?: number;
@@ -317,6 +339,27 @@ interface ToolCardMeta {
   query?: string;
   answer?: string;
   sources?: Array<{ title?: string; url: string; age?: string }>;
+  // task card
+  taskLabel?: string;
+  taskContext?: string;
+  goal?: string;
+  constraints?: string;
+  contract?: string;
+  assignment?: string;
+  subReports?: Array<{ name: string; agent?: string; brief?: string; isolated?: boolean }>;
+  todos?: Array<{ id: string; content: string; status: "pending" | "in_progress" | "completed"; group?: string }>;
+  // code card
+  language?: "javascript" | "python";
+  code?: string;
+  output?: string;
+  // image card (browser screenshot)
+  image?: {
+    imageBase64: string;
+    mimeType: string;
+    width: number;
+    height: number;
+    caption?: string;
+  };
 }
 
 /**
@@ -325,7 +368,62 @@ interface ToolCardMeta {
  * object when there is no card to draw, so a spread leaves the entry untouched.
  */
 function toolCardFieldsFromMeta(meta: ToolCardMeta | undefined): Partial<ChatEntry> {
-  if (!meta || (meta.kind !== "command" && meta.kind !== "edit" && meta.kind !== "web")) return {};
+  if (
+    !meta ||
+    (meta.kind !== "command" &&
+      meta.kind !== "edit" &&
+      meta.kind !== "web" &&
+      meta.kind !== "task" &&
+      meta.kind !== "code" &&
+      meta.kind !== "image")
+  ) {
+    return {};
+  }
+  if (meta.kind === "code") {
+    return {
+      metaKind: "code",
+      codeLanguage: meta.language,
+      codeSource: meta.code,
+      codeOutput: meta.output,
+      exitCode: meta.exitCode ?? null,
+      wallMs: meta.durationMs,
+    };
+  }
+  if (meta.kind === "image") {
+    // Reuse the existing inline-image path: an ImageCard is drawn from
+    // `entry.images` (ChatImageAttachment = ToolPreviewImage + origin). The
+    // pixel size + media type come straight from the meta the tool decoded, so
+    // OpenTUI can draw the PNG where the terminal supports it and falls back to
+    // a captioned dimensions placeholder otherwise.
+    const img = meta.image;
+    if (!img) return { metaKind: "image" };
+    const byteSize = base64ByteLength(img.imageBase64);
+    const attachment: ChatImageAttachment = {
+      index: 1,
+      data: img.imageBase64,
+      mimeType: img.mimeType,
+      format: img.mimeType.split("/")[1],
+      pixelWidth: img.width > 0 ? img.width : undefined,
+      pixelHeight: img.height > 0 ? img.height : undefined,
+      byteSize,
+      alt: img.caption,
+      origin: "browser",
+    };
+    return { metaKind: "image", images: [attachment] };
+  }
+  if (meta.kind === "task") {
+    return {
+      metaKind: "task",
+      taskLabel: meta.taskLabel,
+      taskContext: meta.taskContext,
+      taskGoal: meta.goal,
+      taskConstraints: meta.constraints,
+      taskContract: meta.contract,
+      taskAssignment: meta.assignment,
+      subReports: meta.subReports,
+      taskTodos: meta.todos,
+    };
+  }
   if (meta.kind === "command") {
     return {
       metaKind: "command",
@@ -369,6 +467,43 @@ function restoredToolCardFields(
   success: boolean,
 ): Partial<ChatEntry> {
   const args = input && typeof input === "object" ? (input as Record<string, unknown>) : {};
+  if (name === "spawn_agents") {
+    // The live plan/TODO snapshot and per-agent names were carried on the
+    // (now-gone) meta; from the serialized args we can still recover the shared
+    // context and each task's brief so the launch card survives a restore.
+    const rawTasks = Array.isArray(args.tasks) ? (args.tasks as Array<Record<string, unknown>>) : [];
+    const subReports = rawTasks.map((entry, i) => {
+      const task = typeof entry?.task === "string" ? entry.task.trim() : "";
+      const brief = task ? task.split("\n")[0].slice(0, 64) : "";
+      const agent = typeof entry?.role === "string" ? entry.role : undefined;
+      return {
+        name: typeof entry?.name === "string" && entry.name.trim() ? entry.name.trim() : `#${i + 1}`,
+        ...(agent ? { agent } : {}),
+        ...(brief ? { brief } : {}),
+      };
+    });
+    if (subReports.length === 0) return {};
+    return {
+      metaKind: "task",
+      taskLabel: `${subReports.length} ${subReports.length === 1 ? "agent" : "agents"}`,
+      taskContext: typeof args.context === "string" && args.context.trim() ? args.context : undefined,
+      subReports,
+    };
+  }
+  if (name === "js_eval" || name === "python_eval") {
+    // The display-only meta (language / code / output / duration) is gone on a
+    // restore; recover the source from args and the output from the serialized
+    // result text so the code card still draws.
+    const code = typeof args.code === "string" ? args.code : undefined;
+    if (!code) return {};
+    return {
+      metaKind: "code",
+      codeLanguage: name === "python_eval" ? "python" : "javascript",
+      codeSource: code,
+      codeOutput: typeof content === "string" ? content : undefined,
+      exitCode: success ? 0 : 1,
+    };
+  }
   if (name === "bash" || name === "run_command") {
     const command = typeof args.command === "string" ? args.command.trim() : undefined;
     if (!command) return {};
@@ -439,7 +574,10 @@ function statusRoleColor(
       return theme.SUCCESS;
     case "context":
       return theme.ACCENT;
+    case "activity":
+      return theme.ACCENT;
     case "effort":
+    case "elapsed":
     case "plan":
     default:
       return theme.MUTED;
@@ -465,6 +603,9 @@ export interface ChatScreenOptions {
   model?: string;
   /** Explicit provider choice, applied only when constructing a new runtime. */
   providerId?: RuntimeConfig["provider"];
+  /** Operator-approved role/model choices for new runtimes, never agent-authored consent. */
+  agentModels?: Readonly<Record<string, string>>;
+  singleModel?: boolean;
   role?: "discovery" | "attack" | "verify" | "report" | "audit" | "review";
   maxToolIterations?: number;
   allowScanners?: boolean;
@@ -512,12 +653,10 @@ export interface ChatScreenProps {
   stagePromptHandle?: React.MutableRefObject<((text: string) => void) | null>;
   /** Save a future connection choice, or retry when no session was constructed. */
   reconnectHandle?: React.MutableRefObject<((providerId: string) => void) | null>;
-  /** Select a model for the next chat; a live runtime remains immutable. */
-  modelHandle?: React.MutableRefObject<{ model: string | undefined; select: (id: string) => void } | null>;
   /** Share the existing session host with contextual controls; never create another. */
   onSessionChange?: (session: ConsoleSession | null) => void;
   onWorkingChange?: (busy: boolean) => void;
-  onNextChatOptions?: (selection: Pick<ChatScreenOptions, "model" | "providerId">) => void;
+  onNextChatOptions?: (selection: Pick<ChatScreenOptions, "model" | "providerId" | "agentModels" | "singleModel">) => void;
   /**
    * The shell-level marketplace host manager. A session leases its initial
    * host until cleanup; changed enablement applies to the next explicit chat.
@@ -525,6 +664,17 @@ export interface ChatScreenProps {
   pluginHostManager?: SessionPluginHostManager;
   /** Compact status of the configured self-evolving finder-lens worker. */
   evolutionStatus?: string;
+  interactive: boolean;
+  messagingHomeDir: string;
+  protectedSessionIds: ReadonlySet<string>;
+  onAuditActivity: (activity: AuditActivity) => void;
+  closeHandle: React.MutableRefObject<(() => Promise<void>) | null>;
+  herdHandle: React.MutableRefObject<(() => Readonly<HerdSubagentMap>) | null>;
+  runtimeInfoHandle: React.MutableRefObject<{
+    model: () => string;
+    providerId: () => string;
+  } | null>;
+  renderAuditSwitcher?: (width: number, rows: number) => React.ReactNode;
 }
 
 
@@ -545,6 +695,8 @@ type PendingEscalation = {
 
 type PendingToolApproval = {
   call: ToolCall;
+  /** Presentation-only risk, from the core classifier at the approval boundary. */
+  risk?: ToolRisk;
   resolve: (approved: boolean) => void;
 };
 
@@ -609,7 +761,7 @@ export function entriesFromStoredMessages(messages: readonly unknown[]): ChatEnt
         let output: unknown = b.content;
         if (typeof output === "string") {
           const trimmed = output.trim();
-          if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+          if (trimmed.length <= 32_768 && (trimmed.startsWith("{") || trimmed.startsWith("["))) {
             try {
               output = JSON.parse(trimmed);
             } catch {
@@ -617,17 +769,17 @@ export function entriesFromStoredMessages(messages: readonly unknown[]): ChatEnt
             }
           }
         }
+        const restoredCall = { name, arguments: call?.input };
+        const restoredResult = { success, output, error: success ? null : String(b.content ?? "") };
         out.push({
           id: id(),
           kind: "tool",
           text: name,
-          detail: formatToolResult(
-            { name, arguments: call?.input },
-            { success, output, error: success ? null : String(b.content ?? "") },
-          ),
+          detail: formatToolResult(restoredCall, restoredResult),
+          toolPreview: projectToolPreview(restoredCall, restoredResult),
           // Carry the argument one-liner too (as a live turn does), so a
           // restored session's `save_finding` calls feed the findings sidebar.
-          toolArgs: formatToolArgs({ name, arguments: call?.input }),
+          toolArgs: formatToolArgs(restoredCall),
           success,
           turn: 0,
           // Rebuild the rich-card fields from the serialized transcript. The
@@ -705,6 +857,14 @@ export function runFindingsFromEntries(entries: readonly ChatEntry[]): RunFindin
  */
 const SUBAGENT_MAX_VISIBLE = 4;
 
+/**
+ * Below this content width the inline AGENTS panel auto-collapses to its
+ * one-line summary: a per-agent row needs room for a name, a status glyph and a
+ * live-activity tail, and under ~44 cells those fuse into noise. The operator
+ * can still drill in (Down) to browse the roster one selection at a time.
+ */
+const SUBAGENT_PANEL_MIN_WIDTH = 44;
+
 /** Window after a first Ctrl+C in which a second Ctrl+C confirms the quit. */
 const EXIT_CONFIRM_MS = 3000;
 
@@ -726,12 +886,20 @@ export function ChatScreen({
   submitHandle,
   stagePromptHandle,
   reconnectHandle,
-  modelHandle,
+
   onSessionChange,
   onWorkingChange,
   onNextChatOptions,
   pluginHostManager,
   evolutionStatus,
+  interactive,
+  messagingHomeDir,
+  protectedSessionIds,
+  onAuditActivity,
+  closeHandle,
+  herdHandle,
+  runtimeInfoHandle,
+  renderAuditSwitcher,
 }: ChatScreenProps) {
   const harness = useHarness();
   const connectionFailureRef = useRef(onConnectionFailure);
@@ -777,6 +945,9 @@ export function ChatScreen({
   const [session, setSession] = useState<ConsoleSession | null>(null);
   const cloudSource = useRef<{ owner: ConsoleSession; isHosted: () => boolean; env: NodeJS.ProcessEnv } | null>(null);
   const [cloudBalance, setCloudBalance] = useState<{ owner: ConsoleSession; state: HostedBalanceState } | null>(null);
+  const [hostedCatalog, setHostedCatalog] = useState<{ owner: ConsoleSession; models: readonly HostedCatalogModel[]; expiresAt: number } | null>(null);
+  const [cloudConfigured, setCloudConfigured] = useState<boolean>();
+  const [cloudHintDismissed, setCloudHintDismissed] = useState(false);
   const initialPromptRef = useRef(options?.initialPrompt?.trim() || null);
   const presentationEmitterRef = useRef<PresentationEmitter | null>(null);
   if (!presentationEmitterRef.current) {
@@ -877,6 +1048,39 @@ export function ChatScreen({
     which: defaultWhich,
     onCopied: ({ bytes }) => showToast(`Copied ${bytes} bytes`),
   });
+  // Right-click context menu over the transcript. Purely additive: it opens
+  // only on a right press (button 2) and only when mouse support is on, so the
+  // left-click / drag-to-select / keyboard paths are untouched.
+  const transcriptMenu = useContextMenu();
+  const copyMenuText = useCallback(
+    (text: string, label: string) => {
+      void copySelection(text, { spawn: defaultSpawn, which: defaultWhich }).then(
+        (result) => showToast(result.ok ? `Copied ${label}` : "Copy failed"),
+      );
+    },
+    [copySelection, showToast],
+  );
+  const buildMessageMenuItems = useCallback(
+    (entry: ChatEntry): ContextMenuItem[] => {
+      const text = entry.text ?? "";
+      const items: ContextMenuItem[] = [
+        {
+          label: "Copy message",
+          disabled: text.trim().length === 0,
+          onSelect: () => copyMenuText(text, "message"),
+        },
+      ];
+      const code = firstCodeBlock(text);
+      if (code) {
+        items.push({
+          label: "Copy code block",
+          onSelect: () => copyMenuText(code, "code block"),
+        });
+      }
+      return items;
+    },
+    [copyMenuText],
+  );
   /**
    * Per-turn transcript expansion. In collapsed mode each turn's successful
    * tool/reasoning steps fold to one ▸ line; clicking that line adds the turn
@@ -972,6 +1176,7 @@ export function ChatScreen({
   const target = session?.target ?? options?.target ?? "";
   const [scopeRules, setScopeRules] = useState<string[]>(options?.scope?.raw.in_scope ?? []);
   const [busy, setBusy] = useState(false);
+  const activeTurnStartedAt = useRef<number | null>(null);
   useEffect(() => {
     onSessionChange?.(session);
     return () => onSessionChange?.(null);
@@ -1068,26 +1273,62 @@ export function ChatScreen({
    * pure reducers herd-layout exposes. This is the single source for BOTH the
    * right rail and the inline focus view, so neither reimplements the plumbing.
    */
-  const [herdAgents, setHerdAgents] = useState<HerdSubagentMap>({});
+  const [herdAgents, setHerdAgentsState] = useState<HerdSubagentMap>({});
+  const [operatorStopped, setOperatorStopped] = useState<ReadonlySet<string>>(() => new Set());
+  const workerEpochsRef = useRef(new Map<string, number>());
+  const herdAgentsRef = useRef(herdAgents);
+  const setHerdAgents = useCallback((next: HerdSubagentMap) => {
+    herdAgentsRef.current = next;
+    setHerdAgentsState(next);
+  }, []);
+  const projectedHerdAgents = useMemo(() => {
+    let projected: HerdSubagentMap | undefined;
+    for (const id in herdAgents) {
+      const worker = herdAgents[id];
+      const done = workerOutcomes[id]?.done;
+      const stopped = operatorStopped.has(id);
+      if (worker.done === done && Boolean(worker.operatorStopped) === stopped) continue;
+      (projected ??= { ...herdAgents })[id] = { ...worker, done, operatorStopped: stopped };
+    }
+    return projected ?? herdAgents;
+  }, [herdAgents, operatorStopped, workerOutcomes]);
+  const projectedHerdRef = useRef(projectedHerdAgents);
+  projectedHerdRef.current = projectedHerdAgents;
+  herdHandle.current = useCallback(() => projectedHerdRef.current, []);
   const workerRoster = useMemo(() => Object.values(herdAgents).map((agent) => ({
     ...workerOutcomes[agent.agentId],
     agent_id: agent.agentId, parent_scan_id: agent.parentScanId,
     name: agent.name, task: agent.task, status: agent.status,
     max_turns: agent.maxTurns, turns: agent.turns ?? agent.turn,
   })), [herdAgents, workerOutcomes]);
-  /**
-   * Recent resumable sessions for the LEFT sidebar's "SESSIONS" block. Loaded
-   * from the on-disk session store (a directory read), refreshed whenever the
-   * live session changes — a new turn saves the transcript, so the listing
-   * should pick the current run up once it exists.
-   */
-  const [recentSessions, setRecentSessions] = useState<StoredSessionMeta[]>([]);
+  useEffect(() => {
+    let runningWorkers = 0;
+    let parkedWorkers = 0;
+    for (const worker of workerRoster) {
+      if (operatorStopped.has(worker.agent_id)) continue;
+      if (worker.status === "running" || worker.status === "queued") runningWorkers += 1;
+      else if (worker.status === "parked") parkedWorkers += 1;
+    }
+    onAuditActivity({
+      workers: runningWorkers + parkedWorkers,
+      waiting: Boolean(pendingScope || pendingLocalScope || pendingEscalation || pendingToolApproval || pendingOperatorQuestion)
+        || (!busy && runningWorkers === 0 && parkedWorkers > 0),
+    });
+  }, [busy, entries, workerRoster, operatorStopped, pendingScope, pendingLocalScope, pendingEscalation, pendingToolApproval, pendingOperatorQuestion, onAuditActivity]);
   /**
    * Active-subagent navigation from the composer. -1 means the composer has
    * focus; >= 0 selects a row in the ACTIVE SUBAGENTS block. Entered with Down
    * on an empty composer (only when agents are running), left with Left/Esc.
    */
   const [agentNavIndex, setAgentNavIndex] = useState(-1);
+  /**
+   * Collapse toggle for the inline AGENTS panel. The panel is EXPANDED by
+   * default (running agents are visible without arrowing in); the operator can
+   * collapse it to a single summary line via its corner control (mouse) or the
+   * existing keyboard path. Session-scoped state — the choice is remembered for
+   * the life of the screen but is not persisted to disk.
+   */
+  const [agentsPanelCollapsed, setAgentsPanelCollapsed] = useState(false);
   /**
    * The subagent the operator drilled INTO, or null in list/composer mode. When
    * set, the transcript region is replaced by the inline focus view (the same
@@ -1119,6 +1360,15 @@ export function ChatScreen({
   const [focusScrollOffset, setFocusScrollOffset] = useState(0);
   const { width, height } = useTerminalDimensions();
   const alive = useRef(true);
+  const closingRef = useRef(false);
+  const pendingCancellationsRef = useRef(new Set<() => void>());
+  const trackedRequest = useCallback(<T,>(denied: T) => {
+    const deferred = Promise.withResolvers<T>();
+    const cancel = () => deferred.resolve(denied);
+    pendingCancellationsRef.current.add(cancel);
+    void deferred.promise.then(() => pendingCancellationsRef.current.delete(cancel));
+    return deferred;
+  }, []);
   // Mirror the latest render values so the plugin-host effect can rebuild the
   // session in place without re-subscribing on every state change.
   const sessionRef = useRef(session);
@@ -1332,6 +1582,11 @@ export function ChatScreen({
     if (!alive.current || abortRef.current?.signal.aborted) return;
     if (error instanceof Error && error.name === "AbortError") return;
     if (typeof error === "string" && /^(?:aborted|cancelled|canceled)\b|(?:operator|user).*(?:declined|rejected)|(?:was )?(?:already )?(?:declined|rejected) by (?:the )?(?:operator|user)\b|previously declined/i.test(error)) return;
+    // Always capture the FULL error (stack included) to the always-on local log
+    // by default — no env flag — so a failure is learnable even when the
+    // surfaced line and the transmitted diagnostic are both bounded/coarse.
+    // Local only; nothing here crosses a network wire.
+    logProblem(kind, error, toolName);
     const payload = buildDiagnosticFeedback({
       kind, error, toolName, version: VERSION, platform: process.platform, arch: process.arch,
       runtime: process.versions.bun ? "bun" : "node",
@@ -1384,17 +1639,19 @@ export function ChatScreen({
       },
     });
   }, [problemReview, settings.diagnosticReporting, busy, picker, pendingScope, pendingLocalScope, pendingToolApproval, pendingOperatorQuestion, stageFeedback, chooseReporting, showToast]);
-
   /** Construct only at initial startup, explicit new chat, or failed-start recovery. */
   const buildSession = useCallback((
     opts: { model?: string; providerId?: RuntimeConfig["provider"]; initialMessages?: NativeMessage[] } = {},
   ): { session: ConsoleSession; model: string } => {
+    if (closingRef.current || stoppingAuditRef.current) throw new Error("This audit is stopping.");
     // Resolve credentials into this construction only. Explicit shell exports
     // win, and changing a connection never mutates a live runtime's environment.
     const env = credentialEnvPatch(loadCredentials(), process.env);
     const runtime = createConsoleRuntime({
       model: opts.model ?? options?.model,
       provider: opts.providerId ?? options?.providerId,
+      agentModels: options?.agentModels,
+      singleModel: options?.singleModel,
       env,
     });
     const resolvedModel = runtime.resolvedModel();
@@ -1436,10 +1693,11 @@ export function ChatScreen({
         siblingChannelEnabled: settingsRef.current.allowSubagentPeerMessaging,
         operatorChannelEnabled: settingsRef.current.allowSubagentOperatorMessaging,
         projectPath: process.cwd(),
+        homeDir: messagingHomeDir,
       },
       requestScope: (request) => {
-        const deferred = Promise.withResolvers<ConsoleScopeResolution | null>();
-        if (!alive.current) {
+        const deferred = trackedRequest<ConsoleScopeResolution | null>(null);
+        if (!alive.current || stoppingAuditRef.current) {
           deferred.resolve(null);
           return deferred.promise;
         }
@@ -1447,8 +1705,8 @@ export function ChatScreen({
         return deferred.promise;
       },
       requestLocalScope: (request) => {
-        const deferred = Promise.withResolvers<ConsoleLocalScopeResolution | null>();
-        if (!alive.current) {
+        const deferred = trackedRequest<ConsoleLocalScopeResolution | null>(null);
+        if (!alive.current || stoppingAuditRef.current) {
           deferred.resolve(null);
           return deferred.promise;
         }
@@ -1456,29 +1714,29 @@ export function ChatScreen({
         return deferred.promise;
       },
       escalateScopedAudit: (request) => {
-        const deferred = Promise.withResolvers<boolean>();
-        if (!alive.current) {
+        const deferred = trackedRequest<boolean>(false);
+        if (!alive.current || stoppingAuditRef.current) {
           deferred.resolve(false);
           return deferred.promise;
         }
         setPendingEscalation({ request, resolve: deferred.resolve });
         return deferred.promise;
       },
-      approveTool: (call) => {
-        const deferred = Promise.withResolvers<boolean>();
-        if (!alive.current) {
+      approveTool: (call, risk) => {
+        const deferred = trackedRequest<boolean>(false);
+        if (!alive.current || stoppingAuditRef.current) {
           deferred.resolve(false);
           return deferred.promise;
         }
-        setPendingToolApproval({ call, resolve: deferred.resolve });
+        setPendingToolApproval({ call, risk, resolve: deferred.resolve });
         return deferred.promise;
       },
       // The `ask_operator` question channel. Unlike the gates above it grants
       // nothing — it surfaces the model's structured question, waits for the
       // operator's answer, and resolves it (or null on Esc / a dead console).
       askOperator: (request) => {
-        const deferred = Promise.withResolvers<OperatorQuestionAnswer | null>();
-        if (!alive.current) {
+        const deferred = trackedRequest<OperatorQuestionAnswer | null>(null);
+        if (!alive.current || stoppingAuditRef.current) {
           deferred.resolve(null);
           return deferred.promise;
         }
@@ -1491,17 +1749,28 @@ export function ChatScreen({
       throw error;
     }
     const cleanup = created.cleanup;
-    created.cleanup = async () => {
-      try { await cleanup(); } finally { pluginLease?.release(); }
-    };
+    let cleanupPromise: Promise<void> | undefined;
+    created.cleanup = () => cleanupPromise ??= (async () => {
+      appendTuiEvent({ kind: "wrap-cleanup", stage: "enter", cached: Boolean(cleanupPromise) });
+      try { await cleanup(); appendTuiEvent({ kind: "wrap-cleanup", stage: "core-done" }); }
+      finally { pluginLease?.release(); appendTuiEvent({ kind: "wrap-cleanup", stage: "lease-released" }); }
+    })().catch((error: unknown) => {
+      cleanupPromise = undefined;
+      throw error;
+    });
     cloudSource.current = { owner: created, isHosted: () => runtime.getConfigurationDiagnostics().provider === "hosted", env };
+    runtimeInfoHandle.current = {
+      model: () => runtime.resolvedModel(),
+      providerId: () => runtime.getConfigurationDiagnostics().provider,
+    };
     // resolvedModel() is the id the runtime actually settled on after
     // provider detection — not necessarily what was requested — so it is
     // the only value honest enough to display.
     return { session: created, model: runtime.resolvedModel() };
-  }, [options, pluginHostManager]);
+  }, [options, pluginHostManager, messagingHomeDir, trackedRequest, runtimeInfoHandle]);
 
   useEffect(() => {
+    if (closingRef.current) return;
     let created: ConsoleSession | null = null;
     alive.current = true;
 
@@ -1515,6 +1784,7 @@ export function ChatScreen({
         resumeMessages && resumeMessages.length > 0 ? { initialMessages: resumeMessages } : {},
       );
       created = built.session;
+      sessionRef.current = created;
       setModelId(built.model);
       setSession(created);
       if (resumeMessages && resumeMessages.length > 0) {
@@ -1530,54 +1800,56 @@ export function ChatScreen({
 
     return () => {
       alive.current = false;
-      setPendingScope((pending) => {
-        pending?.resolve(null);
-        return null;
+      void closeHandle.current?.().catch((error: unknown) => {
+        appendTuiCrash({ source: "audit-cleanup", error: serializeError(error) });
       });
-      setPendingLocalScope((pending) => {
-        pending?.resolve(null);
-        return null;
-      });
-      setPendingEscalation((pending) => {
-        pending?.resolve(false);
-        return null;
-      });
-      setPendingToolApproval((pending) => {
-        pending?.resolve(false);
-        return null;
-      });
-      setPendingOperatorQuestion((pending) => {
-        pending?.resolve(null);
-        return null;
-      });
-      setActiveSubagents({});
-      void (sessionRef.current ?? created)?.cleanup();
     };
   }, []);
   useEffect(() => {
+    if (!interactive) return;
+    try {
+      const source = cloudSource.current;
+      const env = source && source.owner === session ? source.env : credentialEnvPatch(loadCredentials(), process.env);
+      loadCloudCredentials({ env, warn: () => {} });
+      setCloudConfigured(true);
+    } catch (error) {
+      setCloudConfigured(error instanceof Error && error.name === "CloudAuthMissingError" ? false : undefined);
+    }
+  }, [session, startupError, interactive]);
+
+  useEffect(() => {
+    if (!interactive) return;
     const source = cloudSource.current;
-    if (!session || source?.owner !== session || !source.isHosted()) {
+    if (!session || !source || source.owner !== session || !source.isHosted()) {
       setCloudBalance(null);
+      setHostedCatalog(null);
       return;
     }
     let active = true;
     let pending = false;
     const refresh = async () => {
       if (pending || !active) return;
+      setHostedCatalog(null);
       if (!source.isHosted()) { setCloudBalance(null); return; }
       pending = true;
       setCloudBalance({ owner: session, state: { status: "loading" } });
       try {
         const credentials = loadCloudCredentials({ env: source.env, warn: () => {} });
-        const account = await new CloudClient({ host: credentials.host, token: credentials.token }).getInferenceAccount();
+        const client = new CloudClient({ host: credentials.host, token: credentials.token });
+        const [account, catalog] = await Promise.all([
+          client.getInferenceAccount(),
+          settings.showContextMeter ? client.getInferenceModels().catch(() => null) : Promise.resolve(null),
+        ]);
         if (!active || cloudSource.current !== source) return;
         const current = loadCloudCredentials({ env: source.env, warn: () => {} });
         if (!source.isHosted()) { setCloudBalance(null); return; }
-        setCloudBalance({
-          owner: session,
-          state: current.host === credentials.host && current.token === credentials.token
-            ? hostedBalanceState(account) : { status: "unavailable" },
-        });
+        const sameCredentials = current.host === credentials.host && current.token === credentials.token;
+        setCloudBalance({ owner: session, state: sameCredentials ? hostedBalanceState(account) : { status: "unavailable" } });
+        if (sameCredentials && catalog) {
+          try {
+            setHostedCatalog({ owner: session, models: buildHostedModelCatalog(catalog.data), expiresAt: Date.now() + 60_000 });
+          } catch { /* Malformed catalog metadata cannot establish a context limit. */ }
+        }
       } catch {
         if (active && cloudSource.current === source) {
           setCloudBalance(source.isHosted() ? { owner: session, state: { status: "unavailable" } } : null);
@@ -1587,8 +1859,7 @@ export function ChatScreen({
     void refresh();
     const interval = setInterval(() => { void refresh(); }, 30_000);
     return () => { active = false; clearInterval(interval); };
-  }, [session, busy]);
-
+  }, [session, busy, interactive, settings.showContextMeter]);
   // Marketplace changes never replace this session's runtime or live harness.
   // Its leased host remains usable until cleanup; new chats acquire the new set.
   useEffect(() => {
@@ -1596,8 +1867,8 @@ export function ChatScreen({
     return pluginHostManager.onChanged(() => {
       appendEntry({
         kind: "notice",
-        text: "Marketplace updated for new chats",
-        detail: "Use /new-chat to load the changed plugins. This chat keeps its current tools and live harness.",
+        text: "Marketplace updated for new audits",
+        detail: "Use /new to load the changed plugins. This audit keeps its current tools and live harness.",
         turn: turn.current,
       });
     });
@@ -1617,8 +1888,8 @@ export function ChatScreen({
     if (sessionRef.current) {
       appendEntry({
         kind: "notice",
-        text: `${providerLabel} saved for new chats`,
-        detail: "Use /new-chat to use this connection. The current runtime, conversation and live harness are unchanged.",
+        text: `${providerLabel} saved for new audits`,
+        detail: "Use /new to use this connection. The current runtime, conversation and live harness are unchanged.",
         turn: turn.current,
       });
       return;
@@ -1654,8 +1925,8 @@ export function ChatScreen({
     if (sessionRef.current) {
       appendEntry({
         kind: "notice",
-        text: `New-chat model: ${requested}`,
-        detail: "Use /new-chat to start with this model. This chat keeps its runtime, accounting and live harness.",
+        text: `Next-audit model: ${requested}`,
+        detail: "Use /new to start with this model. This audit keeps its runtime, accounting and live harness.",
         turn: turn.current,
       });
       return;
@@ -1678,11 +1949,7 @@ export function ChatScreen({
     }
   }, [appendEntry, buildSession, options?.initialMessages, onNextChatOptions]);
 
-  useEffect(() => {
-    if (!modelHandle) return;
-    modelHandle.current = { model: modelId ?? undefined, select: selectModel };
-    return () => { modelHandle.current = null; };
-  }, [modelHandle, modelId, selectModel]);
+
 
 
   /**
@@ -1751,15 +2018,16 @@ export function ChatScreen({
   }, [pendingOperatorQuestion]);
 
   useEffect(() => {
-    if (!settings.showTimestamps) return;
+    if (!interactive || !settings.showTimestamps) return;
     const timer = setInterval(() => setClockTick(Date.now()), 15_000);
     return () => clearInterval(timer);
-  }, [settings.showTimestamps]);
+  }, [settings.showTimestamps, interactive]);
 
   // Refresh the git context behind the status bar. readGitStatus never
   // throws and is time-boxed, so a huge or broken repo degrades to
   // "not a repo" instead of stalling a frame.
   useEffect(() => {
+    if (!interactive) return;
     let cancelled = false;
     const refresh = () => {
       void readGitStatus(process.cwd()).then((next) => {
@@ -1772,7 +2040,7 @@ export function ChatScreen({
       cancelled = true;
       clearInterval(timer);
     };
-  }, []);
+  }, [interactive]);
 
   // Subscribe to subagent lifecycle + progress events from the core event bus.
   // Filter by this session's scanId. `activeSubagents` drives the compact
@@ -1783,11 +2051,46 @@ export function ChatScreen({
   useEffect(() => {
     if (!session) return;
     const scanId = session.scanId;
+    const ownedScanIds = new Set([scanId]);
+    const knownAgents = Object.values(herdAgentsRef.current);
+    let extended: boolean;
+    do {
+      extended = false;
+      for (const agent of knownAgents) {
+        if (ownedScanIds.has(agent.parentScanId) && !ownedScanIds.has(agent.agentId)) {
+          ownedScanIds.add(agent.agentId);
+          extended = true;
+        }
+      }
+    } while (extended);
     const unsub = eventBus.subscribe({
       emit: (type, payload) => {
+        if (!payload || typeof payload !== "object") return;
+        const eventData = payload as Record<string, unknown>;
+        const parentScanId = eventData["parent_scan_id"];
+        const producerScanId = eventData["scan_id"] ?? eventData["scanId"];
+        if (producerScanId !== undefined && (typeof producerScanId !== "string" || !ownedScanIds.has(producerScanId))) return;
+        if (typeof parentScanId === "string") {
+          if (!ownedScanIds.has(parentScanId)) return;
+        } else if (typeof producerScanId !== "string" || !ownedScanIds.has(producerScanId)) {
+          return;
+        }
         if (type === "subagent_lifecycle") {
           const event = payload as unknown as SubagentLifecyclePayload;
-          if (event.parent_scan_id !== scanId) return;
+          ownedScanIds.add(event.agent_id);
+          const previousStatus = herdAgentsRef.current[event.agent_id]?.status;
+          const startsLife = event.status === "queued"
+            ? previousStatus !== "queued"
+            : event.status === "running" && previousStatus !== "queued" && previousStatus !== "running" && previousStatus !== "parked";
+          if (startsLife) {
+            workerEpochsRef.current.set(event.agent_id, (workerEpochsRef.current.get(event.agent_id) ?? 0) + 1);
+            setOperatorStopped((previous) => {
+              if (!previous.has(event.agent_id)) return previous;
+              const next = new Set(previous);
+              next.delete(event.agent_id);
+              return next;
+            });
+          }
           setWorkerOutcomes((prev) => ({ ...prev, [event.agent_id]: event }));
           if (event.summary || event.error) {
             const answer = event.error || event.summary!;
@@ -1800,9 +2103,7 @@ export function ChatScreen({
           }
           if (event.name) agentNamesRef.current.set(event.agent_id, event.name);
           setActiveSubagents((prev) => reduceActiveSubagents(prev, event));
-          setHerdAgents((prev) =>
-            applySubagentLifecycle(prev, payload as Record<string, unknown>, Date.now()),
-          );
+          setHerdAgents(applySubagentLifecycle(herdAgentsRef.current, eventData, Date.now()));
         } else if (type === "peer_message") {
           // An inter-agent message crossed the hub — render it as an IRC line in
           // the transcript. Resolve both endpoints to the roster's display names
@@ -1812,7 +2113,7 @@ export function ChatScreen({
           const nameFor = (id: string): string =>
             id === "Main" || id === "all"
               ? id
-              : agentNamesRef.current.get(id) ?? shortAgentName(id);
+              : agentNamesRef.current.get(id) ?? "Unnamed worker";
           appendEntry({
             kind: "peer",
             text: p.body,
@@ -1822,13 +2123,9 @@ export function ChatScreen({
             turn: turn.current,
           });
         } else if (type === "subagent_progress") {
-          if ((payload as Record<string, unknown>)["parent_scan_id"] !== scanId) return;
-          setHerdAgents((prev) =>
-            applySubagentProgress(prev, payload as Record<string, unknown>, Date.now()),
-          );
+          setHerdAgents(applySubagentProgress(herdAgentsRef.current, eventData, Date.now()));
         } else if (type === "subagent_message") {
           const p = payload as unknown as SubagentMessagePayload;
-          if (p.parent_scan_id !== scanId) return;
           setWorkerTelemetry((prev) => ({ ...prev, [p.agent_id]: p }));
           // Use the main conversation's argument formatting and rich cards,
           // retaining the complete bounded public result rather than reducing
@@ -1849,13 +2146,8 @@ export function ChatScreen({
               id: `${p.agent_id}-t${p.turn}-x${i}`,
               kind: "tool",
               text: t.call.name,
-              detail: t.running
-                ? undefined
-                : t.result.success
-                  ? typeof t.result.output === "string"
-                    ? t.result.output
-                    : JSON.stringify(t.result.output)
-                  : t.result.error ?? "failed",
+              detail: t.running ? undefined : formatToolResult(t.call, t.result),
+              toolPreview: t.running ? undefined : projectToolPreview(t.call, t.result),
               toolArgs: formatToolArgs(t.call),
               success: t.running ? undefined : t.result.success,
               ...toolCardFieldsFromMeta(t.result.meta),
@@ -1873,35 +2165,19 @@ export function ChatScreen({
             });
           }
         } else if (type === "todos") {
-          // The plan is the main agent's, not a subagent's, so it carries no
-          // scanId to filter on; the latest snapshot simply replaces the tree.
-          setTodos(payload as unknown as TodosEventPayload);
+          // A worker's plan must not replace this audit's root plan.
+          if (producerScanId === scanId) setTodos(payload as unknown as TodosEventPayload);
         } else if (type === "session_objective") {
           const p = payload as unknown as SessionObjectivePayload;
           if (p.scanId !== scanId) return;
           setObjective(p.objective);
+          if (p.objective.trim()) onAuditActivity({ title: p.objective.trim() });
         }
       },
     });
     return unsub;
-  }, [session, recordProblem]);
+  }, [session, setHerdAgents, recordProblem]);
 
-  // The LEFT sidebar's recent-sessions list. A disk read, so it only runs while
-  // the sidebar is actually enabled, and re-runs when the live session changes —
-  // each turn saves the transcript, so the current run appears once it is
-  // stored. Sessions from THIS working directory sort first, then by recency.
-  useEffect(() => {
-    if (!settings.showLeftSidebar) {
-      setRecentSessions([]);
-      return;
-    }
-    const here = process.cwd();
-    const saved = listSessions(undefined, { limit: 50 });
-    saved.sort(
-      (a, b) => Number(b.cwd === here) - Number(a.cwd === here) || b.savedAt - a.savedAt,
-    );
-    setRecentSessions(saved);
-  }, [settings.showLeftSidebar, session]);
 
   // A focused agent that leaves the live map (never observed, or the session
   // reset) drops focus rather than staring at a stale record.
@@ -2109,7 +2385,7 @@ export function ChatScreen({
       const owner = pendingScope;
       return {
         owner,
-        title: "Authorize session scope",
+        title: "Authorize audit scope",
         context: `${owner.request.call.name} requests ${owner.request.requestedUrls.join(", ")}`,
         subject: owner.request.call.name,
         bodyLines: owner.request.requestedUrls.map((url) => `requests: ${url}`),
@@ -2118,9 +2394,9 @@ export function ChatScreen({
         items: [
           {
             id: APPROVAL_GRANT_ID,
-            label: "Approve for this session",
+            label: "Approve for this audit",
             meta: "adds the exact hosts",
-            detail: "Exact hosts apply only to this session. Existing deny rules still win.",
+            detail: "Exact hosts apply only to this audit. Existing deny rules still win.",
           },
           {
             id: APPROVAL_DENY_ID,
@@ -2174,7 +2450,7 @@ export function ChatScreen({
         items: [
           {
             id: APPROVAL_GRANT_ID,
-            label: "Enable for this session",
+            label: "Enable for this audit",
             meta: "lifts the audit restriction",
             detail: "Scope approval and the Co-pilot gate still apply to it.",
           },
@@ -2191,14 +2467,26 @@ export function ChatScreen({
     }
     if (pendingToolApproval) {
       const owner = pendingToolApproval;
+      // A positively-classified destructive call is dressed as DANGER: the ERROR
+      // tone, the card's danger glyph (severity), a static category line, and a
+      // deny-first selection (below). This never changes that the gate fires or
+      // what it authorizes — an unclassified/obfuscated call is simply calm.
+      const danger = owner.risk?.level === "destructive";
+      const dangerLabel = danger && owner.risk?.category
+        ? describeDestructiveCategory(owner.risk.category)
+        : undefined;
+      const bodyLines = dangerLabel
+        ? [`Destructive action: ${dangerLabel}`, ...argumentSummaryLines(owner.call.arguments)]
+        : argumentSummaryLines(owner.call.arguments);
       return {
         owner,
         title: `${modeLabel(modeRef.current)} approval`,
         context: `${owner.call.name} ${JSON.stringify(owner.call.arguments)}`,
         subject: owner.call.name,
-        bodyLines: argumentSummaryLines(owner.call.arguments),
-        borderColor: INFO,
-        titleColor: INFO,
+        bodyLines,
+        borderColor: danger ? ERROR : INFO,
+        titleColor: danger ? ERROR : INFO,
+        severity: danger ? "danger" : undefined,
         items: [
           {
             id: APPROVAL_GRANT_ID,
@@ -2241,8 +2529,14 @@ export function ChatScreen({
     ? (approvalCursor && approvalCursor.owner === approvalPrompt.owner
         ? approvalCursor.state
         // The grant is highlighted first, exactly as Enter used to approve
-        // directly — the semantics of the default answer are unchanged.
-        : createSelectorState(approvalPrompt.title, approvalPrompt.items, APPROVAL_GRANT_ID))
+        // directly — the semantics of the default answer are unchanged. The ONE
+        // exception is a DANGER prompt: it opens on the declining choice, so a
+        // reflexive Enter denies rather than runs a destructive call.
+        : createSelectorState(
+            approvalPrompt.title,
+            approvalPrompt.items,
+            approvalPrompt.severity === "danger" ? APPROVAL_DENY_ID : APPROVAL_GRANT_ID,
+          ))
     : null;
   const stepApproval = useCallback((action: "up" | "down") => {
     setApprovalCursor((current) => {
@@ -2265,21 +2559,113 @@ export function ChatScreen({
   const streamingRef = useRef(false);
   /** Name of the tool currently executing, for the tool animation. */
   const [runningTool, setRunningTool] = useState<string | null>(null);
+  useEffect(() => {
+    onAuditActivity({ activity: runningTool ? `Running ${runningTool}` : busy ? "Working on audit" : "" });
+  }, [runningTool, busy, onAuditActivity]);
   /**
    * Interrupt handle for the turn in flight, or null when none is running.
    * Held in a ref because the keyboard handler must reach the CURRENT turn's
    * controller, not the one captured when the handler was built.
    */
   const abortRef = useRef<AbortController | null>(null);
+  const turnSettledRef = useRef<Promise<void> | null>(null);
+  const stopAuditPromiseRef = useRef<Promise<void> | null>(null);
+  const closePromiseRef = useRef<Promise<void> | null>(null);
+  const stoppingAuditRef = useRef(false);
 
   // Cancellation is checkpoint-based. Keep its feedback out of the transcript.
   const interruptTurn = useCallback(() => {
     const controller = abortRef.current;
     if (!controller || controller.signal.aborted) return false;
     controller.abort();
-    showToast("Stopping…");
+    showToast("Interrupting main turn…");
     return true;
   }, [showToast]);
+  const captureStopScope = useCallback((workerId?: string): Map<string, number> => {
+    const rootId = workerId ?? sessionRef.current?.scanId;
+    const captured = new Map<string, number>();
+    if (!rootId) return captured;
+    const family = new Set([rootId]);
+    const records = Object.values(herdAgentsRef.current);
+    let extended: boolean;
+    do {
+      extended = false;
+      for (const record of records) {
+        if (family.has(record.parentScanId) && !family.has(record.agentId)) {
+          family.add(record.agentId);
+          extended = true;
+        }
+      }
+    } while (extended);
+    for (const record of records) {
+      if (family.has(record.agentId) && (record.status === "queued" || record.status === "running" || record.status === "parked")) {
+        captured.set(record.agentId, workerEpochsRef.current.get(record.agentId) ?? 0);
+      }
+    }
+    return captured;
+  }, []);
+
+  const confirmStopped = useCallback((captured: ReadonlyMap<string, number>) => {
+    setOperatorStopped((previous) => {
+      let next: Set<string> | undefined;
+      for (const [id, epoch] of captured) {
+        if ((workerEpochsRef.current.get(id) ?? 0) !== epoch || previous.has(id)) continue;
+        (next ??= new Set(previous)).add(id);
+      }
+      return next ?? previous;
+    });
+  }, []);
+
+  const stopAudit = useCallback((): Promise<void> => {
+    if (stopAuditPromiseRef.current) return stopAuditPromiseRef.current;
+    const ownedSession = sessionRef.current;
+    const captured = captureStopScope();
+    const activeTurn = turnSettledRef.current;
+    stoppingAuditRef.current = true;
+    onAuditActivity({ stopping: true });
+    queuedRef.current = [];
+    setQueuedMessages([]);
+    abortRef.current?.abort();
+    for (const cancel of pendingCancellationsRef.current) cancel();
+    pendingCancellationsRef.current.clear();
+    setPendingScope(null);
+    setPendingLocalScope(null);
+    setPendingEscalation(null);
+    setPendingToolApproval(null);
+    setPendingOperatorQuestion(null);
+    const stopping = Promise.resolve().then(async () => {
+      const t0 = Date.now();
+      appendTuiEvent({ kind: "stop-audit", stage: "await-turn" });
+      await activeTurn;
+      appendTuiEvent({ kind: "stop-audit", stage: "turn-settled", ms: Date.now() - t0 });
+      await ownedSession?.stopPersistentAgents();
+      appendTuiEvent({ kind: "stop-audit", stage: "agents-stopped", ms: Date.now() - t0 });
+      confirmStopped(captured);
+      onAuditActivity({ outcome: "stopped", workers: 0, waiting: false });
+    }).finally(() => {
+      stoppingAuditRef.current = false;
+      stopAuditPromiseRef.current = null;
+      onAuditActivity({ stopping: false });
+    });
+    stopAuditPromiseRef.current = stopping;
+    return stopping;
+  }, [captureStopScope, confirmStopped, onAuditActivity]);
+
+  closeHandle.current = () => closePromiseRef.current ??= (async () => {
+    closingRef.current = true;
+    alive.current = false;
+    const t0 = Date.now();
+    appendTuiEvent({ kind: "close-handle", stage: "stop-audit" });
+    await stopAudit();
+    appendTuiEvent({ kind: "close-handle", stage: "audit-stopped", ms: Date.now() - t0, hasSession: Boolean(sessionRef.current) });
+    if (sessionRef.current) await sessionRef.current.cleanup();
+    else await options?.mcpHost?.closeAll();
+    appendTuiEvent({ kind: "close-handle", stage: "cleaned-up", ms: Date.now() - t0 });
+  })().catch((error: unknown) => {
+    // Failed cleanup keeps the audit visible for the existing explicit retry.
+    closePromiseRef.current = null;
+    throw error;
+  });
 
   const routeSlashCommand = useCallback((raw: string): boolean => {
     const parsed = findCommand(raw);
@@ -2329,7 +2715,7 @@ export function ChatScreen({
           outputTokens: sessionTokens.output,
         });
         if (lastContext !== undefined) {
-          panel.rows.push({ label: "context", value: `${lastContext} tokens` });
+          panel.rows.push({ label: "last model input", value: `${lastContext} tokens` });
         }
         if (turnBudget) {
           panel.rows.push({
@@ -2354,15 +2740,8 @@ export function ChatScreen({
         });
         return true;
       case "new-chat":
-        if (busy) {
-          appendEntry({ kind: "notice", text: "Finish or cancel the active turn before starting a new chat.", turn: turn.current });
-        } else {
-          onNavigate("new-chat");
-        }
+        onNavigate("new-chat");
         return true;
-      // `/clear` (and its `/new` alias) was in the registry and in the
-      // palette but had no handler, so it fell through to `default:` and
-      // answered "unknown command: /clear".
       case "clear": {
         if (busy) {
           appendEntry({
@@ -2403,14 +2782,6 @@ export function ChatScreen({
         return true;
       }
       case "resume": {
-        if (busy) {
-          appendEntry({ kind: "notice", text: "wait for the active turn before resuming", turn: turn.current });
-          return true;
-        }
-        // The full-screen resume BROWSER (run.tsx ResumeRoute) owns listing with
-        // per-chat summaries, search and delete; picking one reopens the chat
-        // around that stored transcript (via openChat's initialMessages →
-        // mount-restore above). Replaces the old cramped overlay picker.
         onNavigate("resume");
         return true;
       }
@@ -2648,6 +3019,50 @@ export function ChatScreen({
         // list squeezed above the composer.
         onNavigate("settings");
         return true;
+      case "keybindings":
+        // run.tsx routes the "keybindings" destination to the rebinding editor;
+        // chat just needs the nav entry (mirrors "/settings").
+        onNavigate("keybindings");
+        return true;
+      case "audits":
+      case "onboard":
+        onNavigate(parsed.command);
+        return true;
+      case "stop": {
+        if (args === "audit") {
+          void stopAudit().catch((error: unknown) => {
+            appendEntry({ kind: "error", text: "Audit stop failed", detail: error instanceof Error ? error.message : String(error), turn: turn.current });
+          });
+          return true;
+        }
+        if (args !== "worker" && !args.startsWith("worker ")) {
+          appendEntry({ kind: "notice", text: "Use /stop audit or /stop worker <exact name or id>.", turn: turn.current });
+          return true;
+        }
+        const requested = args.startsWith("worker ") ? args.slice(7).trim() : "";
+        const id = requested || focusAgentId;
+        const matches = id
+          ? Object.values(herdAgentsRef.current).filter((record) => record.agentId === id || record.name === id)
+          : [];
+        if (matches.length !== 1 || !sessionRef.current) {
+          appendEntry({ kind: "notice", text: "Use /stop audit or /stop worker <exact name or id>.", detail: matches.length > 1 ? "That name is ambiguous; use the worker id from its details." : "No unique owned worker selected.", turn: turn.current });
+          return true;
+        }
+        const worker = matches[0]!;
+        const captured = captureStopScope(worker.agentId);
+        const ownedSession = sessionRef.current;
+        void ownedSession.stopPersistentAgent(worker.agentId).then((stopped) => {
+          if (stopped) {
+            confirmStopped(captured);
+            showToast(`Stopped ${worker.name || "worker"} and its descendants.`);
+          } else {
+            showToast("That worker is no longer live; no stop was confirmed.");
+          }
+        }).catch((error: unknown) => {
+          appendEntry({ kind: "error", text: "Worker stop failed", detail: error instanceof Error ? error.message : String(error), turn: turn.current });
+        });
+        return true;
+      }
       case "theme": {
         const current = settingsRef.current.theme;
         const arg = args.trim().toLowerCase();
@@ -2775,6 +3190,7 @@ export function ChatScreen({
               ? "copilot"
               : "yolo";
         session.setAutonomyMode(next);
+        modeRef.current = next;
         setMode(next);
         // A mode switch is transient STATE, not conversation. The operator
         // cycles modes constantly with Shift+Tab, and the current mode is
@@ -2815,12 +3231,19 @@ export function ChatScreen({
       case "herd":
         onNavigate("herd");
         return true;
+      case "comms":
+        // run.tsx routes the "comms" destination to the Agents Comms view (the
+        // live fleet + inter-agent message stream); chat just needs the nav
+        // entry (mirrors "/herd"/"/ops").
+        onNavigate("comms");
+        return true;
       case "ops":
         onNavigate("ops");
         return true;
-      case "market":
-        // run.tsx already routes the "market" destination to the marketplace
-        // screen; chat just needs the nav entry (mirrors "/ops"/"/settings").
+      case "hackstore":
+        // run.tsx routes the "market" destination to the Hackstore screen
+        // (kept as the internal route id); chat just needs the nav entry
+        // (mirrors "/ops"/"/settings").
         onNavigate("market");
         return true;
       case "usage":
@@ -2872,6 +3295,10 @@ export function ChatScreen({
     activeSubagents,
     appendEntry,
     busy,
+    captureStopScope,
+    confirmStopped,
+    focusAgentId,
+    stopAudit,
     commandCatalog,
     discardStreamPatches,
     lastContext,
@@ -2905,10 +3332,11 @@ export function ChatScreen({
     const text = raw.trim();
     if (!text) return;
     if (routeSlashCommand(text)) return;
-    if (busy || !session) return;
+    if (busy || abortRef.current || stoppingAuditRef.current || !alive.current || !session) return;
 
     const currentTurn = ++turn.current;
     const turnStartedAt = Date.now();
+    activeTurnStartedAt.current = turnStartedAt;
     setBusy(true);
     appendEntry({ kind: "user", text, turn: currentTurn });
     let assistantText = "";
@@ -2924,6 +3352,9 @@ export function ChatScreen({
     // in `finally`, so an Esc after the turn ended aborts nothing.
     const controller = new AbortController();
     abortRef.current = controller;
+    const settled = Promise.withResolvers<void>();
+    turnSettledRef.current = settled.promise;
+    onAuditActivity({ title: objectiveRef.current || (entriesRef.current.find((entry) => entry.kind === "user")?.text || text).split("\n", 1)[0].slice(0, 100) });
 
     try {
       const outcome = await session.send(text, {
@@ -2983,7 +3414,12 @@ export function ChatScreen({
                   e.text === call.name
                 ) {
                   const next = [...current];
-                  next[i] = { ...settled, id: e.id, at: e.at };
+                  // Give every settled tool an honest measured wall span so the
+                  // duration can ride the top of its card (command cards keep
+                  // their precise meta.durationMs via `settled`; every other tool
+                  // gets Date.now() - start). The append-fallback below has no
+                  // start stamp and legitimately stays duration-less.
+                  next[i] = { ...settled, id: e.id, at: e.at, wallMs: settled.wallMs ?? (e.at != null ? Date.now() - e.at : undefined) };
                   return next;
                 }
               }
@@ -3012,34 +3448,41 @@ export function ChatScreen({
             }
             // malformed output — fall through to generic tool card
           }
-          // A counted summary ("4 matches in 3 files") beats a truncated JSON
-          // blob: the operator needs to know what happened, and the raw
-          // payload is already in the model's context, not theirs.
-          //
-          // A rich card's display-only `result.meta` sidecar (never seen by the
-          // model) rides onto the entry so TranscriptEntry can draw a bordered
-          // command / edit card. Absent meta, the entry renders as before.
+          // Preserve rich metadata and a bounded projection of the actual output.
           settleRunningTool({
             kind: "tool",
             text: call.name,
             detail: formatToolResult(call, result),
             toolArgs: formatToolArgs(call),
+            toolPreview: projectToolPreview(call, result),
             success: result.success,
             turn: currentTurn,
             ...toolCardFieldsFromMeta(result.meta),
           });
         },
         onUsage: (usage) => {
-          // Fires once per model call, so the operator watches the budget
-          // being consumed instead of discovering it at the stop.
-          setTurnBudget({ used: usage.turnTokensUsed, limit: usage.turnTokenBudget });
-          setLastContext(usage.inputTokens > 0 ? usage.inputTokens : undefined);
+          // Only explicit finite caps belong in the budget meter. Cumulative
+          // usage remains accounted separately from current context occupancy.
+          setTurnBudget(Number.isFinite(usage.turnTokenBudget)
+            ? { used: usage.turnTokensUsed, limit: usage.turnTokenBudget }
+            : null);
+          if (usage.kind === "planner") {
+            setLastContext(Number.isFinite(usage.inputTokens) && usage.inputTokens > 0 ? usage.inputTokens : undefined);
+          }
         },
         onNotice: (notice) => {
           setScopeRules(session.scope?.raw.in_scope ?? []);
           appendEntry({ kind: "notice", text: notice, turn: currentTurn });
         },
+
       }, { signal: controller.signal });
+      onAuditActivity({
+        outcome: outcome.stopReason === "cancelled" ? "stopped"
+          : outcome.stopReason === "error" ? "failed"
+          : outcome.stopReason === "max_turn_tokens" || outcome.stopReason === "max_tool_iterations" ? "waiting"
+          : !assistantText && !outcome.assistantText && outcome.toolCalls.length === 0 ? "failed"
+          : "completed",
+      });
 
       if (!assistantText && outcome.assistantText) {
         appendEntry({ kind: "assistant", text: outcome.assistantText, turn: currentTurn });
@@ -3048,6 +3491,15 @@ export function ChatScreen({
         input: prev.input + outcome.usage.inputTokens,
         output: prev.output + outcome.usage.outputTokens,
       }));
+      // Context occupancy = the tokens the last model call actually sent (the
+      // whole conversation resent). Some backends (e.g. the ChatGPT/Codex wire)
+      // report usage only on the RETURN value, not through the streaming
+      // `onUsage(kind:"planner")` callback above — so without this the meter
+      // stayed at 0% for a full conversation. Fall back to the turn's final
+      // input count whenever it is a real, positive measurement.
+      if (Number.isFinite(outcome.usage.inputTokens) && outcome.usage.inputTokens > 0) {
+        setLastContext(outcome.usage.inputTokens);
+      }
       turnUsage = { inputTokens: outcome.usage.inputTokens, outputTokens: outcome.usage.outputTokens };
 
       // A turn that fails must say so. The engine reports failure through
@@ -3056,7 +3508,10 @@ export function ChatScreen({
       // which reads as the agent having simply ignored the operator.
       const producedText = Boolean(assistantText || outcome.assistantText);
       if (outcome.stopReason === "error") {
-        const detail = outcome.error ?? "The runtime reported an error but gave no message.";
+        const trimmed = outcome.error?.trim();
+        const detail = trimmed
+          ? trimmed
+          : `The runtime reported an error but gave no message — see ${tuiLogPath()}.`;
         recordProblem("runtime", outcome.error);
         appendEntry({
           kind: "error",
@@ -3082,7 +3537,7 @@ export function ChatScreen({
           kind: "error",
           text: `paused at the tool-call backstop (${outcome.budget.iterations} of ${outcome.budget.maxToolIterations})`,
           detail: outcome.error
-            ?? "This guard only trips when calls report no token cost. Send another message to continue from here.",
+            ?? "The tool-round backstop was reached. History is preserved; review the progress before continuing.",
           turn: currentTurn,
         });
       } else if (outcome.stopReason !== "cancelled" && !producedText && outcome.toolCalls.length === 0) {
@@ -3105,8 +3560,12 @@ export function ChatScreen({
         });
       }
     } catch (error) {
+      onAuditActivity({ outcome: controller.signal.aborted ? "stopped" : "failed" });
       recordProblem("runtime", error);
-      const detail = error instanceof Error ? error.message : String(error);
+      // Never surface a bare "unknown"/empty: an Error with no message falls
+      // back to its name + first stack frame and a pointer to the always-on log
+      // (where recordProblem just wrote the full stack).
+      const detail = describeErrorForSurface(error);
       appendEntry({
         kind: "error",
         text: "turn failed",
@@ -3117,10 +3576,12 @@ export function ChatScreen({
       if (recovery) onConnectionFailure?.(recovery);
       setTurnBudget(null);
     } finally {
+      try {
       // Drop the controller before clearing `busy`, so Esc can never abort a
       // turn that has already returned.
       if (abortRef.current === controller) abortRef.current = null;
       flushStreamPatches();
+      activeTurnStartedAt.current = null;
       setBusy(false);
       // The turn is over: stop the tool spinner and SETTLE any tool/subagent
       // rows still in flight when it ended (interrupt, error, or a budget stop).
@@ -3194,7 +3655,11 @@ export function ChatScreen({
           summary: objectiveRef.current || undefined,
           messages: session.messages as unknown[],
         });
-        pruneSessions();
+        pruneSessions(undefined, { protectedIds: protectedSessionIds });
+      }
+      } finally {
+      settled.resolve();
+      if (turnSettledRef.current === settled.promise) turnSettledRef.current = null;
       }
     }
   }, [
@@ -3203,6 +3668,8 @@ export function ChatScreen({
     flushStreamPatches,
     queueStreamPatch,
     onConnectionFailure,
+    onAuditActivity,
+    protectedSessionIds,
     recordProblem,
     routeSlashCommand,
     session,
@@ -3227,7 +3694,7 @@ export function ChatScreen({
         siblingChannelEnabled: false,
         operatorChannelEnabled: true,
         projectPath: process.cwd(),
-        homeDir: homedir(),
+        homeDir: messagingHomeDir,
         knownPeerIds: Object.keys(activeSubagents),
       };
       const result = sendOperatorMessage(runtime, agentId, body.trim(), Date.now());
@@ -3239,14 +3706,14 @@ export function ChatScreen({
           kind: "peer",
           text: body.trim(),
           peerFrom: "Main",
-          peerTo: agentNamesRef.current.get(agentId) ?? shortAgentName(agentId),
+          peerTo: agentNamesRef.current.get(agentId) ?? "Unnamed worker",
           at: Date.now(),
           turn: turn.current,
         });
       }
       return { ok: result.ok, reason: result.reason };
     },
-    [settingsRef, activeSubagents, appendEntry],
+    [settingsRef, activeSubagents, appendEntry, messagingHomeDir],
   );
 
   // The programmatic operator-submit path, exposed to the coordinator via
@@ -3262,19 +3729,16 @@ export function ChatScreen({
     const disposition = classifyComposerInput({
       input,
       isSlash: findCommand(input).isSlash,
-      busy,
+      busy: busy || abortRef.current !== null,
       hasSession: Boolean(session),
     });
     if (disposition === "queue") {
       const { queue, accepted } = enqueueComposerInput(queuedRef.current, input);
       queuedRef.current = queue;
       setQueuedMessages(queue);
-      // Enter during a running turn INTERRUPTS it, so the just-submitted message
-      // sends right away: interruptTurn() aborts the turn, the console goes idle,
-      // and the idle-drain effect delivers this queued message immediately.
-      // interruptTurn() returns false when there is nothing abortable, in which
-      // case it stays a plain queue.
-      const interrupting = accepted && interruptTurn();
+      // Steer interrupts only the main turn. Detached workers own their lifetime.
+      // Queue mode waits unless the user explicitly presses empty Enter.
+      const interrupting = accepted && settings.busyInputMode === "steer" && interruptTurn();
       if (!interrupting) {
         appendEntry({
           kind: accepted ? "notice" : "error",
@@ -3288,7 +3752,7 @@ export function ChatScreen({
     } else if (disposition === "send") {
       void send(input);
     }
-  }, [appendEntry, busy, send, session, interruptTurn]);
+  }, [appendEntry, busy, send, session, interruptTurn, settings.busyInputMode]);
 
   useEffect(() => {
     if (!submitHandle) return;
@@ -3311,7 +3775,7 @@ export function ChatScreen({
   // itself, and it means a queued message never races the turn it was typed
   // during.
   useEffect(() => {
-    if (busy || !session) return;
+    if (busy || abortRef.current || stoppingAuditRef.current || !alive.current || !session) return;
     const { next, rest } = dequeueComposerInput(queuedRef.current);
     if (next === undefined) return;
     queuedRef.current = rest;
@@ -3322,6 +3786,7 @@ export function ChatScreen({
   // usePaste shares AppContext.keyHandler with useKeyboard, so an overlay
   // owns the paste exclusively while the persistent chat remains mounted.
   usePaste((event) => {
+    if (!interactive || stoppingAuditRef.current) return;
     const text = sanitizeComposerText(decodePasteBytes(event.bytes).replace(/\r\n?/g, "\n"));
     if (!text) return;
     if (secretPrompt) {
@@ -3339,6 +3804,11 @@ export function ChatScreen({
   });
 
   useKeyboard((key) => {
+    if (!interactive || stoppingAuditRef.current) return;
+    // While the right-click context menu is open it owns the keyboard (its own
+    // handler moves the highlight / activates / closes); bail so the transcript
+    // beneath does not also act on Up/Down/Enter/Esc.
+    if (transcriptMenu.state.open) return;
     // The `ask_operator` modal takes precedence exactly like an approval prompt,
     // but it AUTHORIZES NOTHING — Esc resolves a `null` answer (the tool renders
     // that as "dismissed, nothing authorized"), Enter resolves the collected
@@ -3496,8 +3966,18 @@ export function ChatScreen({
       requestExitRef.current();
       return;
     }
+    // The rebindable set resolves its chord through `matchesBinding` against the
+    // operator's persisted overrides rather than a hard-coded `key.name` literal,
+    // so `/keybindings` remaps actually take effect. `matchesBinding` falls back
+    // to the registry default when there is no override. The protected set
+    // (arrows, Enter, Esc, Ctrl+C, the modal scroll verbs, the review extremes
+    // and Right→accept-suggestion) keeps its literal guards on purpose.
+    const keybindingOverrides = settingsRef.current.keybindings;
     if (reviewOpen) {
-      if (key.name === "escape" || (key.ctrl && key.name === "o")) {
+      // review-toggle is rebindable, so its close chord is resolved too (Esc
+      // always closes as well). The overlay's own scroll verbs stay literal —
+      // they are the protected modal Page/Ctrl+Home/End set.
+      if (key.name === "escape" || matchesBinding(key, "overlay.review-toggle", keybindingOverrides)) {
         setReviewOpen(false);
         return;
       }
@@ -3522,7 +4002,7 @@ export function ChatScreen({
       }
       return;
     }
-    if (key.ctrl && key.name === "o") {
+    if (matchesBinding(key, "overlay.review-toggle", keybindingOverrides)) {
       setReviewOpen(true);
       return;
     }
@@ -3607,37 +4087,57 @@ export function ChatScreen({
     // recall composer history. The box is non-focusable, so it never grabs the
     // arrows itself; we drive it explicitly here. Sticky-bottom auto-scroll
     // keeps the newest evidence in view the rest of the time.
-    if (key.name === "pageup" || (key.ctrl && key.name === "up")) {
+    // Main-transcript scrolling is rebindable (nav.scroll-up / nav.scroll-down).
+    // The default answers PageUp/Ctrl+Up and PageDown/Ctrl+Down; an override
+    // replaces those with the operator's chord. The MODAL scroll handlers inside
+    // the review overlay and the focus view above keep their literal Page/Ctrl
+    // guards — those scroll a different surface and are protected.
+    if (matchesBinding(key, "nav.scroll-up", keybindingOverrides)) {
       transcriptRef.current?.scrollBy(-0.5, "viewport");
       return;
     }
-    if (key.name === "pagedown" || (key.ctrl && key.name === "down")) {
+    if (matchesBinding(key, "nav.scroll-down", keybindingOverrides)) {
       transcriptRef.current?.scrollBy(0.5, "viewport");
       return;
     }
-    // Ctrl+R flips the whole transcript between collapsed and expanded detail —
-    // the global disclosure toggle for the folded tool/reasoning summaries. It
-    // persists via the settings store (same layer `/settings` would write), so
-    // the choice survives the session; the store notifies subscribers, so the
-    // transcript repaints immediately with no remount.
-    if (key.ctrl && key.name === "r") {
+    // The rebindable global chords, resolved through `matchesBinding` (see the
+    // const above) so `/keybindings` remaps take effect. They are handled above
+    // the composing block so a chord never reaches the composer's text catch-all
+    // (which only appends non-ctrl sequences anyway).
+    //
+    // transcript-detail flips the whole transcript between collapsed and
+    // expanded detail; both sidebars toggle their pane. All three persist via
+    // the settings store (the same layer `/settings` writes), so the choice
+    // survives the session and the store's subscribers repaint immediately.
+    if (matchesBinding(key, "view.transcript-detail", keybindingOverrides)) {
       updateSetting(
         "transcriptDetail",
         settingsRef.current.transcriptDetail === "collapsed" ? "expanded" : "collapsed",
       );
       return;
     }
-    // Ctrl+B / Ctrl+L collapse the LEFT / RIGHT chat sidebars. Both persist via
-    // the settings store (the same layer `/settings` writes), so the choice
-    // survives the session and the store's subscribers repaint immediately.
-    // Handled above the composing block so the chord never reaches the
-    // composer's text catch-all (which only appends non-ctrl sequences anyway).
-    if (key.ctrl && key.name === "b") {
+    if (matchesBinding(key, "view.left-sidebar", keybindingOverrides)) {
       updateSetting("showLeftSidebar", !settingsRef.current.showLeftSidebar);
       return;
     }
-    if (key.ctrl && key.name === "l") {
+    if (matchesBinding(key, "view.right-sidebar", keybindingOverrides)) {
       updateSetting("showRightSidebar", !settingsRef.current.showRightSidebar);
+      return;
+    }
+    // nav.jump-agents (Ctrl+G) drops straight into the active-subagents list —
+    // the same affordance Down offers on an empty composer, reachable directly
+    // and while composing. Only acts when there are workers to jump to;
+    // otherwise it falls through so the chord is a harmless no-op.
+    if (matchesBinding(key, "nav.jump-agents", keybindingOverrides)) {
+      const navList = settings.showSubagents ? workerRoster : [];
+      if (navList.length > 0) {
+        setAgentNavIndex(0);
+        return;
+      }
+    }
+    // nav.open-comms (Ctrl+T) opens the agent comms view via the shell nav.
+    if (matchesBinding(key, "nav.open-comms", keybindingOverrides)) {
+      onNavigate("comms");
       return;
     }
     // Ctrl+Y pulls the most recently queued message back into the composer for
@@ -3645,7 +4145,7 @@ export function ChatScreen({
     // (Esc) or re-sending it (Enter, re-queued at the back while still busy) is
     // then just normal composer editing. Newest-first so a hurried operator can
     // fix the last thing they typed without disturbing earlier parked lines.
-    if (key.ctrl && key.name === "y" && queuedRef.current.length > 0) {
+    if (matchesBinding(key, "composer.edit-queued", keybindingOverrides) && queuedRef.current.length > 0) {
       const queue = queuedRef.current;
       const last = queue[queue.length - 1];
       const rest = queue.slice(0, -1);
@@ -3666,14 +4166,11 @@ export function ChatScreen({
     // The cycle delegates to `/mode` rather than calling `setAutonomyMode`
     // directly, so it uses the same live-mode transition and runtime readiness
     // checks. All four modes are available without a preconfigured scope.
-    if (key.name === "tab" && key.shift) {
-      const cycle: ConsoleAutonomyMode[] = ["standard", "copilot", "yolo", "recon"];
-      const at = cycle.indexOf(mode);
-      const next = cycle[(at + 1) % cycle.length] ?? "standard";
-      routeSlashCommand(`/mode ${next}`);
+    if (isAutonomyCycleKey(key)) {
+      routeSlashCommand(`/mode ${nextAutonomyMode(modeRef.current)}`);
       return;
     }
-    if (key.ctrl && (key.name === "p" || key.name === "k")) {
+    if (matchesBinding(key, "nav.palette", keybindingOverrides)) {
       if (restorePaletteDraft()) return;
       paletteDraftRef.current = { text: composerRef.current, composing: composingRef.current };
       composingRef.current = true;
@@ -3693,13 +4190,34 @@ export function ChatScreen({
         setComposing(false);
         return;
       }
-      // With no overlay and no draft to discard, Esc means "stop" while a
-      // turn is running and "go back" when nothing is. Interrupting takes
-      // the place of navigation ONLY while a turn is actually in flight, so
-      // the menu → draft → back precedence is unchanged when idle.
+      // Esc interrupts the main turn, not its independently running workers.
+      // Overlay and draft dismissal keep precedence over turn interruption.
       if (interruptTurn()) return;
       onGoBack();
       return;
+    }
+    if (key.name === "return" && !key.shift && !focusAgentId) {
+      const action = queuedInputAction({
+        input: composerRef.current,
+        busy: busy || abortRef.current !== null,
+        hasSession: Boolean(session),
+        queuedCount: queuedRef.current.length,
+      });
+      if (action !== "none") {
+        if (action === "interrupt") {
+          // Keep the queue intact until the interrupted send has settled.
+          interruptTurn();
+        } else {
+          const { next, rest } = dequeueComposerInput(queuedRef.current);
+          queuedRef.current = rest;
+          setQueuedMessages(rest);
+          if (next !== undefined) void send(next);
+        }
+        composingRef.current = false;
+        setComposerText("");
+        setComposing(false);
+        return;
+      }
     }
     if (composingRef.current) {
       if (commandMenuOpenRef.current && composerRef.current.trimStart().startsWith("/")) {
@@ -3744,6 +4262,26 @@ export function ChatScreen({
         recallComposerHistory("down");
         return;
       }
+      // Right arrow accepts the inline autosuggestion (fish / Claude Code
+      // style). The composer is append-only, so the caret is ALWAYS at
+      // end-of-input while composing — the precondition for accepting — and →
+      // fills the ghost suffix into the draft WITHOUT submitting, then leaves
+      // the caret at the new end (setComposerText re-bases it there). With the
+      // feature off, a slash draft, or no matching suggestion, → falls through
+      // to its previous behaviour: a no-op, since the append-only composer has
+      // no caret to move right. Arrows are protected (non-rebindable) keys, so
+      // this is a literal key.name check like the Up/Down/Left handlers, not a
+      // matchesBinding lookup.
+      if (key.name === "right") {
+        const suffix = settingsRef.current.composerSuggestions
+          && !composerRef.current.trimStart().startsWith("/")
+          ? suggestCompletion(composerRef.current, historyRef.current)
+          : null;
+        if (suffix) {
+          setComposerText(`${composerRef.current}${suffix}`);
+          return;
+        }
+      }
       // Shift+Enter inserts a newline; plain Enter submits. Terminals that
       // cannot distinguish the two (no kitty keyboard protocol) fall through to
       // submit, which is the safe default. The multi-line composer renders the
@@ -3762,21 +4300,6 @@ export function ChatScreen({
         const input = useSelectedCommand && selectedSlashCommand
           ? completionFor(selectedSlashCommand, parsed.args)
           : currentComposer;
-        if (shouldFlushQueuedInput({
-          input,
-          busy,
-          hasSession: Boolean(session),
-          queuedCount: queuedRef.current.length,
-        })) {
-          const { next, rest } = dequeueComposerInput(queuedRef.current);
-          queuedRef.current = rest;
-          setQueuedMessages(rest);
-          composingRef.current = false;
-          setComposerText("");
-          setComposing(false);
-          if (next !== undefined) void send(next);
-          return;
-        }
         if (!input.trim()) {
           composingRef.current = false;
           setComposerText("");
@@ -3810,40 +4333,7 @@ export function ChatScreen({
         // Done before the setComposerText("") below, which re-bases the history
         // cursor onto the freshly-grown ring.
         historyRef.current = pushHistory(historyRef.current, input);
-        const disposition = classifyComposerInput({
-          input,
-          isSlash: findCommand(input).isSlash,
-          busy,
-          hasSession: Boolean(session),
-        });
-        if (disposition === "queue") {
-          // A turn is in flight, or the session is still connecting. Park the
-          // message rather than dropping it. Before this, Enter here was a bare
-          // `return`: the text was discarded AND left in the composer, which is
-          // indistinguishable from a dead keyboard.
-          const { queue, accepted } = enqueueComposerInput(queuedRef.current, input);
-          queuedRef.current = queue;
-          setQueuedMessages(queue);
-          // Enter during a running turn INTERRUPTS it so this message sends
-          // right away: interruptTurn() aborts the turn, the console goes idle,
-          // and the idle-drain effect delivers this queued message immediately.
-          // interruptTurn() returns false when there is nothing abortable (still
-          // connecting) — then it stays a plain queue. Mirrors the programmatic
-          // submitOperatorMessage path so a typed Enter and the Fix action agree.
-          const interrupting = accepted && interruptTurn();
-          if (!interrupting) {
-            appendEntry({
-              kind: accepted ? "notice" : "error",
-              text: accepted
-                ? `queued — will send when the current turn ends: ${input}`
-                : `queue is full (${COMPOSER_QUEUE_LIMIT} messages); not queued: ${input}`,
-              turn: turn.current,
-            });
-          }
-          // The transient stopping status covers the wait until the idle drain.
-        } else if (disposition === "send") {
-          void send(input);
-        }
+        submitOperatorMessage(input);
         if (!restorePaletteDraft()) {
           composingRef.current = false;
           setComposerText("");
@@ -3919,9 +4409,28 @@ export function ChatScreen({
   // optional objective. Autonomy mode belongs beside model and workspace state
   // in the bottom bar, where it is available without competing with the target.
   const focusedTelemetry = focusAgentId ? workerTelemetry[focusAgentId] : undefined;
+  const activeModel = session ? runtimeInfoHandle.current?.model() : undefined;
+  const activeProvider = session ? runtimeInfoHandle.current?.providerId() : undefined;
+  const currentHostedCatalog = hostedCatalog && hostedCatalog.owner === session && hostedCatalog.expiresAt > Date.now() ? hostedCatalog.models : null;
+  const contextLimit = useMemo(() => !focusAgentId && settings.showContextMeter
+    ? resolveContextLimit({ modelId: activeModel, providerId: activeProvider, hosted: activeProvider === "hosted" }, { hostedCatalog: currentHostedCatalog })
+    : null, [focusAgentId, settings.showContextMeter, activeModel, activeProvider, currentHostedCatalog]);
+  // The live "what it's doing" one-liner: the active tool + its args, truthfully
+  // (never fabricated). Only while the root turn is running and not focused on a
+  // worker. Computed here because the status bar is built above the later
+  // `runningEntry`.
+  const statusRunningEntry = busy && !focusAgentId && runningTool
+    ? entries.findLast((entry) => entry.kind === "tool" && entry.text === runningTool && entry.success === undefined)
+    : undefined;
+  const statusActivity = busy && !focusAgentId && runningTool
+    ? (statusRunningEntry?.toolArgs ? `${runningTool} · ${statusRunningEntry.toolArgs}` : runningTool)
+    : undefined;
   const statusSegments = buildStatusSegments({
     model: focusAgentId ? focusedTelemetry?.model : modelId ?? undefined,
-    mode: modeLabel(mode),
+    mode: autonomyFooterText(mode),
+    activity: statusActivity,
+    turnElapsedMs: settings.elapsedTimer !== "off" && !focusAgentId && busy && activeTurnStartedAt.current !== null
+      ? Date.now() - activeTurnStartedAt.current : undefined,
     evolution: evolutionStatus,
     cwd: process.cwd(),
     home: homedir(),
@@ -3938,8 +4447,10 @@ export function ChatScreen({
     // number it was not given.
     modelDisplay: settings.modelDisplay,
     showContextMeter: settings.showContextMeter,
+    contextWindow: contextLimit?.tokens,
+    contextUsed: !focusAgentId ? lastContext : undefined,
     showCost: settings.showCost,
-    hostedBalance: !focusAgentId && cloudBalance?.owner === session && cloudSource.current?.isHosted()
+    hostedBalance: !focusAgentId && cloudBalance && cloudBalance.owner === session && cloudSource.current?.isHosted()
       ? formatHostedBalance(cloudBalance.state) : undefined,
   });
   const runningWorkers = Object.values(herdAgents).filter((agent) => agent.status === "running" || agent.status === "queued").length;
@@ -3948,8 +4459,6 @@ export function ChatScreen({
   // between (rendered below via `renderStatusPills`). `statusBarText` remains as
   // the plain single-string fallback the bar degrades to if pills ever cannot
   // be drawn.
-  const statusPills = fitStatusPills(statusSegments, controlsWidth);
-  const statusBarText = fitStatusSegments(statusSegments, controlsWidth);
   // The picker reuses the menu's vertical budget: it occupies the same slot
   // above the composer, so it must obey the same "leave the transcript real
   // rows" rule rather than growing to the size of the model catalogue.
@@ -4020,9 +4529,9 @@ export function ChatScreen({
   // peer, both looked up from the SAME herd map. `focused` gates the inline
   // focus view and suppresses the rail / subagent block while it is open.
   const nowMs = Date.now();
-  const focusRecord = focusAgentId ? herdAgents[focusAgentId] : undefined;
+  const focusRecord = focusAgentId ? projectedHerdAgents[focusAgentId] : undefined;
   const focusPeer = focusAgentId
-    ? subagentPeers(herdAgents, nowMs).find((peer) => peer.id === focusAgentId)
+    ? subagentPeers(projectedHerdAgents, nowMs).find((peer) => peer.id === focusAgentId)
     : undefined;
   const focused = focusAgentId != null && focusRecord != null && focusPeer != null;
   // The two sidebars' budget: each hidden while focused, on a narrow terminal,
@@ -4034,7 +4543,7 @@ export function ChatScreen({
     width,
     contentWidth,
     compact,
-    showLeft: settings.showLeftSidebar && !focused,
+    showLeft: settings.showLeftSidebar && !focused && interactive && Boolean(renderAuditSwitcher),
     showRight: settings.showRightSidebar && !focused,
   });
   // Usable width INSIDE the transcript panel: the ledger box adds its own
@@ -4122,25 +4631,32 @@ export function ChatScreen({
         motion: !settings.reduceMotion && animationKind !== "awaiting-operator",
       })
     : null;
+  const loadingLabel = animation?.glyph ?? "";
+  const loadingWidth = loadingLabel ? textCells(loadingLabel) + 3 : 0;
+  const statusContentWidth = Math.max(0, controlsWidth - loadingWidth);
+  const visibleStatusSegments = settings.showStatusBar ? statusSegments
+    : statusSegments.filter((segment) => segment.kind === "mode" || segment.kind === "elapsed");
+  const statusPills = fitStatusPills(visibleStatusSegments, statusContentWidth);
+  const statusBarText = fitStatusSegments(visibleStatusSegments, statusContentWidth);
 
   // Drive the animation at the kind's own interval; stop entirely when
   // nothing is animating so an idle console costs no repaints.
   useEffect(() => {
-    if (!animationKind && runningWorkers === 0) return;
+    if (!interactive || (!animationKind && runningWorkers === 0)) return;
     const timer = setInterval(
       () => setAnimTick((n) => n + 1),
       settings.reduceMotion || animationKind === "awaiting-operator" ? 1000 : animationKind ? frameIntervalMs(animationKind) : 120,
     );
     return () => clearInterval(timer);
-  }, [animationKind, settings.reduceMotion, runningWorkers]);
+  }, [animationKind, settings.reduceMotion, runningWorkers, interactive]);
 
   // One shared ticker for every shimmering label, at the shimmer cadence. Only
   // runs while `shimmerActive`, so a settled or idle surface costs no repaints.
   useEffect(() => {
-    if (!shimmerActive) return;
+    if (!interactive || !shimmerActive) return;
     const timer = setInterval(() => setShimmerFrame((n) => n + 1), SHIMMER_TEXT_INTERVAL_MS);
     return () => clearInterval(timer);
-  }, [shimmerActive]);
+  }, [shimmerActive, interactive]);
 
   const menu = computeCommandMenuLayout({ width, compact });
   // Height is stated explicitly so the border is drawn where the content
@@ -4166,17 +4682,33 @@ export function ChatScreen({
   // reserved in the ledger via computeLedgerRows regardless of focus, so the
   // focus transcript makes room for it.
   const subagentEntries = settings.showSubagents ? workerRoster : [];
+  const hasSubagents = subagentEntries.length > 0;
   const visibleRosterLimit = Math.max(1, Math.min(SUBAGENT_MAX_VISIBLE, Math.floor(height / 5)));
-  const rosterStart = Math.max(0, agentNavIndex - visibleRosterLimit + 1);
-  const subagentVisible = agentNavIndex >= 0
-    ? subagentEntries.slice(rosterStart, rosterStart + visibleRosterLimit)
-    : [];
+  // The panel is EXPANDED by default so running agents are visible without the
+  // operator arrowing in (the OMP-style "always show what the herd is doing").
+  // It collapses to a one-line summary when the operator toggles the corner
+  // control, and AUTO-collapses on a very narrow terminal where per-agent rows
+  // would not fit. Drilling in (agentNavIndex >= 0) always forces it open so the
+  // selection is on screen — the existing Down-arrow path keeps working.
+  const subagentPanelNarrow = contentWidth < SUBAGENT_PANEL_MIN_WIDTH;
+  const subagentPanelCollapsed = hasSubagents && agentNavIndex < 0 && (agentsPanelCollapsed || subagentPanelNarrow);
+  const rosterStart = agentNavIndex >= 0 ? Math.max(0, agentNavIndex - visibleRosterLimit + 1) : 0;
+  const subagentVisible = subagentPanelCollapsed
+    ? []
+    : agentNavIndex >= 0
+      ? subagentEntries.slice(rosterStart, rosterStart + visibleRosterLimit)
+      : subagentEntries.slice(0, visibleRosterLimit);
   const subagentOverflow = subagentEntries.length - subagentVisible.length;
-  const subagentOverflowRow = agentNavIndex >= 0 && subagentOverflow > 0 ? 1 : 0;
-  // One activity/shortcut row at rest; expand only the selected worker roster.
-  const subagentBlockRows = subagentEntries.length > 0
-    ? 1 + subagentVisible.length + subagentOverflowRow
-    : 0;
+  // Below the header: the visible rows plus a "+N more" tail whenever the
+  // roster outruns the window (both when navigating and when resting expanded).
+  const subagentOverflowRow = !subagentPanelCollapsed && subagentOverflow > 0 ? 1 : 0;
+  // Collapsed → the single summary line (the header itself). Expanded → header
+  // + rows + overflow tail.
+  const subagentBlockRows = !hasSubagents
+    ? 0
+    : subagentPanelCollapsed
+      ? 1
+      : 1 + subagentVisible.length + subagentOverflowRow;
   // Selection within the block while navigating into it. Clamped every render so
   // an index left dangling by a finished agent lands back on a live row.
   const agentNavSelected =
@@ -4197,9 +4729,15 @@ export function ChatScreen({
   // and everything downstream of that (the fused approval card, the fused
   // subagent rows, the transcript that would not scroll to the bottom)
   // followed from the same miscount.
+  const composerStyle: TuiSettings["composerStyle"] =
+    settings.composerStyle === "border" ? "rail" : settings.composerStyle;
+  const composerInnerTextWidth = Math.max(1, sidebars.transcriptWidth - (composerStyle === "rail" ? 5 : 3));
+  const composerInputRows = composing
+    ? composerContentRows(sanitizeComposerText(composer).replace(/\t/g, "    "), composerInnerTextWidth).length : 1;
   const ledgerRows = computeLedgerRows({
     height,
     compact,
+    composerRows: composerInputRows + (composerStyle === "plain" ? 0 : 2) + 1,
     // The picker and the command menu occupy the same slot and both carry a
     // marginTop, which computeLedgerRows adds for a non-zero menuRows.
     menuRows: commandMenuVisible ? commandMenuHeight : picker ? pickerBoxHeight : 0,
@@ -4208,7 +4746,7 @@ export function ChatScreen({
       + (secretPrompt ? SECRET_PANEL_HEIGHT + 1 : 0)
       + (operatorQuestionOpen ? operatorBoxHeight + 1 : 0),
     // The agent-nav hint row (+ its marginTop) below the composer.
-    hintRows: (showAgentNavHint ? 2 : 0) + (settings.showStatusBar ? 1 : 0),
+    hintRows: (showAgentNavHint ? 2 : 0) + 1 + (animation ? 2 : 0),
   });
   // Optional empty-state lines are dropped from the bottom up rather than
   // overprinted. The mark needs the most room, so it goes first.
@@ -4226,41 +4764,19 @@ export function ChatScreen({
   const headerEngagement = [`v${VERSION}`, ...headerSegments].join(" · ");
 
 
-  // ── The single working / waiting indicator ────────────────────────────────
-  // There must be exactly ONE. It used to render in the composer placeholder
-  // AND in the transcript tail (and, after the hero rework, in both the
-  // centered and the scrollbox branches), so a running turn showed the spinner
-  // twice. It now lives in one place per state — the centered hero when empty,
-  // the scrollbox tail when not — and never in the composer. And when a
-  // reasoning ("thinking") entry is the tail it is suppressed entirely: that
-  // entry already prints "thinking" while it streams, so a second "thinking"
-  // spinner beside it is the double-label the operator reported.
-  const tailKind = entries.length > 0 ? entries[entries.length - 1]?.kind : undefined;
-  const workingAnimation = animation && tailKind !== "reasoning" ? animation : null;
-  const workingGlyphColor = animationKind === "awaiting-operator" ? WARNING : ACCENT;
-  // Glyph in its own fixed GLYPH_CELLS cell so motion never shifts the label;
-  // label + elapsed + any queue note collapse into ONE muted, fitted line so
-  // two siblings can never fuse under width pressure. Calm mono palette —
-  // neutral accent for work, WARNING only for "your move", red never here.
-  const workingLine = workingAnimation
-    ? `${workingAnimation.label}${workingAnimation.elapsedLabel ? `  ${workingAnimation.elapsedLabel}` : ""}${queueLabel ? ` · ${queueLabel}` : ""}`
-    : "";
-  // While the turn is working the label SHIMMERS (a bright sweep over the muted
-  // base, MUTED->TEXT); the instant the state settles — or under reduceMotion,
-  // or while awaiting the operator — it renders as the calm static muted line.
-  const workingLineFitted = fitTuiText(workingLine, Math.max(1, contentWidth - GLYPH_CELLS - 1));
-  const workingIndicator = workingAnimation ? (
-    <box flexDirection="row" minWidth={0} marginTop={1} gap={1}>
-      <box width={GLYPH_CELLS} flexShrink={0}>
-        <text fg={workingGlyphColor}>{workingAnimation.glyph}</text>
-      </box>
-      <box flexGrow={1} minWidth={0}>
-        {shimmerActive ? (
-          <ShimmerText label={workingLineFitted} frame={shimmerFrame} base={MUTED} peak={TEXT} />
-        ) : (
-          <text fg={MUTED}>{workingLineFitted}</text>
-        )}
-      </box>
+  // Activity comes from the real in-flight call, not an invented model intent.
+  // Its spinner lives once, below the composer in the loading/status row.
+  const runningEntry = runningTool ? entries.findLast((entry) => entry.kind === "tool" && entry.text === runningTool && entry.success === undefined) : undefined;
+  const workingLine = runningEntry?.toolArgs
+    ? `${runningTool} · ${runningEntry.toolArgs}`
+    : animation?.label ?? "";
+  const canInterrupt = busy && !composing && !gateOpen && !picker && !commandMenuVisible && !reviewOpen;
+  const workingLineFitted = fitTuiText(`${canInterrupt ? "Esc · " : ""}${workingLine}`, controlsWidth);
+  const workingIndicator = animation ? (
+    <box width="100%" height={1} flexShrink={0} marginTop={1} overflow="hidden">
+      {shimmerActive
+        ? <ShimmerText label={workingLineFitted} frame={shimmerFrame} base={MUTED} peak={TEXT} />
+        : <text fg={animationKind === "awaiting-operator" ? WARNING : MUTED}>{workingLineFitted}</text>}
     </box>
   ) : null;
 
@@ -4273,8 +4789,6 @@ export function ChatScreen({
   // centered hero AND the pinned chat state (the start-screen look the operator
   // asked for everywhere): the stored "border" resolves to "rail", while an
   // explicit "plain" — or any deliberate non-border choice — is still honoured.
-  const composerStyle: TuiSettings["composerStyle"] =
-    settings.composerStyle === "border" ? "rail" : settings.composerStyle;
   const composerActive = composing || commandMenuVisible;
   // Real operator input is TEXT-bright; the placeholder and the parked-message
   // note are MUTED so neither reads as something typed. The working spinner is
@@ -4286,13 +4800,22 @@ export function ChatScreen({
   // cells and grows downward up to COMPOSER_MAX_ROWS, then scrolls the oldest
   // rows out to keep the tail cursor in view. The block cursor is FILLED when
   // the composer is focused (`composerActive`) and HOLLOW when it is not.
+  // The inline autosuggestion shown as dimmed ghost text after the caret. Only
+  // while composing a non-slash draft with the feature enabled; the pure prefix
+  // match over submitted-message history lives in composer-suggest.ts. `null`
+  // (empty draft, no match, or a draft equal to a full entry) shows nothing.
+  const composerSuggestion = settings.composerSuggestions && composing && !isSlashComposer
+    ? suggestCompletion(composer, historyRef.current)
+    : null;
   const composerInput = (textWidth: number) => {
     const placeholder = startupError
       ? "type / for setup and commands"
       : queueLabel
         ? queueLabel
         : busy
-          ? "type a follow-up · enter interrupts and sends"
+          ? settings.busyInputMode === "queue"
+            ? "type a follow-up · enter queues"
+            : "type a follow-up · enter steers main"
           : !session
             ? "connecting · type to queue a message"
             : "type to chat or / for commands";
@@ -4305,6 +4828,7 @@ export function ChatScreen({
         placeholder={placeholder}
         placeholderTone={startupError ? ERROR : MUTED}
         theme={theme}
+        suggestion={composerSuggestion}
       />
     );
   };
@@ -4318,14 +4842,18 @@ export function ChatScreen({
     textWidth,
     outerWidth,
     padY = 0,
+    edgeToEdge = false,
+    inputInset = 0,
   }: {
     textWidth: number;
     outerWidth?: number;
     padY?: number;
+    edgeToEdge?: boolean;
+    inputInset?: number;
   }) => (
-    <box flexDirection="row" width={outerWidth ?? "100%"} flexShrink={0} marginTop={1} minWidth={0}>
+    <box flexDirection="row" width={outerWidth ?? "100%"} flexShrink={0} marginTop={1} marginLeft={edgeToEdge ? -(compact ? 1 : 2) : 0} minWidth={0}>
       <ComposerFrame style={composerStyle} active={composerActive} theme={theme} padY={padY}>
-        <box flexDirection="row" width="100%" minWidth={0}>
+        <box flexDirection="row" width="100%" minWidth={0} paddingLeft={inputInset}>
           <text width={1} flexShrink={0} fg={composing ? PRIMARY : MUTED}>›</text>
           <text width={1} flexShrink={0} fg={MUTED}> </text>
           <box width={textWidth} flexShrink={0} minWidth={0}>
@@ -4335,29 +4863,12 @@ export function ChatScreen({
       </ComposerFrame>
     </box>
   );
-  // When a sidebar is shown, the composer aligns UNDER the transcript column
-  // (the left part) rather than spanning the full width beneath the rail — the
-  // input belongs to the conversation, not the AGENTS/FINDINGS/PLAN sidebar. It
-  // reverts to full width when no sidebar is up.
-  const composerConstrained = sidebars.rightVisible || sidebars.leftVisible;
-  const composerOuterWidth = composerConstrained ? sidebars.transcriptWidth : undefined;
-  const composerInnerTextWidth = composerConstrained
-    ? Math.max(8, sidebars.transcriptWidth - 3)
-    : composerTextWidth;
-  const composerBody = buildComposer({
+  const composerNode = buildComposer({
     textWidth: composerInnerTextWidth,
-    outerWidth: composerOuterWidth,
+    outerWidth: width,
+    edgeToEdge: true,
+    inputInset: (compact ? 1 : 2) + (sidebars.leftVisible ? sidebars.leftWidth + sidebars.leftGap : 0),
   });
-  // A left sidebar pushes the transcript (and so the composer) right by its
-  // width + gap; a right-only sidebar leaves the composer flush left.
-  const composerNode = sidebars.leftVisible ? (
-    <box flexDirection="row" flexShrink={0} minWidth={0}>
-      <box width={sidebars.leftWidth + sidebars.leftGap} flexShrink={0} minWidth={0} />
-      {composerBody}
-    </box>
-  ) : (
-    composerBody
-  );
 
   // ── Sticky context above the composer ──────────────────────────────────────
   // Only messages the operator has PARKED for the next round stay pinned
@@ -4375,7 +4886,7 @@ export function ChatScreen({
           <box flexDirection="column" minWidth={0}>
             <text fg={WARNING}>
               {fitTuiText(
-                `${composerQueueLabel(queuedMessages.length)} · sent on the next round · ctrl+y edit`,
+                `${composerQueueLabel(queuedMessages.length)} · enter sends next · ctrl+y edit`,
                 contentWidth,
               )}
             </text>
@@ -4402,8 +4913,9 @@ export function ChatScreen({
   // content column, clamped to a comfortable 40..72 cells and never wider than
   // the column itself. Four cells of chrome (rail + its gap + the "› " prefix)
   // come off the width for the input field.
-  const heroComposerWidth = Math.min(contentWidth, Math.max(40, Math.min(72, Math.floor(contentWidth * 0.6))));
-  const heroComposerTextWidth = Math.max(8, heroComposerWidth - 4);
+  const heroContentWidth = sidebars.rightVisible ? sidebars.transcriptWidth : contentWidth;
+  const heroComposerWidth = Math.min(heroContentWidth, Math.max(40, Math.min(72, Math.floor(heroContentWidth * 0.6))));
+  const heroComposerTextWidth = Math.max(1, heroComposerWidth - (composerStyle === "rail" ? 5 : 3));
   const heroComposerNode = buildComposer({
     textWidth: heroComposerTextWidth,
     outerWidth: heroComposerWidth,
@@ -4500,6 +5012,7 @@ export function ChatScreen({
       activeIndex={approvalState.index}
       hint="↑↓ choose · enter confirm · esc decline"
       accent={approvalPrompt.borderColor}
+      severity={approvalPrompt.severity}
       contentWidth={contentWidth}
       height={approvalBoxHeight}
       theme={theme}
@@ -4541,25 +5054,41 @@ export function ChatScreen({
     </>
   );
 
+  // Effective status per roster row (operator-stop and incomplete folded in),
+  // reused by the row views and the collapsed summary so both read identically.
+  const subagentEffectiveStatus = (sa: (typeof subagentEntries)[number]): string =>
+    operatorStopped.has(sa.agent_id)
+      ? "cancelled"
+      : sa.status === "completed" && sa.done === false
+        ? "incomplete"
+        : sa.status;
+  // The corner control is the "small button to expand": ▸ collapsed / ▾ open.
+  // Clicking the header toggles it (or, while navigating, backs out to the
+  // composer — the same exit the Left/Esc keys give). Collapsed, the header IS
+  // the one-line summary; expanded, it carries the roster count and hints.
+  const subagentToggleGlyph = subagentPanelCollapsed ? "▸" : "▾";
+  const subagentHeaderText = subagentPanelCollapsed
+    ? `${subagentToggleGlyph} ${summarizeRoster(subagentEntries.map(subagentEffectiveStatus))}`
+    : agentNavIndex >= 0
+      ? `${subagentToggleGlyph} agents (${subagentEntries.length}) · ↑↓ select · enter open · esc back`
+      : `${subagentToggleGlyph} agents (${subagentEntries.length}) · ${runningWorkers} running · ↓ select`;
   const subagentNode = subagentBlockRows > 0 ? (
     <box flexDirection="column" width="100%" minWidth={0} height={subagentBlockRows} flexShrink={0} marginTop={1}>
-      <box width={contentWidth} flexShrink={0} onMouseDown={() => setAgentNavIndex(agentNavIndex >= 0 ? -1 : 0)}>
-        <text fg={MUTED}>{fitTuiText(
-          agentNavIndex >= 0
-            ? `AGENTS · ${subagentEntries.length} · ↑↓ select · enter open · esc back`
-            : `Agents: ${runningWorkers} running / ${subagentEntries.length} total · ↓ select`,
-          contentWidth,
-        )}</text>
+      <box width={contentWidth} flexShrink={0} onMouseDown={() => {
+        if (agentNavIndex >= 0) setAgentNavIndex(-1);
+        else setAgentsPanelCollapsed((collapsed) => !collapsed);
+      }}>
+        <text fg={agentNavIndex >= 0 ? ACCENT : MUTED}>{fitTuiText(subagentHeaderText, contentWidth)}</text>
       </box>
       {subagentVisible.map((sa, index) => {
         const rec = herdAgents[sa.agent_id];
+        const status = subagentEffectiveStatus(sa);
         const view: AgentRowView = {
           id: sa.agent_id,
-          name: sa.name ?? shortAgentName(sa.agent_id),
+          name: sa.name ?? rec?.name ?? agentNamesRef.current.get(sa.agent_id) ?? "Unnamed worker",
           task: sa.task ?? "",
-          activity: rec?.tool ?? rec?.note,
-          status: sa.status === "completed" && sa.done === false ? "stopped" : sa.status,
-          meta: `${sa.status === "completed" && sa.done === false ? "stopped" : sa.status}`,
+          activity: summarizeAgentActivity({ status, tool: rec?.tool, note: rec?.note, turn: rec?.turn, maxTurns: rec?.maxTurns ?? sa.max_turns }),
+          status,
           animationFrame: settings.reduceMotion ? undefined : animTick,
           accent: agentAccentFor(sa.agent_id, theme.CANVAS),
         };
@@ -4569,7 +5098,12 @@ export function ChatScreen({
           onSelect={() => { setFocusAgentId(sa.agent_id); setAgentNavIndex(-1); }} />;
       })}
       {subagentOverflowRow > 0 ? (
-        <text fg={MUTED}>{fitTuiText(`${rosterStart + 1}–${rosterStart + subagentVisible.length}/${subagentEntries.length} · ↑↓ browse all`, contentWidth)}</text>
+        <text fg={MUTED}>{fitTuiText(
+          agentNavIndex >= 0
+            ? `${rosterStart + 1}–${rosterStart + subagentVisible.length}/${subagentEntries.length} · ↑↓ browse all`
+            : `+${subagentOverflow} more · ↓ browse all`,
+          contentWidth,
+        )}</text>
       ) : null}
     </box>
   ) : null;
@@ -4582,22 +5116,24 @@ export function ChatScreen({
   // fuse. Whole thing flexShrink={0}. The context strip lives in the bottom
   // status bar, not here — no duplication.
   const rightInner = sidebars.rightInnerWidth;
+  const sidebarContentRows = Math.max(0, ledgerRows - 2);
+  const cloudHintRows = !cloudHintDismissed && shouldOfferCloudHint({ hostedConnected: cloudConfigured, rows: sidebarContentRows, width: rightInner })
+    ? Math.min(5, Math.max(0, sidebarContentRows - 8)) : 0;
   const railRecords = Object.values(herdAgents);
   const runFindings = runFindingsFromEntries(entries);
-  // Split the column between the two sections. Titles cost three rows total:
-  // AGENTS(1) + FINDINGS(1 + its marginTop). Agents take the larger share
-  // because their rows are two lines each.
-  const rightSectionRows = Math.max(0, ledgerRows - 3);
-  // A PLAN (todos) section joins AGENTS + FINDINGS in this column when a plan
-  // exists: it takes a modest share off the top, then agents/findings split the
-  // rest. Each section self-bounds with a "+N more" tail, so none can overflow.
-  const hasPlan = Boolean(todos && todos.total > 0);
-  const rightPlanBudget = hasPlan
-    ? Math.min(rightSectionRows, Math.max(2, Math.floor(rightSectionRows * 0.25)))
-    : 0;
-  const rightBodyRows = Math.max(0, rightSectionRows - rightPlanBudget);
-  const agentsBudget = Math.max(0, Math.floor(rightBodyRows * 0.6));
-  const rightFindingsBudget = Math.max(0, rightBodyRows - agentsBudget);
+  // Header rows: AGENTS(1), FINDINGS(1 + separator), and the hide control(1).
+  // Vertical padding was deducted above. Empty sections consume only their
+  // actual placeholder rows, leaving that space available for the live plan.
+  const rightSectionRows = Math.max(0, sidebarContentRows - 4 - cloudHintRows);
+  const hasPlan = Boolean(todos?.todos.length);
+  const planMinimum = hasPlan ? Math.min(3, rightSectionRows) : 0;
+  const rightBodyRows = rightSectionRows - planMinimum;
+  const agentRowsNeeded = railRecords.length ? railRecords.length * AGENT_SIDEBAR_ROWS : 2;
+  const findingRowsNeeded = Math.max(1, runFindings.length * 2);
+  const findingsShare = Math.min(findingRowsNeeded, Math.floor(rightBodyRows * 0.4));
+  const agentsBudget = Math.min(agentRowsNeeded, Math.max(0, rightBodyRows - findingsShare));
+  const rightFindingsBudget = Math.min(findingRowsNeeded, Math.max(0, rightBodyRows - agentsBudget));
+  const rightPlanBudget = hasPlan ? rightSectionRows - agentsBudget - rightFindingsBudget : 0;
   const railMaxAgents = Math.floor(agentsBudget / AGENT_SIDEBAR_ROWS);
   const railCapacity =
     railRecords.length > railMaxAgents
@@ -4618,9 +5154,9 @@ export function ChatScreen({
       marginLeft={sidebars.rightGap}
     >
       <box width={1} flexShrink={0} alignSelf="stretch" backgroundColor={BORDER} />
-      <box flexDirection="column" flexGrow={1} minHeight={0} minWidth={0} paddingLeft={1} backgroundColor={PANEL}>
+      <box flexDirection="column" flexGrow={1} alignSelf="stretch" minHeight={0} minWidth={0} paddingX={1} paddingY={1} backgroundColor={PANEL}>
         <box width={rightInner} flexShrink={0} minWidth={0}>
-          <text fg={MUTED}>{fitTuiText(`AGENTS ${railRecords.length}`, rightInner)}</text>
+          <text fg={MUTED}>{buildSidebarSectionHeader("AGENTS", railRecords.length, rightInner)}</text>
         </box>
         {railVisible.length === 0 ? (
           <box width={rightInner} flexDirection="column" flexShrink={0} minWidth={0}>
@@ -4634,28 +5170,17 @@ export function ChatScreen({
           </box>
         ) : (
           railVisible.map((rec) => {
-            // The SAME agent-row look as the inline list, in the sidebar's
-            // two-line variant (name over task). Turns + findings ride along as
-            // the right-aligned meta; findings never colour the label.
-            const turnValue =
-              typeof rec.turn === "number"
-                ? rec.turn
-                : typeof rec.turns === "number"
-                  ? rec.turns
-                  : undefined;
-            const meta: string[] = [];
-            if (typeof turnValue === "number") {
-              meta.push(rec.maxTurns > 0 ? `${turnValue}/${rec.maxTurns}` : `t${turnValue}`);
-            }
-            if (typeof rec.findings === "number") meta.push(`${rec.findings}f`);
+            // Share the inline worker identity and truthful status presentation.
             const view: AgentRowView = {
               id: rec.agentId,
-              name: rec.name ?? shortAgentName(rec.agentId),
-              task: rec.task || rec.agentId,
-              activity: rec.tool ?? rec.note,
-              status: rec.status === "completed" && workerOutcomes[rec.agentId]?.done === false ? "stopped" : rec.status,
+              name: rec.name ?? agentNamesRef.current.get(rec.agentId) ?? "Unnamed worker",
+              task: rec.task || "No task reported",
+              activity: summarizeAgentActivity({
+                status: operatorStopped.has(rec.agentId) ? "cancelled" : rec.status === "completed" && workerOutcomes[rec.agentId]?.done === false ? "incomplete" : rec.status,
+                tool: rec.tool, note: rec.note, turn: rec.turn, maxTurns: rec.maxTurns,
+              }),
+              status: operatorStopped.has(rec.agentId) ? "cancelled" : rec.status === "completed" && workerOutcomes[rec.agentId]?.done === false ? "incomplete" : rec.status,
               animationFrame: settings.reduceMotion ? undefined : animTick,
-              meta: meta.length > 0 ? meta.join(" · ") : undefined,
               accent: agentAccentFor(rec.agentId, theme.CANVAS),
             };
             return (
@@ -4686,6 +5211,8 @@ export function ChatScreen({
           <TodosSidebar payload={todos!} width={rightInner} rows={rightPlanBudget} theme={theme} />
         ) : null}
         <box flexGrow={1} minHeight={0} flexShrink={1} />
+        <CloudHintCard hostedConnected={cloudConfigured} width={rightInner} rows={cloudHintRows} theme={theme}
+          dismissed={cloudHintDismissed} onDismiss={() => setCloudHintDismissed(true)} onConnect={() => onNavigate("connect")} />
         <box width={rightInner} flexShrink={0} minWidth={0} onMouseDown={() => updateSetting("showRightSidebar", false)}>
           <text fg={MUTED}>{fitTuiText("Hide agents · ctrl+l", rightInner)}</text>
         </box>
@@ -4693,56 +5220,9 @@ export function ChatScreen({
     </box>
   ) : null;
 
-  // ── The LEFT sidebar: history (recent sessions) ────────────────────────────
-  // "What you have": recent resumable sessions from the session store. History
-  // only — findings moved to the RIGHT sidebar (they are live output of the
-  // current run). Bounded to the region's rows with a "+N" tail so it can never
-  // overflow. Whole thing flexShrink={0}.
-  const leftInner = sidebars.leftInnerWidth;
-  const leftBodyBudget = Math.max(0, ledgerRows - 1); // one title row
-  const sessionsCap =
-    recentSessions.length > leftBodyBudget ? Math.max(0, leftBodyBudget - 1) : leftBodyBudget;
-  const sessionsVisible = recentSessions.slice(0, sessionsCap);
-  const sessionsOverflow = recentSessions.length - sessionsVisible.length;
-  const leftSidebarNode = sidebars.leftVisible ? (
-    <box
-      flexDirection="row"
-      width={sidebars.leftWidth}
-      flexShrink={0}
-      minWidth={0}
-      alignSelf="stretch"
-      marginRight={sidebars.leftGap}
-    >
-      <box flexDirection="column" flexGrow={1} minHeight={0} minWidth={0} paddingRight={1} backgroundColor={PANEL}>
-        <box width={leftInner} flexShrink={0} minWidth={0}>
-          <text fg={MUTED}>{fitTuiText(`SESSIONS ${recentSessions.length}`, leftInner)}</text>
-        </box>
-        {sessionsVisible.length === 0 ? (
-          <box width={leftInner} flexShrink={0} minWidth={0}>
-            <text fg={MUTED}>{fitTuiText("no saved sessions", leftInner)}</text>
-          </box>
-        ) : (
-          sessionsVisible.map((meta) => {
-            const current = session?.scanId === meta.id;
-            const label = meta.preview || meta.target || "(no prompt)";
-            return (
-              <box key={meta.id} flexDirection="row" width={leftInner} flexShrink={0} minWidth={0}>
-                <text width={1} flexShrink={0} fg={current ? ACCENT : MUTED}>{current ? "◉" : "•"}</text>
-                <box width={Math.max(1, leftInner - 2)} flexShrink={0} minWidth={0} marginLeft={1}>
-                  <text fg={current ? TEXT : MUTED}>{fitTuiText(label, Math.max(1, leftInner - 2))}</text>
-                </box>
-              </box>
-            );
-          })
-        )}
-        {sessionsOverflow > 0 ? (
-          <box width={leftInner} flexShrink={0} minWidth={0}>
-            <text fg={MUTED}>{fitTuiText(`+${sessionsOverflow} more`, leftInner)}</text>
-          </box>
-        ) : null}
-        <box flexGrow={1} minHeight={0} flexShrink={1} />
-      </box>
-      <box width={1} flexShrink={0} alignSelf="stretch" backgroundColor={BORDER} />
+  const leftSidebarNode = sidebars.leftVisible && renderAuditSwitcher ? (
+    <box width={sidebars.leftWidth} flexShrink={0} minWidth={0} marginRight={sidebars.leftGap}>
+      {renderAuditSwitcher(sidebars.leftWidth, ledgerRows)}
     </box>
   ) : null;
 
@@ -4782,32 +5262,150 @@ export function ChatScreen({
     activeTurn: focusRecord?.status === "running" ? focusedTelemetry?.turn : undefined,
     activeEntryId: focusRecord?.status === "running" ? focusEntries?.[focusEntries.length - 1]?.id : undefined,
   };
-  const renderTranscriptEntries = (transcript: readonly ChatEntry[], width: number, display: EntryDisplay) =>
-    planTranscript(transcript, display.transcriptDetail, expandedTurns).map((item) => {
-      if (item.type === "fold") {
-        return renderFold(item, width, display, theme, {
-          hovered: hoveredTurn === item.turn,
-          onToggle: () => toggleTurnExpanded(item.turn),
-          onHover: (hovered) => setHoveredTurn(hovered ? item.turn : null),
-        });
+  // Per-agent LIVE telemetry for the Task launch card's sub-report rows, keyed
+  // by the fleet-unique agent NAME (the card's `subReports` carry `name`, not an
+  // `agent_id`). Every value is the SAME truthful producer the AGENTS rail reads
+  // — final/last tokens (usage in+out+cached) and durationMs from
+  // `workerTelemetry`, status + latest tool/report_status note from
+  // `herdAgents`. It NEVER reads the whole-turn timer. Missing fields stay
+  // undefined so the card shows only what is real.
+  const taskAgentTelemetryByName = useMemo(() => {
+    const byName = new Map<
+      string,
+      {
+        id: string;
+        status: string;
+        tokens?: number;
+        contextTokens?: number;
+        durationMs?: number;
+        model?: string;
+        tool?: string;
+        note?: string;
       }
-      const entry = item.entry;
+    >();
+    for (const id in herdAgents) {
+      const rec = herdAgents[id];
+      const name = rec.name ?? agentNamesRef.current.get(id);
+      if (!name) continue;
+      const tel = workerTelemetry[id];
+      const usage = tel?.usage;
+      byName.set(name, {
+        id,
+        status: operatorStopped.has(id) ? "cancelled" : rec.status,
+        tokens: usage ? usage.inputTokens + usage.outputTokens + usage.cachedInputTokens : undefined,
+        contextTokens: tel?.contextTokens,
+        durationMs: tel?.durationMs,
+        model: tel?.model,
+        tool: rec.tool,
+        note: rec.note,
+      });
+    }
+    return byName;
+  }, [herdAgents, workerTelemetry, operatorStopped]);
+  const renderTranscriptEntries = (transcript: readonly ChatEntry[], width: number, display: EntryDisplay) => {
+    // "thinking" is a per-TURN label, not a per-entry one. Walk the plan once
+    // (it is already in transcript order) and record which turns have shown it,
+    // so both the expanded reasoning rows and the folded summaries emit it at
+    // most once per turn. O(1) per item — no rescans.
+    const thinkingShownForTurn = new Set<number>();
+    // The live "thinking…" indicator: the streaming reasoning entry is the tail
+    // of the transcript, so its turn is the one that should shimmer.
+    const tail = transcript[transcript.length - 1];
+    const liveReasoningTurn =
+      tail && tail.id === display.activeEntryId && tail.kind === "reasoning" ? tail.turn : undefined;
+    return planTranscript(transcript, display.transcriptDetail, expandedTurns).map((item) => {
+      if (item.type === "fold") {
+        const hasReasoning = item.entries.some((entry) => entry.kind === "reasoning");
+        let hideReasoningLabel = false;
+        if (hasReasoning) {
+          if (thinkingShownForTurn.has(item.turn)) hideReasoningLabel = true;
+          else thinkingShownForTurn.add(item.turn);
+        }
+        return renderFold(
+          item,
+          width,
+          display,
+          theme,
+          {
+            hovered: hoveredTurn === item.turn,
+            onToggle: () => toggleTurnExpanded(item.turn),
+            onHover: (hovered) => setHoveredTurn(hovered ? item.turn : null),
+          },
+          { hideReasoningLabel },
+        );
+      }
+      const rawEntry = item.entry;
+      // Join the live per-agent telemetry onto a Task card's sub-report rows so
+      // the launch card shows each child's real tokens / duration / model +
+      // status + intent (matching the AGENTS rail). Additive and lossless: an
+      // agent with no telemetry (or a restored session with none) keeps its
+      // static launch row untouched.
+      const entry =
+        rawEntry.kind === "tool" && rawEntry.metaKind === "task" && rawEntry.subReports?.length
+          ? {
+              ...rawEntry,
+              subReports: rawEntry.subReports.map((sr) => {
+                const tel = taskAgentTelemetryByName.get(sr.name);
+                return tel ? { ...sr, ...tel } : sr;
+              }),
+            }
+          : rawEntry;
       const expanded = expandedTurns.has(entry.turn);
       const interactive = expanded && (
         entry.kind === "tool" || entry.kind === "subagent" || entry.kind === "reasoning"
       );
-      return renderEntry(
+      let reasoningLabel: "shimmer" | "static" | "none" = "static";
+      if (entry.kind === "reasoning") {
+        if (thinkingShownForTurn.has(entry.turn)) {
+          reasoningLabel = "none";
+        } else {
+          thinkingShownForTurn.add(entry.turn);
+          reasoningLabel =
+            entry.turn === liveReasoningTurn && typeof display.shimmerFrame === "number"
+              ? "shimmer"
+              : "static";
+        }
+      }
+      const node = renderEntry(
         entry,
         width,
         expanded ? { ...display, transcriptDetail: "expanded" } : display,
         theme,
         interactive ? {
+          expanded,
           hovered: hoveredTurn === entry.turn,
           onToggle: () => toggleTurnExpanded(entry.turn),
           onHover: (hovered) => setHoveredTurn(hovered ? entry.turn : null),
         } : undefined,
+        reasoningLabel,
       );
+      // A right-click on an operator/model message pops its actions at the
+      // cursor. The wrapper is a layout-neutral column and its handler fires
+      // ONLY for a right press (button 2), so left-click / drag-select / the
+      // fold-toggle handlers inside `node` are all untouched. Gated on
+      // `mouseSupport`, matching every other mouse affordance.
+      const isMessage = entry.kind === "user" || entry.kind === "assistant";
+      if (settings.mouseSupport && isMessage && (entry.text ?? "").length > 0) {
+        return (
+          <box
+            key={entry.id}
+            flexDirection="column"
+            flexShrink={0}
+            minWidth={0}
+            onMouseDown={(event) => {
+              if (!isRightClick(event)) return;
+              event.stopPropagation?.();
+              event.preventDefault?.();
+              transcriptMenu.open(event.x, event.y, buildMessageMenuItems(entry));
+            }}
+          >
+            {node}
+          </box>
+        );
+      }
+      return node;
     });
+  };
   const focusHasTranscript = focused && Boolean(focusEntries?.length);
   // The coarse activity fallback is row-windowed. Rich transcripts use their
   // actual viewport and measured content extent instead of this estimate.
@@ -4833,7 +5431,7 @@ export function ChatScreen({
       paddingY={compact ? 0 : 1}
     >
       <box flexDirection="column" flexShrink={0} minWidth={0}>
-        <text fg={ACCENT}>{fitTuiText(`Main › ${focusRecord?.name ?? shortAgentName(focusAgentId ?? "")}`, focusInner)}</text>
+        <text fg={ACCENT}>{fitTuiText(`Main › ${focusRecord?.name ?? agentNamesRef.current.get(focusAgentId ?? "") ?? "Unnamed worker"}`, focusInner)}</text>
         {focusMetaLines.map((line, index) => (
           <text key={`focus-meta-${index}`} fg={herdToneColor(theme, line.tone)}>
             {fitTuiText(line.text, focusInner)}
@@ -4850,6 +5448,7 @@ export function ChatScreen({
             flexGrow={1}
             minHeight={0}
             backgroundColor={PANEL}
+            verticalScrollbarOptions={{ trackOptions: { backgroundColor: PANEL, foregroundColor: MUTED }, arrowOptions: { foregroundColor: MUTED, backgroundColor: PANEL } }}
             contentOptions={{ flexDirection: "column" }}
             stickyScroll
             stickyStart="bottom"
@@ -4863,7 +5462,16 @@ export function ChatScreen({
           </scrollbox>
         </box>
       ) : (
-        <box flexDirection="column" flexGrow={1} minHeight={0} minWidth={0} marginTop={1}>
+        <box
+          flexDirection="column"
+          flexGrow={1}
+          minHeight={0}
+          minWidth={0}
+          marginTop={1}
+          onMouseScroll={(event) =>
+            setFocusScrollOffset((offset) => clampScrollOffset(offset + wheelOffsetStep(event.scroll)))
+          }
+        >
           <text fg={MUTED}>{fitTuiText(herdFocusTranscriptTitle(focusActivityLines.length), focusInner)}</text>
           {focusVisibleActivity.length === 0 ? (
             <text fg={MUTED}>{fitTuiText(HERD_FOCUS_EMPTY_TEXT, focusInner)}</text>
@@ -4877,7 +5485,7 @@ export function ChatScreen({
         </box>
       )}
       <text fg={MUTED} marginTop={1}>
-        {fitTuiText(`ctrl+o transcript · ctrl+r ${workerDisplay.transcriptDetail === "expanded" ? "collapse" : "expand"} details · esc Main`, focusInner)}
+        {fitTuiText(`ctrl+o transcript · ctrl+r ${workerDisplay.transcriptDetail === "expanded" ? "collapse" : "expand"} details · esc/← Main`, focusInner)}
       </text>
     </box>
   );
@@ -4911,7 +5519,7 @@ export function ChatScreen({
         paddingX={compact ? 1 : 2}
         paddingY={1}
       >
-        <scrollbox ref={transcriptRef} focusable={false} width="100%" flexGrow={1} minHeight={0} backgroundColor={PANEL} stickyScroll stickyStart="bottom">
+        <scrollbox ref={transcriptRef} focusable={false} width="100%" flexGrow={1} minHeight={0} backgroundColor={PANEL} stickyScroll stickyStart="bottom" verticalScrollbarOptions={{ trackOptions: { backgroundColor: PANEL, foregroundColor: MUTED }, arrowOptions: { foregroundColor: MUTED, backgroundColor: PANEL } }}>
           <box flexDirection="column" width="100%">
             {renderTranscriptEntries(entries, transcriptWidth, entryDisplay)}
             {/* The plan lives in the RIGHT sidebar now; this inline card is only
@@ -4920,7 +5528,6 @@ export function ChatScreen({
             {!sidebars.rightVisible && todos && todos.total > 0 ? (
               <Todos payload={todos} width={transcriptWidth} theme={theme} />
             ) : null}
-            {workingIndicator}
             {startupError ? <text fg={ERROR}>{fitTuiText(startupError, contentWidth)}</text> : null}
           </box>
         </scrollbox>
@@ -4958,7 +5565,7 @@ export function ChatScreen({
   // Keep first-use actions visible without opening a second navigation surface.
   const heroHintPairs: KeyHint[] = [
     { key: "/connect", label: "connection" },
-    { key: "/resume", label: "sessions" },
+    { key: "/resume", label: "saved audits" },
     { key: "ctrl+p", label: "commands" },
   ];
   // Any overlay open in the hero (slash menu, picker, an approval, the secret
@@ -4995,7 +5602,7 @@ export function ChatScreen({
   // rendered statically as finalLogoFrame by computeLogoFrame regardless.
   const logoStyle = settings.logoAnimation;
   const logoAnimating =
-    showMasthead && showTerminalMark && !settings.reduceMotion && logoStyle !== "off";
+    interactive && showMasthead && showTerminalMark && !settings.reduceMotion && logoStyle !== "off";
   useEffect(() => {
     if (!logoAnimating) return;
     setLogoFrame(0);
@@ -5052,7 +5659,7 @@ export function ChatScreen({
         ) : null}
         <box width={sidebarControlWidth} flexDirection="row" flexShrink={0} gap={1}>
           <box width={Math.floor((sidebarControlWidth - 1) / 2)} flexShrink={0} onMouseDown={() => updateSetting("showLeftSidebar", !settingsRef.current.showLeftSidebar)}>
-            <text fg={settings.showLeftSidebar ? ACCENT : MUTED}>{sidebarControlWidth > 8 ? `${settings.showLeftSidebar ? "▾" : "▸"} Sessions` : "◀"}</text>
+            <text fg={settings.showLeftSidebar ? ACCENT : MUTED}>{sidebarControlWidth > 8 ? `${settings.showLeftSidebar ? "▾" : "▸"} Audits` : "◀"}</text>
           </box>
           <box width={Math.floor(sidebarControlWidth / 2)} flexShrink={0} onMouseDown={() => updateSetting("showRightSidebar", !settingsRef.current.showRightSidebar)}>
             <text fg={settings.showRightSidebar ? ACCENT : MUTED}>{sidebarControlWidth > 8 ? `${settings.showRightSidebar ? "▾" : "▸"} Agents` : "▶"}</text>
@@ -5060,7 +5667,7 @@ export function ChatScreen({
         </box>
       </box>
 
-      {empty && !reviewOpen ? (
+      {empty && !reviewOpen && !leftSidebarNode ? (
         /*
          * The centered start screen: logo + captions + the COMPOSER + a dim
          * hint line render as ONE vertically-centered group (OpenCode's clean
@@ -5071,56 +5678,40 @@ export function ChatScreen({
          * exactly where it sits above the pinned composer. The bottom status bar
          * stays pinned below, outside this group.
          */
-        <box flexDirection="column" flexGrow={1} minHeight={0} width="100%" minWidth={0} alignItems="center">
-          {/*
-            * Region A holds everything above the composer and is BOTTOM-anchored
-            * (justifyContent flex-end). Region A and Region B both flexGrow={1},
-            * so they split the vertical slack equally and the composer card sits
-            * at the centre — a fixed position that does NOT move when the slash
-            * menu opens: the menu is the last child of this bottom-anchored
-            * region, so it appears directly above the composer and grows UPWARD
-            * into the empty space, pushing the logo up rather than the composer
-            * down. No layout jump on open/close.
-            */}
-          <box flexDirection="column" flexGrow={1} minHeight={0} width="100%" minWidth={0} justifyContent="flex-end" alignItems="center">
-            {/*
-              * The masthead: a muted EYEBROW (the lab name) sits ABOVE the block
-              * mark, then the mark, then the tagline. Hidden entirely while an
-              * overlay is open in the hero so the tall menu + logo cannot
-              * overflow upward into the header (the composer stays anchored by
-              * the fixed bottom spacer regardless).
-              */}
-            {showMasthead ? (
-              <Masthead
-                showTerminalMark={showTerminalMark}
-                showTagline={showEmptyStateTagline}
-                contentWidth={contentWidth}
-                logoFrameGrid={logoFrameGrid}
-                theme={theme}
-              />
-            ) : null}
-            {workingIndicator}
-            {startupError && !heroOverlayOpen ? (
-              <box flexDirection="column" width={heroComposerWidth} minWidth={0} flexShrink={0} marginBottom={1}>
-                <text fg={TEXT}>Chat needs setup</text>
-                <text fg={MUTED} wrapMode="word">{startupError}</text>
-              </box>
-            ) : null}
-            {heroOverlaysNode}
+        <box flexDirection="row" flexGrow={1} minHeight={0} width="100%" minWidth={0}>
+          <box flexDirection="column" flexGrow={1} minHeight={0} width={heroContentWidth} minWidth={0} alignItems="center">
+            <box flexDirection="column" flexGrow={1} minHeight={0} width="100%" minWidth={0} justifyContent="flex-end" alignItems="center">
+              {showMasthead ? (
+                <Masthead
+                  showTerminalMark={showTerminalMark && heroContentWidth >= TERMINAL_BLOCK_LOGO_WIDTH}
+                  showTagline={showEmptyStateTagline}
+                  contentWidth={heroContentWidth}
+                  logoFrameGrid={logoFrameGrid}
+                  theme={theme}
+                />
+              ) : null}
+              {workingIndicator}
+              {startupError && !heroOverlayOpen ? (
+                <box flexDirection="column" width={heroComposerWidth} minWidth={0} flexShrink={0} marginBottom={1}>
+                  <text fg={TEXT}>Chat needs setup</text>
+                  <text fg={MUTED} wrapMode="word">{startupError}</text>
+                </box>
+              ) : null}
+              {heroOverlaysNode}
+            </box>
+            <box flexDirection="column" width={heroComposerWidth} minWidth={0} flexShrink={0}>
+              {heroComposerNode}
+            </box>
+            <box flexShrink={0} minWidth={0} marginTop={1}>
+              {keyHintsLength(heroHintPairs, " · ") <= heroContentWidth ? (
+                <KeyHints pairs={heroHintPairs} theme={theme} />
+              ) : (
+                <text fg={MUTED}>{fitTuiText("/connect · /resume · ctrl+p", heroContentWidth)}</text>
+              )}
+            </box>
+            <box height={heroBottomSpacer} flexShrink={0} minWidth={0} />
           </box>
-          {/* The composer card — fixed vertical centre; the menu above never shifts it. */}
-          <box flexDirection="column" width={heroComposerWidth} minWidth={0} flexShrink={0}>
-            {heroComposerNode}
-          </box>
-          <box flexShrink={0} minWidth={0} marginTop={1}>
-            {keyHintsLength(heroHintPairs, " · ") <= contentWidth ? (
-              <KeyHints pairs={heroHintPairs} theme={theme} />
-            ) : (
-              <text fg={MUTED}>{fitTuiText("/connect · /resume · ctrl+p", contentWidth)}</text>
-            )}
-          </box>
-          {/* Region B: a FIXED spacer, so the composer's position is constant. */}
-          <box height={heroBottomSpacer} flexShrink={0} minWidth={0} />
+          {rightSidebarNode}
         </box>
       ) : reviewOpen ? (
         conversationRegion
@@ -5135,6 +5726,7 @@ export function ChatScreen({
 
           {overlaysNode}
           {stickyNode}
+          {workingIndicator}
           {composerNode}
           {/*
             * The inline ACTIVE SUBAGENTS list sits directly BELOW the composer,
@@ -5152,41 +5744,37 @@ export function ChatScreen({
       )}
 
       {/*
-        * The bottom bar is its own row BELOW the composer, not a second
-        * line inside it. It carries environmental state the header does not:
-        * model, working tree, and counters. Autonomy mode is intentionally
-        * header-only; repeating it here made the idle screen noisy.
+        * The shared bottom row keeps permission mode visible in both hero and
+        * conversation layouts. showStatusBar controls the extra environmental
+        * telemetry, not the only indicator of the operator's approval mode.
         */}
-      {settings.showStatusBar ? (
-        <box flexDirection="column" width="100%" minWidth={0} flexShrink={0}>
-          <box width={controlsWidth} flexShrink={0} minWidth={0}>
-            {statusPills.length > 0 ? (
-              // OMP-style coloured pills: each segment its own glyph+text in its
-              // role colour, a subtle muted dot between. Widths come from
-              // `fitStatusPills`, so the row's children sum to <= controlsWidth
-              // and never overprint (chat-layout invariant).
-              <box flexDirection="row" flexShrink={0} minWidth={0}>
-                {statusPills.map((segment, index) => (
-                  <React.Fragment key={segment.kind}>
-                    {index > 0 ? <text fg={MUTED}> · </text> : null}
-                    <text fg={statusRoleColor(segment.colorRole, theme, mode)}>
-                      {pillText(segment)}
-                    </text>
-                  </React.Fragment>
-                ))}
-              </box>
-            ) : (
-              <text fg={MUTED}>{fitTuiText(statusBarText, controlsWidth)}</text>
-            )}
-          </box>
+        <box flexDirection="row" width={controlsWidth} height={1} flexShrink={0} minWidth={0} overflow="hidden">
+          {loadingLabel ? <text fg={animationKind === "awaiting-operator" ? WARNING : ACCENT}>{`${loadingLabel} · `}</text> : null}
+          {statusPills.length > 0 ? (
+            <box flexDirection="row" flexShrink={0} minWidth={0}>
+              {statusPills.map((segment, index) => (
+                <React.Fragment key={segment.kind}>
+                  {index > 0 ? <text fg={MUTED}> · </text> : null}
+                  <text fg={statusRoleColor(segment.colorRole, theme, mode)}>{pillText(segment)}</text>
+                </React.Fragment>
+              ))}
+            </box>
+          ) : <text fg={MUTED}>{fitTuiText(statusBarText, statusContentWidth)}</text>}
         </box>
-      ) : null}
       {/*
         * The copy-on-highlight toast. Positioned absolutely with a high
         * zIndex (see toast.tsx), so it floats over the transcript without
         * participating in — or shifting — the column layout above.
         */}
-      <Toast frame={toastFrame} />
+      {interactive ? <Toast frame={toastFrame} /> : null}
+      {interactive && transcriptMenu.state.open ? (
+        <ContextMenu
+          items={transcriptMenu.state.items}
+          x={transcriptMenu.state.x}
+          y={transcriptMenu.state.y}
+          onClose={transcriptMenu.close}
+        />
+      ) : null}
     </box>
   );
 }

@@ -464,8 +464,10 @@ evolve            │
 
 **Source:** `packages/cli/src/commands/plugin.ts`
 
-**Status:** Scaffolded. No marketplace ships. The default registry endpoint is
-intentionally empty. Plugins can be loaded from local filesystem paths for
+**Status:** The Hackstore community index ships as the default registry
+(`github.com/0sec-labs/hackstore`); set `0SEC_REGISTRY_URL` (or `--registry`)
+to override or disable it. Signature crypto is still a stub, so entries install
+as `unverified`. Plugins can also be loaded from local filesystem paths for
 development.
 
 #### Subcommands

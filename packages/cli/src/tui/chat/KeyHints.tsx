@@ -37,3 +37,4 @@ export function KeyHints({
   });
   return <box flexDirection="row" minWidth={0} flexShrink={0}>{nodes}</box>;
 }
+

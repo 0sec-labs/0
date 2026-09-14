@@ -580,6 +580,13 @@ export interface CellsProps extends CellStyle {
    * component already fitted to its allocation.
    */
   children?: string | number | null;
+  /**
+   * Optional click affordance. When set, the leaf reports a mouse-down (used to
+   * make a drawn hint — an `esc` / close label — clickable). Purely additive:
+   * omitting it leaves the leaf inert exactly as before, and every keyboard
+   * path to the same action is untouched.
+   */
+  onMouseDown?: () => void;
 }
 
 /**
@@ -600,6 +607,7 @@ export function Cells({
   align = "left",
   fit,
   maxEncodedRun,
+  onMouseDown,
 }: CellsProps) {
   const cells = toCells(width);
   if (cells <= 0) return null;
@@ -612,6 +620,7 @@ export function Cells({
       fg={fg}
       bg={bg}
       attributes={attributes}
+      onMouseDown={onMouseDown}
     >
       {fitCells(children, cells, { align, fit, maxEncodedRun })}
     </text>

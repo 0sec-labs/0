@@ -115,16 +115,38 @@ export const SLASH_COMMANDS: readonly SlashCommand[] = [
   },
   {
     name: "new-chat",
+    aliases: ["new"],
+    category: "navigation",
+    description: "Create an independent audit using the staged model and connection",
+    tuiOnly: true,
+  },
+  {
+    name: "audits",
     aliases: [],
     category: "navigation",
-    description: "New chat using selected model, connection and self-extension preferences",
+    description: "Switch between live audits without stopping their work",
+    tuiOnly: true,
+  },
+  {
+    name: "onboard",
+    aliases: [],
+    category: "navigation",
+    description: "Reopen guided setup without replacing the current audit",
+    tuiOnly: true,
+  },
+  {
+    name: "stop",
+    aliases: [],
+    category: "session",
+    description: "Stop this audit's work or one owned worker and its descendants",
+    usage: "/stop audit | /stop worker <exact name or id>",
     tuiOnly: true,
   },
 
   // ── session ─────────────────────────────────────────────────────────────
   {
     name: "clear",
-    aliases: ["new"],
+    aliases: [],
     category: "session",
     description: "Clear the conversation history",
   },
@@ -186,7 +208,7 @@ export const SLASH_COMMANDS: readonly SlashCommand[] = [
     name: "mode",
     aliases: [],
     category: "mode",
-    description: "Set Standard (approve actions), Co-pilot (autonomous in scope), YOLO (full autonomy; approve new targets), or Recon (passive)",
+    description: "Set Standard (approve actions), Co-pilot (in scope), YOLO (public-network autonomy), or Recon (passive)",
     usage: "/mode [standard|copilot|yolo|recon]",
   },
   {
@@ -224,6 +246,14 @@ export const SLASH_COMMANDS: readonly SlashCommand[] = [
     category: "system",
     description: "Open settings; changes persist between sessions",
     usage: "/settings",
+  },
+  {
+    name: "keybindings",
+    aliases: ["keys", "keymap"],
+    category: "system",
+    description: "View and rebind keyboard shortcuts; changes persist",
+    usage: "/keybindings",
+    tuiOnly: true,
   },
   {
     name: "theme",
@@ -271,10 +301,17 @@ export const SLASH_COMMANDS: readonly SlashCommand[] = [
     tuiOnly: true,
   },
   {
-    name: "market",
-    aliases: ["marketplace"],
+    name: "comms",
+    aliases: ["messages"],
     category: "navigation",
-    description: "Browse the extension marketplace",
+    description: "Watch the agent fleet and the messages flowing between agents",
+    tuiOnly: true,
+  },
+  {
+    name: "hackstore",
+    aliases: ["store", "market", "marketplace"],
+    category: "navigation",
+    description: "Browse the Hackstore — install community extensions and themes",
     tuiOnly: true,
   },
   {

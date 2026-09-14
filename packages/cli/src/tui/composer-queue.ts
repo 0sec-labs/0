@@ -117,6 +117,15 @@ export function shouldFlushQueuedInput(params: FlushQueuedInputParams): boolean 
   return !params.input.trim() && !params.busy && params.hasSession && params.queuedCount > 0;
 }
 
+/**
+ * Empty Enter requests the next queued message without overlapping turns.
+ * An interrupt leaves the message parked until the active send has settled.
+ */
+export function queuedInputAction(params: FlushQueuedInputParams): "none" | "interrupt" | "send" {
+  if (params.input.trim() || !params.hasSession || params.queuedCount <= 0) return "none";
+  return params.busy ? "interrupt" : "send";
+}
+
 /** The result of taking the next parked message. */
 export interface DequeueResult {
   /** The front message, or undefined when the queue was empty. */

@@ -182,9 +182,8 @@ export async function runThemeInstall(id: string, deps: ThemeCommandDeps = {}): 
   }
   const registryUrl = registryUrlOf(deps, core);
   if (registryUrl.length === 0) {
-    err(chalk.red("No registry is configured, so nothing can be installed."));
-    err("  Point --registry (or $0SEC_REGISTRY_URL) at a theme registry index URL you trust.");
-    err(chalk.dim("  (No registry endpoint ships by default — DEFAULT_REGISTRY_URL is empty.)"));
+    err(chalk.red("The Hackstore is disabled (registry URL is empty), so nothing can be installed."));
+    err("  Unset 0SEC_REGISTRY_URL for the default community Hackstore, or point --registry at a theme index URL you trust.");
     process.exitCode = EXIT_USER_ERROR;
     return;
   }

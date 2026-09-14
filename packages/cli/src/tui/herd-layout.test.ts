@@ -4,11 +4,17 @@ import {
   HERD_ACTIVITY_MAX,
   HERD_COMPOSER_CURSOR,
   HERD_COMPOSER_PROMPT,
+  HERD_ATTENTION_ORDER,
   HERD_PEER_TTL_MS,
   HERD_STATUS_ORDER,
   abbreviateHomePath,
   applySubagentLifecycle,
   applySubagentProgress,
+  completionReasonNote,
+  completionReasonTone,
+  formatTokens,
+  formatElapsed,
+  readFocusTelemetry,
   buildHerdRows,
   clampHerdSelection,
   clipDetailLines,
@@ -31,6 +37,7 @@ import {
   herdStatusOf,
   isPeerStale,
   lastSelectableIndex,
+  nthPeerRowIndex,
   mergeSubagentRoster,
   moveHerdSelection,
   renderFocusActivity,
@@ -161,6 +168,81 @@ describe("buildHerdRows — grouping", () => {
       NOW,
     );
     expect(rows.filter((r) => r.kind === "peer")).toHaveLength(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Attention-first ordering (rosterSort: "attention")
+// ---------------------------------------------------------------------------
+
+describe("buildHerdRows — attention ordering", () => {
+  it("keeps the historical status order by default and for sort=\"status\"", () => {
+    const headingsOf = (sort?: "status" | "attention") =>
+      buildHerdRows(everyStatusRoster(), NOW, undefined, sort)
+        .filter((r): r is Extract<HerdRow, { kind: "heading" }> => r.kind === "heading")
+        .map((h) => h.status);
+    expect(headingsOf()).toEqual(HERD_STATUS_ORDER);
+    expect(headingsOf("status")).toEqual(HERD_STATUS_ORDER);
+  });
+
+  it("floats blocked → working → done → idle → stale for sort=\"attention\"", () => {
+    const headings = buildHerdRows(everyStatusRoster(), NOW, undefined, "attention")
+      .filter((r): r is Extract<HerdRow, { kind: "heading" }> => r.kind === "heading")
+      .map((h) => h.status);
+    expect(headings).toEqual(HERD_ATTENTION_ORDER);
+    expect(headings).toEqual(["blocked", "working", "done", "idle", "stale"]);
+    // blocked comes first — the whole point is surfacing agents needing input.
+    expect(headings[0]).toBe("blocked");
+  });
+
+  it("is stable within a bucket (provider order preserved)", () => {
+    const roster = [
+      peer("b1", { activity: { phase: "blocked" } }),
+      peer("w1", { activity: { phase: "working" } }),
+      peer("b2", { activity: { phase: "blocked" } }),
+      peer("w2", { activity: { phase: "working" } }),
+    ];
+    const ids = buildHerdRows(roster, NOW, undefined, "attention")
+      .filter((r) => r.kind === "peer")
+      .map((r) => (r.kind === "peer" ? r.peer.id : ""));
+    // Blocked bucket first (b1 before b2), then working (w1 before w2).
+    expect(ids).toEqual(["b1", "b2", "w1", "w2"]);
+  });
+
+  it("omits empty groups under attention ordering too", () => {
+    const rows = buildHerdRows([peer("a"), peer("b")], NOW, undefined, "attention");
+    expect([...new Set(rows.map((r) => r.status))]).toEqual(["idle"]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Index → agent mapping (number-key jump)
+// ---------------------------------------------------------------------------
+
+describe("nthPeerRowIndex — 1-based agent jump", () => {
+  const rows = buildHerdRows(everyStatusRoster(), NOW, undefined, "attention");
+  const peerRowIndexes = rows.reduce<number[]>((acc, row, index) => {
+    if (row.kind === "peer") acc.push(index);
+    return acc;
+  }, []);
+
+  it("maps N to the N-th peer row, skipping headings", () => {
+    expect(nthPeerRowIndex(rows, 1)).toBe(peerRowIndexes[0]);
+    expect(nthPeerRowIndex(rows, 3)).toBe(peerRowIndexes[2]);
+    expect(nthPeerRowIndex(rows, 5)).toBe(peerRowIndexes[4]);
+    // The mapped rows are always peers, never headings.
+    for (let n = 1; n <= peerRowIndexes.length; n++) {
+      expect(rows[nthPeerRowIndex(rows, n)]?.kind).toBe("peer");
+    }
+  });
+
+  it("returns -1 for out-of-range, zero, negative and non-integer n", () => {
+    expect(nthPeerRowIndex(rows, 0)).toBe(-1);
+    expect(nthPeerRowIndex(rows, peerRowIndexes.length + 1)).toBe(-1);
+    expect(nthPeerRowIndex(rows, -2)).toBe(-1);
+    expect(nthPeerRowIndex(rows, 1.5)).toBe(-1);
+    expect(nthPeerRowIndex(rows, Number.NaN)).toBe(-1);
+    expect(nthPeerRowIndex([], 1)).toBe(-1);
   });
 });
 
@@ -669,6 +751,15 @@ describe("subagentPeers + mergeSubagentRoster", () => {
 });
 
 describe("focus content — header and transcript", () => {
+  it("renders acknowledged cancellation without failure styling", () => {
+    const map = applySubagentLifecycle({}, lifecycle({ status: "failed", error: "Worker stopped by operator" }), NOW);
+    const record = { ...map["child-1"]!, operatorStopped: true };
+    const worker = subagentPeers({ [record.agentId]: record }, NOW)[0];
+    const lines = focusHeaderLines(worker, record, 80, NOW);
+    expect(lines.find((line) => line.text.startsWith("Status:"))?.tone).toBe("muted");
+    expect(lines.filter((line) => line.tone === "warn")).toEqual([]);
+  });
+
   it("renders identity + status counters, preferring the live record", () => {
     let map = applySubagentLifecycle({}, lifecycle(), NOW);
     map = applySubagentProgress(map, progress({ turn: 3, tool: "curl" }), NOW + 1);
@@ -872,3 +963,145 @@ describe("paneTitleColumns (herd)", () => {
   });
 });
 
+
+// ---------------------------------------------------------------------------
+// Telemetry formatters, completion reason, lineage — the drill-in enrichments
+// ---------------------------------------------------------------------------
+
+describe("formatTokens / formatElapsed (shared chip formatters)", () => {
+  it("formats compact token counts, dropping a zero/missing total", () => {
+    expect(formatTokens(0)).toBe("");
+    expect(formatTokens(undefined)).toBe("");
+    expect(formatTokens(980)).toBe("980");
+    expect(formatTokens(1500)).toBe("1.5k");
+    expect(formatTokens(42_000)).toBe("42k");
+    expect(formatTokens(2_500_000)).toBe("2.5m");
+  });
+
+  it("formats compact elapsed durations, dropping a non-positive one", () => {
+    expect(formatElapsed(0)).toBe("");
+    expect(formatElapsed(4200)).toBe("4.2s");
+    expect(formatElapsed(63_000)).toBe("1m03s");
+    expect(formatElapsed(3_720_000)).toBe("1h02m");
+  });
+});
+
+describe("completionReasonNote / completionReasonTone", () => {
+  it("omits a clean done and a missing reason (no noisy parenthetical)", () => {
+    expect(completionReasonNote(undefined)).toBe("");
+    expect(completionReasonNote("done")).toBe("");
+    expect(completionReasonNote("")).toBe("");
+  });
+
+  it("surfaces a curtailed reason and control-strips an unknown one", () => {
+    expect(completionReasonNote("turn_limit")).toBe("turn_limit");
+    expect(completionReasonNote("cost_limit")).toBe("cost_limit");
+    expect(completionReasonNote("a\x1bb")).toBe("ab");
+  });
+
+  it("tones limit/error reasons as warn, done/early_stop as muted", () => {
+    expect(completionReasonTone("turn_limit")).toBe("warn");
+    expect(completionReasonTone("cost_limit")).toBe("warn");
+    expect(completionReasonTone("error")).toBe("warn");
+    expect(completionReasonTone("early_stop")).toBe("muted");
+    expect(completionReasonTone("done")).toBe("muted");
+  });
+});
+
+describe("readFocusTelemetry", () => {
+  it("extracts measured usage/context/duration/model, else undefined", () => {
+    expect(readFocusTelemetry({})).toBeUndefined();
+    expect(
+      readFocusTelemetry({
+        usage: { inputTokens: 100, outputTokens: 50, cachedInputTokens: 10 },
+        contextTokens: 4200,
+        durationMs: 5000,
+        model: "anthropic/claude",
+      }),
+    ).toEqual({
+      inputTokens: 100,
+      outputTokens: 50,
+      cachedInputTokens: 10,
+      contextTokens: 4200,
+      durationMs: 5000,
+      model: "anthropic/claude",
+    });
+  });
+});
+
+describe("completion reason on the record + focus header", () => {
+  it("projects completion_reason off the lifecycle payload", () => {
+    const map = applySubagentLifecycle(
+      {},
+      lifecycle({ status: "completed", completion_reason: "turn_limit" }),
+      NOW,
+    );
+    expect(map["child-1"]?.completionReason).toBe("turn_limit");
+  });
+
+  it("appends the reason to the Status line and tones a limit run warn", () => {
+    const map = applySubagentLifecycle(
+      {},
+      lifecycle({ status: "completed", completion_reason: "turn_limit" }),
+      NOW,
+    );
+    const rec = map["child-1"];
+    const p = subagentPeers(map, NOW).find((x) => x.id === "child-1");
+    const status = focusHeaderLines(p, rec, 80, NOW).find((l) => l.text.startsWith("Status:"));
+    expect(status?.text).toBe("Status: completed (turn_limit)");
+    expect(status?.tone).toBe("warn");
+  });
+
+  it("shows no parenthetical for a clean done", () => {
+    const map = applySubagentLifecycle(
+      {},
+      lifecycle({ status: "completed", done: true, completion_reason: "done" }),
+      NOW,
+    );
+    const rec = map["child-1"];
+    const p = subagentPeers(map, NOW).find((x) => x.id === "child-1");
+    const status = focusHeaderLines(p, rec, 80, NOW).find((l) => l.text.startsWith("Status:"));
+    expect(status?.text).toBe("Status: completed");
+  });
+});
+
+describe("focus header — telemetry block + lineage", () => {
+  it("renders Model / Tokens / Context / Elapsed only for reported data", () => {
+    const map = applySubagentLifecycle({}, lifecycle({ status: "completed" }), NOW);
+    const rec = map["child-1"];
+    const p = subagentPeers(map, NOW).find((x) => x.id === "child-1");
+    const text = focusHeaderLines(p, rec, 80, NOW, {
+      telemetry: {
+        model: "anthropic/claude",
+        inputTokens: 12_000,
+        outputTokens: 3_000,
+        cachedInputTokens: 500,
+        contextTokens: 8_000,
+        durationMs: 63_000,
+      },
+    }).map((l) => l.text);
+    expect(text).toContain("Model: anthropic/claude");
+    expect(text).toContain("Tokens: 12k in / 3.0k out / 500 cached");
+    expect(text).toContain("Context: 8.0k");
+    expect(text).toContain("Elapsed: 1m03s");
+  });
+
+  it("omits every telemetry line when nothing is reported", () => {
+    const map = applySubagentLifecycle({}, lifecycle({ status: "completed" }), NOW);
+    const rec = map["child-1"];
+    const p = subagentPeers(map, NOW).find((x) => x.id === "child-1");
+    const text = focusHeaderLines(p, rec, 80, NOW).map((l) => l.text);
+    expect(text.some((t) => t.startsWith("Model:"))).toBe(false);
+    expect(text.some((t) => t.startsWith("Tokens:"))).toBe(false);
+    expect(text.some((t) => t.startsWith("Context:"))).toBe(false);
+    expect(text.some((t) => t.startsWith("Elapsed:"))).toBe(false);
+  });
+
+  it("renders a Parent lineage line from parentScanId", () => {
+    const map = applySubagentLifecycle({}, lifecycle(), NOW);
+    const rec = map["child-1"];
+    const p = subagentPeers(map, NOW).find((x) => x.id === "child-1");
+    const text = focusHeaderLines(p, rec, 80, NOW).map((l) => l.text);
+    expect(text).toContain("Parent: scan-1");
+  });
+});

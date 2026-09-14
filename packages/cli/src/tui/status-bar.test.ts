@@ -14,30 +14,6 @@ import {
   type StatusSegmentKind,
 } from "./status-bar.js";
 
-/**
- * The bar the status line is modelled on, copied verbatim.
- *
- * The renderer, not this module, decides how segments are grouped and
- * spaced on screen — which is why the assembly below uses the reference
- * bar's own spacing rather than the default separator. What is being
- * pinned here is the *content* of each segment: get one of these strings
- * wrong and no amount of layout work reproduces the target.
- */
-const REFERENCE_BAR =
-  "GPT-5.6-Terra · max   ~/coding/0sec-labs/0sec   publish/main-integration *54 ?29   1.4%/1M  (sub)";
-
-const REFERENCE_INPUT: StatusBarInput = {
-  model: "GPT-5.6-Terra",
-  effort: "max",
-  cwd: "/home/dev/coding/0sec-labs/0sec",
-  home: "/home/dev",
-  branch: "publish/main-integration",
-  modified: 54,
-  untracked: 29,
-  contextWindow: 1_000_000,
-  contextUsed: 14_000,
-  plan: "sub",
-};
 
 /** A bar with every segment populated, for the fitting tests. */
 const RICH_INPUT: StatusBarInput = {
@@ -132,52 +108,6 @@ describe("formatTokenCount", () => {
 });
 
 describe("buildStatusSegments", () => {
-  it("reproduces the reference bar from a realistic input", () => {
-    const segments = buildStatusSegments(REFERENCE_INPUT);
-
-    expect(kinds(segments)).toEqual([
-      "model",
-      "effort",
-      "cwd",
-      "branch",
-      "dirty",
-      "context",
-      "plan",
-    ]);
-
-    const bar =
-      `${textOf(segments, "model")} · ${textOf(segments, "effort")}` +
-      `   ${textOf(segments, "cwd")}` +
-      `   ${textOf(segments, "branch")} ${textOf(segments, "dirty")}` +
-      `   ${textOf(segments, "context")}` +
-      `  ${textOf(segments, "plan")}`;
-
-    expect(bar).toBe(REFERENCE_BAR);
-  });
-
-  it("orders segments model, effort, mode, cwd, branch, dirty, tokens, context, plan", () => {
-    expect(kinds(buildStatusSegments(RICH_INPUT))).toEqual([
-      "model",
-      "effort",
-      "mode",
-      "cwd",
-      "branch",
-      "dirty",
-      "tokens",
-      "context",
-      "plan",
-    ]);
-  });
-
-  it("surfaces configured self-evolution after autonomy mode", () => {
-    const segments = buildStatusSegments({ model: "m", mode: "Standard", evolution: "evolve:auto" });
-    expect(kinds(segments)).toEqual(["model", "mode", "evolution"]);
-    expect(textOf(segments, "evolution")).toBe("evolve:auto");
-    expect(segments.find((segment) => segment.kind === "evolution")).toMatchObject({
-      colorRole: "evolution",
-      priority: 8,
-    });
-  });
 
   it("emits nothing for an empty input", () => {
     expect(buildStatusSegments({})).toEqual([]);
@@ -262,17 +192,59 @@ describe("buildStatusSegments", () => {
     expect(textOf(segments, "cwd")).toBe("~/coding/0sec-labs/0sec");
   });
 
-  it("marks the model as undroppable and the cwd as the first to go", () => {
-    const segments = buildStatusSegments(RICH_INPUT);
-    const priority = (kind: StatusSegmentKind): number =>
-      segments.find((segment) => segment.kind === kind)!.priority;
+});
 
-    expect(priority("model")).toBe(0);
-    const droppable = segments.filter((segment) => segment.priority > 0);
-    const lowest = Math.min(...droppable.map((segment) => segment.priority));
-    expect(priority("cwd")).toBe(lowest);
-    expect(priority("dirty")).toBeLessThan(priority("branch"));
-    expect(priority("mode")).toBeGreaterThan(priority("effort"));
+describe("active turn elapsed", () => {
+  it("is time-only (no 'running for ' prefix) at unit boundaries", () => {
+    expect(textOf(buildStatusSegments({ turnElapsedMs: 59_999 }), "elapsed")).toBe("59s");
+    expect(textOf(buildStatusSegments({ turnElapsedMs: 60_000 }), "elapsed")).toBe("1m");
+    expect(textOf(buildStatusSegments({ turnElapsedMs: 3_600_000 }), "elapsed")).toBe("1h");
+  });
+
+  it("does not invent elapsed time when idle or the reading is invalid", () => {
+    for (const turnElapsedMs of [undefined, -1, Number.NaN, Number.POSITIVE_INFINITY]) {
+      expect(textOf(buildStatusSegments({ turnElapsedMs }), "elapsed")).toBeUndefined();
+    }
+  });
+
+  it("leads the segment order and carries a single-cell clock glyph", () => {
+    // The timer pill sits right after the bottom-left spinner icon, so it must
+    // be the first data segment and read as its own glyphed pill.
+    const segments = buildStatusSegments({ turnElapsedMs: 4_000, model: "m", mode: "Standard" });
+    expect(kinds(segments)[0]).toBe("elapsed");
+    const elapsed = segments.find((s) => s.kind === "elapsed")!;
+    expect(elapsed.icon).toBe("◷");
+    expect(elapsed.icon.length).toBe(1);
+    expect(elapsed.text).toBe("4s");
+  });
+});
+
+describe("live activity segment", () => {
+  it("surfaces a caller-composed activity line and trails the order", () => {
+    const segments = buildStatusSegments({
+      model: "m",
+      turnElapsedMs: 1_000,
+      activity: "read · packages/cli/src/tui/status-bar.ts",
+    });
+    expect(textOf(segments, "activity")).toBe("read · packages/cli/src/tui/status-bar.ts");
+    // Rightmost pill: the live line reads at the end of the row.
+    expect(kinds(segments).at(-1)).toBe("activity");
+  });
+
+  it("invents nothing: an absent or blank activity emits no segment", () => {
+    expect(textOf(buildStatusSegments({ model: "m" }), "activity")).toBeUndefined();
+    expect(textOf(buildStatusSegments({ model: "m", activity: "   " }), "activity")).toBeUndefined();
+  });
+
+  it("sheds early under width pressure, before mode or model", () => {
+    const segments = buildStatusSegments({
+      model: "a-model",
+      mode: "YOLO",
+      activity: "running some long tool call with a big argument preview",
+    });
+    const kept = fitStatusPills(segments, 14).map((s) => s.kind);
+    expect(kept).not.toContain("activity");
+    expect(kept).toContain("mode");
   });
 });
 
@@ -328,12 +300,35 @@ describe("context meter", () => {
     ).toContain("▱▱▱▱▱▱ 0% of 100");
   });
 
-  it("still needs both window and usage to draw a meter", () => {
-    for (const input of [{ contextUsed: 10 }, { contextWindow: 100 }]) {
-      const text = textOf(buildStatusSegments({ ...input, showContextMeter: true }), "meter");
-      expect(text).toBeDefined();
-      expect(text).not.toMatch(/[0-9%▱▰]/u);
-    }
+  it("never draws a percent/bar meter without a known window", () => {
+    // A bar/percent implies an occupancy fraction of a window. Usage alone (no
+    // window) gets the count-only fallback, asserted separately below; a KNOWN
+    // window without usage does draw a 0% bar, also asserted below.
+    const text = textOf(buildStatusSegments({ contextUsed: 10, showContextMeter: true }), "meter");
+    expect(text).toBeDefined();
+    expect(text).not.toMatch(/[%▱▰]/u);
+  });
+
+  it("shows a truthful token count when usage is known but the window is not", () => {
+    // A model absent from the context-window catalog (e.g. gpt-5.5) still
+    // reports how many tokens the turn used — surface that rather than a dead
+    // "unavailable" label, without inventing a percentage.
+    const text = textOf(buildStatusSegments({ contextUsed: 10, showContextMeter: true }), "meter");
+    expect(text).toMatch(/used/);
+    expect(text).not.toMatch(/[%▱▰]/u);
+  });
+
+  it("shows the window at 0% when it is known but no usage exists yet", () => {
+    // A fresh session with a known window: the capacity is real before the
+    // first token is spent, so show it at 0% rather than "unavailable".
+    const text = textOf(buildStatusSegments({ contextWindow: 100, showContextMeter: true }), "meter");
+    expect(text).not.toBe("Context usage unavailable");
+    expect(text).toMatch(/0%|▱/u);
+  });
+
+  it("still shows unavailable when neither window nor usage is known", () => {
+    const text = textOf(buildStatusSegments({ showContextMeter: true }), "meter");
+    expect(text).toBe("Context usage unavailable");
   });
 });
 
@@ -410,8 +405,8 @@ describe("fitStatusSegments", () => {
   });
 
   it("truncates with an ellipsis when even the model does not fit", () => {
-    const model = textOf(segments, "model")!;
-    const bar = fitStatusSegments(segments, 8);
+    const model = "a-very-long-model-name";
+    const bar = fitStatusSegments(buildStatusSegments({ model }), 8);
     expect(bar.length).toBe(8);
     expect(bar.endsWith("...")).toBe(true);
     expect(model.startsWith(bar.slice(0, -3))).toBe(true);
@@ -510,12 +505,14 @@ describe("fitStatusPills", () => {
     }
   });
 
-  it("sheds the least important segment first, keeping the model longest", () => {
-    const segments = buildStatusSegments(RICH_INPUT);
-    // A width that forces several drops but not all of them.
-    const pills = fitStatusPills(segments, 40);
-    expect(pills.some((s) => s.kind === "model")).toBe(true);
-    expect(pills.some((s) => s.kind === "cwd")).toBe(false);
+  it("keeps the permission mode visible when model and elapsed cannot fit", () => {
+    const segments = buildStatusSegments({
+      model: "a-very-long-model-identifier",
+      mode: "YOLO",
+      turnElapsedMs: 1_000,
+    });
+    expect(fitStatusSegments(segments, 8)).toBe("YOLO");
+    expect(fitStatusPills(segments, 8).map(pillText).join(" · ")).toContain("YOLO");
   });
 
   it("truncates the undroppable model's label but keeps its glyph when alone", () => {

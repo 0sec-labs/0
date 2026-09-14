@@ -40,13 +40,44 @@ export interface TranscriptReviewOptions {
   expandedTurns?: ReadonlySet<number>;
 }
 
+/**
+ * A horizontal rule, `width` cells wide, clamped to a readable 3..80.
+ *
+ * Repeated characters are the proven rule idiom in this codebase; per-edge
+ * border arrays are not, and the review document is a single flat text buffer
+ * that has no borders to speak of in any case. Exported so the review's own
+ * chrome (`chat/TranscriptReview.tsx`) draws the same rule as a markdown `---`
+ * inside the transcript, rather than a second, slightly different one.
+ */
+export function reviewRule(width: number): string {
+  const cells = Number.isFinite(width) ? Math.floor(width) : 0;
+  return "─".repeat(Math.max(3, Math.min(cells, 80)));
+}
+
+/**
+ * The gutter glyph that opens an entry's header line.
+ *
+ * The review is one native text buffer with a single foreground colour, so the
+ * per-line `tone` cannot be painted — the hierarchy has to live in the
+ * characters. These are the SAME glyphs the live chat uses for the same
+ * meanings (`✓` done, `×` failed, `▶` running, `·` quiet, `▸` folded), so an
+ * operator does not learn a second vocabulary to read the review.
+ */
+const GUTTER = {
+  speaker: "▌",
+  quiet: "·",
+  running: "▶",
+  done: "✓",
+  failed: "×",
+} as const;
+
 function markdownLines(source: string, width: number): string[] {
   const lines: string[] = [];
   const blockWidth = Math.max(8, width);
 
   for (const block of renderMarkdown(source, blockWidth)) {
     if (block.kind === "rule") {
-      lines.push("─".repeat(Math.max(3, Math.min(blockWidth, 80))));
+      lines.push(reviewRule(blockWidth));
       continue;
     }
 
@@ -123,7 +154,7 @@ function compileEntry(
   if (entry.kind === "user" || entry.kind === "assistant") {
     const tone = entry.kind === "user" ? "user" : "assistant";
     document.push({
-      text: `${entry.kind === "user" ? "OPERATOR" : "0SEC"}${repeat}`,
+      text: `${GUTTER.speaker} ${entry.kind === "user" ? "OPERATOR" : "0SEC"}${repeat}`,
       tone,
       turn: entry.turn,
       entryId: entry.id,
@@ -133,7 +164,7 @@ function compileEntry(
   }
 
   if (entry.kind === "reasoning") {
-    document.push({ text: `THINKING${repeat}`, tone: "reasoning", turn: entry.turn, entryId: entry.id });
+    document.push({ text: `${GUTTER.quiet} THINKING${repeat}`, tone: "reasoning", turn: entry.turn, entryId: entry.id });
     pushLines(document, markdownLines(entry.text, width), "reasoning", entry, "  ");
     return;
   }
@@ -144,7 +175,11 @@ function compileEntry(
     const state = failed ? "failed" : entry.success === undefined && entry.subagentOutcome === undefined ? "running" : "done";
     const label = entry.kind === "subagent" ? "AGENT" : "TOOL";
     const args = entry.toolArgs ? ` · ${entry.toolArgs}` : "";
-    document.push({ text: `${label} ${state} · ${entry.text}${args}${repeat}`, tone, turn: entry.turn, entryId: entry.id });
+    // The glyph restates the state the words already give, because the words
+    // scroll past at a glance and the gutter does not. Never guessed: it is
+    // derived from the same `state` the label prints.
+    const glyph = state === "failed" ? GUTTER.failed : state === "running" ? GUTTER.running : GUTTER.done;
+    document.push({ text: `${glyph} ${label} ${state} · ${entry.text}${args}${repeat}`, tone, turn: entry.turn, entryId: entry.id });
     pushLines(document, reviewDetail(entry, options.detail), tone, entry, "  ");
     if (entry.subagentSummary) pushLines(document, detailLines(entry.subagentSummary), tone, entry, "  ");
     if (entry.subagentError) pushLines(document, detailLines(entry.subagentError), "failure", entry, "  ");
@@ -152,7 +187,8 @@ function compileEntry(
   }
 
   const tone = entry.kind === "error" ? "failure" : "notice";
-  document.push({ text: `${entry.text}${repeat}`, tone, turn: entry.turn, entryId: entry.id });
+  const glyph = tone === "failure" ? GUTTER.failed : GUTTER.quiet;
+  document.push({ text: `${glyph} ${entry.text}${repeat}`, tone, turn: entry.turn, entryId: entry.id });
   pushLines(document, detailLines(entry.detail), tone, entry, "  ");
 }
 

@@ -2,35 +2,48 @@
 import React from "react";
 import type { ScrollBoxRenderable } from "@opentui/core";
 import { fitTuiText } from "../text.js";
+import { operatorIcon, operatorTitle } from "../operator-icons.js";
 import type { CommandMenuLayout } from "../chat-layout.js";
 import type { SlashCommand } from "../slash-commands.js";
 import type { Theme } from "../theme-context.js";
+import { useSymbols } from "../symbol-context.js";
 
 const COMMAND_ICONS: Readonly<Record<string, string>> = {
-  help: "\uf059",
-  status: "\uf080",
-  connect: "\uf1e6",
-  providers: "\uf0ac",
-  model: "\uec19",
-  settings: "\uf1de",
-  resume: "\uf0e2",
-  transcript: "\uf0ea",
-  history: "\uf017",
-  "new-chat": "\uf055",
-  clear: "\uf12d",
-  scope: "\uf140",
-  mode: "\uf14e",
-  agents: "\uf0c0",
-  tools: "\uf0ad",
+  help: "?",
+  status: "▥",
+  connect: "↗",
+  providers: "⊞",
+  model: "◈",
+  settings: "⚙",
+  resume: "▷",
+  transcript: "▤",
+  history: "◷",
+  "new-chat": "✚",
+  clear: "✕",
+  scope: "○",
+  mode: "◐",
+  agents: "♙",
+  tools: "⌘",
 };
 
 /**
  * The slash-command menu, a bordered box stacked directly above the composer.
- * Extracted verbatim from ChatScreen's `buildCommandMenu`; every width, the
- * fixed-height scrollbox and the no-overflow contract are unchanged — the caller
- * still owns navigation (the module keyboard handler) and scroll positioning.
+ *
+ * This is the IN-PLACE palette, not a route: it is rendered inside the chat
+ * composer area, so it deliberately registers NO keyboard handler of its own.
+ * Navigation, completion, Enter and Esc all stay with `chat-screen.tsx`'s
+ * single handler, which is what keeps the menu from stealing a keystroke from
+ * the composer beneath it or from a dialog opened above it. Do not add a
+ * `useKeyboard` here.
+ *
+ * Every width, the fixed-height scrollbox and the no-overflow contract come
+ * from the caller's `CommandMenuLayout`; this component computes none of them.
  * One builder, two call sites: the full-width `layout` for the pinned chat
  * composer and a narrower one aligned to the centered hero card.
+ *
+ * The rows list the REAL registered commands the caller filtered — their
+ * canonical name, their actual aliases (or their category when they have
+ * none) and their registry description. Nothing here is invented.
  */
 export function CommandMenu({
   layout,
@@ -57,16 +70,17 @@ export function CommandMenu({
   compact: boolean;
   theme: Theme;
 }) {
+  const symbols = useSymbols();
   const { BORDER, PANEL_ALT, MUTED, PRIMARY, TEXT, ERROR } = theme;
   return (
     <box flexDirection="column" width={boxWidth} minWidth={0} height={height} flexShrink={0} marginTop={1} border borderColor={BORDER} backgroundColor={PANEL_ALT} paddingX={1}>
       <box flexDirection="row" width={layout.innerWidth} minWidth={0} gap={layout.headerGap}>
         <box width={layout.headerTitleWidth} flexShrink={0} minWidth={0}>
-          <text fg={MUTED}>{fitTuiText("COMMANDS", layout.headerTitleWidth)}</text>
+          <text fg={MUTED}>{fitTuiText(`${operatorIcon("commands", symbols)} ${operatorTitle("commands")}`, layout.headerTitleWidth)}</text>
         </box>
         {layout.headerQueryWidth > 0 ? (
           <box width={layout.headerQueryWidth} flexShrink={0} minWidth={0}>
-            <text fg={MUTED}>{fitTuiText(query ? `/${query}` : "all commands", layout.headerQueryWidth, { mode: "middle" })}</text>
+            <text fg={MUTED}>{fitTuiText(query ? `/${query} · ${commands.length}` : `all commands · ${commands.length}`, layout.headerQueryWidth, { mode: "middle" })}</text>
           </box>
         ) : null}
       </box>
@@ -94,11 +108,11 @@ export function CommandMenu({
                 : command.category;
               return (
                 <box key={command.name} flexDirection="row" width={layout.innerWidth} flexShrink={0} minWidth={0}>
-                  <text width={1} flexShrink={0} fg={active ? PRIMARY : MUTED}>{active ? "\uf054" : " "}</text>
+                  <text width={1} flexShrink={0} fg={active ? PRIMARY : MUTED}>{active ? symbols.rowMarker : " "}</text>
                   <box flexDirection="column" width={layout.rowWidth} flexGrow={0} flexShrink={0} minWidth={0} marginLeft={1}>
                     <box flexDirection="row" width={layout.rowWidth} minWidth={0} gap={1}>
                       <box width={layout.nameWidth} flexShrink={0} minWidth={0}>
-                        <text fg={active ? PRIMARY : TEXT}>{fitTuiText(`${COMMAND_ICONS[command.name] ?? "\uf054"} /${command.name}`, layout.nameWidth)}</text>
+                        <text fg={active ? PRIMARY : TEXT}>{fitTuiText(`${COMMAND_ICONS[command.name] ?? "◇"} /${command.name}`, layout.nameWidth)}</text>
                       </box>
                       {layout.metaWidth > 0 ? (
                         <box width={layout.metaWidth} flexShrink={0} minWidth={0}>

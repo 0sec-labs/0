@@ -1,28 +1,40 @@
 /** @jsxImportSource @opentui/react */
 /**
- * The full-screen provider connect / login screen (`/connect`, alias `/login`).
+ * The provider connect / login dialog (`/connect`, alias `/login`).
  *
  * `/providers` reports which vendors this machine can already reach; this
  * screen is the write side, letting the operator connect one without leaving
- * the console. It mirrors `model-screen.tsx` in shape — a grouped list on the
- * left, the highlighted provider's detail on the right, stacked when the
- * terminal is too narrow to hold both — and, like it, does no arithmetic of
- * its own: every width, row count and window boundary comes off
- * `connect-layout.ts`, which is swept across widths 0..200 and heights 0..80.
+ * the console. It is a pop-up: the host wraps it in `DialogSurface`, and
+ * `useSurfaceDimensions` reports that panel's inner box, so every row and cell
+ * budget here is measured against the dialog. The body is the console's one
+ * shared picker (`DialogSelectBody` in inline `bodyRows` mode) — providers
+ * grouped by how you connect them, searchable, with the highlighted one's
+ * detail in the column beside the list — plus a title row and a status line.
+ * The footer of bindings is the HOST's single row, drawn from the `hint` this
+ * screen returns through `frame`, so it is not drawn twice. The detail column
+ * scrolls rather than clipping: every provider fact the full-screen version
+ * could show is still reachable.
  *
- * Two properties are load-bearing:
+ * Three properties are load-bearing and survive the redesign unchanged:
  *
  * 1. **A credential leaves this screen only through the credential store.** The
  *    input sub-step writes the pasted secret with `saveCredentials`, which
  *    persists it owner-only to `~/.0sec/credentials.json`. Nothing is sent
- *    anywhere else, and the raw value is never rendered — the input echoes a
- *    fixed, length-capped dot run, never the secret.
+ *    anywhere else.
  *
- * 2. **The green check is verified, never optimistic.** A provider reads as
- *    connected only when `providerStates` finds an env credential or the store
+ * 2. **The raw secret is never rendered.** The input sub-step echoes
+ *    `connectInputMask` — a fixed dot run capped at eight cells — and nothing
+ *    else. The secret lives in one piece of component state, is never put on a
+ *    `DialogItem`, in the detail pane, in the status line or in a log, and is
+ *    dropped the moment the sub-step ends.
+ *
+ * 3. **The green check is verified, never optimistic.** A provider reads as
+ *    connected — the gutter dot, the `connected` meta and the detail pane's
+ *    header — only when `providerStates` finds an env credential or the store
  *    on disk holds one. There is no sticky "connecting…" state; the check
  *    appears after a save because the store now holds the value, not because
- *    the screen assumed the save worked.
+ *    the screen assumed the save worked. A provider being repaired after a
+ *    failure reads as NOT connected until it is reconnected.
  *
  * The ChatGPT Codex path runs the official `codex login --device-auth` flow
  * under this OpenTUI pane. It never asks for an API key or pasted OAuth token:
@@ -38,11 +50,16 @@
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { decodePasteBytes, TextAttributes } from "@opentui/core";
-import { useKeyboard, usePaste, useTerminalDimensions } from "@opentui/react";
+import { useKeyboard, usePaste } from "@opentui/react";
 
 import { useTheme, type Theme } from "./theme-context.js";
+import { useSymbols } from "./symbol-context.js";
+import { useDialogSurface, useSurfaceDimensions } from "./dialog-surface.js";
+import { operatorIcon, operatorTitle } from "./operator-icons.js";
 import { Cells } from "./primitives.js";
 import { providerStates } from "./provider-status.js";
+import { DialogSelectBody, type DialogItem } from "./dialog-select.js";
+import { clampDialogSelection, moveDialogSelection } from "./dialog-select-layout.js";
 import {
   loadCredentials,
   saveCredentials,
@@ -60,34 +77,37 @@ import {
   type HostedDeviceAuthUpdate,
 } from "./hosted-device-auth.js";
 import {
-  authHintLabel,
+  CONNECT_DIALOG_HOST_ROWS,
   buildConnectRows,
-  clampSelection,
-  clipConnectDetailLines,
   computeConnectLayout,
   computeConnectTitleLayout,
-  computeConnectWindow,
+  connectConnectedCounts,
   connectDetailLines,
   connectDetailTitleLabel,
   connectDetailTitleMeta,
+  connectDialogItems,
+  connectDisplayRowCount,
   connectFooterHint,
   connectInputMask,
-  connectListMeta,
-  connectListTitleLabel,
+  connectRowForId,
   connectStatusLine,
-  firstSelectableIndex,
+
   isFilterKey,
-  moveSelection,
   pastableChars,
+  shellChromeRows,
+  wrapCells,
   type ConnectDetailTone,
   type ConnectMode,
-  type ConnectPane,
   type ConnectProvider,
+  type ConnectRow,
 } from "./connect-layout.js";
 
 /** How many rows page-up and page-down move. */
 const PAGE_STEP = 5;
-
+/** The dialog's own identity, from the shared operator icon/title table. */
+const SCREEN_KEY = "connect";
+/** The picker id the cloud sign-in row commits with. */
+const CLOUD_ID = "hosted";
 
 export interface ConnectFrameInput {
   body: React.ReactNode;
@@ -114,7 +134,14 @@ export interface ConnectScreenProps {
   homeDir?: string;
 }
 
-function toneColor(theme: Theme, tone: ConnectDetailTone): string | undefined {
+/** One fitted line of the detail column, with the colour already chosen. */
+interface PaneLine {
+  text: string;
+  fg: string;
+  bold?: boolean;
+}
+
+function toneColor(theme: Theme, tone: ConnectDetailTone): string {
   switch (tone) {
     case "title":
       return theme.PRIMARY;
@@ -130,154 +157,6 @@ function toneColor(theme: Theme, tone: ConnectDetailTone): string | undefined {
     default:
       return theme.TEXT;
   }
-}
-
-/**
- * Local equivalent of the shell's RailBar. It is a painted one-cell spine, not
- * a text glyph, so it remains a continuous rule across the section's height.
- */
-function RailBar({ tone }: { tone: string }) {
-  return <box width={1} flexShrink={0} alignSelf="stretch" backgroundColor={tone} />;
-}
-
-/**
- * The connect flow uses the same sparse rail treatment as chat: one primary
- * selection rail, then a flat selected-provider context. `connect-layout`
- * already reserves four cells of wide-screen pane chrome; this spends them as
- * rail + breathing room instead of drawing a second all-sided console box.
- */
-function RailPane({
-  pane,
-  railTone,
-  title,
-  children,
-}: {
-  pane: ConnectPane;
-  /** Omit for the quieter selected-provider context pane. */
-  railTone?: string;
-  /** The header row node, already fitted to the pane's inner width. */
-  title: React.ReactNode;
-  children: React.ReactNode;
-}) {
-  if (pane.width <= 0 || pane.height <= 0 || pane.innerWidth <= 0) return null;
-  const titleRow = pane.hasTitle ? title : null;
-  const hasWideChrome = pane.width > pane.innerWidth;
-  const body = (
-    <>
-      {titleRow}
-      {children}
-    </>
-  );
-
-  if (railTone && hasWideChrome) {
-    return (
-      <box
-        flexDirection="row"
-        width={pane.width}
-        height={pane.height}
-        flexShrink={0}
-        flexGrow={0}
-        minWidth={0}
-      >
-        <RailBar tone={railTone} />
-        <box
-          flexDirection="column"
-          width={pane.innerWidth}
-          height={pane.height}
-          flexShrink={0}
-          flexGrow={0}
-          minWidth={0}
-          marginLeft={1}
-        >
-          {body}
-        </box>
-      </box>
-    );
-  }
-
-  return (
-    <box
-      flexDirection="column"
-      width={pane.width}
-      height={pane.height}
-      flexShrink={0}
-      flexGrow={0}
-      minWidth={0}
-    >
-      <box
-        flexDirection="column"
-        width={pane.innerWidth}
-        height={pane.height}
-        flexShrink={0}
-        flexGrow={0}
-        minWidth={0}
-        marginLeft={hasWideChrome ? 2 : undefined}
-      >
-        {body}
-      </box>
-    </box>
-  );
-}
-
-/** A compact rail treatment for an OAuth or connection-recovery message. */
-function DetailRail({
-  showRail,
-  tone,
-  children,
-}: {
-  showRail: boolean;
-  tone: string;
-  children: React.ReactNode;
-}) {
-  if (!showRail) {
-    return <box flexDirection="column" width="100%" minWidth={0}>{children}</box>;
-  }
-  return (
-    <box flexDirection="row" width="100%" minWidth={0}>
-      <RailBar tone={tone} />
-      <box flexDirection="column" flexGrow={1} minWidth={0} paddingLeft={1}>
-        {children}
-      </box>
-    </box>
-  );
-}
-
-/**
- * A pane header: a bold, primary-toned title on the left and a right-aligned
- * summary meta on the right. Widths come off `computeConnectTitleLayout`, so the
- * row claims exactly the pane's inner width and the title survives when the
- * header is too narrow for both. `metaFg` lets the caller colour the meta (the
- * detail header greens a connected provider).
- */
-function TitleRow({
-  innerWidth,
-  title,
-  meta,
-  metaFg,
-}: {
-  innerWidth: number;
-  title: string;
-  meta: string;
-  metaFg: string;
-}) {
-  const theme = useTheme();
-  const columns = computeConnectTitleLayout(innerWidth, meta.length);
-  if (columns.width <= 0) return null;
-  return (
-    <box flexDirection="row" width={columns.width} flexShrink={0} minWidth={0}>
-      <Cells width={columns.titleWidth} fg={theme.PRIMARY} attributes={TextAttributes.BOLD}>
-        {title}
-      </Cells>
-      {columns.metaWidth > 0 ? (
-        <>
-          <Cells width={columns.gap}>{""}</Cells>
-          <Cells width={columns.metaWidth} align="right" fg={metaFg}>
-            {meta}
-          </Cells>
-        </>
-      ) : null}
-    </box>
-  );
 }
 
 function oauthStateTone(theme: Theme, phase: CodexDeviceAuthUpdate["phase"]): string {
@@ -413,21 +292,40 @@ function hostedRecoveryHint(phase: HostedDeviceAuthUpdate["phase"]): string {
 
 export function ConnectScreen({ frame, onBack, onExit, recovery, onConnected, env, homeDir }: ConnectScreenProps) {
   const theme = useTheme();
-  const { width, height } = useTerminalDimensions();
+  const symbols = useSymbols();
+  const { width, height } = useSurfaceDimensions();
+  const inDialog = useDialogSurface();
 
   const [filter, setFilter] = useState("");
   const [filtering, setFiltering] = useState(false);
-  const [anchor, setAnchor] = useState(0);
+  const filterRef = useRef("");
+  const filteringRef = useRef(false);
+  const setFilterMode = (next: boolean) => {
+    filteringRef.current = next;
+    setFiltering(next);
+  };
 
   // The store is component state so a save is reflected immediately: the row's
   // check turns green because the store now holds the value, not because the
   // screen assumed the write succeeded.
   const [stored, setStored] = useState<StoredCredentials>(() => loadCredentials(homeDir));
 
-  // API-key input state. The raw secret lives here and nowhere else, and is
-  // dropped the moment the sub-step ends.
+  // API-key input state. The raw secret lives here and nowhere else, is never
+  // rendered (only `connectInputMask` of its LENGTH is), and is dropped the
+  // moment the sub-step ends.
   const [inputProviderId, setInputProviderId] = useState<string | undefined>(undefined);
   const [inputValue, setInputValue] = useState("");
+  const inputProviderRef = useRef<string | undefined>(undefined);
+  const inputValueRef = useRef("");
+  const applyInputProviderId = (next: string | undefined) => {
+    inputProviderRef.current = next;
+    setInputProviderId(next);
+  };
+  const applyInputValue = (update: React.SetStateAction<string>) => {
+    const next = typeof update === "function" ? update(inputValueRef.current) : update;
+    inputValueRef.current = next;
+    setInputValue(next);
+  };
   const [notice, setNotice] = useState<string | undefined>(undefined);
   const oauthSessionRef = useRef<CodexDeviceAuthSession | undefined>(undefined);
   const hostedSessionRef = useRef<{ cancel(): void } | undefined>(undefined);
@@ -437,6 +335,16 @@ export function ConnectScreen({ frame, onBack, onExit, recovery, onConnected, en
   const [hosted, setHosted] = useState<
     (HostedDeviceAuthUpdate & { providerId: string }) | undefined
   >(undefined);
+  const oauthRef = useRef<typeof oauth>(undefined);
+  const hostedRef = useRef<typeof hosted>(undefined);
+  const applyOauth = (next: typeof oauth) => {
+    oauthRef.current = next;
+    setOauth(next);
+  };
+  const applyHosted = (next: typeof hosted) => {
+    hostedRef.current = next;
+    setHosted(next);
+  };
   const [authEpoch, setAuthEpoch] = useState(0);
 
   const cloudState = useMemo(() => readHostedConnection(env ?? process.env, homeDir), [env, authEpoch, homeDir]);
@@ -451,35 +359,47 @@ export function ConnectScreen({ frame, onBack, onExit, recovery, onConnected, en
     () => buildConnectRows({ states, stored: storedIds, filter }),
     [states, storedIds, filter],
   );
+  // The picker's rows: the same grouped model, projected onto `DialogItem`s.
+  // Connectedness on an item is `provider.connected` and nothing else, so the
+  // dot and the meta are as verified as the row model is.
+  const items = useMemo(
+    () => connectDialogItems({
+      rows,
+      cloudConnected,
+      recoveryProviderId: recovery?.providerId,
+      // The two lifecycle colours the hand-rolled list used to carry, and no
+      // others: connected reads green, a provider awaiting repair reads as an
+      // error. Both come off state the row model already verified.
+      tones: { connected: theme.SUCCESS, recovering: theme.ERROR },
+    }),
+    [rows, cloudConnected, recovery?.providerId, theme.SUCCESS, theme.ERROR],
+  );
+  const totalRows = useMemo(() => connectDisplayRowCount(items), [items]);
 
   const recoveredProviderRef = useRef<string | undefined>(undefined);
-  const [selected, setSelected] = useState(() => {
-    const at = firstSelectableIndex(buildConnectRows({ states, stored: storedIds, cloudConnected }));
-    return at >= 0 ? at : 0;
-  });
+  const [selected, setSelected] = useState(0);
+  const selectedRef = useRef(0);
+  const highlight = (next: number) => {
+    selectedRef.current = next;
+    setSelected(next);
+  };
 
-  const cursor = clampSelection(rows, selected);
-  const activeRow = cursor >= 0 ? rows[cursor] : undefined;
+  const cursor = clampDialogSelection(items, selected);
+  const activeItem: DialogItem | undefined = items[cursor];
+  const activeRow: ConnectRow | undefined = connectRowForId(rows, activeItem?.id);
   const activeProvider: ConnectProvider | undefined =
     activeRow?.kind === "provider" ? activeRow.provider : undefined;
   const isCloudRow = activeRow?.kind === "cloud";
-  const detailRow =
-    activeRow?.kind === "provider" && recovery?.providerId === activeRow.provider.id
-      ? {
-          ...activeRow,
-          provider: {
-            ...activeRow.provider,
-            connected: false,
-            source: undefined,
-            via: undefined,
-          },
-        }
-      : activeRow;
-  const detailProvider: ConnectProvider | undefined =
-    detailRow?.kind === "provider" ? detailRow.provider : undefined;
 
-  const layout = computeConnectLayout({ width, height, noticeRows: 1 });
-  const window = computeConnectWindow({ rows, selected: cursor, visible: layout.visibleRows, anchor });
+
+  // Inside a dialog the surface IS the panel's inner box — the shell renders
+  // with `dialogContent`, so it has no header and no padding — and the only
+  // row the host still spends is its single footer, drawn from the `hint`
+  // this screen returns. Outside a dialog the legacy shell chrome applies.
+  const layout = computeConnectLayout(width, height, totalRows, inDialog
+    ? { chromeRows: CONNECT_DIALOG_HOST_ROWS, chromeColumns: 0 }
+    : { chromeRows: shellChromeRows(width) });
+  const { panel, contentWidth } = layout;
 
   const inInput = inputProviderId !== undefined;
   const oauthVisible = oauth?.providerId === activeProvider?.id;
@@ -488,31 +408,16 @@ export function ConnectScreen({ frame, onBack, onExit, recovery, onConnected, en
   const inHosted = hostedVisible && ["opening", "polling", "opener-failed"].includes(hosted?.phase ?? "");
   const mode: ConnectMode = inInput ? "input" : inOAuth ? "oauth" : inHosted ? "hosted" : filtering ? "filter" : "browse";
 
-  // Keep the stored anchor in step with the window the list is actually
-  // showing, so the list scrolls rather than jumps — but leave it frozen while
-  // an authentication sub-step is active.
   useEffect(() => {
-    if (!inInput && !inOAuth && !inHosted && window.start !== anchor) setAnchor(window.start);
-  }, [inInput, inOAuth, inHosted, window.start, anchor]);
-  useEffect(() => {
-    if (cursor >= 0 && cursor !== selected) setSelected(cursor);
+    if (cursor !== selected) highlight(cursor);
   }, [cursor, selected]);
   useEffect(() => {
     const providerId = recovery?.providerId;
     if (!providerId || recoveredProviderRef.current === providerId) return;
-    const recoveryIndex = rows.findIndex(
-      (entry) => {
-        if (entry.kind === "provider" && entry.provider.id === providerId) return true;
-        if (entry.kind === "cloud" && providerId === "hosted") return true;
-        return false;
-      },
-    );
+    const recoveryIndex = items.findIndex((item) => item.id === providerId);
     recoveredProviderRef.current = providerId;
-    if (recoveryIndex >= 0) {
-      setSelected(recoveryIndex);
-      setAnchor(Math.max(0, recoveryIndex - 1));
-    }
-  }, [recovery?.providerId, rows]);
+    if (recoveryIndex >= 0) highlight(recoveryIndex);
+  }, [recovery?.providerId, items]);
 
   // Cleanup on unmount: cancel any active auth session.
   useEffect(() => () => {
@@ -520,28 +425,42 @@ export function ConnectScreen({ frame, onBack, onExit, recovery, onConnected, en
     hostedSessionRef.current?.cancel();
   }, []);
 
+  const currentRows = () => filterRef.current === filter
+    ? rows
+    : buildConnectRows({ states, stored: storedIds, filter: filterRef.current });
+  const currentItems = (visibleRows = currentRows()) => visibleRows === rows
+    ? items
+    : connectDialogItems({
+      rows: visibleRows,
+      cloudConnected,
+      recoveryProviderId: recovery?.providerId,
+      tones: { connected: theme.SUCCESS, recovering: theme.ERROR },
+    });
+
   const move = (delta: number) => {
-    const next = moveSelection(rows, cursor, delta);
-    if (next >= 0) {
-      setSelected(next);
-      setNotice(undefined);
-    }
+    const visible = currentItems();
+    if (visible.length === 0) return;
+    const dir: 1 | -1 = delta >= 0 ? 1 : -1;
+    let next = clampDialogSelection(visible, selectedRef.current);
+    for (let step = 0; step < Math.abs(delta); step += 1) next = moveDialogSelection(visible, next, dir);
+    highlight(next);
+    setNotice(undefined);
   };
 
   const setQuery = (next: string) => {
+    filterRef.current = next;
     setFilter(next);
-    setSelected(0);
-    setAnchor(0);
+    highlight(0);
   };
 
   const beginOauth = (provider: ConnectProvider) => {
     hostedSessionRef.current?.cancel();
     oauthSessionRef.current?.cancel();
-    setInputProviderId(undefined);
-    setInputValue("");
-    setHosted(undefined);
+    applyInputProviderId(undefined);
+    applyInputValue("");
+    applyHosted(undefined);
     setNotice(undefined);
-    setOauth({
+    applyOauth({
       providerId: provider.id,
       phase: "running",
       lines: [],
@@ -550,7 +469,7 @@ export function ConnectScreen({ frame, onBack, onExit, recovery, onConnected, en
     oauthSessionRef.current = startCodexDeviceAuth({
       homeDir,
       onUpdate: (update) => {
-        setOauth({ ...update, providerId: provider.id });
+        applyOauth({ ...update, providerId: provider.id });
         if (update.phase === "failed") setNotice(update.message);
       },
       onConnected: () => {
@@ -566,11 +485,11 @@ export function ConnectScreen({ frame, onBack, onExit, recovery, onConnected, en
   const beginHosted = () => {
     hostedSessionRef.current?.cancel();
     oauthSessionRef.current?.cancel();
-    setInputProviderId(undefined);
-    setInputValue("");
-    setOauth(undefined);
+    applyInputProviderId(undefined);
+    applyInputValue("");
+    applyOauth(undefined);
     setNotice(undefined);
-    setHosted({
+    applyHosted({
       providerId: "hosted",
       phase: "opening",
       message: "Starting 0sec Cloud sign-in…",
@@ -579,7 +498,7 @@ export function ConnectScreen({ frame, onBack, onExit, recovery, onConnected, en
       homeDir,
       host: (env ?? process.env)["0SEC_CLOUD_HOST"] ?? cloudState.host,
       onUpdate: (update) => {
-        setHosted({ ...update, providerId: "hosted" });
+        applyHosted({ ...update, providerId: "hosted" });
         if (["cancelled", "timeout", "failed"].includes(update.phase)) {
           setNotice(update.message);
         }
@@ -598,16 +517,16 @@ export function ConnectScreen({ frame, onBack, onExit, recovery, onConnected, en
       beginOauth(provider);
       return;
     }
-    setHosted(undefined);
-    setOauth(undefined);
-    setInputProviderId(provider.id);
-    setInputValue("");
+    applyHosted(undefined);
+    applyOauth(undefined);
+    applyInputProviderId(provider.id);
+    applyInputValue("");
     setNotice(undefined);
   };
 
   const cancelInput = () => {
-    setInputProviderId(undefined);
-    setInputValue("");
+    applyInputProviderId(undefined);
+    applyInputValue("");
   };
 
   const cancelOauth = () => {
@@ -617,21 +536,21 @@ export function ConnectScreen({ frame, onBack, onExit, recovery, onConnected, en
   const cancelHosted = () => {
     hostedSessionRef.current?.cancel();
     hostedSessionRef.current = undefined;
-    setHosted(undefined);
+    applyHosted(undefined);
     onBack();
   };
 
   const commitInput = () => {
-    const id = inputProviderId;
-    const secret = inputValue.trim();
-    setInputProviderId(undefined);
-    setInputValue("");
+    const id = inputProviderRef.current;
+    const secret = inputValueRef.current.trim();
+    applyInputProviderId(undefined);
+    applyInputValue("");
     if (!id) return;
     if (secret.length === 0) {
       setNotice("nothing pasted; provider unchanged");
       return;
     }
-    const next: StoredCredentials = { ...stored, [id]: secret };
+    const next: StoredCredentials = { ...loadCredentials(homeDir), [id]: secret };
     const ok = saveCredentials(next, homeDir);
     if (!ok) {
       setNotice("could not write credentials (is HOME writable?)");
@@ -647,9 +566,9 @@ export function ConnectScreen({ frame, onBack, onExit, recovery, onConnected, en
   usePaste((event) => {
     event.preventDefault();
     event.stopPropagation();
-    if (!inInput) return;
+    if (inputProviderRef.current === undefined) return;
     const chunk = pastableChars(decodePasteBytes(event.bytes));
-    if (chunk) setInputValue((current) => current + chunk);
+    if (chunk) applyInputValue((current) => current + chunk);
   });
 
   useKeyboard((key) => {
@@ -660,18 +579,19 @@ export function ConnectScreen({ frame, onBack, onExit, recovery, onConnected, en
       return;
     }
 
-    if (inOAuth) {
+    if (oauthRef.current?.phase === "running") {
       if (key.name === "escape") cancelOauth();
       return;
     }
 
-    if (inHosted) {
+    const hostedPhase = hostedRef.current?.phase;
+    if (hostedPhase === "opening" || hostedPhase === "polling" || hostedPhase === "opener-failed") {
       if (key.name === "escape") cancelHosted();
       return;
     }
 
     // ── input sub-step ──
-    if (inInput) {
+    if (inputProviderRef.current !== undefined) {
       if (key.name === "escape") {
         cancelInput();
         return;
@@ -681,11 +601,11 @@ export function ConnectScreen({ frame, onBack, onExit, recovery, onConnected, en
         return;
       }
       if (key.name === "backspace") {
-        setInputValue((current) => current.slice(0, -1));
+        applyInputValue((current) => current.slice(0, -1));
         return;
       }
       const chunk = pastableChars(seq);
-      if (chunk) setInputValue((current) => current + chunk);
+      if (chunk) applyInputValue((current) => current + chunk);
       return;
     }
 
@@ -695,31 +615,35 @@ export function ConnectScreen({ frame, onBack, onExit, recovery, onConnected, en
     if (key.name === "pageup") return move(-PAGE_STEP);
     if (key.name === "pagedown") return move(PAGE_STEP);
     if (key.name === "return") {
-      if (isCloudRow) {
+      const visibleRows = currentRows();
+      const visible = currentItems(visibleRows);
+      const item = visible[clampDialogSelection(visible, selectedRef.current)];
+      const row = connectRowForId(visibleRows, item?.id);
+      if (row?.kind === "cloud") {
         beginHosted();
         return;
       }
-      if (activeProvider) beginConnect(activeProvider);
+      if (row?.kind === "provider") beginConnect(row.provider);
       return;
     }
 
     // ── filter mode ──
-    if (filtering) {
+    if (filteringRef.current) {
       if (key.name === "escape") {
-        setFiltering(false);
+        setFilterMode(false);
         return;
       }
       if (key.name === "backspace") {
-        setQuery(filter.slice(0, -1));
+        setQuery(filterRef.current.slice(0, -1));
         return;
       }
-      if (isFilterKey(seq)) setQuery(filter + seq);
+      if (isFilterKey(seq)) setQuery(filterRef.current + seq);
       return;
     }
 
     // ── browse mode ──
     if (key.name === "escape") {
-      if (filter) {
+      if (filterRef.current) {
         setQuery("");
         return;
       }
@@ -727,297 +651,193 @@ export function ConnectScreen({ frame, onBack, onExit, recovery, onConnected, en
       return;
     }
     if (key.name === "backspace") {
-      if (filter) setQuery(filter.slice(0, -1));
+      if (filterRef.current) setQuery(filterRef.current.slice(0, -1));
       return;
     }
     if (seq === "/") {
-      setFiltering(true);
+      setFilterMode(true);
       setQuery("");
       return;
     }
     if (isFilterKey(seq)) {
-      setFiltering(true);
+      setFilterMode(true);
       setQuery(seq);
     }
   });
 
-  const row = layout.row;
-  const heading = layout.heading;
-  const visible = rows.slice(window.start, window.end);
+  // ── detail column ────────────────────────────────────────────────────────
+  //
+  // One renderer for every sub-step, so the column always describes exactly
+  // the state the screen is in: the provider's facts while browsing, the
+  // device/browser sign-in while one is running, the masked key prompt while
+  // one is being pasted, and the failure that opened the screen when there is
+  // one. Every line is wrapped to the pane's width and the list is clipped to
+  // its rows, because OpenTUI paints an overflow through its neighbours.
 
-  const listBody = visible.map((entry, offset) => {
-    const index = window.start + offset;
+  const renderDetail = (item: DialogItem, pane: { width: number; height: number }) => {
+    if (pane.width <= 0 || pane.height <= 0) return null;
+    const row = connectRowForId(rows, item.id);
+    const isCloud = row?.kind === "cloud";
+    const provider = row?.kind === "provider" ? row.provider : undefined;
+    const recoveringId = recovery?.providerId;
+    const recovering = recoveringId !== undefined
+      && recoveringId === (isCloud ? CLOUD_ID : provider?.id);
+    // A provider being repaired is never described as connected: the
+    // credential it holds is the one that just failed.
+    const shownRow: ConnectRow | undefined =
+      recovering && row?.kind === "provider"
+        ? { ...row, provider: { ...row.provider, connected: false, source: undefined, via: undefined } }
+        : row;
 
-    if (entry.kind === "cloud") {
-      const selectedRow = index === cursor;
-      const background = selectedRow ? theme.PANEL_ALT : undefined;
-      const connected = cloudConnected;
-      return (
-        <box
-          key="cloud"
-          flexDirection="row"
-          width={row.width}
-          flexShrink={0}
-          minWidth={0}
-        >
-          <Cells width={row.markerWidth} fg={theme.ACCENT} bg={background}>
-            {selectedRow ? "▸" : ""}
-          </Cells>
-          <Cells width={row.markerGap} bg={background}>
-            {""}
-          </Cells>
-          <Cells width={row.checkWidth} fg={theme.SUCCESS} bg={background}>
-            {connected ? "✓" : ""}
-          </Cells>
-          <Cells width={row.checkGap} bg={background}>
-            {""}
-          </Cells>
-          <Cells
-            width={row.labelWidth}
-            fg={connected ? theme.SUCCESS : selectedRow ? theme.ACCENT : theme.MUTED}
-            bg={background}
-          >
-            {"0sec Cloud"}
-          </Cells>
-          <Cells width={row.authGap} bg={background}>
-            {""}
-          </Cells>
-          <Cells width={row.authWidth} align="right" fg={theme.MUTED} bg={background}>
-            {connected ? "login saved" : "Sign in"}
-          </Cells>
-        </box>
+    const hostedHere = isCloud && hosted?.providerId === CLOUD_ID;
+    const oauthHere = provider !== undefined && oauth?.providerId === provider.id;
+    const inputHere = provider !== undefined && inputProviderId === provider.id;
+
+    const headerRows = pane.height >= 4 ? 1 : 0;
+    const bodyRows = Math.max(0, pane.height - headerRows);
+    // The body scrolls rather than being clipped away: a provider's setup
+    // hint, a Codex transcript or an account note that does not fit must
+    // still be reachable. A scrollbox reveals its bar in the last column the
+    // moment it overflows, so the text is budgeted one cell narrower.
+    const width = Math.max(1, pane.width - 1);
+    const wrap = (text: string, fg: string, bold?: boolean): PaneLine[] =>
+      wrapCells(text, width).map((line) => ({ text: line, fg, bold }));
+    const blank = (): PaneLine => ({ text: "", fg: theme.MUTED });
+
+    const lines: PaneLine[] = [];
+    let meta: string;
+    let metaFg: string;
+    let title: string;
+
+    if (hostedHere && hosted) {
+      const tone = hostedStateTone(theme, hosted.phase);
+      title = "0sec Cloud";
+      meta = hostedStateMeta(hosted.phase);
+      metaFg = tone;
+      lines.push(...wrap(hostedStateTitle(hosted.phase), tone, true), blank());
+      lines.push(...wrap(hosted.message, hosted.phase === "ready" ? theme.MUTED : theme.TEXT));
+      if (hosted.loginUrl) lines.push(blank(), ...wrap(hosted.loginUrl, theme.ACCENT));
+      lines.push(blank(), ...wrap(hostedRecoveryHint(hosted.phase), theme.MUTED));
+    } else if (oauthHere && oauth && provider) {
+      const tone = oauthStateTone(theme, oauth.phase);
+      title = provider.label;
+      meta = oauthStateMeta(oauth.phase);
+      metaFg = tone;
+      lines.push(...wrap(oauthStateTitle(oauth.phase, headerRows === 0), tone, true), blank());
+      lines.push(...wrap(oauth.message, oauth.phase === "failed" ? theme.TEXT : theme.MUTED));
+      if (oauth.lines.length > 0) {
+        lines.push(blank(), ...wrap("CODEX", theme.MUTED));
+        for (const line of oauth.lines) lines.push(...wrap(line, theme.TEXT));
+      }
+      lines.push(blank(), ...wrap(oauthRecoveryHint(oauth.phase), theme.MUTED));
+    } else if (inputHere && provider) {
+      // The secret itself never reaches this pane: only a fixed, length-capped
+      // dot run, and only to show that something was pasted.
+      title = provider.label;
+      meta = "waiting for key";
+      metaFg = theme.ACCENT;
+      lines.push(...wrap(`Paste the ${provider.label} API key`, theme.ACCENT, true), blank());
+      const mask = connectInputMask(inputValue.length);
+      lines.push(...wrap(mask.length > 0 ? mask : "nothing pasted yet", mask.length > 0 ? theme.TEXT : theme.MUTED));
+      lines.push(blank());
+      lines.push(...wrap("The key is written owner-only to the credential store on this machine and is never displayed.", theme.MUTED));
+      if (provider.envVars.length > 0) {
+        lines.push(...wrap(`Exported to the runtime as ${provider.envVars[0]}`, theme.MUTED));
+      }
+      lines.push(blank(), ...wrap("enter save · esc cancel", theme.MUTED));
+    } else {
+      const codexRecovery = recovery?.providerId === "chatgpt-codex";
+      title = isCloud ? "0sec Cloud" : provider?.label ?? connectDetailTitleLabel();
+      meta = recovering ? "reconnect" : connectDetailTitleMeta(shownRow, cloudConnected);
+      metaFg = recovering
+        ? theme.ERROR
+        : (shownRow?.kind === "provider" && shownRow.provider.connected) || (isCloud && cloudConnected)
+          ? theme.SUCCESS
+          : theme.MUTED;
+      if (recovering) {
+        const recoveryTitle = codexRecovery ? "ChatGPT Codex needs device sign-in" : recovery?.title;
+        const recoveryDetail = codexRecovery
+          ? "Sign in with your ChatGPT subscription. This is separate from an OpenAI API key and does not require a 0sec account."
+          : recovery?.detail;
+        if (recoveryTitle) lines.push(...wrap(recoveryTitle, theme.ERROR, true));
+        if (recoveryDetail) lines.push(blank(), ...wrap(recoveryDetail, theme.TEXT));
+        lines.push(blank(), ...wrap(
+          `Press Enter to start ${codexRecovery ? "ChatGPT Codex device OAuth" : `reconnect ${provider?.label ?? "the selected provider"}`}. Esc returns to chat.`,
+          theme.ACCENT,
+        ));
+        lines.push(blank());
+      }
+      const detail = connectDetailLines(
+        { row: shownRow, compact: bodyRows < 12, cloudConnected },
+        width,
       );
+      // The pane header already names the provider; drop the repeated lead
+      // title (and its spacer) when there is a header to carry it.
+      let start = 0;
+      if (headerRows > 0) {
+        while (start < detail.length) {
+          const tone = detail[start]?.tone;
+          if (tone !== "title" && tone !== "blank") break;
+          start += 1;
+        }
+      }
+      for (const line of detail.slice(start)) {
+        lines.push({ text: line.text, fg: toneColor(theme, line.tone) });
+      }
     }
 
-    if (entry.kind === "heading") {
-      return (
-        <box
-          key={`heading-${entry.group.id}`}
-          flexDirection="row"
-          width={heading.width}
-          flexShrink={0}
-          minWidth={0}
-        >
-          <Cells width={heading.labelWidth} fg={theme.MUTED} attributes={TextAttributes.BOLD}>
-            {entry.group.label.toUpperCase()}
-          </Cells>
-          <Cells width={heading.gap}>{""}</Cells>
-          <Cells width={heading.stateWidth} align="right" fg={theme.MUTED}>
-            {""}
-          </Cells>
-        </box>
-      );
-    }
-
-    if (entry.kind === "subtitle") {
-      return (
-        <box
-          key={`subtitle-${index}`}
-          flexDirection="row"
-          width={row.width}
-          flexShrink={0}
-          minWidth={0}
-        >
-          <Cells width={row.markerWidth + row.markerGap}>{""}</Cells>
-          <Cells width={Math.max(0, row.width - row.markerWidth - row.markerGap)} fg={theme.MUTED}>
-            {entry.text}
-          </Cells>
-        </box>
-      );
-    }
-
-    const selectedRow = index === cursor;
-    const background = selectedRow ? theme.PANEL_ALT : undefined;
-    const provider = entry.provider;
-    const recovering = recovery?.providerId === provider.id;
-    const connected = provider.connected && !recovering;
+    const header = computeConnectTitleLayout(pane.width, meta.length);
     return (
-      <box
-        key={`provider-${provider.id}`}
-        flexDirection="row"
-        width={row.width}
-        flexShrink={0}
-        minWidth={0}
-      >
-        <Cells width={row.markerWidth} fg={theme.ACCENT} bg={background}>
-          {selectedRow ? "▸" : ""}
-        </Cells>
-        <Cells width={row.markerGap} bg={background}>
-          {""}
-        </Cells>
-        <Cells width={row.checkWidth} fg={theme.SUCCESS} bg={background}>
-          {connected ? "✓" : ""}
-        </Cells>
-        <Cells width={row.checkGap} bg={background}>
-          {""}
-        </Cells>
-        <Cells
-          width={row.labelWidth}
-          fg={connected ? theme.SUCCESS : selectedRow ? theme.ACCENT : theme.MUTED}
-          bg={background}
-        >
-          {provider.label}
-        </Cells>
-        <Cells width={row.authGap} bg={background}>
-          {""}
-        </Cells>
-        <Cells width={row.authWidth} align="right" fg={recovering ? theme.ERROR : theme.MUTED} bg={background}>
-          {recovering ? "reconnect" : connected ? "connected" : authHintLabel(provider.auth)}
-        </Cells>
-      </box>
-    );
-  });
-
-  const rawDetailLines = connectDetailLines(
-    { row: detailRow, compact: layout.detailCompact, cloudConnected },
-    layout.detail.innerWidth,
-  );
-  // A wide detail pane gets the selected provider in its title row. Remove that
-  // repeated lead label (and its spacer) before spending the body-row budget;
-  // stacked/narrow panes retain the original self-contained detail lines.
-  let detailBodyStart = 0;
-  if (layout.detail.hasTitle) {
-    while (detailBodyStart < rawDetailLines.length) {
-      const tone = rawDetailLines[detailBodyStart]?.tone;
-      if (tone !== "title" && tone !== "blank") break;
-      detailBodyStart += 1;
-    }
-  }
-  const detailLines = detailBodyStart === 0
-    ? rawDetailLines
-    : rawDetailLines.slice(detailBodyStart);
-  const detailBody = clipConnectDetailLines(
-    detailLines,
-    layout.detail.bodyRows,
-    layout.detail.innerWidth,
-  ).map((line, index) => (
-    <Cells key={`detail-${index}`} width={layout.detail.innerWidth} fg={toneColor(theme, line.tone)}>
-      {line.text}
-    </Cells>
-  ));
-  const oauthTone = oauthVisible && oauth ? oauthStateTone(theme, oauth.phase) : theme.MUTED;
-  const oauthContent = oauthVisible && oauth ? (
-    <scrollbox
-      width={layout.detail.innerWidth}
-      height={Math.max(1, layout.detail.bodyRows)}
-      flexShrink={0}
-      minWidth={0}
-      minHeight={0}
-    >
-      <DetailRail showRail={layout.bordered} tone={oauthTone}>
-        <text fg={oauthTone} attributes={TextAttributes.BOLD} wrapMode="word">
-          {oauthStateTitle(oauth.phase, !layout.detail.hasTitle)}
-        </text>
-        <text
-          fg={oauth.phase === "failed" ? theme.TEXT : theme.MUTED}
-          marginTop={1}
-          wrapMode="word"
-        >
-          {oauth.message}
-        </text>
-        {oauth.lines.length > 0 ? (
-          <box flexDirection="column" marginTop={1} minWidth={0}>
-            <text fg={theme.MUTED}>CODEX</text>
-            {oauth.lines.map((line, index) => (
-              <text key={`oauth-${index}`} fg={theme.TEXT} wrapMode="word">{line}</text>
-            ))}
+      <>
+        {headerRows > 0 ? (
+          <box flexDirection="row" width={header.width} flexShrink={0} minWidth={0}>
+            <Cells width={header.titleWidth} fg={theme.PRIMARY} attributes={TextAttributes.BOLD}>
+              {title}
+            </Cells>
+            {header.metaWidth > 0 ? (
+              <>
+                <Cells width={header.gap}>{""}</Cells>
+                <Cells width={header.metaWidth} align="right" fg={metaFg}>
+                  {meta}
+                </Cells>
+              </>
+            ) : null}
           </box>
         ) : null}
-        <text fg={theme.MUTED} marginTop={1} wrapMode="word">
-          {oauthRecoveryHint(oauth.phase)}
-        </text>
-      </DetailRail>
-    </scrollbox>
-  ) : null;
-
-  // Hosted (cloud) sign-in content: replaces the normal detail pane when
-  // the cloud flow is active.
-  const hostedTone = hostedVisible && hosted ? hostedStateTone(theme, hosted.phase) : theme.MUTED;
-  const hostedContent = hostedVisible && hosted ? (
-    <scrollbox
-      width={layout.detail.innerWidth}
-      height={Math.max(1, layout.detail.bodyRows)}
-      flexShrink={0}
-      minWidth={0}
-      minHeight={0}
-    >
-      <DetailRail showRail={layout.bordered} tone={hostedTone}>
-        <text fg={hostedTone} attributes={TextAttributes.BOLD} wrapMode="word">
-          {hostedStateTitle(hosted.phase)}
-        </text>
-        <text
-          fg={hosted.phase === "ready" ? theme.MUTED : theme.TEXT}
-          marginTop={1}
-          wrapMode="word"
-        >
-          {hosted.message}
-        </text>
-        {hosted.loginUrl ? (
-          <text
-            fg={theme.ACCENT}
-            marginTop={1}
-            wrapMode="word"
+        {bodyRows > 0 ? (
+          <scrollbox
+            key={item.id}
+            width={pane.width}
+            height={bodyRows}
+            flexShrink={0}
+            scrollX={false}
+            verticalScrollbarOptions={{
+              trackOptions: {
+                backgroundColor: theme.PANEL,
+                foregroundColor: theme.MUTED,
+              },
+              arrowOptions: {
+                foregroundColor: theme.MUTED,
+                backgroundColor: theme.PANEL,
+              },
+            }}
           >
-            {hosted.loginUrl}
-          </text>
+            <box width={width} flexDirection="column" flexShrink={0} minWidth={0}>
+              {lines.map((line, index) => (
+                <Cells key={`detail-${index}`} width={width} fg={line.fg}
+                  attributes={line.bold ? TextAttributes.BOLD : undefined}>
+                  {line.text}
+                </Cells>
+              ))}
+            </box>
+          </scrollbox>
         ) : null}
-        <text fg={theme.MUTED} marginTop={1} wrapMode="word">
-          {hostedRecoveryHint(hosted.phase)}
-        </text>
-      </DetailRail>
-    </scrollbox>
-  ) : null;
+      </>
+    );
+  };
 
-  const codexRecovery = recovery?.providerId === "chatgpt-codex";
-  const recoveryTitle = codexRecovery
-    ? "ChatGPT Codex needs device sign-in"
-    : recovery?.title;
-  const recoveryDetail = codexRecovery
-    ? "Sign in with your ChatGPT subscription. This is separate from an OpenAI API key and does not require a 0sec account."
-    : recovery?.detail;
-  const detailContent = hostedContent ?? oauthContent ?? (recovery ? (
-    <scrollbox
-      width={layout.detail.innerWidth}
-      height={Math.max(1, layout.detail.bodyRows)}
-      flexShrink={0}
-      minWidth={0}
-      minHeight={0}
-    >
-      <DetailRail showRail={layout.bordered} tone={theme.ERROR}>
-        <text fg={theme.ERROR} attributes={TextAttributes.BOLD} wrapMode="word">{recoveryTitle}</text>
-        <text fg={theme.TEXT} marginTop={1} wrapMode="word">{recoveryDetail}</text>
-        <text fg={theme.ACCENT} marginTop={1} wrapMode="word">
-          Press Enter to start {codexRecovery ? "ChatGPT Codex device OAuth" : `reconnect ${activeProvider?.label ?? "the selected provider"}`}. Esc returns to chat.
-        </text>
-        {detailBody.length > 0 ? (
-          <box flexDirection="column" marginTop={1} minWidth={0}>{detailBody}</box>
-        ) : null}
-      </DetailRail>
-    </scrollbox>
-  ) : detailBody);
-
-  // Determine the detail pane header meta and its colour.
-  const detailContextMeta = hostedVisible && hosted
-    ? hostedStateMeta(hosted.phase)
-    : oauthVisible && oauth
-      ? oauthStateMeta(oauth.phase)
-      : recovery !== undefined && recovery.providerId === (isCloudRow ? "hosted" : detailProvider?.id)
-        ? "reconnect"
-        : connectDetailTitleMeta(detailRow, cloudConnected);
-  const detailContextMetaFg = hostedVisible && hosted
-    ? hostedTone
-    : oauthVisible && oauth
-      ? oauthTone
-      : recovery !== undefined && recovery.providerId === (isCloudRow ? "hosted" : detailProvider?.id)
-        ? theme.ERROR
-        : detailProvider?.connected ? theme.SUCCESS : theme.MUTED;
-
-  // The detail pane title uses "0sec Cloud" when the cloud row is highlighted.
-  const detailTitle = isCloudRow
-    ? "0sec Cloud"
-    : detailProvider?.label ?? connectDetailTitleLabel();
-
-  // Build the status text — one line below the panes.
+  // ── status line ──────────────────────────────────────────────────────────
+  // Never the secret: the input sub-step reports only the masked length.
   const statusText = inHosted
     ? hosted?.message ?? "signing in to 0sec Cloud..."
     : hostedVisible && hosted
@@ -1025,75 +845,74 @@ export function ConnectScreen({ frame, onBack, onExit, recovery, onConnected, en
       : oauthVisible && oauth
         ? oauth.message
         : recovery
-          ? recoveryTitle ?? "provider needs to reconnect"
+          ? recovery.providerId === "chatgpt-codex"
+            ? "ChatGPT Codex needs device sign-in"
+            : recovery.title || "provider needs to reconnect"
           : inInput
             ? `paste API key for ${activeProvider?.label ?? inputProviderId}: ${connectInputMask(inputValue.length)}`
-            : filtering
-              ? `filter: ${filter}_`
-              : notice
-                ? notice
-                : isCloudRow && cloudState.warning
-                  ? cloudState.warning
-                  : filter
-                    ? `filter: ${filter} · ${connectStatusLine(rows)}`
-                    : connectStatusLine(rows);
+            : notice
+              ? notice
+              : isCloudRow && cloudState.warning
+                ? cloudState.warning
+                : connectStatusLine(rows);
   const statusFg = inHosted
     ? theme.ACCENT
     : hostedVisible && hosted
-      ? hostedTone
+      ? hostedStateTone(theme, hosted.phase)
       : oauthVisible && oauth
         ? oauth.phase === "failed" ? theme.ERROR : oauth.phase === "connected" ? theme.SUCCESS : theme.ACCENT
         : recovery ? theme.ERROR : inInput ? theme.ACCENT : isCloudRow && cloudState.warning ? theme.WARNING : theme.MUTED;
 
+  const hint = connectFooterHint(mode, filter.length > 0);
+  const counts = connectConnectedCounts(rows);
+  const titleText = `${operatorIcon(SCREEN_KEY, symbols)} ${operatorTitle(SCREEN_KEY)}`;
+  const titleMeta = counts.total === 0 ? "" : `${counts.connected}/${counts.total} connected`;
+  const title = computeConnectTitleLayout(contentWidth, titleMeta.length);
+
   const body = (
-    <box flexDirection="column" width="100%" flexGrow={1} minWidth={0}>
-      <box
-        flexDirection={layout.stacked ? "column" : "row"}
-        gap={layout.paneGap}
-        flexShrink={0}
-        minWidth={0}
-      >
-        <RailPane
-          pane={layout.list}
-          railTone={layout.bordered ? theme.ACCENT : undefined}
-          title={
-            <TitleRow
-              innerWidth={layout.list.innerWidth}
-              title={connectListTitleLabel()}
-              meta={connectListMeta(window)}
-              metaFg={theme.MUTED}
-            />
-          }
-        >
-          {rows.length === 0 ? (
-            <Cells width={row.width} fg={theme.MUTED}>
-              no providers match this filter
-            </Cells>
-          ) : (
-            listBody
-          )}
-        </RailPane>
-        <RailPane
-          pane={layout.detail}
-          title={
-            <TitleRow
-              innerWidth={layout.detail.innerWidth}
-              title={detailTitle}
-              meta={detailContextMeta}
-              metaFg={detailContextMetaFg}
-            />
-          }
-        >
-          {detailContent}
-        </RailPane>
+    <box flexDirection="column" width={contentWidth} flexGrow={1} minWidth={0} overflow="hidden">
+      {layout.titleRows > 0 ? (
+        <box flexDirection="row" width={title.width} flexShrink={0} minWidth={0}>
+          <Cells width={title.titleWidth} fg={theme.PRIMARY} attributes={TextAttributes.BOLD}>
+            {titleText}
+          </Cells>
+          {title.metaWidth > 0 ? (
+            <>
+              <Cells width={title.gap}>{""}</Cells>
+              <Cells width={title.metaWidth} align="right"
+                fg={counts.connected > 0 ? theme.SUCCESS : theme.MUTED}>
+                {titleMeta}
+              </Cells>
+            </>
+          ) : null}
+        </box>
+      ) : null}
+      <box width={contentWidth} height={layout.bodyRows} flexDirection="column" flexShrink={0} minWidth={0}>
+        {layout.listRows >= 2 && contentWidth > 0 ? (
+          <DialogSelectBody
+            items={items}
+            cursor={cursor}
+            panel={panel}
+            query={filter}
+            placeholder="type to find a provider"
+            gutter
+            isCurrent={(item) => item.current === true}
+            renderDetail={renderDetail}
+            emptyText="no providers match this filter"
+          />
+        ) : null}
+        {layout.stackedRows > 0 && activeItem ? (
+          <box width={contentWidth} height={layout.stackedRows}
+            flexDirection="column" flexShrink={0} minWidth={0}>
+            {renderDetail(activeItem, { width: contentWidth, height: layout.stackedRows })}
+          </box>
+        ) : null}
       </box>
-      <box flexDirection="row" width="100%" flexShrink={0} minWidth={0}>
-        <Cells width={layout.contentWidth} fg={statusFg}>
-          {statusText}
-        </Cells>
-      </box>
+      {layout.statusRows > 0 ? (
+        <Cells width={contentWidth} fg={statusFg}>{statusText}</Cells>
+      ) : null}
     </box>
   );
 
-  return <>{frame({ body, hint: connectFooterHint(mode, filter.length > 0) })}</>;
+  return <>{frame({ body, hint })}</>;
 }

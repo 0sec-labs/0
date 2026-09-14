@@ -375,10 +375,11 @@ export function webPentestPrompt(target: string, opts?: { hasBrowser?: boolean; 
 ## Browser Tool (Playwright)
 
 You have a **browser** tool for JavaScript-rendered pages and XSS confirmation.
-Actions: navigate, click, fill, evaluate, content, screenshot.
+Actions: navigate, click, type, eval, get_content, screenshot, list_tabs, close.
+- Multi-tab: pass \`tab\` (e.g. tab:"authed", tab:"victim") to keep several pages open across turns; list_tabs shows them and close releases one (or all:true for every tab).
 - For XSS: use browser to navigate to a page with an injected payload, then check the "dialogs" array — if alert/confirm/prompt fires, XSS is confirmed
 - Use for pages that require JavaScript rendering (SPAs, dynamic forms)
-- Use evaluate to run arbitrary JS in the page context
+- Use eval to run arbitrary JS in the page context; type fills a field, get_content returns HTML + visible text
 ` : "";
 
   return `You are a senior web application penetration tester performing an authorized security assessment.
@@ -917,10 +918,11 @@ Use read_file and run_command to analyze the code BEFORE attacking.${FILE_EDIT_T
 ## Browser tool (Playwright)
 
 You have a **browser** tool for JavaScript-rendered pages and XSS confirmation.
-Actions: navigate, click, fill, evaluate, content, screenshot.
+Actions: navigate, click, type, eval, get_content, screenshot, list_tabs, close.
 - Use browser to navigate to pages that require JS rendering
+- Multi-tab: pass \`tab\` to keep several pages open across turns; list_tabs / close manage them
 - For XSS: use bash/curl to find reflection points, then use browser to navigate to the injected page and check the dialogs array in the response — if alert/confirm/prompt fires, XSS is confirmed
-- Use evaluate to run arbitrary JS in the page context
+- Use eval to run arbitrary JS in the page context
 - Combine with bash for complex attack chains (e.g., bash to find injection points, browser to confirm XSS fires)
 - Never save an XSS finding without browser evidence (dialogs, rendered HTML, or DOM execution proof)
 
@@ -928,7 +930,7 @@ Actions: navigate, click, fill, evaluate, content, screenshot.
 1. Inject a unique canary string with bash/curl and verify it reflects in HTML
 2. Replace the canary with an execution payload
 3. browser action=navigate to the payload-bearing page
-4. If no dialog fires, browser action=content to inspect rendered HTML and browser action=evaluate for DOM-based execution checks
+4. If no dialog fires, browser action=get_content to inspect rendered HTML and browser action=eval for DOM-based execution checks
 5. For stored XSS, inject first, then browse to every render location until the payload executes
 ` : "";
 

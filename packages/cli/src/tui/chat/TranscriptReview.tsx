@@ -2,10 +2,13 @@
 import React, { type MutableRefObject, useMemo } from "react";
 import type { PresentationTranscriptDocument } from "@0sec/shared";
 import type { Theme } from "../theme-context.js";
+import { useSymbols } from "../symbol-context.js";
 import {
   compileTranscriptReview,
+  reviewRule,
   type TranscriptReviewDocument,
 } from "../transcript-review.js";
+import { operatorIcon } from "../operator-icons.js";
 import "../transcript-review-renderable.js";
 import type { TranscriptReviewRenderable } from "../transcript-review-renderable.js";
 import type { TranscriptDetail } from "../transcript-style.js";
@@ -27,18 +30,38 @@ export function TranscriptReview({
   theme,
   renderableRef,
 }: TranscriptReviewProps) {
+  const symbols = useSymbols();
   const document = useMemo<TranscriptReviewDocument>(
     () => compileTranscriptReview(transcript, { width, detail, expandedTurns }),
     [detail, expandedTurns, transcript, width],
   );
+  // Title + footer-style hint row + a rule, in the dialog language but drawn
+  // with repeated characters — this is one flat text buffer, so a rule is the
+  // only chrome available and `reviewRule` is the codebase's proven idiom.
+  //
+  // The entry count is the real length of the transcript we were handed; the
+  // one-entry case is spelled correctly rather than reading "1 entries", and an
+  // empty transcript says so instead of printing "0 entries" under a heading.
+  const count = transcript.entries.length;
+  // The registered `replay` glyph, always beside its label — never glyph-only.
+  const title = `${operatorIcon("replay", symbols)} TRANSCRIPT REVIEW`;
+  const hints = "Esc / Ctrl+O live · PgUp/PgDn scroll · Ctrl+Home/Ctrl+End jump";
+  const rule = reviewRule(width);
   const content = document.text
     ? [
-        `TRANSCRIPT REVIEW · ${transcript.entries.length} entries`,
-        "Esc / Ctrl+O live · PgUp/PgDn scroll · Ctrl+Home/Ctrl+End jump",
+        `${title} · ${count} ${count === 1 ? "entry" : "entries"}`,
+        hints,
+        rule,
         "",
         document.text,
       ].join("\n")
-    : "TRANSCRIPT REVIEW\n\nNo transcript entries yet. Esc / Ctrl+O returns to live chat.";
+    : [
+        title,
+        hints,
+        rule,
+        "",
+        "No transcript entries yet.",
+      ].join("\n");
 
   return (
     <box flexGrow={1} minHeight={0} width="100%" minWidth={0} backgroundColor={theme.PANEL}>

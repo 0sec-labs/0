@@ -1,10 +1,26 @@
+import type { TodoStatus } from "@0sec/core";
 import type { PanelData } from "../panels.js";
+import type { ToolPreview, ToolPreviewImage } from "../tool-format.js";
 import type {
   RoleLabelStyle,
   ToolCardStyle,
   TranscriptDetail,
   TranscriptStyle,
 } from "../transcript-style.js";
+
+/**
+ * An inline image as the transcript holds it.
+ *
+ * This is exactly {@link ToolPreviewImage} — the projection produced by
+ * `projectToolPreview` from the tool result's own bytes — plus an optional note
+ * of which tool produced it. Nothing is added by the view layer: the pixel
+ * dimensions, media type and byte size all originate in the payload, and are
+ * absent when the payload did not carry them.
+ */
+export type ChatImageAttachment = ToolPreviewImage & {
+  /** Name of the tool whose result carried this image, when it is known. */
+  origin?: string;
+};
 
 export type ChatEntry = {
   id: string;
@@ -38,6 +54,22 @@ export type ChatEntry = {
    * just the bare tool name.
    */
   toolArgs?: string;
+  /** Bounded and redacted actual output, projected before transcript insertion. */
+  toolPreview?: ToolPreview;
+  /**
+   * Inline images this entry carried, in the order the result presented them.
+   *
+   * Deliberately a FIELD rather than a new `kind`: `ChatEntry` is handed
+   * straight to shared's `createTranscriptDocument`, whose kind union this
+   * package does not own, so widening the union here would break that call.
+   * A `tool` entry renders these beneath its card (the usual case, since
+   * `projectToolPreview` also surfaces them on `toolPreview.images`), and any
+   * other entry renders them as standalone image cards.
+   *
+   * Every field inside is optional and present only when the result actually
+   * supplied it — the card omits any element it has no datum for.
+   */
+  images?: readonly ChatImageAttachment[];
   /** Epoch ms the entry was appended, for relative timestamps. */
   at?: number;
   /**
@@ -64,10 +96,14 @@ export type ChatEntry = {
    * entry without them renders as the existing rail/compact line.
    *
    * `metaKind` selects the card: "command" (a `$ cmd` + output + wall/exit
-   * footer), "edit" (a `✎ Edit: path (+A/-R)` header + diff), or "web" (a
-   * `⌕ Web Search` header + query + answer + sources list).
+   * footer), "edit" (a `✎ Edit: path (+A/-R)` header + diff), "web" (a
+   * `⌕ Web Search` header + query + answer + sources list), "task" (a
+   * subagent-launch card: Goal/Constraints/Contract sections + sub-report
+   * bullets + the phase/checkbox TODO tree), or "image" (an inline screenshot
+   * — the browser tool: the actual bytes ride on {@link images}, so the card
+   * renders it via `ImageCard` beneath the usual tool header).
    */
-  metaKind?: "command" | "edit" | "web";
+  metaKind?: "command" | "edit" | "web" | "task" | "code" | "image";
   // ── command card ──
   /** The command that was run (header `$ <command>`). */
   command?: string;
@@ -99,6 +135,63 @@ export type ChatEntry = {
   webAnswer?: string;
   /** The result sources: title (optional), url, and an optional relative age. */
   webSources?: Array<{ title?: string; url: string; age?: string }>;
+  // ── task card (subagent launch: spawn_agents) ──
+  /** Card title suffix (`Task • <label>`) — e.g. the batch agent count. */
+  taskLabel?: string;
+  /**
+   * Batch shared-context Markdown (the model-authored `# Goal / # Constraints /
+   * # Contract`). The card splits it on those H1 headings into sections.
+   */
+  taskContext?: string;
+  /** Pre-split `# Goal` section (core `goal`), when a producer parsed it out. */
+  taskGoal?: string;
+  /** Pre-split `# Constraints` section (core `constraints`). */
+  taskConstraints?: string;
+  /** Pre-split `# Contract` section (core `contract`). */
+  taskContract?: string;
+  /** Per-agent assignment brief Markdown (single-agent, core `assignment`). */
+  taskAssignment?: string;
+  /**
+   * The dispatched sub-report bullets (one row each). `name`/`agent`/`brief`/
+   * `isolated` come from the spawn spec (present at launch). The remaining
+   * fields are OPTIONAL live telemetry joined at render time from the CLI's own
+   * `herdAgents` + `workerTelemetry` (by fleet-unique `name`); every one is
+   * omitted when its truthful producer has not reported it, so a row without a
+   * join renders exactly as the static launch record. NOTHING here is estimated
+   * — per-agent cost / request-count / tool-count / context-window% have no
+   * per-agent producer yet and are deliberately absent (see task-card-layout).
+   */
+  subReports?: Array<{
+    name: string;
+    agent?: string;
+    brief?: string;
+    isolated?: boolean;
+    /** Stable per-agent id (`agent_id`) for the accent rail; falls back to `name`. */
+    id?: string;
+    /** Lifecycle status word (running/completed/failed/…), from the live herd. */
+    status?: string;
+    /** Cumulative tokens (in+out+cached) from `workerTelemetry.usage`. */
+    tokens?: number;
+    /** Latest measured per-turn context tokens from `workerTelemetry`. */
+    contextTokens?: number;
+    /** Final/last measured wallclock (ms) from `workerTelemetry.durationMs`. */
+    durationMs?: number;
+    /** Resolved model id from `workerTelemetry.model`. */
+    model?: string;
+    /** Latest non-`report_status` tool name (the live "what am I doing" verb). */
+    tool?: string;
+    /** Latest `report_status` note (the live intent sentence). */
+    note?: string;
+  }>;
+  /** Phase/checkbox plan snapshot, fed straight into `buildTodoTreeRows`. */
+  taskTodos?: Array<{ id: string; content: string; status: TodoStatus; group?: string }>;
+  // ── code card (js_eval / python_eval) ──
+  /** Highlighter language for the code block (core `language`). */
+  codeLanguage?: "javascript" | "python";
+  /** The source that was evaluated, rendered as a highlighted block (core `code`). */
+  codeSource?: string;
+  /** The evaluated program's combined stdout/stderr (core `output`). */
+  codeOutput?: string;
 };
 
 export interface EntryDisplay {
@@ -106,7 +199,7 @@ export interface EntryDisplay {
   spacing: number;
   showTimestamps: boolean;
   now: number;
-  /** Framing of a speaking turn (Messenger / rail / plain / compact / document). */
+  /** Framing of a speaking turn (bubble / rail / plain / compact / document). */
   transcriptStyle: TranscriptStyle;
   /** How the "who said this" label is drawn (full / short / glyph / off). */
   roleLabelStyle: RoleLabelStyle;

@@ -12,8 +12,75 @@ on the published npm package and the GitHub Release tag.
 
 ## [Unreleased]
 
+### Added
+
+- Add explicit Unicode, Nerd Font, and ASCII symbol choices to migrated operator
+  dialogs and sidebar components, with Unicode as the default. This migration
+  does not yet cover all chat, transcript, approval, and composer glyphs.
+- Add opt-in development-engine replacement between turns, preserving the live
+  conversation, scope decisions, task state and accounting. Failed candidates
+  retain the active engine. This trusted host-code path is separate from
+  sandboxed self-extension and does not reload the terminal shell or injected clients.
+
+### Changed
+
+- Default automatic updates on for profiles without an explicit update policy,
+  including existing profiles with that setting unset. Eligible startup checks
+  may download and install remote code. Explicit `off` and `notify` preferences,
+  project-setting restrictions, and existing updater safety checks remain intact.
+
 ### Fixed
 
+- Search the full BYOK model catalog from the curated picker and navigate models
+  with duplicate IDs across providers without mixing their detail panes.
+  Preserve hosted model pins and role-selection controls.
+- Re-anchor eight existing Foxguard baseline entries after line-only shifts,
+  without adding suppressed findings or changing the security policy.
+- Keep unlimited turn budgets out of finite-JSON harness checkpoints without
+  weakening snapshot validation.
+- Preserve contained source-file aliases in immutable engine generations and
+  reject directory aliases or links outside the selected Core source.
+- Terminate sandbox controller process groups on cancellation, deadlines and
+  output overflow. Reuse already-approved Docker group access without host
+  execution fallback or privilege elevation.
+- Validate browser arguments and initial URL scope before acquiring a backend.
+- Show shared batch instructions and worker briefs in bounded, expandable Task
+  cards without hiding the tool result. Pass shared instructions to every
+  `spawn_agents` child alongside its own task.
+- Present operator screens as bounded, responsive dialogs while keeping the
+  current audit and draft mounted. Use consistent icons and palette colors.
+- Keep sidebar backgrounds and padding continuous, show live plan progress,
+  and theme transcript scrollbars without resetting their position.
+- Preserve filter text, selection, and permission-mode changes across keyboard
+  bursts. Pin marketplace confirmations and worker steering drafts to the
+  exact selected item or worker rather than a later roster or registry state.
+- Show tool activity above the composer and loading below full-width rules.
+  Render expandable tool and image cards with reported outcomes and dimensions,
+  and use audit objective events for titles without inventing context usage.
+- Keep phase-aware plan trees and rounded You/0sec transcript cards, with
+  bounded, redacted code and diff previews shared by tool result cards.
+- Keep each live audit's conversation, draft, runtime, and mailbox independent.
+  `/new` opens another audit; closing waits for cleanup and permits an explicit retry.
+  Keep generated worker addresses within the mailbox identity limit for UUID audit IDs.
+- Report context occupancy from planner input only; plugin usage still updates
+  turn budgets. Missing samples, unknown limits, and worker focus stay unknown.
+  The bottom bar shows `Context usage unavailable` without fallback input or limit numbers.
+- Drain owned workers before acknowledging a stop, while retaining the parent
+  conversation. Show confirmed stops and unfinished workers as settled.
+- Pin worker model choices to the parent's provider and account. Model-picker
+  changes apply to the next audit, and hosted metadata comes from that account's catalog.
+- Keep onboarding completion in the operator's global settings. Reset selected
+  settings without promoting unrelated project overrides into global preferences.
+- Default fresh settings to slate and right-aligned operator bubbles. Preserve
+  saved styles, including migration from `messenger`, and place message/tool
+  labels in their top borders. Collapsed tools retain recorded command or path.
+- Keep permission mode in the bottom row, even with optional status telemetry
+  hidden. Show elapsed time for the whole active root turn.
+- Make early-stop retries opt-in through `0SEC_FEATURE_EARLY_STOP=1`.
+- Preserve unrelated host refusals during explicit target recovery and keep
+  saved credentials bound to their original origin across target/mode changes.
+- Block unanchored shared-address-space HTTP destinations, including
+  IPv4-mapped DNS answers, while retaining explicit internal targets.
 - Commit each work-plan transition and its audit records atomically, reducing
   repeated synchronous database flushes and rolling back partial transitions
   when audit artifact storage fails.

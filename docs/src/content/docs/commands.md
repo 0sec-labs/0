@@ -7,7 +7,7 @@ tableOfContents:
 ---
 
 Find the command, arguments, and options for your task. This reference covers
-**56 top-level commands** and their registered subcommands.
+**57 top-level commands** and their registered subcommands.
 
 For a worked example, start with [Scan Workflows](/scan-workflows/),
 [Console](/console/), or [Research Workflows](/research-workflows/).
@@ -293,6 +293,53 @@ Delete an installed theme (built-ins cannot be removed)
 | Argument | Required | Description |
 | --- | --- | --- |
 | `id` | Yes |  |
+
+### hackstore
+
+Author and validate community extensions for the Hackstore — the 0sec extension store. `init` scaffolds a new extension; `validate` checks a manifest against the same contract the CLI enforces on install. Publish by opening a pull request against the community index at [github.com/0sec-labs/hackstore](https://github.com/0sec-labs/hackstore).
+
+```text
+0sec hackstore
+```
+
+Guide: [Read the workflow](/integrations/).
+
+Aliases: `hack`, `store`.
+
+Subcommands: [init](#hackstore-init) · [validate](#hackstore-validate).
+
+#### hackstore init
+
+Scaffold a new Hackstore extension (manifest, example tool, README)
+
+```text
+0sec hackstore init [options] <name>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `name` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--dir <path>` | — | Parent directory to create the extension in (default: cwd) |
+| `--force` | — | Write into a non-empty target directory |
+
+#### hackstore validate
+
+Validate an extension manifest against the Hackstore schema
+
+```text
+0sec hackstore validate [options] <path>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `path` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--json` | — | Emit machine-readable JSON |
 
 ### upgrade
 
@@ -2362,7 +2409,7 @@ Search the configured registry for plugins
 
 | Option | Registered default | Description |
 | --- | --- | --- |
-| `--registry <url>` | — | Marketplace index URL (https) |
+| `--registry <url>` | — | Hackstore index URL (https) |
 
 #### plugin browse
 
@@ -2374,7 +2421,7 @@ List everything in the configured registry
 
 | Option | Registered default | Description |
 | --- | --- | --- |
-| `--registry <url>` | — | Marketplace index URL (https) |
+| `--registry <url>` | — | Hackstore index URL (https) |
 
 #### plugin install
 
@@ -2390,7 +2437,7 @@ Download, validate, and write plugin files. Installation leaves the plugin disab
 
 | Option | Registered default | Description |
 | --- | --- | --- |
-| `--registry <url>` | — | Marketplace index URL (https) |
+| `--registry <url>` | — | Hackstore index URL (https) |
 
 #### plugin enable
 

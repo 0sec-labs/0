@@ -46,7 +46,11 @@ import { sanitizeTuiText } from "./text.js";
  * How a speaking turn (user / assistant / error / reasoning / notice) is
  * framed. These are genuinely different shapes, not tints:
  *
- *  - `messenger` — right-aligned operator messages and left-aligned answers.
+ *  - `minimal`  — the OpenCode / oh-my-pi flat look and the default: NO bubble
+ *                 or box anywhere. The operator's turn is marked only by a thin
+ *                 coloured accent rail down its left; the answer flows as plain
+ *                 body text flush against the pane. Minimal chrome, maximal read.
+ *  - `bubble` — right-aligned operator messages and left-aligned answers.
  *  - `rail`     — a 1-cell coloured rail down the left of each turn.
  *  - `plain`    — no rails, no borders; the role is a short coloured prefix
  *                 and the content gets every remaining cell. Densest reading.
@@ -55,7 +59,7 @@ import { sanitizeTuiText } from "./text.js";
  *  - `document` — generous whitespace and full-width markdown so a long
  *                 analysis reads like a document rather than a chat log.
  */
-export const TRANSCRIPT_STYLES = ["messenger", "rail", "plain", "compact", "document"] as const;
+export const TRANSCRIPT_STYLES = ["minimal", "bubble", "rail", "plain", "compact", "document"] as const;
 export type TranscriptStyle = (typeof TRANSCRIPT_STYLES)[number];
 
 /**
@@ -81,7 +85,7 @@ export type RoleLabelStyle = (typeof ROLE_LABEL_STYLES)[number];
 export const TOOL_CARD_STYLES = ["rail", "inline", "compact", "hidden"] as const;
 export type ToolCardStyle = (typeof TOOL_CARD_STYLES)[number];
 
-export const DEFAULT_TRANSCRIPT_STYLE: TranscriptStyle = "messenger";
+export const DEFAULT_TRANSCRIPT_STYLE: TranscriptStyle = "minimal";
 export const DEFAULT_ROLE_LABEL_STYLE: RoleLabelStyle = "full";
 export const DEFAULT_TOOL_CARD_STYLE: ToolCardStyle = "rail";
 
@@ -151,17 +155,26 @@ function foldToken(entry: CollapseEntryLike): string {
  * one, otherwise a count plus the first few distinct names ("3 steps ·
  * run_command, read_file"). Pure; the caller owns the leading glyph and colour.
  */
-export function foldSummary(entries: readonly CollapseEntryLike[]): string {
+export function foldSummary(
+  entries: readonly CollapseEntryLike[],
+  opts?: { dropReasoningLabel?: boolean },
+): string {
   if (entries.length === 0) return "";
   const names: string[] = [];
   for (const entry of entries) {
+    // When the turn has already shown its one "thinking" label, a later fold in
+    // the same turn omits the reasoning token so the label is not repeated. The
+    // step still counts toward "N steps"; only the caption word is dropped.
+    if (opts?.dropReasoningLabel && entry.kind === "reasoning") continue;
     const token = foldToken(entry);
     if (!names.includes(token)) names.push(token);
   }
   const shown = names.slice(0, 3).join(", ");
   const more = names.length > 3 ? ` +${names.length - 3}` : "";
-  if (entries.length === 1) return shown;
-  return `${entries.length} steps · ${shown}${more}`;
+  if (entries.length === 1) return shown; // may be "" for a lone suppressed reasoning fold
+  return names.length === 0
+    ? `${entries.length} steps` // pure-reasoning fold, label already shown
+    : `${entries.length} steps · ${shown}${more}`;
 }
 
 /** A planned transcript row: a normal entry, or a folded run of collapsibles. */
@@ -298,8 +311,9 @@ function clampWidth(n: number): number {
  * it. `age` is a pre-formatted relative age ("12s"); an empty string omits the
  * separator entirely rather than leaving a dangling ` · `.
  *
- * The `full` form reproduces today's labels exactly (`▌ operator`, `▌ 0sec`),
- * which is what keeps the default byte-identical.
+ * `full` and `short` show You / 0sec with the optional age; `glyph` keeps the
+ * bare name and `off` suppresses it. Placement belongs to the renderer: bubble
+ * cards use a top-border title rather than a separate heading row.
  */
 export function roleLabelText(
   kind: "user" | "assistant",
@@ -307,12 +321,11 @@ export function roleLabelText(
   age = "",
 ): string | null {
   if (style === "off") return null;
-  const speaker = kind === "user" ? "operator" : "0sec";
-  const short = kind === "user" ? "op" : "0sec";
+  const name = kind === "user" ? "You" : "0sec";
   const suffix = age ? ` · ${age}` : "";
-  if (style === "glyph") return "▌";
-  if (style === "short") return `${short}${suffix}`;
-  return `▌ ${speaker}${suffix}`;
+  if (style === "glyph") return name;
+  if (style === "short") return `${name}${suffix}`;
+  return `${name}${suffix}`;
 }
 
 /**
@@ -381,7 +394,7 @@ export function speechFrame(
   // A bordered block needs at least one inner cell; on a pane too narrow to
   // hold the border chrome it degrades to the plain framing rather than paint
   // a border with nothing inside it.
-  if (style === "messenger" && !isReasoning && !isNotice && width - BORDER_CHROME >= 1) {
+  if (style === "bubble" && !isReasoning && !isNotice && width - BORDER_CHROME >= 1) {
     // Inner content is width - (2 borders + 2 padding).
     const inner = clampWidth(width - BORDER_CHROME);
     return {
@@ -393,6 +406,29 @@ export function speechFrame(
       labelOwnRow: true,
       contentWidth: inner,
       markdownWidth: Math.max(MIN_MARKDOWN_WIDTH, inner),
+    };
+  }
+
+  if (style === "minimal" && !isReasoning && !isNotice) {
+    // OpenCode / oh-my-pi flat look: NO bordered bubble or box. The operator's
+    // turn carries a 1-cell coloured accent rail (a subtle left gutter) plus a
+    // 1-cell gap so it reads as "yours"; the assistant answer — and an error —
+    // is flush and full-width, plain body text. `railKind: "solid"` on the user
+    // turn is what both the chat surface and the settings preview draw the bar
+    // from, so the two never disagree.
+    const isUser = kind === "user";
+    const railWidth = isUser && width >= 2 ? 1 : 0;
+    const contentGap = isUser && width >= 2 ? 1 : 0;
+    const content = clampWidth(width - railWidth - contentGap);
+    return {
+      bordered: false,
+      railKind: isUser ? "solid" : "none",
+      railWidth,
+      contentGap,
+      extraMarginTop: 0,
+      labelOwnRow: true,
+      contentWidth: content,
+      markdownWidth: Math.max(MIN_MARKDOWN_WIDTH, content),
     };
   }
 
@@ -429,12 +465,18 @@ export function speechFrame(
 
   // rail (default) — and the reasoning/notice fallbacks for every style, which
   // deliberately keep the rail treatment so the quiet voices look identical
-  // everywhere. This branch is byte-identical to today for every width >= 2;
-  // below that the rail and its gap collapse rather than overrun the pane.
-  const railWidth = width >= 1 ? 1 : 0;
-  const contentGap = width >= 2 ? 1 : 0;
+  // everywhere.
+  //
+  // User and assistant speech turns NO LONGER carry a left spine ("inside
+  // author rail") — the role label is positioned externally (0sec upper-left,
+  // You upper-right) so the content area is flush against the pane edge,
+  // matching OpenCode's clean transcript. Reasoning and notice keep their
+  // quiet rails (dotted and marker respectively) since they are not "authors".
+  const hasRail = isReasoning || isNotice;
+  const railWidth = hasRail && width >= 1 ? 1 : 0;
+  const contentGap = hasRail && width >= 2 ? 1 : 0;
   const content = clampWidth(width - railWidth - contentGap);
-  const railKind: RailKind = isReasoning ? "dotted" : isNotice ? "marker" : "solid";
+  const railKind: RailKind = isReasoning ? "dotted" : isNotice ? "marker" : "none";
   return {
     bordered: false,
     railKind,
@@ -639,13 +681,22 @@ export function toolCompactLine(
   name: string,
   state: string,
   width: number,
+  duration?: string,
 ): string {
   const w = clampWidth(width);
   if (w <= 0) return "";
   const cleanName = sanitizeTuiText(name);
   const cleanState = sanitizeTuiText(state);
-  const full = `${icon} ${cleanName} · ${cleanState}`;
+  // The execution time rides the end of the one-liner too, for parity with the
+  // card's top-of-border duration. It is the FIRST thing dropped under width
+  // pressure (before the state, then the name), so the identity always survives.
+  // Omitting `duration` reproduces the historical `icon name · state` exactly.
+  const cleanDur = duration ? sanitizeTuiText(duration) : "";
+  const durPart = cleanDur ? ` · (${cleanDur})` : "";
+  const full = `${icon} ${cleanName} · ${cleanState}${durPart}`;
   if (full.length <= w) return full;
+  const withoutDur = `${icon} ${cleanName} · ${cleanState}`;
+  if (withoutDur.length <= w) return withoutDur;
   // Drop the state first, then truncate the name, so the identity survives.
   const withoutState = `${icon} ${cleanName}`;
   if (withoutState.length <= w) return withoutState;
@@ -772,4 +823,86 @@ export function foldBodyLines(body: string, maxLines: number): string[] {
   out.push(`… ${hidden} more line${hidden === 1 ? "" : "s"}`);
   if (tail > 0) out.push(...lines.slice(lines.length - tail));
   return out;
+}
+
+// ---------------------------------------------------------------------------
+// Rounded bordered cards (OMP-style: ╭──╮ top with inset title)
+// ---------------------------------------------------------------------------
+
+/** Rounded box-drawing characters for the card border. */
+export const ROUND_CORNER_TL = "╭";
+export const ROUND_CORNER_TR = "╮";
+export const ROUND_CORNER_BL = "╰";
+export const ROUND_CORNER_BR = "╯";
+/** The horizontal line character used in rounded borders. */
+export const ROUND_HORIZ = "─";
+/** The vertical bar character for rounded card sides. */
+export const ROUND_VERT = "│";
+
+/**
+ * Geometry for a rounded bordered card with an inset title in the top border.
+ * Shares the same chrome budget as `CardFrame` (4 cells) but the top row has
+ * a 3-cell ─── cap prefix before the label text, so the label sits inset.
+ */
+export interface RoundedCardFrame {
+  /** Whether the card can render at this width (false → falls back to plain line). */
+  render: boolean;
+  /** Explicit outer width for the bordered box (needs flexShrink=0). */
+  outerWidth: number;
+  /** Usable inner width for content lines (between ││ bars and padding). */
+  innerWidth: number;
+}
+
+/**
+ * Geometry for a rounded card. Below the chrome cost the card cannot render
+ * and degrades to the caller's fallback.
+ *
+ * The top row layout is: `╭─── label fill───╮` where `╭` (1) + `───` (3) +
+ * label + fill + `╮` (1) = outerWidth. The caller provides the label text;
+ * this function only reports the geometry.
+ */
+export function roundedCardFrame(maxWidth: number): RoundedCardFrame {
+  const width = clampWidth(maxWidth);
+  // Same chrome as cardFrame: 2 border cells + 2 padding cells.
+  const inner = clampWidth(width - BORDER_CHROME);
+  if (inner < MIN_CARD_INNER) {
+    return { render: false, outerWidth: 0, innerWidth: 0 };
+  }
+  return { render: true, outerWidth: width, innerWidth: inner };
+}
+
+/**
+ * Build the top border line of a rounded card with an inset label.
+ * Returns a single string: `╭─── label ─────────────────╮`.
+ * The label is fitted to fit within available space; when it overflows, the
+ * label is ellipsised.
+ */
+export function roundedCardTopBorder(
+  label: string,
+  outerWidth: number,
+): string {
+  const w = clampWidth(outerWidth);
+  // ╭(1) + ───(3) + label + fill + ╮(1) = w
+  const leftCap = `${ROUND_CORNER_TL}${ROUND_HORIZ.repeat(3)}`;
+  const rightCap = ROUND_CORNER_TR;
+  const leftLen = leftCap.length; // 4
+  const rightLen = rightCap.length; // 1
+  const maxLabel = w - leftLen - rightLen;
+  if (maxLabel <= 0) return `${ROUND_CORNER_TL}${ROUND_HORIZ.repeat(Math.max(0, w - 2))}${ROUND_CORNER_TR}`;
+  const cleanLabel = sanitizeTuiText(label);
+  const trimmedLabel = cleanLabel.length > maxLabel
+    ? `${cleanLabel.slice(0, Math.max(1, maxLabel - 1))}…`
+    : cleanLabel;
+  const fill = Math.max(0, w - leftLen - trimmedLabel.length - rightLen);
+  return `${leftCap}${trimmedLabel}${ROUND_HORIZ.repeat(fill)}${rightCap}`;
+}
+
+/**
+ * Build the bottom border line of a rounded card.
+ * Returns: `╰──────────────────────╯`
+ */
+export function roundedCardBottomBorder(outerWidth: number): string {
+  const w = clampWidth(outerWidth);
+  const inner = Math.max(0, w - 2);
+  return `${ROUND_CORNER_BL}${ROUND_HORIZ.repeat(inner)}${ROUND_CORNER_BR}`;
 }

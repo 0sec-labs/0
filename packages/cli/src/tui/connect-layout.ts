@@ -1,17 +1,17 @@
 /**
- * Layout, navigation and windowing arithmetic for the full-screen provider
- * connect / login screen (`/connect`, alias `/login`).
+ * The provider model and text of the connect / login dialog (`/connect`,
+ * alias `/login`).
  *
- * This is `model-layout.ts` for provider authentication, and it exists for the
- * same reason spelled out in `PRIMITIVES.md`: OpenTUI lays rows out with Yoga,
- * and Yoga *shrinks* siblings rather than clipping them. Two `<text>` nodes
- * that together want more cells than their row has are both painted in full
- * into boxes that are now too small, and the terminal shows the two strings
- * interleaved character by character. The same failure on the vertical axis
- * makes a bordered box paint its own bottom border through its last content
- * row. So the component reads widths and row counts off a `ConnectLayout` and
- * never computes one, and a sweep hammers every number in here across widths
- * 0..200 and heights 0..80.
+ * The screen is a pop-up now, so the two-pane console geometry this module
+ * used to own is gone: the shared picker (`DialogSelectBody` over
+ * `computeDialogPanel`) lays out the list column, the detail column and the
+ * split between them, and `computeConnectLayout` here is the dialog-shaped
+ * partition every other dialog uses. What remains is what only connect knows
+ * — which providers exist, how they group, what may honestly be said about
+ * each one, and how a credential is masked — and it is still pure: the
+ * component reads widths and row counts off this module and never computes
+ * one, for the reason spelled out in `PRIMITIVES.md` (OpenTUI lays rows out
+ * with Yoga, and Yoga shrinks siblings rather than clipping them).
  *
  * ## What the screen is for
  *
@@ -52,11 +52,31 @@
  * for that move.
  */
 
-import { computeListWindow, computePaneSplit } from "./pane-layout.js";
-import { shellChromeRows, wrapCells } from "./settings-layout.js";
+import { PROVIDERS, providerStates, type ProviderState } from "./provider-status.js";
+import type { DialogItem } from "./dialog-select-layout.js";
+import {
+  DIALOG_HOST_FOOTER_ROWS,
+  computeDialogScreenLayout,
+  shellChromeRows,
+  titleColumns,
+  wrapCells,
+  type DialogScreenLayout,
+  type DialogScreenLayoutOptions,
+} from "./settings-layout.js";
 import { sanitizeTuiText } from "./text.js";
 
 export { shellChromeRows, wrapCells };
+
+/**
+ * Rows the host spends around this screen inside a dialog.
+ *
+ * The settled contract: the shell renders with `dialogContent` (no header, no
+ * padding, the surface IS the panel interior) and draws exactly one footer row
+ * from the `hint` the screen returns through `frame`. The connect route adds
+ * nothing of its own, so the footer is the whole allowance — and the screen
+ * must not draw a hint row itself.
+ */
+export const CONNECT_DIALOG_HOST_ROWS = DIALOG_HOST_FOOTER_ROWS;
 
 // ---------------------------------------------------------------------------
 // Numeric hygiene (mirrors model-layout.ts)
@@ -67,11 +87,6 @@ function cells(value: unknown, fallback = 0): number {
   const raw = typeof value === "number" && Number.isFinite(value) ? value : fallback;
   const truncated = Math.trunc(raw);
   return truncated > 0 ? truncated : 0;
-}
-
-function clamp(value: number, low: number, high: number): number {
-  if (high < low) return low;
-  return Math.min(Math.max(value, low), high);
 }
 
 // ---------------------------------------------------------------------------
@@ -87,7 +102,6 @@ function clamp(value: number, low: number, high: number): number {
 export type AuthKind = "api-key" | "oauth";
 
 
-import { PROVIDERS, type ProviderState } from "./provider-status.js";
 
 /**
  * Providers surfaced in the "Popular" group, in the order shown. Membership is
@@ -123,6 +137,17 @@ export interface ConnectGroup {
   readonly label: string;
 }
 
+/**
+ * The cloud sign-in's own group.
+ *
+ * The cloud row is not a provider in `PROVIDERS` and is not filtered with
+ * them, but the shared picker groups by category, so it needs one of its own —
+ * and it sorts first because `buildConnectRows` emits it first.
+ */
+const CLOUD_GROUP: ConnectGroup = { id: "cloud", label: "0sec Cloud" };
+/** The picker id the cloud row commits with; the runtime calls it "hosted". */
+const CLOUD_ITEM_ID = "hosted";
+const CLOUD_LABEL = "0sec Cloud";
 const POPULAR_GROUP: ConnectGroup = { id: "popular", label: "Use my own API key" };
 const ALL_GROUP: ConnectGroup = { id: "all", label: "Other API providers" };
 const SUBSCRIPTION_GROUP: ConnectGroup = { id: "subscription", label: "Provider subscription" };
@@ -278,271 +303,150 @@ export function buildConnectRows({
   return rows;
 }
 
-/** A provider row is selectable; headings and subtitles are not. */
-function isSelectable(row: ConnectRow | undefined): boolean {
-  return row?.kind === "provider" || row?.kind === "cloud";
-}
-
-/** Index of the first selectable row, or -1. */
-export function firstSelectableIndex(rows: readonly ConnectRow[]): number {
-  for (let index = 0; index < rows.length; index++) {
-    if (isSelectable(rows[index])) return index;
-  }
-  return -1;
-}
-
-/** Index of the last selectable row, or -1. */
-export function lastSelectableIndex(rows: readonly ConnectRow[]): number {
-  for (let index = rows.length - 1; index >= 0; index--) {
-    if (isSelectable(rows[index])) return index;
-  }
-  return -1;
-}
-
-/** Index of a provider by id, or -1. */
-export function indexOfProvider(rows: readonly ConnectRow[], id: string | undefined): number {
-  if (!id) return -1;
-  // The cloud row addresses via "hosted" id.
-  if (id === "hosted") {
-    return rows.findIndex((row) => row.kind === "cloud");
-  }
-  for (let index = 0; index < rows.length; index++) {
-    const row = rows[index];
-    if (row?.kind === "provider" && row.provider.id === id) return index;
-  }
-  return -1;
-}
-
-/**
- * Pulls an arbitrary index onto a selectable row: forward first so the cursor
- * stays near where the list was, then backward, then -1 when nothing selects.
- */
-export function clampSelection(rows: readonly ConnectRow[], current: number): number {
-  if (rows.length === 0) return -1;
-  const start = clamp(Math.trunc(Number.isFinite(current) ? current : 0), 0, rows.length - 1);
-  for (let index = start; index < rows.length; index++) {
-    if (isSelectable(rows[index])) return index;
-  }
-  for (let index = start - 1; index >= 0; index--) {
-    if (isSelectable(rows[index])) return index;
-  }
-  return -1;
-}
-
-/** Moves the selection by `delta` rows, skipping headings/subtitles and wrapping. */
-export function moveSelection(rows: readonly ConnectRow[], current: number, delta: number): number {
-  const total = rows.length;
-  if (total === 0) return -1;
-  const anchor = clampSelection(rows, current);
-  if (anchor < 0) return -1;
-
-  const step = delta >= 0 ? 1 : -1;
-  const truncated = Math.trunc(Number.isFinite(delta) ? delta : 0);
-  const count = Math.max(1, Math.abs(truncated) || 1);
-
-  let index = anchor;
-  for (let moved = 0; moved < count; moved++) {
-    let probe = index;
-    for (let guard = 0; guard < total; guard++) {
-      probe = (probe + step + total) % total;
-      if (isSelectable(rows[probe])) break;
-    }
-    if (!isSelectable(rows[probe])) return anchor;
-    index = probe;
-  }
-  return index;
-}
 
 // ---------------------------------------------------------------------------
-// Windowing (mirrors computeModelWindow)
+// Projection onto the shared picker
 // ---------------------------------------------------------------------------
 
-export interface ConnectWindowInput {
+export interface ConnectItemsInput {
+  /** The rows `buildConnectRows` produced. */
   rows: readonly ConnectRow[];
-  selected: number;
-  visible: number;
-  anchor?: number;
-}
-
-export interface ConnectWindow {
-  start: number;
-  end: number;
-  count: number;
-  total: number;
-  hasAbove: boolean;
-  hasBelow: boolean;
-}
-
-/**
- * Scroll-into-view windowing, anchored on the caller's last start so the list
- * scrolls rather than re-centres. When the cursor is the first provider of a
- * group, the window is pulled up to keep that group's heading on screen — the
- * heading is where the group's identity lives.
- */
-export function computeConnectWindow(input: ConnectWindowInput): ConnectWindow {
-  return computeListWindow(input);
-}
-
-// ---------------------------------------------------------------------------
-// Geometry
-// ---------------------------------------------------------------------------
-
-/** Below this the detail pane cannot sit beside the list and stacks under it. */
-const TWO_PANE_MIN_WIDTH = 76;
-const DETAIL_MIN_WIDTH = 30;
-const DETAIL_MAX_WIDTH = 56;
-const DETAIL_WIDTH_SHARE = 0.44;
-const LIST_MIN_WIDTH = 34;
-/** Widest the auth hint column gets; "subscription" is 12 cells. */
-const AUTH_MAX_WIDTH = 12;
-const AUTH_WIDTH_SHARE = 0.42;
-/** Below this a row cannot afford an auth column at all. */
-const AUTH_MIN_ROOM = 26;
-/** Widest a heading's state column gets; "3 connected" is 11 cells. */
-const STATE_MAX_WIDTH = 12;
-const HEADING_LABEL_MIN = 8;
-const HEADING_STATE_MIN_ROOM = 22;
-const BORDERED_MIN_ROWS = 12;
-const STACKED_DETAIL_SHARE = 0.4;
-const STACKED_DETAIL_MAX_ROWS = 10;
-
-export interface ConnectPane {
-  width: number;
-  innerWidth: number;
-  height: number;
-  bodyRows: number;
-  hasTitle: boolean;
-}
-
-export interface ConnectRowLayout {
-  /** Total cells a list row occupies; equals the list pane's inner width. */
-  width: number;
-  markerWidth: number;
-  markerGap: number;
-  /** Connected-state check column. 0 when the row cannot spare it. */
-  checkWidth: number;
-  checkGap: number;
-  /** The provider label. */
-  labelWidth: number;
-  authGap: number;
-  /** Right-aligned auth hint. 0 when the row can only afford a label. */
-  authWidth: number;
-}
-
-export interface ConnectHeadingLayout {
-  width: number;
-  labelWidth: number;
-  gap: number;
-  stateWidth: number;
-}
-
-export interface ConnectLayoutInput {
-  width: number;
-  height: number;
-  /** 1 when the status line under the panes is rendered. */
-  noticeRows?: number;
-}
-
-export interface ConnectLayout {
-  stacked: boolean;
-  bordered: boolean;
-  contentWidth: number;
-  bodyRows: number;
-  paneGap: number;
-  list: ConnectPane;
-  detail: ConnectPane;
-  row: ConnectRowLayout;
-  heading: ConnectHeadingLayout;
-  visibleRows: number;
-  detailCompact: boolean;
+  /**
+   * Local Cloud credential presence, decided by the component from the
+   * environment or `~/.0sec/cloud.env`. Never assumed here.
+   */
+  cloudConnected?: boolean;
+  /**
+   * The provider this screen was opened to REPAIR, if any. A provider being
+   * reconnected is never drawn as connected, however the store reads, because
+   * the credential it holds is the one that just failed.
+   */
+  recoveryProviderId?: string;
+  /**
+   * Lifecycle colours for the row, supplied by the component because this
+   * module never sees a theme. They restore exactly the two colours the old
+   * hand-rolled list carried — a connected provider read green, a provider
+   * awaiting reconnection read as an error — and nothing more. A tone is only
+   * ever attached to a state the row model already verified.
+   */
+  tones?: {
+    /** A verified credential exists (env or store). */
+    readonly connected?: string;
+    /** This provider is the one being repaired. */
+    readonly recovering?: string;
+  };
 }
 
 /**
- * Splits a list row into cursor, check, label and auth columns. The auth hint
- * gives way first, then the check, then the cursor; the label always survives.
- * Every separator is a real gap, never a padded literal — `sanitizeTuiText`
- * trims, so a literal space would collapse and fuse two columns.
+ * Projects the connect rows onto the console's one shared picker.
+ *
+ * `DialogItem` carries the group as `category`, so the picker draws the same
+ * "0sec Cloud / Use my own API key / Other API providers / Provider
+ * subscription" headings the hand-rolled list drew, and it searches them. The
+ * subtitle that used to occupy a row of its own becomes the item's
+ * `description`, which costs no row and cannot be landed on by the cursor.
+ *
+ * The honesty rule survives the projection intact. `current` — the gutter dot
+ * — and the `connected` meta are set from `provider.connected`, which
+ * `connectProviderFor` derives only from an env credential or the on-disk
+ * store, minus any provider currently being repaired. Nothing here can mark a
+ * provider connected optimistically, and no secret is carried on the item.
  */
-function computeRowLayout(innerWidth: number): ConnectRowLayout {
-  const width = cells(innerWidth);
-  if (width <= 0) {
-    return {
-      width: 0,
-      markerWidth: 0,
-      markerGap: 0,
-      checkWidth: 0,
-      checkGap: 0,
-      labelWidth: 0,
-      authGap: 0,
-      authWidth: 0,
-    };
-  }
-
-  const markerWidth = width >= 8 ? 1 : 0;
-  const markerGap = markerWidth > 0 && width > markerWidth ? 1 : 0;
-  const afterMarker = Math.max(0, width - markerWidth - markerGap);
-
-  const checkWidth = afterMarker >= 10 ? 1 : 0;
-  const checkGap = checkWidth > 0 && afterMarker > checkWidth ? 1 : 0;
-  const afterCheck = Math.max(0, afterMarker - checkWidth - checkGap);
-
-  const authWidth =
-    afterCheck >= AUTH_MIN_ROOM
-      ? Math.min(AUTH_MAX_WIDTH, Math.floor(afterCheck * AUTH_WIDTH_SHARE))
-      : 0;
-  const authGap = authWidth > 0 && afterCheck > authWidth ? 1 : 0;
-  const labelWidth = Math.max(0, afterCheck - authWidth - authGap);
-
-  return { width, markerWidth, markerGap, checkWidth, checkGap, labelWidth, authGap, authWidth };
-}
-
-/** Splits a heading into its label and its right-aligned state column. */
-function computeHeadingLayout(innerWidth: number): ConnectHeadingLayout {
-  const width = cells(innerWidth);
-  if (width <= 0) return { width: 0, labelWidth: 0, gap: 0, stateWidth: 0 };
-  if (width < HEADING_STATE_MIN_ROOM) {
-    return { width, labelWidth: width, gap: 0, stateWidth: 0 };
-  }
-  const stateWidth = clamp(
-    Math.min(STATE_MAX_WIDTH, Math.floor(width * 0.4)),
-    0,
-    Math.max(0, width - HEADING_LABEL_MIN - 1),
-  );
-  const gap = stateWidth > 0 ? 1 : 0;
-  return { width, labelWidth: Math.max(0, width - stateWidth - gap), gap, stateWidth };
-}
-
-/** The full geometry of the connect screen. Mirrors `computeModelLayout`. */
-export function computeConnectLayout({
-  width,
-  height,
-  noticeRows = 0,
-}: ConnectLayoutInput): ConnectLayout {
-  const terminalWidth = cells(width);
-  const contentWidth = Math.max(0, terminalWidth - 4);
-  const bodyRows = Math.max(
-    0,
-    cells(height) - shellChromeRows(terminalWidth) - Math.min(1, cells(noticeRows)),
-  );
-
-  const split = computePaneSplit(contentWidth, bodyRows, {
-    twoPaneMinWidth: TWO_PANE_MIN_WIDTH,
-    detailMinWidth: DETAIL_MIN_WIDTH,
-    detailMaxWidth: DETAIL_MAX_WIDTH,
-    detailWidthShare: DETAIL_WIDTH_SHARE,
-    listMinWidth: LIST_MIN_WIDTH,
-    borderedMinRows: BORDERED_MIN_ROWS,
-    stackedDetailShare: STACKED_DETAIL_SHARE,
-    stackedDetailMaxRows: STACKED_DETAIL_MAX_ROWS,
+export function connectDialogItems({
+  rows,
+  cloudConnected,
+  recoveryProviderId,
+  tones,
+}: ConnectItemsInput): DialogItem[] {
+  const items: DialogItem[] = [];
+  // Subtitles are rows in the row model; fold them onto the item above.
+  const subtitleFor = new Map<string, string>();
+  rows.forEach((row, index) => {
+    if (row.kind !== "subtitle") return;
+    const above = rows[index - 1];
+    if (above?.kind === "provider") subtitleFor.set(above.provider.id, row.text);
   });
 
-  return {
-    ...split,
-    row: computeRowLayout(split.list.innerWidth),
-    heading: computeHeadingLayout(split.list.innerWidth),
-    visibleRows: split.list.bodyRows,
-    detailCompact: !split.bordered,
-  };
+  for (const row of rows) {
+    if (row.kind === "cloud") {
+      const connected = cloudConnected === true && recoveryProviderId !== "hosted";
+      items.push({
+        id: CLOUD_ITEM_ID,
+        label: CLOUD_LABEL,
+        description: "Sign in once to use the 0sec-managed model catalog",
+        meta: recoveryProviderId === "hosted" ? "reconnect" : connected ? "login saved" : "sign in",
+        category: CLOUD_GROUP.label,
+        current: connected,
+        tone: recoveryProviderId === "hosted" ? tones?.recovering : connected ? tones?.connected : undefined,
+      });
+      continue;
+    }
+    if (row.kind !== "provider") continue;
+    const provider = row.provider;
+    const recovering = recoveryProviderId === provider.id;
+    const connected = provider.connected && !recovering;
+    items.push({
+      id: provider.id,
+      label: provider.label,
+      description: provider.subtitle ?? subtitleFor.get(provider.id),
+      meta: recovering ? "reconnect" : connected ? "connected" : authHintLabel(provider.auth),
+      category: row.group.label,
+      current: connected,
+      tone: recovering ? tones?.recovering : connected ? tones?.connected : undefined,
+    });
+  }
+  return items;
+}
+
+/** Display rows (category headings interleaved) the picker would render. */
+export function connectDisplayRowCount(items: readonly DialogItem[]): number {
+  let count = 0;
+  let group = "";
+  for (const item of items) {
+    if (item.category && item.category !== group) {
+      group = item.category;
+      count += 1;
+    }
+    count += 1;
+  }
+  return count;
+}
+
+/** The row for an item id, so the detail column can reach the full facts. */
+export function connectRowForId(
+  rows: readonly ConnectRow[],
+  id: string | undefined,
+): ConnectRow | undefined {
+  if (!id) return undefined;
+  if (id === CLOUD_ITEM_ID) return rows.find((row) => row.kind === "cloud");
+  return rows.find((row) => row.kind === "provider" && row.provider.id === id);
+}
+
+// ---------------------------------------------------------------------------
+// Dialog geometry
+// ---------------------------------------------------------------------------
+
+export type ConnectLayout = DialogScreenLayout;
+export type ConnectLayoutOptions = DialogScreenLayoutOptions;
+
+/**
+ * The connect dialog's row and column budget.
+ *
+ * The screen is a pop-up now, so there is no bordered two-pane console frame
+ * to lay out: the shared picker owns the list column, its detail column and
+ * the split between them, and this only has to partition the surface the host
+ * left into a title row, the picker body, a status line and a footer. It is
+ * `computeDialogScreenLayout` under a connect-shaped name — the same
+ * implementation, and therefore the same sweep, the settings dialog uses, and
+ * the same borrowing this module already does for `shellChromeRows`.
+ */
+export function computeConnectLayout(
+  width: number,
+  height: number,
+  totalRows: number,
+  options: ConnectLayoutOptions = {},
+): ConnectLayout {
+  return computeDialogScreenLayout(width, height, totalRows, options);
 }
 
 // ---------------------------------------------------------------------------
@@ -689,9 +593,6 @@ export function clipConnectDetailLines(
 // Title row (pane header: bold title left, right-aligned summary meta)
 // ---------------------------------------------------------------------------
 
-/** The title never shrinks below this; the meta gives way first. */
-const TITLE_MIN_WIDTH = 6;
-
 /** A pane header split into a left title and a right-aligned meta column. */
 export interface ConnectTitleLayout {
   /** Total cells the header row occupies; equals the pane's inner width. */
@@ -703,29 +604,37 @@ export interface ConnectTitleLayout {
 }
 
 /**
- * Splits a pane header into a left title and a right-aligned summary meta. The
- * title outranks the meta: on a narrow header the meta gives way whole rather
- * than crushing the title, and the two columns always sum to exactly the pane's
- * inner width so the header claims every cell it was given and never one more.
- * The separator is a real gap, never a padded literal — `sanitizeTuiText`
- * trims, so a literal space would fuse the two.
+ * Splits a header into a left title and a right-aligned summary meta.
+ *
+ * The split itself is `titleColumns` in `settings-layout.ts` — every dialog in
+ * the console divides its header the same way, and one implementation means
+ * one sweep. The title outranks the meta: on a narrow header the meta gives
+ * way whole rather than crushing the title, and the two columns always sum to
+ * exactly the width handed in.
  */
 export function computeConnectTitleLayout(innerWidth: number, metaLength: number): ConnectTitleLayout {
-  const width = cells(innerWidth);
-  if (width <= 0) return { width: 0, titleWidth: 0, gap: 0, metaWidth: 0 };
-  const wanted = cells(metaLength);
-  const metaWidth = Math.min(wanted, Math.max(0, width - TITLE_MIN_WIDTH - 1));
-  const gap = metaWidth > 0 ? 1 : 0;
-  const titleWidth = Math.max(0, width - metaWidth - gap);
-  return { width, titleWidth, gap, metaWidth };
+  return titleColumns(innerWidth, metaLength);
 }
 
 // ---------------------------------------------------------------------------
 // Status line, titles, hints and keys
 // ---------------------------------------------------------------------------
 
-/** The always-on status line under the panes: how many providers are connected. */
-export function connectStatusLine(rows: readonly ConnectRow[]): string {
+export interface ConnectCounts {
+  /** Providers holding a verified credential (env or store). */
+  readonly connected: number;
+  /** Distinct providers offered, the cloud row excluded. */
+  readonly total: number;
+}
+
+/**
+ * How many providers actually hold a credential.
+ *
+ * Counted off the same `provider.connected` the rows carry, so it can never
+ * disagree with the dots and checks the list draws, and the cloud row is left
+ * out of both numbers: it is a sign-in, not one of the providers.
+ */
+export function connectConnectedCounts(rows: readonly ConnectRow[]): ConnectCounts {
   const seen = new Set<string>();
   let connected = 0;
   for (const row of rows) {
@@ -733,29 +642,17 @@ export function connectStatusLine(rows: readonly ConnectRow[]): string {
     if (row.kind !== "provider") continue;
     if (seen.has(row.provider.id)) continue;
     seen.add(row.provider.id);
-    if (row.provider.connected) connected++;
+    if (row.provider.connected) connected += 1;
   }
-  if (seen.size === 0) return "no providers to connect";
+  return { connected, total: seen.size };
+}
+
+/** The always-on status line under the list: how many providers are connected. */
+export function connectStatusLine(rows: readonly ConnectRow[]): string {
+  const { connected, total } = connectConnectedCounts(rows);
+  if (total === 0) return "no providers to connect";
   if (connected === 0) return "no providers connected yet - select one to connect";
-  return `connected: ${connected} of ${seen.size} provider${seen.size === 1 ? "" : "s"}`;
-}
-
-/** `PROVIDERS 4-15/20`, or `PROVIDERS 20` when the whole list is on screen. */
-export function connectListTitle(window: ConnectWindow): string {
-  const meta = connectListMeta(window);
-  return meta ? `${connectListTitleLabel()} ${meta}` : connectListTitleLabel();
-}
-
-/** The list pane's stable, left-aligned header label. */
-export function connectListTitleLabel(): string {
-  return "CONNECTION";
-}
-
-/** The right-aligned header meta: total count, or the on-screen window range. */
-export function connectListMeta(window: ConnectWindow): string {
-  if (window.total === 0) return "0";
-  if (!window.hasAbove && !window.hasBelow) return String(window.total);
-  return `${window.start + 1}-${window.end}/${window.total}`;
+  return `connected: ${connected} of ${total} provider${total === 1 ? "" : "s"}`;
 }
 
 /** The detail pane's stable, left-aligned header label. */
