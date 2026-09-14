@@ -722,7 +722,7 @@ const OH_MY_PI: Theme = {
 };
 
 /**
- * `Ember` — the flagship 0sec look: signature orange on warm graphite.
+ * `0sec` — the flagship 0sec look: signature orange on warm graphite.
  *
  * The brand palette. Two anchors drive everything: the signature orange
  * `#FD802E` (PRIMARY / BRAND — the hero the eye lands on: rails, titles, the
@@ -757,7 +757,7 @@ const OH_MY_PI: Theme = {
  * text bar as PRIMARY. Syntax is a warm, legible palette: comment a dim warm
  * grey, strings/functions in warm hues, the cool teal reserved for types/links.
  */
-const EMBER: Theme = {
+const OSEC_THEME: Theme = {
   CANVAS: "#1A1613",
   PANEL: "#26221D",
   PANEL_ALT: "#35302A",
@@ -796,7 +796,7 @@ const EMBER: Theme = {
 /* ----------------------------------------------------------------- registry */
 
 export const THEME_NAMES = [
-  "ember",
+  "0sec",
   "midnight",
   "dark",
   "light",
@@ -819,10 +819,11 @@ export const THEME_ALIASES: Readonly<Record<string, ThemeName>> = {
   opencode: "golden-gate",
   golden: "golden-gate",
   "oh-my-pi": "blue-team",
+  ember: "0sec",
 };
 
 /**
- * The theme a fresh session gets. `ember` — the flagship 0sec look, signature
+ * The theme a fresh session gets. `0sec` — the flagship 0sec look, signature
  * orange (`#FD802E`) on warm graphite — is the shipped default: it puts the
  * brand hue front and centre while a rich, semantically-coloured transcript
  * reads far less flat than a neutral grey. `blue-team` (electric-blue on
@@ -831,7 +832,7 @@ export const THEME_ALIASES: Readonly<Record<string, ThemeName>> = {
  * text token with no waivers, so the default carries no contrast debt.
  * `slate` remains available for anyone who prefers hueless grey chrome.
  *
- * The `ember` name is a suggestion — orange-on-graphite reads as ember/coal —
+ * available in `/settings` alongside blue-team and golden-gate.
  * and the operator can rename it freely (label, id, and the `THEME_ALIASES`
  * entries are the only places the name is user-visible).
  *
@@ -844,7 +845,7 @@ export const THEME_ALIASES: Readonly<Record<string, ThemeName>> = {
  * preferred the old warm-grey look can opt back into it. That preservation — not
  * being the default — is why `dark` is the sole carrier of `CONTRAST_WAIVERS`.
  */
-export const DEFAULT_THEME_NAME: ThemeName = "ember";
+export const DEFAULT_THEME_NAME: ThemeName = "0sec";
 
 /**
  * The one palette pinned byte-for-byte to the original `ui/theme.ts`, and so the
@@ -869,12 +870,12 @@ export interface ThemeEntry {
 }
 
 export const THEMES: Readonly<Record<ThemeName, ThemeEntry>> = {
-  ember: {
-    name: "ember",
-    label: "Ember",
+  "0sec": {
+    name: "0sec",
+    label: "0sec",
     description: "The flagship 0sec look: signature orange on warm graphite, with an amber accent.",
     mode: "dark",
-    palette: EMBER,
+    palette: OSEC_THEME,
   },
   dark: {
     name: "dark",
