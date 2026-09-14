@@ -3966,8 +3966,18 @@ export function ChatScreen({
       requestExitRef.current();
       return;
     }
+    // The rebindable set resolves its chord through `matchesBinding` against the
+    // operator's persisted overrides rather than a hard-coded `key.name` literal,
+    // so `/keybindings` remaps actually take effect. `matchesBinding` falls back
+    // to the registry default when there is no override. The protected set
+    // (arrows, Enter, Esc, Ctrl+C, the modal scroll verbs, the review extremes
+    // and Right→accept-suggestion) keeps its literal guards on purpose.
+    const keybindingOverrides = settingsRef.current.keybindings;
     if (reviewOpen) {
-      if (key.name === "escape" || (key.ctrl && key.name === "o")) {
+      // review-toggle is rebindable, so its close chord is resolved too (Esc
+      // always closes as well). The overlay's own scroll verbs stay literal —
+      // they are the protected modal Page/Ctrl+Home/End set.
+      if (key.name === "escape" || matchesBinding(key, "overlay.review-toggle", keybindingOverrides)) {
         setReviewOpen(false);
         return;
       }
@@ -3992,7 +4002,7 @@ export function ChatScreen({
       }
       return;
     }
-    if (key.ctrl && key.name === "o") {
+    if (matchesBinding(key, "overlay.review-toggle", keybindingOverrides)) {
       setReviewOpen(true);
       return;
     }
@@ -4077,27 +4087,28 @@ export function ChatScreen({
     // recall composer history. The box is non-focusable, so it never grabs the
     // arrows itself; we drive it explicitly here. Sticky-bottom auto-scroll
     // keeps the newest evidence in view the rest of the time.
-    if (key.name === "pageup" || (key.ctrl && key.name === "up")) {
+    // Main-transcript scrolling is rebindable (nav.scroll-up / nav.scroll-down).
+    // The default answers PageUp/Ctrl+Up and PageDown/Ctrl+Down; an override
+    // replaces those with the operator's chord. The MODAL scroll handlers inside
+    // the review overlay and the focus view above keep their literal Page/Ctrl
+    // guards — those scroll a different surface and are protected.
+    if (matchesBinding(key, "nav.scroll-up", keybindingOverrides)) {
       transcriptRef.current?.scrollBy(-0.5, "viewport");
       return;
     }
-    if (key.name === "pagedown" || (key.ctrl && key.name === "down")) {
+    if (matchesBinding(key, "nav.scroll-down", keybindingOverrides)) {
       transcriptRef.current?.scrollBy(0.5, "viewport");
       return;
     }
-    // The three View toggles are the rebindable set: their chord is resolved
-    // through `matchesBinding` against the operator's persisted overrides
-    // (`settingsRef.current.keybindings`) rather than a hard-coded `key.name`
-    // literal, so `/keybindings` can remap them. `matchesBinding` falls back to
-    // the registry default (Ctrl+R / Ctrl+B / Ctrl+L) when there is no override.
-    // Handled above the composing block so the chord never reaches the
-    // composer's text catch-all (which only appends non-ctrl sequences anyway).
+    // The rebindable global chords, resolved through `matchesBinding` (see the
+    // const above) so `/keybindings` remaps take effect. They are handled above
+    // the composing block so a chord never reaches the composer's text catch-all
+    // (which only appends non-ctrl sequences anyway).
     //
     // transcript-detail flips the whole transcript between collapsed and
     // expanded detail; both sidebars toggle their pane. All three persist via
     // the settings store (the same layer `/settings` writes), so the choice
     // survives the session and the store's subscribers repaint immediately.
-    const keybindingOverrides = settingsRef.current.keybindings;
     if (matchesBinding(key, "view.transcript-detail", keybindingOverrides)) {
       updateSetting(
         "transcriptDetail",
@@ -4113,12 +4124,28 @@ export function ChatScreen({
       updateSetting("showRightSidebar", !settingsRef.current.showRightSidebar);
       return;
     }
+    // nav.jump-agents (Ctrl+G) drops straight into the active-subagents list —
+    // the same affordance Down offers on an empty composer, reachable directly
+    // and while composing. Only acts when there are workers to jump to;
+    // otherwise it falls through so the chord is a harmless no-op.
+    if (matchesBinding(key, "nav.jump-agents", keybindingOverrides)) {
+      const navList = settings.showSubagents ? workerRoster : [];
+      if (navList.length > 0) {
+        setAgentNavIndex(0);
+        return;
+      }
+    }
+    // nav.open-comms (Ctrl+T) opens the agent comms view via the shell nav.
+    if (matchesBinding(key, "nav.open-comms", keybindingOverrides)) {
+      onNavigate("comms");
+      return;
+    }
     // Ctrl+Y pulls the most recently queued message back into the composer for
     // editing — which doubles as cancel: it leaves the queue, and dropping it
     // (Esc) or re-sending it (Enter, re-queued at the back while still busy) is
     // then just normal composer editing. Newest-first so a hurried operator can
     // fix the last thing they typed without disturbing earlier parked lines.
-    if (key.ctrl && key.name === "y" && queuedRef.current.length > 0) {
+    if (matchesBinding(key, "composer.edit-queued", keybindingOverrides) && queuedRef.current.length > 0) {
       const queue = queuedRef.current;
       const last = queue[queue.length - 1];
       const rest = queue.slice(0, -1);
@@ -4143,7 +4170,7 @@ export function ChatScreen({
       routeSlashCommand(`/mode ${nextAutonomyMode(modeRef.current)}`);
       return;
     }
-    if (key.ctrl && (key.name === "p" || key.name === "k")) {
+    if (matchesBinding(key, "nav.palette", keybindingOverrides)) {
       if (restorePaletteDraft()) return;
       paletteDraftRef.current = { text: composerRef.current, composing: composingRef.current };
       composingRef.current = true;

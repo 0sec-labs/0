@@ -9,6 +9,7 @@ import {
   computeShortcutsColumns,
   computeShortcutsLayout,
   effectiveKeysDisplay,
+  filterKeybindingEditorRows,
   keybindingsEditorFooterHint,
   rebindableRowIndices,
   shortcutsFooterHint,
@@ -236,6 +237,62 @@ describe("buildKeybindingEditorRows", () => {
     expect(other.overridden).toBe(false);
   });
 
+  it("carries the default chord only on an overridden row", () => {
+    const rows = buildKeybindingEditorRows({ "view.left-sidebar": "ctrl+j" });
+    const overridden = rows.find((r) => r.id === "view.left-sidebar")!;
+    expect(overridden.defaultChord).toBe("Ctrl+B");
+    // Multi-chord rebindables keep both defaults in the note.
+    const rows2 = buildKeybindingEditorRows({ "nav.palette": "ctrl+j" });
+    expect(rows2.find((r) => r.id === "nav.palette")!.defaultChord).toBe("Ctrl+P / Ctrl+K");
+    // A non-overridden row carries no default note.
+    expect(rows.find((r) => r.id === "view.right-sidebar")!.defaultChord).toBeUndefined();
+  });
+
+  it("carries lockReason on locked rows and none on rebindable rows", () => {
+    const rows = buildKeybindingEditorRows({});
+    for (const row of rows) {
+      if (row.kind !== "binding") continue;
+      if (row.rebindable) expect(row.lockReason, row.id).toBeUndefined();
+      else expect((row.lockReason ?? "").length, row.id).toBeGreaterThan(0);
+    }
+    expect(rows.find((r) => r.id === "session.quit")!.lockReason).toBe("quit");
+    expect(rows.find((r) => r.id === "composer.accept-suggestion")!.lockReason).toBe("text entry");
+  });
+});
+
+describe("filterKeybindingEditorRows", () => {
+  const rows = buildKeybindingEditorRows({});
+
+  it("returns everything for an empty query", () => {
+    expect(filterKeybindingEditorRows(rows, "")).toEqual(rows);
+    expect(filterKeybindingEditorRows(rows, "   ")).toEqual(rows);
+  });
+
+  it("keeps only matching binding rows and drops emptied headings", () => {
+    const filtered = filterKeybindingEditorRows(rows, "sidebar");
+    const bindings = filtered.filter((r) => r.kind === "binding");
+    expect(bindings.length).toBeGreaterThan(0);
+    for (const row of bindings) {
+      expect(row.description?.toLowerCase()).toContain("sidebar");
+    }
+    // No heading survives without a following binding row.
+    for (let i = 0; i < filtered.length; i += 1) {
+      if (filtered[i]!.kind !== "heading") continue;
+      expect(filtered[i + 1]?.kind, "heading must be followed by a binding").toBe("binding");
+    }
+  });
+
+  it("matches on the chord column too", () => {
+    const filtered = filterKeybindingEditorRows(rows, "ctrl+b");
+    const ids = filtered.filter((r) => r.kind === "binding").map((r) => r.id);
+    expect(ids).toContain("view.left-sidebar");
+  });
+
+  it("returns no binding rows for a query that matches nothing", () => {
+    const filtered = filterKeybindingEditorRows(rows, "zzzzznope");
+    expect(filtered.filter((r) => r.kind === "binding").length).toBe(0);
+  });
+
   it("rebindableRowIndices points at editable binding rows only", () => {
     const rows = buildKeybindingEditorRows({});
     const indices = rebindableRowIndices(rows);
@@ -251,8 +308,10 @@ describe("keybindingsEditorFooterHint", () => {
   it("names the capture keys while capturing and the nav keys otherwise", () => {
     expect(keybindingsEditorFooterHint(true)).toContain("press a chord");
     const idle = keybindingsEditorFooterHint(false);
+    expect(idle).toContain("type to search");
     expect(idle).toContain("enter rebind");
-    expect(idle).toContain("r reset");
+    expect(idle).toContain("ctrl+r reset");
+    expect(idle).toContain("reset all");
     expect(idle).toContain("esc back");
   });
 });

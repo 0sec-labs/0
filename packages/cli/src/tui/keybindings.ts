@@ -29,9 +29,10 @@
  * (a canonical `"ctrl+b"` / `"pageup"` string, parseable back to a chord) and a
  * {@link Keybinding.rebindable} flag. Only the flagged bindings may be remapped
  * by an operator; the rest — text entry, Enter/Shift+Enter, Esc, Ctrl+C, the
- * Shift+Tab mode-cycle and the overloaded Up/Down/Tab — are structurally
- * protected and their chords are reserved (see {@link reservedChords}) so a
- * rebind can never steal them. `chat-screen.tsx`'s handlers for the rebindable
+ * Shift+Tab mode-cycle, the overloaded Up/Down/Left/Right/Tab and the
+ * review-overlay extremes (Ctrl+Home/Ctrl+End) — are structurally protected,
+ * carry a {@link Keybinding.lockReason} and have their chords reserved (see
+ * {@link reservedChords}) so a rebind can never steal them. `chat-screen.tsx`'s handlers for the rebindable
  * set consult {@link matchesBinding} against the persisted overrides map rather
  * than their old hard-coded `key.name === …` guards; the protected set keeps
  * its literal guards on purpose.
@@ -63,15 +64,26 @@ export interface Keybinding {
   readonly defaultChords: readonly string[];
   /**
    * Whether an operator may remap this binding. `false` for the structurally
-   * protected set (text entry, submit/newline, escape, quit, the mode-cycle and
-   * the overloaded arrows/Tab); `true` only for the self-contained View toggles.
-   * Both the editor and the resolver refuse to touch a `false` binding, and its
-   * chords are reserved so nothing can be rebound onto them.
+   * protected set (text entry, submit/newline, escape, quit, the mode-cycle,
+   * the overloaded arrows/Tab and the review-overlay extremes) — those carry a
+   * {@link Keybinding.lockReason}; `true` for the self-contained single-action
+   * bindings that don't feed a modal or text reducer (the View toggles, the
+   * review-overlay toggle, the palette, transcript scroll, edit-queued and the
+   * direct agents/comms jumps). Both the editor and the resolver refuse to
+   * touch a `false` binding, and its chords are reserved so nothing can be
+   * rebound onto them.
    */
   readonly rebindable: boolean;
   /** One line describing what the chord does. */
   readonly description: string;
   readonly category: KeybindingCategory;
+  /**
+   * A short, operator-facing token explaining WHY a protected binding cannot be
+   * remapped — "text entry", "modal", "quit", "mode-cycle". Present only on
+   * `rebindable: false` bindings, so the editor can render a reason beside each
+   * locked row instead of an unexplained lock. Rebindable bindings omit it.
+   */
+  readonly lockReason?: string;
   /**
    * The `chat-screen.tsx` guard this binding was captured from, quoted verbatim
    * so the registry can be checked against the handler that implements it. Not
@@ -97,6 +109,7 @@ export const KEYBINDINGS: readonly Keybinding[] = [
     description:
       "Send the message or run the highlighted slash command; queues the line when a turn is already in flight.",
     category: "Composer",
+    lockReason: "text entry",
     handler: 'if (key.name === "return") { … send / queue / dequeue }',
   },
   {
@@ -107,6 +120,7 @@ export const KEYBINDINGS: readonly Keybinding[] = [
     description:
       "Insert a newline instead of sending (terminals without the kitty protocol fall through to send).",
     category: "Composer",
+    lockReason: "text entry",
     handler: 'if (key.name === "return" && key.shift) setComposerText(`${…}\\n`)',
   },
   {
@@ -116,6 +130,7 @@ export const KEYBINDINGS: readonly Keybinding[] = [
     rebindable: false,
     description: "Complete the highlighted slash command in the command menu.",
     category: "Composer",
+    lockReason: "text entry",
     handler:
       'if (key.name === "tab") setComposerText(completionFor(selectedSlashCommand, …))',
   },
@@ -123,12 +138,12 @@ export const KEYBINDINGS: readonly Keybinding[] = [
     id: "composer.edit-queued",
     keys: "Ctrl+Y",
     defaultChords: ["ctrl+y"],
-    rebindable: false,
+    rebindable: true,
     description:
       "Pull the most recently queued message back into the composer to edit, re-send, or drop.",
     category: "Composer",
     handler:
-      'if (key.ctrl && key.name === "y" && queuedRef.current.length > 0) …',
+      'if (matchesBinding(key, "composer.edit-queued", …) && queuedRef.current.length > 0) …',
   },
   {
     id: "composer.delete-word",
@@ -137,6 +152,7 @@ export const KEYBINDINGS: readonly Keybinding[] = [
     rebindable: false,
     description: "Delete the word before the cursor.",
     category: "Composer",
+    lockReason: "text entry",
     handler:
       'if (key.ctrl && key.name === "w") / if (key.name === "backspace" && (key.meta || key.option || key.ctrl)) → deletePreviousWord',
   },
@@ -147,7 +163,20 @@ export const KEYBINDINGS: readonly Keybinding[] = [
     rebindable: false,
     description: "Delete from the cursor to the start of the line.",
     category: "Composer",
+    lockReason: "text entry",
     handler: 'if (key.ctrl && key.name === "u") → deleteToLineStart',
+  },
+  {
+    id: "composer.accept-suggestion",
+    keys: "Right",
+    defaultChords: ["right"],
+    rebindable: false,
+    description:
+      "Accept the inline autosuggestion, filling the ghost suffix into the draft without sending.",
+    category: "Composer",
+    lockReason: "text entry",
+    handler:
+      'if (key.name === "right") { const suffix = suggestCompletion(...); if (suffix) setComposerText(`${…}${suffix}`) }',
   },
 
   // ── Navigation ──────────────────────────────────────────────────────────────
@@ -155,10 +184,10 @@ export const KEYBINDINGS: readonly Keybinding[] = [
     id: "nav.palette",
     keys: "Ctrl+P / Ctrl+K",
     defaultChords: ["ctrl+p", "ctrl+k"],
-    rebindable: false,
+    rebindable: true,
     description: "Open the slash-command palette.",
     category: "Navigation",
-    handler: 'if (key.ctrl && (key.name === "p" || key.name === "k")) setComposerText("/")',
+    handler: 'if (matchesBinding(key, "nav.palette", …)) setComposerText("/")',
   },
   {
     id: "nav.history-prev",
@@ -168,6 +197,7 @@ export const KEYBINDINGS: readonly Keybinding[] = [
     description:
       "Recall the previous submitted message into the composer (also moves the selection in menus and overlays).",
     category: "Navigation",
+    lockReason: "modal",
     handler: 'if (key.name === "up") recallComposerHistory("up")',
   },
   {
@@ -178,8 +208,29 @@ export const KEYBINDINGS: readonly Keybinding[] = [
     description:
       "Recall the next message, or — on an empty composer with workers running — drop into the active-subagents list.",
     category: "Navigation",
+    lockReason: "modal",
     handler:
       'if (key.name === "down") { setAgentNavIndex(0) | recallComposerHistory("down") }',
+  },
+  {
+    id: "nav.jump-agents",
+    keys: "Ctrl+G",
+    defaultChords: ["ctrl+g"],
+    rebindable: true,
+    description:
+      "Drop straight into the active-subagents list from the composer (a direct chord complementing Down).",
+    category: "Navigation",
+    handler:
+      'if (matchesBinding(key, "nav.jump-agents", …) && workerRoster.length) setAgentNavIndex(0)',
+  },
+  {
+    id: "nav.open-comms",
+    keys: "Ctrl+T",
+    defaultChords: ["ctrl+t"],
+    rebindable: true,
+    description: "Open the agent comms view (the live sub-agent fleet) from chat.",
+    category: "Navigation",
+    handler: 'if (matchesBinding(key, "nav.open-comms", …)) onNavigate("comms")',
   },
   {
     id: "nav.escape",
@@ -189,27 +240,28 @@ export const KEYBINDINGS: readonly Keybinding[] = [
     description:
       "Step back one level: close the command menu, then clear the draft, then interrupt a running turn, then leave the screen.",
     category: "Navigation",
+    lockReason: "modal",
     handler: 'if (key.name === "escape") { … interruptTurn() … onGoBack() }',
   },
   {
     id: "nav.scroll-up",
     keys: "PageUp / Ctrl+Up",
     defaultChords: ["pageup", "ctrl+up"],
-    rebindable: false,
+    rebindable: true,
     description: "Scroll the transcript up by half a viewport.",
     category: "Navigation",
     handler:
-      'if (key.name === "pageup" || (key.ctrl && key.name === "up")) transcriptRef.current?.scrollBy(-0.5, "viewport")',
+      'if (matchesBinding(key, "nav.scroll-up", …)) transcriptRef.current?.scrollBy(-0.5, "viewport")',
   },
   {
     id: "nav.scroll-down",
     keys: "PageDown / Ctrl+Down",
     defaultChords: ["pagedown", "ctrl+down"],
-    rebindable: false,
+    rebindable: true,
     description: "Scroll the transcript down by half a viewport.",
     category: "Navigation",
     handler:
-      'if (key.name === "pagedown" || (key.ctrl && key.name === "down")) transcriptRef.current?.scrollBy(0.5, "viewport")',
+      'if (matchesBinding(key, "nav.scroll-down", …)) transcriptRef.current?.scrollBy(0.5, "viewport")',
   },
   {
     id: "nav.focus-subagent",
@@ -219,6 +271,7 @@ export const KEYBINDINGS: readonly Keybinding[] = [
     description:
       "In the active-subagents list, drill into the highlighted subagent's live focus view.",
     category: "Navigation",
+    lockReason: "modal",
     handler: 'if (agentNavIndex >= 0) { if (key.name === "return") setFocusAgentId(agent.agent_id) }',
   },
   {
@@ -229,6 +282,7 @@ export const KEYBINDINGS: readonly Keybinding[] = [
     description:
       "Return from the active-subagents list or a subagent focus view back to the composer.",
     category: "Navigation",
+    lockReason: "modal",
     handler:
       'if (focusAgentId) / if (agentNavIndex >= 0) { if (key.name === "escape" || key.name === "left") … }',
   },
@@ -241,6 +295,7 @@ export const KEYBINDINGS: readonly Keybinding[] = [
     rebindable: false,
     description: "Press twice within 3 seconds to quit; the first press arms and warns.",
     category: "Session",
+    lockReason: "quit",
     handler: 'if (key.ctrl && key.name === "c") requestExitRef.current()',
   },
 
@@ -276,6 +331,36 @@ export const KEYBINDINGS: readonly Keybinding[] = [
     handler:
       'if (matchesBinding(key, "view.transcript-detail", …)) updateSetting("transcriptDetail", …)',
   },
+  {
+    id: "overlay.review-toggle",
+    keys: "Ctrl+O",
+    defaultChords: ["ctrl+o"],
+    rebindable: true,
+    description: "Open (and close) the full-screen transcript-review overlay.",
+    category: "View",
+    handler:
+      'if (matchesBinding(key, "overlay.review-toggle", …)) setReviewOpen(true) / (reviewOpen) close',
+  },
+  {
+    id: "overlay.review-top",
+    keys: "Ctrl+Home",
+    defaultChords: ["ctrl+home"],
+    rebindable: false,
+    description: "Jump to the top of the transcript-review overlay.",
+    category: "View",
+    lockReason: "modal",
+    handler: 'if (reviewOpen && key.ctrl && key.name === "home") review.scrollY = 0',
+  },
+  {
+    id: "overlay.review-bottom",
+    keys: "Ctrl+End",
+    defaultChords: ["ctrl+end"],
+    rebindable: false,
+    description: "Jump to the bottom of the transcript-review overlay.",
+    category: "View",
+    lockReason: "modal",
+    handler: 'if (reviewOpen && key.ctrl && key.name === "end") review.scrollY = review.maxScrollY',
+  },
 
   // ── Autonomy ─────────────────────────────────────────────────────────────────
   {
@@ -286,6 +371,7 @@ export const KEYBINDINGS: readonly Keybinding[] = [
     description:
       "Cycle the autonomy mode: Standard → Co-pilot → YOLO → Recon; no preconfigured scope is required.",
     category: "Autonomy",
+    lockReason: "mode-cycle",
     handler: 'if (isAutonomyCycleKey(key)) routeSlashCommand(`/mode ${next}`)',
   },
 ] as const;
@@ -597,11 +683,17 @@ export function detectConflicts(
   const byChord = new Map<string, string[]>();
   for (const binding of bindings) {
     if (!binding.rebindable) continue;
-    const chord = effectiveChords(binding, overrides)[0];
-    if (!chord) continue;
-    const existing = byChord.get(chord);
-    if (existing) existing.push(binding.id);
-    else byChord.set(chord, [binding.id]);
+    // Bucket EVERY effective chord, not just the first: a rebindable binding
+    // that is still on its multi-chord default (nav.palette, nav.scroll-up)
+    // occupies all of them, and a would-be collision on the second chord must
+    // be caught too.
+    for (const chord of effectiveChords(binding, overrides)) {
+      if (!chord) continue;
+      const existing = byChord.get(chord);
+      if (existing) {
+        if (!existing.includes(binding.id)) existing.push(binding.id);
+      } else byChord.set(chord, [binding.id]);
+    }
   }
 
   const reserved = reservedChords(bindings);
@@ -648,7 +740,9 @@ export function assessChordAssignment(
   }
   for (const binding of bindings) {
     if (binding.id === id || !binding.rebindable) continue;
-    if (effectiveChords(binding, overrides)[0] === canonical) {
+    // Compare against every effective chord: a rebindable binding still on its
+    // multi-chord default owns each of them.
+    if (effectiveChords(binding, overrides).includes(canonical)) {
       return { kind: "conflict", chord: canonical, conflictId: binding.id, conflictLabel: binding.description };
     }
   }
@@ -691,11 +785,15 @@ export function sanitizeKeybindingOverrides(
   const occupied = new Map<string, string[]>();
   for (const binding of bindings) {
     if (!binding.rebindable) continue;
-    const chord = candidates[binding.id] ?? binding.defaultChords[0];
-    if (!chord) continue;
-    const existing = occupied.get(chord);
-    if (existing) existing.push(binding.id);
-    else occupied.set(chord, [binding.id]);
+    // An accepted candidate replaces with its single chord; an un-overridden
+    // binding still occupies ALL of its default chords, so bucket every one.
+    for (const chord of effectiveChords(binding, candidates)) {
+      if (!chord) continue;
+      const existing = occupied.get(chord);
+      if (existing) {
+        if (!existing.includes(binding.id)) existing.push(binding.id);
+      } else occupied.set(chord, [binding.id]);
+    }
   }
   for (const [, ids] of occupied) {
     if (ids.length <= 1) continue;

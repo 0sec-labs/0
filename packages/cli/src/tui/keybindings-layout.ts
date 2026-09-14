@@ -26,7 +26,7 @@ import {
   type Keybinding,
   type KeybindingCategory,
 } from "./keybindings.js";
-import type { DialogItem } from "./dialog-select-layout.js";
+import { rankDialogItem, type DialogItem } from "./dialog-select-layout.js";
 import { shellChromeRows } from "./settings-layout.js";
 import { SLASH_COMMANDS, type SlashCommand } from "./slash-commands.js";
 import { sanitizeTuiText, wrapText } from "./text.js";
@@ -528,6 +528,18 @@ export interface KeybindingEditorRow {
   category?: KeybindingCategory;
   /** The effective chord label (override applied) for `binding` rows. */
   chord?: string;
+  /**
+   * The binding's DEFAULT chord label, present on a `binding` row only when it
+   * is currently overridden — so the editor can show the default greyed beside
+   * the active override (e.g. `Ctrl+J  (was Ctrl+B)`).
+   */
+  defaultChord?: string;
+  /**
+   * The reason a locked (non-rebindable) row cannot be remapped — the binding's
+   * `lockReason` token ("text entry", "modal", "quit", "mode-cycle"). Present on
+   * locked binding rows only.
+   */
+  lockReason?: string;
   /** Whether the operator may remap this row. */
   rebindable?: boolean;
   /** Whether an override is currently active for this row. */
@@ -548,18 +560,77 @@ export function buildKeybindingEditorRows(
   for (const [category, entries] of keybindingsByCategory(bindings)) {
     rows.push({ kind: "heading", label: category.toUpperCase(), category });
     for (const binding of entries) {
+      const overridden = binding.rebindable && typeof overrides[binding.id] === "string";
       rows.push({
         kind: "binding",
         id: binding.id,
         description: sanitizeTuiText(binding.description),
         category,
         chord: sanitizeTuiText(effectiveKeysDisplay(binding, overrides)),
+        // Only carry the default separately when it differs from what's shown
+        // (i.e. the row is overridden), so the screen can grey it beside the
+        // active chord without repeating it on every unmodified row.
+        ...(overridden
+          ? { defaultChord: sanitizeTuiText(binding.defaultChords.map(chordDisplay).join(" / ")) }
+          : {}),
+        ...(binding.rebindable ? {} : { lockReason: binding.lockReason }),
         rebindable: binding.rebindable,
-        overridden: binding.rebindable && typeof overrides[binding.id] === "string",
+        overridden,
       });
     }
   }
   return rows;
+}
+
+/**
+ * Filter the editor rows to those matching a search query, reusing the shared
+ * `dialog-select` fuzzy scorer so typing "sidebar" or "ctrl" narrows the list
+ * exactly as `/shortcuts` does. An empty query returns the rows untouched. A
+ * heading survives only when at least one of its binding rows matched, so no
+ * empty category is left behind. Binding-row order (and thus the source-of-truth
+ * ordering) is preserved.
+ */
+export function filterKeybindingEditorRows(
+  rows: readonly KeybindingEditorRow[],
+  query: string,
+): KeybindingEditorRow[] {
+  const needle = query.trim().toLowerCase();
+  if (needle.length === 0) return [...rows];
+
+  const matched = new Set<KeybindingEditorRow>();
+  for (const row of rows) {
+    if (row.kind !== "binding") continue;
+    const score = rankDialogItem(
+      {
+        id: row.id ?? "",
+        label: row.description ?? "",
+        meta: row.chord ?? "",
+        category: row.category ?? "",
+      },
+      needle,
+    );
+    if (Number.isFinite(score)) matched.add(row);
+  }
+
+  const result: KeybindingEditorRow[] = [];
+  for (let i = 0; i < rows.length; i += 1) {
+    const row = rows[i]!;
+    if (row.kind === "binding") {
+      if (matched.has(row)) result.push(row);
+      continue;
+    }
+    // A heading is kept only if a following binding row (before the next
+    // heading) matched.
+    let hasMatch = false;
+    for (let j = i + 1; j < rows.length && rows[j]!.kind === "binding"; j += 1) {
+      if (matched.has(rows[j]!)) {
+        hasMatch = true;
+        break;
+      }
+    }
+    if (hasMatch) result.push(row);
+  }
+  return result;
 }
 
 /** The indices of the editable (rebindable) binding rows, in row order. */
@@ -571,11 +642,26 @@ export function rebindableRowIndices(rows: readonly KeybindingEditorRow[]): numb
   return indices;
 }
 
-/** The editor's footer hint, depending on whether a chord is being captured. */
+/**
+ * The editor's footer hint, depending on whether a chord is being captured.
+ *
+ * Idle mode advertises the search box (bare printable keys filter the list, the
+ * way `/shortcuts` does), so the per-row reset moved off bare `r` onto Ctrl+R
+ * (and reset-all onto Ctrl+Shift+R) — otherwise `r` could never be typed into a
+ * query. Esc clears the query first, then leaves.
+ */
 export function keybindingsEditorFooterHint(capturing: boolean): string {
   return capturing
     ? ["press a chord to bind", "esc cancel"].join(" · ")
-    : ["↑/↓ move", "enter rebind", "r reset", "esc back", "ctrl+c exit"].join(" · ");
+    : [
+        "type to search",
+        "↑/↓ move",
+        "enter rebind",
+        "ctrl+r reset",
+        "ctrl+shift+r reset all",
+        "esc back",
+        "ctrl+c exit",
+      ].join(" · ");
 }
 
 /** The editor's pane title. */
