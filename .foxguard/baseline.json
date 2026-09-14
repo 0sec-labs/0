@@ -3560,10 +3560,10 @@
       "line": 50
     },
     {
-      "fingerprint": "df5bd0ce65c05eeea57eb069c62adab52315f307b5c34a3be4c4d818cf56c88f",
+      "fingerprint": "b0f71a8961fcc7b4ea88c1439e934e96c9812fbe2573c55811a043de0a6c220e",
       "rule_id": "js/no-unsafe-regex",
       "file": "packages/cli/src/commands/hackstore.test.ts",
-      "line": 220
+      "line": 202
     },
     {
       "fingerprint": "49341073bd6fc9ffdcad0cdbcceb3e476fd8c016742c5a5105df6576338e1734",
@@ -3620,10 +3620,10 @@
       "line": 47
     },
     {
-      "fingerprint": "2dd8eb101e7e820076eb291ee33cf47d1923c58a12d5ef238a2cb4731ae37c39",
+      "fingerprint": "be85b53e39f87dffd5e870f63a1b3f2ee87a5e4a84408e0112835f1eed4783ff",
       "rule_id": "js/no-hardcoded-secret",
       "file": "packages/cli/src/tui/credential-store.ts",
-      "line": 51
+      "line": 61
     },
     {
       "fingerprint": "5ddb3345259f9e9c3bf6ddeab005e3f35b0abf65d9fbd0e59b48dc6672d67411",
@@ -3650,16 +3650,16 @@
       "line": 65
     },
     {
-      "fingerprint": "13cfb1f4f18c8e20c39ff6644f259d8eaf1f007f4a5a5340862f25f63243e3e4",
+      "fingerprint": "787031486fee1cc3f7f89d3866102233bfed7f8e9350f7874b66cf710ceb2e66",
       "rule_id": "js/no-hardcoded-secret",
       "file": "packages/cli/src/tui/themes.test.ts",
-      "line": 1035
+      "line": 1037
     },
     {
-      "fingerprint": "e9707d4bbd7cc2c2d78d615a11cf680f558e95cb33f7970df587ec3960e3b3d4",
+      "fingerprint": "a93d411eb109c0d0944a1d8900ff8be4313a5101daaa75b4e97f7ccefe65e68b",
       "rule_id": "js/no-unsafe-regex",
       "file": "packages/cli/src/tui/themes.ts",
-      "line": 1330
+      "line": 1409
     },
     {
       "fingerprint": "69319d3e3c504f30c956fe191268c5c4ed7a916a0e1d14b929e83d6246410423",
@@ -4376,22 +4376,22 @@
       "line": 2481
     },
     {
-      "fingerprint": "4d5c0f5c11d7c5f7e98ae25081b4280e485d17018cf6c245c1d0f67ca6d02a35",
+      "fingerprint": "6e961616ab2deab4d520e644f1b758030baf9c78ce2eb1747ee7dd579c59416e",
       "rule_id": "js/no-hardcoded-secret",
       "file": "packages/core/src/runtime/llm-api.ts",
-      "line": 691
+      "line": 767
     },
     {
-      "fingerprint": "4044dfbd927f397ee6cb872af146167ff1ccb19bedf8e95e658bc13ce8ed44ed",
+      "fingerprint": "d29af25877618a5532d5e6d466b9b551501a283a2648e1cd885334ef8cec5619",
       "rule_id": "js/no-ssrf",
       "file": "packages/core/src/runtime/llm-api.ts",
-      "line": 1223
+      "line": 1299
     },
     {
-      "fingerprint": "e09701b3e62a75c5755e3ade6b0067f4e8958248d92cf1ba5a4ae31267fdf433",
+      "fingerprint": "df30ff5768eb7e09463cda98ac90ae9570ce508372eb31abf38270e9a48c224a",
       "rule_id": "js/no-ssrf",
       "file": "packages/core/src/runtime/llm-api.ts",
-      "line": 2624
+      "line": 2700
     },
     {
       "fingerprint": "688e6ce2de6e7a4e0302f44ae42fa06d4ec3bd1dcd27f2a600e645b29c1d8c19",
@@ -4406,28 +4406,28 @@
       "line": 523
     },
     {
-      "fingerprint": "e3a749b4b02ab3b3330566b06737dda710639ad1beda9969d8e15f2e78dfddde",
+      "fingerprint": "ad19052e7d7b13173a58ae49c0273522673951df9db0d99677802c729af7350c",
       "rule_id": "js/no-hardcoded-secret",
       "file": "packages/core/src/runtime/responses-provider.test.ts",
-      "line": 70
+      "line": 76
     },
     {
-      "fingerprint": "71781c6e63900c896cf3f6aa70b479a3c76eb6dbbcd42c5981935951f80ef0db",
+      "fingerprint": "e50353f7dfa8e778c10402831663bb05201b33056fc3ddc47fd523bee0a95207",
       "rule_id": "js/no-hardcoded-secret",
       "file": "packages/core/src/runtime/responses-provider.test.ts",
-      "line": 92
+      "line": 98
     },
     {
-      "fingerprint": "5de2d8a17b5c6074b434126062e217dd647ce31d92915c175e361884a2062853",
+      "fingerprint": "77f697986a9e7318bb95d86ad10cbe33697df8d554bebcf16f9bbe7b8cb5f0ee",
       "rule_id": "js/no-hardcoded-secret",
       "file": "packages/core/src/runtime/responses-provider.test.ts",
-      "line": 130
+      "line": 136
     },
     {
-      "fingerprint": "496bfe786d37f3f7b02f85f0beda4bb5dda934844a08d9c0bc543cf4e30e1578",
+      "fingerprint": "d3ce8effe41528c3deefbf4b14db554b41f2019b276ed83227c810ea4ffe238b",
       "rule_id": "js/no-hardcoded-secret",
       "file": "packages/core/src/runtime/responses-provider.test.ts",
-      "line": 153
+      "line": 159
     },
     {
       "fingerprint": "ef1dac2848daebe7a14b2daeb86388355af4cff968004eae9e698502239b5ae6",

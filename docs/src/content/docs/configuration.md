@@ -388,8 +388,9 @@ Keys are stored in plaintext at `~/.0sec/credentials.json` by default, with
 `0600` file and `0700` directory permissions. Explicit environment values win.
 See [credential storage](/api-keys/#console-credential-store).
 
-In `/model`, **Tab** opens the full catalog. Check credentials and account access.
-Treat missing price data as unknown.
+In the BYOK `/model` picker, **Tab** opens the full catalog and a nonblank query
+searches it from either view. Check credentials and account access.
+Treat missing price data as unknown. See [Model picker](/console/#model-picker).
 For an existing chat, `/connect` and `/model` configure the next `/new-chat`.
 The current runtime, conversation and live harness stay unchanged.
 

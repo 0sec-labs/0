@@ -76,11 +76,13 @@ export function catalogCachePath(opts: CatalogSyncOptions = {}): string {
  * keyed by model id, each model optionally carrying `cost.{input,output}` and
  * `limit.context`. We parse defensively — the feed evolves, and a shape change
  * must degrade to "fewer rows," never a throw.
+ *
+ * Keeps one row per provider listing: the same id is often served by several
+ * gateways.
  */
 export function normalizeModelsDev(raw: unknown): SyncedModel[] {
   if (typeof raw !== "object" || raw === null) return [];
   const out: SyncedModel[] = [];
-  const seen = new Set<string>();
 
   for (const [providerId, providerVal] of Object.entries(raw as Record<string, unknown>)) {
     if (typeof providerVal !== "object" || providerVal === null) continue;
@@ -89,7 +91,7 @@ export function normalizeModelsDev(raw: unknown): SyncedModel[] {
 
     for (const [modelId, modelVal] of Object.entries(models as Record<string, unknown>)) {
       const id = typeof modelId === "string" ? modelId : undefined;
-      if (!id || seen.has(id)) continue;
+      if (!id) continue;
       const m = (typeof modelVal === "object" && modelVal !== null
         ? (modelVal as Record<string, unknown>)
         : {}) as Record<string, unknown>;
@@ -106,7 +108,6 @@ export function normalizeModelsDev(raw: unknown): SyncedModel[] {
       if (typeof cost["output"] === "number") entry.output = cost["output"];
       if (typeof limit["context"] === "number") entry.contextTokens = limit["context"];
       out.push(entry);
-      seen.add(id);
     }
   }
   return out;

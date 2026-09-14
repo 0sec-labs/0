@@ -142,6 +142,7 @@ import {
   buildHostedModelCatalog,
   hostedModelDetails,
   preferredHostedModel,
+  scopeModelCatalog,
 } from "./model-catalog.js";
 import {
   syncModelCatalog,
@@ -149,7 +150,6 @@ import {
   loadHostedModelCatalog,
   type HostedCatalogSnapshot,
 } from "./model-catalog-sync.js";
-import { OFFLINE_MODEL_CATALOG } from "./model-catalog.offline.js";
 import { providerStates } from "./provider-status.js";
 import { sanitizeTuiText } from "./text.js";
 
@@ -168,9 +168,6 @@ const HOSTED_PROVIDER_ID = "hosted";
  * about is targetable even when it is not named here.
  */
 const MODEL_ROLES = ["discovery", "attack", "verify", "report", "audit", "review"] as const;
-const CURATED_MODEL_IDS: Readonly<Record<string, true>> = Object.fromEntries(
-  OFFLINE_MODEL_CATALOG.map((model) => [model.id, true]),
-);
 
 export interface ModelFrameInput {
   /** The screen body, already sized to the rows the frame left it. */
@@ -395,8 +392,8 @@ export function ModelScreen({
     [isByok, catalogNonce],
   );
   const scopedCatalog = useMemo(
-    () => showAll ? catalog : catalog.filter((model) => Object.hasOwn(CURATED_MODEL_IDS, model.id) || model.id === activeModel),
-    [catalog, activeModel, showAll],
+    () => isByok ? scopeModelCatalog(catalog, { showAll, filter, currentModel: activeModel }) : [],
+    [catalog, activeModel, filter, isByok, showAll],
   );
 
   // `buildModelRows` does all the domain work — grouping by provider, credential
@@ -430,18 +427,21 @@ export function ModelScreen({
         current: model.id === activeModel,
       }));
   };
-  const items = isHosted ? hostedItems(filter) : modelDialogItems(modelRows);
+  const modelOnlyRows = useMemo(
+    () => modelRows.filter((row): row is Extract<ModelRow, { kind: "model" }> => row.kind === "model"),
+    [modelRows],
+  );
+  const byokItems = useMemo(() => modelDialogItems(modelOnlyRows), [modelOnlyRows]);
+  const items = isHosted ? hostedItems(filter) : byokItems;
   const hostedById = useMemo(
     () => new Map(hostedCatalog.map((model) => [model.id, model])),
     [hostedCatalog],
   );
-  // id -> ModelRow, so the detail renderer can reach the full provider/credential
-  // facts the flat `DialogItem` does not carry.
-  const rowById = useMemo(() => {
-    const map = new Map<string, ModelRow>();
-    for (const row of modelRows) if (row.kind === "model") map.set(row.model.id, row);
-    return map;
-  }, [modelRows]);
+  // Item identity preserves the provider's own price, window and credential facts.
+  const rowByItem = useMemo(
+    () => new Map(byokItems.map((item, index) => [item, modelOnlyRows[index]])),
+    [byokItems, modelOnlyRows],
+  );
   // Display rows (headings interleaved) drive the panel's scroll/height math.
   const totalRows = useMemo(() => {
     let count = 0;
@@ -456,17 +456,21 @@ export function ModelScreen({
     return count;
   }, [items]);
 
-  // Keep the highlight on the same model when the background catalog refreshes.
-  const [selectedId, setSelectedId] = useState(currentModel);
-  const selectedIdRef = useRef(selectedId);
+  // Match provider and id so duplicates remain navigable across catalog refreshes.
+  const [selectedItem, setSelectedItem] = useState<DialogItem>();
+  const selectedItemRef = useRef(selectedItem);
   // On the hosted path the opening highlight is the operator's pin resolved
   // against the account's own catalogue: `preferredHostedModel` returns that
   // row, or nothing when the pinned id is not in this account's list. It never
   // substitutes another model, so an unlisted pin simply leaves the cursor on
   // the first row instead of silently pointing at a different one.
-  const offeredId = preferredHostedModel(hostedCatalog, selectedId ?? activeModel)?.id;
-  const highlightId = isHosted ? offeredId : (selectedId ?? activeModel);
-  const cursor = clampDialogSelection(items, items.findIndex((item) => item.id === highlightId));
+  const offeredId = preferredHostedModel(hostedCatalog, activeModel)?.id;
+  const selectionIndex = (visible: DialogItem[], selection = selectedItemRef.current) =>
+    clampDialogSelection(visible, visible.findIndex((item) =>
+      item.id === (selection?.id ?? (isHosted ? offeredId : activeModel)) &&
+      (!selection || item.category === selection.category),
+    ));
+  const cursor = selectionIndex(items, selectedItem);
 
   // Every width and row count comes off the layout module, from the surface
   // box the dialog handed down — never from `useTerminalDimensions` and never
@@ -502,34 +506,34 @@ export function ModelScreen({
     : filterRef.current === filter && showAllRef.current === showAll
       ? items
       : modelDialogItems(buildModelRows({
-        catalog: showAllRef.current
-          ? catalog
-          : catalog.filter((model) => Object.hasOwn(CURATED_MODEL_IDS, model.id) || model.id === activeModel),
+        catalog: scopeModelCatalog(catalog, {
+          showAll: showAllRef.current,
+          filter: filterRef.current,
+          currentModel: activeModel,
+        }),
         states,
         filter: filterRef.current,
         activeModel,
       }));
-  const highlight = (id: string | undefined) => {
-    selectedIdRef.current = id;
-    setSelectedId(id);
+  const highlight = (index: number) => {
+    const item = currentItems()[index];
+    selectedItemRef.current = item;
+    setSelectedItem(item);
   };
 
   const move = (delta: number) => {
     const visible = currentItems();
     if (visible.length === 0) return;
     const dir: 1 | -1 = delta >= 0 ? 1 : -1;
-    let next = clampDialogSelection(
-      visible,
-      visible.findIndex((item) => item.id === (selectedIdRef.current ?? activeModel ?? offeredId)),
-    );
+    let next = selectionIndex(visible);
     for (let i = 0; i < Math.abs(delta); i += 1) next = moveDialogSelection(visible, next, dir);
-    highlight(visible[next]?.id);
+    highlight(next);
   };
 
   const setQuery = (next: SetStateAction<string>) => {
     filterRef.current = typeof next === "function" ? next(filterRef.current) : next;
     setFilter(filterRef.current);
-    highlight(undefined);
+    highlight(0);
   };
 
   usePaste((event) => {
@@ -553,7 +557,8 @@ export function ModelScreen({
       const next = roles[(index + (key.name === "right" ? 1 : -1) + roles.length) % roles.length] ?? null;
       setRole(next);
       setNotice("");
-      highlight(next === null ? currentModel : (agentModels?.[next] ?? currentModel));
+      const target = next === null ? currentModel : (agentModels?.[next] ?? currentModel);
+      highlight(currentItems().findIndex((item) => item.id === target));
       return;
     }
     if (singleModelLive && key.ctrl && key.name === "s") {
@@ -577,8 +582,8 @@ export function ModelScreen({
     if (key.name === "down") return move(1);
     if (key.name === "pageup") return move(-PAGE_STEP);
     if (key.name === "pagedown") return move(PAGE_STEP);
-    if (key.name === "home") return highlight(currentItems()[0]?.id);
-    if (key.name === "end") return highlight(currentItems().at(-1)?.id);
+    if (key.name === "home") return highlight(0);
+    if (key.name === "end") return highlight(Math.max(0, currentItems().length - 1));
     if (key.name === "tab") {
       // Curated/all is a property of the BYOK superset; the hosted catalogue is
       // whatever the account listed, so there is nothing to widen.
@@ -589,10 +594,7 @@ export function ModelScreen({
     }
     if (key.name === "return") {
       const visible = currentItems();
-      const activeItem = visible[clampDialogSelection(
-        visible,
-        visible.findIndex((item) => item.id === (selectedIdRef.current ?? activeModel ?? offeredId)),
-      )];
+      const activeItem = visible[selectionIndex(visible)];
       if (!activeItem) return;
       if (role !== null && rolesLive) {
         onAgentModelsChange?.({ ...agentModels, [role]: activeItem.id });
@@ -625,6 +627,7 @@ export function ModelScreen({
   // body hands it. Both branches end in a bounded box, so the pane physically
   // cannot paint more rows than it was given.
   const renderDetail = (item: DialogItem, pane: { width: number; height: number }) => {
+
     const compact = pane.height < 12;
 
     if (isHosted) {
@@ -685,7 +688,7 @@ export function ModelScreen({
     // The BYOK pane is short and bounded — id, provider, price, context, the
     // credential story — and is clipped with a visible marker rather than
     // scrolled. Nothing that was reachable before is dropped.
-    const row = rowById.get(item.id);
+    const row = rowByItem.get(item);
     const contextTokens = row?.kind === "model"
       ? contextWindowFor(contextIndex, row.model.provider, row.model.id)
       : null;
@@ -712,7 +715,7 @@ export function ModelScreen({
 
   // ── Title row: glyph + label on the left, the live row count on the right.
   // Split explicitly so the two leaves can never be handed overlapping cells.
-  const titleText = modelDialogTitle({ scope, providerId, showAll });
+  const titleText = modelDialogTitle({ scope, providerId, showAll: showAll || !!filter.trim() });
   const countText = modelDialogCount(items.length, refreshing);
   const countWidth = Math.min(contentWidth, textCells(countText));
   const titleWidth = Math.max(0, contentWidth - countWidth - (countWidth > 0 ? 1 : 0));
@@ -756,7 +759,7 @@ export function ModelScreen({
   }
   if (isByok) {
     metaLines.push({
-      text: `${showAll ? "All models" : "Curated models"} · ${items.length} of ${scopedCatalog.length} · Tab ${showAll ? "curated" : "all models"}${refreshing ? " · refreshing…" : ""}`,
+      text: `${showAll || filter.trim() ? "All models" : "Curated models"} · ${items.length} of ${scopedCatalog.length} · Tab ${showAll ? "curated" : "all models"}${refreshing ? " · refreshing…" : ""}`,
       fg: theme.ACCENT,
     });
   }
@@ -830,13 +833,13 @@ export function ModelScreen({
           gutter
           isCurrent={(item) => item.current === true}
           renderDetail={renderDetail}
-          onActivateRow={(index) => highlight(items[index]?.id)}
+          onActivateRow={highlight}
           onScroll={move}
           emptyText={isHosted
             ? refreshing
               ? "Loading the hosted catalog"
               : "No hosted models matched; no fallback catalog is used"
-            : showAll
+            : showAll || filter.trim()
               ? "No matches. Ctrl+U clears search."
               : "No matches. Tab searches all models; Ctrl+U clears."}
         />
