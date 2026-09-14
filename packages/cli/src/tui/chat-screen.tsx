@@ -230,6 +230,13 @@ import {
 } from "./transcript-style.js";
 import { useSelectionCopy, type SelectionCopyFn } from "./use-selection-copy.js";
 import { useToast, Toast } from "./toast.js";
+import { ContextMenu } from "./context-menu.js";
+import {
+  useContextMenu,
+  isRightClick,
+  type ContextMenuItem,
+} from "./use-context-menu.js";
+import { firstCodeBlock } from "./markdown.js";
 import {
   copyToClipboard,
   defaultSpawn,
@@ -1032,6 +1039,39 @@ export function ChatScreen({
     which: defaultWhich,
     onCopied: ({ bytes }) => showToast(`Copied ${bytes} bytes`),
   });
+  // Right-click context menu over the transcript. Purely additive: it opens
+  // only on a right press (button 2) and only when mouse support is on, so the
+  // left-click / drag-to-select / keyboard paths are untouched.
+  const transcriptMenu = useContextMenu();
+  const copyMenuText = useCallback(
+    (text: string, label: string) => {
+      void copySelection(text, { spawn: defaultSpawn, which: defaultWhich }).then(
+        (result) => showToast(result.ok ? `Copied ${label}` : "Copy failed"),
+      );
+    },
+    [copySelection, showToast],
+  );
+  const buildMessageMenuItems = useCallback(
+    (entry: ChatEntry): ContextMenuItem[] => {
+      const text = entry.text ?? "";
+      const items: ContextMenuItem[] = [
+        {
+          label: "Copy message",
+          disabled: text.trim().length === 0,
+          onSelect: () => copyMenuText(text, "message"),
+        },
+      ];
+      const code = firstCodeBlock(text);
+      if (code) {
+        items.push({
+          label: "Copy code block",
+          onSelect: () => copyMenuText(code, "code block"),
+        });
+      }
+      return items;
+    },
+    [copyMenuText],
+  );
   /**
    * Per-turn transcript expansion. In collapsed mode each turn's successful
    * tool/reasoning steps fold to one ▸ line; clicking that line adds the turn
@@ -3739,6 +3779,10 @@ export function ChatScreen({
 
   useKeyboard((key) => {
     if (!interactive || stoppingAuditRef.current) return;
+    // While the right-click context menu is open it owns the keyboard (its own
+    // handler moves the highlight / activates / closes); bail so the transcript
+    // beneath does not also act on Up/Down/Enter/Esc.
+    if (transcriptMenu.state.open) return;
     // The `ask_operator` modal takes precedence exactly like an approval prompt,
     // but it AUTHORIZES NOTHING — Esc resolves a `null` answer (the tool renders
     // that as "dismissed, nothing authorized"), Enter resolves the collected
@@ -5228,7 +5272,7 @@ export function ChatScreen({
               : "static";
         }
       }
-      return renderEntry(
+      const node = renderEntry(
         entry,
         width,
         expanded ? { ...display, transcriptDetail: "expanded" } : display,
@@ -5241,6 +5285,31 @@ export function ChatScreen({
         } : undefined,
         reasoningLabel,
       );
+      // A right-click on an operator/model message pops its actions at the
+      // cursor. The wrapper is a layout-neutral column and its handler fires
+      // ONLY for a right press (button 2), so left-click / drag-select / the
+      // fold-toggle handlers inside `node` are all untouched. Gated on
+      // `mouseSupport`, matching every other mouse affordance.
+      const isMessage = entry.kind === "user" || entry.kind === "assistant";
+      if (settings.mouseSupport && isMessage && (entry.text ?? "").length > 0) {
+        return (
+          <box
+            key={entry.id}
+            flexDirection="column"
+            flexShrink={0}
+            minWidth={0}
+            onMouseDown={(event) => {
+              if (!isRightClick(event)) return;
+              event.stopPropagation?.();
+              event.preventDefault?.();
+              transcriptMenu.open(event.x, event.y, buildMessageMenuItems(entry));
+            }}
+          >
+            {node}
+          </box>
+        );
+      }
+      return node;
     });
   };
   const focusHasTranscript = focused && Boolean(focusEntries?.length);
@@ -5604,6 +5673,14 @@ export function ChatScreen({
         * participating in — or shifting — the column layout above.
         */}
       {interactive ? <Toast frame={toastFrame} /> : null}
+      {interactive && transcriptMenu.state.open ? (
+        <ContextMenu
+          items={transcriptMenu.state.items}
+          x={transcriptMenu.state.x}
+          y={transcriptMenu.state.y}
+          onClose={transcriptMenu.close}
+        />
+      ) : null}
     </box>
   );
 }

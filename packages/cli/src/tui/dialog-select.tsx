@@ -21,12 +21,13 @@
 
 import React, { useMemo, useRef, useState, type ReactNode, type SetStateAction } from "react";
 import { useKeyboard, usePaste } from "@opentui/react";
-import { TextAttributes, decodePasteBytes, RGBA } from "@opentui/core";
+import { TextAttributes, decodePasteBytes, RGBA, type MouseEvent as OpenTuiMouseEvent } from "@opentui/core";
 
 import { useTheme } from "./theme-context.js";
 import { useSymbols } from "./symbol-context.js";
 import { Cells, textCells } from "./primitives.js";
 import { wheelRowDelta } from "./mouse.js";
+import { isRightClick } from "./use-context-menu.js";
 import { sanitizeTuiText } from "./text.js";
 import { useSurfaceDimensions } from "./dialog-surface.js";
 import { operatorIcon } from "./operator-icons.js";
@@ -158,6 +159,14 @@ export interface DialogSelectBodyProps {
    * one place.
    */
   onScroll?: (rowDelta: number) => void;
+  /**
+   * A right-click (button 2) on a selectable row. Optional and additive: when
+   * omitted the row behaves exactly as before (any press activates); when
+   * given, a right press routes here (with the absolute cursor cell on the
+   * event) instead of activating, and a left press still activates. Lets a host
+   * pop a per-row context menu without touching the left-click path.
+   */
+  onRowContextMenu?: (itemIndex: number, event: OpenTuiMouseEvent) => void;
 }
 
 /**
@@ -191,6 +200,7 @@ export function DialogSelectBody({
   emptyText = "no matches",
   onActivateRow,
   onScroll,
+  onRowContextMenu,
 }: DialogSelectBodyProps) {
   const theme = useTheme();
 
@@ -251,7 +261,19 @@ export function DialogSelectBody({
         flexShrink={0}
         minWidth={0}
         backgroundColor={bg}
-        onMouseDown={onActivateRow && !item.disabled ? () => onActivateRow(row.itemIndex) : undefined}
+        onMouseDown={
+          (onActivateRow || onRowContextMenu) && !item.disabled
+            ? (event: OpenTuiMouseEvent) => {
+                if (onRowContextMenu && isRightClick(event)) {
+                  event.stopPropagation?.();
+                  event.preventDefault?.();
+                  onRowContextMenu(row.itemIndex, event);
+                  return;
+                }
+                onActivateRow?.(row.itemIndex);
+              }
+            : undefined
+        }
       >
         {columns.gutterWidth > 0 ? (
           <Cells width={columns.gutterWidth} fg={dotFg} bg={bg}>

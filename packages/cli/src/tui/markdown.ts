@@ -1064,3 +1064,20 @@ export function renderMarkdown(source: string, width: number): MdBlock[] {
   if (w <= 0) return [];
   return parseMarkdownBlocks(source).map((block) => wrapBlock(block, w));
 }
+
+/**
+ * The verbatim contents of the FIRST fenced code block in `source`, or `null`
+ * when there is none. Reuses {@link parseMarkdownBlocks}, so it recognises a
+ * code block exactly as the transcript renderer does (backtick/tilde fences,
+ * any length, with or without an info string). Pure — used to offer a "Copy
+ * code block" action on a transcript message only when one is actually present.
+ */
+export function firstCodeBlock(source: string): string | null {
+  for (const block of parseMarkdownBlocks(source)) {
+    if (block.kind === "code") {
+      const text = block.lines.join("\n");
+      return text.length > 0 ? text : null;
+    }
+  }
+  return null;
+}
