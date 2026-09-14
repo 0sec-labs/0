@@ -345,8 +345,8 @@ docker build --build-arg INSTALL_SECLISTS=1 -t 0sec:full .
   model at runtime, executed in isolated Docker containers or smolvm microVMs.
   This is the primary self-extension path, enabled by default for non-verifier
   agents (operator can opt out via `allowModelSelfExtension: false`).
-- **Third-party operator plugins** — CLI-managed plugins from the operator
-  marketplace. Scaffolded; no marketplace ships.
+- **Third-party operator plugins**: tools installed from Hackstore and enabled
+  for a project. These run as local child processes, not in the self-extension sandbox.
 
 ### Model-authored executable plugins (self-extension)
 
@@ -464,23 +464,29 @@ evolve            │
 
 **Source:** `packages/cli/src/commands/plugin.ts`
 
-**Status:** The Hackstore community index ships as the default registry
-(`github.com/0sec-labs/hackstore`); set `0SEC_REGISTRY_URL` (or `--registry`)
-to override or disable it. Signature crypto is still a stub, so entries install
-as `unverified`. Plugins can also be loaded from local filesystem paths for
-development.
+Hackstore is the default community registry. Override it with `0SEC_REGISTRY_URL`
+or `--registry` on browse, search, and install. An explicit empty setting disables
+fetching. Entries use the unconfigured signature verifier and are marked
+`unverified`.
+
+The [author guide](/hackstore/)
+covers executable scaffolding, the manifest, and a local two-file installation
+in an isolated home. The installer writes `plugin.js` and `plugin.json` only.
+These instructions follow source; the tested 0.16.3 binary requires the
+`plugin run` tool-registry fix before direct calls work.
 
 #### Subcommands
 
 | Subcommand | Description |
 |------------|-------------|
 | `0sec plugin list` | List installed plugins |
-| `0sec plugin search <query>` | Search the plugin registry (empty by default) |
+| `0sec plugin browse` | List the configured registry |
+| `0sec plugin search <query>` | Search the configured registry |
 | `0sec plugin install <id>` | Write plugin files to disk (does not execute) |
 | `0sec plugin enable <id>` | Record operator decision to permit the plugin |
 | `0sec plugin disable <id>` | Revoke enablement |
 | `0sec plugin info <id>` | Show plugin manifest and capabilities |
-| `0sec plugin run <id> [tool]` | Invoke one contributed tool of an enabled plugin |
+| `0sec plugin run <id> <tool> [pairs...]` | Invoke a tool; name it explicitly before `key=value` arguments. Effectful calls require `--yes`. |
 
 #### Security model
 
@@ -490,11 +496,13 @@ CLI-managed plugins have three distinct states:
 |-------|-------------|
 | **Installed** | Files on disk. `install` writes bytes; runs nothing |
 | **Enabled** | Per-project operator decision recorded by the enablement store |
-| **Running** | Tool invocation. Only enabled plugins with declared capabilities execute |
+| **Loaded** | The enabled plugin starts executing in a child process, before any tool call |
 
-CLI plugin capabilities declared in the manifest and gated at runtime:
-`network`, `filesystem-read`, `filesystem-write`, `process-exec`,
-`findings-write`
+Declared capabilities are `compute`, `model-call`, `network`, `filesystem-read`,
+`filesystem-write`, `process-exec`, and `findings-write`. They inform host-side
+approval decisions; they do not enforce operating-system restrictions. A plugin
+runs under the operator's account. Review code before enabling it. Omitting
+`--yes` for an effectful call prevents the call, not the preceding plugin load.
 
 ## Disclose and evidence
 

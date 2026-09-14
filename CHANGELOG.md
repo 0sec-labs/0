@@ -31,6 +31,13 @@ on the published npm package and the GitHub Release tag.
 
 ### Fixed
 
+- Fix `plugin run` to read the name-keyed built-in tool registry instead of
+  treating it as an array. Approval-denied output now distinguishes loading
+  plugin code from invoking its tool.
+- Generate a runnable SHA-256 `plugin.js` from `hackstore init`, reading the
+  installed manifest instead of duplicating it in code. Include local testing
+  instructions and reject invalid tool arguments explicitly.
+
 - Search the full BYOK model catalog from the curated picker and navigate models
   with duplicate IDs across providers without mixing their detail panes.
   Preserve hosted model pins and role-selection controls.

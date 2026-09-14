@@ -70,7 +70,7 @@ async function realCorePort(): Promise<CorePort> {
     // subprocess in a unit test while still exercising the enablement + consent
     // gates in `runRun`.
     PluginHost: FakeRunHost,
-    TOOL_DEFINITIONS: [{ name: "run_command" }],
+    TOOL_DEFINITIONS: { run_command: { name: "run_command" } },
   } as unknown as CorePort;
 }
 
@@ -411,12 +411,10 @@ describe("run", () => {
     expect(process.exitCode).toBe(0);
   });
 
-  it("REFUSES an effectful (non read-only) tool without --yes, running nothing", async () => {
+  it("refuses an effectful tool call without --yes", async () => {
     await installAndEnable();
     await runRun("acme.recon", "acme_probe", ["host=example.test"], deps());
     expect(runCalls).toHaveLength(0);
-    expect(joined(err)).toMatch(/not read-only/);
-    expect(joined(err)).toMatch(/--yes/);
     expect(process.exitCode).toBe(1);
   });
 

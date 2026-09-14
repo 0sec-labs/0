@@ -3560,10 +3560,10 @@
       "line": 50
     },
     {
-      "fingerprint": "df5bd0ce65c05eeea57eb069c62adab52315f307b5c34a3be4c4d818cf56c88f",
+      "fingerprint": "b0f71a8961fcc7b4ea88c1439e934e96c9812fbe2573c55811a043de0a6c220e",
       "rule_id": "js/no-unsafe-regex",
       "file": "packages/cli/src/commands/hackstore.test.ts",
-      "line": 220
+      "line": 202
     },
     {
       "fingerprint": "49341073bd6fc9ffdcad0cdbcceb3e476fd8c016742c5a5105df6576338e1734",

@@ -1,33 +1,11 @@
-// `0sec plugin` — install, enable, and inspect third-party plugins.
+// `0sec plugin` manages registry installation, project enablement, and tool calls.
+// Install writes files; enable records approval. Neither executes plugin code.
+// `run` loads an enabled plugin before choosing and authorizing a tool call.
+// Loading starts a child process under the operator's account, not an OS sandbox.
+// Registry signatures remain unverified; inspect code before enabling it.
 //
-// SCAFFOLD NOTICE (stage 4 + part of stage 5 of packages/core/src/plugins/DESIGN.md)
-// ─────────────────────────────────────────────────────────────────────────────
-// This is the OPERATOR SURFACE for the plugin trust model. It deliberately
-// keeps three states separate, because the boundaries between them are the
-// entire security story:
-//
-//   installed  — files on disk. `install` writes bytes; it runs NOTHING. There
-//                is no install script, no postinstall, no import of plugin code.
-//   enabled    — a per-project operator decision recorded by the enablement
-//                store. `enable` writes ONE json record; it spawns nothing.
-//   running    — a tool is actually invoked. That happens only in the loader,
-//                at scan time, and only for ids the enablement store reports as
-//                cleanly enabled. This command never spawns a plugin.
-//
-// The Hackstore ships as the default registry (DEFAULT_REGISTRY_URL → the
-// community index in github.com/0sec-labs/hackstore); the signature crypto is
-// still a stub, so entries install as `unverified` (see registry-client).
-// `0SEC_REGISTRY_URL`/`--registry` overrides it; an explicit empty value makes
-// `search` / `browse` / `install` a clear no-op ("Hackstore disabled").
-//
-// DEPENDENCY NOTE
-// ───────────────
-// The core primitives this command drives (`enablement.ts`, `registry-client.ts`,
-// and the loader's discovery helpers) are consumed through an injected {@link
-// CorePort} so the command is unit-testable with fakes and never spawns or
-// touches the real network in tests. The production port lazily imports
-// `@0sec/core`; the barrel must export the symbols listed at the bottom of this
-// file for that import to resolve at runtime.
+// CorePort isolates CLI I/O for command tests. Its structural types must match
+// the runtime exports, including the name-keyed built-in tool registry.
 
 import { chmodSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -206,7 +184,7 @@ export interface CorePort {
   PluginHost: new (opts: PluginHostOptionsView) => PluginHostView;
   /** Built-in tool definitions; their names are the reserved set a plugin may
    *  not shadow. Passed to the host so there is one authorization namespace. */
-  readonly TOOL_DEFINITIONS: readonly { name: string }[];
+  readonly TOOL_DEFINITIONS: Readonly<Record<string, { name: string }>>;
 }
 
 /** Lazy real port. Cast through {@link CorePort} so tsc does not require the
@@ -701,7 +679,7 @@ export async function runRun(
     pluginsDir: root,
     homeDir: d.homeDir,
     enabled: [...loadable],
-    reservedToolNames: d.core.TOOL_DEFINITIONS.map((t) => t.name),
+    reservedToolNames: Object.values(d.core.TOOL_DEFINITIONS).map((t) => t.name),
     coreVersion: deps.coreVersion,
     callTimeoutMs: deps.callTimeoutMs,
   });
@@ -741,7 +719,7 @@ export async function runRun(
           `Tool "${target.name}" declares [${capSummary(target.capabilities)}] — it is not read-only.`,
         ),
       );
-      d.err("  Re-run with --yes to authorize it. Nothing was run.");
+      d.err("  Re-run with --yes to authorize the tool call. The plugin was loaded, but the tool was not called.");
       process.exitCode = EXIT_USER_ERROR;
       return;
     }
@@ -772,7 +750,7 @@ export async function runRun(
 export function registerPluginCommand(program: Command): void {
   const plugin = program
     .command("plugin")
-    .description("Install, enable, and inspect third-party plugins (scaffold; no marketplace ships)");
+    .description("Install, enable, inspect, and run Hackstore extensions");
 
   const withDeps = async (opts: { registry?: string }): Promise<PluginCommandDeps> => ({
     core: await defaultCorePort(),
