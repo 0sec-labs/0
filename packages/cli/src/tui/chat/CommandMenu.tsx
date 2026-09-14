@@ -27,7 +27,8 @@ const COMMAND_ICONS: Readonly<Record<string, string>> = {
 };
 
 /**
- * The slash-command menu, a bordered box stacked directly above the composer.
+ * The slash-command menu, a background-contrast popup stacked directly above
+ * the composer (borderless, delineated by its PANEL_ALT ground).
  *
  * This is the IN-PLACE palette, not a route: it is rendered inside the chat
  * composer area, so it deliberately registers NO keyboard handler of its own.
@@ -71,9 +72,14 @@ export function CommandMenu({
   theme: Theme;
 }) {
   const symbols = useSymbols();
-  const { BORDER, PANEL_ALT, MUTED, PRIMARY, TEXT, ERROR } = theme;
+  const { PANEL_ALT, MUTED, PRIMARY, TEXT, ERROR } = theme;
   return (
-    <box flexDirection="column" width={boxWidth} minWidth={0} height={height} flexShrink={0} marginTop={1} border borderColor={BORDER} backgroundColor={PANEL_ALT} paddingX={1}>
+    // Borderless popup: the drawn box border is replaced by the PANEL_ALT
+    // background contrast (raised over the chat's PANEL/CANVAS ground). The
+    // two border columns become paddingX={2} and the two border rows become
+    // paddingY={1}, so the inner content geometry is byte-for-byte unchanged
+    // and `commandMenuBoxHeight`'s MENU_CHROME_ROWS (still 2 chrome rows) holds.
+    <box flexDirection="column" width={boxWidth} minWidth={0} height={height} flexShrink={0} marginTop={1} backgroundColor={PANEL_ALT} paddingX={2} paddingY={1}>
       <box flexDirection="row" width={layout.innerWidth} minWidth={0} gap={layout.headerGap}>
         <box width={layout.headerTitleWidth} flexShrink={0} minWidth={0}>
           <text fg={MUTED}>{fitTuiText(`${operatorIcon("commands", symbols)} ${operatorTitle("commands")}`, layout.headerTitleWidth)}</text>

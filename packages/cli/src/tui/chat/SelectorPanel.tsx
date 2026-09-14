@@ -9,8 +9,9 @@ import type { Theme } from "../theme-context.js";
 /**
  * How many rows a selector panel may spend, and on what.
  *
- * The panel is a bordered box stacked above the composer with an EXPLICIT
- * height, so whatever it claims here is exactly what it paints. `budget` is
+ * The panel is a background-contrast popup stacked above the composer with an
+ * EXPLICIT height, so whatever it claims here is exactly what it paints.
+ * `budget` is
  * the number of content rows the column can spare (from
  * `computeCommandMenuHeight`, which already reserves the composer, the
  * header and a minimum transcript).
@@ -43,8 +44,9 @@ export function selectorPanelBudget({
 
 /**
  * Total rows a selector panel occupies for the rows it actually renders.
- * `commandMenuBoxHeight` covers the two border rows, the header and the
- * hint footer; the optional lines are added explicitly.
+ * `commandMenuBoxHeight` covers the two chrome rows (now paddingY, formerly
+ * the border), the header and the hint footer; the optional lines are added
+ * explicitly.
  */
 export function selectorPanelHeight(itemRows: number, showContext: boolean, showDetail: boolean): number {
   return commandMenuBoxHeight(Math.max(itemRows, 1), 1)
@@ -140,10 +142,15 @@ export function SelectorPanel({
 
   return (
     // Inline, NOT a dialog: no scrim, no absolute positioning, no centring —
-    // it sits in the composer's column and shares its vertical budget. It
-    // borrows only the dialog language's rounded outline so the two surfaces
-    // read as one family.
-    <box flexDirection="column" width="100%" minWidth={0} height={height} flexShrink={0} marginTop={1} border borderStyle="rounded" borderColor={borderColor} backgroundColor={PANEL_ALT} paddingX={1}>
+    // it sits in the composer's column and shares its vertical budget.
+    // Borderless like the restyled dialogs/screens: the drawn rounded outline
+    // is replaced by the PANEL_ALT background contrast that now delineates the
+    // popup. The two former border columns become paddingX={2} and the two
+    // border rows become paddingY={1}, so the inner width/height budget is
+    // unchanged and `commandMenuBoxHeight`'s two chrome rows still hold. The
+    // `borderColor` prop stays in the public interface (callers pass it) but no
+    // longer draws a box; identity now rides the bold `titleColor` title text.
+    <box flexDirection="column" width="100%" minWidth={0} height={height} flexShrink={0} marginTop={1} backgroundColor={PANEL_ALT} paddingX={2} paddingY={1}>
       <box flexDirection="row" width={innerWidth} height={1} flexShrink={0} minWidth={0}>
         <box width={headerTitleWidth} height={1} flexShrink={0} minWidth={0}>
           <text width={headerTitleWidth} height={1} wrapMode="none" truncate fg={titleColor} attributes={TextAttributes.BOLD}>{fitTuiText(title, headerTitleWidth)}</text>
