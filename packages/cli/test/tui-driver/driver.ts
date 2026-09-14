@@ -40,6 +40,32 @@ export interface KeyModifiers {
   hyper?: boolean;
 }
 
+/**
+ * A REAL macrotask tick.
+ *
+ * OpenTUI's React reconciler commits, and React runs passive effects
+ * (`useEffect`), on a macrotask — NOT synchronously inside `setup.flush()`,
+ * which only drives native render passes. A component's `useKeyboard`/`usePaste`
+ * subscription is a passive effect (`keyHandler.on("keypress", …)`), so until a
+ * real macrotask runs, a freshly-mounted screen — the initial route, and any
+ * route/overlay that mounts mid-scenario — has NOT yet attached its key handler
+ * and silently drops input. Yielding a macrotask before delivering input (and
+ * again after, so the state update paints) is what makes overlay-screen
+ * keyboard drivable headlessly. See `settleInput` below and the driver header.
+ */
+function macrotask(ms = 0): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * A lone Escape arrives as a bare ESC byte, and the terminal input parser holds
+ * it back briefly to disambiguate it from an escape SEQUENCE (arrows, function
+ * keys) that starts with the same byte. It only surfaces as a "escape" keypress
+ * after that parser timeout elapses, so an Esc needs a longer settle than a
+ * printable key. ~40ms matches the parser's flush window.
+ */
+const ESCAPE_SETTLE_MS = 40;
+
 export interface LaunchOptions {
   /** Terminal columns. */
   cols?: number;
@@ -60,6 +86,23 @@ export interface TuiHandle {
   sendKey(key: string, mods?: KeyModifiers): Promise<void>;
   /** Deliver a bracketed paste, exercising the composer's paste-chip path. */
   sendPaste(text: string): Promise<void>;
+  /**
+   * Move the mouse pointer to a cell (0-based col `x`, row `y`), firing the
+   * hover/move handlers (`onMouseOver`, `onMouseMove`) of the renderable under
+   * it. The pointer is remembered, so a follow-up hover at the SAME cell is a
+   * no-op the way a real terminal reports it — which is exactly the condition
+   * the list's hover-vs-scroll guard keys on.
+   */
+  moveMouse(x: number, y: number): Promise<void>;
+  /** Left-click a cell (0-based), firing the `onMouseDown` of the renderable under it. */
+  click(x: number, y: number): Promise<void>;
+  /**
+   * Scroll the wheel over a cell (0-based). `deltaRows` is signed: NEGATIVE
+   * scrolls up (toward the top), POSITIVE scrolls down; its magnitude is the
+   * number of wheel notches delivered. The pointer does not move, so this
+   * exercises exactly the wheel-over-a-stationary-cursor path.
+   */
+  scroll(x: number, y: number, deltaRows: number): Promise<void>;
   /** Resize the virtual terminal. */
   resize(cols: number, rows: number): Promise<void>;
   /** Wait until a rendered (normalized) frame matches `re`; resolves with that frame. */
@@ -145,28 +188,134 @@ export async function launch(opts: LaunchOptions = {}): Promise<TuiHandle> {
   root.render(React.createElement(UnifiedApp, { mode }));
 
   // Let mount effects (plugin-host prep, workspace bootstrap) run and paint.
+  // The extra macrotask is what lets React run the passive effects that ATTACH
+  // the mounted screen's `useKeyboard`/`usePaste` subscriptions — without it the
+  // very first keystroke lands before any handler is listening. See `macrotask`.
   await setup.flush();
+  await macrotask();
+  await setup.flush();
+
+  /**
+   * Bridge the module-duplicated `Renderable.renderablesByNumber` maps so mouse
+   * dispatch can resolve a hit to its handler.
+   *
+   * Under vitest + Bun, `@opentui/react` (the reconciler that CREATES the
+   * renderables and attaches their `onMouseOver`/`onMouseDown`/`onMouseScroll`
+   * handlers) resolves a SEPARATE copy of `@opentui/core` from the one
+   * `@opentui/core/testing` builds the renderer with. `Renderable` is a class
+   * with a STATIC `renderablesByNumber` map, so each copy keeps its own: the
+   * reconciler registers its renderables in copy A's map, while the renderer's
+   * mouse dispatch (`processSingleMouseEvent`) looks the hit id up in copy B's.
+   * The native hit grid (shared via the renderer pointer) still returns the
+   * right id, but `renderablesByNumber.get(id)` in copy B is empty, so
+   * `maybeRenderable` is undefined and NO handler fires. Keyboard/paste are
+   * unaffected — they dispatch through `renderer.keyInput`, not this map.
+   *
+   * The fix, entirely driver-side: before delivering a mouse event, walk the
+   * live tree (the renderables ARE the reconciler's objects, reachable through
+   * `renderer.root`) and register each into the RENDERER's copy of the map by
+   * its `num`. Dispatch then resolves the id to the real renderable and calls
+   * its listeners. Re-run before every mouse event so a freshly mounted /
+   * re-laid-out tree stays covered; stale entries are harmless because the hit
+   * grid never returns an id for a renderable that is no longer painted.
+   */
+  const rendererRenderableClass = Object.getPrototypeOf(setup.renderer.root)
+    .constructor as { renderablesByNumber?: Map<number, unknown> };
+  function syncRenderablesForMouse(): void {
+    const map = rendererRenderableClass.renderablesByNumber;
+    if (!map) return;
+    // Primary path: copy the reconciler copy's OWN map wholesale. That copy
+    // holds every renderable it created — crucially the ones nested inside a
+    // scrollbox's viewport, which a `getChildren` tree-walk does not reach
+    // (the list rows in the model picker live there). Find that class through
+    // any live child of the root: its prototype's constructor is the reconciler
+    // copy, distinct from the renderer's own.
+    for (const child of (setup.renderer.root.getChildren?.() ?? []) as unknown[]) {
+      const reconClass = Object.getPrototypeOf(child).constructor as {
+        renderablesByNumber?: Map<number, unknown>;
+      };
+      if (reconClass !== rendererRenderableClass && reconClass.renderablesByNumber) {
+        for (const [num, rn] of reconClass.renderablesByNumber) map.set(num, rn);
+        break;
+      }
+    }
+    // Belt-and-suspenders: also register everything reachable by walking the
+    // tree, covering any renderable a copy's map might have missed.
+    const walk = (node: unknown): void => {
+      if (!node || typeof node !== "object") return;
+      const rn = node as { num?: number; getChildren?: () => unknown[] };
+      if (typeof rn.num === "number") map.set(rn.num, rn);
+      for (const child of rn.getChildren?.() ?? []) walk(child);
+    };
+    walk(setup.renderer.root);
+  }
+
+  /**
+   * Deliver synthetic input, then settle.
+   *
+   * `pre` runs on the current tree; a macrotask before it guarantees that a
+   * screen mounted by the PREVIOUS input (a route change, a pushed overlay) has
+   * had its key/paste subscription attached before this input is emitted.
+   * `escape` gets the longer parser-flush window; every input then paints.
+   */
+  async function settleInput(pre: () => void | Promise<void>, escape = false): Promise<void> {
+    await macrotask();
+    await setup.flush();
+    await pre();
+    // Settle in SEVERAL macrotask+flush rounds, not one. The handler's React
+    // state update commits on a macrotask (the reconciler is async), and the
+    // committed tree only paints on the NEXT flush — so a single round can
+    // capture the pre-update frame. This bites hardest right after a mouse
+    // event, whose own async stdin drain shifts the timing enough that one
+    // round intermittently misses the keyboard update's paint. A few rounds
+    // (each a real macrotask) let commit-then-paint fully drain; the settle
+    // window is longer for Esc, which the stdin parser releases late.
+    const rounds = escape ? 3 : 2;
+    for (let i = 0; i < rounds; i += 1) {
+      await macrotask(escape ? ESCAPE_SETTLE_MS : 0);
+      await setup.flush();
+    }
+  }
 
   const handle: TuiHandle = {
     async sendKeys(str) {
-      await setup.mockInput.typeText(str);
-      await setup.flush();
+      await settleInput(() => setup.mockInput.typeText(str));
     },
     async sendKey(key, mods) {
-      const arrow = ARROWS[key.toLowerCase()];
-      if (arrow) setup.mockInput.pressArrow(arrow, mods);
-      else if (key.toLowerCase() === "enter" || key.toLowerCase() === "return")
-        setup.mockInput.pressEnter(mods);
-      else if (key.toLowerCase() === "escape" || key.toLowerCase() === "esc")
-        setup.mockInput.pressEscape(mods);
-      else if (key.toLowerCase() === "tab") setup.mockInput.pressTab(mods);
-      else if (key.toLowerCase() === "backspace") setup.mockInput.pressBackspace(mods);
-      else setup.mockInput.pressKey(key, mods);
-      await setup.flush();
+      const lower = key.toLowerCase();
+      const isEscape = lower === "escape" || lower === "esc";
+      await settleInput(() => {
+        const arrow = ARROWS[lower];
+        if (arrow) setup.mockInput.pressArrow(arrow, mods);
+        else if (lower === "enter" || lower === "return") setup.mockInput.pressEnter(mods);
+        else if (isEscape) setup.mockInput.pressEscape(mods);
+        else if (lower === "tab") setup.mockInput.pressTab(mods);
+        else if (lower === "backspace") setup.mockInput.pressBackspace(mods);
+        else setup.mockInput.pressKey(key, mods);
+      }, isEscape);
     },
     async sendPaste(text) {
-      await setup.mockInput.pasteBracketedText(text);
-      await setup.flush();
+      await settleInput(() => setup.mockInput.pasteBracketedText(text));
+    },
+    async moveMouse(x, y) {
+      await settleInput(() => {
+        syncRenderablesForMouse();
+        return setup.mockMouse.moveTo(x, y);
+      });
+    },
+    async click(x, y) {
+      await settleInput(() => {
+        syncRenderablesForMouse();
+        return setup.mockMouse.click(x, y);
+      });
+    },
+    async scroll(x, y, deltaRows) {
+      const direction = deltaRows < 0 ? "up" : "down";
+      const notches = Math.max(1, Math.abs(deltaRows));
+      await settleInput(async () => {
+        syncRenderablesForMouse();
+        for (let i = 0; i < notches; i += 1) await setup.mockMouse.scroll(x, y, direction);
+      });
     },
     async resize(c, r) {
       setup.resize(c, r);

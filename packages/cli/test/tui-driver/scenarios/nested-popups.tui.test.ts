@@ -19,12 +19,17 @@
  *
  * The layers render plain markers rather than the `Popup` chrome — the stack's
  * focus/lifecycle mechanism is what is under test here; `Popup`'s geometry and
- * backdrop are unit-tested in popup.test.ts. Mounting the real `SettingsScreen`
- * to press `r` is not viable in this harness: an overlay screen's `useKeyboard`
- * does not subscribe under the headless renderer (reproducible on the untouched
- * baseline), so its keys never arrive — a pre-existing harness limitation. This
- * file, like `driver.ts`, is plain `.ts` and builds its tree with
- * `React.createElement` (the scenario runner does not transform JSX).
+ * backdrop are unit-tested in popup.test.ts. This file mounts its own minimal
+ * tree (rather than driving a real overlay through `launch()`) to isolate the
+ * popup-stack mechanism from any one screen; it therefore reproduces `driver.ts`'s
+ * tolerant teardown and its macrotask `tick()` locally. (The `useKeyboard` note
+ * here is historical: an overlay screen's keyboard subscription is a passive
+ * effect that attaches only after a real macrotask, so it looked inert when the
+ * driver flushed without one; `driver.ts` now settles a macrotask before every
+ * keystroke, and routed overlays ARE keyboard-drivable — see
+ * `model-picker-nav.tui.test.ts`.) This file, like `driver.ts`, is plain `.ts`
+ * and builds its tree with `React.createElement` (the runner does not transform
+ * JSX).
  */
 
 import React, { useState } from "react";
