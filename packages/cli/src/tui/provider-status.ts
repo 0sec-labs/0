@@ -98,9 +98,14 @@ const PROVIDER_DEFS: readonly Omit<ProviderInfo, "auth">[] = [
   {
     id: "openrouter",
     label: "OpenRouter",
-    methods: ["api-key"],
+    // OAuth (PKCE browser sign-in) is preferred; a pasted OPENROUTER_API_KEY
+    // remains a secondary path. The browser flow provisions a durable
+    // `sk-or-...` key and stores it as an api_key record written to
+    // OPENROUTER_API_KEY (envVars[0], which llm-api already reads), so — unlike
+    // the xai/kimi device flows — the credential is a key, not OAuth tokens.
+    methods: ["oauth", "api-key"],
     envVars: ["OPENROUTER_API_KEY"],
-    hint: "set OPENROUTER_API_KEY=sk-or-... from openrouter.ai/keys",
+    hint: "sign in with your OpenRouter account, or set OPENROUTER_API_KEY=sk-or-... from openrouter.ai/keys",
   },
   {
     id: "azure",

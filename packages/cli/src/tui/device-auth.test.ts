@@ -3,11 +3,17 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
+import { createHash } from "node:crypto";
+
 import {
   PROVIDER_DEVICE_AUTH,
   startDeviceAuth,
   type DeviceAuthResponse,
   type DeviceAuthUpdate,
+  type DeviceCodeProviderConfig,
+  type LoopbackRedirect,
+  type LoopbackServer,
+  type PkceLoopbackProviderConfig,
 } from "./device-auth.js";
 import { getActiveAccount, loadAccountStore } from "./credential-store.js";
 import { providerSupportsMethod } from "./provider-status.js";
@@ -34,7 +40,7 @@ function jsonResponse(status: number, body: unknown): DeviceAuthResponse {
   };
 }
 
-const CONFIG = PROVIDER_DEVICE_AUTH.xai;
+const CONFIG = PROVIDER_DEVICE_AUTH.xai as DeviceCodeProviderConfig;
 
 /** A fake transport: device code always succeeds, token responses are queued. */
 function makeFetch(tokenResponses: Array<DeviceAuthResponse | Error>) {
@@ -223,12 +229,220 @@ describe("startDeviceAuth", () => {
   });
 });
 
+const OPENROUTER = PROVIDER_DEVICE_AUTH.openrouter as PkceLoopbackProviderConfig;
+
+/** A fake loopback server whose redirect the test drives by hand. */
+function makePkceServer(port = 4567) {
+  const state = { closed: 0, port };
+  let deliver: ((redirect: LoopbackRedirect) => void) | undefined;
+  const factory = async ({ onRedirect }: { onRedirect: (redirect: LoopbackRedirect) => void }): Promise<LoopbackServer> => {
+    deliver = onRedirect;
+    return { port: state.port, close: () => { state.closed += 1; } };
+  };
+  return { factory, state, redirect: (redirect: LoopbackRedirect) => deliver?.(redirect) };
+}
+
+/** A fake transport recording every request; the keys exchange is queued. */
+function makePkceFetch(exchange: DeviceAuthResponse | Error) {
+  const calls: Array<{ url: string; body: string }> = [];
+  const fetchImpl = async (
+    url: string,
+    init: { method: string; headers: Record<string, string>; body: string },
+  ): Promise<DeviceAuthResponse> => {
+    calls.push({ url, body: init.body });
+    if (url === OPENROUTER.keysUrl) {
+      if (exchange instanceof Error) throw exchange;
+      return exchange;
+    }
+    throw new Error(`unexpected url ${url}`);
+  };
+  return { fetchImpl, calls };
+}
+
+/** A sleep that never resolves, so the pkce timeout never fires under test. */
+const neverSleep = () => new Promise<void>(() => {});
+
+describe("startDeviceAuth pkce-loopback (OpenRouter)", () => {
+  it("runs the browser flow: challenge -> loopback code -> minted api_key + env patch", async () => {
+    const home = temporaryHome();
+    const env: NodeJS.ProcessEnv = {};
+    const pkce = makePkceServer();
+    const { fetchImpl, calls } = makePkceFetch(jsonResponse(200, { key: "sk-or-provisioned" }));
+    const opened: string[] = [];
+    const updates: DeviceAuthUpdate[] = [];
+    let connected = 0;
+
+    startDeviceAuth(OPENROUTER, {
+      env,
+      homeDir: home,
+      fetch: fetchImpl,
+      now: fixedNow,
+      sleep: neverSleep,
+      serverFactory: pkce.factory,
+      createPkcePair: () => ({ verifier: "verifier-123", challenge: "challenge-abc" }),
+      openBrowser: (url) => { opened.push(url); },
+      onUpdate: (update) => updates.push(update),
+      onConnected: () => { connected += 1; },
+    });
+    await flush();
+
+    // The browser was sent to the authorize URL with the S256 challenge and the
+    // client-id-less loopback callback (OpenRouter names it callback_url).
+    expect(opened).toHaveLength(1);
+    const authorizeUrl = new URL(opened[0]!);
+    expect(authorizeUrl.origin + authorizeUrl.pathname).toBe("https://openrouter.ai/auth");
+    expect(authorizeUrl.searchParams.get("code_challenge")).toBe("challenge-abc");
+    expect(authorizeUrl.searchParams.get("code_challenge_method")).toBe("S256");
+    expect(authorizeUrl.searchParams.get("callback_url")).toBe(`http://localhost:${pkce.state.port}/callback`);
+    expect(authorizeUrl.searchParams.has("client_id")).toBe(false);
+
+    // The loopback delivers the authorization code.
+    pkce.redirect({ code: "auth-code-xyz" });
+    await flush();
+
+    // The exchange POSTed { code, code_verifier } to the keys endpoint.
+    expect(calls).toHaveLength(1);
+    expect(calls[0]!.url).toBe(OPENROUTER.keysUrl);
+    expect(JSON.parse(calls[0]!.body)).toEqual({ code: "auth-code-xyz", code_verifier: "verifier-123" });
+
+    expect(connected).toBe(1);
+    expect(updates.at(-1)?.phase).toBe("connected");
+    // The server was closed after the redirect landed.
+    expect(pkce.state.closed).toBe(1);
+
+    // The minted key is a durable api_key, written to OPENROUTER_API_KEY.
+    expect(env.OPENROUTER_API_KEY).toBe("sk-or-provisioned");
+    const record = getActiveAccount(loadAccountStore(home), "openrouter");
+    expect(record?.kind).toBe("api_key");
+    if (record?.kind === "api_key") expect(record.secret).toBe("sk-or-provisioned");
+  });
+
+  it("derives the S256 challenge from the generated verifier by default", async () => {
+    const home = temporaryHome();
+    const pkce = makePkceServer();
+    const { fetchImpl, calls } = makePkceFetch(jsonResponse(200, { key: "sk-or-x" }));
+    const opened: string[] = [];
+
+    startDeviceAuth(OPENROUTER, {
+      env: {},
+      homeDir: home,
+      fetch: fetchImpl,
+      now: fixedNow,
+      sleep: neverSleep,
+      serverFactory: pkce.factory,
+      // No createPkcePair: exercise the real node:crypto generator.
+      openBrowser: (url) => { opened.push(url); },
+      onUpdate: () => {},
+      onConnected: () => {},
+    });
+    await flush();
+    pkce.redirect({ code: "code-1" });
+    await flush();
+
+    const challenge = new URL(opened[0]!).searchParams.get("code_challenge")!;
+    const verifier = JSON.parse(calls[0]!.body).code_verifier as string;
+    const expected = createHash("sha256").update(verifier).digest().toString("base64url");
+    expect(challenge).toBe(expected);
+    // base64url: no padding, no + or /.
+    expect(challenge).not.toMatch(/[+/=]/);
+  });
+
+  it("closes the loopback server and reports cancelled on cancel()", async () => {
+    const home = temporaryHome();
+    const pkce = makePkceServer();
+    const { fetchImpl, calls } = makePkceFetch(jsonResponse(200, { key: "should-not-mint" }));
+    const updates: DeviceAuthUpdate[] = [];
+
+    const session = startDeviceAuth(OPENROUTER, {
+      env: {},
+      homeDir: home,
+      fetch: fetchImpl,
+      now: fixedNow,
+      sleep: neverSleep,
+      serverFactory: pkce.factory,
+      createPkcePair: () => ({ verifier: "v", challenge: "c" }),
+      openBrowser: () => {},
+      onUpdate: (update) => updates.push(update),
+      onConnected: () => {},
+    });
+    await flush();
+
+    session.cancel();
+    await flush();
+
+    expect(pkce.state.closed).toBe(1);
+    expect(calls).toHaveLength(0);
+    expect(updates.at(-1)?.phase).toBe("cancelled");
+  });
+
+  it("fails (not connects) when the redirect never arrives before the timeout", async () => {
+    const home = temporaryHome();
+    const pkce = makePkceServer();
+    const { fetchImpl, calls } = makePkceFetch(jsonResponse(200, { key: "unreached" }));
+    const updates: DeviceAuthUpdate[] = [];
+    let connected = 0;
+
+    startDeviceAuth(OPENROUTER, {
+      env: {},
+      homeDir: home,
+      fetch: fetchImpl,
+      now: fixedNow,
+      sleep: () => Promise.resolve(), // timeout fires immediately
+      serverFactory: pkce.factory,
+      createPkcePair: () => ({ verifier: "v", challenge: "c" }),
+      openBrowser: () => {},
+      onUpdate: (update) => updates.push(update),
+      onConnected: () => { connected += 1; },
+    });
+    await flush();
+
+    expect(connected).toBe(0);
+    expect(calls).toHaveLength(0);
+    expect(updates.at(-1)?.phase).toBe("failed");
+    expect(updates.at(-1)?.message).toMatch(/timed out/i);
+    expect(pkce.state.closed).toBe(1);
+  });
+
+  it("fails when the keys exchange returns no api key", async () => {
+    const home = temporaryHome();
+    const pkce = makePkceServer();
+    const { fetchImpl } = makePkceFetch(jsonResponse(200, { not_a_key: true }));
+    const updates: DeviceAuthUpdate[] = [];
+    let connected = 0;
+
+    startDeviceAuth(OPENROUTER, {
+      env: {},
+      homeDir: home,
+      fetch: fetchImpl,
+      now: fixedNow,
+      sleep: neverSleep,
+      serverFactory: pkce.factory,
+      createPkcePair: () => ({ verifier: "v", challenge: "c" }),
+      openBrowser: () => {},
+      onUpdate: (update) => updates.push(update),
+      onConnected: () => { connected += 1; },
+    });
+    await flush();
+    pkce.redirect({ code: "code-1" });
+    await flush();
+
+    expect(connected).toBe(0);
+    expect(updates.at(-1)?.phase).toBe("failed");
+    expect(updates.at(-1)?.message).toMatch(/api key/i);
+  });
+});
+
 describe("provider-status oauth methods", () => {
   it("lets xai and kimi authenticate with oauth (api-key stays secondary)", () => {
     for (const id of ["xai", "kimi"]) {
       expect(providerSupportsMethod(id, "oauth")).toBe(true);
       expect(providerSupportsMethod(id, "api-key")).toBe(true);
     }
+  });
+
+  it("lets openrouter authenticate with oauth and api-key", () => {
+    expect(providerSupportsMethod("openrouter", "oauth")).toBe(true);
+    expect(providerSupportsMethod("openrouter", "api-key")).toBe(true);
   });
 
   it("keeps anthropic api-key only", () => {
