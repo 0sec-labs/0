@@ -58,7 +58,7 @@
  * is labelled qualified, ready, healthy or funded, and no row is drawn as
  * disabled on a fact nobody reported.
  *
- * Every write is an explicit operator action staged for the next audit: the
+ * Every write is an explicit operator action applied to the current audit: the
  * base model, one role's assignment, or the single-model policy. Loading,
  * highlighting, filtering and background refreshing never call those callbacks,
  * and no model is ever selected for the operator.
@@ -131,7 +131,6 @@ import {
   modelDialogTitle,
   modelFooterHint,
   modelTargetLine,
-  singleModelLine,
   buildModelRows,
   type ModelCatalogScope,
   type ModelDetailLine,
@@ -196,17 +195,17 @@ export interface ModelScreenProps {
    * Never invented — the router reports what the runtime says.
    */
   providerId?: string;
-  /** Per-role model assignments already staged for the next audit. */
+  /** Per-role model assignments applied to the current audit. */
   agentModels?: Readonly<Record<string, string>>;
-  /** Whether the next audit is pinned to one model for every role. */
+  /** Whether the audit is pinned to one model for every role. */
   singleModel?: boolean;
   /**
-   * Stage the full merged role map for the next audit. Optional: when the
+   * Apply the full merged role map to the current audit. Optional: when the
    * router does not supply it there is no role targeting at all — no Ctrl+←/→,
    * no Ctrl+Backspace, no target row and no footer mention of either.
    */
   onAgentModelsChange?: (models: Readonly<Record<string, string>>) => void;
-  /** Stage the single-model policy. Optional on the same terms as above. */
+  /** Apply the single-model policy. Optional on the same terms as above. */
   onSingleModelChange?: (enabled: boolean) => void;
   /** Enter on a model row. The router decides what "select" means. */
   onSelect: (id: string) => void;
@@ -516,47 +515,40 @@ export function ModelScreen({
   // Every width and row count comes off the layout module, from the surface
   // box the dialog handed down — never from `useTerminalDimensions` and never
   // computed here (PRIMITIVES.md: Yoga shrinks siblings rather than clipping).
-  // ── Meta lines (above the list), in priority order:
-  //   1. the focus line — which target the next Enter assigns, and its model;
-  //   2. the single-model policy — stated loudly when on, because it makes every
-  //      role pick inert;
-  //   3. the agent roster — every target and the model it resolves to, so the
-  //      whole per-agent mapping is visible without cycling the target blindly;
-  //   4. the curated/all slice (BYOK only).
-  // The layout hands out as many rows as height allows (never starving the
-  // list), and the slice below keeps the highest-priority lines. Each line that
-  // names a key is present only when that key is bound. Built here, before the
-  // layout, so the layout can size the list against the real demand — the width
-  // it wraps to (`dialogContentWidth`) is the same the layout will report.
+  // ── Meta lines (above the list), deliberately kept to at most one by default.
+  // The header used to carry six-plus lines — a focus line with key hints, a
+  // single-model policy line, the full per-agent roster (which wraps to several
+  // rows) and a curated/all count — and that dense block stole the rows the
+  // picker list needs. So now:
+  //   • ONE compact context line, only while role targeting is wired: the
+  //     target and the model it resolves to, with the single-model note folded
+  //     in. No key hints — those live in the footer.
+  //   • The full agent roster is NOT drawn by default. It is revealed only while
+  //     the operator is actively targeting a specific role, which is the one
+  //     moment the whole per-role mapping matters (so "select each" is visible).
+  //   • No single-model line and no curated/all line: the title already names
+  //     curated/all and its count, and the footer already names Tab and Ctrl+S.
+  // Built here, before the layout, so the layout can size the list against the
+  // real demand — the width it wraps to (`dialogContentWidth`) is the same the
+  // layout will report.
   const metaContentWidth = dialogContentWidth(width, inDialog);
-  const byokVisible = modelRows.reduce((n, r) => (r.kind === "model" ? n + 1 : n), 0);
   const metaLines: { text: string; fg: string }[] = [];
   if (rolesLive) {
     metaLines.push({
-      text: `${modelTargetLine(role, activeModel, role !== null && agentModels?.[role] !== undefined, symbols, singleModel)} · Ctrl+←/→ target · Enter assign`,
-      fg: theme.ACCENT,
+      text: modelTargetLine(role, activeModel, role !== null && agentModels?.[role] !== undefined, symbols, singleModel),
+      fg: singleModel && role !== null ? theme.WARNING : theme.ACCENT,
     });
-  }
-  if (singleModelLive) {
-    metaLines.push({
-      text: `${singleModelLine(singleModel)} · Ctrl+S toggle`,
-      fg: singleModel ? theme.WARNING : theme.MUTED,
-    });
-  }
-  if (rolesLive) {
-    for (const line of agentRosterLines(
-      { roles, parentModel: currentModel, agentModels, activeRole: role, singleModel },
-      metaContentWidth,
-      symbols,
-    )) {
-      metaLines.push({ text: line.text, fg: line.tone === "warn" ? theme.WARNING : theme.MUTED });
+    // Reveal the full roster only while a specific role is targeted; the parent
+    // (base) view stays at the single context line above.
+    if (role !== null) {
+      for (const line of agentRosterLines(
+        { roles, parentModel: currentModel, agentModels, activeRole: role, singleModel },
+        metaContentWidth,
+        symbols,
+      )) {
+        metaLines.push({ text: line.text, fg: line.tone === "warn" ? theme.WARNING : theme.MUTED });
+      }
     }
-  }
-  if (isByok) {
-    metaLines.push({
-      text: `${showAll ? "All models" : "Curated models"} · ${byokVisible} of ${scopedCatalog.length} · Tab ${showAll ? "curated" : "all models"}${refreshing ? " · refreshing…" : ""}`,
-      fg: theme.ACCENT,
-    });
   }
 
   const layout = computeModelDialogLayout({ width, height, totalRows, inDialog, metaLineCount: metaLines.length });
@@ -669,7 +661,7 @@ export function ModelScreen({
     }
     if (singleModelLive && key.ctrl && key.name === "s") {
       onSingleModelChange?.(!singleModel);
-      setNotice("Single-model policy staged for the next audit; the running audit is unchanged.");
+      setNotice("Single-model policy applied to this audit.");
       return;
     }
     // Ctrl+R re-reads the live hosted catalogue — on the pure hosted lane, and
@@ -682,7 +674,7 @@ export function ModelScreen({
       const next = { ...agentModels };
       delete next[role];
       onAgentModelsChange?.(next);
-      setNotice(`${role} will inherit the parent model in the next audit.`);
+      setNotice(`${role} now inherits the parent model.`);
       return;
     }
     if (key.ctrl || key.meta || key.option) return;
@@ -707,7 +699,7 @@ export function ModelScreen({
       if (role !== null && rolesLive) {
         onAgentModelsChange?.({ ...agentModels, [role]: activeItem.id });
         setNotice(
-          `${role}: ${activeItem.id} staged for the next audit${singleModel ? "; single-model mode still takes precedence" : ""}.`,
+          `${role}: ${activeItem.id} applied${singleModel ? "; single-model mode still takes precedence" : ""}.`,
         );
         return;
       }
@@ -752,7 +744,7 @@ export function ModelScreen({
           1,
           0,
           `Role advice: ${role} inherits the parent unless you explicitly assign a model.`,
-          `Enter stages this exact model for ${role}; Ctrl+Backspace restores inheritance. The running audit is unchanged.`,
+          `Enter applies this exact model to ${role}; Ctrl+Backspace restores inheritance.`,
         );
       }
       // The hosted report is the account's own description of the route, and
@@ -844,7 +836,7 @@ export function ModelScreen({
       ? modelFooterHint(mode, filter.length > 0)
       : [
         "↑↓ model",
-        role !== null && rolesLive ? "enter stage" : "enter select",
+        role !== null && rolesLive ? "enter apply" : "enter select",
         rolesLive ? "ctrl+←/→ target" : undefined,
         rolesLive && role !== null ? "ctrl+backspace inherit" : undefined,
         singleModelLive ? "ctrl+s single" : undefined,

@@ -455,8 +455,8 @@ describe("the focus / target line", () => {
   });
 
   it("says a role inherits when it has no assignment of its own", () => {
-    expect(modelTargetLine("attack", "gpt-5", false)).toContain("inherits the parent");
-    expect(modelTargetLine("attack", "opus", true)).not.toContain("inherits the parent");
+    expect(modelTargetLine("attack", "gpt-5", false)).toContain("inherits parent");
+    expect(modelTargetLine("attack", "opus", true)).not.toContain("inherits parent");
   });
 
   it("marks the pick inert for a role while single-model is on", () => {
