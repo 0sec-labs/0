@@ -21,6 +21,7 @@ export const BROWSER_ACTIONS = [
   "eval",
   "list_tabs",
   "close",
+  "attach",
 ] as const;
 
 export type BrowserAction = (typeof BROWSER_ACTIONS)[number];
@@ -40,8 +41,11 @@ export const browserToolDefinitions: Record<string, ToolDefinition> = {
       "session and a victim frame). Actions: navigate (goto a URL — scope-validated, " +
       "with a post-redirect re-check), click (CSS selector), type (fill a field), " +
       "screenshot (PNG, base64), get_content (HTML + visible text), eval (run JS in the " +
-      "page and capture dialogs/console — the primary XSS signal), list_tabs, close. " +
-      "Every navigation is gated through the engagement scope exactly like http_request/crawl.",
+      "page and capture dialogs/console — the primary XSS signal), list_tabs, close, " +
+      "attach (connect over CDP to an operator's ALREADY-AUTHENTICATED Chrome so new tabs " +
+      "inherit its cookies/MFA/SSO session — for testing post-auth flows, IDOR/CSRF/XSS). " +
+      "Every navigation is gated through the engagement scope exactly like http_request/crawl, " +
+      "including on a CDP-attached context.",
     parameters: {
       action: {
         type: "string",
@@ -52,6 +56,13 @@ export const browserToolDefinitions: Record<string, ToolDefinition> = {
       selector: { type: "string", description: "CSS selector (for click/type)" },
       text: { type: "string", description: "Text to type (for type)" },
       value: { type: "string", description: "JavaScript source to run (for eval)" },
+      cdp_url: {
+        type: "string",
+        description:
+          "attach: the operator's Chrome CDP endpoint (e.g. http://127.0.0.1:9222), launched with " +
+          "--remote-debugging-port. New tabs open in the browser's already-authenticated context so " +
+          "cookies/MFA/SSO carry over. Only ever supply an endpoint the operator explicitly provides.",
+      },
       tab: {
         type: "string",
         description: `Named tab to act on (default "${DEFAULT_TAB}"). For close, omit and set all:true to release every tab.`,
@@ -132,6 +143,21 @@ export interface BrowserDriverOptions {
   /** When true, treat like public-network browsing (serviceWorkers blocked, etc.). */
   publicNetwork?: boolean;
   /**
+   * OPT-IN CDP attach. When set, the driver connects to an ALREADY-RUNNING,
+   * operator-authenticated Chrome via `chromium.connectOverCDP(cdpEndpoint)`
+   * (an http url like `http://127.0.0.1:9222` or a ws devtools endpoint) and
+   * ADOPTS that browser's existing context — so new tabs inherit its
+   * cookies/MFA/SSO session — instead of launching a fresh, clean browser.
+   * Never auto-discovered: only ever set from an explicit operator-supplied url.
+   */
+  cdpEndpoint?: string;
+  /**
+   * Launch a headed (non-headless) browser and reduce a couple of the most
+   * obvious automation fingerprints. Ignored on the CDP-attach path (the
+   * operator's Chrome is already a real, headed browser). Default false.
+   */
+  headed?: boolean;
+  /**
    * Optional scope-pinned request sink supplied by ToolExecutor. It mediates
    * page requests. Without it, handler URL checks do not isolate subresources.
    */
@@ -155,16 +181,23 @@ export type BrowserDriverFactory = (
  */
 interface BackendModule {
   chromium: {
-    launch(opts: { headless: boolean }): Promise<BackendBrowser>;
+    launch(opts: { headless: boolean; args?: string[] }): Promise<BackendBrowser>;
+    /** Connect to a running Chrome over the DevTools Protocol (CDP-attach path). */
+    connectOverCDP(endpointURL: string): Promise<BackendBrowser>;
   };
 }
 interface BackendBrowser {
   newContext(opts: Record<string, unknown>): Promise<BackendContext>;
+  /** Existing contexts — for CDP-attach, `contexts()[0]` is the authed default context. */
+  contexts(): BackendContext[];
   close(): Promise<void>;
 }
 interface BackendContext {
   newPage(): Promise<BackendPage>;
+  /** Pages already open in the context (used only to count adopted operator tabs). */
+  pages(): BackendPage[];
   route(glob: string, handler: (route: unknown) => void): Promise<void>;
+  addInitScript(script: string): Promise<void>;
 }
 interface BackendPage {
   goto(url: string, opts: Record<string, unknown>): Promise<{ status(): number } | null>;
@@ -264,9 +297,11 @@ class PlaywrightPage implements BrowserPage {
   }
 }
 
-class PlaywrightDriver implements BrowserDriver {
+export class PlaywrightDriver implements BrowserDriver {
   private browser: BackendBrowser | null = null;
   private context: BackendContext | null = null;
+  /** True when `context` is a CDP-adopted operator context we must not tear down. */
+  private adopted = false;
   private readonly tabs = new Map<string, PlaywrightPage>();
 
   constructor(
@@ -276,15 +311,45 @@ class PlaywrightDriver implements BrowserDriver {
 
   private async ensureContext(): Promise<BackendContext> {
     if (this.context) return this.context;
-    this.browser = await this.mod.chromium.launch({ headless: true });
-    this.context = await this.browser.newContext({
-      ignoreHTTPSErrors: true,
-      ...(this.opts.publicNetwork ? { serviceWorkers: "block" } : {}),
-      ...(this.opts.userAgent ? { userAgent: this.opts.userAgent } : {}),
-      ...(this.opts.extraHeaders && Object.keys(this.opts.extraHeaders).length > 0
-        ? { extraHTTPHeaders: this.opts.extraHeaders }
-        : {}),
-    });
+
+    if (this.opts.cdpEndpoint) {
+      // ── CDP-attach path (opt-in) ──────────────────────────────────────────
+      // Connect to the operator's already-running, already-authenticated Chrome
+      // and ADOPT its existing context so newly opened tabs inherit the live
+      // cookies/MFA/SSO session. We reuse the default context rather than making
+      // a clean one (`newContext` would start unauthenticated and defeat the
+      // whole point). The operator's browser is never launched or closed by us.
+      this.browser = await this.mod.chromium.connectOverCDP(this.opts.cdpEndpoint);
+      const existing = this.browser.contexts();
+      if (existing.length > 0) {
+        this.context = existing[0];
+        this.adopted = true;
+      } else {
+        // Degenerate case: a CDP target with no context yet. Fall back to a new
+        // one (still on the operator's browser) so attach doesn't hard-fail.
+        this.context = await this.browser.newContext({ ignoreHTTPSErrors: true });
+        this.adopted = false;
+      }
+    } else {
+      this.browser = await this.mod.chromium.launch({
+        headless: !this.opts.headed,
+        ...(this.opts.headed ? { args: ["--disable-blink-features=AutomationControlled"] } : {}),
+      });
+      this.context = await this.browser.newContext({
+        ignoreHTTPSErrors: true,
+        ...(this.opts.publicNetwork ? { serviceWorkers: "block" } : {}),
+        ...(this.opts.userAgent ? { userAgent: this.opts.userAgent } : {}),
+        ...(this.opts.extraHeaders && Object.keys(this.opts.extraHeaders).length > 0
+          ? { extraHTTPHeaders: this.opts.extraHeaders }
+          : {}),
+      });
+      // Trim the most obvious automation fingerprint when running headed/stealth.
+      if (this.opts.headed) {
+        await this.context
+          .addInitScript("Object.defineProperty(navigator, 'webdriver', { get: () => undefined });")
+          .catch(() => {});
+      }
+    }
     // Scope-pinned transport (lifted from tools.ts `ensureBrowser`): route EVERY
     // page resource — the top document and every sub-resource, redirects included
     // — through the executor's `fetchTarget` sink so Chromium never resolves an
@@ -292,6 +357,17 @@ class PlaywrightDriver implements BrowserDriver {
     // `null` to let the request continue directly (the executor returns null for
     // non-public scans, mirroring the old `if (!publicNetwork) route.continue()`).
     // A throw / missing response aborts the request (`blockedbyclient`).
+    //
+    // CDP-attach limitation (documented): the route is installed on the adopted
+    // operator context, so it governs every NEW page and every future
+    // navigation/sub-resource on it — which is what the agent drives. It does
+    // NOT retroactively cover the operator's pre-existing tabs, in-flight
+    // requests, or service-worker fetches, and `connectOverCDP` interception is
+    // "lower fidelity" than a launched context (per Playwright's own note). We
+    // mitigate this by NEVER adopting the operator's open pages as agent tabs:
+    // `tab()` always opens a fresh page, and the agent can only reach it through
+    // the scope-gated `navigate` action — so scope still governs every page the
+    // agent actually touches, external context or not.
     const interceptor = this.opts.interceptor;
     if (interceptor) {
       await this.context.route("**/*", async (route: unknown) => {
@@ -359,11 +435,17 @@ class PlaywrightDriver implements BrowserDriver {
   }
 
   async dispose(): Promise<void> {
+    // Always release the pages WE opened. For an adopted CDP context we then
+    // only sever the DevTools connection (never close the operator's context) so
+    // their authenticated browser and its tabs survive. For a launched browser
+    // we close it fully as before. `browser.close()` on a `connectOverCDP`
+    // connection disconnects Playwright without shutting down the real Chrome.
     await this.closeAll();
     if (this.browser) {
       await this.browser.close().catch(() => {});
       this.browser = null;
       this.context = null;
+      this.adopted = false;
     }
   }
 }
@@ -410,9 +492,16 @@ export interface BrowserToolDeps {
    * through it so nothing escapes scope; see {@link BrowserDriverOptions.interceptor}.
    */
   interceptor?: BrowserDriverOptions["interceptor"];
+  /** Launch headed + light stealth on the LAUNCH path (ignored for CDP-attach). */
+  headed?: boolean;
 }
 
 const DEFAULT_ACTION_TIMEOUT_MS = 10_000;
+
+/** Accept only the CDP endpoint shapes Playwright's connectOverCDP understands. */
+function isValidCdpEndpoint(value: string): boolean {
+  return /^(https?|wss?):\/\/.+/i.test(value);
+}
 
 function fail(error: string): ToolResult {
   return { success: false, output: null, error };
@@ -465,12 +554,30 @@ export async function executeBrowser(
     case "eval":
       if (typeof args.value !== "string" || !args.value) return fail("value (JavaScript) is required for eval");
       break;
+    case "attach":
+      if (typeof args.cdp_url !== "string" || !args.cdp_url) return fail("cdp_url is required for attach");
+      if (!isValidCdpEndpoint(args.cdp_url)) {
+        return fail(
+          `attach refused: cdp_url '${args.cdp_url}' is not a CDP endpoint (expected http(s):// or ws(s)://, e.g. http://127.0.0.1:9222)`,
+        );
+      }
+      break;
   }
 
   const timeoutMs = deps.actionTimeoutMs ?? DEFAULT_ACTION_TIMEOUT_MS;
   const tabName = typeof args.tab === "string" && args.tab.length > 0 ? args.tab : DEFAULT_TAB;
   const factory = deps.createDriver ?? createBrowserDriver;
   const host = deps.host;
+
+  // OPT-IN CDP attach: only the `attach` action carries a cdp_url, so the launch
+  // path is completely unchanged for every other action. `attach` (re)connects
+  // to the operator's authed Chrome, so if a driver already exists (a prior
+  // launch, or an earlier attach) we tear it down first and reconnect fresh.
+  const cdpEndpoint = action === "attach" ? (args.cdp_url as string) : undefined;
+  if (action === "attach" && host?.driver) {
+    await host.driver.dispose().catch(() => {});
+    host.driver = null;
+  }
 
   // Lazy, guarded driver acquisition. A missing backend degrades to a clear,
   // actionable error — never an import-time throw.
@@ -481,6 +588,8 @@ export async function executeBrowser(
       userAgent: deps.userAgent,
       extraHeaders: deps.extraHeaders,
       interceptor: deps.interceptor,
+      cdpEndpoint,
+      headed: deps.headed,
     });
     if ("error" in made) return fail(made.error);
     driver = made.driver;
@@ -489,6 +598,25 @@ export async function executeBrowser(
 
   try {
     switch (action as BrowserAction) {
+      case "attach": {
+        // Force the CDP connection now (ensureContext runs on first tab()) so a
+        // bad endpoint surfaces here as a clear error, and open one fresh,
+        // authenticated page the agent can immediately navigate (scope-gated).
+        await driver.tab(tabName);
+        return {
+          success: true,
+          output: {
+            attached: true,
+            cdp_url: cdpEndpoint,
+            tab: tabName,
+            tabs: driver.listTabs(),
+            note:
+              "Connected to the operator's authenticated Chrome over CDP. New tabs share its " +
+              "cookies/session; navigate (scope-gated) to reach an in-scope authenticated page.",
+          },
+        };
+      }
+
       case "list_tabs":
         return { success: true, output: { tabs: driver.listTabs() } };
 
