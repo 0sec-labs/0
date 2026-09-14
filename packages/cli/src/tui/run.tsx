@@ -687,7 +687,7 @@ function ConsoleApp({
       const promptExit = setTimeout(() => {
         appendTuiEvent({ kind: "shutdown", stage: "prompt-exit" });
         process.exit(0);
-      }, 400);
+      }, 250);
       if (typeof promptExit.unref === "function") promptExit.unref();
     }).catch((error) => {
       // Even an unexpected error in the shutdown chain must not strand the

@@ -216,10 +216,21 @@ export function withDevEngineUpdates(
   const cleanup = (): Promise<void> => closing ??= (async () => {
     closingStarted = true;
     let completed = false;
-    devlog({ stage: "cleanup-begin", busy });
+    // An idle session has nothing to drain, yet one close in retire's chain
+    // can still fail to settle promptly. Bound the idle case tightly and let
+    // the outer 12s exit watchdog (run.tsx) cover a genuine wedge, so the
+    // operator's Ctrl+C returns in well under a second instead of ~3.4s.
+    const coreCleanupMs = busy ? 3000 : 300;
+    devlog({ stage: "cleanup-begin", busy, coreCleanupMs });
     try {
       await bounded("await-active-send", activeSend?.catch(() => {}), 2000);
-      await bounded("core-cleanup", current.cleanup(), 3000);
+      await Promise.all([
+        bounded("core-cleanup", current.cleanup(), coreCleanupMs),
+        // A hot-swapped-in candidate holds its own resources; dispose it too so
+        // no open handle keeps the loop alive after unmount (the +400ms tail).
+        bounded("candidate-cleanup", handoffCandidate?.cleanup(), coreCleanupMs),
+      ]);
+      handoffCandidate = undefined;
       completed = true;
     }
     finally {
