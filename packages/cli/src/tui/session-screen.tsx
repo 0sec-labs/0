@@ -384,9 +384,7 @@ function renderTranscriptItem(
         <box
           flexDirection="column"
           marginLeft={1}
-          backgroundColor={isHovered ? theme.PANEL : theme.PANEL_ALT}
-          border
-          borderColor={isHovered || isExpanded ? theme.MUTED : theme.BORDER}
+          backgroundColor={theme.PANEL_ALT}
           paddingX={1}
           paddingY={0}
           flexGrow={1}
@@ -451,10 +449,11 @@ function PanelSection({
 }) {
   const theme = useTheme();
   return (
-    // flexShrink is off because the section draws its own border: squeeze it
-    // and Yoga paints that bottom border straight through the last row of
-    // content. Overflowing off-screen is recoverable; a corrupt frame is not.
-    <box flexDirection="column" flexShrink={0} minWidth={0} border borderColor={tone} backgroundColor={theme.PANEL} paddingX={1} paddingY={0}>
+    // flexShrink is off so Yoga cannot squeeze the raised PANEL block below its
+    // content height; the section is delineated by background contrast (a PANEL
+    // surface on the CANVAS sidebar) plus a tone-coloured title, not a drawn
+    // border, with a one-row gap separating stacked sections.
+    <box flexDirection="column" flexShrink={0} minWidth={0} backgroundColor={theme.PANEL} paddingX={2} paddingY={1} marginBottom={1}>
       <text fg={tone}>{fitTuiText(title.toUpperCase(), contentWidth ?? 44)}</text>
       <box flexDirection="column" minWidth={0}>
         {children}
@@ -809,9 +808,6 @@ export function SessionScreen({ state, onExit, shell, queueUserMessage }: { stat
           minHeight={0}
           stickyScroll
           stickyStart="bottom"
-          border
-          borderColor={theme.BORDER}
-          focusedBorderColor={theme.BORDER}
           backgroundColor={theme.PANEL}
           paddingX={1}
           paddingY={0}

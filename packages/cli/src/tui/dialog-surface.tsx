@@ -47,7 +47,7 @@ export function DialogSurface({ children, onDismiss, size = "large" }: {
       <box position="absolute" left={Math.max(0, Math.floor((terminal.width - panelWidth) / 2))}
         top={Math.max(0, Math.floor((terminal.height - panelHeight) / 3))}
         width={panelWidth} height={panelHeight} flexDirection="column" overflow="hidden"
-        border={border} borderStyle="rounded" borderColor={theme.BORDER} backgroundColor={theme.PANEL}
+        paddingX={border ? 1 : 0} paddingY={border ? 1 : 0} backgroundColor={theme.PANEL}
         onMouseDown={(event) => { backdropPress.current = false; event.stopPropagation(); }}
         onMouseUp={(event) => { backdropPress.current = false; event.stopPropagation(); }}>
         <SurfaceContext.Provider value={dimensions}>{children}</SurfaceContext.Provider>

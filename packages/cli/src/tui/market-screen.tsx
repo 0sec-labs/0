@@ -645,6 +645,11 @@ export function MarketScreen({
             const rowIndex = rowIndexOfItem[itemIndex];
             if (rowIndex !== undefined) applySelected(rowIndex);
           }}
+          onHoverRow={(itemIndex) => {
+            // Hover previews selection, exactly as arrow-key navigation does.
+            const rowIndex = rowIndexOfItem[itemIndex];
+            if (rowIndex !== undefined) applySelected(rowIndex);
+          }}
           onScroll={move}
         />
       )}

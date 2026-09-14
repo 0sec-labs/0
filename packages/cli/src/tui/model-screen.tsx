@@ -924,6 +924,7 @@ export function ModelScreen({
           isCurrent={(item) => item.current === true}
           renderDetail={renderDetail}
           onActivateRow={highlight}
+          onHoverRow={highlight}
           onScroll={move}
           emptyText={isHosted
             ? refreshing

@@ -36,7 +36,7 @@ export function OverlayFrame({
   const overlay = getOverlayLayout(width);
 
   return (
-    <box position="absolute" top="12%" left={overlay.left} width={overlay.width} border borderColor={theme.MUTED} backgroundColor={theme.PANEL_ALT} paddingX={1} paddingY={0} zIndex={10}>
+    <box position="absolute" top="12%" left={overlay.left} width={overlay.width} backgroundColor={theme.PANEL_ALT} paddingX={2} paddingY={1} zIndex={10}>
       <box flexDirection="column" width="100%" minWidth={0}>
         <text fg={theme.PRIMARY}>{fitTuiText(title, overlay.contentWidth)}</text>
         {children}

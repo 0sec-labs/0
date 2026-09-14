@@ -583,6 +583,7 @@ export function SettingsScreen({ frame, onBack, onExit }: SettingsScreenProps) {
             renderDetail={renderDetail}
             emptyText="No matching settings · ctrl+u clears search"
             onActivateRow={(itemIndex) => highlight(itemIndex)}
+            onHoverRow={(itemIndex) => highlight(itemIndex)}
             onScroll={move}
           />
         ) : null}

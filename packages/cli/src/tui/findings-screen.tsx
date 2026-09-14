@@ -737,6 +737,7 @@ export function FindingsScreen({ options, onExit, shell }: { options: FindingsSc
           gutter
           renderDetail={renderFindingsDetail}
           onActivateRow={(itemIndex) => applyIndex(itemIndex)}
+          onHoverRow={(itemIndex) => applyIndex(itemIndex)}
           onScroll={moveFindingsCursor}
           onRowContextMenu={mouseSupport ? (itemIndex, event) => {
             // Select the right-clicked row first, so every reused action (which

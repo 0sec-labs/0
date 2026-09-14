@@ -1,6 +1,6 @@
 /** @jsxImportSource @opentui/react */
 /**
- * The right-click context menu: a small bordered popup that appears at the
+ * The right-click context menu: a small borderless popup that appears at the
  * cursor with the actions for whatever was clicked, matching the herdr-style
  * gesture ("right-click a thing → its actions, where you clicked").
  *
@@ -10,7 +10,7 @@
  * the popup lands, which row the keyboard moves to) lives as pure functions in
  * that module; this file is just the OpenTUI surface.
  *
- * Chrome is theme-token only: a `PANEL` ground under a `BORDER` outline, `TEXT`
+ * Chrome is theme-token only: a raised `PANEL` ground (color contrast, no drawn outline), `TEXT`
  * rows, `ACCENT` behind the highlighted row (with `CANVAS` as its readable
  * inverse, the same pairing the pickers use), `MUTED` for disabled rows and
  * `ERROR` for a danger action.
@@ -38,7 +38,8 @@ import {
 const BACKDROP_ZINDEX = 300;
 /** Longest label the popup will render before the viewport clamp trims it further. */
 const MAX_LABEL = 40;
-/** Border (2) + one cell of horizontal padding each side (2). */
+/** Two cells of horizontal padding each side — the surface is borderless and
+ * reads as a raised layer through its `PANEL` ground, not a drawn outline. */
 const CHROME_CELLS = 4;
 
 export interface ContextMenuProps {
@@ -105,7 +106,7 @@ export function ContextMenu({ items, x, y, onClose }: ContextMenuProps) {
     Math.min(widest, MAX_LABEL, Math.max(1, termWidth - CHROME_CELLS)),
   );
   const boxWidth = innerWidth + CHROME_CELLS;
-  const boxHeight = items.length + 2; // one row per item + top/bottom border
+  const boxHeight = items.length + 2; // one row per item + top/bottom padding
 
   const pos = clampMenuPosition(x, y, { width: boxWidth, height: boxHeight }, {
     width: termWidth,
@@ -141,11 +142,9 @@ export function ContextMenu({ items, x, y, onClose }: ContextMenuProps) {
         flexDirection="column"
         flexShrink={0}
         minWidth={0}
-        border
-        borderStyle="rounded"
-        borderColor={theme.BORDER}
         backgroundColor={theme.PANEL}
-        paddingX={1}
+        paddingX={2}
+        paddingY={1}
         zIndex={BACKDROP_ZINDEX + 1}
       >
         {items.map((item, i) => {

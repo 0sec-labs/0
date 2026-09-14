@@ -167,6 +167,14 @@ export interface DialogSelectBodyProps {
    * pop a per-row context menu without touching the left-click path.
    */
   onRowContextMenu?: (itemIndex: number, event: OpenTuiMouseEvent) => void;
+  /**
+   * Pointer moved over a selectable row (hover-to-preview, OpenCode-style).
+   * Given the row's index in `items`, it should set the highlight exactly as
+   * the arrow keys do — hovering previews the selection, a click commits it.
+   * Optional and additive: when omitted, hover changes nothing and keyboard
+   * navigation is untouched. Disabled rows never fire it.
+   */
+  onHoverRow?: (itemIndex: number) => void;
 }
 
 /**
@@ -201,6 +209,7 @@ export function DialogSelectBody({
   onActivateRow,
   onScroll,
   onRowContextMenu,
+  onHoverRow,
 }: DialogSelectBodyProps) {
   const theme = useTheme();
 
@@ -273,6 +282,9 @@ export function DialogSelectBody({
                 onActivateRow?.(row.itemIndex);
               }
             : undefined
+        }
+        onMouseOver={
+          onHoverRow && !item.disabled ? () => onHoverRow(row.itemIndex) : undefined
         }
       >
         {columns.gutterWidth > 0 ? (
@@ -547,11 +559,9 @@ export function DialogSelect({
         width={panel.panelWidth}
         flexShrink={0}
         flexDirection="column"
-        border
-        borderStyle="rounded"
-        borderColor={theme.BORDER}
         backgroundColor={theme.PANEL}
-        paddingX={1}
+        paddingX={2}
+        paddingY={1}
       >
         {/* Title + esc */}
         <box flexDirection="row" width={panel.innerWidth} flexShrink={0} minWidth={0} gap={titleGap}>
@@ -574,6 +584,7 @@ export function DialogSelect({
           isCurrent={isCurrent}
           renderDetail={renderDetail}
           onActivateRow={moveTo}
+          onHoverRow={moveTo}
           onScroll={move}
         />
 

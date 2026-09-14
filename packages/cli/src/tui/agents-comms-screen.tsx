@@ -540,10 +540,9 @@ function RegionShell({
       flexGrow={0}
       minWidth={0}
       minHeight={0}
-      border={bordered || undefined}
-      borderColor={bordered ? theme.BORDER : undefined}
       backgroundColor={bordered ? theme.PANEL : undefined}
-      paddingX={bordered ? 1 : undefined}
+      paddingX={bordered ? 2 : undefined}
+      paddingY={bordered ? 1 : undefined}
     >
       <box flexDirection="row" width={innerWidth} flexShrink={0} minWidth={0}>
         <Cells width={cols.titleWidth} fg={theme.PRIMARY} attributes={TextAttributes.BOLD}>
