@@ -286,7 +286,7 @@ function analyticsLines(width: number): StepLine[] {
     ...paragraph("Help improve 0sec", "title", width),
     BLANK,
     ...paragraph(
-      "Share anonymous usage analytics so we can improve 0sec and advance open AI-cybersecurity research. This covers how features are used and the CATEGORY of errors that occur — never your targets, findings, commands, code, or any engagement data, which never leave your machine.",
+      "Share anonymous usage analytics so we can improve and advance open AI-cybersecurity research.",
       "text",
       width,
     ),
