@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { LlmApiRuntime, __resetFallbackChainForTests } from "./llm-api.js";
@@ -272,6 +272,118 @@ describe("provider Responses selection", () => {
       env: { OPENAI_API_KEY: "fixture", OPENAI_WIRE_API: "responses" },
     });
     expect(result.stopReason).toBe("error");
+  });
+
+  const codexConfig: Partial<RuntimeConfig> = {
+    provider: "chatgpt-codex", model: "gpt-fixture",
+    env: { "0SEC_CHATGPT_ACCESS_TOKEN": "fixture-access", "0SEC_CHATGPT_ACCOUNT_ID": "fixture-account" },
+  };
+
+  it.each([
+    { ending: "EOF", tail: [] },
+    { ending: "misleading completion", tail: [{ type: "response.completed", response: { status: "completed", output: [] } }] },
+  ])("preserves Codex policy failure at $ending without retrying or promoting tools", async ({ tail }) => {
+    process.env["0SEC_LLM_STREAM_MAX_ATTEMPTS"] = "3";
+    const tracePath = join(home, "native.jsonl");
+    process.env["0SEC_TRACE_NATIVE_RESPONSES"] = tracePath;
+    const events = [
+      { type: "response.output_item.done", item: { type: "function_call", call_id: "unsafe_to_run", name: "inspect", arguments: "{}" } },
+      { type: "response.failed", response: {
+        status: "failed",
+        error: { code: "cyber_policy", message: "confidential fixture payload" },
+        usage: { input_tokens: 7, output_tokens: 3, input_tokens_details: { cached_tokens: 5 } },
+      } },
+      ...tail,
+    ];
+    fetchMock.mockResolvedValueOnce(new Response(events.map(event => `data: ${JSON.stringify(event)}\n\n`).join("")));
+    const result = await request(codexConfig);
+    expect(result.stopReason).toBe("error");
+    expect(result.error).toContain("cyber_policy");
+    expect(result.error).not.toContain("confidential fixture payload");
+    expect(result.content.some(block => block.type === "tool_use")).toBe(false);
+    expect(result.usage).toMatchObject({ inputTokens: 7, outputTokens: 3, cachedInputTokens: 5 });
+    const failure = readFileSync(tracePath, "utf8").trim().split("\n")
+      .map(line => JSON.parse(line)).find(record => record.kind === "native-response-stream-error");
+    expect(failure).toMatchObject({
+      terminalFailure: { event: "response.failed", code: "cyber_policy" },
+      usage: { inputTokens: 7, outputTokens: 3, cachedInputTokens: 5 },
+    });
+    expect(JSON.stringify(failure)).not.toContain("confidential fixture payload");
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
+  it.each([
+    { event: { type: "error", code: "rate_limit_exceeded" }, detail: "rate_limit_exceeded" },
+    { event: { type: "response.incomplete", response: { status: "incomplete", incomplete_details: { reason: "max_output_tokens" } } }, detail: "max_output_tokens" },
+    { event: { type: "response.completed", response: { status: "failed", error: { code: "server_error" } } }, detail: "server_error" },
+  ])("does not turn Codex $detail into completion or transient EOF", async ({ event, detail }) => {
+    process.env["0SEC_LLM_STREAM_MAX_ATTEMPTS"] = "3";
+    const events = [
+      { type: "response.output_item.done", item: { type: "function_call", call_id: "unsafe_to_run", name: "inspect", arguments: "{}" } },
+      event,
+      { type: "response.completed", response: { status: "completed", output: [] } },
+    ];
+    fetchMock.mockResolvedValueOnce(new Response(events.map(value => `data: ${JSON.stringify(value)}\n\n`).join("")));
+    const result = await request(codexConfig);
+    expect(result.stopReason).toBe("error");
+    expect(result.error).toContain(detail);
+    expect(result.error).not.toContain("cyber_policy");
+    expect(result.content.some(block => block.type === "tool_use")).toBe(false);
+    expect(result.usage).toBeUndefined();
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
+  it.each(["\n", "\r\n", "\r"])("preserves Codex output over byte-split %j SSE framing", async separator => {
+    const events = [
+      { type: "response.output_item.done", item: { type: "function_call", call_id: "call_fixture", name: "inspect", arguments: '{"path":"résumé.md"}' } },
+      { type: "response.completed", response: { status: "completed", output: [], usage: { input_tokens: 7, output_tokens: 3 } } },
+    ];
+    const wire = new TextEncoder().encode(events.map(event => `data:${JSON.stringify(event)}${separator}${separator}`).join(""));
+    fetchMock.mockResolvedValueOnce(new Response(new ReadableStream({
+      start(controller) {
+        for (const byte of wire) controller.enqueue(Uint8Array.of(byte));
+        controller.close();
+      },
+    })));
+    const result = await request(codexConfig);
+    expect(result.error).toBeUndefined();
+    expect(result.stopReason).toBe("tool_use");
+    expect(result.content).toEqual([{ type: "tool_use", id: "call_fixture", name: "inspect", input: { path: "résumé.md" } }]);
+    expect(result.usage).toMatchObject({ inputTokens: 7, outputTokens: 3 });
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
+  it("returns a terminal rejection without waiting for stream closure or teardown", async () => {
+    fetchMock.mockResolvedValueOnce(new Response(new ReadableStream({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify({
+          type: "response.failed", response: { status: "failed", error: { code: "cyber_policy" } },
+        })}\n\n`));
+      },
+      cancel: () => new Promise<void>(() => {}),
+    })));
+    const result = await request(codexConfig);
+    expect(result.stopReason).toBe("error");
+    expect(result.error).toContain("cyber_policy");
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
+  it("keeps malformed and unterminated SSE distinct from a provider rejection", async () => {
+    const tracePath = join(home, "native.jsonl");
+    process.env["0SEC_TRACE_NATIVE_RESPONSES"] = tracePath;
+    const unterminated = `data: ${JSON.stringify({ type: "response.completed", response: { status: "completed" } })}`;
+    fetchMock.mockResolvedValueOnce(new Response(`data: invalid-json\n\ndata: null\n\n${unterminated}`, {
+      headers: { "content-type": "text/event-stream" },
+    }));
+    const result = await request(codexConfig);
+    expect(result.stopReason).toBe("error");
+    expect(result.usage).toBeUndefined();
+    const records = readFileSync(tracePath, "utf8").trim().split("\n").map(line => JSON.parse(line));
+    expect(records.find(record => record.kind === "native-response-stream-error")).toMatchObject({
+      httpStatus: 200, eventStreamContentType: true, terminalFailure: null,
+      malformedEvents: 2, trailingCharacters: unterminated.length, usage: null,
+    });
+    expect(fetchMock).toHaveBeenCalledOnce();
   });
 
   it("cancels an OpenRouter stream during text delivery", async () => {
