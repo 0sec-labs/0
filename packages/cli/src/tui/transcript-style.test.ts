@@ -266,6 +266,25 @@ describe("transcript styles are genuinely distinct, not tints", () => {
     expect(bot.labelOwnRow).toBe(true);
   });
 
+  it("balanced bubbles only the operator's turn; everything else is flat plain", () => {
+    // The operator's own turn is a bordered bubble, byte-identical to `bubble`.
+    const user = speechFrame("balanced", "user", 80);
+    expect(user.bordered).toBe(true);
+    expect(user).toEqual(speechFrame("bubble", "user", 80));
+    // Every other voice is flat and full-width, byte-identical to `plain`.
+    for (const kind of ["assistant", "error", "reasoning", "notice"] as const) {
+      const frame = speechFrame("balanced", kind, 80);
+      expect(frame.bordered).toBe(false);
+      expect(frame.railKind).toBe("none");
+      expect(frame.contentWidth).toBe(80);
+      expect(frame).toEqual(speechFrame("plain", kind, 80));
+    }
+    // Too narrow to hold border chrome: the user turn degrades to flat plain.
+    const tiny = speechFrame("balanced", "user", 3);
+    expect(tiny.bordered).toBe(false);
+    expect(tiny).toEqual(speechFrame("plain", "user", 3));
+  });
+
   it("minimal is the default transcript style", () => {
     expect(DEFAULT_TRANSCRIPT_STYLE).toBe("minimal");
     expect(resolveTranscriptStyleSettings({}).transcriptStyle).toBe("minimal");
