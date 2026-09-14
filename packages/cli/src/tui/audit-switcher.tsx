@@ -6,7 +6,27 @@ import type { Theme } from "./theme-context.js";
 import { useSymbols } from "./symbol-context.js";
 import { useSettings } from "./settings-store.js";
 import { spinnerGlyph, UI_ANIMATION_INTERVAL_MS } from "./animations.js";
-import { fitTuiText, sanitizeTuiText } from "./text.js";
+import { fitHint, fitTuiText, sanitizeTuiText } from "./text.js";
+
+/**
+ * The sidebar's fixed key legend, authored widest→narrowest. The pane is only
+ * ~28–40 cols, so the full line cannot fit; {@link fitHint} picks the widest
+ * whole variant that does, and NONE of these ever shows a mid-word "…" at a
+ * realistic sidebar width. Same keys throughout — only the annotations
+ * ("Ctrl+Alt:" prefix, "* unread") and wording shrink.
+ */
+export const AUDIT_SWITCHER_HINT_VARIANTS = [
+  "Ctrl+Alt: ↑↓ select · N new · W close · * unread",
+  "↑↓ select · N new · W close",
+  "↑↓ · N new · W close",
+] as const;
+
+/** The empty-state prompt, same adaptive treatment. */
+export const AUDIT_SWITCHER_EMPTY_VARIANTS = [
+  "No live audits · create with Ctrl+Alt+N",
+  "No audits · Ctrl+Alt+N",
+  "No audits · +",
+] as const;
 
 export interface AuditSwitcherProps {
   records: readonly AuditSummary[];
@@ -55,7 +75,7 @@ export function AuditSwitcher({ records, selectedAuditId, onSelect, onCreate, on
         <text width={createWidth} height={1} wrapMode="none" truncate fg={theme.ACCENT} onMouseDown={() => onCreate()}>{fitTuiText(columns >= 24 ? "[+ New]" : "[+]", createWidth)}</text>
         {closeWidth > 0 ? <text width={closeWidth} height={1} wrapMode="none" truncate fg={selected?.status === "stopping" ? theme.MUTED : theme.TEXT} onMouseDown={() => { if (selected && selected.status !== "stopping") onClose(selected.id); }}>{fitTuiText(columns >= 24 ? " [Close]" : "[×]", closeWidth)}</text> : null}
       </box>
-      {records.length === 0 && capacity > 0 ? <text width={columns} height={1} wrapMode="none" truncate fg={theme.MUTED}>{fitTuiText("No live audits · create with Ctrl+Alt+N", columns)}</text> : null}
+      {records.length === 0 && capacity > 0 ? <text width={columns} height={1} wrapMode="none" truncate fg={theme.MUTED}>{fitHint(columns, AUDIT_SWITCHER_EMPTY_VARIANTS)}</text> : null}
       {visible.map(record => {
         const active = record.id === selectedAuditId;
         const glyph = record.status === "completed" ? symbols.check : record.status === "failed" ? symbols.cross
@@ -76,7 +96,7 @@ export function AuditSwitcher({ records, selectedAuditId, onSelect, onCreate, on
           </box>
         );
       })}
-      {showHint ? <text width={columns} height={1} wrapMode="none" truncate fg={theme.MUTED}>{fitTuiText("Ctrl+Alt: ↑↓ select · N new · W close · * unread", columns)}</text> : null}
+      {showHint ? <text width={columns} height={1} wrapMode="none" truncate fg={theme.MUTED}>{fitHint(columns, AUDIT_SWITCHER_HINT_VARIANTS)}</text> : null}
     </box>
   );
 }

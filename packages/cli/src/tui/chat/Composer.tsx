@@ -4,7 +4,7 @@ import stringWidth from "string-width";
 import type { BorderSides } from "@opentui/core";
 import type { Theme } from "../theme-context.js";
 import type { TuiSettings } from "../settings.js";
-import { fitTuiText, sanitizeComposerText } from "../text.js";
+import { fitLegend, fitTuiText, sanitizeComposerText } from "../text.js";
 
 /** Horizontal rules frame input without turning it into another card. */
 const RAIL_SIDES: BorderSides[] = ["top", "bottom"];
@@ -237,7 +237,7 @@ export function ComposerInput({
       </box>
     );
   }
-  return <text fg={placeholderTone ?? MUTED}>{fitTuiText(placeholder, textWidth)}</text>;
+  return <text fg={placeholderTone ?? MUTED}>{fitLegend(textWidth, placeholder)}</text>;
 }
 
 /**

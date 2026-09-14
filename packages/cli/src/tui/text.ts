@@ -64,6 +64,55 @@ export function fitTuiUrl(value: unknown, maxChars: number): string {
 }
 
 /**
+ * Pick the widest FIXED-hint variant that fits the available cell width.
+ *
+ * A fixed UI hint (a key legend, a static label) must never show a mid-word
+ * "…": callers author a few variants of the same hint at different lengths and
+ * this returns the longest one whose sanitized display width is ≤ `columns`.
+ * Only when even the shortest variant is too wide do we fall back to fitting it
+ * with an ellipsis (last resort). Widths use the same measure as `textCells`
+ * (sanitized string length), so callers can pass variants in any order.
+ */
+export function fitHint(columns: number, variants: readonly string[]): string {
+  const cols = Number.isFinite(columns) ? Math.max(0, Math.floor(columns)) : 0;
+  const measured = variants
+    .map(variant => sanitizeTuiText(variant))
+    .filter(text => text.length > 0)
+    .sort((a, b) => b.length - a.length);
+  if (measured.length === 0) return "";
+  for (const candidate of measured) {
+    if (candidate.length <= cols) return candidate;
+  }
+  return fitTuiText(measured[measured.length - 1], cols);
+}
+
+/** Separator between the key/action units of a legend hint. */
+const LEGEND_SEPARATOR = " · ";
+
+/**
+ * Fit a FIXED key legend / action hint to `columns` without a mid-word "…".
+ *
+ * A legend such as `"↑↓ move · / filter · esc back"` is a set of authored,
+ * priority-ordered units joined by `" · "`. When the whole line is too wide we
+ * drop whole trailing units (the least-important keys, which authors place
+ * last) rather than clipping a word — so the operator always reads complete
+ * words. Callers may instead pass an explicit list of reworded variants
+ * (widest first). Either way this returns the widest whole hint that fits,
+ * delegating to {@link fitHint} and only ellipsizing as a last resort.
+ */
+export function fitLegend(columns: number, hint: string | readonly string[]): string {
+  if (Array.isArray(hint)) return fitHint(columns, hint);
+  const text = String(hint);
+  const parts = text.split(LEGEND_SEPARATOR);
+  if (parts.length <= 1) return fitHint(columns, [text]);
+  const variants: string[] = [];
+  for (let count = parts.length; count >= 1; count--) {
+    variants.push(parts.slice(0, count).join(LEGEND_SEPARATOR));
+  }
+  return fitHint(columns, variants);
+}
+
+/**
  * Greedy word-wrap of an already-sanitized string to lines of at most `width`
  * cells. Words longer than the limit are hard-split across lines. Callers pass
  * text they have already run through the appropriate sanitizer, keeping this

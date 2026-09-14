@@ -35,6 +35,7 @@ import { useRenderer, useTerminalDimensions } from "@opentui/react";
 
 import { useTheme } from "./theme-context.js";
 import { Cells } from "./primitives.js";
+import { fitLegend } from "./text.js";
 import { clampMenuPosition, type MenuBox, type MenuPosition, type Viewport } from "./use-context-menu.js";
 
 // ---------------------------------------------------------------------------
@@ -197,9 +198,11 @@ export function PopupTitle({
 /** The popup footer hint — a single muted line, fitted to the inner width. */
 export function PopupFooter({ text, width }: { text: string; width: number }) {
   const theme = useTheme();
+  // A fixed footer legend must fit whole — drop trailing " · " units rather
+  // than clip a word — before Cells pads it to the inner width.
   return (
     <Cells width={Math.max(1, width)} fg={theme.MUTED}>
-      {text}
+      {fitLegend(Math.max(1, width), text)}
     </Cells>
   );
 }

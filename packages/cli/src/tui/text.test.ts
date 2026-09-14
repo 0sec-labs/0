@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { fitTuiText, fitTuiUrl, sanitizeComposerText, sanitizeTuiText } from "./text.js";
+import { fitHint, fitLegend, fitTuiText, fitTuiUrl, sanitizeComposerText, sanitizeTuiText } from "./text.js";
 
 describe("sanitizeComposerText", () => {
   it("preserves whitespace exactly (trailing, leading, and runs)", () => {
@@ -71,5 +71,57 @@ describe("fitTuiUrl", () => {
     const out = fitTuiUrl("https://example.com/a/very/long/path/with/query?token=secret", 24);
     expect(out).toBe("https://exa...ken=secret");
     expect(out.length).toBe(24);
+  });
+});
+
+describe("fitHint", () => {
+  it("picks the widest authored variant whose width fits", () => {
+    const variants = [
+      "Ctrl+Alt: ↑↓ select · N new · W close · * unread", // 48
+      "↑↓ select · N new · W close", // 27
+      "↑↓ · N new · W close", // 20
+    ];
+    expect(fitHint(60, variants)).toBe(variants[0]);
+    expect(fitHint(30, variants)).toBe(variants[1]);
+    expect(fitHint(24, variants)).toBe(variants[2]);
+  });
+
+  it("never emits a mid-word ellipsis while any whole variant fits", () => {
+    const out = fitHint(30, [
+      "Ctrl+Alt: ↑↓ select · N new · W close · * unread",
+      "↑↓ select · N new · W close",
+      "↑↓ · N new · W close",
+    ]);
+    expect(out.endsWith("...")).toBe(false);
+  });
+
+  it("falls back to the shortest variant, truncated only as a last resort", () => {
+    // Even the shortest variant is wider than the pane: last-resort ellipsis.
+    expect(fitHint(6, ["longer one", "shortish"])).toBe("sho...");
+  });
+
+  it("ignores variant order and empty variants", () => {
+    expect(fitHint(10, ["", "abc", "abcdefghijkl"])).toBe("abc");
+    expect(fitHint(10, [])).toBe("");
+  });
+});
+
+describe("fitLegend", () => {
+  it("drops whole trailing ' · ' units instead of clipping a word", () => {
+    const legend = "↑↓ move · / filter · esc back · ctrl+c exit";
+    // Wide enough for everything.
+    expect(fitLegend(80, legend)).toBe(legend);
+    // Not wide enough for the last two units — drop them whole, no ellipsis.
+    const narrowed = fitLegend(20, legend);
+    expect(narrowed.endsWith("...")).toBe(false);
+    expect(narrowed).toBe("↑↓ move · / filter");
+  });
+
+  it("accepts an explicit variant list (widest that fits)", () => {
+    expect(fitLegend(12, ["one · two · three", "one · two", "one"])).toBe("one · two");
+  });
+
+  it("behaves like fitTuiText for a single-unit hint", () => {
+    expect(fitLegend(12, "no separators here")).toBe(fitTuiText("no separators here", 12));
   });
 });
