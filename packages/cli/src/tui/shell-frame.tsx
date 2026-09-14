@@ -14,6 +14,14 @@ import {
   getOverlayLayout,
 } from "./shell-geometry.js";
 
+/**
+ * True when this process was launched from a dev source checkout — the `0dev`
+ * wrapper execs with `0SEC_DEV_SOURCE_ROOT` set. Drives the [dev] vs [beta]
+ * header badge. Read once at module load; the launch channel never changes
+ * mid-session.
+ */
+const DEV_CHANNEL = Boolean(process.env["0SEC_DEV_SOURCE_ROOT"]?.trim());
+
 export function OverlayFrame({
   title,
   footer,
@@ -86,6 +94,12 @@ function BrandStamp({ animated = false }: { animated?: boolean }) {
     <box flexDirection="row" width={BRAND_STAMP_WIDTH} flexShrink={0}>
       <text width={4} flexShrink={0} fg={theme.MUTED}>{animated ? brand.word : "0sec"}</text>
       <text flexShrink={0} fg={theme.MUTED}>{` v${VERSION}`}</text>
+      {/* Build-channel badge: [dev] when launched from a dev source checkout
+          (the `0dev` wrapper exports 0SEC_DEV_SOURCE_ROOT), else [beta] for a
+          published build. Toned so dev is unmistakable at a glance. */}
+      {DEV_CHANNEL
+        ? <text flexShrink={0} fg={theme.WARNING}>{" [dev]"}</text>
+        : <text flexShrink={0} fg={theme.INFO}>{" [beta]"}</text>}
     </box>
   );
 }

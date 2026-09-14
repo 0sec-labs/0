@@ -481,7 +481,7 @@ describe("sidebar settings", () => {
     expect(def?.default).toBe("minimal");
     expect(def?.choices).toContain("minimal");
     // The prior styles all remain selectable.
-    for (const style of ["bubble", "rail", "plain", "compact", "document"]) {
+    for (const style of ["bubble", "balanced", "rail", "plain", "compact", "document"]) {
       expect(def?.choices).toContain(style);
     }
     // A persisted minimal round-trips through normalise + save + load.

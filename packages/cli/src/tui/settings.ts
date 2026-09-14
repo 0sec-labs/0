@@ -111,7 +111,7 @@ export interface TuiSettings {
   /** Let a subagent send a message to the operator's transcript (child→operator). */
   allowSubagentOperatorMessaging: boolean;
   /** How a conversation turn is framed. */
-  transcriptStyle: "minimal" | "rail" | "bubble" | "plain" | "compact" | "document";
+  transcriptStyle: "minimal" | "rail" | "bubble" | "balanced" | "plain" | "compact" | "document";
   /** How the speaker label is drawn. */
   roleLabelStyle: "full" | "short" | "glyph" | "off";
   /** How a tool/subagent call is drawn (failures always show). */
@@ -484,10 +484,10 @@ const DEFS: readonly TuiSettingDef[] = [
   {
     key: "transcriptStyle",
     label: "Transcript style",
-    description: "Minimal (the default) drops every bubble and box: your turns carry a thin coloured accent rail and the answer flows as plain body text, the OpenCode / oh-my-pi flat look. Bubble right-aligns your messages against left-aligned answers and titles each card on its border. Rail, plain, compact and document offer alternative transcript layouts.",
+    description: "Minimal (the default) drops every bubble and box: your turns carry a thin coloured accent rail and the answer flows as plain body text, the OpenCode / oh-my-pi flat look. Bubble right-aligns your messages against left-aligned answers and titles each card on its border. Balanced: only your own messages are bubbled; everything else is flat. Rail, plain, compact and document offer alternative transcript layouts.",
     kind: "enum",
     default: "minimal",
-    choices: ["minimal", "rail", "bubble", "plain", "compact", "document"],
+    choices: ["minimal", "rail", "bubble", "balanced", "plain", "compact", "document"],
     group: "Display",
   },
   {
