@@ -3491,6 +3491,15 @@ export function ChatScreen({
         input: prev.input + outcome.usage.inputTokens,
         output: prev.output + outcome.usage.outputTokens,
       }));
+      // Context occupancy = the tokens the last model call actually sent (the
+      // whole conversation resent). Some backends (e.g. the ChatGPT/Codex wire)
+      // report usage only on the RETURN value, not through the streaming
+      // `onUsage(kind:"planner")` callback above — so without this the meter
+      // stayed at 0% for a full conversation. Fall back to the turn's final
+      // input count whenever it is a real, positive measurement.
+      if (Number.isFinite(outcome.usage.inputTokens) && outcome.usage.inputTokens > 0) {
+        setLastContext(outcome.usage.inputTokens);
+      }
       turnUsage = { inputTokens: outcome.usage.inputTokens, outputTokens: outcome.usage.outputTokens };
 
       // A turn that fails must say so. The engine reports failure through
