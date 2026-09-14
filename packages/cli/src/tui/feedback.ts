@@ -580,15 +580,47 @@ const DIAGNOSTIC_PLATFORMS = new Set(["darwin", "linux", "win32", "aix", "freebs
 const DIAGNOSTIC_ARCHS = new Set(["x64", "arm64", "arm", "ia32", "s390", "mips", "ppc64"]);
 const DIAGNOSTIC_RUNTIMES = new Set(["node", "bun", "deno"]);
 
+/**
+ * Classify arbitrary failure text into a FINITE, safe category — never the raw
+ * text. Tool failures arrive as strings ("exited 1: …", "ENOENT …"), and
+ * returning a bare "unknown" for them (the old behaviour) told the operator
+ * nothing. These buckets name the failure MODE without transmitting any path,
+ * host, payload or other engagement data. Returns null when nothing matches.
+ */
+function classifyFailureText(text: string): string | null {
+  const t = text.toLowerCase();
+  if (/exited?\s+-?\d+|exit code|non-?zero exit/.test(t)) return "nonzero-exit";
+  if (/enoent|no such file|command not found|not found on path|cannot find (?:module|the )/.test(t)) return "not-found";
+  if (/etimedout|timed out|\btimeout\b|deadline exceeded/.test(t)) return "timeout";
+  if (/econnrefused|econnreset|epipe|network|fetch failed|socket hang up|getaddrinfo|dns|tls|certificate/.test(t)) return "network";
+  if (/eacces|eperm|permission denied|forbidden|unauthor|401|403/.test(t)) return "permission";
+  if (/rate.?limit|too many requests|\b429\b|quota|overloaded/.test(t)) return "rate-limit";
+  if (/unexpected token|json|yaml|parse error|invalid json|malformed/.test(t)) return "parse";
+  if (/out of memory|enomem|heap|maximum call stack/.test(t)) return "resource";
+  if (/stream completed without final response|response stream failed|incomplete/.test(t)) return "stream-incomplete";
+  return null;
+}
+
 function diagnosticError(error: unknown): string {
   try {
+    // Named built-in error classes first — the class is already finite + safe.
     if (error instanceof TypeError) return "TypeError";
     if (error instanceof ReferenceError) return "ReferenceError";
     if (error instanceof SyntaxError) return "SyntaxError";
     if (error instanceof RangeError) return "RangeError";
     if (error instanceof URIError) return "URIError";
     if (error instanceof EvalError) return "EvalError";
-    if (error instanceof Error) return "Error";
+    if (error instanceof Error) {
+      // A plain Error: classify its message into a finite mode so a generic
+      // `new Error("exited 1: …")` reports "Error:nonzero-exit", not just "Error".
+      const mode = classifyFailureText(error.message ?? "");
+      return mode ? `Error:${mode}` : "Error";
+    }
+    if (typeof error === "string") {
+      // Tool failures are strings — classify the mode; an uncategorised one is
+      // still a finite "tool-error", never the useless "unknown".
+      return classifyFailureText(error) ?? "tool-error";
+    }
   } catch { /* A hostile proxy must not break error reporting. */ }
   return "unknown";
 }

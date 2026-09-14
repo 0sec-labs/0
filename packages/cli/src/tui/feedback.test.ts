@@ -641,6 +641,30 @@ describe("buildDiagnosticFeedback", () => {
     expect(result.message).not.toContain("private");
     expect(Buffer.byteLength(result.message)).toBeLessThanOrEqual(MAX_DIAGNOSTIC_MESSAGE_BYTES);
   });
+
+  it("classifies string/tool failures into a finite mode instead of 'unknown', leaking no raw text", () => {
+    const cases: [unknown, string][] = [
+      ["exited 1: /home/dev/secret/target scan failed", "Error: nonzero-exit"],
+      ["ENOENT: no such file /etc/private/target.conf", "Error: not-found"],
+      ["connect ETIMEDOUT 10.0.0.5:443", "Error: timeout"],
+      ["fetch failed: ECONNREFUSED https://target.internal", "Error: network"],
+      ["permission denied opening /root/.ssh/id_rsa", "Error: permission"],
+      ["429 Too Many Requests", "Error: rate-limit"],
+      ["unexpected token < in JSON at position 0", "Error: parse"],
+      ["stream completed without final response", "Error: stream-incomplete"],
+      ["something totally unrecognised happened", "Error: tool-error"],
+      [new Error("exited 2: nmap crashed"), "Error: Error:nonzero-exit"],
+    ];
+    for (const [error, expected] of cases) {
+      const result = buildDiagnosticFeedback(diagInfo({ error, kind: "tool" }));
+      expect(result.message).toContain(expected);
+      // No raw path/host/text from the input leaks into the finite wire body.
+      for (const secret of ["/home/dev/secret", "/etc/private", "10.0.0.5", "target.internal", "/root/.ssh", "nmap"]) {
+        expect(result.message).not.toContain(secret);
+      }
+      expect(Buffer.byteLength(result.message)).toBeLessThanOrEqual(MAX_DIAGNOSTIC_MESSAGE_BYTES);
+    }
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -683,10 +707,12 @@ describe("buildDiagnosticReview", () => {
     expect(localDetail).toContain(real);
     expect(localDetail).toContain("Tool: self_extend");
     expect(localDetail).not.toContain("Error: unknown");
-    // ...but the transmit-safe payload stays a finite category, and never
-    // carries the raw message.
-    expect(payload.message).toContain("Error: unknown");
+    // ...but the transmit-safe payload stays a finite CATEGORY (the failure
+    // mode, "nonzero-exit"), never "unknown" and never the raw message.
+    expect(payload.message).toContain("Error: nonzero-exit");
+    expect(payload.message).not.toContain("Error: unknown");
     expect(JSON.stringify(payload)).not.toContain(real);
+    expect(JSON.stringify(payload)).not.toContain("foo");
   });
 
   it("is byte-identical on the wire to buildDiagnosticFeedback", () => {
