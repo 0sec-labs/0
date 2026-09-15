@@ -13,8 +13,8 @@
  *   0sec bench diff  — compare two recorded runs (by id) in a ledger.
  */
 
-import { readFileSync, existsSync } from "node:fs";
-import { resolve } from "node:path";
+import { readFileSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { resolve, join } from "node:path";
 import { performance } from "node:perf_hooks";
 import type { Command } from "commander";
 import chalk from "chalk";
@@ -34,6 +34,7 @@ import {
   appendLedgerEntry,
   lastGreen,
   evaluateRegression,
+  renderScoreboard,
   type BenchAttemptPolicy,
   type BenchIntegration,
   type BenchManifest,
@@ -386,5 +387,32 @@ export function registerBenchCommand(program: Command): void {
           (delta.significant ? chalk.green("significant") : chalk.yellow("not significant")),
       );
       console.log("");
+    });
+
+  // ── bench scoreboard ──
+  // "Benchmark in public": project the persisted ledger into a publishable
+  // markdown report + a dashboard JSON. Pure render (renderScoreboard); this
+  // command is only the thin writer.
+  bench
+    .command("scoreboard")
+    .description("Render a publishable scoreboard (markdown + JSON) from the benchmark ledger")
+    .option("--ledger <path>", "Benchmark ledger path", DEFAULT_LEDGER)
+    .option("--out <dir>", "Directory to write scoreboard.md + scoreboard.json", ".")
+    .option("--title <title>", "Report title/header")
+    .option("--keep-runs <n>", "Trailing ledger entries shown in the trend table", "10")
+    .action(async (opts) => {
+      const ledger = await loadLedger(String(opts.ledger));
+      const { markdown, json } = renderScoreboard(ledger, {
+        ...(opts.title ? { title: String(opts.title) } : {}),
+        keepRuns: Number(opts.keepRuns),
+      });
+      const outDir = resolve(String(opts.out));
+      mkdirSync(outDir, { recursive: true });
+      const mdPath = join(outDir, "scoreboard.md");
+      const jsonPath = join(outDir, "scoreboard.json");
+      writeFileSync(mdPath, markdown, "utf8");
+      writeFileSync(jsonPath, JSON.stringify(json, null, 2) + "\n", "utf8");
+      console.log(chalk.green(`  wrote ${mdPath}`));
+      console.log(chalk.green(`  wrote ${jsonPath}`));
     });
 }

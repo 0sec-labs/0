@@ -150,6 +150,16 @@ export {
   saveLedger,
 } from "./ledger.js";
 
+export { renderScoreboard, renderEmptyScoreboard } from "./scoreboard.js";
+export type {
+  ScoreboardJson,
+  ScoreboardRender,
+  ScoreboardChampion,
+  ScoreboardRegression,
+  ScoreboardTrendPoint,
+  RenderScoreboardOptions,
+} from "./scoreboard.js";
+
 export {
   digestBenchManifest,
   projectResearchImprovementResult,
