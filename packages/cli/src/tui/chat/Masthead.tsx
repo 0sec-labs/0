@@ -3,6 +3,7 @@ import React from "react";
 import { fitTuiText } from "../text.js";
 import { computeLogoFrame, logoRowRuns } from "../logo-animation.js";
 import { TERMINAL_BLOCK_LOGO_WIDTH, logoRunStyle } from "./logo.js";
+import { MASCOT_WIDTH, mascotRows, mascotToneStyle } from "./mascot.js";
 import type { Theme } from "../theme-context.js";
 
 /**
@@ -58,10 +59,44 @@ export function Masthead({
     { label: "Scope", value: String(engagement?.scope ?? "").trim() },
     { label: "Session", value: String(engagement?.sessionState ?? "").trim() },
   ].filter((fact) => fact.value.length > 0);
+  // The mascot art, split into the octagon head (drawn above the wordmark) and
+  // the brand band (drawn below it). Computed unconditionally — it is a few
+  // small string ops — but only painted when the block logo is (see below).
+  const mascotArt = mascotRows();
+  const mascotHead = mascotArt.slice(0, mascotArt.length - 1);
+  const mascotBand = mascotArt[mascotArt.length - 1];
   return (
     <>
       {showTerminalMark ? (
         <text fg={MUTED} marginBottom={1}>{fitTuiText("Swiss Applied AI Cybersecurity Research Lab", contentWidth, { mode: "middle" })}</text>
+      ) : null}
+      {/*
+        * 0sec mascot — the aperture "operator" head. A compact octagon-with-a-
+        * slash (the brand ∅ device rendered as a little masked sentinel face),
+        * sitting above the wordmark so the hero reads as a cohesive brand
+        * lockup: mascot → 0SEC → band → tagline. Gated on the SAME
+        * interactive + width test as the block logo (`showTerminalMark`, which
+        * already requires `heroContentWidth >= TERMINAL_BLOCK_LOGO_WIDTH`), so
+        * it never appears on a narrow terminal — it simply disappears rather
+        * than breaking the column. Static (no animation) → reduceMotion-safe.
+        * Each row is a fixed MASCOT_WIDTH of sized runs (widths sum exactly),
+        * mirroring the logo, so no run can overflow the content column.
+        */}
+      {showTerminalMark ? (
+        <box flexDirection="column" width={MASCOT_WIDTH} minWidth={MASCOT_WIDTH} flexShrink={0} marginBottom={1}>
+          {mascotHead.map((runs, rowIndex) => (
+            <box key={`mascot-${rowIndex}`} flexDirection="row" width={MASCOT_WIDTH} flexShrink={0} minWidth={0}>
+              {runs.map((run, runIndex) => (
+                <text
+                  key={`mascot-${rowIndex}-${runIndex}`}
+                  width={run.length}
+                  flexShrink={0}
+                  fg={mascotToneStyle(run.tone, theme).fg}
+                >{run.glyph.repeat(run.length)}</text>
+              ))}
+            </box>
+          ))}
+        </box>
       ) : null}
       {showTerminalMark ? (
         <box flexDirection="column" width={TERMINAL_BLOCK_LOGO_WIDTH} minWidth={TERMINAL_BLOCK_LOGO_WIDTH} flexShrink={0}>
@@ -100,6 +135,18 @@ export function Masthead({
           </text>
         </box>
       )}
+      {/*
+        * The brand band — a short orange (PRIMARY) rule directly under the
+        * wordmark, echoing the site's wordmark-over-band lockup (the brand's
+        * old red band, retired to orange). Same gate as the mascot/logo.
+        */}
+      {showTerminalMark ? (
+        <box flexDirection="row" width={MASCOT_WIDTH} flexShrink={0} minWidth={0} marginTop={1}>
+          <text width={mascotBand[0].length} flexShrink={0} fg={mascotToneStyle(mascotBand[0].tone, theme).fg}>
+            {mascotBand[0].glyph.repeat(mascotBand[0].length)}
+          </text>
+        </box>
+      ) : null}
       {showTagline ? (
         <text fg={TEXT} marginTop={1}>{fitTuiText("Make software secure itself.", contentWidth, { mode: "middle" })}</text>
       ) : null}
