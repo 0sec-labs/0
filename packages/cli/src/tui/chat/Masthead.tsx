@@ -1,7 +1,7 @@
 /** @jsxImportSource @opentui/react */
 import React from "react";
 import { fitTuiText } from "../text.js";
-import { computeLogoFrame, finalLogoFrame, logoRowRuns } from "../logo-animation.js";
+import { computeLogoFrame, finalLogoFrame, logoCellGlyph, logoRowRuns } from "../logo-animation.js";
 import {
   TERMINAL_BLOCK_LOGO_COMPACT,
   TERMINAL_BLOCK_LOGO_FULL_WIDTH,
@@ -96,16 +96,17 @@ export function Masthead({
             * "SECURITY" (or "SEC" in the compact fallback). The per-cell frame
             * is the full-word intro animation / settled frame when the column is
             * wide enough (see `blockFrame`), and the static compact "0SEC" mark
-            * otherwise. logoRowRuns coalesces each row into (tone,visible) runs
-            * whose widths sum to `blockWidth`, so no run overflows and each tone
-            * keeps its own token. Rendered verbatim — the row widths are exact,
-            * so no fitTuiText/trim is needed.
+            * otherwise. logoRowRuns coalesces each row into (tone,visible,ch)
+            * runs whose widths sum to `blockWidth`, so no run overflows and each
+            * tone keeps its own token; chamfer corner cells keep their quadrant
+            * glyph via `logoCellGlyph`. Rendered verbatim — the row widths are
+            * exact, so no fitTuiText/trim is needed.
             */}
           {blockFrame.map((row, index) => (
             <box key={`logo-${index}`} flexDirection="row" width={blockWidth} flexShrink={0} minWidth={0}>
               {logoRowRuns(row).map((run, runIndex) => {
                 const style = logoRunStyle(run.tone, theme);
-                const glyph = run.visible ? "█" : " ";
+                const glyph = run.visible ? logoCellGlyph(run.ch) : " ";
                 return (
                   <text
                     key={`logo-${index}-${runIndex}`}
