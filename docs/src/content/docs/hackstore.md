@@ -7,10 +7,9 @@ An extension adds tools the 0sec agent can call. It consists of a manifest and a
 self-contained Node.js program. This guide takes a generated extension through a
 local run, then explains the runtime contract.
 
-Use a source build containing the authoring and `plugin run` fixes. The tested
-0.16.3 binary fails in `plugin run` because it treats the built-in tool registry
-as an array. Older releases may also lack `hackstore init`. Check
-`0sec --version` and command-specific `--help`; these instructions follow source.
+Use 0sec 0.17.0 or newer for the authoring commands and direct `plugin run`
+workflow below. The 0.16.3 binary has a tool-registry bug in `plugin run`.
+Check `0sec --version` and command-specific `--help` before following this guide.
 
 ## Create and validate
 

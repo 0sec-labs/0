@@ -75,20 +75,20 @@ printf '%s\n' "Installed verified 0sec to ${INSTALL_DIR}/0sec (also available as
 # Provision the default static analyzer too, so standalone source reviews do
 # not require Node/npm. INSTALL_FOXGUARD=0 opts out for pre-provisioned hosts.
 if [ "${INSTALL_FOXGUARD:-1}" != "0" ]; then
-  FOXGUARD_TAG="${FOXGUARD_TAG:-v0.12.0}"
-  [ "$FOXGUARD_TAG" = "v0.12.0" ] || fail "update the pinned FoxGuard checksums before selecting another release"
+  FOXGUARD_TAG="${FOXGUARD_TAG:-v0.14.0}"
+  [ "$FOXGUARD_TAG" = "v0.14.0" ] || fail "update the pinned FoxGuard checksums before selecting another release"
   FOXGUARD_REPO="0sec-labs/foxguard"
 
   case "$(uname -s)" in
     Darwin)
       case "$(uname -m)" in
-        arm64) FG_ASSET="foxguard-macos-aarch64"; FG_SHA256="3bd54b666ec399b3c9e77dbe1b1389da240807b62383f652697626cc45da2a17" ;;
+        arm64) FG_ASSET="foxguard-macos-aarch64"; FG_SHA256="aa47b956f31bfbc87e0f43cd48e01f3bc73229192ffff0113ff094e5b3fd7d12" ;;
         *) fail "unsupported macOS architecture for FoxGuard companion" ;;
       esac ;;
     Linux)
       case "$(uname -m)" in
-        x86_64|amd64) FG_ASSET="foxguard-linux-x86_64"; FG_SHA256="0f82260e1cf944b1b5e318206777bb6df5a3accdd390421d704f5646cfc91374" ;;
-        aarch64|arm64) FG_ASSET="foxguard-linux-aarch64"; FG_SHA256="26c65e4458a2540d2328975c70a5feabfa9af92ce897f1d3ec810bef16872a8e" ;;
+        x86_64|amd64) FG_ASSET="foxguard-linux-x86_64"; FG_SHA256="ef56a4d5cfc4cc4462e435bf31ca0f90694f47df1384772361a67828427db3d9" ;;
+        aarch64|arm64) FG_ASSET="foxguard-linux-aarch64"; FG_SHA256="7d5c7263d71089eb06113a634aa3394ab8b54782b16e67a349693fedbb598120" ;;
         *) fail "unsupported Linux architecture for FoxGuard companion" ;;
       esac ;;
     *) fail "unsupported operating system for FoxGuard companion" ;;

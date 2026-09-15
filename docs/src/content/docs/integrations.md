@@ -472,8 +472,8 @@ fetching. Entries use the unconfigured signature verifier and are marked
 The [author guide](/hackstore/)
 covers executable scaffolding, the manifest, and a local two-file installation
 in an isolated home. The installer writes `plugin.js` and `plugin.json` only.
-These instructions follow source; the tested 0.16.3 binary requires the
-`plugin run` tool-registry fix before direct calls work.
+Use 0sec 0.17.0 or newer for direct plugin calls. The 0.16.3 binary has a
+tool-registry bug in `plugin run`.
 
 #### Subcommands
 

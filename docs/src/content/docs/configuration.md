@@ -544,7 +544,7 @@ static leads. Set `0SEC_STATIC=semgrep` to route them through Semgrep instead;
 audit`, OSV, OCI inventory) run separately for package targets regardless.
 
 The static runner uses `foxguard` from `PATH` when provisioned. Otherwise it
-launches `npx --yes foxguard@v0.12.0`, which requires Node/npm and access to the
+launches `npx --yes foxguard@v0.14.0`, which requires Node/npm and access to the
 package and release download on first use. Native v1 JSON reports and legacy
 finding arrays are accepted. Launch failures, invalid reports, and scanner
 error exits are surfaced as failures; the default path does not silently invoke

@@ -1684,7 +1684,7 @@ Run A/B variant tournaments and a CI regression gate over the labeled corpus (#6
 
 Guide: [Read the workflow](/research-workflows/).
 
-Subcommands: [improvement-project](#bench-improvement-project) · [improvement-assess](#bench-improvement-assess) · [calibrate](#bench-calibrate) · [run](#bench-run) · [diff](#bench-diff).
+Subcommands: [improvement-project](#bench-improvement-project) · [improvement-assess](#bench-improvement-assess) · [calibrate](#bench-calibrate) · [run](#bench-run) · [diff](#bench-diff) · [scoreboard](#bench-scoreboard).
 
 #### bench improvement-project
 
@@ -1805,6 +1805,28 @@ Compare two recorded runs in a benchmark ledger
 | `--b <runId>` **required** | — | Comparison run id |
 | `--ledger <path>` | `benchmark-ledger.json` | Benchmark ledger path |
 | `--format <format>` | `terminal` | Output format: terminal, json |
+
+#### bench scoreboard
+
+Render an existing benchmark ledger as Markdown and dashboard JSON. This command
+does not run a benchmark or invoke a model. It creates the output directory and
+overwrites `scoreboard.md` and `scoreboard.json` there. Review the reports before
+publishing them.
+
+```text
+0sec bench scoreboard [options]
+```
+
+```sh
+0sec bench scoreboard --ledger ./benchmark-ledger.json --out ./reports --title "Local benchmark"
+```
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--ledger <path>` | `benchmark-ledger.json` | Benchmark ledger path |
+| `--out <dir>` | `.` | Directory to write scoreboard.md + scoreboard.json |
+| `--title <title>` | — | Report title/header |
+| `--keep-runs <n>` | `10` | Trailing ledger entries shown in the trend table |
 
 ### lens-synth
 
