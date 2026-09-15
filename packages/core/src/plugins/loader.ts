@@ -373,7 +373,7 @@ const TARGET_AUTH_ENV_NAMES = ["TARGET", "AUTH_HEADER", "AUTH_VALUE", "AUTH_CURL
  *   - `shell: false` (the default, stated explicitly) — no string is ever
  *     handed to a shell, so nothing in a plugin id, path, or manifest can be
  *     shell-interpreted.
- *   - Fixed argv: `[<entry>]` under the CURRENT node binary (`process.execPath`).
+ *   - Fixed argv: `[<entry>]` under the current runtime (`process.execPath`).
  *     The plugin does not choose the interpreter and does not choose the flags.
  *   - `cwd` set EXPLICITLY to the plugin's own directory, never inherited — a
  *     child that inherits the operator's cwd starts life pointed at the
@@ -725,11 +725,14 @@ export class PluginHost {
       };
     }
 
+    // Compiled Bun must run its embedded interpreter, not re-enter the 0sec CLI.
+    const env = buildPluginEnv(pluginId, this.env);
+    if (process.versions.bun) env.BUN_BE_BUN = "1";
     const spec: PluginSpawnSpec = {
       command: process.execPath,
       args: [entryPath],
       cwd: dir,
-      env: buildPluginEnv(pluginId, this.env),
+      env,
     };
 
     const generation = ++this.generation;

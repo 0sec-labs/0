@@ -115,6 +115,8 @@ jobs:
               }
             '
           )
+      - name: Smoke standalone plugin execution
+        run: node scripts/smoke-plugin-runtime.mjs "dist-bin/${{ matrix.asset }}"
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.asset }}
@@ -151,3 +153,47 @@ jobs:
               --notes "Automated multi-platform release. See CHANGELOG.md for changes." \
               --verify-tag
           fi
+
+  publish-npm:
+    name: publish npm
+    needs: release
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
+      RELEASE_TAG: ${{ github.event.inputs.tag || github.ref_name }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+      - run: corepack enable
+      - name: Verify package versions match the release tag
+        run: |
+          node --input-type=module -e '
+            import { readFileSync } from "node:fs";
+            for (const file of ["package.json", "packages/cli/package.json"]) {
+              const pkg = JSON.parse(readFileSync(file, "utf8"));
+              if (`v${pkg.version}` !== process.env.RELEASE_TAG) {
+                throw new Error(`${file} does not match ${process.env.RELEASE_TAG}`);
+              }
+            }
+          '
+      - run: pnpm install --frozen-lockfile
+      - name: Build the published CLI package
+        run: pnpm build
+      - name: Install runtime dependencies and smoke the bundle
+        run: |
+          npm --prefix dist install --omit=dev --no-audit --no-fund
+          node dist/0sec.js --version
+          bash scripts/smoke-cli.sh "node dist/0sec.js"
+          node scripts/smoke-plugin-runtime.mjs dist/0sec.js
+      - name: Publish npm package
+        working-directory: dist
+        run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

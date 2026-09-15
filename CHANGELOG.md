@@ -12,87 +12,55 @@ on the published npm package and the GitHub Release tag.
 
 ## [Unreleased]
 
+## [0.17.0] - 2026-09-15
+
 ### Added
 
-- Add explicit Unicode, Nerd Font, and ASCII symbol choices to migrated operator
-  dialogs and sidebar components, with Unicode as the default. This migration
-  does not yet cover all chat, transcript, approval, and composer glyphs.
-- Add opt-in development-engine replacement between turns, preserving the live
-  conversation, scope decisions, task state and accounting. Failed candidates
-  retain the active engine. This trusted host-code path is separate from
-  sandboxed self-extension and does not reload the terminal shell or injected clients.
+- Hackstore community discovery, extension authoring commands, and a runnable
+  generated SHA-256 extension. Installation and per-project enablement remain
+  separate operator decisions.
+- Multi-tab browser tools, authenticated Chrome attachment, JavaScript/Python
+  evaluation tools, and additional security-engine tools and skills.
+- Additional provider connection flows, live model/provider selection,
+  per-agent routing, context compaction, and consent-gated redacted analytics.
+- A publishable benchmark scoreboard through `0sec bench scoreboard`, with
+  benchmark-miss harvesting available through `lens-synth --from-bench`.
 
 ### Changed
 
-- Default automatic updates on for profiles without an explicit update policy,
-  including existing profiles with that setting unset. Eligible startup checks
-  may download and install remote code. Explicit `off` and `notify` preferences,
-  project-setting restrictions, and existing updater safety checks remain intact.
+- Reworked terminal dialogs, command and model pickers, keyboard controls,
+  code and tool cards, worker activity, themes, and shutdown feedback.
+- Report live session links, pane activity, and runtime context to Herdr, and
+  release the session sink on exit.
+- Default automatic updates on for profiles without an explicit update policy.
+  Eligible startup checks may download and install remote code; explicit `off`
+  and `notify` preferences and existing updater safety checks remain intact.
+- Pin the default Foxguard scanner and standalone installer companion to
+  v0.14.0, with matching published checksums for every supported platform.
 
 ### Fixed
 
-- Fix `plugin run` to read the name-keyed built-in tool registry instead of
-  treating it as an array. Approval-denied output now distinguishes loading
-  plugin code from invoking its tool.
-- Generate a runnable SHA-256 `plugin.js` from `hackstore init`, reading the
-  installed manifest instead of duplicating it in code. Include local testing
-  instructions and reject invalid tool arguments explicitly.
-
-- Search the full BYOK model catalog from the curated picker and navigate models
-  with duplicate IDs across providers without mixing their detail panes.
-  Preserve hosted model pins and role-selection controls.
-- Re-anchor existing Foxguard baseline entries after line-only shifts,
-  without adding suppressed findings or changing the security policy.
-- Keep unlimited turn budgets out of finite-JSON harness checkpoints without
-  weakening snapshot validation.
-- Preserve contained source-file aliases in immutable engine generations and
-  reject directory aliases or links outside the selected Core source.
-- Terminate sandbox controller process groups on cancellation, deadlines and
-  output overflow. Reuse already-approved Docker group access without host
-  execution fallback or privilege elevation.
-- Validate browser arguments and initial URL scope before acquiring a backend.
-- Show shared batch instructions and worker briefs in bounded, expandable Task
-  cards without hiding the tool result. Pass shared instructions to every
-  `spawn_agents` child alongside its own task.
-- Present operator screens as bounded, responsive dialogs while keeping the
-  current audit and draft mounted. Use consistent icons and palette colors.
-- Keep sidebar backgrounds and padding continuous, show live plan progress,
-  and theme transcript scrollbars without resetting their position.
-- Preserve filter text, selection, and permission-mode changes across keyboard
-  bursts. Pin marketplace confirmations and worker steering drafts to the
-  exact selected item or worker rather than a later roster or registry state.
-- Show tool activity above the composer and loading below full-width rules.
-  Render expandable tool and image cards with reported outcomes and dimensions,
-  and use audit objective events for titles without inventing context usage.
-- Keep phase-aware plan trees and rounded You/0sec transcript cards, with
-  bounded, redacted code and diff previews shared by tool result cards.
-- Keep each live audit's conversation, draft, runtime, and mailbox independent.
-  `/new` opens another audit; closing waits for cleanup and permits an explicit retry.
-  Keep generated worker addresses within the mailbox identity limit for UUID audit IDs.
-- Report context occupancy from planner input only; plugin usage still updates
-  turn budgets. Missing samples, unknown limits, and worker focus stay unknown.
-  The bottom bar shows `Context usage unavailable` without fallback input or limit numbers.
-- Drain owned workers before acknowledging a stop, while retaining the parent
-  conversation. Show confirmed stops and unfinished workers as settled.
-- Pin worker model choices to the parent's provider and account. Model-picker
-  changes apply to the next audit, and hosted metadata comes from that account's catalog.
-- Keep onboarding completion in the operator's global settings. Reset selected
-  settings without promoting unrelated project overrides into global preferences.
-- Default fresh settings to slate and right-aligned operator bubbles. Preserve
-  saved styles, including migration from `messenger`, and place message/tool
-  labels in their top borders. Collapsed tools retain recorded command or path.
-- Keep permission mode in the bottom row, even with optional status telemetry
-  hidden. Show elapsed time for the whole active root turn.
-- Make early-stop retries opt-in through `0SEC_FEATURE_EARLY_STOP=1`.
-- Preserve unrelated host refusals during explicit target recovery and keep
-  saved credentials bound to their original origin across target/mode changes.
-- Block unanchored shared-address-space HTTP destinations, including
-  IPv4-mapped DNS answers, while retaining explicit internal targets.
-- Commit each work-plan transition and its audit records atomically, reducing
-  repeated synchronous database flushes and rolling back partial transitions
+- Make `plugin run` consume the name-keyed built-in tool registry correctly.
+  Approval-denied output distinguishes loading plugin code from invoking a tool.
+- Execute plugins with the embedded Bun interpreter in standalone builds,
+  without requiring Node or Bun on `PATH`.
+- Exclude security engines with sub-analysis or network capabilities from
+  attacker-controlled source scopes while retaining trusted audit access.
+- Preserve live conversations, scope decisions, worker state, and accounting
+  across supported runtime changes; retain the active engine on failed replacement.
+- Keep unlimited turn budgets out of finite-JSON checkpoints, contain source
+  aliases within immutable engine generations, and terminate owned sandbox
+  process groups on cancellation, deadlines, and output overflow.
+- Validate browser arguments and initial scope before acquiring a backend.
+  Preserve explicit target authority, origin-bound credentials, and refusal
+  of unanchored shared-address-space destinations.
+- Commit work-plan transitions and audit records atomically, with rollback
   when audit artifact storage fails.
-- Reuse isolated empty database schemas in pipeline fixtures and load hunt
-  orchestration before timing ledger behavior.
+
+### Release
+
+- Publish the generated npm package through the existing release workflow
+  after the standalone platform builds, using the repository's CI credential.
 
 ## [0.16.3] - 2026-09-12
 

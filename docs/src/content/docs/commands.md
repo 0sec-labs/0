@@ -1808,10 +1808,17 @@ Compare two recorded runs in a benchmark ledger
 
 #### bench scoreboard
 
-Render a publishable scoreboard (markdown + JSON) from the benchmark ledger
+Render an existing benchmark ledger as Markdown and dashboard JSON. This command
+does not run a benchmark or invoke a model. It creates the output directory and
+overwrites `scoreboard.md` and `scoreboard.json` there. Review the reports before
+publishing them.
 
 ```text
 0sec bench scoreboard [options]
+```
+
+```sh
+0sec bench scoreboard --ledger ./benchmark-ledger.json --out ./reports --title "Local benchmark"
 ```
 
 | Option | Registered default | Description |

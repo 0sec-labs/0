@@ -22,16 +22,17 @@ function createRepository(): string {
       "",
     ].join("\n"),
   );
-  // CommonJS on purpose: the repo has no package.json declaring
-  // "type":"module", so a `.js` file with ESM `import` syntax fails to load
-  // (SyntaxError → exit 1) under Node regardless of the patch. `require` keeps
-  // the operator test command deterministic across Node versions.
+  writeFileSync(
+    join(root, "package.json"),
+    JSON.stringify({ type: "module" }) + "\n",
+  );
   writeFileSync(
     join(root, "test.js"),
     [
-      "const { readFileSync } = require('node:fs');",
-      "const source = readFileSync('src/auth.js', 'utf8');",
-      "if (!source.includes('typeof input !== \"string\"')) process.exit(1);",
+      "import assert from 'node:assert/strict';",
+      "import { parse } from './src/auth.js';",
+      "assert.throws(() => parse(42), TypeError);",
+      "assert.equal(parse('accepted'), 'accepted');",
       "",
     ].join("\n"),
   );
