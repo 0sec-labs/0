@@ -85,7 +85,7 @@ import {
   pillText,
   type StatusColorRole,
 } from "./status-bar.js";
-import { SHIMMER_TEXT_INTERVAL_MS } from "./animations.js";
+import { SHIMMER_TEXT_INTERVAL_MS, spinnerGlyph } from "./animations.js";
 import { ShimmerText } from "./chat/shimmer.js";
 import {
   createSelectorState,
@@ -120,6 +120,8 @@ import type { SessionPluginHostManager } from "./session-plugin-host.js";
 import { reportOperatorGate } from "../herdr-state.js";
 import {
   GLYPH_CELLS,
+  ELAPSED_VISIBLE_AFTER_MS,
+  formatElapsedClock,
   frameAt,
   frameIntervalMs,
   type AnimationKind,
@@ -4755,12 +4757,23 @@ export function ChatScreen({
   // (never fabricated). Only while the root turn is running and not focused on a
   // worker. Computed here because the status bar is built above the later
   // `runningEntry`.
+  const runningWorkers = Object.values(herdAgents).filter((agent) => agent.status === "running" || agent.status === "queued").length;
+  // The fleet's "running N agents" line, oh-my-pi style — a concise, TRUTHFUL
+  // count of the subagents genuinely in flight, or "" when the herd is quiet.
+  // Reused by the header status word, the below-composer working line, and the
+  // status-bar activity pill so all three read the same live fact.
+  const fleetActivityLabel = runningWorkers > 0
+    ? `running ${runningWorkers} agent${runningWorkers === 1 ? "" : "s"}`
+    : "";
   const statusRunningEntry = busy && !focusAgentId && runningTool
     ? entries.findLast((entry) => entry.kind === "tool" && entry.text === runningTool && entry.success === undefined)
     : undefined;
+  // The live "what it's doing" pill: the in-flight tool (+ its argument
+  // preview) while the root turn owns a call, otherwise the fleet's running
+  // count when subagents are the only thing in flight. Never fabricated.
   const statusActivity = busy && !focusAgentId && runningTool
     ? (statusRunningEntry?.toolArgs ? `${runningTool} · ${statusRunningEntry.toolArgs}` : runningTool)
-    : undefined;
+    : fleetActivityLabel || undefined;
   const statusSegments = buildStatusSegments({
     model: focusAgentId ? focusedTelemetry?.model : modelId ?? undefined,
     mode: autonomyFooterText(mode),
@@ -4789,7 +4802,6 @@ export function ChatScreen({
     hostedBalance: !focusAgentId && cloudBalance && cloudBalance.owner === session && cloudSource.current?.isHosted()
       ? formatHostedBalance(cloudBalance.state) : undefined,
   });
-  const runningWorkers = Object.values(herdAgents).filter((agent) => agent.status === "running" || agent.status === "queued").length;
   // The OMP-style pill row: the SAME segments, kept/dropped at the bar's real
   // width, each painted as its own coloured glyph+text with a subtle separator
   // between (rendered below via `renderStatusPills`). `statusBarText` remains as
@@ -5093,7 +5105,41 @@ export function ChatScreen({
   const showTerminalMark =
     settings.showLogo && empty && ledgerRows >= LEDGER_MARK_ROWS && contentWidth >= TERMINAL_BLOCK_LOGO_WIDTH;
   const showEmptyStateTagline = empty && ledgerRows >= 3;
-  const sessionState = startupError ? "unavailable" : busy ? "working" : session ? "ready" : "connecting";
+  // The header readiness word, oh-my-pi style: not a bare "working" but a live,
+  // informative indicator — an animated spinner glyph, the present-tense verb
+  // for what's happening (thinking / responding / a tool name), the fleet's
+  // "running N agents" when subagents are in flight, and the turn's elapsed
+  // clock ("1m 12s") once past the flicker threshold. Every piece is driven by
+  // the SAME `animTick` the below-composer indicator uses (no new interval), so
+  // the glyph advances in lock-step; reduceMotion pins the glyph to frame 0
+  // (via `motion:false` in `frameAt`) so the word stays honest but still.
+  const turnElapsedMs =
+    busy && activeTurnStartedAt.current !== null ? Date.now() - activeTurnStartedAt.current : 0;
+  const elapsedClock =
+    turnElapsedMs >= ELAPSED_VISIBLE_AFTER_MS ? formatElapsedClock(turnElapsedMs) : "";
+  const busyStatusWord = (() => {
+    // A busy machine-turn: spinner + verb (+ agents) (+ elapsed).
+    if (animation && animationKind !== "awaiting-operator") {
+      const parts = [animation.label];
+      if (fleetActivityLabel) parts.push(fleetActivityLabel);
+      if (elapsedClock) parts.push(elapsedClock);
+      return `${loadingLabel} ${parts.join(" · ")}`;
+    }
+    // The human's turn: expectant wording, not a grinding spinner.
+    if (animationKind === "awaiting-operator" && animation) {
+      return `${loadingLabel} ${animation.label}`;
+    }
+    // The root turn is idle but the herd is still working: keep the header
+    // alive with the smooth spinner and the running count.
+    if (!busy && fleetActivityLabel) {
+      const glyph = spinnerGlyph(animTick, { reduceMotion: settings.reduceMotion });
+      return `${glyph} ${fleetActivityLabel}`;
+    }
+    return "";
+  })();
+  const sessionState = startupError
+    ? "unavailable"
+    : busyStatusWord || (busy ? "working" : session ? "ready" : "connecting");
   const headerSegments: string[] = [];
   if (settings.showScope) headerSegments.push(`Scope: ${scopeLabel}`);
   headerSegments.push(sessionState);
@@ -5109,9 +5155,16 @@ export function ChatScreen({
   // Activity comes from the real in-flight call, not an invented model intent.
   // Its spinner lives once, below the composer in the loading/status row.
   const runningEntry = runningTool ? entries.findLast((entry) => entry.kind === "tool" && entry.text === runningTool && entry.success === undefined) : undefined;
-  const workingLine = runningEntry?.toolArgs
+  const workingLineBase = runningEntry?.toolArgs
     ? `${runningTool} · ${runningEntry.toolArgs}`
     : animation?.label ?? "";
+  // Fold the live "running N agents" fact into the below-composer indicator too
+  // (unless the base already speaks about the fleet), so the most prominent
+  // "something is happening" line names what the herd is doing, not just the
+  // root turn's verb.
+  const workingLine = fleetActivityLabel && !workingLineBase.includes("agent")
+    ? (workingLineBase ? `${workingLineBase} · ${fleetActivityLabel}` : fleetActivityLabel)
+    : workingLineBase;
   const canInterrupt = busy && !composing && !gateOpen && !picker && !commandMenuVisible && !reviewOpen;
   const workingLineFitted = fitTuiText(`${canInterrupt ? "Esc · " : ""}${workingLine}`, controlsWidth);
   const workingIndicator = animation ? (
