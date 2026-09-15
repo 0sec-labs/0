@@ -1,5 +1,6 @@
 /** @jsxImportSource @opentui/react */
 import React from "react";
+import type { NativeImage } from "@opentui/core";
 import { useRenderer } from "@opentui/react";
 import { fitTuiText } from "../text.js";
 import { finalLogoFrame, logoRowRuns, type LogoFrame } from "../logo-animation.js";
@@ -9,7 +10,7 @@ import {
   TERMINAL_BLOCK_LOGO_WIDTH,
   logoRunStyle,
 } from "./logo.js";
-import { ZERO_IMAGE, ZERO_ROWS } from "./mascot.js";
+import { createZeroImage, ZERO_ROWS } from "./mascot.js";
 import { ZERO_WIDTH, ZERO_HEIGHT } from "./zero-art.js";
 import type { Theme } from "../theme-context.js";
 
@@ -65,6 +66,18 @@ export function Masthead({
   const { MUTED, TEXT } = theme;
   const renderer = useRenderer();
   const graphics = Boolean(renderer.capabilities?.kitty_graphics || renderer.capabilities?.sixel);
+  const [portrait, setPortrait] = React.useState<{ canvas: string; image: NativeImage }>();
+  const showImage = graphics && showTerminalMark && showMascot;
+  React.useEffect(() => {
+    if (!showImage) {
+      setPortrait(undefined);
+      return;
+    }
+    const image = createZeroImage(theme.CANVAS);
+    setPortrait({ canvas: theme.CANVAS, image });
+    return () => image.dispose();
+  }, [showImage, theme.CANVAS]);
+  const portraitImage = showImage && portrait?.canvas === theme.CANVAS ? portrait.image : undefined;
   const fullWord = contentWidth >= TERMINAL_BLOCK_LOGO_FULL_WIDTH;
   const blockFrame = fullWord ? logoFrameGrid : COMPACT_LOGO_FRAME;
   const blockWidth = fullWord ? TERMINAL_BLOCK_LOGO_FULL_WIDTH : TERMINAL_BLOCK_LOGO_WIDTH;
@@ -83,9 +96,9 @@ export function Masthead({
         <text fg={MUTED} marginBottom={1}>{fitTuiText("Swiss Applied AI Cybersecurity Research Lab", contentWidth, { mode: "middle" })}</text>
       ) : null}
       {showTerminalMark && showMascot ? (
-        <box flexDirection="column" width={ZERO_WIDTH} height={ZERO_HEIGHT} flexShrink={0} marginBottom={1}>
-          {graphics ? (
-            <image source={ZERO_IMAGE} fit="fit" width={ZERO_WIDTH} height={ZERO_HEIGHT} flexShrink={0} />
+        <box flexDirection="column" width={ZERO_WIDTH} height={ZERO_HEIGHT} flexShrink={0} marginBottom={1} backgroundColor={theme.CANVAS}>
+          {portraitImage ? (
+            <image source={portraitImage} fit="fit" width={ZERO_WIDTH} height={ZERO_HEIGHT} flexShrink={0} />
           ) : ZERO_ROWS.map((runs, rowIndex) => (
             <box key={`zero-${rowIndex}`} flexDirection="row" width={ZERO_WIDTH} height={1} flexShrink={0}>
               {runs.map((run, runIndex) => (

@@ -1,7 +1,36 @@
+import { NativeImage, parseColor } from "@opentui/core";
 import { ZERO_PALETTE, ZERO_PIXELS, ZERO_PNG_BASE64, ZERO_WIDTH } from "./zero-art.js";
 
-/** Real Zero portrait for Kitty/Sixel-capable terminals. Embedded for standalone builds. */
-export const ZERO_IMAGE = Buffer.from(ZERO_PNG_BASE64, "base64");
+const imageBytes = Buffer.from(ZERO_PNG_BASE64, "base64");
+
+/**
+ * Flatten transparency onto the active canvas before terminal image encoding.
+ * Sixel/terminal compositors may otherwise replace transparent pixels with
+ * their own background, producing a visible rectangle around the mascot.
+ * The caller owns the returned native image and must dispose it.
+ */
+export function createZeroImage(canvas: string): NativeImage {
+  const source = NativeImage.decode(imageBytes);
+  try {
+    const raw = source.raw();
+    const [red, green, blue] = parseColor(canvas).toInts();
+    const pixels = new Uint8Array(raw.width * raw.height * 4);
+    for (let y = 0; y < raw.height; y++) {
+      for (let x = 0; x < raw.width; x++) {
+        const offset = y * raw.stride + x * 4;
+        const target = (y * raw.width + x) * 4;
+        const alpha = raw.data[offset + 3]! / 255;
+        pixels[target] = Math.round(raw.data[offset]! * alpha + red * (1 - alpha));
+        pixels[target + 1] = Math.round(raw.data[offset + 1]! * alpha + green * (1 - alpha));
+        pixels[target + 2] = Math.round(raw.data[offset + 2]! * alpha + blue * (1 - alpha));
+        pixels[target + 3] = 255;
+      }
+    }
+    return NativeImage.fromRgba(pixels, raw.width, raw.height);
+  } finally {
+    source.dispose();
+  }
+}
 
 interface PortraitRun {
   top: string | null;
