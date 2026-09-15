@@ -121,7 +121,20 @@ const CREDENTIAL_KEY_PATTERN =
 
 const REDACTED = "[redacted]";
 
+/**
+ * Keys that are a bare conversation/session identifier — a non-secret id this
+ * (single-operator, hardened) box has explicitly waived from redaction, so its
+ * value renders in tool-call cards (e.g. `read_conversation · session_id=…`).
+ * Deliberately narrow: it exempts only a key that *ends* in `session id`
+ * (optionally prefixed, e.g. `session_id`, `sessionId`, `x-session-id`).
+ * `session_token`, `session_secret`, `session_key`, or a bare `session` (which
+ * may carry a session cookie) do NOT match here and still fall to
+ * CREDENTIAL_KEY_PATTERN below.
+ */
+const NON_SECRET_ID_PATTERN = /^(?:[a-z0-9]+[\W_]+)*session[\W_]*id$/i;
+
 function isCredentialKey(key: string): boolean {
+  if (NON_SECRET_ID_PATTERN.test(key)) return false;
   return CREDENTIAL_KEY_PATTERN.test(key);
 }
 
