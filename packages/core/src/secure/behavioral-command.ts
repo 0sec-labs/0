@@ -23,6 +23,10 @@ export async function runSecureCommand(
 ): Promise<SecureCommandResult> {
   signal.throwIfAborted();
   const { promise, resolve, reject } = deferredPromise.withResolvers<SecureCommandResult>();
+  // Callers pass fixed binaries (git/node/python3/bash) with argv arrays (no shell);
+  // the operator's own setup/test commands intentionally run via /bin/sh -c, matching
+  // source-fix's explicit regression-command contract. Env is allowlist-sanitized.
+  // foxguard: ignore[js/no-command-injection]
     const child = spawn(command, args, { cwd, env: sanitizedEnv(), stdio: ["ignore", "pipe", "pipe"], detached: process.platform !== "win32" });
     const stdout: Buffer[] = [];
     const stderr: Buffer[] = [];
