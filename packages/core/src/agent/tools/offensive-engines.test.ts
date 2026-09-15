@@ -82,16 +82,18 @@ describe("offensive-engine tools — registration (dev-live-engine-recovery)", (
 });
 
 describe("GROUP 1 — offline engines are in the DEFAULT read-only role", () => {
-  it("appear for audit/review WITH a scope (the scoped-source-audit default set)", () => {
+  it("are ABSENT from the scoped-source-audit set (attacker-controlled boundary)", () => {
+    // They stay OUT of the ATTACKER-CONTROLLED scoped source boundary — the
+    // trust surface must stay minimal inside a hostile scope.
     for (const role of ["audit", "review"]) {
       const scoped = getToolsForRole(role, { hasScope: true }).map((t) => t.name);
       for (const name of GROUP1_TOOLS) {
-        expect(scoped, `${name} offered to ${role} with scope`).toContain(name);
+        expect(scoped, `${name} must be absent from scoped ${role}`).not.toContain(name);
       }
     }
   });
 
-  it("also appear in the no-scope audit/review 'everything' set", () => {
+  it("appear in the no-scope audit/review 'everything' set (trusted role)", () => {
     for (const role of ["audit", "review"]) {
       const everything = getToolsForRole(role).map((t) => t.name);
       for (const name of GROUP1_TOOLS) {
@@ -100,10 +102,10 @@ describe("GROUP 1 — offline engines are in the DEFAULT read-only role", () => 
     }
   });
 
-  it("are NOT gated behind a feature flag or scope", () => {
+  it("are NOT gated behind a feature flag (present in the non-scoped role)", () => {
     withGroup3Flags({}, () => {
-      const scoped = getToolsForRole("audit", { hasScope: true }).map((t) => t.name);
-      for (const name of GROUP1_TOOLS) expect(scoped).toContain(name);
+      const everything = getToolsForRole("audit").map((t) => t.name);
+      for (const name of GROUP1_TOOLS) expect(everything).toContain(name);
     });
   });
 });
