@@ -2035,6 +2035,48 @@ describe("LlmApiRuntime stream idle watchdog", () => {
     expect(result.error).toContain("stalled");
   });
 
+  it("trips the EVENT watchdog when only keep-alive comments flow (Codex queue hold)", async () => {
+    // The 2026-09 headless-bench hang: the ChatGPT Codex backend (or its CDN)
+    // accepts the request and holds the SSE stream open with periodic comment
+    // keep-alives (`: keep-alive`) — bytes that reset the byte-level watchdog
+    // forever while no real `data:` event ever arrives. The byte watchdog
+    // (200ms) must stay quiet here; the EVENT watchdog (400ms) must fire.
+    vi.useFakeTimers();
+    const EVENT_IDLE_ENV = "0SEC_LLM_STREAM_EVENT_IDLE_TIMEOUT_MS";
+    process.env[IDLE_ENV] = "200";
+    process.env[EVENT_IDLE_ENV] = "400";
+    try {
+      const rt = mkStreamingRt(30000); // overall budget far away — not what fires
+      vi.stubGlobal("fetch", vi.fn(async () => {
+        let interval: ReturnType<typeof setInterval> | undefined;
+        const body = new ReadableStream<Uint8Array>({
+          start(controller) {
+            interval = setInterval(() => {
+              controller.enqueue(new TextEncoder().encode(": keep-alive\n\n"));
+            }, 50);
+            // never sends an event, never closes
+          },
+          cancel() {
+            clearInterval(interval);
+          },
+        });
+        return { ok: true, body };
+      }));
+
+      const pending = rt.executeNative("sys", userMsg, []);
+      // 3 attempts × 400ms event-watchdog + 500/1000ms backoffs ≈ 2.7s virtual;
+      // 10s of fake clock covers the whole retry chain with margin. Pre-fix
+      // this stream NEVER settled inside the 30s overall budget (the keep-
+      // alives reset the only watchdog that existed) — the run hung.
+      await vi.advanceTimersByTimeAsync(10_000);
+      const result = await pending;
+      expect(result.stopReason).toBe("error");
+      expect(result.error).toContain("stalled");
+    } finally {
+      delete process.env[EVENT_IDLE_ENV];
+    }
+  });
+
   it("applies the total request timeout even while an SSE stream keeps yielding", async () => {
     vi.useFakeTimers();
     process.env[IDLE_ENV] = "1000";

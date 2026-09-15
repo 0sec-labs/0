@@ -611,23 +611,53 @@ export function parseUsageLimitReached(
  * Idle watchdog for STREAMING (SSE) calls, in ms.
  * `0SEC_LLM_STREAM_IDLE_TIMEOUT_MS` (default 120s).
  *
- * The streaming (responses-wireApi) branch disarms the overall call timer once
- * response HEADERS arrive so a long generation isn't killed mid-stream — but
- * that left `reader.read()` completely unbounded: a server that accepts the
- * request and then holds the SSE stream open without emitting a single byte
- * (queue/hold) hung the whole scan silently until the outer sandbox timeout —
- * the "$0 cost, zero output, died at timeout" failure shape reproduced
- * 2026-07-17 against the ChatGPT Codex backend on both E2B and microsandbox.
- * An idle window with NO bytes at all is never legitimate progress (a healthy
- * stream emits reasoning/text deltas or keep-alives continuously), so we fail
- * the call as a transient-class stall: the agent loop's bounded backoff
- * applies, then the run exits loudly via errorExit instead of hanging.
+ * The streaming (responses-wireApi) branch keeps the overall call timer ARMED
+ * through the stream, but that bound is the whole-call budget — routinely
+ * raised far above this for long generations — so it is too coarse for a
+ * silent socket: a server that accepts the request and then holds the SSE
+ * stream open without emitting a single byte (queue/hold) hung the whole scan
+ * silently until the outer sandbox timeout — the "$0 cost, zero output, died
+ * at timeout" failure shape reproduced 2026-07-17 against the ChatGPT Codex
+ * backend on both E2B and microsandbox. An idle window with NO bytes at all
+ * is never legitimate progress (a healthy stream emits reasoning/text deltas
+ * or keep-alives continuously), so we fail the call as a transient-class
+ * stall: the agent loop's bounded backoff applies, then the run exits loudly
+ * via errorExit instead of hanging.
  */
 function llmStreamIdleTimeoutMs(): number {
   const raw = process.env["0SEC_LLM_STREAM_IDLE_TIMEOUT_MS"];
   if (raw == null || raw.trim() === "") return 120_000;
   const n = Number.parseInt(raw, 10);
   return Number.isFinite(n) && n > 0 ? n : 120_000;
+}
+
+/**
+ * EVENT-level idle watchdog for STREAMING (SSE) calls, in ms.
+ * `0SEC_LLM_STREAM_EVENT_IDLE_TIMEOUT_MS` (default 240s).
+ *
+ * The byte-level watchdog above is defeated by keep-alives: a server (or the
+ * CDN in front of it — the ChatGPT Codex backend hangs exactly this way on
+ * queued headless requests, observed 2026-09) can hold the stream open for
+ * hours while emitting periodic SSE comment lines (`: keep-alive`) that reset
+ * the byte clock without a single real `data:` event ever arriving. The call
+ * then survives until the outer sandbox timeout — "$0 cost, zero output,
+ * died at timeout" with the idle watchdog never firing.
+ *
+ * This second bound measures time since the last MEANINGFUL SSE event (a
+ * non-empty `data:` payload), not since the last byte. Keep-alive comments,
+ * `event:`-only frames and whitespace heartbeats do NOT reset it, so a
+ * keep-alive-only hold fails as the same transient-class stall. The default
+ * is deliberately looser than the byte watchdog (2×): a provider in a long
+ * silent-reasoning phase that emits only keep-alives (e.g. OpenRouter's
+ * `: OPENROUTER PROCESSING`) is still legitimate progress up to this window.
+ * Independent of the byte bound on purpose — whichever fires first wins; a
+ * totally silent stream still dies at the byte watchdog's tighter bound.
+ */
+function llmStreamEventIdleTimeoutMs(): number {
+  const raw = process.env["0SEC_LLM_STREAM_EVENT_IDLE_TIMEOUT_MS"];
+  if (raw == null || raw.trim() === "") return 240_000;
+  const n = Number.parseInt(raw, 10);
+  return Number.isFinite(n) && n > 0 ? n : 240_000;
 }
 
 /**
@@ -4177,6 +4207,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
 
           const streamed = await this.consumeResponsesStream(res, start, callbacks, {
             idleTimeoutMs: llmStreamIdleTimeoutMs(),
+            eventIdleTimeoutMs: llmStreamEventIdleTimeoutMs(),
             abort: call,
           });
           clearTimeout(timer);
@@ -4663,7 +4694,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
     res: Response,
     start: number,
     callbacks?: NativeStreamCallbacks,
-    opts?: { idleTimeoutMs?: number; abort?: CallAbort },
+    opts?: { idleTimeoutMs?: number; eventIdleTimeoutMs?: number; abort?: CallAbort },
   ): Promise<NativeRuntimeResult> {
     const reader = res.body?.getReader();
     if (!reader) {
@@ -4679,14 +4710,23 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
     // overall request timer stays armed through this stream; the watchdog adds
     // a tighter bound for a silent stream between otherwise-valid SSE events.
     const idleTimeoutMs = opts?.idleTimeoutMs ?? llmStreamIdleTimeoutMs();
+    // EVENT-level bound (keep-alive-proof) — see llmStreamEventIdleTimeoutMs.
+    // `lastEventAt` moves ONLY when a real `data:` payload arrives (the parse
+    // loop below); comment keep-alives / whitespace heartbeats never touch it,
+    // so a server hold disguised by CDN keep-alives still fails as a stall.
+    const eventIdleTimeoutMs = opts?.eventIdleTimeoutMs ?? llmStreamEventIdleTimeoutMs();
+    let lastEventAt = Date.now();
     // The OPERATOR signal only — never the composed one. Racing the composed
     // signal here would convert a timeout abort into a cancellation and break
     // the "total request timeout applies even while the stream keeps yielding"
     // contract the watchdog tests pin.
     const operatorSignal = opts?.abort?.operator;
     let stalled = false;
+    // Which bound fired — only for the diagnostic/error wording.
+    let stallIdleMs = idleTimeoutMs;
     const readBounded = async (): Promise<ReadableStreamReadResult<Uint8Array>> => {
-      let timer: ReturnType<typeof setTimeout> | undefined;
+      let timer: NodeJS.Timeout | undefined;
+      let eventTimer: NodeJS.Timeout | undefined;
       // Undefined unless an operator signal exists, so the racer array below
       // stays exactly the two entries it has always had for every other call.
       const detach = operatorSignal ? new AbortController() : undefined;
@@ -4696,8 +4736,21 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
           new Promise<never>((_resolve, reject) => {
             timer = setTimeout(() => {
               stalled = true;
+              stallIdleMs = idleTimeoutMs;
               reject(new Error("stream stalled"));
             }, idleTimeoutMs);
+          }),
+          // Event-level racer: fires when no MEANINGFUL SSE event has arrived
+          // for `eventIdleTimeoutMs`, even if keep-alive bytes keep resetting
+          // the byte-level timer above. Recomputed per read, so an event that
+          // landed while the previous chunk was being parsed re-arms it.
+          new Promise<never>((_resolve, reject) => {
+            const remainingMs = eventIdleTimeoutMs - (Date.now() - lastEventAt);
+            eventTimer = setTimeout(() => {
+              stalled = true;
+              stallIdleMs = eventIdleTimeoutMs;
+              reject(new Error("stream stalled"));
+            }, Math.max(remainingMs, 0));
           }),
           // A real aborted `fetch` also errors the body stream, so `read()`
           // would reject on its own — but only for a live socket. This racer
@@ -4720,7 +4773,8 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
             : []),
         ]);
       } finally {
-        if (timer) clearTimeout(timer);
+        clearTimeout(timer);
+        clearTimeout(eventTimer);
         detach?.abort();
       }
     };
@@ -4782,13 +4836,13 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
           } catch {
             /* best-effort — the stream is already broken */
           }
-          const secs = Math.round(idleTimeoutMs / 1000);
+          const secs = Math.round(stallIdleMs / 1000);
           diag.warn(
             "stream_stalled",
             `${this.providerLabel} stream stalled — no SSE events for ${secs}s (server hold; aborting call)`,
             {
               provider: this.providerLabel,
-              idle_timeout_ms: idleTimeoutMs,
+              idle_timeout_ms: stallIdleMs,
               idle_timeout_s: secs,
             },
           );
@@ -4817,6 +4871,10 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
           .map((line) => line.slice(5).trim())
           .join("\n");
         if (!payload || payload === "[DONE]") continue;
+        // A real `data:` payload (keep-alive comments / whitespace heartbeats
+        // never reach here — they filter out above) re-arms the EVENT-level
+        // watchdog; the byte-level one re-arms on any read.
+        lastEventAt = Date.now();
 
         let event: Record<string, unknown>;
         try {
