@@ -1,0 +1,49 @@
+id: scoped-fix
+name: "Scoped Fix Generation"
+description: "When to reach for the offline `generate_fix` engine: for a REPRODUCED finding, generate a minimal, scoped patch that closes the vulnerability without changing unrelated behaviour. Offline — it reads the finding focus + the affected source and produces a candidate diff; it never touches the target network and never applies the patch itself. The remediation half of the loop."
+version: 1
+applicable_roles:
+  - attack
+  - audit
+  - review
+tags:
+  - remediation
+  - fix
+  - patch
+  - scoped-fix
+  - source-review
+triggers:
+  - "generate (a )?fix"
+  - "remediat"
+  - "patch (the|this) (finding|vuln|bug)"
+  - "how (do i|to) fix"
+  - "scoped fix"
+estimated_tokens: 600
+content: |
+  ## Scoped fix generation (offline)
+
+  Finding a bug is half the job; a credible, MINIMAL fix is what makes it
+  actionable. `generate_fix` produces a candidate patch for a finding that has
+  already been reproduced.
+
+  ### How to drive it
+  - Pass the `finding_id` (the reproduced finding to remediate) and, when the
+    source is not already the scoped path, the `repo` / source path. The engine
+    loads the finding's focus (the vulnerable file/lines + evidence) and the
+    surrounding source, then produces a scoped diff.
+
+  ### What "scoped" means here
+  - The patch should close the vulnerability and NOTHING else: no refactors, no
+    behaviour changes on the valid path, the smallest change that adds the
+    missing guard / fixes the boundary / corrects the check.
+  - It is generated OFFLINE and is NOT applied automatically. Treat the diff as
+    a proposal: read it, confirm it actually blocks the reproduced PoC and does
+    not break the legitimate path, then apply it through your normal edit/patch
+    flow.
+
+  ### Where it sits in the loop
+  - Reproduce first (`verify_finding`), then `generate_fix`. A fix for an
+    UNREPRODUCED finding is speculation — prefer to confirm the bug is real and
+    reachable before proposing a patch.
+  - After patching, a variant hunt (`variant_hunt`) off the same fix diff finds
+    sibling sites the single patch missed.

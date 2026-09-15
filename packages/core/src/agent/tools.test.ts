@@ -185,6 +185,12 @@ describe("getToolsForRole", () => {
         "file_security_review",
         "assemble_advisory",
         "cve_lookup",
+        // Phase-2 GROUP 1 offline source engines (dev-live-engine-recovery):
+        // variant hunt, assumption-mining, scoped fix generation — source/DB
+        // read only, no target traffic, so they join the default read-only set.
+        "variant_hunt",
+        "assumption_hunt",
+        "generate_fix",
       ]);
     }
   });

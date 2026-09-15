@@ -1,0 +1,55 @@
+id: poc-verification
+name: "PoC Verification (Loop-Closer)"
+description: "When to reach for the `verify_finding` engine: replay a persisted finding's proof-of-concept against the real target and get a deterministic pass/fail verdict from the category oracle. This is the LOOP-CLOSER — it turns a LEAD into a CONFIRMED, reproduced finding. Touches the target network, so it is offered only for an active in-scope engagement."
+version: 1
+applicable_roles:
+  - attack
+tags:
+  - verification
+  - reproduction
+  - proof-of-concept
+  - deterministic-oracle
+  - loop-closer
+triggers:
+  - "verify (the|this) (finding|vuln|poc|bug)"
+  - "reproduce"
+  - "confirm (the|this|it'?s) (finding|exploit|vuln)"
+  - "does (it|this) actually (work|reproduce)"
+  - "replay (the )?poc"
+estimated_tokens: 700
+content: |
+  ## PoC verification — closing the loop
+
+  A finding is a hypothesis until it is REPRODUCED. `verify_finding` replays a
+  persisted finding's PoC against the real target and returns a deterministic
+  pass/fail verdict from the category oracle — the single most important step
+  between "a lead" and "a confirmed, reportable finding".
+
+  ### Scope gate (read this first)
+  This tool sends traffic to the TARGET. It is offered ONLY when an engagement
+  scope is active — the target (or the explicit in-scope override) must be
+  authorized by the scope. Without a scope it is not available; do not attempt
+  to verify against a host the engagement does not cover.
+
+  ### How to drive it
+  - Pass the `finding_id` of the persisted finding to replay. Optionally pass a
+    `target` override — but it must be IN SCOPE; an out-of-scope override is
+    refused.
+  - The engine loads the finding, rebuilds its reproduction bundle, replays the
+    deterministic PoC, and runs the category-specific oracle to decide the
+    verdict.
+
+  ### Reading the verdict
+  - A PASS means the oracle observed the exact expected effect (the reflected
+    marker, the state change, the leaked value, the timing signal) — this is a
+    reproduced finding, safe to escalate toward disclosure.
+  - A FAIL means the PoC did not reproduce as recorded. That is NOT proof the
+    bug is absent — the target may have changed, the payload may need
+    adaptation, or the PoC was flaky. Re-examine the evidence and the oracle
+    category before discarding.
+
+  ### Where it sits
+  - Every lead from `deep_source_review`, `variant_hunt`, `assumption_hunt`, or
+    a scanner should pass through here before it is treated as real.
+  - A verified finding is the right input to `generate_fix` (remediation) and
+    `assemble_advisory` (disclosure draft).

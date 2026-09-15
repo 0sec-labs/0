@@ -1,0 +1,53 @@
+id: assumption-mining
+name: "Assumption Mining"
+description: "When to reach for the offline `assumption_hunt` engine: mine a source tree for the IMPLICIT assumptions the code depends on (a field is never null, an input is already validated upstream, a caller holds a lock, a size fits) and surface the sites where a violated assumption becomes a bug. Offline source read; never touches the target network. Emits LEADS to verify."
+version: 1
+applicable_roles:
+  - attack
+  - audit
+  - review
+tags:
+  - assumption-mining
+  - invariants
+  - preconditions
+  - source-review
+  - static-analysis
+  - trust-boundary
+triggers:
+  - "assumption"
+  - "invariant"
+  - "precondition"
+  - "trusts? (that|the) (input|caller|upstream)"
+  - "(implicit|unstated) (contract|guarantee)"
+estimated_tokens: 600
+content: |
+  ## Assumption mining (offline)
+
+  Many real bugs are not a missing check in isolation — they are an IMPLICIT
+  assumption that holds everywhere except one path. `assumption_hunt` mines a
+  source tree for those unstated contracts and flags where a violated one turns
+  into a vulnerability.
+
+  ### What it hunts
+  - "This value is never null / never empty here."
+  - "This input was already validated / sanitized upstream."
+  - "The caller already holds this lock / already checked permission."
+  - "This length/size always fits; this index is always in range."
+  - "These two representations can never disagree."
+
+  For each mined assumption it looks for a reachable path where the assumption
+  is NOT guaranteed — an entry point that skips the upstream validation, a
+  second caller that does not hold the lock, an attacker-controlled size.
+
+  ### How to drive it
+  - Point it at the `source` root (a local path; resolved within the scoped
+    source path when one is set). It is offline and reads files only.
+
+  ### Reading the result
+  - Output is **LEADS, not confirmed bugs.** A mined assumption + a candidate
+    violating path is a hypothesis. Verify it: trace the concrete path from a
+    real entry point to the site and confirm the assumption is genuinely
+    unenforced there (not enforced by a wrapper or an earlier guard).
+  - Complements `variant_hunt` (same bug elsewhere) and `deep_source_review`
+    (lens-driven depth): use `assumption_hunt` when the risk is a subtle broken
+    contract rather than a keyword-visible dangerous sink.

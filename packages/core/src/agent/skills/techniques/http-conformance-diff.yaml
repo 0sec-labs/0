@@ -1,0 +1,48 @@
+id: http-conformance-diff
+name: "HTTP Conformance Differential"
+description: "When to reach for the `protocol_conformance` engine: send crafted HTTP requests to a real target and diff its behaviour against the HTTP spec's stated invariants — surfacing parser quirks and conformance violations that lead to request smuggling, cache poisoning, and desync. Sends live traffic to the target, so it is offered only for an active in-scope engagement."
+version: 1
+applicable_roles:
+  - attack
+tags:
+  - http
+  - protocol
+  - conformance
+  - request-smuggling
+  - desync
+  - parser-differential
+triggers:
+  - "conformance"
+  - "protocol (check|test|violation)"
+  - "http (spec|invariant|parser)"
+  - "(request )?smuggl"
+  - "desync"
+estimated_tokens: 650
+content: |
+  ## HTTP conformance differential (live)
+
+  Many high-impact HTTP bugs are conformance violations: the server parses a
+  request in a way the spec forbids, and that gap becomes request smuggling,
+  cache poisoning, or a desync. `protocol_conformance` crafts requests that
+  probe specific HTTP invariants and diffs the real target's behaviour against
+  what the spec requires.
+
+  ### Scope gate (read this first)
+  This tool sends crafted requests to the TARGET. It is offered ONLY when an
+  engagement scope is active and the target is in scope. Without a scope it is
+  not available.
+
+  ### How to drive it
+  - Pass the `target` (an in-scope base URL / endpoint) and a `spec` excerpt —
+    the invariant(s) to check (e.g. how Content-Length vs Transfer-Encoding
+    must be handled, header folding rules, ambiguous request-line handling).
+  - The engine builds the crafted requests, sends them through the live HTTP
+    sender, and reports each invariant as conformant or VIOLATED with the
+    observed evidence.
+
+  ### Reading the result
+  - A violation is a LEAD toward a concrete attack (smuggling/desync/cache
+    poisoning), not yet the attack itself. Confirm the downstream impact — e.g.
+    that a front-end/back-end pair actually disagree — before reporting.
+  - Conformant behaviour on the probed invariants is not proof the whole stack
+    is safe; it only clears the invariants you tested.

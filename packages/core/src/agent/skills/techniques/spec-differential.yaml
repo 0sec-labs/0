@@ -1,0 +1,48 @@
+id: spec-differential
+name: "Specification Differential"
+description: "When to reach for the `spec_drift` engine: extract the invariants a target is SUPPOSED to enforce (from an OpenAPI/spec) and probe the live target for DRIFT — endpoints, params, auth requirements, and status/shape contracts the implementation violates. A network differential between the documented contract and the real behaviour. Sends live traffic, so it is offered only for an active in-scope engagement."
+version: 1
+applicable_roles:
+  - attack
+tags:
+  - spec-drift
+  - openapi
+  - differential
+  - contract
+  - shadow-api
+  - broken-object-level-authz
+triggers:
+  - "spec.?drift"
+  - "openapi|swagger"
+  - "(api )?spec (differential|drift|mismatch)"
+  - "shadow (api|endpoint)"
+  - "undocumented (endpoint|param)"
+estimated_tokens: 650
+content: |
+  ## Specification differential (live)
+
+  An API's spec is a statement of intent; the implementation is the reality.
+  Where they DRIFT is where bugs live — an endpoint that ignores a documented
+  auth requirement, an undocumented "shadow" parameter, a response that leaks a
+  field the schema hides, a status contract the server breaks. `spec_drift`
+  extracts the spec's invariants and probes the live target for those gaps.
+
+  ### Scope gate (read this first)
+  This tool sends requests to the TARGET. It is offered ONLY when an engagement
+  scope is active and the target is in scope. Without a scope it is not
+  available.
+
+  ### How to drive it
+  - Pass the `target` (an in-scope base URL) and the `spec` (an OpenAPI/schema
+    document or excerpt). The engine runs `extractSpecInvariants` to derive the
+    contract, then plans and executes probes that test each invariant against
+    the live server.
+
+  ### Reading the result
+  - Each drift is a LEAD: a documented-vs-actual mismatch. The high-value
+    classes are auth/authorization drift (an endpoint reachable without the
+    required credential — BOLA/BFLA), shadow endpoints/params, and
+    over-disclosure in responses.
+  - Confirm the security impact of a drift (who can reach it, what it exposes)
+    before treating it as a finding. Not every documentation mismatch is a
+    vulnerability.

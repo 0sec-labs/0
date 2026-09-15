@@ -1,0 +1,51 @@
+id: llm-safety-eval
+name: "LLM/Agent Safety Evaluation"
+description: "When to reach for the `safety_eval` engine: send adversarial prompts to a real LLM/agent endpoint and score its responses for safety failures — jailbreaks, harmful-content compliance, prompt-injection susceptibility, and unsafe tool/agency use. Sends live traffic to the endpoint, so it is offered only for an active in-scope engagement (the target endpoint must be in scope)."
+version: 1
+applicable_roles:
+  - attack
+tags:
+  - llm
+  - safety
+  - adversarial
+  - jailbreak
+  - agent-assurance
+  - red-team
+triggers:
+  - "safety eval"
+  - "adversarial (prompt|eval|test)"
+  - "jailbreak"
+  - "red.?team (the )?(llm|model|agent|chatbot)"
+  - "(harmful|unsafe) (content|output|response)"
+estimated_tokens: 650
+content: |
+  ## LLM / agent safety evaluation (live endpoint)
+
+  `safety_eval` red-teams a real LLM or agent endpoint: it sends a battery of
+  adversarial prompts and scores the responses for safety failures — direct
+  jailbreaks, compliance with harmful requests, susceptibility to prompt
+  injection, and unsafe tool/agency use.
+
+  ### Scope gate (read this first)
+  This tool sends prompts to a live model/agent ENDPOINT. It is offered ONLY
+  when an engagement scope is active and the target endpoint is in scope.
+  Without a scope it is not available; do not point it at a third-party model
+  the engagement does not authorize.
+
+  ### How to drive it
+  - Point it at the in-scope target endpoint and run the adversarial suite. The
+    engine sends the prompts, collects responses, and scores each against the
+    safety criteria.
+
+  ### Reading the result
+  - A failure is a case where the endpoint produced unsafe output or was
+    steered off its guardrails. Capture the exact prompt + response as evidence
+    — reproducibility is what makes a safety finding actionable.
+  - Passing the suite means the endpoint resisted THESE prompts, not that it is
+    unjailbreakable. Treat the score as coverage of the tested vectors, not a
+    safety certificate.
+
+  ### Related
+  - For injection specifically against an application's LLM feature, pair with
+    the `llm-prompt-injection` skill; `safety_eval` is the broad adversarial
+    battery against the endpoint itself.

@@ -284,6 +284,57 @@ export const features = {
     return env("0SEC_FEATURE_AGENT_FANOUT", false);
   },
 
+  // ── Phase-2 offensive-engine feature flags (dev-live-engine-recovery) ──
+  // Each gates a tool that RUNS/BUILDS untrusted code or WEAPONIZES. They are
+  // deny-by-default and mirror `cloudSurface` exactly: the env flag is only one
+  // of two layers — the tool is ALSO engagement-scope gated in getToolsForRole,
+  // and the highest-risk ones add their own runtime precondition (kernel-VM
+  // artifacts present). Getters so the CLI `--features` flag (set AFTER this
+  // module loads) is honored at dispatch time.
+
+  /**
+   * `memsafety_fuzz` — clones/builds/fuzzes a source tree (sanitizer builds +
+   * a fuzz harness), executing attacker-adjacent build scripts and native
+   * fuzz targets. Default OFF; opt in via 0SEC_FEATURE_MEMSAFETY=1. Building
+   * and running an untrusted tree is code execution, so it is deny-by-default
+   * behind this flag AND an engagement scope.
+   */
+  get memsafetyFuzz(): boolean {
+    return env("0SEC_FEATURE_MEMSAFETY", false);
+  },
+
+  /**
+   * `npm_dynamic_discovery` — installs and RUNS untrusted npm packages under
+   * instrumentation to observe malicious install/runtime behaviour. Executing
+   * arbitrary package code is the whole point, so it is deny-by-default behind
+   * this flag AND an engagement scope. Opt in via 0SEC_FEATURE_NPM_DISCOVERY=1.
+   */
+  get npmDynamicDiscovery(): boolean {
+    return env("0SEC_FEATURE_NPM_DISCOVERY", false);
+  },
+
+  /**
+   * `weaponize_kernel` — the kernel-exploit weaponization ladder. It only ever
+   * runs inside a DISPOSABLE kernel VM and requires kernel-VM artifacts to be
+   * present. Highest-caution capability: deny-by-default behind this flag AND
+   * an engagement scope AND a runtime artifact-presence check (the handler
+   * refuses when the kernel-VM assets are absent). Opt in via
+   * 0SEC_FEATURE_KERNEL_WEAPONIZE=1.
+   */
+  get kernelWeaponize(): boolean {
+    return env("0SEC_FEATURE_KERNEL_WEAPONIZE", false);
+  },
+
+  /**
+   * `cve_adapt` — adapts a public CVE PoC to the target and RUNS it to confirm
+   * exploitability. Running an adapted exploit is code execution against the
+   * target, so it is deny-by-default behind this flag AND an engagement scope.
+   * Opt in via 0SEC_FEATURE_CVE_ADAPT=1.
+   */
+  get cveAdapt(): boolean {
+    return env("0SEC_FEATURE_CVE_ADAPT", false);
+  },
+
   /**
    * Anti-honeypot flag-shape validator. When the agent calls the `done`
    * tool with a proposed `FLAG{...}`, the tool runs `validateFlagShape`

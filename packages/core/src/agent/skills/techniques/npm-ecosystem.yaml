@@ -1,0 +1,51 @@
+id: npm-ecosystem
+name: "npm Ecosystem Dynamic Discovery"
+description: "When to reach for the `npm_dynamic_discovery` engine: install and RUN untrusted npm packages under instrumentation to observe malicious install/runtime behaviour — install-script abuse, network beacons, filesystem/credential access, and known-vulnerable dependencies (via an OSV advisory lookup). Executes arbitrary package code, so it is deny-by-default behind an explicit feature flag AND an engagement scope."
+version: 1
+applicable_roles:
+  - attack
+tags:
+  - npm
+  - supply-chain
+  - dynamic-analysis
+  - malicious-package
+  - install-script
+  - osv
+triggers:
+  - "npm (package|module|dependency|install)"
+  - "supply.?chain"
+  - "malicious (package|dependency|module)"
+  - "install script"
+  - "postinstall"
+estimated_tokens: 700
+content: |
+  ## npm ecosystem dynamic discovery (executes untrusted code)
+
+  Static review misses supply-chain attacks that only reveal themselves at
+  install or runtime — an obfuscated `postinstall` that beacons out, a package
+  that reads `~/.npmrc` or env credentials, a dependency with a known CVE.
+  `npm_dynamic_discovery` installs and RUNS the package(s) under
+  instrumentation and reports the observed behaviour, layering an OSV advisory
+  lookup on top.
+
+  ### This runs untrusted code — deny-by-default gating
+  Executing arbitrary package code is the entire point of the engine, and it is
+  dangerous. It is offered ONLY when BOTH:
+  1. the feature flag `0SEC_FEATURE_NPM_DISCOVERY=1` is set, AND
+  2. an engagement scope is active.
+  Absent either, the tool is not available. Run it only in a sandbox/VM you are
+  willing to discard.
+
+  ### How to drive it
+  - Provide the package target (name/version or path) to analyze. The engine
+    resolves its behaviour detectors, installs + runs the package under
+    instrumentation, and consults the OSV advisory lookup for known
+    vulnerabilities in the resolved dependency set.
+
+  ### Reading the result
+  - Behavioural detections (network egress, suspicious filesystem/credential
+    access, install-script execution) are the high-signal output — a package
+    that phones home during install is a finding.
+  - OSV advisory hits ground the dependency-level risk. A clean dynamic run is
+    not proof of safety: the malicious path may be gated on an environment the
+    sandbox did not present.
