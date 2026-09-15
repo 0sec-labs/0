@@ -1,6 +1,6 @@
 /** @jsxImportSource @opentui/react */
 import React from "react";
-import type { NativeImage } from "@opentui/core";
+import { CliRenderEvents, resolveImageRenderProtocol, type NativeImage } from "@opentui/core";
 import { useRenderer } from "@opentui/react";
 import { fitTuiText } from "../text.js";
 import { finalLogoFrame, logoRowRuns, type LogoFrame } from "../logo-animation.js";
@@ -10,7 +10,7 @@ import {
   TERMINAL_BLOCK_LOGO_WIDTH,
   logoRunStyle,
 } from "./logo.js";
-import { createZeroImage, ZERO_ROWS } from "./mascot.js";
+import { createZeroImage } from "./mascot.js";
 import { ZERO_WIDTH, ZERO_HEIGHT } from "./zero-art.js";
 import type { Theme } from "../theme-context.js";
 
@@ -65,9 +65,26 @@ export function Masthead({
 }) {
   const { MUTED, TEXT } = theme;
   const renderer = useRenderer();
-  const graphics = Boolean(renderer.capabilities?.kitty_graphics || renderer.capabilities?.sixel);
+  const subscribe = React.useCallback((changed: () => void) => {
+    renderer.on(CliRenderEvents.CAPABILITIES, changed);
+    renderer.on(CliRenderEvents.RESIZE, changed);
+    // Pixel resolution arrives asynchronously without its own event.
+    renderer.on(CliRenderEvents.FRAME, changed);
+    return () => {
+      renderer.off(CliRenderEvents.CAPABILITIES, changed);
+      renderer.off(CliRenderEvents.FRAME, changed);
+      renderer.off(CliRenderEvents.RESIZE, changed);
+    };
+  }, [renderer]);
+  const getProtocol = React.useCallback(() => {
+    const resolution = renderer.resolution;
+    const hasResolution = renderer.terminalWidth > 0 && renderer.terminalHeight > 0
+      && Boolean(resolution && resolution.width > 0 && resolution.height > 0);
+    return resolveImageRenderProtocol("auto", renderer.capabilities, hasResolution);
+  }, [renderer]);
+  const protocol = React.useSyncExternalStore(subscribe, getProtocol);
   const [portrait, setPortrait] = React.useState<{ canvas: string; image: NativeImage }>();
-  const showImage = graphics && showTerminalMark && showMascot;
+  const showImage = protocol !== "blocks" && showTerminalMark && showMascot;
   React.useEffect(() => {
     if (!showImage) {
       setPortrait(undefined);
@@ -88,31 +105,16 @@ export function Masthead({
     { label: "Scope", value: String(engagement?.scope ?? "").trim() },
     { label: "Session", value: String(engagement?.sessionState ?? "").trim() },
   ].filter((fact) => fact.value.length > 0);
-  // Native image when supported; otherwise render the same portrait as coloured
-  // half blocks. Both paths are static and occupy exactly the same cell budget.
+  // Only native graphics: never substitute a block-art mascot, including the
+  // renderer's automatic fallback for tmux or Sixel without pixel dimensions.
   return (
     <>
       {showTerminalMark ? (
         <text fg={MUTED} marginBottom={1}>{fitTuiText("Swiss Applied AI Cybersecurity Research Lab", contentWidth, { mode: "middle" })}</text>
       ) : null}
-      {showTerminalMark && showMascot ? (
+      {portraitImage ? (
         <box flexDirection="column" width={ZERO_WIDTH} height={ZERO_HEIGHT} flexShrink={0} marginBottom={1} backgroundColor={theme.CANVAS}>
-          {portraitImage ? (
-            <image source={portraitImage} fit="fit" width={ZERO_WIDTH} height={ZERO_HEIGHT} flexShrink={0} />
-          ) : ZERO_ROWS.map((runs, rowIndex) => (
-            <box key={`zero-${rowIndex}`} flexDirection="row" width={ZERO_WIDTH} height={1} flexShrink={0}>
-              {runs.map((run, runIndex) => (
-                <text
-                  key={`zero-${rowIndex}-${runIndex}`}
-                  width={run.length}
-                  height={1}
-                  flexShrink={0}
-                  fg={run.top ?? theme.CANVAS}
-                  bg={run.bottom ?? theme.CANVAS}
-                >{"▀".repeat(run.length)}</text>
-              ))}
-            </box>
-          ))}
+          <image source={portraitImage} protocol={protocol} fit="fit" width={ZERO_WIDTH} height={ZERO_HEIGHT} flexShrink={0} />
         </box>
       ) : null}
       {showTerminalMark ? (

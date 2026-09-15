@@ -5350,21 +5350,18 @@ export function ChatScreen({
     outerWidth: heroComposerWidth,
     padY: 1,
   });
-  // A FIXED bottom spacer (not a flexGrow) is what actually anchors the hero
-  // composer: with it fixed and the region above it flexGrow, the composer's
-  // distance from the bottom never changes, so opening the slash menu (which
-  // grows upward in the region above) cannot move the composer. Sized to put the
-  // composer near the vertical centre when the menu is closed — roughly the same
-  // number of rows sit below it as the composer/hint block spends.
-  // The space ABOVE the composer must hold the tallest the command menu can get
-  // (not the current filtered count — that changes as the query narrows, and the
-  // composer must not move), so an open overlay grows into that space instead of
-  // overflowing upward into the header. Reserve for the stable max menu height
-  // plus the composer card, hint and header chrome, then centre what is left.
+  // Centre the whole welcome group, not just the composer. Measure the actual
+  // masthead (which may omit the native image) and composer rather than assuming
+  // a fixed hero height. Retain the masthead measurement while an overlay replaces
+  // it, so filtering the slash menu cannot move the input.
+  const [heroMastheadRows, setHeroMastheadRows] = useState(0);
+  const [heroComposerRows, setHeroComposerRows] = useState(0);
+  // Four rows belong to the outer header/footer; two to the shortcut line and
+  // its margin. Keep enough room above the input for the tallest command menu.
   const heroMenuMaxRows = commandMenuBoxHeight(commandMenuLimit, commandRowsPerCommand);
   const heroBottomSpacer = Math.max(
     1,
-    Math.min(Math.floor((height - 6) / 2), height - 12 - heroMenuMaxRows),
+    Math.min(Math.floor((height - 4 - heroMastheadRows - heroComposerRows - 2) / 2), height - 12 - heroMenuMaxRows),
   );
 
   // ── Overlays that share the slot directly above the composer ───────────────
@@ -6142,6 +6139,8 @@ export function ChatScreen({
           <box flexDirection="column" flexGrow={1} minHeight={0} width={heroContentWidth} minWidth={0} alignItems="center">
             <box flexDirection="column" flexGrow={1} minHeight={0} width="100%" minWidth={0} justifyContent="flex-end" alignItems="center">
               {showMasthead ? (
+                <box flexDirection="column" width="100%" minWidth={0} flexShrink={0} alignItems="center"
+                  onSizeChange={function () { setHeroMastheadRows(this.height); }}>
                 <Masthead
                   showTerminalMark={showTerminalMark && heroContentWidth >= TERMINAL_BLOCK_LOGO_WIDTH}
                   showMascot={height >= 38}
@@ -6150,6 +6149,7 @@ export function ChatScreen({
                   logoFrameGrid={logoFrameGrid}
                   theme={theme}
                 />
+                </box>
               ) : null}
               {workingIndicator}
               {startupError && !heroOverlayOpen ? (
@@ -6160,7 +6160,8 @@ export function ChatScreen({
               ) : null}
               {heroOverlaysNode}
             </box>
-            <box flexDirection="column" width={heroComposerWidth} minWidth={0} flexShrink={0}>
+            <box flexDirection="column" width={heroComposerWidth} minWidth={0} flexShrink={0}
+              onSizeChange={function () { setHeroComposerRows(this.height); }}>
               {heroComposerNode}
             </box>
             <box flexShrink={0} minWidth={0} marginTop={1}>

@@ -17,10 +17,13 @@ on the published npm package and the GitHub Release tag.
 - Show a consistently spaced `0SECURITY` hero wordmark on wide terminals, with
   the original `0SEC` mark retained for narrow columns.
 - Replace the duplicate aperture above the wordmark with Zero peeking over an
-  edge, facing forward with both gloves visible. Image-capable terminals use
-  the embedded artwork composited onto the active theme canvas; other terminals
-  display a coloured half-block version. Keep the orange band and hide the
-  portrait on short screens to preserve composer space.
+  edge, facing forward with both gloves visible. Preserve the original image
+  resolution and antialias the silhouette without its white fringe. Native
+  images are composited onto the active theme canvas; when native graphics
+  cannot be used, omit the mascot entirely instead of displaying pixel art.
+  Keep the orange band and hide the portrait on short screens.
+- Vertically centre the entire welcome group, including the mascot, wordmark,
+  input and shortcuts, while keeping the input stationary when filtering commands.
 
 ## [0.17.0] - 2026-09-15
 
