@@ -2,9 +2,15 @@
 import React from "react";
 import { TextAttributes } from "@opentui/core";
 
-import { fitTuiText, sanitizeTuiText } from "../text.js";
+import { fitTuiText, keyGlyph, sanitizeTuiText } from "../text.js";
 import { commandCardFrame, toolCompactLine } from "../transcript-style.js";
-import { projectToolPreview, type ToolPreview } from "../tool-format.js";
+import {
+  COLLAPSED_OUTPUT_LINES,
+  capOutputLines,
+  moreLinesAffordance,
+  projectToolPreview,
+  type ToolPreview,
+} from "../tool-format.js";
 import { codeTokenStyle, highlightCode, parseDiffLine } from "../syntax-style.js";
 import { resolveSyntaxColors } from "../themes.js";
 import { agentAccentFor } from "../agent-color.js";
@@ -84,9 +90,24 @@ import {
  * (`useSelectionCopy` in chat-screen) keeps working over the card.
  */
 
-/** Retained-line budget: collapsed shows a taste, expanded shows the lot. */
-const COLLAPSED_OUTPUT_LINES = 10;
+/**
+ * Retained-line budget: collapsed shows a taste, expanded shows the lot.
+ * `COLLAPSED_OUTPUT_LINES` is the OMP-style head-window cap and is imported from
+ * `tool-format` so the cap and its `capOutputLines`/`moreLinesAffordance`
+ * helpers stay a single source of truth (and are unit-tested there).
+ */
 const EXPANDED_OUTPUT_LINES = 128;
+
+/**
+ * The bracketed expand legend appended to a `… N more lines` affordance,
+ * matching the `[⌃R] to expand` idiom already used for the whole-entry collapse
+ * (see `TranscriptEntry`). `toggleable` means a mouse click on the row also
+ * expands it, so we say so first. Built from the live keybinding registry.
+ */
+function expandLegend(toggleable: boolean): string {
+  const key = TOOL_EXPAND_KEY ? `[${keyGlyph(TOOL_EXPAND_KEY)}] to expand` : "expand";
+  return `${toggleable ? "click or " : ""}${key}`;
+}
 
 /** Lines of input we will print. An input longer than this is elided. */
 const MAX_INPUT_ROWS = 8;
@@ -344,9 +365,7 @@ function TaskCard({
     EXPANDED_SUBREPORT_LIMIT,
   );
   const todos = entry.taskTodos ?? [];
-  const expandHint = toggleable
-    ? ` · click${TOOL_EXPAND_KEY ? ` or ${TOOL_EXPAND_KEY}` : ""} to expand`
-    : "";
+  const expandHint = toggleable ? ` · ${expandLegend(true)}` : "";
   const scrollbarOptions = {
     trackOptions: { backgroundColor: PANEL, foregroundColor: MUTED },
     arrowOptions: { foregroundColor: MUTED, backgroundColor: PANEL },
@@ -576,7 +595,7 @@ function TaskCard({
         )}
         {outHidden > 0 ? (
           <text width={inner} height={1} wrapMode="none" truncate fg={MUTED}>
-            {fitTuiText(`${outHidden} more preview line${outHidden === 1 ? "" : "s"}${expandHint}`, inner)}
+            {fitTuiText(`… ${outHidden} more line${outHidden === 1 ? "" : "s"}${expandHint}`, inner)}
           </text>
         ) : null}
         {outCapped ? (
@@ -634,9 +653,7 @@ function CodeCard({
 
   const inner = frame.innerWidth;
   const bodyWidth = Math.max(1, inner - (expanded ? 1 : 0));
-  const expandHint = toggleable
-    ? ` · click${TOOL_EXPAND_KEY ? ` or ${TOOL_EXPAND_KEY}` : ""} to expand`
-    : "";
+  const expandHint = toggleable ? ` · ${expandLegend(true)}` : "";
   const scrollbarOptions = {
     trackOptions: { backgroundColor: PANEL, foregroundColor: MUTED },
     arrowOptions: { foregroundColor: MUTED, backgroundColor: PANEL },
@@ -734,7 +751,7 @@ function CodeCard({
         )}
         {outHidden > 0 ? (
           <text width={inner} height={1} wrapMode="none" truncate fg={MUTED}>
-            {fitTuiText(`${outHidden} more preview line${outHidden === 1 ? "" : "s"}${expandHint}`, inner)}
+            {fitTuiText(`… ${outHidden} more line${outHidden === 1 ? "" : "s"}${expandHint}`, inner)}
           </text>
         ) : null}
         {outCapped ? (
@@ -826,8 +843,11 @@ export function ToolCard({
   const retained = preview.lines
     .slice(0, EXPANDED_OUTPUT_LINES)
     .map((line) => sanitizeTuiText(line.slice(0, 512)));
-  const visible = retained.slice(0, expanded ? EXPANDED_OUTPUT_LINES : COLLAPSED_OUTPUT_LINES);
-  const hiddenLines = retained.length - visible.length;
+  // OMP-style head window: collapsed shows only the first N lines and a
+  // `… N more lines` expander; expanded reveals the full retained body.
+  const outputWindow = capOutputLines(retained, expanded ? EXPANDED_OUTPUT_LINES : COLLAPSED_OUTPUT_LINES);
+  const visible = outputWindow.visible;
+  const hiddenLines = outputWindow.hidden;
   const capped = preview.truncated || preview.lines.length > retained.length;
 
   // A diff body (edit card, or any preview the projector tagged `diff`) is
@@ -959,7 +979,7 @@ export function ToolCard({
         )}
         {hiddenLines > 0 ? (
           <text width={inner} height={1} wrapMode="none" truncate fg={MUTED}>
-            {fitTuiText(`${hiddenLines} more preview lines${toggleable ? ` · click${TOOL_EXPAND_KEY ? ` or ${TOOL_EXPAND_KEY}` : ""} to expand` : ""}`, inner)}
+            {fitTuiText(moreLinesAffordance(hiddenLines, expandLegend(toggleable)), inner)}
           </text>
         ) : null}
         {capped ? (

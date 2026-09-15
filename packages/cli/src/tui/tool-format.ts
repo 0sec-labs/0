@@ -57,6 +57,53 @@ const DEFAULT_DETAIL_LINES = 3;
 const VALUE_BUDGET = 48;
 
 // ---------------------------------------------------------------------------
+// Output-body truncation (OMP-style collapse / expand)
+// ---------------------------------------------------------------------------
+
+/**
+ * Collapsed line cap for a tool/command OUTPUT body. oh-my-pi's default tool
+ * renderer caps output to the FIRST N lines and draws a `… N more lines`
+ * expander under it (see `@oh-my-pi/pi-coding-agent` `tools/default-renderer.ts`,
+ * `maxOutputLines = expanded ? 12 : 4`). We keep a slightly roomier head window
+ * so an ordinary command still shows in full, and reveal the full retained body
+ * on expand. This is a HEAD window — the first `cap` lines — matching OMP.
+ */
+export const COLLAPSED_OUTPUT_LINES = 14;
+
+/** The head window drawn for a (possibly long) output body. */
+export interface OutputWindow {
+  /** The first `cap` lines actually drawn — or all of them when they fit. */
+  readonly visible: readonly string[];
+  /** How many lines fall below the window; 0 when nothing was dropped. */
+  readonly hidden: number;
+}
+
+/**
+ * Keep the FIRST `cap` lines of an output body (the OMP head window) and report
+ * how many were dropped, so the caller can draw a `… N more lines` expander.
+ * Pure and total: a non-finite / negative cap collapses to 0.
+ */
+export function capOutputLines(lines: readonly string[], cap: number): OutputWindow {
+  const limit = Number.isFinite(cap) ? Math.max(0, Math.trunc(cap)) : 0;
+  if (lines.length <= limit) return { visible: lines, hidden: 0 };
+  return { visible: lines.slice(0, limit), hidden: lines.length - limit };
+}
+
+/**
+ * The muted expander line OMP draws beneath a capped body, e.g.
+ * `… 47 more lines · [⌃R] to expand`. The leading `… ` and the `N more line(s)`
+ * wording match oh-my-pi's default renderer; `hint` is the bracketed key legend
+ * the caller assembles (via {@link keyGlyph}/{@link keyLegend}) and is appended
+ * after a ` · ` when present. Returns `""` when nothing is hidden.
+ */
+export function moreLinesAffordance(hidden: number, hint = ""): string {
+  const n = Number.isFinite(hidden) ? Math.max(0, Math.trunc(hidden)) : 0;
+  if (n <= 0) return "";
+  const base = `… ${n} more line${n === 1 ? "" : "s"}`;
+  return hint ? `${base} · ${hint}` : base;
+}
+
+// ---------------------------------------------------------------------------
 // Secrets discipline
 // ---------------------------------------------------------------------------
 
