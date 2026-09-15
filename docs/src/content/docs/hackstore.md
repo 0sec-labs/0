@@ -4,7 +4,7 @@ description: Create, test, and publish tools for the 0sec agent.
 ---
 
 An extension adds tools the 0sec agent can call. It consists of a manifest and a
-self-contained Node.js program. This guide takes a generated extension through a
+self-contained JavaScript program using Node-compatible APIs. This guide takes a generated extension through a
 local run, then explains the runtime contract.
 
 Use 0sec 0.17.0 or newer for the authoring commands and direct `plugin run`
@@ -99,9 +99,11 @@ object, authentication configuration, or access to the engine's internal APIs.
 - Do not return credentials or unnecessary source content. Tool arguments and
   results can appear in model context and logs.
 
-The loader starts `node <pluginDir>/plugin.js` without a shell, with its working
-directory set to the installed plugin directory. If a tool scans a user's files,
-require an absolute path rather than assuming `.` means the user's project.
+The loader starts `<pluginDir>/plugin.js` without a shell, using the current
+runtime: Node for Node installations, or the embedded Bun interpreter for
+standalone builds. Standalone plugins do not require Node or Bun on `PATH`.
+The working directory is the installed plugin directory. If a tool scans a user's
+files, require an absolute path rather than assuming `.` means the user's project.
 Use Node built-ins or bundle JavaScript dependencies into the entry point.
 Document external executables such as `foxguard` as prerequisites.
 
