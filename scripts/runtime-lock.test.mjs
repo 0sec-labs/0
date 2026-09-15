@@ -15,8 +15,10 @@ test("dist runtime lock matches the generated package identity", () => {
   const rootPackage = JSON.parse(read("package.json"));
   const cliPackage = JSON.parse(read("packages/cli/package.json"));
 
-  assert.equal(lock.name, rootPackage.name);
-  assert.equal(lock.packages[""].name, rootPackage.name);
+  const publishedPackage = JSON.parse(read("dist/package.json"));
+  assert.equal(publishedPackage.name, "0sec-cli");
+  assert.equal(lock.name, publishedPackage.name);
+  assert.equal(lock.packages[""].name, publishedPackage.name);
   assert.equal(lock.packages[""].version, rootPackage.version);
   assert.equal(lock.packages[""].dependencies["node-sqlite3-wasm"], rootPackage.dependencies["node-sqlite3-wasm"]);
   assert.equal(lock.packages[""].dependencies["tree-sitter"], rootPackage.dependencies["tree-sitter"]);

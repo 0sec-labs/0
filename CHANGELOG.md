@@ -59,8 +59,9 @@ on the published npm package and the GitHub Release tag.
 
 ### Release
 
-- Publish the generated npm package through the existing release workflow
+- Publish the established `0sec-cli` npm package through the release workflow
   after the standalone platform builds, using the repository's CI credential.
+  An npm-only recovery run leaves existing tags and native assets unchanged.
 
 ## [0.16.3] - 2026-09-12
 
