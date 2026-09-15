@@ -110,7 +110,7 @@ export function Masthead({
   return (
     <>
       {showTerminalMark ? (
-        <text fg={MUTED} marginBottom={1}>{fitTuiText("Swiss Applied AI Cybersecurity Research Lab", contentWidth, { mode: "middle" })}</text>
+        <text fg={MUTED} marginBottom={1}>{fitTuiText("Swiss Applied AI & Cybersecurity Research Lab", contentWidth, { mode: "middle" })}</text>
       ) : null}
       {portraitImage ? (
         <box flexDirection="column" width={ZERO_WIDTH} height={ZERO_HEIGHT} flexShrink={0} marginBottom={1} backgroundColor={theme.CANVAS}>

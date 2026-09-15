@@ -958,7 +958,7 @@ export const THEMES: Readonly<Record<ThemeName, ThemeEntry>> = {
   swiss: {
     name: "swiss",
     label: "Swiss",
-    description: "Swiss-flag red on near-black, crisp white text. For the Swiss Applied AI Cybersecurity Research Lab.",
+    description: "Swiss-flag red on near-black, crisp white text. For the Swiss Applied AI & Cybersecurity Research Lab.",
     mode: "dark",
     palette: SWISS,
   },
