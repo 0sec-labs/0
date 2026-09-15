@@ -7,7 +7,7 @@ tableOfContents:
 ---
 
 Find the command, arguments, and options for your task. This reference covers
-**57 top-level commands** and their registered subcommands.
+**58 top-level commands** and their registered subcommands.
 
 For a worked example, start with [Scan Workflows](/scan-workflows/),
 [Console](/console/), or [Research Workflows](/research-workflows/).
@@ -543,6 +543,54 @@ Guide: [Read the workflow](/scan-workflows/).
 #### Review profiles
 
 Profiles select review behavior and prerequisites. See [Scan Workflows](/scan-workflows/) and [Research Workflows](/research-workflows/). Static kernel review leaves VM execution and crash reproduction to a separate step.
+
+### secure
+
+Investigate a repository, reproduce findings, generate repair candidates, run regression tests, and independently verify repairs before delivery.
+
+```text
+0sec secure [options] <repo>
+```
+
+The repository can be a local Git checkout or an HTTPS Git URL. Execution is **host-local in managed checkouts under the state directory, not in a newly provisioned sandbox**. Repository code, the operator-approved setup command, and the required regression command run with the worker's available permissions. Use an appropriately isolated worker for untrusted repositories; a disposable checkout is not a security boundary.
+
+For example, after reviewing the repository's test command:
+
+```bash
+0sec secure ./my-repo --test-command "npm test" --state-dir "$HOME/.0sec/secure/my-repo"
+```
+
+The regression command must pass before and after a repair. Findings that cannot be reproduced or verified must not be treated as fixed. Inspect the JSON result's `status`, `repairs`, and `errors`; a completed run is not a guarantee that the repository contains no vulnerabilities.
+
+`--resume` requires an explicit `--state-dir`. It checks configuration identity and repository revision, can retry blocked or failed work, and does not resume cancelled runs. It does not blindly replay publication.
+
+Publication is opt-in. `--publish` uses authorized repository credentials and `gh` to open PRs for **verified patches only**; it never merges or deploys them. Review retained evidence and proposed patches before enabling publication.
+
+`--timeout` bounds the whole workflow. The investigation phase currently relies on that deadline rather than immediate operator cancellation; the repair phase supports cancellation. The CLI accepts `api` or `auto` runtime selection and JSON output only.
+
+Exit codes: `0` completed, `2` blocked, `3` failed, `130` cancelled.
+
+Guide: [Scope & Authorization](/scope/).
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `repo` | Yes | Local Git repository or HTTPS Git URL; execution occurs in the current worker, not a newly provisioned sandbox |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--test-command <command>` **required** | — | Operator-approved regression command; must pass before and after repair |
+| `--setup-command <command>` | — | Operator-approved setup/build command run in each disposable checkout |
+| `--state-dir <path>` | — | Private persistent run directory; required when resuming |
+| `--runtime <runtime>` | `api` | Native repair runtime: auto or api |
+| `-m, --model <model>` | — | Model for investigation and repair; inherits configured provider when omitted |
+| `--timeout <ms>` | `3600000` | Whole workflow deadline in milliseconds |
+| `--cost-ceiling <usd>` | — | Whole workflow model cost ceiling in USD |
+| `--max-findings <n>` | `10` | Maximum findings to repair; remaining findings keep the run blocked |
+| `--max-attempts <n>` | `3` | Maximum repair candidates per finding |
+| `--max-turns <n>` | `30` | Maximum model turns per repair phase |
+| `--resume` | `false` | Resume compatible persisted work; never blindly replay publication |
+| `--publish` | `false` | Publish verified patches as PRs using authorized repository credentials; never merge or deploy |
+| `--format <format>` | `json` | Output format: json |
 
 ### file-review
 
