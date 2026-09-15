@@ -1,12 +1,14 @@
 # FoxGuard configuration for the 0sec repository.
 #
+# Refreshed with Foxguard 0.14.0 against released 0sec 0.17.0:
+# 6a34d78085f2d3edfe8c42c85f5261f1bf6f39f6. This records debt, not remediation.
 # The PR security policy scans the whole repository, so without a baseline it
 # reports the entire pre-existing backlog on every pull request and blocks
 # changes that introduce nothing new. This baseline records the findings that
 # existed when it was generated; the PR gate then only blocks on findings a PR
 # *adds*. Regenerate after intentionally clearing debt:
 #   foxguard baseline --exclude .worktrees --exclude node_modules \
-#     --write-baseline .foxguard/baseline.json .
+#     --output .foxguard/baseline.json .
 scan:
   baseline: .foxguard/baseline.json
   exclude:
