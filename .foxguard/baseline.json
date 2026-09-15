@@ -2972,102 +2972,6 @@
       "line": 163
     },
     {
-      "fingerprint": "6aa1e8661072bb1baa78b9cbcf88f62cf279cee26856fcf24b528bbb72cc4745",
-      "rule_id": "js/no-path-traversal",
-      "file": "assets/cli-launch/film-reset/generate-audio.mjs",
-      "line": 36
-    },
-    {
-      "fingerprint": "2d6c9f6e88ae900a5050df4adc6b4bd0b570088efdcfd48d23cbf3b09b1ca48f",
-      "rule_id": "js/no-ssrf",
-      "file": "assets/cli-launch/film-reset/generate-audio.mjs",
-      "line": 41
-    },
-    {
-      "fingerprint": "be2580e4babbede1882b50a3c62c387f3f27fac72f910f2f8ab7b514bb492bd1",
-      "rule_id": "py/no-path-traversal",
-      "file": "assets/cli-launch/hyperframes/generate-sound.py",
-      "line": 1357
-    },
-    {
-      "fingerprint": "e48c428395a78620d8af2e45227d0eac7bf8e207991d5011b1492b3d856f144a",
-      "rule_id": "js/no-path-traversal",
-      "file": "assets/cli-launch/launch-film/generate-elevenlabs.mjs",
-      "line": 40
-    },
-    {
-      "fingerprint": "08061cac6225462ead98cf3840abb68c47c9676cbacdee29f8a9b0fb501346ca",
-      "rule_id": "js/no-ssrf",
-      "file": "assets/cli-launch/launch-film/generate-elevenlabs.mjs",
-      "line": 49
-    },
-    {
-      "fingerprint": "1c486f8f2cf90acbea0b69513ed4e5559f391b92de321a283ac3a05836f4d2e3",
-      "rule_id": "js/no-unsafe-regex",
-      "file": "assets/cli-launch/out/0sec-launch-film-picture-review-bundle/161.bundle.js",
-      "line": 1131
-    },
-    {
-      "fingerprint": "48e682beed97479c3e1a7a7f5cc6ceafc6d722eeaf8f5d7dcbf5b149f6830e02",
-      "rule_id": "js/no-unsafe-regex",
-      "file": "assets/cli-launch/out/0sec-launch-film-picture-review-bundle/161.bundle.js",
-      "line": 1145
-    },
-    {
-      "fingerprint": "0d0f91849defb99e1ea163b6f1f5517ecf3e4933d6d754e90858baa2fda10c41",
-      "rule_id": "js/no-unsafe-regex",
-      "file": "assets/cli-launch/out/0sec-launch-film-picture-review-bundle/864.bundle.js",
-      "line": 4780
-    },
-    {
-      "fingerprint": "07cf510393731bed3168f6de10cdeb163d9db9c5604169f60fb882ca40d43776",
-      "rule_id": "js/no-unsafe-regex",
-      "file": "assets/cli-launch/out/0sec-launch-film-picture-review-bundle/864.bundle.js",
-      "line": 4784
-    },
-    {
-      "fingerprint": "14825fbf1cc1fb32615e0f8778097cce2799f89046b93b2ae55090a9e14fedda",
-      "rule_id": "js/no-unsafe-regex",
-      "file": "assets/cli-launch/out/0sec-launch-film-picture-review-bundle/864.bundle.js",
-      "line": 4803
-    },
-    {
-      "fingerprint": "e1284c21b69d7330078cbba996e989352d8789d92c71b370c693e6f5bcaf6813",
-      "rule_id": "js/no-unsafe-regex",
-      "file": "assets/cli-launch/out/hybrid-bundle/161.bundle.js",
-      "line": 1131
-    },
-    {
-      "fingerprint": "4c5f75d4bd7ff4d0378d9f7b1e5b5288d8f5dfad5e12b67b6e5b203283a054fe",
-      "rule_id": "js/no-unsafe-regex",
-      "file": "assets/cli-launch/out/hybrid-bundle/161.bundle.js",
-      "line": 1145
-    },
-    {
-      "fingerprint": "f78ea87b81b628f93b7b5c965457c2f28105b9e935c82b3efc0ed874d8505609",
-      "rule_id": "js/no-unsafe-regex",
-      "file": "assets/cli-launch/out/hybrid-bundle/864.bundle.js",
-      "line": 4780
-    },
-    {
-      "fingerprint": "ecc6a06b5c5ac650f119891bcbbb5858d49b7384ae3eb139ccbca3380e7e515e",
-      "rule_id": "js/no-unsafe-regex",
-      "file": "assets/cli-launch/out/hybrid-bundle/864.bundle.js",
-      "line": 4784
-    },
-    {
-      "fingerprint": "73c858e32c0815217456cf20b7d61ad7d00f67670395a0150ea8f78ed95c4fbf",
-      "rule_id": "js/no-unsafe-regex",
-      "file": "assets/cli-launch/out/hybrid-bundle/864.bundle.js",
-      "line": 4803
-    },
-    {
-      "fingerprint": "686c49cf45a87b597485c985d0bdd97a439e08d50ddceddd27d96dc8190d20fc",
-      "rule_id": "js/no-command-injection",
-      "file": "assets/cli-launch/render-film.mjs",
-      "line": 24
-    },
-    {
       "fingerprint": "9ce727e5078166606124fbd147e84557f85dcdf7a2692568f080ef84eac37a57",
       "rule_id": "js/no-command-injection",
       "file": "packages/benchmark/craft-agent.ts",
@@ -3626,10 +3530,10 @@
       "line": 61
     },
     {
-      "fingerprint": "5ddb3345259f9e9c3bf6ddeab005e3f35b0abf65d9fbd0e59b48dc6672d67411",
+      "fingerprint": "2523fcb261de02dfb2fb848a2dd971e7020315d1213e348242e3945e530e8c0c",
       "rule_id": "js/no-hardcoded-secret",
       "file": "packages/cli/src/tui/feedback.test.ts",
-      "line": 605
+      "line": 607
     },
     {
       "fingerprint": "84776d24d7dd7bfe6947206b077e0044c4dd068d00c1f5f8d6b51ffd9c3685aa",
@@ -3650,16 +3554,22 @@
       "line": 65
     },
     {
-      "fingerprint": "787031486fee1cc3f7f89d3866102233bfed7f8e9350f7874b66cf710ceb2e66",
+      "fingerprint": "c18561e37dc70c534a3491bf26292c934f885d48e17a03c552549393dceec482",
       "rule_id": "js/no-hardcoded-secret",
       "file": "packages/cli/src/tui/themes.test.ts",
-      "line": 1037
+      "line": 1039
     },
     {
-      "fingerprint": "a93d411eb109c0d0944a1d8900ff8be4313a5101daaa75b4e97f7ccefe65e68b",
+      "fingerprint": "d6d75ab3896a5bab5348f2689477d5eba7f71370d675dadd256eaaa69a13c295",
       "rule_id": "js/no-unsafe-regex",
       "file": "packages/cli/src/tui/themes.ts",
-      "line": 1409
+      "line": 1531
+    },
+    {
+      "fingerprint": "d0c9565f63432df4aa4f330ece3a8659676cd1ec77afedd6ddae0abc0e9f3dae",
+      "rule_id": "js/no-unsafe-regex",
+      "file": "packages/cli/src/tui/tool-format.ts",
+      "line": 134
     },
     {
       "fingerprint": "69319d3e3c504f30c956fe191268c5c4ed7a916a0e1d14b929e83d6246410423",
@@ -3746,22 +3656,22 @@
       "line": 23
     },
     {
-      "fingerprint": "d8872bed813696c2bdbd405fb3a5b02d3fdb64207e32cea2c79260bbfe3acee2",
+      "fingerprint": "f4916331c9554766e04d7ab43ebc259bebf97e03800acfb23c5a4e5598288b4b",
       "rule_id": "js/no-hardcoded-secret",
       "file": "packages/core/src/agent/tools.test.ts",
-      "line": 1393
+      "line": 1401
     },
     {
-      "fingerprint": "a54f210cbcbd492e3c42455f8fda666df233699a8725318dd8b2962f5755acb6",
+      "fingerprint": "735920f88064df0da1cd57a6d97dee032b3fec58f369f8fb92422dab1decfe7b",
       "rule_id": "js/no-hardcoded-secret",
       "file": "packages/core/src/agent/tools.test.ts",
-      "line": 1429
+      "line": 1437
     },
     {
-      "fingerprint": "dedaa5b886683f9ca4caadeb037d79fc8890e4106b07b23fb32d8640c5673d1a",
+      "fingerprint": "5023077af19d4ef053074520059d078e17e7c3e25f8a810588518b7859351eca",
       "rule_id": "js/no-command-injection",
       "file": "packages/core/src/agent/tools.ts",
-      "line": 1187
+      "line": 1227
     },
     {
       "fingerprint": "c569bac014b3983c18f2ceecb96a012d474c4950f1822cb19d77663add16c4fc",
@@ -4130,6 +4040,12 @@
       "line": 172
     },
     {
+      "fingerprint": "e2b7a1571d87d57b60b9c28b5b8bbd4efe04a6a8574882580548a2eecd85b312",
+      "rule_id": "js/no-hardcoded-secret",
+      "file": "packages/core/src/runtime/llm-api.copilot.test.ts",
+      "line": 36
+    },
+    {
       "fingerprint": "6317ca6b51d2427e09f8165d339688579e0ce380c1267b4e897f108cd1839379",
       "rule_id": "js/no-hardcoded-secret",
       "file": "packages/core/src/runtime/llm-api.delta.test.ts",
@@ -4376,22 +4292,34 @@
       "line": 2481
     },
     {
-      "fingerprint": "6e961616ab2deab4d520e644f1b758030baf9c78ce2eb1747ee7dd579c59416e",
+      "fingerprint": "4b64a2e12272d7667fba21fd24d83ff06d240a52bde469bee4836623a98c4256",
       "rule_id": "js/no-hardcoded-secret",
       "file": "packages/core/src/runtime/llm-api.ts",
-      "line": 767
+      "line": 768
     },
     {
-      "fingerprint": "d29af25877618a5532d5e6d466b9b551501a283a2648e1cd885334ef8cec5619",
+      "fingerprint": "5749b02ff92960053c41ddd07be5fa6c9aa6ae43190f151ce173867d90872994",
       "rule_id": "js/no-ssrf",
       "file": "packages/core/src/runtime/llm-api.ts",
-      "line": 1299
+      "line": 1378
     },
     {
-      "fingerprint": "df30ff5768eb7e09463cda98ac90ae9570ce508372eb31abf38270e9a48c224a",
+      "fingerprint": "56a67c48a63fbd83e7ee2438b1a03c0a9718e8ccee5928dd49afa75a80d9b281",
       "rule_id": "js/no-ssrf",
       "file": "packages/core/src/runtime/llm-api.ts",
-      "line": 2700
+      "line": 1708
+    },
+    {
+      "fingerprint": "a8fa22091d28291d395c73e8cd6b3d2c8c93cbbc8d82283cf2a90ef3e3b531ab",
+      "rule_id": "js/no-ssrf",
+      "file": "packages/core/src/runtime/llm-api.ts",
+      "line": 1791
+    },
+    {
+      "fingerprint": "b7d02d6efbf44ac1b09663134abe8a0b492b0b03967e5abb331fec681107cdfc",
+      "rule_id": "js/no-ssrf",
+      "file": "packages/core/src/runtime/llm-api.ts",
+      "line": 3361
     },
     {
       "fingerprint": "688e6ce2de6e7a4e0302f44ae42fa06d4ec3bd1dcd27f2a600e645b29c1d8c19",
@@ -4604,6 +4532,24 @@
       "line": 372
     },
     {
+      "fingerprint": "b45eea3132751fc246c2ab1195d2de012c0aa82062f5a61f45edd8bd9712d326",
+      "rule_id": "js/no-hardcoded-secret",
+      "file": "packages/core/src/telemetry/analytics-pipeline.test.ts",
+      "line": 52
+    },
+    {
+      "fingerprint": "8673a5da49ea47322e09c6f595cce483491ef6ab29a66c3b60f570e769539730",
+      "rule_id": "js/no-hardcoded-secret",
+      "file": "packages/core/src/telemetry/redaction.test.ts",
+      "line": 124
+    },
+    {
+      "fingerprint": "3288eace297bfaa4bbb1c69b027f0335a4de486c81ce395f3adca99c9384071b",
+      "rule_id": "js/no-hardcoded-secret",
+      "file": "packages/core/src/telemetry/redaction.ts",
+      "line": 46
+    },
+    {
       "fingerprint": "cf32f108b8858739060bb447d918c244fe09943ab17d2ba5ad0baa7873abfc9a",
       "rule_id": "js/no-command-injection",
       "file": "packages/core/src/triage/kernel-vm-runner.ts",
@@ -4812,6 +4758,12 @@
       "rule_id": "js/no-hardcoded-secret",
       "file": "scripts/smoke-docker-replay.mjs",
       "line": 16
+    },
+    {
+      "fingerprint": "18eb81630b00d0b1a75b383716dae960c3e76b0213ffa979e4b8c09535db2639",
+      "rule_id": "js/no-command-injection",
+      "file": "scripts/smoke-plugin-runtime.mjs",
+      "line": 32
     },
     {
       "fingerprint": "e1903821b412b2792262a77c0dc17c050b612920e3b9d3b89bdb808e416cd364",
