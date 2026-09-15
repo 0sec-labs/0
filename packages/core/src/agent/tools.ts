@@ -188,6 +188,15 @@ import {
 } from "./agent-messaging.js";
 import { mapWithConcurrency } from "../concurrency.js";
 import { executeIntel } from "./tools/intel.js";
+import {
+  executeAdAttackPaths,
+  executeEntraAttackPaths,
+  executeEntraPosture,
+  executeDeepSourceReview,
+  executeFileSecurityReview,
+  executeAssembleAdvisory,
+  executeCveLookup,
+} from "./tools/security-engines.js";
 import { executeBrowser, type BrowserDriverHost } from "./tools/browser.js";
 import { resolveScopedPath } from "./tools/scope-path.js";
 import { windowFileContent } from "./tools/read-file-window.js";
@@ -581,6 +590,17 @@ const SCOPED_SOURCE_AUDIT_TOOLS: Record<string, true> = {
   // Explicitly opt-in; the handler confines the path, strips credentials, and
   // leaves dynamic target execution disabled unless 0verse itself is configured.
   analyze_binary: true,
+  // Offline / read-only security engines (dev-live-engine-recovery): file/DB
+  // read or read-only + env-scoped analysis — no target network, no exploit, no
+  // write inside the scope. Safe inside the scoped source-audit trust boundary
+  // exactly like `intel`, so they belong in the DEFAULT read-only role set.
+  ad_attack_paths: true,
+  entra_attack_paths: true,
+  entra_posture: true,
+  deep_source_review: true,
+  file_security_review: true,
+  assemble_advisory: true,
+  cve_lookup: true,
 };
 
 /**
@@ -8197,6 +8217,37 @@ export class ToolExecutor {
   // resolving each tool name to a real ToolExecutor method.
   private intelTool(args: Record<string, unknown>): Promise<ToolResult> {
     return executeIntel(this.ctx, args);
+  }
+
+  // ── Offline / read-only security engines (dev-live-engine-recovery) ──
+  // Thin delegates to the free-function handlers in tools/security-engines.ts,
+  // mirroring the intelTool → executeIntel shape (0sec#1284).
+  private adAttackPathsTool(args: Record<string, unknown>): Promise<ToolResult> {
+    return executeAdAttackPaths(this.ctx, args);
+  }
+
+  private entraAttackPathsTool(args: Record<string, unknown>): Promise<ToolResult> {
+    return executeEntraAttackPaths(this.ctx, args);
+  }
+
+  private entraPostureTool(args: Record<string, unknown>): Promise<ToolResult> {
+    return executeEntraPosture(this.ctx, args);
+  }
+
+  private deepSourceReviewTool(args: Record<string, unknown>): Promise<ToolResult> {
+    return executeDeepSourceReview(this.ctx, args);
+  }
+
+  private fileSecurityReviewTool(args: Record<string, unknown>): Promise<ToolResult> {
+    return executeFileSecurityReview(this.ctx, args);
+  }
+
+  private assembleAdvisoryTool(args: Record<string, unknown>): Promise<ToolResult> {
+    return executeAssembleAdvisory(this.ctx, args);
+  }
+
+  private cveLookupTool(args: Record<string, unknown>): Promise<ToolResult> {
+    return executeCveLookup(this.ctx, args);
   }
 
   private updateTarget(args: Record<string, unknown>): ToolResult {

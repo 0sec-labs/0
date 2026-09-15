@@ -177,6 +177,14 @@ describe("getToolsForRole", () => {
         "update_finding",
         "done",
         "update_todos",
+        // Offline / read-only security engines (dev-live-engine-recovery).
+        "ad_attack_paths",
+        "entra_attack_paths",
+        "entra_posture",
+        "deep_source_review",
+        "file_security_review",
+        "assemble_advisory",
+        "cve_lookup",
       ]);
     }
   });

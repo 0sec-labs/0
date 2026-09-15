@@ -34,6 +34,7 @@ import { askOperatorToolDefinitions } from "./ask-operator.js";
 import { todosToolDefinitions } from "./todos.js";
 import { evalToolDefinitions } from "./eval.js";
 import { proxyToolDefinitions } from "./proxy.js";
+import { securityEngineToolDefinitions } from "./security-engines.js";
 
 export {
   SCANNER_TOOL_NAMES,
@@ -65,6 +66,7 @@ const DOMAIN_DEFINITIONS: Record<string, ToolDefinition> = {
   ...todosToolDefinitions,
   ...evalToolDefinitions,
   ...proxyToolDefinitions,
+  ...securityEngineToolDefinitions,
 };
 
 // Canonical registry order. getToolsForRole("audit"/"review") enumerates
@@ -131,6 +133,17 @@ const TOOL_REGISTRY_ORDER = [
   // Burp-style intercepting HTTP(S) proxy (burp-network-20260913). Behind a
   // lazy ProxyDriver seam; scope-gated like http_request/browser.
   "proxy",
+  // Offline / read-only security engines (dev-live-engine-recovery). File/DB
+  // read or read-only + env-scoped — no target network, no exploit — so they
+  // join the DEFAULT read-only role set (SCOPED_SOURCE_AUDIT_TOOLS), not any
+  // allowScanners/cloud gate.
+  "ad_attack_paths",
+  "entra_attack_paths",
+  "entra_posture",
+  "deep_source_review",
+  "file_security_review",
+  "assemble_advisory",
+  "cve_lookup",
 ] as const;
 
 export const TOOL_DEFINITIONS: Record<string, ToolDefinition> = Object.fromEntries(

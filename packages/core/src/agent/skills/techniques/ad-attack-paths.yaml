@@ -1,0 +1,57 @@
+id: ad-attack-paths
+name: "Active Directory Attack-Path Analysis"
+description: "When to reach for the offline `ad_attack_paths` engine: given a BloodHound CE / SharpHound JSON collection on disk, enumerate paths to Domain Admin, kerberoastable principals, unconstrained delegation, DCSync rights, ACL-abuse chains, and ADCS escalation — files only, no collection, no network."
+version: 1
+applicable_roles:
+  - attack
+  - audit
+  - review
+tags:
+  - active-directory
+  - bloodhound
+  - sharphound
+  - kerberoast
+  - dcsync
+  - delegation
+  - privilege-escalation
+triggers:
+  - "BloodHound"
+  - "SharpHound"
+  - "DCSync"
+  - "kerberoast"
+  - "unconstrained delegation"
+  - "Domain Admin"
+estimated_tokens: 600
+content: |
+  ## Active Directory attack-path analysis (offline)
+
+  When you have (or can point at) a BloodHound CE / SharpHound JSON collection
+  already on disk, do NOT try to reason about the graph by hand or re-collect it
+  over the network. Call the **`ad_attack_paths`** tool: it ingests the collector
+  files, builds the object graph, and runs every analyzer offline.
+
+  ### When this applies
+  - A directory of `*.json` collector output, or a single BloodHound CE export.
+  - Any question about "how does an attacker reach Domain Admin here?", tiering
+    violations, or dangerous ACL/permission chains.
+
+  ### How to drive it
+  - Pass `dir` for an unzipped collection directory, or `file` for one export.
+  - Optionally pass `domain` (an FQDN) to scope a multi-domain collection.
+  - The tool never touches the network and never authenticates — it reads files.
+
+  ### Reading the result
+  - `findings[]` are ordered worst-first; each carries a `shortestPath`
+    (`hops` + `technique`), an affected-principal count, and a remediation.
+  - Prioritise short paths to Tier-0: a 2-hop path to Domain Admin is a
+    different conversation from a 6-hop one.
+  - **An empty result is not a clean domain.** If the export never collected
+    memberships/ACLs, the paths that depend on them cannot be computed — say so,
+    and recommend re-collecting with the missing collections rather than
+    reporting the domain as safe.
+
+  ### Follow-ups
+  - Confirm the concrete edges (group membership, ACE, delegation flag) in the
+    finding evidence before you claim a path is real.
+  - Feed a confirmed, high-impact path into `assemble_advisory` when you need a
+    written write-up.

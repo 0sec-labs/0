@@ -40,6 +40,13 @@ const EXPECTED_SKILL_IDS = [
   "nextjs-appsec",
   "supabase-appsec",
   "python-web-appsec",
+  // Offline / read-only security-engine routing skills (dev-live-engine-recovery).
+  "ad-attack-paths",
+  "entra-attack-paths",
+  "entra-id",
+  "seedless-depth-review",
+  "advisory-disclosure",
+  "cve-poc-adaptation",
 ];
 
 const VALID_ROLES = new Set(["attack", "audit", "review"]);
@@ -185,17 +192,24 @@ describe("Skill Registry", () => {
       expect(attackSkills.length).toBe(EXPECTED_SKILL_IDS.length);
 
       const reviewSkills = listSkillSummaries({ role: "review" }, registry);
-      expect(reviewSkills.length).toBe(8);
+      expect(reviewSkills.length).toBe(14);
       const reviewIds = reviewSkills.map((s) => s.id).sort();
       expect(reviewIds).toEqual([
+        // Offline / read-only security-engine routing skills (all review-applicable).
+        "ad-attack-paths",
+        "advisory-disclosure",
         "blind-exploitation",
         "cardano-eutxo-validators",
         "crypto-misuse",
+        "cve-poc-adaptation",
+        "entra-attack-paths",
+        "entra-id",
         "graphql-introspection",
         "jwt-attacks",
         // Framework-specific methodology packs are review-applicable.
         "nextjs-appsec",
         "python-web-appsec",
+        "seedless-depth-review",
         "supabase-appsec",
       ]);
     });

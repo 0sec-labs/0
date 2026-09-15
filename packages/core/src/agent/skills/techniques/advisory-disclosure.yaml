@@ -1,0 +1,59 @@
+id: advisory-disclosure
+name: "Advisory & Disclosure Drafting"
+description: "When to reach for the offline `assemble_advisory` engine: turn a persisted, confirmed finding into a GHSA-ready advisory draft (CWE + CVSS + repro + remediation), a filing-state decision, and — when reproduced — a DRAFT vendor-notification. Offline DB read; never sends or publishes."
+version: 1
+applicable_roles:
+  - attack
+  - audit
+  - review
+tags:
+  - advisory
+  - disclosure
+  - ghsa
+  - cvss
+  - vendor-notification
+  - reporting
+triggers:
+  - "advisory"
+  - "GHSA"
+  - "disclosure"
+  - "CVSS"
+  - "vendor notification"
+  - "write.?up"
+estimated_tokens: 650
+content: |
+  ## Advisory & coordinated-disclosure drafting (offline)
+
+  When a finding is confirmed and you need a written, GHSA-ready advisory, use
+  the **`assemble_advisory`** tool. It reads the finding from the local findings
+  database (offline) and renders the artifacts — it NEVER sends, files, or
+  publishes anything. Everything it produces is a DRAFT for human review.
+
+  ### How to drive it
+  - Pass `finding_id` (an id or unique prefix). Omit it to draft the most recent
+    finding that is not `discovered` (LLM-hypothesised, unconfirmed) or
+    `false-positive` (rejected).
+  - Optionally pass `scan_id` to restrict the lookup, and `db_path` for a
+    non-default database.
+  - `allow_unreproduced: true` also stages the vendor-notification for a finding
+    whose PoC did not reproduce (default off).
+
+  ### The quality gate — never auto-draft junk
+  - Auto-filing an unverified PoC is the canonical "AI-generated low-quality"
+    trigger that gets advisories auto-closed. The tool refuses to auto-select
+    `discovered` / `false-positive` / suppressed findings for exactly this
+    reason. Respect that: if you must draft one, pass its explicit `finding_id`
+    and treat the output as internal.
+
+  ### Reading the result
+  - `advisory.markdown` is the GHSA-ready draft (with `primaryCwe`, `cvssVector`,
+    `cvssScore`). `advisoryError` appears instead when the finding has no
+    reproducible PoC content (an empty-PoC drop).
+  - `filingState` is the keep / needs-review / drop verdict.
+  - `vendorNotification` is the DRAFT notification when the finding reproduced;
+    `vendorNote` explains why it was skipped otherwise.
+
+  ### Before disclosing
+  - Confirm the CVSS vector and affected range are right, and that the repro is
+    genuinely reproducible. Ground any referenced CVE with `cve_lookup` rather
+    than citing from memory.
