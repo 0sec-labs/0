@@ -23,12 +23,15 @@ on the published npm package and the GitHub Release tag.
   evaluation tools, and additional security-engine tools and skills.
 - Additional provider connection flows, live model/provider selection,
   per-agent routing, context compaction, and consent-gated redacted analytics.
-- A publishable benchmark scoreboard through `0sec bench scoreboard`.
+- A publishable benchmark scoreboard through `0sec bench scoreboard`, with
+  benchmark-miss harvesting available through `lens-synth --from-bench`.
 
 ### Changed
 
 - Reworked terminal dialogs, command and model pickers, keyboard controls,
   code and tool cards, worker activity, themes, and shutdown feedback.
+- Report live session links, pane activity, and runtime context to Herdr, and
+  release the session sink on exit.
 - Default automatic updates on for profiles without an explicit update policy.
   Eligible startup checks may download and install remote code; explicit `off`
   and `notify` preferences and existing updater safety checks remain intact.
@@ -39,6 +42,10 @@ on the published npm package and the GitHub Release tag.
 
 - Make `plugin run` consume the name-keyed built-in tool registry correctly.
   Approval-denied output distinguishes loading plugin code from invoking a tool.
+- Execute plugins with the embedded Bun interpreter in standalone builds,
+  without requiring Node or Bun on `PATH`.
+- Exclude security engines with sub-analysis or network capabilities from
+  attacker-controlled source scopes while retaining trusted audit access.
 - Preserve live conversations, scope decisions, worker state, and accounting
   across supported runtime changes; retain the active engine on failed replacement.
 - Keep unlimited turn budgets out of finite-JSON checkpoints, contain source
