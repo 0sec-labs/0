@@ -2468,8 +2468,8 @@ export function validateSpawnPersistentAgentArgs(
     return { ok: false, error: parsed.error.issues[0]?.message ?? "invalid arguments" };
   }
   const { task, name, max_turns, role, model } = parsed.data;
-  // Clamp the turn budget to the same [1,25] band spawn_agent uses.
-  const maxTurns = Math.min(25, Math.max(1, max_turns ?? 15));
+  // Clamp the turn budget to the same [1,120] band spawn_agent uses.
+  const maxTurns = Math.min(120, Math.max(1, max_turns ?? 40));
   return { ok: true, args: { task, ...(name ? { name } : {}), maxTurns, ...(role !== undefined ? { role } : {}), ...(model !== undefined ? { model } : {}) } };
 }
 
@@ -6599,7 +6599,7 @@ export class ToolExecutor {
     const selection = subagentModelSelectionSchema.safeParse(args);
     if (!selection.success) return { success: false, output: null, error: selection.error.issues[0]?.message ?? "Invalid model selection" };
 
-    const maxTurns = Math.min((args.max_turns as number) ?? 15, 25);
+    const maxTurns = Math.min((args.max_turns as number) ?? 40, 120);
     const base = this.buildSubagentLifecycleBase(task, maxTurns);
 
     const lease = this._workerTree.acquire(base.agent_id, this.ctx.scanId);
@@ -6677,7 +6677,7 @@ export class ToolExecutor {
       }
       const selection = subagentModelSelectionSchema.safeParse(entry);
       if (!selection.success) return { success: false, output: null, error: `tasks[${i}]: ${selection.error.issues[0]?.message ?? "Invalid model selection"}` };
-      const maxTurns = Math.min((entry?.max_turns as number) ?? 15, 25);
+      const maxTurns = Math.min((entry?.max_turns as number) ?? 40, 120);
       specs.push({ task, maxTurns, base: this.buildSubagentLifecycleBase(task, maxTurns), selection: selection.data });
     }
 

@@ -144,7 +144,7 @@ export const systemToolDefinitions: Record<string, ToolDefinition> = {
       "Spawn a focused sub-agent with fresh context for a specific exploitation task. Use when you've found a vulnerability and need deep exploitation (e.g., SQLi table enumeration, multi-step auth chain). The sub-agent gets its own turn budget and returns findings.",
     parameters: {
       task: { type: "string", description: "What the sub-agent should do. Be specific: include the target URL, the vulnerability found, and what to extract." },
-      max_turns: { type: "number", description: "Turn budget for the sub-agent (default 15, max 25)" },
+      max_turns: { type: "number", description: "Turn budget for the sub-agent (default 40, max 120)" },
       role: { type: "string", description: "Optional operator-configured worker model role." },
       model: { type: "string", description: "Optional model id for this sub-agent. Under an operator-configured auto-routing role you may name any model the session can reach (a provider whose credentials are present); otherwise it must be one of the parent's operator-approved pins." },
     },
@@ -175,7 +175,7 @@ export const systemToolDefinitions: Record<string, ToolDefinition> = {
             },
             max_turns: {
               type: "number",
-              description: "Turn budget for this sub-agent (default 15, max 25)",
+              description: "Turn budget for this sub-agent (default 40, max 120)",
             },
             role: { type: "string", description: "Optional operator-configured worker model role." },
             model: { type: "string", description: "Optional model id for this sub-agent. Under an operator-configured auto-routing role you may name any model the session can reach (a provider whose credentials are present); otherwise it must be one of the parent's operator-approved pins." },
@@ -219,7 +219,7 @@ export const systemToolDefinitions: Record<string, ToolDefinition> = {
     parameters: {
       task: { type: "string", description: "The initial task for the persistent agent. Be specific: target, goal, and what to report back." },
       name: { type: "string", description: "Optional display name (else an auto AdjectiveNoun name is assigned)." },
-      max_turns: { type: "number", description: "Turn budget per task/revive (default 15, max 25)." },
+      max_turns: { type: "number", description: "Turn budget per task/revive (default 40, max 120)." },
       role: { type: "string", description: "Optional operator-configured worker model role." },
       model: { type: "string", description: "Optional model id for this sub-agent. Under an operator-configured auto-routing role you may name any model the session can reach (a provider whose credentials are present); otherwise it must be one of the parent's operator-approved pins." },
     },
