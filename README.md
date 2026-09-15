@@ -47,6 +47,15 @@ export PATH="$HOME/.0sec/bin:$PATH"
 Add the `export` line to your shell profile. Run `0` to open the interactive
 console, or `0 --help` for commands. Only test systems you own or have permission to assess.
 
+Alternatively, with Node.js 24 or newer:
+
+```bash
+npm install -g 0sec-cli
+0sec --help
+```
+
+The npm package is `0sec-cli`; its commands are `0sec` and `0`.
+
 ## Documentation
 
 - [Getting started](https://docs.0.security/getting-started/): installation, source builds and your first scan.

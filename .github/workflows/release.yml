@@ -16,12 +16,17 @@ on:
       tag:
         description: "Existing tag to build + release (e.g. v0.15.0)"
         required: true
+      npm_only:
+        description: "Publish only npm from the existing tag; leave native assets unchanged"
+        type: boolean
+        default: false
 
 permissions:
   contents: write
 
 jobs:
   build:
+    if: ${{ !inputs.npm_only }}
     name: build ${{ matrix.asset }}
     strategy:
       fail-fast: false
@@ -157,6 +162,7 @@ jobs:
   publish-npm:
     name: publish npm
     needs: release
+    if: ${{ !cancelled() && (needs.release.result == 'success' || (github.event_name == 'workflow_dispatch' && inputs.npm_only)) }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
@@ -165,7 +171,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
-          ref: ${{ github.event.inputs.tag || github.ref }}
+          ref: refs/tags/${{ github.event.inputs.tag || github.ref_name }}
       - uses: actions/setup-node@v5
         with:
           node-version: 24
@@ -186,12 +192,24 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Build the published CLI package
         run: pnpm build
+      - name: Normalize public npm identity
+        working-directory: dist
+        # The private workspace name is not the established npm channel.
+        # Apply packaging metadata here too so older tags can be recovered.
+        run: npm pkg set name=0sec-cli bin.0sec=0sec.js bin.0=0sec.js
       - name: Install runtime dependencies and smoke the bundle
         run: |
           npm --prefix dist install --omit=dev --no-audit --no-fund
           node dist/0sec.js --version
           bash scripts/smoke-cli.sh "node dist/0sec.js"
           node scripts/smoke-plugin-runtime.mjs dist/0sec.js
+      - name: Smoke an installed package
+        run: |
+          mkdir -p "$RUNNER_TEMP/npm-pack" "$RUNNER_TEMP/npm-smoke"
+          npm pack ./dist --pack-destination "$RUNNER_TEMP/npm-pack"
+          npm install --prefix "$RUNNER_TEMP/npm-smoke" "$RUNNER_TEMP"/npm-pack/*.tgz --omit=dev --no-audit --no-fund
+          "$RUNNER_TEMP/npm-smoke/node_modules/.bin/0sec" --version
+          node scripts/smoke-plugin-runtime.mjs "$RUNNER_TEMP/npm-smoke/node_modules/.bin/0sec"
       - name: Publish npm package
         working-directory: dist
         run: npm publish --access public
