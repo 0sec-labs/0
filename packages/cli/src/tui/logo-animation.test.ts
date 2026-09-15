@@ -10,13 +10,13 @@ import {
   type LogoFrame,
 } from "./logo-animation.js";
 
-/** The shipped chamfered 0SEC block mark (mirrors chat's TERMINAL_BLOCK_LOGO_COMPACT). */
+/** The shipped 0SEC block mark (mirrors chat-screen's TERMINAL_BLOCK_LOGO). */
 const LOGO = [
-  "▗######▖  ▗#####▖  ######▖  ▗#####▖",
+  " ######   #######  #######   ######",
   "##  //##  ##       ##       ##     ",
-  "## // ##  ▝#####▖  #####    ##     ",
+  "## // ##  #######  #####    ##     ",
   "##//  ##       ##  ##       ##     ",
-  "▝######▘  ▝#####▘  ######▘  ▝#####▘",
+  " ######   #######  #######   ######",
 ] as const;
 
 const ONE_SHOT: LogoAnimStyle[] = [
@@ -374,22 +374,16 @@ describe("logoRowRuns", () => {
     }
   });
 
-  it("coalesces adjacent cells sharing (tone, visible, ch)", () => {
-    // Row 0 of the mark: a chamfer corner, then a run of white blocks, then the
-    // mirror corner — the corners share (tone, visible) with the blocks but
-    // must NOT merge with them, or the chamfer glyph would be lost.
+  it("coalesces adjacent cells sharing (tone, visible)", () => {
+    // Row 0 of the mark: a leading empty cell, then a run of white blocks.
     const row0 = finalLogoFrame(LOGO)[0]!;
     const runs = logoRowRuns(row0);
     expect(runs.length).toBeGreaterThan(1);
-    expect(runs[0]).toMatchObject({ tone: "text", visible: true, ch: "▗", length: 1 });
-    expect(runs[1]).toMatchObject({ tone: "text", visible: true, ch: "#" });
-    expect(runs[2]).toMatchObject({ tone: "text", visible: true, ch: "▖", length: 1 });
-    // Neighbouring runs never share the same (tone, visible, ch) triple.
+    expect(runs[0]).toMatchObject({ tone: "text", visible: false });
+    expect(runs[1]).toMatchObject({ tone: "text", visible: true });
+    // Neighbouring runs never share the same (tone, visible) pair.
     for (let i = 1; i < runs.length; i += 1) {
-      const same =
-        runs[i]!.tone === runs[i - 1]!.tone &&
-        runs[i]!.visible === runs[i - 1]!.visible &&
-        runs[i]!.ch === runs[i - 1]!.ch;
+      const same = runs[i]!.tone === runs[i - 1]!.tone && runs[i]!.visible === runs[i - 1]!.visible;
       expect(same).toBe(false);
     }
   });
