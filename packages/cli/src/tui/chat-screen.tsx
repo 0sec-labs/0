@@ -6144,6 +6144,7 @@ export function ChatScreen({
               {showMasthead ? (
                 <Masthead
                   showTerminalMark={showTerminalMark && heroContentWidth >= TERMINAL_BLOCK_LOGO_WIDTH}
+                  showMascot={height >= 38}
                   showTagline={showEmptyStateTagline}
                   contentWidth={heroContentWidth}
                   logoFrameGrid={logoFrameGrid}

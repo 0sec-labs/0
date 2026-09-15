@@ -1,10 +1,19 @@
 /** @jsxImportSource @opentui/react */
 import React from "react";
+import { useRenderer } from "@opentui/react";
 import { fitTuiText } from "../text.js";
-import { computeLogoFrame, logoRowRuns } from "../logo-animation.js";
-import { TERMINAL_BLOCK_LOGO_WIDTH, logoRunStyle } from "./logo.js";
-import { MASCOT_WIDTH, mascotRows, mascotToneStyle } from "./mascot.js";
+import { finalLogoFrame, logoRowRuns, type LogoFrame } from "../logo-animation.js";
+import {
+  TERMINAL_BLOCK_LOGO_COMPACT,
+  TERMINAL_BLOCK_LOGO_FULL_WIDTH,
+  TERMINAL_BLOCK_LOGO_WIDTH,
+  logoRunStyle,
+} from "./logo.js";
+import { ZERO_IMAGE, ZERO_ROWS } from "./mascot.js";
+import { ZERO_WIDTH, ZERO_HEIGHT } from "./zero-art.js";
 import type { Theme } from "../theme-context.js";
+
+const COMPACT_LOGO_FRAME = finalLogoFrame(TERMINAL_BLOCK_LOGO_COMPACT);
 
 /**
  * What the masthead is allowed to say about the engagement, and nothing more.
@@ -37,6 +46,7 @@ export interface MastheadEngagement {
  */
 export function Masthead({
   showTerminalMark,
+  showMascot = true,
   showTagline,
   contentWidth,
   logoFrameGrid,
@@ -44,14 +54,20 @@ export function Masthead({
   theme,
 }: {
   showTerminalMark: boolean;
+  showMascot?: boolean;
   showTagline: boolean;
   contentWidth: number;
-  logoFrameGrid: ReturnType<typeof computeLogoFrame>;
+  logoFrameGrid: LogoFrame;
   /** Real engagement facts from the host; anything absent is simply not drawn. */
   engagement?: MastheadEngagement;
   theme: Theme;
 }) {
   const { MUTED, TEXT } = theme;
+  const renderer = useRenderer();
+  const graphics = Boolean(renderer.capabilities?.kitty_graphics || renderer.capabilities?.sixel);
+  const fullWord = contentWidth >= TERMINAL_BLOCK_LOGO_FULL_WIDTH;
+  const blockFrame = fullWord ? logoFrameGrid : COMPACT_LOGO_FRAME;
+  const blockWidth = fullWord ? TERMINAL_BLOCK_LOGO_FULL_WIDTH : TERMINAL_BLOCK_LOGO_WIDTH;
   // Only facts that exist. `filter(Boolean)` after trimming is the whole
   // truthfulness policy: an empty or whitespace value is an absent value.
   const facts: Array<{ label: string; value: string }> = [
@@ -59,59 +75,37 @@ export function Masthead({
     { label: "Scope", value: String(engagement?.scope ?? "").trim() },
     { label: "Session", value: String(engagement?.sessionState ?? "").trim() },
   ].filter((fact) => fact.value.length > 0);
-  // The mascot art, split into the octagon head (drawn above the wordmark) and
-  // the brand band (drawn below it). Computed unconditionally — it is a few
-  // small string ops — but only painted when the block logo is (see below).
-  const mascotArt = mascotRows();
-  const mascotHead = mascotArt.slice(0, mascotArt.length - 1);
-  const mascotBand = mascotArt[mascotArt.length - 1];
+  // Native image when supported; otherwise render the same portrait as coloured
+  // half blocks. Both paths are static and occupy exactly the same cell budget.
   return (
     <>
       {showTerminalMark ? (
         <text fg={MUTED} marginBottom={1}>{fitTuiText("Swiss Applied AI Cybersecurity Research Lab", contentWidth, { mode: "middle" })}</text>
       ) : null}
-      {/*
-        * 0sec mascot — the aperture "operator" head. A compact octagon-with-a-
-        * slash (the brand ∅ device rendered as a little masked sentinel face),
-        * sitting above the wordmark so the hero reads as a cohesive brand
-        * lockup: mascot → 0SEC → band → tagline. Gated on the SAME
-        * interactive + width test as the block logo (`showTerminalMark`, which
-        * already requires `heroContentWidth >= TERMINAL_BLOCK_LOGO_WIDTH`), so
-        * it never appears on a narrow terminal — it simply disappears rather
-        * than breaking the column. Static (no animation) → reduceMotion-safe.
-        * Each row is a fixed MASCOT_WIDTH of sized runs (widths sum exactly),
-        * mirroring the logo, so no run can overflow the content column.
-        */}
-      {showTerminalMark ? (
-        <box flexDirection="column" width={MASCOT_WIDTH} minWidth={MASCOT_WIDTH} flexShrink={0} marginBottom={1}>
-          {mascotHead.map((runs, rowIndex) => (
-            <box key={`mascot-${rowIndex}`} flexDirection="row" width={MASCOT_WIDTH} flexShrink={0} minWidth={0}>
+      {showTerminalMark && showMascot ? (
+        <box flexDirection="column" width={ZERO_WIDTH} height={ZERO_HEIGHT} flexShrink={0} marginBottom={1}>
+          {graphics ? (
+            <image source={ZERO_IMAGE} fit="fit" width={ZERO_WIDTH} height={ZERO_HEIGHT} flexShrink={0} />
+          ) : ZERO_ROWS.map((runs, rowIndex) => (
+            <box key={`zero-${rowIndex}`} flexDirection="row" width={ZERO_WIDTH} height={1} flexShrink={0}>
               {runs.map((run, runIndex) => (
                 <text
-                  key={`mascot-${rowIndex}-${runIndex}`}
+                  key={`zero-${rowIndex}-${runIndex}`}
                   width={run.length}
+                  height={1}
                   flexShrink={0}
-                  fg={mascotToneStyle(run.tone, theme).fg}
-                >{run.glyph.repeat(run.length)}</text>
+                  fg={run.top ?? theme.CANVAS}
+                  bg={run.bottom ?? theme.CANVAS}
+                >{"▀".repeat(run.length)}</text>
               ))}
             </box>
           ))}
         </box>
       ) : null}
       {showTerminalMark ? (
-        <box flexDirection="column" width={TERMINAL_BLOCK_LOGO_WIDTH} minWidth={TERMINAL_BLOCK_LOGO_WIDTH} flexShrink={0}>
-          {/*
-            * 0sec brand mark: a slashed zero — a white "0" outline with an
-            * orange diagonal slash through its hollow — then white "SEC".
-            * The per-cell frame comes from computeLogoFrame (the intro
-            * animation, or the settled final frame under reduceMotion/"off");
-            * logoRowRuns coalesces each row into (tone,visible) runs whose
-            * widths sum to TERMINAL_BLOCK_LOGO_WIDTH, so no run overflows and
-            * each tone keeps its own token. Rendered verbatim — the row
-            * widths are exact, so no fitTuiText/trim is needed.
-            */}
-          {logoFrameGrid.map((row, index) => (
-            <box key={`logo-${index}`} flexDirection="row" width={TERMINAL_BLOCK_LOGO_WIDTH} flexShrink={0} minWidth={0}>
+        <box flexDirection="column" width={blockWidth} minWidth={blockWidth} flexShrink={0}>
+          {blockFrame.map((row, index) => (
+            <box key={`logo-${index}`} flexDirection="row" width={blockWidth} flexShrink={0} minWidth={0}>
               {logoRowRuns(row).map((run, runIndex) => {
                 const style = logoRunStyle(run.tone, theme);
                 const glyph = run.visible ? "█" : " ";
@@ -131,20 +125,13 @@ export function Masthead({
       ) : (
         <box flexDirection="row" width={contentWidth} flexShrink={0} minWidth={0}>
           <text width={contentWidth} height={1} wrapMode="none" truncate fg={TEXT}>
-            {fitTuiText("0SEC · OPERATOR CONSOLE", contentWidth, { mode: "middle" })}
+            {fitTuiText("0SECURITY · OPERATOR CONSOLE", contentWidth, { mode: "middle" })}
           </text>
         </box>
       )}
-      {/*
-        * The brand band — a short orange (PRIMARY) rule directly under the
-        * wordmark, echoing the site's wordmark-over-band lockup (the brand's
-        * old red band, retired to orange). Same gate as the mascot/logo.
-        */}
       {showTerminalMark ? (
-        <box flexDirection="row" width={MASCOT_WIDTH} flexShrink={0} minWidth={0} marginTop={1}>
-          <text width={mascotBand[0].length} flexShrink={0} fg={mascotToneStyle(mascotBand[0].tone, theme).fg}>
-            {mascotBand[0].glyph.repeat(mascotBand[0].length)}
-          </text>
+        <box flexDirection="row" width={9} height={1} flexShrink={0} marginTop={1}>
+          <text width={9} flexShrink={0} fg="#FD802E">━━━━━━━━━</text>
         </box>
       ) : null}
       {showTagline ? (

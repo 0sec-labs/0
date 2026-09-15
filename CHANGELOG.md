@@ -12,6 +12,15 @@ on the published npm package and the GitHub Release tag.
 
 ## [Unreleased]
 
+### Changed
+
+- Show a consistently spaced `0SECURITY` hero wordmark on wide terminals, with
+  the original `0SEC` mark retained for narrow columns.
+- Replace the duplicate aperture above the wordmark with Zero's actual thinking
+  portrait. Image-capable terminals use the embedded artwork; other terminals
+  display a coloured half-block version. Keep the orange band and hide the
+  portrait on short screens to preserve composer space.
+
 ## [0.17.0] - 2026-09-15
 
 ### Added

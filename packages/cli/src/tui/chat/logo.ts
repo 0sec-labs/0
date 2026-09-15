@@ -3,18 +3,21 @@ import type { Theme } from "../theme-context.js";
 import type { LogoCellTone } from "../logo-animation.js";
 
 /**
- * The 0sec block mark as a per-cell colour grid, one string per row over a
- * three-letter alphabet: ' ' is an empty cell, '#' a white (`theme.TEXT`)
- * block, '/' an orange (brand) block. The "0" is drawn wider than the
- * other letters so its interior has room for a two-cell-thick orange diagonal
- * slash — lower-left to upper-right — that clears the white outline on both
- * sides: a slashed zero. "SEC" stays white. This grid is the fixed base the
- * intro animation reveals: `computeLogoFrame` (logo-animation.ts) turns it into
- * a per-cell frame and `logoRowRuns` coalesces each row into same-tone runs the
- * render draws as explicitly-sized `<text>`s (widths sum to exactly
- * `TERMINAL_BLOCK_LOGO_WIDTH`), which keeps a row's segments from overflowing.
+ * Five-row 0SECURITY wordmark. Every letter has an eight-cell slot and
+ * two cells of tracking; the narrow I/T/Y stems keep the same two-cell weight.
+ * '#' is white block art, '/' is the orange diagonal in the leading zero.
  */
 export const TERMINAL_BLOCK_LOGO = [
+  " ######    ######   #######    ######   ##    ##  #######    ######   ########  ##    ##",
+  "##  //##  ##        ##        ##        ##    ##  ##    ##     ##        ##      ##  ## ",
+  "## // ##   ######   ######    ##        ##    ##  #######      ##        ##       ####  ",
+  "##//  ##        ##  ##        ##        ##    ##  ##  ##       ##        ##        ##   ",
+  " ######    ######   #######    ######    ######   ##   ##    ######      ##        ##   ",
+] as const;
+export const TERMINAL_BLOCK_LOGO_FULL_WIDTH = 88;
+
+/** Original compact mark for columns too narrow for the full word. */
+export const TERMINAL_BLOCK_LOGO_COMPACT = [
   " ######   #######  #######   ######",
   "##  //##  ##       ##       ##     ",
   "## // ##  #######  #####    ##     ",
