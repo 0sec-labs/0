@@ -358,6 +358,24 @@ describe("secrets discipline — credential-bearing keys are redacted", () => {
     const out = formatToolArgs({ name: "mystery", arguments: { path: "src/a.ts" } });
     expect(out).not.toContain("[redacted]");
   });
+
+  // Operator waiver: session_id is a non-secret conversation id and must render.
+  for (const key of ["session_id", "sessionId", "x-session-id"]) {
+    it(`shows non-secret "${key}" in the clear`, () => {
+      const out = formatToolArgs({ name: "read_conversation", arguments: { [key]: "conv-abc-123", offset: 30 } });
+      expect(out).toContain("conv-abc-123");
+      expect(out).not.toContain("[redacted]");
+    });
+  }
+
+  // …but a session *token/secret/key* is still a credential and stays masked.
+  for (const key of ["session_token", "session_secret", "session_key", "session"]) {
+    it(`still redacts credential-shaped "${key}"`, () => {
+      const out = formatToolArgs({ name: "mystery", arguments: { [key]: "s3cr3t-value-123" } });
+      expect(out).toContain("[redacted]");
+      expect(out).not.toContain("s3cr3t-value-123");
+    });
+  }
 });
 
 describe("totality — malformed input never throws and stays bounded", () => {

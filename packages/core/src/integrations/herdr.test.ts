@@ -203,7 +203,8 @@ describe("report shape", () => {
     expect(meta!.params.ttl_ms).toBeLessThanOrEqual(86_400_000);
     expect(meta!.params.tokens).toMatchObject({ findings: "1", phase: "research" });
     expect(Object.keys(meta!.params.tokens).length).toBeLessThanOrEqual(16);
-    // We deliberately never send a pane title — it is where a target would go.
+    // No topic ingredients were provided (no target/objective/finding-title/
+    // activity), so there is nothing to name the pane with here — title omitted.
     expect(meta!.params.title).toBeUndefined();
   });
 
@@ -503,75 +504,64 @@ describe("fail-soft", () => {
 
 // ── Privacy ─────────────────────────────────────────────────────────────────
 
-describe("privacy", () => {
-  const SECRETS = [
-    "admin.internal.acme-corp.com",
-    "https://admin.internal.acme-corp.com/login?next=/etc",
-    "Blind SQL injection in the tenant login form",
-    "The password reset endpoint leaks tokens",
-    "/home/dev/engagements/acme/src/auth/login.ts",
-    "curl -X POST --data 'id=1 OR 1=1'",
-    "Enumerate subdomains of acme-corp.com and exploit the admin panel",
-    "SuperSecretApiKey123",
-  ];
-
-  it("never puts engagement content on the wire", async () => {
+describe("content policy (operator waived the shared-socket privacy gate)", () => {
+  it("DOES put the useful engagement content on the wire", async () => {
+    // This build runs on a single operator's hardened box; the operator wants
+    // full herdr visibility. The old allow-list that stripped finding titles,
+    // targets, tool args and paths is intentionally gone: the pane topic and
+    // tokens now carry the real, useful content.
     const harness = createFakeHerdr();
     const sink = makeSink(harness);
 
+    sink.setTarget("admin.internal.acme-corp.com");
+    sink.setObjective("Blind SQL injection in the tenant login form");
     sink.emit("finding_ingested", {
       finding_id: "f-1",
       severity: "critical",
       title: "Blind SQL injection in the tenant login form",
-      description: "The password reset endpoint leaks tokens",
       category: "sqli",
-      source_path: "/home/dev/engagements/acme/src/auth/login.ts",
-      evidence_request: "GET https://admin.internal.acme-corp.com/login?next=/etc",
-      evidence_response: "SuperSecretApiKey123",
-      poc_steps: "curl -X POST --data 'id=1 OR 1=1'",
     });
     sink.emit("tool_call_started", {
       tool: "http_request",
       turn: 4,
-      args_preview: "https://admin.internal.acme-corp.com/login?next=/etc",
+      args_preview: "/login?next=/etc",
       ts: 1,
     });
-    sink.emit("tool_call_completed", {
-      tool: "http_request",
-      turn: 4,
-      duration_ms: 12,
-      status: "error",
-      error: "connect ETIMEDOUT admin.internal.acme-corp.com:443",
-      ts: 2,
-    });
-    sink.emit("subagent_lifecycle", {
-      agent_id: "sub-1",
-      parent_scan_id: "scan-1",
-      status: "running",
-      task: "Enumerate subdomains of acme-corp.com and exploit the admin panel",
-      max_turns: 10,
-      scope_rules: ["*.acme-corp.com"],
-    });
-    sink.emit("step_started", { step: "attack admin.internal.acme-corp.com" });
-    sink.emit("scan_completed", {
-      findings: 1,
-      summary: "Blind SQL injection in the tenant login form",
-      exit_reason: "done",
-    });
+    sink.emit("llm_planner_invoked", { turn: 4, model: "claude-opus-4-8" });
     await sink.drain();
 
+    const meta = harness.requests().filter((r) => r.method === "pane.report_metadata").pop();
+    expect(meta).toBeDefined();
+    // The target/scope anchors the pane topic (title) and the live objective
+    // rides along — real engagement content, exactly what the operator wants.
+    expect(typeof meta!.params.title).toBe("string");
+    expect(meta!.params.title).toContain("admin.internal.acme-corp.com");
+    expect(meta!.params.title).toContain("Blind SQL injection");
+    // Model and the running tool name are reported as tokens.
+    expect(meta!.params.tokens.model).toBe("claude-opus-4-8");
+    expect(meta!.params.tokens.tool).toBe("http_request");
+    // And the raw content really did cross the socket.
     const serialized = harness.writes.join("");
-    expect(serialized.length).toBeGreaterThan(0);
-    for (const secret of SECRETS) {
-      expect(serialized).not.toContain(secret);
-    }
-    // Not even a fragment of the target host survives.
-    expect(serialized).not.toContain("acme");
-    expect(serialized).not.toContain("http");
-    expect(serialized).not.toContain("/home/dev");
+    expect(serialized).toContain("acme-corp.com");
+    expect(serialized).toContain("claude-opus-4-8");
   });
 
-  it("still reports the useful non-identifying counters", async () => {
+  it("stays fail-soft while sending rich content (a throwing socket never propagates)", async () => {
+    const harness = createFakeHerdr("throw-connect");
+    const sink = makeSink(harness);
+    // None of these may throw even though every delivery attempt fails.
+    expect(() => {
+      sink.setTarget("admin.internal.acme-corp.com");
+      sink.setObjective("Blind SQL injection in the tenant login form");
+      sink.setModel("claude-opus-4-8", "anthropic");
+      sink.setContextPercent(73);
+      sink.emit("tool_call_started", { tool: "sqlmap", turn: 1, args_preview: "-u https://x/y", ts: 1 });
+      sink.reportCompacting();
+    }).not.toThrow();
+    await expect(sink.drain()).resolves.toBeUndefined();
+  });
+
+  it("reports the useful counters and rich tokens together", async () => {
     const harness = createFakeHerdr();
     const sink = makeSink(harness);
 
@@ -591,6 +581,109 @@ describe("privacy", () => {
       cost_usd: "1.2346",
       subagents: "0",
     });
+  });
+});
+
+// ── Session lifecycle + rich metadata ────────────────────────────────────────
+
+describe("session lifecycle (pane.report_agent_session)", () => {
+  it("links the pane to the agent session with id + start source", async () => {
+    const harness = createFakeHerdr();
+    const sink = makeSink(harness);
+
+    sink.reportSession({ sessionId: "scan-42", startSource: "new" });
+    await sink.drain();
+
+    const session = harness.requests().find((r) => r.method === "pane.report_agent_session");
+    expect(session).toBeDefined();
+    expect(session!.params).toMatchObject({
+      pane_id: "pane-7",
+      source: "0sec",
+      agent: "0sec",
+      agent_session_id: "scan-42",
+      session_start_source: "new",
+    });
+    expect(typeof session!.params.seq).toBe("number");
+  });
+
+  it("is a no-op when neither a session id nor a path is known", async () => {
+    const harness = createFakeHerdr();
+    const sink = makeSink(harness);
+
+    sink.reportSession({ startSource: "new" });
+    await sink.drain();
+
+    expect(harness.requests().some((r) => r.method === "pane.report_agent_session")).toBe(false);
+  });
+
+  it("carries a session path when provided", async () => {
+    const harness = createFakeHerdr();
+    const sink = makeSink(harness);
+
+    sink.reportSession({ sessionPath: "/home/dev/.0sec/sessions/scan-42.jsonl" });
+    await sink.drain();
+
+    const session = harness.requests().find((r) => r.method === "pane.report_agent_session");
+    expect(session!.params.agent_session_path).toBe("/home/dev/.0sec/sessions/scan-42.jsonl");
+  });
+});
+
+describe("rich metadata setters", () => {
+  it("reports model + provider, context %, and a compaction count as tokens", async () => {
+    const harness = createFakeHerdr();
+    const sink = makeSink(harness);
+
+    sink.setModel("gpt-5-codex", "openai");
+    sink.setContextPercent(73.6);
+    sink.reportCompacting();
+    sink.reportCompacting();
+    await sink.drain();
+
+    const meta = harness.requests().filter((r) => r.method === "pane.report_metadata").pop();
+    expect(meta!.params.tokens).toMatchObject({
+      model: "gpt-5-codex",
+      providers: "openai",
+      ctx: "74%",
+      compactions: "2",
+    });
+  });
+
+  it("joins a provider roster into one bounded token", async () => {
+    const harness = createFakeHerdr();
+    const sink = makeSink(harness);
+
+    sink.setProviders(["hosted", "anthropic", "openai"]);
+    await sink.drain();
+
+    const meta = harness.requests().filter((r) => r.method === "pane.report_metadata").pop();
+    expect(meta!.params.tokens.providers).toBe("hosted,anthropic,openai");
+  });
+
+  it("clamps context percent into [0,100]", async () => {
+    const harness = createFakeHerdr();
+    const sink = makeSink(harness);
+
+    sink.setContextPercent(150);
+    await sink.drain();
+    const meta = harness.requests().filter((r) => r.method === "pane.report_metadata").pop();
+    expect(meta!.params.tokens.ctx).toBe("100%");
+  });
+
+  it("keeps title + tokens within protocol bounds (<= 16 tokens, control-free title)", async () => {
+    const harness = createFakeHerdr();
+    const sink = makeSink(harness);
+
+    sink.setTarget("acme-corp.com");
+    sink.setObjective("SQLi\nin\tthe\rlogin form"); // control chars must be scrubbed
+    sink.emit("agent_turn_started", { turn: 1, max_turns: 40 });
+    await sink.drain();
+
+    const meta = harness.requests().filter((r) => r.method === "pane.report_metadata").pop();
+    expect(Object.keys(meta!.params.tokens).length).toBeLessThanOrEqual(16);
+    expect(meta!.params.title).not.toMatch(/[\n\r\t]/);
+    expect(meta!.params.title).toContain("acme-corp.com");
+    // The framed line stays a single NDJSON record (no embedded newline).
+    for (const line of harness.writes) expect(line.slice(0, -1)).not.toContain("\n");
   });
 });
 
@@ -620,12 +713,21 @@ describe("sanitizeHerdrTokens", () => {
     expect(Object.keys(out).sort()).toEqual(["GOOD-2", "good_key"]);
   });
 
-  it("drops keys outside the privacy allow-list by default", () => {
+  it("keeps every well-formed key when no allow-list is given (the default)", () => {
+    // The operator waived the shared-socket privacy gate: rich content is sent.
     const out = sanitizeHerdrTokens({ findings: 3, target: "acme.com", title: "sqli" });
+    expect(out).toEqual({ findings: "3", target: "acme.com", title: "sqli" });
+  });
+
+  it("still honours an explicit allow-list when one is passed", () => {
+    const out = sanitizeHerdrTokens(
+      { findings: 3, target: "acme.com" },
+      new Set(["findings"]),
+    );
     expect(out).toEqual({ findings: "3" });
   });
 
-  it("coerces and rejects values", () => {
+  it("coerces values richly (spaces are kept; only unrepresentable values drop)", () => {
     const out = sanitizeHerdrTokens(
       {
         a: 7,
@@ -634,16 +736,32 @@ describe("sanitizeHerdrTokens", () => {
         d: Number.POSITIVE_INFINITY,
         e: true,
         f: "ok-value",
-        g: "has spaces so it is dropped",
-        h: "x".repeat(64),
+        g: "has spaces and is kept now",
+        h: "y".repeat(80),
         i: { nested: 1 },
         j: null,
         k: undefined,
         l: ["a"],
+        m: "   ",
       },
       null,
     );
-    expect(out).toEqual({ a: "7", b: "1.2346", e: "true", f: "ok-value" });
+    // Numbers coerce, booleans coerce, strings (incl. spaces) are kept and
+    // length-bounded; objects/arrays/null/undefined/non-finite/blank drop.
+    expect(out.a).toBe("7");
+    expect(out.b).toBe("1.2346");
+    expect(out.e).toBe("true");
+    expect(out.f).toBe("ok-value");
+    expect(out.g).toBe("has spaces and is kept now");
+    expect(out.h.length).toBe(64); // bounded with an ellipsis
+    expect(out.h.endsWith("…")).toBe(true);
+    expect(out.c).toBeUndefined();
+    expect(out.d).toBeUndefined();
+    expect(out.i).toBeUndefined();
+    expect(out.j).toBeUndefined();
+    expect(out.k).toBeUndefined();
+    expect(out.l).toBeUndefined();
+    expect(out.m).toBeUndefined(); // blank after trim
   });
 
   it("does not mutate its input", () => {

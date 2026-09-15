@@ -613,26 +613,14 @@ const SCOPED_SOURCE_AUDIT_TOOLS: Record<string, true> = {
   // Explicitly opt-in; the handler confines the path, strips credentials, and
   // leaves dynamic target execution disabled unless 0verse itself is configured.
   analyze_binary: true,
-  // Offline / read-only security engines (dev-live-engine-recovery): file/DB
-  // read or read-only + env-scoped analysis — no target network, no exploit, no
-  // write inside the scope. Safe inside the scoped source-audit trust boundary
-  // exactly like `intel`, so they belong in the DEFAULT read-only role set.
-  ad_attack_paths: true,
-  entra_attack_paths: true,
-  entra_posture: true,
-  deep_source_review: true,
-  file_security_review: true,
-  assemble_advisory: true,
-  cve_lookup: true,
-  // Phase-2 GROUP 1 (dev-live-engine-recovery): offline source engines — a
-  // variant hunt from a seed, assumption-mining over a source root, and scoped
-  // fix generation for a reproduced finding. All read source/DB only, run no
-  // target traffic, and (generate_fix aside, which only PROPOSES a patch) write
-  // nothing — so, exactly like the Phase-1 offline engines above, they join the
-  // DEFAULT read-only role set with NO extra gating.
-  variant_hunt: true,
-  assumption_hunt: true,
-  generate_fix: true,
+  // NOTE: the wired security engines (ad_attack_paths, entra_*, deep_source_review,
+  // file_security_review, assemble_advisory, cve_lookup, variant_hunt,
+  // assumption_hunt, generate_fix) are deliberately NOT in this set. Several
+  // spawn sub-analyses / run lenses / make network calls (entra_posture,
+  // cve_lookup), so exposing them inside the ATTACKER-CONTROLLED scoped source
+  // boundary would widen the trust surface. They remain in TOOL_REGISTRY_ORDER
+  // and so are available to the trusted (non-scoped) audit/review role via
+  // `allEnabledTools` — just never inside a hostile scope.
 };
 
 /**

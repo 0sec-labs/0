@@ -75,8 +75,18 @@ export type LogoAnimStyle =
   | "swiss"
   | "off";
 
-/** The logo alphabet: empty, white block, red-slash block. */
-export type LogoCellChar = " " | "#" | "/";
+/** The logo alphabet: empty, white block, red-slash block, or a chamfer corner. */
+export type LogoCellChar = " " | "#" | "/" | "▗" | "▖" | "▝" | "▘";
+
+/**
+ * The render glyph for a cell class: outline and slash classes paint as a full
+ * block; the chamfer classes (▗▖▝▘ single-quadrant corners) paint as themselves
+ * so cut corners survive to the screen. Hidden cells render as spaces — the
+ * caller decides visibility, this only maps class -> glyph.
+ */
+export function logoCellGlyph(ch: LogoCellChar): string {
+  return ch === "#" || ch === "/" ? "█" : ch === " " ? " " : ch;
+}
 
 /** The five named render tones the caller maps to theme tokens (and DIM). */
 export type LogoNamedTone = "text" | "error" | "dim" | "muted" | "brand";
@@ -106,11 +116,13 @@ export interface LogoCellState {
 export type LogoFrame = LogoCellState[][];
 
 /**
- * One coalesced run of adjacent cells sharing a `(tone, visible)` pair, so the
- * caller can paint each run as a single explicitly-sized `<text>` rather than a
- * cell per element — the animated analogue of the masthead's raw-glyph runs, but
- * keyed on the frame's render state instead of the raw glyph alphabet. Run
- * lengths across a row sum to the frame's (padded) width, so no run overflows.
+ * One coalesced run of adjacent cells sharing a `(tone, visible, ch)` triple, so
+ * the caller can paint each run as a single explicitly-sized `<text>` rather
+ * than a cell per element — the animated analogue of the masthead's raw-glyph
+ * runs, but keyed on the frame's render state instead of the raw glyph alphabet.
+ * The cell class is part of the key because chamfer corners (▗▖▝▘) render as
+ * themselves, not as full blocks. Run lengths across a row sum to the frame's
+ * (padded) width, so no run overflows.
  */
 export interface LogoRun {
   /** Number of cells this run spans. */
@@ -119,17 +131,19 @@ export interface LogoRun {
   tone: LogoCellTone;
   /** Shared visibility; `false` runs render as `length` spaces. */
   visible: boolean;
+  /** The shared cell class; map through `logoCellGlyph` for the paint glyph. */
+  ch: LogoCellChar;
 }
 
-/** Coalesce one frame row into `(tone, visible)` runs, preserving order. */
+/** Coalesce one frame row into `(tone, visible, ch)` runs, preserving order. */
 export function logoRowRuns(row: readonly LogoCellState[]): LogoRun[] {
   const runs: LogoRun[] = [];
   for (const cell of row) {
     const last = runs[runs.length - 1];
-    if (last && last.tone === cell.tone && last.visible === cell.visible) {
+    if (last && last.tone === cell.tone && last.visible === cell.visible && last.ch === cell.ch) {
       last.length += 1;
     } else {
-      runs.push({ length: 1, tone: cell.tone, visible: cell.visible });
+      runs.push({ length: 1, tone: cell.tone, visible: cell.visible, ch: cell.ch });
     }
   }
   return runs;
@@ -194,7 +208,17 @@ export function logoAnimationLoops(style: LogoAnimStyle): boolean {
 /** Normalise a raw grid char to the logo alphabet. */
 function cellCharAt(grid: readonly string[], row: number, col: number): LogoCellChar {
   const ch = grid[row]?.[col];
-  return ch === "#" ? "#" : ch === "/" ? "/" : " ";
+  switch (ch) {
+    case "#":
+    case "/":
+    case "▗":
+    case "▖":
+    case "▝":
+    case "▘":
+      return ch;
+    default:
+      return " ";
+  }
 }
 
 /** The widest row's length; the frame is padded to this many columns. */
@@ -396,7 +420,7 @@ function strikeFrame(grid: readonly string[], frame: number, width: number): Log
   for (let r = 0; r < grid.length; r += 1) {
     for (let c = 0; c < width; c += 1) {
       const ch = out[r]![c]!.ch;
-      if (ch === "#") {
+      if (ch !== " " && ch !== "/") {
         out[r]![c] = { ch, visible: true, tone: "text" };
       } else if (ch === "/") {
         const key = c - r;

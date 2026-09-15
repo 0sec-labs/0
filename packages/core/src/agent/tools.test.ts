@@ -177,20 +177,14 @@ describe("getToolsForRole", () => {
         "update_finding",
         "done",
         "update_todos",
-        // Offline / read-only security engines (dev-live-engine-recovery).
-        "ad_attack_paths",
-        "entra_attack_paths",
-        "entra_posture",
-        "deep_source_review",
-        "file_security_review",
-        "assemble_advisory",
-        "cve_lookup",
-        // Phase-2 GROUP 1 offline source engines (dev-live-engine-recovery):
-        // variant hunt, assumption-mining, scoped fix generation — source/DB
-        // read only, no target traffic, so they join the default read-only set.
-        "variant_hunt",
-        "assumption_hunt",
-        "generate_fix",
+        // NOTE: the wired security engines (ad_attack_paths, entra_*,
+        // deep_source_review, file_security_review, assemble_advisory,
+        // cve_lookup, variant_hunt, assumption_hunt, generate_fix) are
+        // deliberately ABSENT from the scoped source-audit set — several spawn
+        // sub-analyses / run lenses / make network calls, so exposing them
+        // inside the ATTACKER-CONTROLLED scoped source boundary would widen the
+        // trust surface. They stay available to the trusted (non-scoped)
+        // audit/review role via allEnabledTools — just never inside a scope.
       ]);
     }
   });

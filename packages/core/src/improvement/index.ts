@@ -22,3 +22,15 @@ export {
   resolveEvolutionImage, resolveEvolutionConfigImage,
 } from "./sandbox.js";
 export { proposeEvolutionEdits } from "./rewrite.js";
+export {
+  harvestMissesFromScorecard,
+  harvestMissesFromTournament,
+  harvestMissesFromLedgerEntry,
+  harvestedMissesToMissInput,
+  mergeHarvestedMisses,
+} from "./miss-harvest.js";
+export type {
+  MissHarvestResult,
+  MissSkipReason,
+  SkippedCase,
+} from "./miss-harvest.js";

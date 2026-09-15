@@ -3,24 +3,58 @@ import type { Theme } from "../theme-context.js";
 import type { LogoCellTone } from "../logo-animation.js";
 
 /**
- * The 0sec block mark as a per-cell colour grid, one string per row over a
- * three-letter alphabet: ' ' is an empty cell, '#' a white (`theme.TEXT`)
- * block, '/' an orange (brand) block. The "0" is drawn wider than the
- * other letters so its interior has room for a two-cell-thick orange diagonal
- * slash — lower-left to upper-right — that clears the white outline on both
- * sides: a slashed zero. "SEC" stays white. This grid is the fixed base the
- * intro animation reveals: `computeLogoFrame` (logo-animation.ts) turns it into
- * a per-cell frame and `logoRowRuns` coalesces each row into same-tone runs the
+ * The 0sec block wordmark as a per-cell colour grid, one string per row over a
+ * seven-char alphabet: ' ' is an empty cell, '#' a white (`theme.TEXT`) block,
+ * '/' an orange (brand) block, and ▗▖▝▘ white single-quadrant chamfer corners
+ * (they render as themselves, not full blocks — see `logoCellGlyph`). The
+ * leading "0" is drawn wider than the other letters so its interior has room
+ * for a two-cell-thick orange diagonal slash — lower-left to upper-right — that
+ * clears the white outline on both sides: a slashed zero. The remaining letters
+ * ("SECURITY") stay white. This grid is the fixed base the intro animation
+ * reveals: `computeLogoFrame` (logo-animation.ts) turns it into a per-cell
+ * frame and `logoRowRuns` coalesces each row into same-(tone,glyph) runs the
  * render draws as explicitly-sized `<text>`s (widths sum to exactly
- * `TERMINAL_BLOCK_LOGO_WIDTH`), which keeps a row's segments from overflowing.
+ * `TERMINAL_BLOCK_LOGO_FULL_WIDTH`), which keeps a row's segments from
+ * overflowing.
+ *
+ * Every glyph is hand-built in the same chamfered block style — five rows
+ * tall, two-cell ("##") stroke weight, a two-cell gap between letters, and
+ * single-quadrant cuts on the outer corners: the "0" is a full octagon; "S/C"
+ * cut all four corners; "E/R" cut the open right side; "U" cuts the baseline;
+ * "I/T" cut the bar ends. The chamfers give the mark its cut-corner identity
+ * instead of soft rounded blocks.
  */
 export const TERMINAL_BLOCK_LOGO = [
-  " ######   #######  #######   ######",
-  "##  //##  ##       ##       ##     ",
-  "## // ##  #######  #####    ##     ",
-  "##//  ##       ##  ##       ##     ",
-  " ######   #######  #######   ######",
+  "▗######▖  ▗#####▖  ######▖  ▗#####▖  ##   ##  ######▖  ▗#####▖  ▗#####▖  ##   ##",
+  "##  //##  ##       ##       ##       ##   ##  ##   ##    ##       ##     ##   ##",
+  "## // ##  ▝#####▖  #####    ##       ##   ##  ######▘    ##       ##     ▝## ##▘",
+  "##//  ##       ##  ##       ##       ##   ##  ##  ##     ##       ##       ##   ",
+  "▝######▘  ▝#####▘  ######▘  ▝#####▘  ▝#####▘  ##   ##  ▝#####▘    ##       ##   ",
 ] as const;
+/** Width of the full "0SECURITY" wordmark; content must be at least this wide for it. */
+export const TERMINAL_BLOCK_LOGO_FULL_WIDTH = 80;
+
+/**
+ * The compact "0SEC" mark — the same chamfered block wordmark, kept as the
+ * graceful fallback for terminals wide enough for a block mark but too narrow
+ * for the full "0SECURITY" word. Same alphabet, style and slashed-zero as the
+ * full mark; the masthead paints it as a settled (static) frame via
+ * `finalLogoFrame`.
+ */
+export const TERMINAL_BLOCK_LOGO_COMPACT = [
+  "▗######▖  ▗#####▖  ######▖  ▗#####▖",
+  "##  //##  ##       ##       ##     ",
+  "## // ##  ▝#####▖  #####    ##     ",
+  "##//  ##       ##  ##       ##     ",
+  "▝######▘  ▝#####▘  ######▘  ▝#####▘",
+] as const;
+/**
+ * Width of the compact "0SEC" mark. This is ALSO the minimum content width at
+ * which the hero renders any block mark at all (the caller's gate): below it the
+ * hero drops to its one-line text form; at or above it the mark shows — the
+ * compact "0SEC" from here up to `TERMINAL_BLOCK_LOGO_FULL_WIDTH`, the full
+ * "0SECURITY" beyond.
+ */
 export const TERMINAL_BLOCK_LOGO_WIDTH = 35;
 
 /**

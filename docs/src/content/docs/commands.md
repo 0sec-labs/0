@@ -1846,6 +1846,8 @@ Guide: [Read the workflow](/improvement-plane/).
 | `-m, --model <id>` | — | synthesis model override |
 | `--promote` | `false` | persist a validated champion to the durable overlay |
 | `--trials <n>` | — | repeated validation trials (2–10; default 2) |
+| `--from-bench <ledger>` | — | harvest the champion's false-negatives from a benchmark ledger into the curated misses (requires --manifest) |
+| `--manifest <path>` | — | bench manifest path (ground-truth vuln class + sink); required with --from-bench |
 | `--watch` | `false` | poll the miss-input and process each new content revision |
 | `--poll-interval <ms>` | `2000` | watch polling interval (minimum 100ms) |
 | `--status` | `false` | show the active durable overlay and promotion ledger |

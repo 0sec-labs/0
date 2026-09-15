@@ -65,6 +65,7 @@ import { UsageScreen } from "./usage-screen.js";
 import { FindingDetailScreen } from "./finding-detail-screen.js";
 import { copyToClipboard, defaultSpawn, defaultWhich } from "./clipboard.js";
 import { createSessionCloseGate } from "./session-close-gate.js";
+import { reportHerdrSession, reportHerdrSessionClose } from "../herdr-state.js";
 import { installTuiOutputGuard } from "./output-guard.js";
 import {
   createTuiLensEvolutionController,
@@ -608,6 +609,14 @@ function ConsoleApp({
   const records = workspace.records;
   const selectedId = workspace.selectedId;
   const selectedRecord = workspace.selected;
+  // Link the herdr pane to the selected audit's agent session so herdr can tie
+  // the pane to a 0sec session (its lifecycle signal). Re-links whenever the
+  // selected session changes (a new/resumed audit). No-op off-herdr, fail-soft.
+  const selectedScanId = selectedRecord?.session?.scanId;
+  useEffect(() => {
+    if (!selectedScanId) return;
+    reportHerdrSession({ sessionId: selectedScanId });
+  }, [selectedScanId]);
   const [workspaceRoot] = useState(() => process.cwd());
   const [shellError, setShellError] = useState<string | null>(null);
   const [closingAll, setClosingAll] = useState(false);
@@ -631,6 +640,9 @@ function ConsoleApp({
     if (exitRequested.current) return;
     exitRequested.current = true;
     setClosingAll(true);
+    // Release this pane's herdr agent slot on the way out so the sidebar stops
+    // showing 0sec's stale state/topic. Fire-and-forget and fail-soft.
+    reportHerdrSessionClose();
     appendTuiEvent({ kind: "shutdown", stage: "requested", audits: creations.current.size });
     for (const gate of legacyLaunches.current.keys()) gate.close();
     const sessionClosures = routes.filter((route) => route.type === "session")

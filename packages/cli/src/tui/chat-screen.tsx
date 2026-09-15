@@ -117,7 +117,15 @@ import {
   saveSession,
 } from "./session-store.js";
 import type { SessionPluginHostManager } from "./session-plugin-host.js";
-import { reportOperatorGate } from "../herdr-state.js";
+import {
+  reportOperatorGate,
+  reportHerdrModel,
+  reportHerdrContextPercent,
+  reportHerdrTarget,
+  reportHerdrObjective,
+  reportHerdrActivity,
+  reportHerdrCompaction,
+} from "../herdr-state.js";
 import {
   GLYPH_CELLS,
   ELAPSED_VISIBLE_AFTER_MS,
@@ -4802,6 +4810,32 @@ export function ChatScreen({
     hostedBalance: !focusAgentId && cloudBalance && cloudBalance.owner === session && cloudSource.current?.isHosted()
       ? formatHostedBalance(cloudBalance.state) : undefined,
   });
+  // Feed herdr the same live facts the status bar shows — model/provider,
+  // context %, the target/objective topic and the current activity — so the
+  // pane's sidebar chrome names 0sec's work. Gated on `interactive`: only the
+  // selected, non-overlay audit owns the single pane's topic, so hidden audits
+  // never fight over it. Percent mirrors the status-bar meter exactly. All
+  // reporters are no-ops off-herdr and fail-soft.
+  const herdrContextPercent =
+    contextLimit?.tokens && lastContext !== undefined && contextLimit.tokens > 0
+      ? (lastContext / contextLimit.tokens) * 100
+      : null;
+  useEffect(() => {
+    if (!interactive) return;
+    reportHerdrModel(activeModel ?? null, activeProvider ?? null);
+    reportHerdrContextPercent(herdrContextPercent);
+    reportHerdrTarget(target || null);
+    reportHerdrObjective(objective || null);
+    reportHerdrActivity(statusActivity ?? null);
+  }, [interactive, activeModel, activeProvider, herdrContextPercent, target, objective, statusActivity]);
+  // A compaction just ran: surface it to herdr as a monotonic count token.
+  // Fires once per new compaction (the effect only re-runs when the number
+  // changes); guarded against the undefined initial value.
+  useEffect(() => {
+    if (latestCompaction === undefined) return;
+    reportHerdrCompaction();
+  }, [latestCompaction]);
+
   // The OMP-style pill row: the SAME segments, kept/dropped at the bar's real
   // width, each painted as its own coloured glyph+text with a subtle separator
   // between (rendered below via `renderStatusPills`). `statusBarText` remains as
