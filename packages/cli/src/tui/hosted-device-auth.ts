@@ -1,4 +1,4 @@
-import { loadCloudCredentials, CloudClient, CloudUnauthorizedError, CloudForbiddenError } from "@0sec/core";
+import { loadCloudCredentials, CloudClient, CloudError, CloudUnauthorizedError, CloudForbiddenError } from "@0sec/core";
 import type { HostedVerificationStatus } from "./connect-layout.js";
 import { hostedBrowserLoginFlow, type HostedBrowserLoginOptions, type HostedLoginPhase, type LoginResult } from "../commands/auth.js";
 
@@ -71,6 +71,13 @@ export async function verifyHostedConnection(opts: {
     return { kind: "verified", remainingUsd: typeof account.remainingUsd === "number" ? account.remainingUsd : undefined };
   } catch (error) {
     if (error instanceof CloudUnauthorizedError || error instanceof CloudForbiddenError) return { kind: "rejected" };
+    if (error instanceof CloudError) {
+      // The gateway distinguishes a deliberate service gate from an outage via a
+      // body code; surface that instead of a blanket "unreachable".
+      if (error.code === "inference_disabled") return { kind: "disabled" };
+      if (error.status === 402 || error.code === "insufficient_funds") return { kind: "no-credits" };
+      // provider_unavailable / billing_unavailable / other 5xx are genuine outages.
+    }
     return { kind: "unreachable" };
   }
 }

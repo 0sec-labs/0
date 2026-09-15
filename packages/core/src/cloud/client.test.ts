@@ -151,3 +151,32 @@ describe("CloudClient credit availability", () => {
     expect((await client.getInferenceAccount()).credits?.remainingPercent).toBeNull();
   });
 });
+
+describe("gateway error codes", () => {
+  const HOST2 = "https://cloud.0.security";
+  const SECRET2 = "tok";
+  const gate = (status: number, code: string) =>
+    (async () => new Response(JSON.stringify({ error: { code } }), {
+      status, headers: { "content-type": "application/json" },
+    })) as typeof fetch;
+
+  it("threads inference_disabled (503) through CloudError.code", async () => {
+    const client = new CloudClient({ host: HOST2, token: SECRET2, fetchImpl: gate(503, "inference_disabled") });
+    await expect(client.getInferenceAccount()).rejects.toMatchObject({
+      name: "CloudError", status: 503, code: "inference_disabled",
+    });
+  });
+
+  it("threads insufficient_funds (402) through CloudError.code", async () => {
+    const client = new CloudClient({ host: HOST2, token: SECRET2, fetchImpl: gate(402, "insufficient_funds") });
+    await expect(client.getInferenceModels()).rejects.toMatchObject({
+      name: "CloudError", status: 402, code: "insufficient_funds",
+    });
+  });
+
+  it("leaves code undefined when the body has none", async () => {
+    const client = new CloudClient({ host: HOST2, token: SECRET2,
+      fetchImpl: (async () => new Response("oops", { status: 500 })) as typeof fetch });
+    await expect(client.getInferenceModels()).rejects.toMatchObject({ name: "CloudError", status: 500 });
+  });
+});

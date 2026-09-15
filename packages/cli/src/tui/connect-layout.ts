@@ -474,6 +474,10 @@ export type HostedVerificationStatus =
   | { readonly kind: "pending" }
   | { readonly kind: "verified"; readonly remainingUsd?: number }
   | { readonly kind: "rejected" }
+  /** Token is valid but hosted inference is not switched on yet (503 inference_disabled). */
+  | { readonly kind: "disabled" }
+  /** Token is valid but the account is out of inference credits (402 insufficient_funds). */
+  | { readonly kind: "no-credits" }
   | { readonly kind: "unreachable" };
 
 export interface ConnectDetailInput {
@@ -530,6 +534,10 @@ export function connectDetailLines(
         );
       } else if (v.kind === "rejected") {
         push("Sign-in saved, but 0sec Cloud rejected the token \u2014 press Enter to sign in again.", "warn");
+      } else if (v.kind === "disabled") {
+        push("Signed in \u2014 hosted inference isn\u2019t enabled yet. Use your own provider key for now.", "muted");
+      } else if (v.kind === "no-credits") {
+        push("Signed in, but this account is out of inference credits.", "warn");
       } else {
         push("Sign-in saved; couldn\u2019t reach 0sec Cloud to verify right now.", "muted");
       }

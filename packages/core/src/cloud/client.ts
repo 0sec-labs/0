@@ -15,6 +15,11 @@ export class CloudError extends Error {
     message: string,
     readonly status?: number,
     readonly path?: string,
+    /** The gateway's machine error code from the `{error:{code}}` body, when present
+     * (e.g. `inference_disabled`, `provider_unavailable`, `billing_unavailable`,
+     * `insufficient_funds`) — lets a caller tell a deliberate service gate from an
+     * outage. */
+    readonly code?: string,
   ) {
     super(message);
     this.name = "CloudError";
@@ -202,8 +207,31 @@ export class CloudClient {
       throw new CloudNetworkError(this.scrub(msg), path);
     }
 
-    this.assertOk(res, path);
+    if (!res.ok) {
+      // The gateway returns a machine code in the body (`{error:{code}}`) — read it
+      // so a deliberate 503 gate (`inference_disabled`) is distinguishable from an
+      // outage. Best-effort: a missing / non-JSON body leaves the code undefined.
+      let code: string | undefined;
+      try {
+        const body = (await res.json()) as { error?: { code?: unknown } } | null;
+        const raw = body?.error?.code;
+        if (typeof raw === "string" && raw.length > 0) code = raw;
+      } catch { /* no / malformed body */ }
+      this.throwForStatus(res.status, path, code);
+    }
     return (await res.json()) as T;
+  }
+
+  /** Throw a typed error for a non-2xx status, carrying the gateway's body `code`. */
+  throwForStatus(status: number, path: string, code?: string): never {
+    if (status === 401) throw new CloudUnauthorizedError(path);
+    if (status === 403) throw new CloudForbiddenError(path);
+    throw new CloudError(
+      `0sec-cloud request failed (HTTP ${status}${code ? ` ${code}` : ""}) on ${path}.`,
+      status,
+      path,
+      code,
+    );
   }
 
   /**

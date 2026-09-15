@@ -528,6 +528,18 @@ describe("cloud verification in the detail pane", () => {
     expect(out).toContain("rejected the token");
     expect(out).toContain("warn:");
   });
+  it("says hosted inference isn't enabled yet on a deliberate service gate", () => {
+    const out = render({ kind: "disabled" });
+    expect(out).toContain("isn");            // "isn't enabled yet"
+    expect(out).toContain("enabled");
+    expect(out).not.toContain("rejected");
+    expect(out).not.toContain("couldn");     // not framed as unreachable
+  });
+  it("flags an out-of-credits account distinctly", () => {
+    const out = render({ kind: "no-credits" });
+    expect(out).toContain("out of inference credits");
+    expect(out).toContain("warn:");
+  });
   it("distinguishes an unreachable backend from a bad token", () => {
     expect(render({ kind: "unreachable" })).toContain("couldn");
     expect(render({ kind: "unreachable" })).not.toContain("rejected");
