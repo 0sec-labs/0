@@ -80,7 +80,7 @@ export function registerConnectCommand(program: Command): void {
       return n;
     })
     .option("--cron <expression>", "Recurring schedule (cron). Default: daily at 03:00 UTC", "0 3 * * *")
-    .option("--no-schedule", "Only run once, do not install a recurring schedule", false)
+    .option("--no-schedule", "Only run once, do not install a recurring schedule")
     .action(async (repo: string, options: ConnectOptions) => {
       if (!/^https:\/\/[^\s]+\.git$|^https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/?$/.test(repo)) {
         throw new InvalidArgumentError("repo must be an HTTPS git URL (e.g. https://github.com/org/repo)");
