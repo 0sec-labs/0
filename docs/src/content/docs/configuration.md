@@ -204,13 +204,18 @@ you choose a lower tier:
 | --- | --- |
 | `off` | No analytics or training uploads |
 | `usage` | Feature/finding counters, error categories, turns, duration and available cost totals; no tool content |
-| `commands` | Usage plus redacted tool arguments/results and submitted executable-plugin files |
-| `full` | Commands plus redacted scope entries and findings |
+| `commands` | Usage plus credential-scrubbed tool arguments/results and submitted executable-plugin files |
+| `full` | Commands plus credential-scrubbed scope entries and findings |
 
-Training records support model improvement and security research. Redaction
-removes recognized secret values and patterns, but **does not guarantee
-anonymity or removal of every sensitive value**. Requests are authenticated;
-random install/session identifiers do not make them anonymous. This pipeline
+Training records support model improvement and security research. **Ordinary
+content is retained, including emails, URLs, identifiers and opaque strings.**
+Only recognized credentials are scrubbed: authentication headers, known API-key
+and token shapes, private keys, credential-named fields and URL user/password
+information. Structured JSON is decoded before scrubbing nested values.
+This is best-effort credential protection, **not anonymization or a guarantee
+that every secret is recognized**. Requests are authenticated; random
+install/session identifiers do not make them anonymous. The v1 `*Redacted`
+field names refer to credential scrubbing, not broad PII removal. This pipeline
 does not introduce a separate conversation-transcript record.
 
 The setting is operator-global; project settings cannot broaden it. Saved
@@ -232,6 +237,8 @@ counts, not unconditional training-data acceptance.
 
 Tool arguments, tool results and submitted source each have a **262,144-byte
 UTF-8 limit after redaction**. Accepted content is not cut to a short preview.
+Other metadata strings retain a 4,000-character cap, including any overflow
+marker; this does not reduce the tool/code content allowance.
 POSTs contain at most 100 records and 1,048,576 encoded JSON bytes, including
 escaping and the batch wrapper. An oversized field or single encoded record
 is skipped, not truncated or retried: stderr and

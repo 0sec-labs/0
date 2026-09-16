@@ -82,11 +82,13 @@ export class EmptyPocError extends Error {
 
 const SENSITIVE_HEADER_NAMES = new Set([
   "authorization",
+  "proxy-authorization",
   "cookie",
   "set-cookie",
   "x-auth-token",
   "x-api-key",
   "x-csrf-token",
+  "x-xsrf-token",
 ]);
 
 const AWS_KEY_RE = /\bAKIA[0-9A-Z]{16}\b/g;
@@ -123,10 +125,21 @@ const INLINE_CURL_HEADER_RE =
  */
 export function redactSensitiveHeaders(text: string): string {
   if (!text) return text;
+  let out = redactAuthHeaders(text);
+  out = out.replace(AWS_KEY_RE, "<REDACTED-AWS-KEY>");
+  // Advisory output retains its conservative JWT-like string sweep.
+  out = out.replace(JWT_RE, (match) => {
+    if (match.length < 80) return match;
+    return "<REDACTED-JWT>";
+  });
+  return out;
+}
+
+/** Scrub explicit authentication headers without masking ordinary opaque text. */
+export function redactAuthHeaders(text: string): string {
+  if (!text) return text;
   const lines = text.split("\n");
   const redactedLines = lines.map((line) => {
-    // Header line: `Name: value` or `Name:value`. Allow leading whitespace
-    // (request indentation) and arbitrary case on the header name.
     const m = /^(\s*)([A-Za-z][A-Za-z0-9-]*)\s*:\s*(.*)$/.exec(line);
     if (m && SENSITIVE_HEADER_NAMES.has(m[2].toLowerCase())) {
       return `${m[1]}${m[2]}: <REDACTED-${m[2]}>`;
@@ -134,25 +147,11 @@ export function redactSensitiveHeaders(text: string): string {
     return line;
   });
   let out = redactedLines.join("\n");
-  // Inline `curl -H 'Sensitive: ...'` patterns. Apply BEFORE bearer/JWT/AWS
-  // sweeps so the value is wholly replaced, not partially masked.
   out = out.replace(INLINE_CURL_HEADER_RE, (match, flag, sep, quote, name, _value) => {
     if (!SENSITIVE_HEADER_NAMES.has(name.toLowerCase())) return match;
     return `${flag}${sep}${quote}${name}: <REDACTED-${name}>${quote}`;
   });
-  // Inline `Bearer <token>` anywhere in the text — handles cases the
-  // `^Authorization:` matcher above already covered, but also wraps
-  // tokens embedded in shell args.
-  out = out.replace(INLINE_BEARER_RE, "$1 <REDACTED-Bearer>");
-  out = out.replace(AWS_KEY_RE, "<REDACTED-AWS-KEY>");
-  // Apply JWT regex AFTER header redaction so we don't double-replace masks.
-  // The mask placeholder doesn't match the JWT pattern so this is safe.
-  out = out.replace(JWT_RE, (match) => {
-    // Skip strings that don't look like real JWTs (need to be 80+ chars).
-    if (match.length < 80) return match;
-    return "<REDACTED-JWT>";
-  });
-  return out;
+  return out.replace(INLINE_BEARER_RE, "$1 <REDACTED-Bearer>");
 }
 
 /**

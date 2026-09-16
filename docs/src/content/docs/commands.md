@@ -580,7 +580,7 @@ Guide: [Scope & Authorization](/scope/).
 | --- | --- | --- |
 | `--test-command <command>` **required** | — | Operator-approved regression command; must pass before and after repair |
 | `--setup-command <command>` | — | Operator-approved setup/build command run in each disposable checkout |
-| `--state-dir <path>` | — | Private persistent run directory; required when resuming |
+| `--state-dir <path>` | — | Persistent run directory; defaults to a stable per-repository path so learnings accumulate |
 | `--runtime <runtime>` | `api` | Native repair runtime: auto or api |
 | `-m, --model <model>` | — | Model for investigation and repair; inherits configured provider when omitted |
 | `--timeout <ms>` | `3600000` | Whole workflow deadline in milliseconds |
@@ -588,7 +588,7 @@ Guide: [Scope & Authorization](/scope/).
 | `--max-findings <n>` | `10` | Maximum findings to repair; remaining findings keep the run blocked |
 | `--max-attempts <n>` | `3` | Maximum repair candidates per finding |
 | `--max-turns <n>` | `30` | Maximum model turns per repair phase |
-| `--resume` | `false` | Resume compatible persisted work; never blindly replay publication |
+| `--resume` | `false` | Resume the compatible persisted run for this repository; never blindly replays publication |
 | `--publish` | `false` | Publish verified patches as PRs using authorized repository credentials; never merge or deploy |
 | `--format <format>` | `json` | Output format: json |
 

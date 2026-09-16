@@ -320,6 +320,7 @@ import {
 } from "./chat/ApprovalCard.js";
 import { OperatorQuestionCard } from "./chat/OperatorQuestionCard.js";
 import { Masthead } from "./chat/Masthead.js";
+import { ZERO_HEIGHT } from "./chat/zero-art.js";
 import { CommandMenu } from "./chat/CommandMenu.js";
 import {
   AGENT_SIDEBAR_ROWS,
@@ -6147,7 +6148,7 @@ export function ChatScreen({
                   onSizeChange={function () { setHeroMastheadRows(this.height); }}>
                 <Masthead
                   showTerminalMark={showTerminalMark && heroContentWidth >= TERMINAL_BLOCK_LOGO_WIDTH}
-                  showMascot={height >= 38}
+                  showMascot={ledgerRows >= LEDGER_MARK_ROWS + ZERO_HEIGHT + 1}
                   showTagline={showEmptyStateTagline}
                   contentWidth={heroContentWidth}
                   logoFrameGrid={logoFrameGrid}

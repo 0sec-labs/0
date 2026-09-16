@@ -1,12 +1,11 @@
 /**
  * Analytics payload TYPES only — no logic, no I/O.
  *
- * SAFETY CONTRACT: the envelope is structurally incapable of carrying operator
- * identity or engagement data. It MUST NEVER gain a field for email, account,
- * username, hostname, IP, MAC, cwd, file path, target URL, or any auth token /
- * credential. Anything that could carry such data must first pass through
- * `redactContent` (./redaction.js) and land in one of the `*Redacted` string
- * fields below. Adding an identity field here defeats the entire consent gate.
+ * The envelope adds random identifiers and finite runtime metadata, not
+ * explicit user or host identity. Training content may retain email addresses,
+ * target URLs and other engagement identifiers. The v1 `*Redacted` field names
+ * mean recognized credentials are scrubbed by `redactContent`; they do not
+ * promise PII removal or anonymity. Authenticated delivery remains attributable.
  *
  * The finite `platform` / `arch` / `runtime` value sets mirror the CLI's
  * diagnostic allowlists (packages/cli/src/tui/feedback.ts): custom or unknown
@@ -90,9 +89,9 @@ export interface UsageRecord {
 export interface CommandRecord {
   /** Tool / command name. */
   tool: string;
-  /** Redacted argument preview (via redactContent). */
+  /** Accepted arguments with recognized credentials scrubbed (not a preview). */
   argsRedacted: string;
-  /** Redacted output preview (via redactContent). */
+  /** Accepted output with recognized credentials scrubbed (not a preview). */
   outputRedacted: string;
   /** Finite completion status. */
   status: string;
@@ -102,11 +101,11 @@ export interface CommandRecord {
   turn: number;
 }
 
-/** "full" tier: a code snippet, source already redacted. */
+/** "commands" tier: submitted source with recognized credentials scrubbed. */
 export interface CodeRecord {
   /** Detected language. */
   lang: string;
-  /** Redacted source snippet (via redactContent). */
+  /** Accepted source content (via redactContent, without preview truncation). */
   sourceRedacted: string;
   /** Where the snippet came from (finite origin label). */
   origin: string;
