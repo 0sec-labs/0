@@ -2499,6 +2499,7 @@ export type {
   BehavioralProbeResult,
   BehavioralRepairOptions,
   BehavioralRepairResult,
+  PriorRepairOutcome,
   SecureEvent,
   SecurePhase,
   SecureProjectOptions,
