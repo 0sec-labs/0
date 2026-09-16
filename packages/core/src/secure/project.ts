@@ -328,6 +328,7 @@ async function publishRepairPatches(
   repairs: Record<string, BehavioralRepairResult>,
   findings: Finding[],
   revision: string,
+  runId: string,
   signal?: AbortSignal,
 ): Promise<{ prs: PublishedPullRequest[]; errors: string[] }> {
   const result: PublishedPullRequest[] = [];
@@ -339,6 +340,15 @@ async function publishRepairPatches(
     errors.push("gh CLI not available or not authenticated — skipping PR publication.");
     return { prs: result, errors };
   }
+
+  // Default branch for the PR base: origin/HEAD when the clone knows it, else main.
+  let baseBranch = "main";
+  try {
+    const head = execFileSync("git", ["symbolic-ref", "--short", "refs/remotes/origin/HEAD"], {
+      cwd: checkoutPath, timeout: 10_000, stdio: "pipe", encoding: "utf-8",
+    }).trim().replace(/^origin\//, "");
+    if (head) baseBranch = head;
+  } catch { /* detached or unborn remote HEAD — keep main */ }
 
   let remoteUrl: string;
   try {
@@ -428,7 +438,7 @@ async function publishRepairPatches(
         "gh",
         [
           "pr", "create",
-          "--base", "main",
+          "--base", baseBranch,
           "--head", branch,
           "--title", `fix: ${finding.title}`,
           "--body",
@@ -440,7 +450,11 @@ async function publishRepairPatches(
             "",
             `**Verification**: ${repair.verification?.detail ?? "Verified via behavioral probe."}`,
             "",
-            "This PR was automatically generated. Review before merging.",
+            "",
+            // Machine-readable attribution marker: the cloud learning loop parses
+            // this from PR webhooks to link merged/closed/edited outcomes back to
+            // the exact run, finding, and verified patch.
+            `<!-- 0sec:repair ${JSON.stringify({ runId, findingId: finding.id, patchSha256: repair.patchSha256 ?? null, baseRevision: revision })} -->`,
           ].join("\n"),
           "--repo", repoSlash,
         ],
@@ -902,7 +916,7 @@ export async function runSecureProject(
 
       if (publish === true) {
         const { prs, errors: pubErrors } = await publishRepairPatches(
-          checkoutPath, state.repairs, state.findings, revision, combinedSignal,
+          checkoutPath, state.repairs, state.findings, revision, state.runId, combinedSignal,
         );
         state.pullRequests = prs.map((pr) => pr.url);
         for (const err of pubErrors) {
