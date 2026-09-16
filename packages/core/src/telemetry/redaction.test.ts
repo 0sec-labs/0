@@ -8,7 +8,6 @@ import { describe, expect, it } from "vitest";
 import {
   DEFAULT_REDACTION_CAP,
   REDACTED_AWS,
-  REDACTED_EMAIL,
   REDACTED_GCP,
   REDACTED_GH,
   REDACTED_JWT,
@@ -42,11 +41,10 @@ describe("redactContent — credential shapes", () => {
     expect(out).toContain(REDACTED_OPENAI);
   });
 
-  it("removes a GitHub token", () => {
-    const out = redactContent(`token=${GHP}`);
-    // Caught by either the assignment rule or the gh rule — never the raw value.
-    expect(out).not.toContain(GHP);
-    expect(out).toMatch(new RegExp(`${REDACTED_GH}|${REDACTED_SECRET}`));
+  it.each([GHP, `github_pat_${"a".repeat(32)}`])("removes the GitHub credential shape %s", (key) => {
+    const out = redactContent(`credential ${key} end`);
+    expect(out).not.toContain(key);
+    expect(out).toContain(REDACTED_GH);
   });
 
   it("removes an AWS access key id", () => {
@@ -69,9 +67,9 @@ describe("redactContent — credential shapes", () => {
     expect(out).toContain(REDACTED_SLACK);
   });
 
-  it("removes a JWT", () => {
-    const out = redactContent(`jwt ${JWT} x`);
-    expect(out).not.toContain(JWT);
+  it.each([JWT, "eyJhbGciOiJIUzI1NiJ9.e30.c2lnbmF0dXJl"])("removes JWT credentials including compact claims: %s", (jwt) => {
+    const out = redactContent(`jwt ${jwt} x`);
+    expect(out).not.toContain(jwt);
     expect(out).toContain(REDACTED_JWT);
   });
 
@@ -95,27 +93,82 @@ describe("redactContent — credential shapes", () => {
     expect(out).toContain(REDACTED_SECRET);
   });
 
-  it("redacts a high-entropy base64 blob (60 chars)", () => {
-    const out = redactContent(`blob ${B64_60} end`);
-    expect(out).not.toContain(B64_60);
-    expect(out).toContain(REDACTED_SECRET);
-  });
 });
 
-describe("redactContent — PII", () => {
-  it("redacts an email, including the operator's own address", () => {
-    const out = redactContent(`contact ${OPERATOR_EMAIL} for more`);
-    expect(out).not.toContain(OPERATOR_EMAIL);
-    expect(out).toContain(REDACTED_EMAIL);
+describe("redactContent — credential-only capture", () => {
+  it("preserves email, opaque content, ordinary URLs and non-credential identifiers", () => {
+    const text = [
+      `contact ${OPERATOR_EMAIL}`,
+      `const encoded = "${B64_60}";`,
+      `https://${"ordinary-subdomain".repeat(5)}.example.com/artifacts?id=${B64_60}`,
+      "KEYBOARD_LAYOUT=us",
+      "MONKEY=chimp",
+      "PUBLIC_KEY=published-material",
+      "TOKEN_COUNT=42",
+      'const data = {"\\x63ontact":"sample.user@example.com"};',
+    ].join("\n");
+    expect(redactContent(text)).toBe(text);
   });
 
-  it("redacts credentials inside a postgres connection string", () => {
-    const out = redactContent(CONN);
-    expect(out).not.toContain("dbuser");
-    expect(out).not.toContain("s3cr3tP");
-    expect(out).toContain(REDACTED_SECRET);
-    // Endpoint shape survives so the record stays legible.
-    expect(out).toContain("postgres://");
+  it("scrubs quoted credential fields without changing ordinary JSON values", () => {
+    const input = {
+      contact: OPERATOR_EMAIL,
+      blob: B64_60,
+      password: 'quoted"password\\value',
+      userPassword: "camel-case-credential",
+      api_key: "plain-api-credential",
+      APP_SECRET: "app-credential",
+      AWS_SECRET_ACCESS_KEY: "aws-credential",
+      headers: { Authorization: "Basic dXNlcjpwYXNz", Cookie: "sid=private-session" },
+    };
+    const out = JSON.parse(redactContent(JSON.stringify(input)));
+    expect(out).toEqual({
+      ...input,
+      password: REDACTED_SECRET,
+      userPassword: REDACTED_SECRET,
+      api_key: REDACTED_SECRET,
+      APP_SECRET: REDACTED_SECRET,
+      AWS_SECRET_ACCESS_KEY: REDACTED_SECRET,
+      headers: { Authorization: REDACTED_SECRET, Cookie: REDACTED_SECRET },
+    });
+  });
+
+  it("scrubs shell credentials nested in JSON-stringified tool arguments", () => {
+    const input = {
+      cmd: 'curl -H "Cookie: sid=private-session" --data \'password="private-password"\' https://example.com',
+      contact: OPERATOR_EMAIL,
+    };
+    const text = redactContent(JSON.stringify(input));
+    expect(text).not.toContain("private-session");
+    expect(text).not.toContain("private-password");
+    const out = JSON.parse(text);
+    expect(out.contact).toBe(OPERATOR_EMAIL);
+    expect(out.cmd).toContain("https://example.com");
+  });
+
+  it("preserves duplicate ordinary JSON keys and whitespace while scrubbing credentials", () => {
+    const input = '{ "message":"keep-first", "message":"keep-second", "password":"synthetic-secret" }\n';
+    expect(redactContent(input)).toBe(input.replace("synthetic-secret", REDACTED_SECRET));
+  });
+
+  it("scrubs earlier duplicate credential-bearing values, including escaped shell commands", () => {
+    const nested = JSON.stringify('curl --data \'password="hidden-password"\' https://example.com');
+    const input = `{"value":${JSON.stringify(SK)},"value":"ordinary","cmd":${nested},"cmd":"retained"}`;
+    const out = redactContent(input);
+    expect(out).not.toContain(SK);
+    expect(out).not.toContain("hidden-password");
+    expect(out.match(/"value":/g)).toHaveLength(2);
+    expect(out.match(/"cmd":/g)).toHaveLength(2);
+    expect(JSON.parse(out)).toEqual({ value: "ordinary", cmd: "retained" });
+  });
+
+  it("scrubs complete structured credential values without disturbing adjacent data", () => {
+    const input = '{ "credentials":{"nested":[1,{"opaque":"hidden"}]}, "password":12345, "email":"sample.user@example.com" }';
+    expect(redactContent(input)).toBe(`{ "credentials":"${REDACTED_SECRET}", "password":"${REDACTED_SECRET}", "email":"sample.user@example.com" }`);
+  });
+
+  it("removes complete URL credentials while retaining the endpoint", () => {
+    expect(redactContent(CONN)).toBe(`postgres://${REDACTED_SECRET}@db.internal:5432/prod`);
   });
 });
 
@@ -133,7 +186,7 @@ describe("redactContent — truncation after redaction", () => {
   it("caps at the default length only after secrets are tokenised", () => {
     const filler = "a".repeat(DEFAULT_REDACTION_CAP);
     const out = redactContent(`${filler}${SK}`);
-    expect(out.length).toBeLessThanOrEqual(DEFAULT_REDACTION_CAP + 3); // + "..."
+    expect(out.length).toBeLessThanOrEqual(DEFAULT_REDACTION_CAP);
     expect(out).not.toContain(SK);
   });
 
@@ -146,12 +199,12 @@ describe("redactContent — truncation after redaction", () => {
     expect(out).not.toContain(SK);
     // No 8+ char run of the original key leaks (a split token exposes nothing).
     expect(out).not.toContain(SK.slice(0, 8));
-    expect(out.length).toBeLessThanOrEqual(cap + 3);
+    expect(out.length).toBeLessThanOrEqual(cap);
   });
 
   it("honours a caller-supplied cap", () => {
     const out = redactContent("x".repeat(100), { maxChars: 10 });
-    expect(out).toBe(`${"x".repeat(10)}...`);
+    expect(out).toBe(`${"x".repeat(7)}...`);
   });
 });
 

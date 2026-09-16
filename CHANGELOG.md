@@ -28,6 +28,11 @@ on the published npm package and the GitHub Release tag.
   category-specific onboarding/settings disclosure and preserved saved,
   environment and organization opt-outs. Capture console tools and all submitted
   executable-plugin files through the shared redaction boundary.
+- Retain ordinary training content, including emails, URLs and opaque strings.
+  Scrub recognized credentials rather than applying broad PII or entropy
+  masking; handle nested JSON/shell credentials without losing JSON quoting.
+- Keep metadata overflow markers within the receiver's 4,000-character limit
+  so a long finding cannot invalidate an otherwise acceptable capture batch.
 - Preserve accepted tool/code content up to 256 KiB per redacted UTF-8 field;
   bound Cloud batches by encoded bytes and count, report oversized captures
   locally, and recheck consent before every POST.

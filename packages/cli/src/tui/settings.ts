@@ -221,8 +221,8 @@ export interface TuiSettings {
   reduceMotion: boolean;
   /**
    * Operator-global analytics and training-data tier; full for new installs.
-   * Usage contains counters, commands adds redacted tool content and code,
-   * and full adds scope and findings. Redaction does not guarantee anonymity.
+   * Usage contains counters, commands adds credential-scrubbed tool content
+   * and code, and full adds scope and findings. Ordinary content is retained.
    * Explicit environment restrictions and saved opt-outs remain effective.
    * Problem-report preferences are independent; a project cannot widen either.
    */
@@ -692,7 +692,7 @@ const DEFS: readonly TuiSettingDef[] = [
     key: "analyticsLevel",
     label: "Analytics and training data",
     description:
-      "Full is the new-install default. Usage shares feature counters and error categories, not tool content. Commands adds redacted tool arguments/results and submitted code for model training and security research; Full also adds scope and findings. Sending uses authenticated Cloud storage. Redaction does not guarantee anonymity. Each tool/code content field is limited to 256 KiB after redaction; oversized records are reported locally, not silently truncated. Explicit 0SEC_ANALYTICS_LEVEL and offline/no-telemetry/DO_NOT_TRACK restrictions win over broader settings. Problem reports are separate. Applies to this computer, not this project.",
+      "Full is the new-install default. Usage shares feature counters and error categories, not tool content. Commands adds tool arguments/results and submitted code for model training and security research; Full also adds scope and findings. Recognized credentials are scrubbed; emails, URLs, identifiers and other content are retained. Sending uses authenticated Cloud storage and is not anonymous. Each tool/code content field is limited to 256 KiB after credential scrubbing; oversized records are reported locally, not silently truncated. Explicit 0SEC_ANALYTICS_LEVEL and offline/no-telemetry/DO_NOT_TRACK restrictions win over broader settings. Problem reports are separate. Applies to this computer, not this project.",
     kind: "enum",
     default: "full",
     choices: ["off", "usage", "commands", "full"],

@@ -260,13 +260,13 @@ const ANALYTICS_OPTIONS = [
     level: "commands",
     label: "Tool content and code",
     detail:
-      "Also redacted tool arguments/results and submitted code for model training and research.",
+      "Also tool arguments/results and submitted code for training, with recognized credentials scrubbed.",
   },
   {
     level: "full",
     label: "Full training data (new-install default)",
     detail:
-      "Usage metrics plus redacted tool arguments/results, submitted code, scope and findings.",
+      "Usage, tool arguments/results, submitted code, scope and findings; recognized credentials scrubbed.",
   },
   {
     level: "off",
@@ -281,7 +281,7 @@ function analyticsLines(width: number): StepLine[] {
     ...paragraph("Analytics and training data", "title", width),
     BLANK,
     ...paragraph(
-      "Full sharing is on by default for new installs. Usage metrics are separate from training data: redacted tool arguments/results, submitted code, scope and findings for model improvement and security research. Sending requires Cloud sign-in. Redaction does not guarantee anonymity.",
+      "Full sharing is on by default for new installs. Usage metrics are separate from training data: tool arguments/results, submitted code, scope and findings for model improvement and security research. Recognized credentials are scrubbed; emails, URLs, identifiers and other content are retained. This is not anonymous. Sending requires Cloud sign-in.",
       "text",
       width,
     ),
