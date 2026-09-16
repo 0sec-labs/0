@@ -51,11 +51,7 @@
  */
 
 import { execFileSync } from "node:child_process";
-import {
-  existsSync,
-  mkdirSync,
-  readFileSync,
-} from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { join, isAbsolute, resolve } from "node:path";
 import { randomUUID, createHash } from "node:crypto";
 import type { Finding, ScanDepth, TokenUsageForPricing } from "@0sec/shared";
@@ -225,6 +221,34 @@ interface ResolvedSource {
 
 function prepareSource(source: string, stateDir: string): ResolvedSource {
   const checkout = managedCheckoutDir(stateDir);
+
+  // Continuous runs reuse the managed checkout: a stable stateDir means the
+  // learning store's content-hash notes (pinned to this path) keep recalling.
+  // Reuse requires the same origin; otherwise wipe and re-clone.
+  if (existsSync(join(checkout, ".git"))) {
+    const origin = (() => {
+      try {
+        return execFileSync("git", ["remote", "get-url", "origin"], {
+          cwd: checkout, timeout: 10_000, stdio: "pipe", encoding: "utf-8",
+        }).trim();
+      } catch { return ""; }
+    })();
+    const expected = /^https?:\/\//.test(source) || /^git@/.test(source)
+      ? source.replace(/\.git$/, "").replace(/@.*$/, "")
+      : `file://${isAbsolute(source) ? source : resolve(process.cwd(), source)}`;
+    if (origin && (origin === expected || origin.replace(/\.git$/, "") === expected.replace(/\.git$/, ""))) {
+      execFileSync("git", ["fetch", "--depth", "1", "origin"], {
+        cwd: checkout, timeout: 120_000, stdio: "pipe",
+      });
+      const { ref } = parseRepoRef(source);
+      execFileSync("git", ["reset", "--hard", ref ?? "origin/HEAD"], {
+        cwd: checkout, timeout: 30_000, stdio: "pipe",
+      });
+      execFileSync("git", ["clean", "-fdx"], { cwd: checkout, timeout: 30_000, stdio: "pipe" });
+      return { checkoutPath: checkout, revision: resolveRepoRevision(checkout) };
+    }
+    rmSync(checkout, { recursive: true, force: true });
+  }
 
   if (/^https?:\/\//.test(source) || /^git@/.test(source)) {
     mkdirSync(stateDir, { recursive: true });
