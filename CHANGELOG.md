@@ -21,7 +21,8 @@ on the published npm package and the GitHub Release tag.
   resolution and antialias the silhouette without its white fringe. Native
   images are composited onto the active theme canvas; when native graphics
   cannot be used, omit the mascot entirely instead of displaying pixel art.
-  Keep the orange band and hide the portrait on short screens.
+  Keep the orange band and fit the portrait to the available body rows rather
+  than hiding it below a fixed terminal-height cutoff.
 - Vertically centre the entire welcome group, including the mascot, wordmark,
   input and shortcuts, while keeping the input stationary when filtering commands.
 - Default analytics and training sharing to `full` for new installations, with
