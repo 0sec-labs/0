@@ -38,6 +38,14 @@ export interface PriorRepairOutcome {
   outcome: "accepted" | "rejected";
   mergedAt?: string;
 }
+
+/** A reviewer's comment on a past 0sec repair PR for this tenant. */
+export interface RepairGuidance {
+  title: string;
+  comment: string;
+  author: string;
+}
+
 export interface BehavioralRepairOptions {
   repoRoot: string;
   finding: Finding;
@@ -56,6 +64,13 @@ export interface BehavioralRepairOptions {
    */
   priorOutcomes?: PriorRepairOutcome[];
   onEvent?: (event: SecureEvent) => void;
+  /** Plain-English repair standards, rendered as untrusted guidance. */
+  rules?: string;
+  /**
+   * What human reviewers said on past repair PRs (Greptile-style comment
+   * learning). Untrusted guidance. Cloud injects via 0SEC_SECURE_GUIDANCE.
+   */
+  guidance?: RepairGuidance[];
 }
 
 export interface SecureProjectOptions {
@@ -74,6 +89,11 @@ export interface SecureProjectOptions {
   costCeilingUsd?: number;
   resume?: boolean;
   publish?: boolean;
+  /**
+   * Plain-English team repair standards (untrusted guidance). Defaults to the
+   * 0SEC_SECURE_RULES env (cloud injects per-repo rules from secure_config).
+   */
+  rules?: string;
   signal?: AbortSignal;
   onEvent?: (event: SecureEvent) => void;
 }

@@ -20,6 +20,7 @@ interface SecureOptions {
   resume: boolean;
   publish: boolean;
   format: string;
+  rules?: string;
 }
 
 function positiveInteger(value: string): number {
@@ -54,6 +55,7 @@ export function registerSecureCommand(program: Command): void {
     .option("--max-turns <n>", "Maximum model turns per repair phase", positiveInteger, 30)
     .option("--resume", "Resume the compatible persisted run for this repository; never blindly replays publication", false)
     .option("--publish", "Publish verified patches as PRs using authorized repository credentials; never merge or deploy", false)
+    .option("--rules <text>", "Plain-English team repair standards (e.g. \"minimal diffs, no new dependencies\")")
     .option("--format <format>", "Output format: json", "json")
     .action(async (repo: string, options: SecureOptions) => {
       if (options.format !== "json") throw new InvalidArgumentError("--format must be json.");
@@ -92,6 +94,7 @@ export function registerSecureCommand(program: Command): void {
           maxTurns: options.maxTurns,
           resume: options.resume,
           publish: options.publish,
+          rules: options.rules,
           signal: controller.signal,
           onEvent,
         });

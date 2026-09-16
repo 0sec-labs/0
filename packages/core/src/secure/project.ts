@@ -931,6 +931,29 @@ export async function runSecureProject(
           } catch { /* malformed env — no guidance */ }
         }
         repairOptions.priorOutcomes = priorOutcomes;
+        // Team standards: option wins; env (cloud secure_config.rules) fills in.
+        repairOptions.rules = options.rules?.trim() || process.env["0SEC_SECURE_RULES"]?.trim().slice(0, 4000) || undefined;
+        // Reviewer comments from past repair PRs (cloud injects). Defensive
+        // parse: malformed or oversized input degrades to no guidance.
+        const guidanceRaw = process.env["0SEC_SECURE_GUIDANCE"];
+        if (guidanceRaw && guidanceRaw.length <= 4096) {
+          try {
+            const parsed = JSON.parse(guidanceRaw);
+            if (Array.isArray(parsed)) {
+              repairOptions.guidance = parsed
+                .filter((g): g is Record<string, unknown> =>
+                  g != null && typeof g === "object" &&
+                  typeof (g as Record<string, unknown>).title === "string" &&
+                  typeof (g as Record<string, unknown>).comment === "string")
+                .slice(0, 5)
+                .map((g) => ({
+                  title: String(g.title).slice(0, 200),
+                  comment: String(g.comment).slice(0, 2000),
+                  author: typeof g.author === "string" ? g.author.slice(0, 100) : "unknown",
+                }));
+            }
+          } catch { /* malformed env — no guidance */ }
+        }
 
         let repairResult: BehavioralRepairResult;
         try {
