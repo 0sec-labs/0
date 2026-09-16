@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash } from "node:crypto";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { InvalidArgumentError } from "commander";
@@ -44,7 +44,7 @@ export function registerSecureCommand(program: Command): void {
     .argument("<repo>", "Local Git repository or HTTPS Git URL; execution occurs in the current worker, not a newly provisioned sandbox")
     .requiredOption("--test-command <command>", "Operator-approved regression command; must pass before and after repair")
     .option("--setup-command <command>", "Operator-approved setup/build command run in each disposable checkout")
-    .option("--state-dir <path>", "Private persistent run directory; required when resuming")
+    .option("--state-dir <path>", "Persistent run directory; defaults to a stable per-repository path so learnings accumulate")
     .option("--runtime <runtime>", "Native repair runtime: auto or api", "api")
     .option("-m, --model <model>", "Model for investigation and repair; inherits configured provider when omitted")
     .option("--timeout <ms>", "Whole workflow deadline in milliseconds", positiveInteger, 3_600_000)
@@ -52,7 +52,7 @@ export function registerSecureCommand(program: Command): void {
     .option("--max-findings <n>", "Maximum findings to repair; remaining findings keep the run blocked", positiveInteger, 10)
     .option("--max-attempts <n>", "Maximum repair candidates per finding", positiveInteger, 3)
     .option("--max-turns <n>", "Maximum model turns per repair phase", positiveInteger, 30)
-    .option("--resume", "Resume compatible persisted work; never blindly replay publication", false)
+    .option("--resume", "Resume the compatible persisted run for this repository; never blindly replays publication", false)
     .option("--publish", "Publish verified patches as PRs using authorized repository credentials; never merge or deploy", false)
     .option("--format <format>", "Output format: json", "json")
     .action(async (repo: string, options: SecureOptions) => {
@@ -60,8 +60,14 @@ export function registerSecureCommand(program: Command): void {
       if (!["api", "auto"].includes(options.runtime)) throw new InvalidArgumentError("--runtime must be api or auto.");
       if (!options.testCommand.trim()) throw new InvalidArgumentError("--test-command cannot be blank.");
       if (options.setupCommand !== undefined && !options.setupCommand.trim()) throw new InvalidArgumentError("--setup-command cannot be blank.");
-      if (options.resume && !options.stateDir) throw new InvalidArgumentError("--resume requires --state-dir.");
-      const stateDir = resolve(options.stateDir ?? join(homedir(), ".0sec", "secure", randomUUID()));
+      // Stable per-repository state dir by default: the managed checkout and
+      // the learning store's content-hash notes persist across runs, so the
+      // harness actually learns from previous repairs. --state-dir overrides.
+      const repoKey = createHash("sha256")
+        .update(resolve(repo))
+        .digest("hex")
+        .slice(0, 12);
+      const stateDir = resolve(options.stateDir ?? join(homedir(), ".0sec", "secure", repoKey));
       const controller = new AbortController();
       const cancel = () => controller.abort(new Error("Workflow cancelled by operator"));
       process.once("SIGINT", cancel);
