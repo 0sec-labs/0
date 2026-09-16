@@ -12,7 +12,38 @@ on the published npm package and the GitHub Release tag.
 
 ## [Unreleased]
 
+## [0.18.0] - 2026-09-16
+
+### Added
+
+- **`0sec secure` — the self-securing lifecycle.** Point the CLI at a
+  repository and it investigates, behaviorally reproduces each finding with a
+  frozen probe, repairs across multiple files, runs your regression command,
+  and independently verifies the fix in a fresh checkout before retaining the
+  patch and evidence. Broken candidates (e.g. feature-disabling patches) are
+  rejected; unresolved findings block the run instead of reporting clean.
+  Runs are resumable with identity checks, persist an exclusive lock, and
+  track real token cost. `--publish` opens PRs for verified patches only.
+- **`0sec connect` — one-command cloud onboarding.** `0sec auth login` once,
+  then `0sec connect <repo-url>`: auth is verified, the test command is
+  auto-detected (package.json / Makefile / pytest / Cargo / Go), the first
+  secure run starts immediately, and a recurring schedule is installed.
+- **Learning loop.** Verified and failed repair outcomes are recorded in the
+  revision-aware memory store and recalled as untrusted hints on later runs.
+  State is stable per repository by default, so learnings accumulate across
+  runs instead of resetting.
+- **Developer-choice learning.** Repair PRs carry a machine-readable
+  attribution marker; accepted/rejected outcomes (`0SEC_SECURE_PRIOR_OUTCOMES`)
+  and reviewer comments (`0SEC_SECURE_GUIDANCE`) flow back into future repair
+  prompts as untrusted guidance.
+- **Per-repo repair rules.** `--rules` / `0SEC_SECURE_RULES` render
+  plain-English team standards ("minimal diffs; no new dependencies") into
+  repair prompts.
+
 ### Changed
+
+- `0sec update` is now an alias of `0sec upgrade`.
+
 
 - Show a consistently spaced `0SECURITY` hero wordmark on wide terminals, with
   the original `0SEC` mark retained for narrow columns.
