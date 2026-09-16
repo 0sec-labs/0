@@ -1,8 +1,12 @@
-name: "0sec: Dogfood Review"
+name: "0sec: Dogfood Secure"
 
-# The product reviews its own trusted mainline delta after normal CI has built
-# and tested it. This deliberately does not run on PR code: the review runtime
-# receives a model credential and may inspect the checked-out source.
+# The product secures itself through the same managed path customers use:
+# after normal CI succeeds on main, this workflow asks 0cloud to run the
+# secure lifecycle (investigate → reproduce → repair → verify) against the
+# public repo. Nothing executes checkout-controlled code with credentials
+# here — the cloud sandbox is the execution boundary, exactly as for
+# customers. Findings, verified patches, and learning land in the cloud
+# dashboard; this workflow only confirms the dispatch.
 on:
   workflow_run:
     workflows: ["0sec: Main"]
@@ -12,14 +16,13 @@ on:
 
 permissions:
   contents: read
-  security-events: write
 
 concurrency:
-  group: 0sec-dogfood-review-main
+  group: 0sec-dogfood-secure-main
   cancel-in-progress: false
 
 jobs:
-  review:
+  dispatch:
     if: >-
       (github.event_name == 'workflow_run' &&
        github.event.workflow_run.conclusion == 'success' &&
@@ -28,128 +31,36 @@ jobs:
        github.event.workflow_run.head_repository.full_name == github.repository) ||
       (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
     runs-on: [self-hosted, Linux, X64]
-    timeout-minutes: 30
+    timeout-minutes: 5
     env:
+      # Scoped CLI token (scans:dispatch) minted for the ops org. Never a
+      # model or repo credential — the cloud holds those server-side.
+      OSEC_CLOUD_TOKEN: ${{ secrets.DOGFOOD_CLOUD_TOKEN }}
+      OSEC_CLOUD_HOST: "https://cloud.0.security"
+      # Per-run cost ceiling the cloud enforces server-side.
       DOGFOOD_COST_CEILING_USD: "2"
-      # Reviewed as a supply-chain trust root; update this pair only in a
-      # separately reviewed release-bump change.
-      DOGFOOD_REVIEWER_TAG: v0.15.0
-      DOGFOOD_REVIEWER_SHA256: 1d9846be6345b8e2a4566bdf31a6c0684e9aae3503d16324948723ceb0e4f440
     steps:
-      - uses: actions/checkout@v6
-        with:
-          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
-          fetch-depth: 2
-      - name: Bootstrap runner
-        run: bash "$GITHUB_WORKSPACE/scripts/ci-runner-bootstrap.sh"
-      - name: Provision FoxGuard binary
-        env:
-          INSTALL_DIR: ${{ runner.temp }}/0sec-tools/bin
-        run: |
-          bash "$GITHUB_WORKSPACE/scripts/provision-foxguard.sh"
-          echo "$INSTALL_DIR" >> "$GITHUB_PATH"
-      - name: Require dogfood credential
-        env:
-          OPENAI_API_KEY: ${{ secrets.DOGFOOD_OPENAI_API_KEY }}
+      - name: Dispatch secure run via 0cloud
         run: |
           set -euo pipefail
-          test -n "$OPENAI_API_KEY" || {
-            echo "::error::DOGFOOD_OPENAI_API_KEY is required for the trusted self-review lane."
+          test -n "$OSEC_CLOUD_TOKEN" || {
+            echo "::error::DOGFOOD_CLOUD_TOKEN is required for the cloud dogfood lane."
             exit 1
           }
-      # Do not execute checkout-controlled package lifecycle code in the
-      # credentialed lane. A pinned, independently verified release scans this
-      # checkout instead of mutable `releases/latest` assets.
-      - name: Download verified release reviewer
-        run: |
-          set -euo pipefail
-          tool_dir="$RUNNER_TEMP/0sec-dogfood-reviewer"
-          mkdir -p "$tool_dir"
-          curl -fsSL --retry 3 --retry-delay 2 \
-            --output "$tool_dir/0sec-linux-x64" \
-            "https://github.com/${GITHUB_REPOSITORY}/releases/download/${DOGFOOD_REVIEWER_TAG}/0sec-linux-x64"
-          actual="$(sha256sum "$tool_dir/0sec-linux-x64" | awk '{ print $1 }')"
-          test "$actual" = "$DOGFOOD_REVIEWER_SHA256" || {
-            echo "::error::pinned release reviewer checksum verification failed."
-            exit 1
-          }
-          chmod 755 "$tool_dir/0sec-linux-x64"
-      - name: Review the merged delta with 0sec
-        env:
-          OPENAI_API_KEY: ${{ secrets.DOGFOOD_OPENAI_API_KEY }}
-          0SEC_CHATGPT_ACCESS_TOKEN: ""
-          0SEC_CHATGPT_OAUTH_REFRESH_TOKEN: ""
-          0SEC_CHATGPT_ACCOUNT_ID: ""
-          0SEC_CHATGPT_AUTH_FILE: "/tmp/0sec-dogfood-no-auth-${{ github.run_id }}.json"
-          0SEC_CODEX_AUTH_JSON_PATH: "/tmp/0sec-dogfood-no-auth-${{ github.run_id }}.json"
-          0SEC_SELECTED_PROVIDER: openai
-          0SEC_MODEL: gpt-5.6-luna
-          DOGFOOD_MODEL: gpt-5.6-luna
-        run: |
-          set -euo pipefail
-          base="$(git rev-parse HEAD^)"
-          set +e
-          "$RUNNER_TEMP/0sec-dogfood-reviewer/0sec-linux-x64" review . \
-            --cost-ceiling "$DOGFOOD_COST_CEILING_USD" \
-            --diff-base "$base" \
-            --changed-only \
-            --depth quick \
-            --runtime api \
-            --model "$DOGFOOD_MODEL" \
-            --format sarif \
-            --db-path "$RUNNER_TEMP/0sec-dogfood.sqlite" \
-            > dogfood-review.sarif 2> dogfood-review.stderr
-          review_status=$?
-          set -e
-          cat dogfood-review.stderr >&2
-          if [ "$review_status" -ne 0 ]; then
-            exit "$review_status"
-          fi
-          if grep -q "\\[0sec\\] Agent loop error" dogfood-review.stderr; then
-            echo "::error::0sec could not complete the dogfood review."
-            exit 1
-          fi
-      # v0.15 release reviewers emitted thread-flow locations without the
-      # physical location GitHub Code Scanning requires. Keep their evidence and
-      # normalize it until every supported release emits compliant SARIF.
-      - name: Normalize dogfood SARIF
-        if: always() && hashFiles('dogfood-review.sarif') != ''
-        run: |
-          node - dogfood-review.sarif <<'NODE'
-          const fs = require("node:fs");
-          const path = process.argv[2];
-          const sarif = JSON.parse(fs.readFileSync(path, "utf8"));
-          for (const run of sarif.runs ?? []) {
-            for (const result of run.results ?? []) {
-              const physicalLocation = result.locations?.[0]?.physicalLocation;
-              if (!physicalLocation) {
-                delete result.codeFlows;
-                continue;
-              }
-              for (const flow of result.codeFlows ?? []) {
-                for (const thread of flow.threadFlows ?? []) {
-                  for (const entry of thread.locations ?? []) {
-                    entry.location ??= {};
-                    entry.location.physicalLocation ??= physicalLocation;
-                  }
-                }
-              }
+          payload="$(jq -nc --arg repo "https://github.com/${GITHUB_REPOSITORY}" --argjson ceiling "$DOGFOOD_COST_CEILING_USD" '{
+            target: $repo,
+            scan_mode: "secure",
+            secure_config: {
+              repo: $repo,
+              test_command: "pnpm test:public",
+              cost_ceiling_usd: $ceiling,
+              rules: "minimal diffs; never weaken tests to pass; keep the public CLI surface stable"
             }
-          }
-          fs.writeFileSync(path, JSON.stringify(sarif));
-          NODE
-      - name: Upload dogfood SARIF
-        if: always() && hashFiles('dogfood-review.sarif') != ''
-        uses: github/codeql-action/upload-sarif@v4
-        with:
-          sarif_file: dogfood-review.sarif
-      - name: Preserve dogfood evidence
-        if: always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: 0sec-dogfood-review-${{ github.sha }}
-          path: |
-            dogfood-review.sarif
-            dogfood-review.stderr
-          if-no-files-found: warn
-          retention-days: 14
+          }')"
+          response="$(curl -fsS --retry 3 --retry-delay 2 \
+            -X POST "$OSEC_CLOUD_HOST/api/scans" \
+            -H "Authorization: Bearer $OSEC_CLOUD_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "$payload")"
+          scan_id="$(jq -r '.id' <<<"$response")"
+          echo "Secure dogfood run dispatched: $OSEC_CLOUD_HOST/cloud/scans/$scan_id"
