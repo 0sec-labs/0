@@ -356,6 +356,8 @@ Guide: [Read the workflow](/getting-started/).
 | `--version <tag>` | — | Pin a specific release tag (e.g. v0.10.0) |
 | `--install-dir <path>` | — | Override the install directory (default: ~/.0sec/bin) |
 
+Aliases: `update`.
+
 ## Scan & source review
 
 ### scan
@@ -590,6 +592,7 @@ Guide: [Scope & Authorization](/scope/).
 | `--max-turns <n>` | `30` | Maximum model turns per repair phase |
 | `--resume` | `false` | Resume the compatible persisted run for this repository; never blindly replays publication |
 | `--publish` | `false` | Publish verified patches as PRs using authorized repository credentials; never merge or deploy |
+| `--rules <text>` | — | Plain-English team repair standards (e.g. "minimal diffs, no new dependencies") |
 | `--format <format>` | `json` | Output format: json |
 
 ### file-review

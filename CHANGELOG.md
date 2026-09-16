@@ -41,6 +41,8 @@ on the published npm package and the GitHub Release tag.
   than cumulative turn usage, including usage reported before a stream failure.
 - Render scrollbars with a one-column, narrow-stroke thumb and remove unused
   scrollbar reservations from expanded inline tool cards.
+- Accept `update` as an alias for `upgrade`, including the CLI entrypoint and
+  generated command reference.
 
 ## [0.17.0] - 2026-09-15
 
