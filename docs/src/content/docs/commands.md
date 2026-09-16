@@ -7,7 +7,7 @@ tableOfContents:
 ---
 
 Find the command, arguments, and options for your task. This reference covers
-**58 top-level commands** and their registered subcommands.
+**59 top-level commands** and their registered subcommands.
 
 For a worked example, start with [Scan Workflows](/scan-workflows/),
 [Console](/console/), or [Research Workflows](/research-workflows/).
@@ -2766,6 +2766,52 @@ Check configured control-plane credentials against `/health`.
 ```text
 0sec auth status
 ```
+
+### connect
+
+Connect an authorized repository to managed Cloud security runs: start a
+`secure` run immediately, then create a recurring schedule.
+
+```text
+0sec connect [options] <repo>
+```
+
+Authenticate once, then connect the repository:
+
+```bash
+0sec auth login
+0sec connect https://github.com/org/repo
+```
+
+The repository must be an HTTPS Git URL you own or are authorized to assess.
+When `--test-command` is omitted, the CLI makes a temporary shallow clone and
+detects a regression command from Node package scripts, a Makefile, Python
+project files, Cargo, or Go. If detection fails, supply `--test-command`;
+`--setup-command` specifies setup or build work before the remote tests.
+
+Scheduling defaults to daily at 03:00 UTC. Use `--cron` to change the schedule,
+or `--no-schedule` for only the immediate run. The CLI prints the first run's
+Cloud URL and the created schedule's next run time. If the scan has no target
+ID, it warns and skips schedule creation.
+
+Managed runs retain verified patches and evidence for review; this command
+does not publish pull requests. Model-provider access and per-run
+`--cost-ceiling` are separate from the CLI's Cloud authentication.
+
+Guide: [Cloud authentication](/api-keys/).
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `repo` | Yes | HTTPS git URL of the repository you own or are authorized to assess |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--test-command <command>` | — | Regression command; auto-detected from the repo when omitted |
+| `--setup-command <command>` | — | Setup/build command run before tests (e.g. pnpm install) |
+| `-m, --model <model>` | — | Model for the managed runs; defaults to the cloud routing default |
+| `--cost-ceiling <usd>` | — | Per-run model cost ceiling in USD |
+| `--cron <expression>` | `0 3 * * *` | Recurring schedule (cron). Default: daily at 03:00 UTC |
+| `--no-schedule` | — | Only run once, do not install a recurring schedule |
 
 ## XBOW benchmark runner
 

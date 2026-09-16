@@ -190,6 +190,35 @@ export class CloudClient {
   }
 
   /**
+   * Generic JSON POST helper with the same error mapping as getJson.
+   * Used by `0sec connect` to enqueue scans and schedules.
+   */
+  async postJson<T = unknown>(path: string, body: unknown): Promise<T> {
+    const url = `${this.host}${path}`;
+    let res: Response;
+    try {
+      res = await this.fetchImpl(url, {
+        method: "POST",
+        headers: { ...this.headers(), "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      throw new CloudNetworkError(this.scrub(msg), path);
+    }
+    if (!res.ok) {
+      let code: string | undefined;
+      try {
+        const parsed = (await res.json()) as { error?: { code?: unknown } | string } | null;
+        const raw = typeof parsed?.error === "object" ? parsed.error?.code : undefined;
+        if (typeof raw === "string" && raw.length > 0) code = raw;
+      } catch { /* no / malformed body */ }
+      this.throwForStatus(res.status, path, code);
+    }
+    return (await res.json()) as T;
+  }
+
+  /**
    * Generic JSON GET helper. Public so future modules (scans, findings)
    * can reuse the same error mapping without duplicating it. Not exported
    * past the package boundary — see ./index.ts.
