@@ -38,6 +38,7 @@ export interface PriorRepairOutcome {
   outcome: "accepted" | "rejected";
   mergedAt?: string;
 }
+
 export interface BehavioralRepairOptions {
   repoRoot: string;
   finding: Finding;
@@ -56,6 +57,8 @@ export interface BehavioralRepairOptions {
    */
   priorOutcomes?: PriorRepairOutcome[];
   onEvent?: (event: SecureEvent) => void;
+  /** Plain-English repair standards, rendered as untrusted guidance. */
+  rules?: string;
 }
 
 export interface SecureProjectOptions {
@@ -74,6 +77,11 @@ export interface SecureProjectOptions {
   costCeilingUsd?: number;
   resume?: boolean;
   publish?: boolean;
+  /**
+   * Plain-English team repair standards (untrusted guidance). Defaults to the
+   * 0SEC_SECURE_RULES env (cloud injects per-repo rules from secure_config).
+   */
+  rules?: string;
   signal?: AbortSignal;
   onEvent?: (event: SecureEvent) => void;
 }

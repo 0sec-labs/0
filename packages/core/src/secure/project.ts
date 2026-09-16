@@ -931,6 +931,8 @@ export async function runSecureProject(
           } catch { /* malformed env — no guidance */ }
         }
         repairOptions.priorOutcomes = priorOutcomes;
+        // Team standards: option wins; env (cloud secure_config.rules) fills in.
+        repairOptions.rules = options.rules?.trim() || process.env["0SEC_SECURE_RULES"]?.trim().slice(0, 4000) || undefined;
 
         let repairResult: BehavioralRepairResult;
         try {
