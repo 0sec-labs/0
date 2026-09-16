@@ -29,8 +29,13 @@ describe("resolveAnalyticsLevel — parsing", () => {
     expect(resolveAnalyticsLevel({ "0SEC_ANALYTICS_LEVEL": "  FULL " })).toBe("full");
   });
 
-  it("defaults to off when unset", () => {
-    expect(resolveAnalyticsLevel({})).toBe("off");
+  it("defaults to full when unset", () => {
+    expect(resolveAnalyticsLevel({})).toBe("full");
+  });
+
+  it("opt-out env still wins over default full", () => {
+    expect(resolveAnalyticsLevel({ "0SEC_OFFLINE": "1" })).toBe("off");
+    expect(resolveAnalyticsLevel({ "DO_NOT_TRACK": "1" })).toBe("off");
   });
 
   it("fails closed to off on an unknown/invalid value", () => {

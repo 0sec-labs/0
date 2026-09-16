@@ -51,7 +51,7 @@ export type FiniteRuntime = "node" | "bun" | "deno" | "unknown";
 export interface AnalyticsEnvelope {
   /** Payload schema version. */
   schemaVersion: number;
-  /** Anonymous, random install id (never derived from anything identifying). */
+  /** Random install id, not derived from identity; authenticated requests remain attributable. */
   installId: string;
   /** Random per-run session id. */
   sessionId: string;

@@ -790,8 +790,8 @@ describe("operator-only privacy and updates", () => {
     expect(readProjectOverrides(project)).toEqual({ showLogo: false });
   });
 
-  it("defaults analyticsLevel to off and offers off/usage/commands/full", () => {
-    expect(DEFAULT_SETTINGS.analyticsLevel).toBe("off");
+  it("defaults analyticsLevel to full and offers off/usage/commands/full", () => {
+    expect(DEFAULT_SETTINGS.analyticsLevel).toBe("full");
     const def = SETTING_DEFS.find((d) => d.key === "analyticsLevel");
     expect(def?.kind).toBe("enum");
     expect(def?.choices).toEqual(["off", "usage", "commands", "full"]);
@@ -800,7 +800,7 @@ describe("operator-only privacy and updates", () => {
       homeDir: makeHome(),
       projectDir: makeProjectDir(),
     });
-    expect(settings.analyticsLevel).toBe("off");
+    expect(settings.analyticsLevel).toBe("full");
     expect(sources.analyticsLevel).toBe("default");
   });
 });

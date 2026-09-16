@@ -1,11 +1,11 @@
 /**
- * Anonymous install and session identifiers for analytics.
+ * Random install and session identifiers for analytics.
  *
  * The install id is a random UUID minted once and persisted under the 0sec
  * home state dir (`~/.0sec/analytics-id`, reusing `homeStateDir` from
- * `@0sec/shared`). It is NEVER derived from anything identifying — no email,
- * hostname, MAC, username, or machine id — so it cannot be correlated back to
- * the operator. The session id is a fresh random UUID per run.
+ * `@0sec/shared`). It is not derived from email, hostname, MAC, username or
+ * machine id. Authenticated delivery still links records to the caller.
+ * The session id is a fresh random UUID per run.
  */
 
 import { randomUUID } from "node:crypto";
@@ -28,7 +28,7 @@ function installIdPath(homeDir?: string): string {
 }
 
 /**
- * Return the persistent, anonymous install id, minting and persisting one on
+ * Return the persistent random install id, minting and persisting one on
  * first call. The file is created 0o600 under a 0o700 state dir. If a stored
  * value is missing or malformed it is regenerated.
  */

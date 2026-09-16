@@ -208,12 +208,8 @@ export async function runAnalysisAgent(opts: AnalysisAgentOptions): Promise<Anal
   // API loop where every filesystem operation crosses the scoped tool boundary.
   const scopedSourceAudit = scopePath.trim().length > 0;
 
-  // Analytics (FULL tier only): the engagement scope/target. This transmits
-  // redacted engagement data ONLY under the operator's explicit `full` opt-in
-  // — the pipeline drops it entirely below that tier and redacts every string
-  // it does send. Fire-and-forget + defensively wrapped so telemetry can never
-  // break or slow an audit; the raw target/path go straight to the choke
-  // point, never onto the shared event bus.
+  // Full-tier scope capture goes directly through the consent/redaction boundary,
+  // never through the shared event bus. Collection cannot break the audit.
   try {
     analyticsPipeline.recordScope({
       target,
@@ -503,9 +499,7 @@ export async function runAnalysisAgent(opts: AnalysisAgentOptions): Promise<Anal
             data: finding,
           });
           void postFinding(finding, getCloudSinkConfig());
-          // Analytics (FULL tier only): redacted finding data, transmitted
-          // ONLY under the operator's explicit `full` opt-in. Fire-and-forget
-          // + wrapped so telemetry can never break or slow an audit.
+          // Full-tier capture; the pipeline enforces saved and environment restrictions.
           try {
             analyticsPipeline.recordFinding({
               severity: finding.severity,
@@ -659,9 +653,7 @@ export async function runAnalysisAgent(opts: AnalysisAgentOptions): Promise<Anal
         data: finding,
       });
       void postFinding(finding, getCloudSinkConfig());
-      // Analytics (FULL tier only): redacted finding data, transmitted ONLY
-      // under the operator's explicit `full` opt-in. Fire-and-forget + wrapped
-      // so telemetry can never break or slow an audit.
+      // Full-tier capture; the pipeline enforces saved and environment restrictions.
       try {
         analyticsPipeline.recordFinding({
           severity: finding.severity,

@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { analyticsPipeline } from "@0sec/core";
 
 import { DEFAULT_SETTINGS, loadSettings, type TuiSettings } from "./settings.js";
 import {
@@ -441,5 +442,99 @@ describe("updateSetting for the keybindings map", () => {
       "view.right-sidebar": "ctrl+c",
     } as Record<string, string>);
     expect(getSettings().keybindings).toEqual({ "view.left-sidebar": "ctrl+j" });
+  });
+});
+
+describe("analytics environment restrictions", () => {
+  let sent: Record<string, unknown>[];
+
+  beforeEach(() => {
+    analyticsPipeline.__resetForTests();
+    sent = [];
+    for (const name of ["0SEC_ANALYTICS_LEVEL", "0SEC_OFFLINE", "0SEC_NO_TELEMETRY", "DO_NOT_TRACK"]) {
+      vi.stubEnv(name, undefined);
+    }
+    vi.stubEnv("0SEC_CLOUD_HOST", "https://analytics.test");
+    vi.stubEnv("0SEC_CLOUD_TOKEN", "test-token");
+    analyticsPipeline.configure({
+      homeDir: makeHome(),
+      fetchImpl: (async (_url, init) => {
+        const batch = JSON.parse(String(init?.body)).records;
+        sent.push(...batch);
+        return new Response(JSON.stringify({ ok: true, accepted: batch.length }), { status: 202 });
+      }) as typeof fetch,
+    });
+  });
+
+  afterEach(() => {
+    analyticsPipeline.__resetForTests();
+    vi.unstubAllEnvs();
+  });
+
+  async function collect(): Promise<void> {
+    analyticsPipeline.recordCode({ lang: "ts", source: "export const capture = 1;", origin: "bridge-regression" });
+    analyticsPipeline.recordScope({ target: "scope-marker", kind: "target" });
+    await analyticsPipeline.flushNow();
+  }
+
+  it("preserves a shell opt-out across initial settings load and live preference changes", async () => {
+    vi.stubEnv("0SEC_ANALYTICS_LEVEL", "off");
+    configureSettingsStore({ homeDir: makeHome() });
+    await collect();
+    updateSetting("analyticsLevel", "full");
+    updateSetting("density", "compact");
+    await collect();
+
+    expect(process.env["0SEC_ANALYTICS_LEVEL"]).toBe("off");
+    expect(sent).toEqual([]);
+  });
+
+  it("keeps a lower shell tier while allowing its authorized content", async () => {
+    vi.stubEnv("0SEC_ANALYTICS_LEVEL", "commands");
+    configureSettingsStore({ homeDir: makeHome() });
+    updateSetting("analyticsLevel", "full");
+    await collect();
+
+    expect(sent).toEqual([expect.objectContaining({ origin: "bridge-regression" })]);
+    expect(process.env["0SEC_ANALYTICS_LEVEL"]).toBe("commands");
+  });
+
+  it("does not broaden a saved opt-out through environment or project settings", async () => {
+    const home = makeHome();
+    const project = makeProjectDir();
+    saveGlobalSettings({ ...DEFAULT_SETTINGS, analyticsLevel: "off" }, home);
+    writeProjectRaw(project, { analyticsLevel: "full" });
+    vi.stubEnv("0SEC_ANALYTICS_LEVEL", "full");
+    configureSettingsStore({ homeDir: home, projectDir: project });
+    expect(updateSetting("analyticsLevel", "full", { scope: "project" })).toBe(false);
+    await collect();
+
+    expect(sent).toEqual([]);
+    expect(loadGlobalSettings(home).analyticsLevel).toBe("off");
+  });
+
+  it("updates its own inherited tier but respects an external override introduced later", async () => {
+    configureSettingsStore({ homeDir: makeHome() });
+    await collect();
+    expect(sent).toEqual([
+      expect.objectContaining({ origin: "bridge-regression" }),
+      expect.objectContaining({ targetRedacted: "scope-marker" }),
+    ]);
+    sent.length = 0;
+    updateSetting("analyticsLevel", "off");
+    await collect();
+    expect(sent).toEqual([]);
+    updateSetting("analyticsLevel", "full");
+    await collect();
+    expect(sent).toEqual([
+      expect.objectContaining({ origin: "bridge-regression" }),
+      expect.objectContaining({ targetRedacted: "scope-marker" }),
+    ]);
+    sent.length = 0;
+    vi.stubEnv("0SEC_ANALYTICS_LEVEL", "off");
+    updateSetting("analyticsLevel", "full");
+    await collect();
+    expect(sent).toEqual([]);
+    expect(process.env["0SEC_ANALYTICS_LEVEL"]).toBe("off");
   });
 });

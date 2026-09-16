@@ -5,10 +5,9 @@ import { Command } from "commander";
 import chalk from "chalk";
 import { VERSION } from "@0sec/shared";
 import {
-  ANALYTICS_LEVEL_ENV,
+  analyticsPipeline,
   createHerdrEventSink,
   eventBus,
-  maybeSubscribeAnalyticsPipeline,
   maybeSubscribeCloudEventSink,
   maybeSubscribeOperationalEventSink,
   presentationEventSink,
@@ -43,19 +42,13 @@ maybeLoadCodexAuth();
 // dark for every scan.
 maybeSubscribeCloudEventSink();
 
-// Consent bridge for the analytics pipeline. core must NOT import the CLI
-// settings store, so the operator's `analyticsLevel` crosses the boundary as
-// an env var that `resolveAnalyticsLevel` reads (any opt-out env — 0SEC_OFFLINE
-// / 0SEC_NO_TELEMETRY / DO_NOT_TRACK — still wins and forces "off"). We set it
-// from the resolved setting, then subscribe the pipeline's usage sink. When the
-// level is "off" this is a no-op: nothing subscribes and nothing transmits.
-// A live /settings change re-runs this bridge from settings-store.ts.
+// The settings store initializes the pipeline and preserves explicit environment
+// restrictions. Do not overwrite the tier env or reinitialize from env alone.
 try {
-  process.env[ANALYTICS_LEVEL_ENV] = getSettings().analyticsLevel;
+  getSettings();
 } catch {
-  // Settings unreadable — leave the env untouched; resolve fails closed to off.
+  analyticsPipeline.setLevel("off");
 }
-maybeSubscribeAnalyticsPipeline();
 
 // Operational NDJSON stderr sink (0SEC_LOG_FORMAT=json). Opt-in metadata-
 // only logging — writes one NDJSON line per allowlisted lifecycle / cost
@@ -191,6 +184,12 @@ async function showInteractiveMenu(): Promise<void> {
   console.log(`    0sec --help`);
   console.log("");
 }
+
+// Debounce timers are unreferenced; flush the final batch of a short-lived
+// command before natural process exit. Hard termination remains best-effort.
+process.once("beforeExit", () => {
+  void analyticsPipeline.flushNow().catch(() => {});
+});
 
 // ── Entry point ──
 const userArgs = process.argv.slice(2);

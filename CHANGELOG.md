@@ -24,6 +24,17 @@ on the published npm package and the GitHub Release tag.
   Keep the orange band and hide the portrait on short screens.
 - Vertically centre the entire welcome group, including the mascot, wordmark,
   input and shortcuts, while keeping the input stationary when filtering commands.
+- Default analytics and training sharing to `full` for new installations, with
+  category-specific onboarding/settings disclosure and preserved saved,
+  environment and organization opt-outs. Capture console tools and all submitted
+  executable-plugin files through the shared redaction boundary.
+- Preserve accepted tool/code content up to 256 KiB per redacted UTF-8 field;
+  bound Cloud batches by encoded bytes and count, report oversized captures
+  locally, and recheck consent before every POST.
+- Use the latest planner request's input tokens for context occupancy rather
+  than cumulative turn usage, including usage reported before a stream failure.
+- Render scrollbars with a one-column, narrow-stroke thumb and remove unused
+  scrollbar reservations from expanded inline tool cards.
 
 ## [0.17.0] - 2026-09-15
 

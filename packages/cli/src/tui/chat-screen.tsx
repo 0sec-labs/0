@@ -3747,14 +3747,18 @@ export function ChatScreen({
         input: prev.input + outcome.usage.inputTokens,
         output: prev.output + outcome.usage.outputTokens,
       }));
-      // Context occupancy = the tokens the last model call actually sent (the
-      // whole conversation resent). Some backends (e.g. the ChatGPT/Codex wire)
-      // report usage only on the RETURN value, not through the streaming
-      // `onUsage(kind:"planner")` callback above — so without this the meter
-      // stayed at 0% for a full conversation. Fall back to the turn's final
-      // input count whenever it is a real, positive measurement.
-      if (Number.isFinite(outcome.usage.inputTokens) && outcome.usage.inputTokens > 0) {
-        setLastContext(outcome.usage.inputTokens);
+      // Context occupancy = the tokens the last planner call actually sent (the
+      // whole conversation resent — a per-call measure). Some backends
+      // (e.g. the ChatGPT/Codex wire) report usage only on the RETURN value,
+      // not through the streaming `onUsage(kind:"planner")` callback above — so
+      // without this the meter stayed at 0% for a full conversation.
+      // Crucially, outcome.usage.inputTokens is the TURN-CUMULATIVE sum of
+      // every model call; using it here would wrongly inflate context
+      // occupancy toward 238% when a tool-using turn re-sends the growing
+      // conversation multiple times. outcome.contextInputTokens is the
+      // true per-call planner input token count.
+      if (outcome.contextInputTokens !== undefined && outcome.contextInputTokens > 0) {
+        setLastContext(outcome.contextInputTokens);
       }
       turnUsage = { inputTokens: outcome.usage.inputTokens, outputTokens: outcome.usage.outputTokens };
 

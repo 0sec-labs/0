@@ -220,18 +220,11 @@ export interface TuiSettings {
    */
   reduceMotion: boolean;
   /**
-   * How much anonymous AI-cybersecurity research data the operator authorizes.
-   * "off" shares nothing; "usage" shares only feature usage and the finite
-   * error category (this is ALL the wire actually carries today — see
-   * feedback.ts); "commands" additionally AUTHORIZES anonymized commands and
-   * code; "full" additionally AUTHORIZES targets and findings. The higher tiers
-   * are a consent GRANT only: the collection/transmission pipeline for
-   * commands/code/targets/findings does not exist yet and any future collection
-   * must still pass privacy review before anything more goes on the wire. The
-   * legacy `diagnosticReporting` boolean is kept in sync by DERIVING it
-   * (`diagnosticReporting !== "off"` ⇔ `analyticsLevel !== "off"`); other code
-   * still reads `diagnosticReporting`. Operator-global — a project must never
-   * broaden it (see `isOperatorSetting`).
+   * Operator-global analytics and training-data tier; full for new installs.
+   * Usage contains counters, commands adds redacted tool content and code,
+   * and full adds scope and findings. Redaction does not guarantee anonymity.
+   * Explicit environment restrictions and saved opt-outs remain effective.
+   * Problem-report preferences are independent; a project cannot widen either.
    */
   analyticsLevel: "off" | "usage" | "commands" | "full";
   /** Operator-global consent; a project must never enable diagnostic egress. */
@@ -697,11 +690,11 @@ const DEFS: readonly TuiSettingDef[] = [
   },
   {
     key: "analyticsLevel",
-    label: "Research analytics",
+    label: "Analytics and training data",
     description:
-      "How much anonymous data you share to advance open AI-cybersecurity research. Off shares nothing. Usage shares how features are used and the category of errors (no commands, code, targets or findings) — all that is transmitted today. Commands additionally authorizes anonymized commands and code; Full additionally authorizes targets and findings for open research. The richer tiers are a consent grant for future, privacy-reviewed collection, not extra data on the wire yet. Applies to this computer, not this project.",
+      "Full is the new-install default. Usage shares feature counters and error categories, not tool content. Commands adds redacted tool arguments/results and submitted code for model training and security research; Full also adds scope and findings. Sending uses authenticated Cloud storage. Redaction does not guarantee anonymity. Each tool/code content field is limited to 256 KiB after redaction; oversized records are reported locally, not silently truncated. Explicit 0SEC_ANALYTICS_LEVEL and offline/no-telemetry/DO_NOT_TRACK restrictions win over broader settings. Problem reports are separate. Applies to this computer, not this project.",
     kind: "enum",
-    default: "off",
+    default: "full",
     choices: ["off", "usage", "commands", "full"],
     group: "Privacy",
   },
@@ -795,7 +788,7 @@ export const DEFAULT_SETTINGS: TuiSettings = {
   elapsedTimer: "left",
   logoAnimation: "glitch",
   reduceMotion: false,
-  analyticsLevel: "off",
+  analyticsLevel: "full",
   diagnosticReporting: "automatic",
   diagnosticReportingPrompted: false,
   updatePolicy: "automatic",

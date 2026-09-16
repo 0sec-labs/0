@@ -124,6 +124,50 @@ describe("createConsoleSession", () => {
     expect(runtime.calls[1].messages.length).toBeGreaterThanOrEqual(2);
   });
 
+  it("keeps latest planner occupancy separate from cumulative input usage", async () => {
+    const runtime = new ScriptedRuntime([
+      ...["first", "second"].map((id): NativeRuntimeResult => ({
+        content: [{ type: "tool_use", id, name: "payload_lookup", input: { name: "jsfuck_alert" } }],
+        stopReason: "tool_use",
+        durationMs: 1,
+        usage: { inputTokens: 216_000, outputTokens: 10 },
+      })),
+      { ...endTurn("Complete."), usage: { inputTokens: 216_000, outputTokens: 10 } },
+    ]);
+    const session = createConsoleSession({ runtime, refineObjective: false, maxTurnTokens: 2_000_000 });
+    try {
+      const outcome = await session.send("look up the payload twice");
+      expect(outcome.stopReason).toBe("end_turn");
+      expect(outcome.usage.inputTokens).toBe(648_000);
+      expect(outcome.contextInputTokens).toBe(216_000);
+    } finally {
+      await session.cleanup();
+    }
+  });
+
+  it("retains the latest streamed planner occupancy when that call fails", async () => {
+    let calls = 0;
+    const runtime: NativeRuntime = {
+      type: "api",
+      async isAvailable() { return true; },
+      async executeNative(_system, _messages, _tools, callbacks) {
+        if (++calls === 1) return { ...endTurn("First."), usage: { inputTokens: 150_000, outputTokens: 10 } };
+        callbacks?.onUsage?.({ inputTokens: 215_000, outputTokens: 20 });
+        throw new Error("provider stream interrupted");
+      },
+    };
+    const session = createConsoleSession({ runtime, refineObjective: false });
+    try {
+      await session.send("first");
+      const outcome = await session.send("second");
+      expect(outcome.stopReason).toBe("error");
+      expect(outcome.contextInputTokens).toBe(215_000);
+      expect(outcome.usage).toEqual({ inputTokens: 215_000, outputTokens: 20 });
+    } finally {
+      await session.cleanup();
+    }
+  });
+
   it("rejects overlapping turns without mixing history and accepts the next turn", async () => {
     let release!: (result: NativeRuntimeResult) => void;
     const pending = new Promise<NativeRuntimeResult>((resolve) => { release = resolve; });

@@ -60,8 +60,14 @@ export const REDACTION_TOKENS = [
   REDACTED_EMAIL,
 ] as const;
 
-/** Default size cap applied AFTER redaction. */
+/** Default size cap applied AFTER redaction (bounded metadata fields). */
 export const DEFAULT_REDACTION_CAP = 4000;
+
+/**
+ * Size cap for large-content redacted fields (argsRedacted, outputRedacted,
+ * sourceRedacted). Receiver confirmed max 262 144 UTF-8 bytes per field.
+ */
+export const MAX_CONTENT_BYTES = 262144;
 
 export interface RedactContext {
   /**
@@ -111,8 +117,7 @@ const EMAIL_RE = /[A-Za-z0-9._%+-]+@[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?\.[
 // prose, paths and hyphenated identifiers do not trip it. Same shape as the
 // CLI's high-entropy rule, applied last (placeholder tokens are all-caps with
 // no digit, so they can never be re-matched).
-const ENTROPY_RE =
-  /(?=[A-Za-z0-9+/_-]{40,})(?=[A-Za-z0-9+/_-]*[a-z])(?=[A-Za-z0-9+/_-]*[A-Z])(?=[A-Za-z0-9+/_-]*[0-9])[A-Za-z0-9+/_-]{40,}={0,2}/g;
+const ENTROPY_RE = /[A-Za-z0-9+/_-]{40,}={0,2}/g;
 
 // ---------------------------------------------------------------------------
 // Truncation (mirrors the private `truncate` in ../agent/action-log.ts)
@@ -164,7 +169,8 @@ export function redactContent(text: string, ctx: RedactContext = {}): string {
     out = out.replace(EMAIL_RE, REDACTED_EMAIL);
 
     // High-entropy runs last (catch-all for anything shaped like a token).
-    out = out.replace(ENTROPY_RE, REDACTED_SECRET);
+    out = out.replace(ENTROPY_RE, (run) =>
+      /[a-z]/.test(run) && /[A-Z]/.test(run) && /[0-9]/.test(run) ? REDACTED_SECRET : run);
 
     // Pass 5 — size cap, strictly AFTER redaction.
     const cap = ctx.maxChars ?? DEFAULT_REDACTION_CAP;

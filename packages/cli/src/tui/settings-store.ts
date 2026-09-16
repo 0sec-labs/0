@@ -37,6 +37,7 @@ import { useSyncExternalStore } from "react";
 import {
   ANALYTICS_LEVEL_ENV,
   analyticsPipeline,
+  levelAtLeast,
   resolveAnalyticsLevel,
 } from "@0sec/core";
 
@@ -88,6 +89,7 @@ const subscribers = new Set<Subscriber>();
  * that subscribes) from inside its own callback cannot corrupt the walk.
  */
 function notify(settings: TuiSettings): void {
+  bridgeAnalyticsLevel(settings);
   for (const fn of [...subscribers]) {
     try {
       fn(settings);
@@ -110,7 +112,10 @@ function loadLayered(): LayeredSettings {
  * `useSyncExternalStore` from tearing or looping.
  */
 export function getSettings(): TuiSettings {
-  if (cached === null) cached = loadLayered();
+  if (cached === null) {
+    cached = loadLayered();
+    bridgeAnalyticsLevel(cached.settings);
+  }
   return cached.settings;
 }
 
@@ -119,8 +124,8 @@ export function getSettings(): TuiSettings {
  * (default/global/project) each value came from. Lazily loads like `getSettings`.
  */
 export function getSettingSources(): Record<keyof TuiSettings, SettingLayer> {
-  if (cached === null) cached = loadLayered();
-  return cached.sources;
+  getSettings();
+  return cached!.sources;
 }
 
 /**
@@ -234,27 +239,27 @@ export function subscribeSettings(fn: Subscriber): () => void {
   };
 }
 
-// ── Analytics consent bridge (live) ─────────────────────────────────────────
-//
-// core must NOT import this CLI settings store, so the operator's
-// `analyticsLevel` crosses the boundary as an env var. The CLI entry sets it
-// once at startup; this bridge keeps it in lock-step when the setting changes
-// live (a /settings toggle), re-resolving through `resolveAnalyticsLevel` so an
-// opt-out env still wins, and pushing the tier into the pipeline's cached level
-// so the change takes effect WITHOUT a restart. Only fires on an actual change,
-// and every step is fail-soft — a broken bridge must never break settings.
-let lastBridgedLevel: string | undefined;
+// Preserve explicit environment restrictions. Only replace an env value this
+// bridge wrote itself, so child processes inherit live operator preferences
+// without turning a shell-level opt-out back on.
+let bridgedAnalyticsEnv: string | undefined;
 function bridgeAnalyticsLevel(settings: TuiSettings): void {
   try {
-    if (settings.analyticsLevel === lastBridgedLevel) return;
-    lastBridgedLevel = settings.analyticsLevel;
-    process.env[ANALYTICS_LEVEL_ENV] = settings.analyticsLevel;
-    analyticsPipeline.setLevel(resolveAnalyticsLevel());
+    const current = process.env[ANALYTICS_LEVEL_ENV];
+    if (current === undefined || current === bridgedAnalyticsEnv) {
+      process.env[ANALYTICS_LEVEL_ENV] = settings.analyticsLevel;
+      bridgedAnalyticsEnv = settings.analyticsLevel;
+    } else {
+      bridgedAnalyticsEnv = undefined;
+    }
+    const environmentLevel = resolveAnalyticsLevel();
+    analyticsPipeline.setLevel(levelAtLeast(environmentLevel, settings.analyticsLevel)
+      ? settings.analyticsLevel
+      : environmentLevel);
   } catch {
     // Never let telemetry wiring break a settings write.
   }
 }
-subscribeSettings(bridgeAnalyticsLevel);
 
 /**
  * Re-read both layers and notify — for when a settings file was edited by hand
@@ -293,6 +298,11 @@ export function __resetSettingsStoreForTests(): void {
   homeDir = undefined;
   projectDir = undefined;
   subscribers.clear();
+  if (bridgedAnalyticsEnv !== undefined && process.env[ANALYTICS_LEVEL_ENV] === bridgedAnalyticsEnv) {
+    delete process.env[ANALYTICS_LEVEL_ENV];
+  }
+  bridgedAnalyticsEnv = undefined;
+  analyticsPipeline.setLevel("off");
 }
 
 /**

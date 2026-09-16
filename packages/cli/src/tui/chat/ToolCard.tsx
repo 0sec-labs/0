@@ -355,8 +355,7 @@ function TaskCard({
   }
 
   const inner = frame.innerWidth;
-  // One cell is surrendered to the scrollbar when a body region can scroll.
-  const bodyWidth = Math.max(1, inner - (expanded ? 1 : 0));
+  const bodyWidth = inner;
 
   const sections = taskMarkdownSections(entry);
   const { rows: subRows, hidden: hiddenAgents } = subReportRows(
@@ -366,10 +365,6 @@ function TaskCard({
   );
   const todos = entry.taskTodos ?? [];
   const expandHint = toggleable ? ` · ${expandLegend(true)}` : "";
-  const scrollbarOptions = {
-    trackOptions: { backgroundColor: PANEL, foregroundColor: MUTED },
-    arrowOptions: { foregroundColor: MUTED, backgroundColor: PANEL },
-  };
 
   // ── context (Goal / Constraints / Contract / Assignment) ────────────────────
   // Flattened to one countable line list and bounded exactly like the normal
@@ -652,12 +647,8 @@ function CodeCard({
   }
 
   const inner = frame.innerWidth;
-  const bodyWidth = Math.max(1, inner - (expanded ? 1 : 0));
+  const bodyWidth = inner;
   const expandHint = toggleable ? ` · ${expandLegend(true)}` : "";
-  const scrollbarOptions = {
-    trackOptions: { backgroundColor: PANEL, foregroundColor: MUTED },
-    arrowOptions: { foregroundColor: MUTED, backgroundColor: PANEL },
-  };
 
   // ── code (the source that ran) — syntax-highlighted, bounded, collapsible ──
   const codeLinesAll = (entry.codeSource ?? "").split("\n");
@@ -836,8 +827,7 @@ export function ToolCard({
   }
 
   const inner = frame.innerWidth;
-  // One cell is surrendered to the scrollbar when the body can scroll.
-  const bodyWidth = Math.max(1, inner - (expanded ? 1 : 0));
+  const bodyWidth = inner;
 
   // ── output ────────────────────────────────────────────────────────────────
   const retained = preview.lines

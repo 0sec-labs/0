@@ -191,8 +191,59 @@ from these records. Credential-like values in retained identifiers are redacted.
 This adds records alongside existing stderr diagnostics; it does not make all
 stderr output JSON or replace `--format`. Stdout and the `0SEC_EVENT_*` cloud
 relay protocol are unchanged. Unset `0SEC_LOG_FORMAT` to disable the sink;
-only the `json` format enables it. Nothing is uploaded automatically: collect
-stderr through your runner or container logging pipeline.
+only the `json` format enables it. These operational log records are not uploaded
+automatically; collect stderr through your runner or container logging pipeline.
+
+## Analytics and training data
+
+**Full sharing is the default for new installations.** Onboarding and
+`/settings` → **Analytics and training data** disclose the categories and let
+you choose a lower tier:
+
+| Tier | Collected records |
+| --- | --- |
+| `off` | No analytics or training uploads |
+| `usage` | Feature/finding counters, error categories, turns, duration and available cost totals; no tool content |
+| `commands` | Usage plus redacted tool arguments/results and submitted executable-plugin files |
+| `full` | Commands plus redacted scope entries and findings |
+
+Training records support model improvement and security research. Redaction
+removes recognized secret values and patterns, but **does not guarantee
+anonymity or removal of every sensitive value**. Requests are authenticated;
+random install/session identifiers do not make them anonymous. This pipeline
+does not introduce a separate conversation-transcript record.
+
+The setting is operator-global; project settings cannot broaden it. Saved
+opt-outs survive upgrades. An explicit `0SEC_ANALYTICS_LEVEL` limits the
+effective tier, even if the saved setting is higher. `0SEC_OFFLINE`,
+`0SEC_NO_TELEMETRY`, or `DO_NOT_TRACK` forces analytics off when set to a
+non-empty value other than `0`, `false`, or `no`. For example:
+
+```bash
+env 0SEC_ANALYTICS_LEVEL=off 0sec console
+env 0SEC_ANALYTICS_LEVEL=usage 0sec scan https://authorized.example
+```
+
+Sending requires Cloud credentials and uses `/api/cli-analytics` on the
+configured Cloud host. Run `0sec auth login` again if an older CLI grant lacks
+`analytics:submit`. Organization policy can further exclude training records;
+usage is stored separately. A `202` response reports accepted and excluded
+counts, not unconditional training-data acceptance.
+
+Tool arguments, tool results and submitted source each have a **262,144-byte
+UTF-8 limit after redaction**. Accepted content is not cut to a short preview.
+POSTs contain at most 100 records and 1,048,576 encoded JSON bytes, including
+escaping and the batch wrapper. An oversized field or single encoded record
+is skipped, not truncated or retried: stderr and
+`~/.0sec/analytics-outcomes.log` report only the field, byte counts, limit and
+timestamp. Post-redaction payloads attempted over HTTP are recorded in
+`~/.0sec/analytics-sent.log`; that log is not proof of server acceptance.
+
+Consent is checked again before every POST. Lowering it discards disallowed
+pending records; re-enabling does not replay those discarded records. Skipping
+the onboarding choice leaves the current setting unchanged. Choosing `off`
+there also disables automatic problem reports; choosing a higher analytics
+tier does not re-enable an existing problem-report opt-out.
 
 ## Feedback delivery
 

@@ -55,6 +55,7 @@ import type { AgentRole, OperatorQuestionAnswer, OperatorQuestionRequest, Scoped
 import { classifyToolRisk } from "../agent/destructive-classifier.js";
 import { normalizeScopeHostname, ScopePolicy } from "../scope/scope.js";
 import { eventBus } from "../events/bus.js";
+import { analyticsPipeline } from "../telemetry/analytics-pipeline.js";
 import { createSessionObjectiveService } from "./session-objective.js";
 import { consoleSessionCheckpointSchema } from "./session-checkpoint.js";
 import type { ConsoleSessionCheckpoint } from "./session-checkpoint.js";
@@ -344,6 +345,13 @@ export interface ConsoleTurnOutcome {
   assistantText: string;
   toolCalls: Array<{ call: ToolCall; result: ToolResult }>;
   usage: { inputTokens: number; outputTokens: number };
+  /**
+   * The most recent / current planner-model-call input tokens — the actual
+   * conversation occupancy passed to the model. Distinct from the cumulative
+   * `usage.inputTokens`, which sums every model call (planner + plugin) across
+   * the turn. Undefined when no planner call reported usage.
+   */
+  contextInputTokens?: number;
   /**
    * Consumption vs. the limits in force. Always present, whatever the stop
    * reason — the operator needs the numbers to decide whether to continue.
@@ -2815,6 +2823,31 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
     const usage = { inputTokens: 0, outputTokens: 0 };
     let assistantText = "";
     let iterations = 0;
+    const recordToolResult = (call: ToolCall, result: ToolResult, startedAt: number, findingsBefore: number): void => {
+      try {
+        analyticsPipeline.recordCommand({
+          tool: call.name,
+          args: call.arguments,
+          output: result.success ? result.output : result.error,
+          status: result.success ? "ok" : "error",
+          durationMs: Date.now() - startedAt,
+          turn: iterations,
+        });
+        for (let index = findingsBefore; index < toolContext.findings.length; index++) {
+          const finding = toolContext.findings[index]!;
+          analyticsPipeline.recordFinding({
+            severity: finding.severity,
+            category: finding.category,
+            title: finding.title,
+            description: finding.description,
+            evidence: finding.evidence,
+            confidence: finding.confidence ?? 0,
+          });
+        }
+      } catch {
+        // Collection must never break the authorized tool path.
+      }
+    };
     // Bounded context-window overflow recoveries within this turn (scan-loop
     // parity). Only used if the provider rejects a request for its window.
     let contextOverflowRecoveries = 0;
@@ -2830,6 +2863,12 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
         budget: { tokensUsed: 0, tokenBudget: maxTurnTokens, iterations: 0, maxToolIterations },
         stopReason: "cancelled",
       };
+    }
+    try {
+      if (sessionTarget) analyticsPipeline.recordScope({ target: sessionTarget, kind: "target" });
+      if (sessionScopePath) analyticsPipeline.recordScope({ target: sessionScopePath, kind: "scope-path" });
+    } catch {
+      // Collection must never block a console turn.
     }
 
     messages.push({ role: "user", content: [{ type: "text", text: userText }] });
@@ -2882,6 +2921,7 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
         usage.inputTokens += delta.inputTokens;
         usage.outputTokens += delta.outputTokens;
         lastCallInputTokens = delta.inputTokens;
+        if (kind === "planner") lastPlannerInputTokens = delta.inputTokens;
       }
       callbacks?.onUsage?.({
         inputTokens: delta?.inputTokens ?? 0,
@@ -2939,6 +2979,8 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
           ? () => harness!.assertDriverAuthority()
           : authorityResult ? () => harness!.assertDriverAuthority(authorityResult) : undefined;
         callbacks?.onToolStart?.(call);
+        const startedAt = Date.now();
+        const findingsBefore = toolContext.findings.length;
         let result: ToolResult;
         try {
           result = nativeTools.some((tool) => tool.name === name)
@@ -2952,6 +2994,7 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
           { role: "user", content: [{ type: "tool_result", tool_use_id: driverCallId, content: stringifyToolResult(result), is_error: !result.success }] },
         );
         runCalls.push({ call, result });
+        recordToolResult(call, result, startedAt, findingsBefore);
         callbacks?.onToolResult?.(call, result);
         return result;
       },
@@ -3105,7 +3148,11 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
         callbacks?.onNotice?.(
           `Turn cancelled by operator after ${iterations} tool round(s) — used ${usage.inputTokens + usage.outputTokens}${hasTurnTokenCap ? ` of ${maxTurnTokens}` : ""} tokens. Conversation is intact; send another message to continue.`,
         );
-        return { assistantText, toolCalls: runCalls, usage, budget: budgetSnapshot(), stopReason: "cancelled" };
+        return {
+          assistantText, toolCalls: runCalls, usage,
+          contextInputTokens: lastPlannerInputTokens > 0 ? lastPlannerInputTokens : undefined,
+          budget: budgetSnapshot(), stopReason: "cancelled",
+        };
       }
 
       // Background results enter the model at request boundaries, not only if
@@ -3136,13 +3183,13 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
           driverResult = supplied;
           // Actual SDK model calls already recorded their usage through invokePluginModel.
         } else {
-          result = await config.runtime.executeNative(systemPrompt, messages, nativeTools, streamCallbacks, signal);
-          const plannerUsage = result.usage ?? streamedUsage;
-          recordModelUsage("planner", plannerUsage);
-          // Prompt occupancy the planner just reported — the signal the
-          // turn-boundary compaction trigger measures against next turn.
-          // Persisted across turns; only updated when the call reported usage.
-          if (plannerUsage) lastPlannerInputTokens = plannerUsage.inputTokens;
+          try {
+            result = await config.runtime.executeNative(systemPrompt, messages, nativeTools, streamCallbacks, signal);
+          } catch (error) {
+            if (streamedUsage) recordModelUsage("planner", streamedUsage);
+            throw error;
+          }
+          recordModelUsage("planner", result.usage ?? streamedUsage);
         }
       } catch (error) {
         // Capture the FULL stack to the diagnostics channel by default (no env
@@ -3159,9 +3206,13 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
               : { value: String(error) },
           );
         }
-        return { assistantText, toolCalls: runCalls, usage, budget: budgetSnapshot(),
+        return {
+          assistantText, toolCalls: runCalls, usage,
+          contextInputTokens: lastPlannerInputTokens > 0 ? lastPlannerInputTokens : undefined,
+          budget: budgetSnapshot(),
           stopReason: signal?.aborted ? "cancelled" : "error",
-          error: signal?.aborted ? "turn cancelled by operator" : describeCaughtError(error) };
+          error: signal?.aborted ? "turn cancelled by operator" : describeCaughtError(error),
+        };
       } finally { directDriver = false; }
 
       if (result.stopReason === "error") {
@@ -3206,6 +3257,7 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
           assistantText,
           toolCalls: runCalls,
           usage,
+          contextInputTokens: lastPlannerInputTokens > 0 ? lastPlannerInputTokens : undefined,
           budget: budgetSnapshot(),
           stopReason: "error",
           error: result.error ?? "LLM runtime error",
@@ -3227,7 +3279,11 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
         (b): b is Extract<NativeContentBlock, { type: "tool_use" }> => b.type === "tool_use",
       );
       if (toolUseBlocks.length === 0) {
-        return { assistantText, toolCalls: runCalls, usage, budget: budgetSnapshot(), stopReason: "end_turn" };
+        return {
+          assistantText, toolCalls: runCalls, usage,
+          contextInputTokens: lastPlannerInputTokens > 0 ? lastPlannerInputTokens : undefined,
+          budget: budgetSnapshot(), stopReason: "end_turn",
+        };
       }
 
       const toolResultBlocks: NativeContentBlock[] = [];
@@ -3265,6 +3321,7 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
             error: "Tool call cancelled by operator before dispatch.",
           };
           callbacks?.onToolStart?.(call);
+          recordToolResult(call, cancelResult, Date.now(), toolContext.findings.length);
           callbacks?.onToolResult?.(call, cancelResult);
           runCalls.push({ call, result: cancelResult });
           toolResultBlocks.push({
@@ -3277,12 +3334,15 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
         }
 
         callbacks?.onToolStart?.(call);
+        const startedAt = Date.now();
+        const findingsBefore = toolContext.findings.length;
         let toolResult: ToolResult;
         try { toolResult = await dispatchAuthorized(call, callbacks?.onNotice, signal, true, assertAuthority); }
         catch (error) {
           if (!authorityFailure) throw error;
           toolResult = { success: false, output: null, error: authorityFailure };
         }
+        recordToolResult(call, toolResult, startedAt, findingsBefore);
         callbacks?.onToolResult?.(call, toolResult);
         runCalls.push({ call, result: toolResult });
         toolResultBlocks.push({
@@ -3297,7 +3357,11 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
       iterations += 1;
       try { assertAuthority?.(); } catch { /* Preserve completed tool receipts before reporting lost authority. */ }
       if (authorityFailure) {
-        return { assistantText, toolCalls: runCalls, usage, budget: budgetSnapshot(), stopReason: "error", error: authorityFailure };
+        return {
+          assistantText, toolCalls: runCalls, usage,
+          contextInputTokens: lastPlannerInputTokens > 0 ? lastPlannerInputTokens : undefined,
+          budget: budgetSnapshot(), stopReason: "error", error: authorityFailure,
+        };
       }
 
       // A mid-round abort stops here — AFTER the tool_result message for this
@@ -3307,7 +3371,11 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
         callbacks?.onNotice?.(
           `Turn cancelled by operator mid-round — used ${usage.inputTokens + usage.outputTokens}${hasTurnTokenCap ? ` of ${maxTurnTokens}` : ""} tokens over ${iterations} tool round(s). Outstanding tool calls were closed out; send another message to continue.`,
         );
-        return { assistantText, toolCalls: runCalls, usage, budget: budgetSnapshot(), stopReason: "cancelled" };
+        return {
+          assistantText, toolCalls: runCalls, usage,
+          contextInputTokens: lastPlannerInputTokens > 0 ? lastPlannerInputTokens : undefined,
+          budget: budgetSnapshot(), stopReason: "cancelled",
+        };
       }
 
       // Both guards are evaluated HERE — after every tool_use block in this
@@ -3328,7 +3396,11 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
         callbacks?.onNotice?.(
           `Token budget for this turn is spent — used ${tokensUsed} of ${maxTurnTokens} tokens over ${iterations} tool round(s). Pausing for operator input; send another message to continue from here.`,
         );
-        return { assistantText, toolCalls: runCalls, usage, budget: budgetSnapshot(), stopReason: "max_turn_tokens" };
+        return {
+          assistantText, toolCalls: runCalls, usage,
+          contextInputTokens: lastPlannerInputTokens > 0 ? lastPlannerInputTokens : undefined,
+          budget: budgetSnapshot(), stopReason: "max_turn_tokens",
+        };
       }
 
       // BACKSTOP: runaway rounds. Only reachable when the turn is burning
@@ -3337,7 +3409,11 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
         callbacks?.onNotice?.(
           `Reached the ${maxToolIterations}-tool-call runaway cap for this turn (${tokensUsed} tokens used${hasTurnTokenCap ? ` of ${maxTurnTokens}` : ""}); pausing for operator input.`,
         );
-        return { assistantText, toolCalls: runCalls, usage, budget: budgetSnapshot(), stopReason: "max_tool_iterations" };
+        return {
+          assistantText, toolCalls: runCalls, usage,
+          contextInputTokens: lastPlannerInputTokens > 0 ? lastPlannerInputTokens : undefined,
+          budget: budgetSnapshot(), stopReason: "max_tool_iterations",
+        };
       }
     }
     } finally {
