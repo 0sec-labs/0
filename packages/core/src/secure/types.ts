@@ -30,6 +30,14 @@ export interface BehavioralRepairResult {
   artifactDir: string;
 }
 
+
+/** One recorded developer decision on a past 0sec repair for this tenant. */
+export interface PriorRepairOutcome {
+  category: string;
+  title: string;
+  outcome: "accepted" | "rejected";
+  mergedAt?: string;
+}
 export interface BehavioralRepairOptions {
   repoRoot: string;
   finding: Finding;
@@ -41,6 +49,12 @@ export interface BehavioralRepairOptions {
   maxTurns: number;
   timeoutMs: number;
   signal?: AbortSignal;
+  /**
+   * Developer-choice learnings: how this tenant responded to past repairs.
+   * Rendered to the model as UNTRUSTED guidance (preferences, never facts
+   * about the code). Cloud injects via 0SEC_SECURE_PRIOR_OUTCOMES.
+   */
+  priorOutcomes?: PriorRepairOutcome[];
   onEvent?: (event: SecureEvent) => void;
 }
 

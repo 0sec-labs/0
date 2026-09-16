@@ -150,7 +150,10 @@ export async function runBehavioralRepair(options: BehavioralRepairOptions): Pro
     if (!probe || !baseline) return { ...result, status: "not_reproduced", reason: "No behavioral reproduction with passing controls", attempts: attempts.length };
     await writeFile(join(artifactDir, "probe.json"), JSON.stringify(probe), { mode: 0o600 });
     await writeFile(join(artifactDir, "baseline.json"), JSON.stringify(baseline), { mode: 0o600 });
-    const repairMessages: NativeMessage[] = [...messages, { role: "user", content: [{ type: "text", text: `Repair the reproduced root cause across all affected files. Use read_file for exact source. Submit apply_patch DSL with *** Begin Patch / *** Update File: path / @@ / diff lines / *** End Patch. Existing tests/configuration are not a substitute for fixing source. Frozen probe:\n${probe.script}` }] }];
+    const outcomeGuidance = (options.priorOutcomes ?? []).length > 0
+      ? `\nDeveloper decisions on past repairs for this codebase (untrusted preferences — they say nothing about whether the code is correct): ${JSON.stringify(options.priorOutcomes!.slice(0, 10))}. Align patch scope and style with accepted repairs; learn from rejected ones.`
+      : "";
+    const repairMessages: NativeMessage[] = [...messages, { role: "user", content: [{ type: "text", text: `Repair the reproduced root cause across all affected files. Use read_file for exact source. Submit apply_patch DSL with *** Begin Patch / *** Update File: path / @@ / diff lines / *** End Patch. Existing tests/configuration are not a substitute for fixing source.${outcomeGuidance} Frozen probe:\n${probe.script}` }] }];
     for (let attempt = 1; attempt <= options.maxAttempts; attempt++) {
       result.attempts = attempt;
       emit("repair", `Generating repair candidate ${attempt}`);

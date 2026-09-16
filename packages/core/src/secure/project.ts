@@ -51,11 +51,7 @@
  */
 
 import { execFileSync } from "node:child_process";
-import {
-  existsSync,
-  mkdirSync,
-  readFileSync,
-} from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { join, isAbsolute, resolve } from "node:path";
 import { randomUUID, createHash } from "node:crypto";
 import type { Finding, ScanDepth, TokenUsageForPricing } from "@0sec/shared";
@@ -225,6 +221,34 @@ interface ResolvedSource {
 
 function prepareSource(source: string, stateDir: string): ResolvedSource {
   const checkout = managedCheckoutDir(stateDir);
+
+  // Continuous runs reuse the managed checkout: a stable stateDir means the
+  // learning store's content-hash notes (pinned to this path) keep recalling.
+  // Reuse requires the same origin; otherwise wipe and re-clone.
+  if (existsSync(join(checkout, ".git"))) {
+    const origin = (() => {
+      try {
+        return execFileSync("git", ["remote", "get-url", "origin"], {
+          cwd: checkout, timeout: 10_000, stdio: "pipe", encoding: "utf-8",
+        }).trim();
+      } catch { return ""; }
+    })();
+    const expected = /^https?:\/\//.test(source) || /^git@/.test(source)
+      ? source.replace(/\.git$/, "").replace(/@.*$/, "")
+      : `file://${isAbsolute(source) ? source : resolve(process.cwd(), source)}`;
+    if (origin && (origin === expected || origin.replace(/\.git$/, "") === expected.replace(/\.git$/, ""))) {
+      execFileSync("git", ["fetch", "--depth", "1", "origin"], {
+        cwd: checkout, timeout: 120_000, stdio: "pipe",
+      });
+      const { ref } = parseRepoRef(source);
+      execFileSync("git", ["reset", "--hard", ref ?? "origin/HEAD"], {
+        cwd: checkout, timeout: 30_000, stdio: "pipe",
+      });
+      execFileSync("git", ["clean", "-fdx"], { cwd: checkout, timeout: 30_000, stdio: "pipe" });
+      return { checkoutPath: checkout, revision: resolveRepoRevision(checkout) };
+    }
+    rmSync(checkout, { recursive: true, force: true });
+  }
 
   if (/^https?:\/\//.test(source) || /^git@/.test(source)) {
     mkdirSync(stateDir, { recursive: true });
@@ -877,6 +901,36 @@ export async function runSecureProject(
           signal: findingSignal,
           onEvent: (event) => { emit(event); },
         };
+
+        // Developer-choice learnings injected by the cloud worker from the
+        // tenant's recorded PR outcomes. Parse defensively: a malformed or
+        // oversized env degrades to no guidance, never a failed run.
+        let priorOutcomes: BehavioralRepairOptions["priorOutcomes"];
+        const priorRaw = process.env["0SEC_SECURE_PRIOR_OUTCOMES"];
+        if (priorRaw && priorRaw.length <= 8192) {
+          try {
+            const parsed = JSON.parse(priorRaw);
+            if (Array.isArray(parsed)) {
+              priorOutcomes = parsed
+                .filter((o): o is NonNullable<typeof o> =>
+                  o != null && typeof o === "object" &&
+                  typeof (o as Record<string, unknown>).category === "string" &&
+                  typeof (o as Record<string, unknown>).title === "string" &&
+                  ((o as Record<string, unknown>).outcome === "accepted" ||
+                    (o as Record<string, unknown>).outcome === "rejected"))
+                .slice(0, 10)
+                .map((o) => ({
+                  category: String((o as Record<string, unknown>).category).slice(0, 200),
+                  title: String((o as Record<string, unknown>).title).slice(0, 500),
+                  outcome: (o as Record<string, unknown>).outcome as "accepted" | "rejected",
+                  ...(typeof (o as Record<string, unknown>).mergedAt === "string"
+                    ? { mergedAt: (o as Record<string, unknown>).mergedAt as string }
+                    : {}),
+                }));
+            }
+          } catch { /* malformed env — no guidance */ }
+        }
+        repairOptions.priorOutcomes = priorOutcomes;
 
         let repairResult: BehavioralRepairResult;
         try {
