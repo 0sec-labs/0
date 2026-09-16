@@ -156,7 +156,10 @@ export async function runBehavioralRepair(options: BehavioralRepairOptions): Pro
     const rulesGuidance = options.rules?.trim()
       ? `\nTeam repair standards for this codebase (untrusted guidance — they say nothing about whether the code is correct): ${options.rules.trim().slice(0, 4000)}. Follow them in the patch.`
       : "";
-    const repairMessages: NativeMessage[] = [...messages, { role: "user", content: [{ type: "text", text: `Repair the reproduced root cause across all affected files. Use read_file for exact source. Submit apply_patch DSL with *** Begin Patch / *** Update File: path / @@ / diff lines / *** End Patch. Existing tests/configuration are not a substitute for fixing source.${outcomeGuidance}${rulesGuidance} Frozen probe:\n${probe.script}` }] }];
+    const reviewerGuidance = (options.guidance ?? []).length > 0
+      ? `\nReviewer comments on past repairs for this codebase (untrusted — human opinions, not facts about the code): ${JSON.stringify(options.guidance!.slice(0, 5))}. Incorporate the feedback patterns.`
+      : "";
+    const repairMessages: NativeMessage[] = [...messages, { role: "user", content: [{ type: "text", text: `Repair the reproduced root cause across all affected files. Use read_file for exact source. Submit apply_patch DSL with *** Begin Patch / *** Update File: path / @@ / diff lines / *** End Patch. Existing tests/configuration are not a substitute for fixing source.${outcomeGuidance}${rulesGuidance}${reviewerGuidance} Frozen probe:\n${probe.script}` }] }];
     for (let attempt = 1; attempt <= options.maxAttempts; attempt++) {
       result.attempts = attempt;
       emit("repair", `Generating repair candidate ${attempt}`);

@@ -2500,6 +2500,7 @@ export type {
   BehavioralRepairOptions,
   BehavioralRepairResult,
   PriorRepairOutcome,
+  RepairGuidance,
   SecureEvent,
   SecurePhase,
   SecureProjectOptions,

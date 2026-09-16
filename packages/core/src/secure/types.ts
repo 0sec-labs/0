@@ -39,6 +39,13 @@ export interface PriorRepairOutcome {
   mergedAt?: string;
 }
 
+/** A reviewer's comment on a past 0sec repair PR for this tenant. */
+export interface RepairGuidance {
+  title: string;
+  comment: string;
+  author: string;
+}
+
 export interface BehavioralRepairOptions {
   repoRoot: string;
   finding: Finding;
@@ -59,6 +66,11 @@ export interface BehavioralRepairOptions {
   onEvent?: (event: SecureEvent) => void;
   /** Plain-English repair standards, rendered as untrusted guidance. */
   rules?: string;
+  /**
+   * What human reviewers said on past repair PRs (Greptile-style comment
+   * learning). Untrusted guidance. Cloud injects via 0SEC_SECURE_GUIDANCE.
+   */
+  guidance?: RepairGuidance[];
 }
 
 export interface SecureProjectOptions {
