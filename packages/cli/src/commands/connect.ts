@@ -23,7 +23,7 @@ interface ConnectOptions {
   model?: string;
   costCeiling?: number;
   cron: string;
-  noSchedule: boolean;
+  schedule: boolean;
 }
 
 /** Test-command detection from a shallow clone. Ordered by ecosystem confidence. */
@@ -143,7 +143,7 @@ export function registerConnectCommand(program: Command): void {
       });
 
       let schedule: { id: string; next_run_at: string | null } | null = null;
-      if (!options.noSchedule) {
+      if (options.schedule) {
         if (!scan.target_id) {
           process.stderr.write(chalk.yellow("Scan created without a target id — skipping schedule.\n"));
         } else {
