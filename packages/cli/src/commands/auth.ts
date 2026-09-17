@@ -4,15 +4,16 @@
 //   - login        opens a browser at <host>/cli-auth?session=… and polls
 //                  for the mint endpoint to drop a scoped token in
 //   - logout       deletes ~/.0sec/cloud.env
-//   - status       loads creds, hits CloudClient.pingHealth(), reports
+//   - status       loads creds, verifies the token by hitting an
+//                  authenticated orchestrator endpoint, reports
 //
 // The browser flow is backed by the 0cloud session-mint endpoint:
 //   - `0sec auth login` opens `<host>/cli-auth?session=…` and polls the
 //     session URL until browser confirmation makes a scoped token ready.
 //   - `0sec auth login --token <value>` remains a manual credential path for
 //     self-hosted or recovery use.
-//   - `0sec auth status` works against any reachable cloud host that answers
-//     GET /health with a 2xx and `{status: "ok"}`-shaped body.
+//   - `0sec auth status` verifies the saved token against an authenticated
+//     orchestrator endpoint to confirm the credentials are still valid.
 //
 // DIVERGENCE FROM h1.ts
 // ──────────────────────
@@ -139,7 +140,7 @@ export function registerAuthCommand(program: Command): void {
   // ── 0sec auth status ──
   auth
     .command("status")
-    .description("Verify 0sec-cloud credentials against /health")
+    .description("Verify 0sec-cloud credentials against the orchestrator")
     .action(async () => {
       await runStatus({});
     });
@@ -408,7 +409,16 @@ export async function runStatus(opts: StatusOptions): Promise<void> {
 
   const client = new CloudClient({ ...creds, fetchImpl: opts.fetchImpl });
   try {
-    await client.pingHealth();
+    // Verify the token by hitting an authenticated endpoint. The public
+    // /health probe is mounted before auth middleware and returns 200
+    // regardless of credentials — call an endpoint that requires auth so
+    // a revoked / invalid token surfaces as 401.
+    const hostname = new URL(creds.host).hostname.toLowerCase();
+    const verifyPath =
+      hostname === "cloud.0sec.ai" || hostname === "cloud.0.security"
+        ? "/api/orgs"
+        : "/orgs";
+    await client.getJson(verifyPath);
     consolePresentationOutput.stdout(`OK (host=${creds.host})`, "auth.status.ok");
     process.exitCode = EXIT_OK;
   } catch (err) {
