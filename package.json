@@ -1,7 +1,7 @@
 {
   "name": "0sec",
   "type": "module",
-  "version": "0.18.0",
+  "version": "0.19.0",
   "description": "Your self-improving, open-source cybersecurity team.",
   "bin": {
     "0sec": "dist/0sec.js",
