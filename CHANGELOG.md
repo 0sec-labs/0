@@ -30,6 +30,9 @@ on the published npm package and the GitHub Release tag.
 
 ### Fixed
 
+- Separate dashboard text accents from solid orange actions so links, selected
+  workflow text, and translucent badges remain readable in light and dark
+  themes. Use the canonical aperture and SVG wordmark in dashboard navigation.
 - Fail closed when `connect` cannot establish enrollment readiness or inspect
   existing schedules. Missing/malformed endpoints no longer fabricate repository
   authorization. GitHub App installation remains an action-required handoff.

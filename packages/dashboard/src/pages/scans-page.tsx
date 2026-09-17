@@ -409,7 +409,7 @@ function ScanDetail({
                   {targetRuns.slice(0, 6).map((entry) => (
                     <TableRow key={entry.id}>
                       <TableCell className="font-medium">
-                        <NavLink to={`/runs/${entry.id}`} className="text-foreground hover:text-primary">
+                        <NavLink to={`/runs/${entry.id}`} className="text-foreground hover:text-primary-text">
                           {formatTime(entry.startedAt)}
                         </NavLink>
                       </TableCell>

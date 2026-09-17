@@ -5,7 +5,7 @@ export function LoadingState({ label }: { label: string }) {
   return (
     <Card className="border border-border">
       <CardContent className="flex min-h-[16rem] flex-col items-center justify-center gap-4 text-center">
-        <LoaderCircle className="size-8 animate-spin text-primary" />
+        <LoaderCircle className="size-8 animate-spin text-primary-text" />
         <div>
           <CardTitle>{label}</CardTitle>
           <CardDescription>Fetching the latest scan and triage state.</CardDescription>

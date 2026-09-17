@@ -247,7 +247,7 @@ export function CommandPalette({
                       }}
                       className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-left transition-colors hover:bg-accent"
                     >
-                      <div className="inline-flex size-9 items-center justify-center rounded-md border border-border bg-muted text-primary">
+                      <div className="inline-flex size-9 items-center justify-center rounded-md border border-border bg-muted text-primary-text">
                         <item.icon className="size-4" />
                       </div>
                       <div className="min-w-0 flex-1">
