@@ -95,4 +95,51 @@ describe.skipIf(process.platform !== "linux" || process.getuid?.() === 0)("super
     await expect(resolveEvolutionImage("fixture:local", fixture.binary)).rejects.toThrow();
     await expect.poll(() => descendantRunning(fixture.pidFile)).toBe(false);
   }, 10000);
+
+  it("marks cleanupFailed when container removal fails after guest creation", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "0sec-docker-cleanup-"));
+    directories.push(directory);
+    const removed = join(directory, "removed");
+    const pidFile = join(directory, "processes.json");
+    const binary = join(directory, "docker-fixture");
+    writeFileSync(binary, `#!${process.execPath}
+const { spawn } = require('node:child_process');
+const { writeFileSync } = require('node:fs');
+const op = process.argv[2];
+if (op === 'rm') { writeFileSync(${JSON.stringify(removed)}, 'removed'); process.exit(1); }
+if (op === 'create') { console.log('fixture-container'); process.exit(0); }
+if (op === 'start') {
+  const child = spawn(process.execPath, ['-e', 'setTimeout(() => {}, 30000)'], { stdio: 'inherit' });
+  writeFileSync(${JSON.stringify(pidFile)}, JSON.stringify({ parent: process.pid, child: child.pid }));
+  console.log('attached-ready');
+  child.on('exit', () => process.exit(0));
+} else { console.log('sha256:' + 'a'.repeat(64)); }
+`, { mode: 0o700 });
+    const sourceRoot = join(directory, "source");
+    mkdirSync(sourceRoot);
+    writeFileSync(join(sourceRoot, "main.cjs"), "module.exports = 1;\n");
+    const config = parseEvolutionConfig({
+      schemaVersion: 1, sourceRoot, storePath: join(directory, "store"),
+      image: `sha256:${"a".repeat(64)}`, sourcePaths: ["main.cjs"], editablePaths: ["main.cjs"],
+      command: ["node", "main.cjs"], objective: "exercise cleanup uncertainty", computeUsdPerSecond: 0.001,
+      timeoutMs: 10000,
+      cases: (["development", "held-out", "negative-control"] as const).flatMap(lane =>
+        Array.from({ length: 10 }, (_, index) => ({
+          id: `${lane}-${index}`, lane, input: { lane, index }, expected: null,
+        }))),
+    });
+    const snapshot = await snapshotEvolutionSource(config);
+    const abort = new AbortController();
+    const outcome = await createDockerEvolutionSandbox(binary)({
+      config, snapshot, input: null, signal: abort.signal,
+      channel: {
+        onReady() {},
+        onData(data) { if (data.includes("attached-ready")) abort.abort(); },
+      },
+    });
+    expect(outcome.cleanupFailed).toBe(true);
+    expect(outcome.error).toMatch(/cleanup/);
+    expect(existsSync(removed)).toBe(true);
+    await expect.poll(() => descendantRunning(pidFile)).toBe(false);
+  });
 });

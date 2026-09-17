@@ -9,6 +9,7 @@ import { canonicalEvolutionJson, parseEvolutionConfig } from "./config.js";
 import { verifyEvolutionSnapshot } from "./registry.js";
 import { allowlistedChildEnv } from "../agent/sanitized-env.js";
 import { resolveSmolvmImage, runSmolvm } from "../runtime/smolvm.js";
+import { withWorkerAdmission } from "../runtime/worker-admission.js";
 import type { EvolutionConfig, EvolutionExecution, EvolutionSandbox } from "./types.js";
 
 const IMAGE_ID = /^sha256:[a-f0-9]{64}$/;
@@ -172,7 +173,12 @@ export type SandboxProgramConfig = Pick<EvolutionConfig,
 type ProgramRequest = Omit<Parameters<EvolutionSandbox>[0], "config"> & { config: SandboxProgramConfig };
 
 export function createDockerEvolutionSandbox(dockerBinary = "docker"): EvolutionSandbox {
-  return (request) => runDockerSnapshot({ ...request, config: parseEvolutionConfig(request.config) }, dockerBinary);
+  return (request) => withWorkerAdmission(
+    { memoryMb: request.config.memoryMb, cpus: request.config.cpus, timeoutMs: request.config.timeoutMs },
+    request.signal,
+    async (admissionSignal: AbortSignal) =>
+      runDockerSnapshot({ ...request, config: parseEvolutionConfig(request.config), signal: admissionSignal }, dockerBinary),
+  );
 }
 
 async function runDockerSnapshot(
@@ -192,10 +198,12 @@ async function runDockerSnapshot(
     const gid = process.getgid();
     const start = performance.now();
     let created = false;
+    let attemptedCreate = false;
     let execution: EvolutionExecution = { exitCode: null, stdout: "", stderr: "", durationMs: 0, timedOut: false };
     try {
       // Creation completes before start: cancellation can remove a known named
       // container instead of racing an in-flight `docker run` creation request.
+      attemptedCreate = true;
       await control(dockerBinary, [
         "create", "--name", name, "--pull", "never", "--interactive", "--init",
         "--read-only", "--cap-drop", "ALL", "--security-opt", "no-new-privileges:true",
@@ -284,11 +292,23 @@ async function runDockerSnapshot(
     } finally {
       try { await control(dockerBinary, ["rm", "--force", name], CONTROL_TIMEOUT_MS); }
       catch (error) {
-        if (created) execution.error = `${execution.error ?? "worker cleanup failed"}; ${error instanceof Error ? error.message : String(error)}`;
+        if (attemptedCreate) {
+          execution.cleanupFailed = true;
+          execution.error = `${execution.error ?? "worker cleanup failed"}; ${error instanceof Error ? error.message : String(error)}`;
+        }
       }
       execution.durationMs = performance.now() - start;
     }
-    verifyEvolutionSnapshot(snapshot);
+    const hadCleanupFailure = execution.cleanupFailed;
+    try {
+      verifyEvolutionSnapshot(snapshot);
+    } catch (error) {
+      if (hadCleanupFailure) {
+        execution.error = `${execution.error ?? ""}${execution.error ? "; " : ""}snapshot verification failed: ${error instanceof Error ? error.message : String(error)}`;
+        return execution;
+      }
+      throw error;
+    }
     return execution;
 }
 
@@ -302,7 +322,12 @@ export async function resolveEvolutionConfigImage(config: EvolutionConfig): Prom
 }
 
 export function createSmolvmEvolutionSandbox(binary?: string): EvolutionSandbox {
-  return (request) => runSmolvmSnapshot({ ...request, config: parseEvolutionConfig(request.config) }, binary);
+  return (request) => withWorkerAdmission(
+    { memoryMb: request.config.memoryMb, cpus: request.config.cpus, timeoutMs: request.config.timeoutMs },
+    request.signal,
+    async (admissionSignal: AbortSignal) =>
+      runSmolvmSnapshot({ ...request, config: parseEvolutionConfig(request.config), signal: admissionSignal }, binary),
+  );
 }
 
 async function runSmolvmSnapshot(
@@ -322,13 +347,29 @@ async function runSmolvmSnapshot(
       timeoutMs: config.timeoutMs, memoryMb: config.memoryMb, cpus: config.cpus,
       maxOutputBytes: config.maxOutputBytes, signal,
     });
-    verifyEvolutionSnapshot(snapshot);
+    const hadCleanupFailure = execution.cleanupFailed;
+    try {
+      verifyEvolutionSnapshot(snapshot);
+    } catch (error) {
+      if (hadCleanupFailure) {
+        execution.error = `${execution.error ?? ""}${execution.error ? "; " : ""}snapshot verification failed: ${error instanceof Error ? error.message : String(error)}`;
+        return execution;
+      }
+      throw error;
+    }
     return execution;
 }
 
 /** Execute a controller-configured program without manufacturing evaluation cases. */
 export function executeSandboxSnapshot(request: ProgramRequest): Promise<EvolutionExecution> {
-  return request.config.backend === "smolvm" ? runSmolvmSnapshot(request) : runDockerSnapshot(request);
+  return withWorkerAdmission(
+    { memoryMb: request.config.memoryMb, cpus: request.config.cpus, timeoutMs: request.config.timeoutMs },
+    request.signal,
+    async (admissionSignal: AbortSignal) =>
+      request.config.backend === "smolvm"
+        ? runSmolvmSnapshot({ ...request, signal: admissionSignal })
+        : runDockerSnapshot({ ...request, signal: admissionSignal }),
+  );
 }
 
 export function createEvolutionSandbox(config: EvolutionConfig): EvolutionSandbox {

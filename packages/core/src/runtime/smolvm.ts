@@ -41,6 +41,9 @@ export interface SmolvmExecutionResult {
   durationMs: number;
   timedOut: boolean;
   error?: string;
+  /** True when VM teardown could not be confirmed.  The guest may still be
+   * running or consuming resources; do not count its capacity as freed. */
+  cleanupFailed?: boolean;
 }
 
 async function hashArchive(path: string, destination?: string, signal?: AbortSignal): Promise<string> {
@@ -272,7 +275,10 @@ export async function runSmolvm(options: SmolvmExecutionOptions): Promise<Smolvm
     options.signal?.removeEventListener("abort", onAbort);
     if (root) {
       try { await cleanup(root); }
-      catch (error) { result.error = `${result.error ? `${result.error}; ` : ""}${String(error)}`; }
+      catch (error) {
+        result.cleanupFailed = true;
+        result.error = `${result.error ? `${result.error}; ` : ""}${String(error)}`;
+      }
     }
     result.timedOut = timedOut;
     result.durationMs = performance.now() - start;

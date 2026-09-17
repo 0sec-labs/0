@@ -91,6 +91,9 @@ export interface EvolutionExecution {
   durationMs: number;
   timedOut: boolean;
   error?: string;
+  /** True when guest teardown could not be confirmed.  The guest may still be
+   * running or consuming resources; do not count its capacity as freed. */
+  cleanupFailed?: boolean;
 }
 
 export interface EvolutionSandboxRequest {
