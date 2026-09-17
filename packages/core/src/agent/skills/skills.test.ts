@@ -129,6 +129,8 @@ describe("Skill Registry", () => {
     it.each(EXPECTED_SKILL_IDS)(
       "skill '%s' uses kebab-case ID",
       (id) => {
+        // Hyphen delimiters cannot be consumed by either alphanumeric quantifier.
+        // foxguard: ignore[js/no-unsafe-regex]
         expect(id).toMatch(/^[a-z][a-z0-9]*(-[a-z0-9]+)*$/);
       },
     );

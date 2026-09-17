@@ -313,6 +313,8 @@ export async function executeEntraAttackPaths(
 
 // ── 3. entra_posture ──
 
+// Environment variable name, not the directory access token it indexes.
+// foxguard: ignore[js/no-hardcoded-secret]
 const GRAPH_TOKEN_ENV = "0SEC_GRAPH_ACCESS_TOKEN";
 
 export async function executeEntraPosture(

@@ -584,6 +584,8 @@ export const defaultSyzbotFetcher: SyzbotFetcher = async (url) => {
     );
   }
   for (let attempt = 0; attempt < 2; attempt++) {
+    // HTTPS/host/port/userinfo were checked above; redirect responses are refused.
+    // foxguard: ignore[js/no-ssrf]
     const res = await fetch(parsed.toString(), {
       headers: { "user-agent": "0sec-syzbot-queue-mine/1.0" },
       redirect: "manual",

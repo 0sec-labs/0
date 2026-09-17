@@ -459,6 +459,8 @@ describe("submitFeedback", () => {
       const report = payload();
       // Map the initial TLS address to the HTTP-only local fixture. Native
       // fetch owns redirect handling; no response or redirect is mocked.
+      // Only the owned loopback fixture is passed here to exercise redirect refusal.
+      // foxguard: ignore[js/no-ssrf]
       const localFetch = ((url, init) => fetch(String(url).replace(/^https:/, "http:"), init)) as typeof fetch;
       for (redirectStatus of [307, 308]) {
         const result = await submitFeedback(report, env, {
@@ -604,6 +606,8 @@ function diagInfo(overrides: Partial<DiagnosticInfo> = {}): DiagnosticInfo {
 
 describe("buildDiagnosticFeedback", () => {
   it("reports the finite category and release without private error or tool context", () => {
+    // Synthetic marker proves diagnostic reports omit private input fields.
+    // foxguard: ignore[js/no-hardcoded-secret]
     const secret = "private-target-and-credential";
     const result = buildDiagnosticFeedback(diagInfo({
       toolName: secret,

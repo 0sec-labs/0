@@ -287,6 +287,8 @@ describe("credentialEnvPatch", () => {
 
   it("reads only the passed environment, never process.env", () => {
     const previous = process.env.ANTHROPIC_API_KEY;
+    // Synthetic ambient value tests environment isolation, not authentication.
+    // foxguard: ignore[js/no-hardcoded-secret]
     process.env.ANTHROPIC_API_KEY = "sk-ant-ambient";
     try {
       expect(credentialEnvPatch({ anthropic: "sk-ant-stored" }, {})).toEqual({
@@ -317,6 +319,8 @@ describe("redactSecret", () => {
   });
 
   it("shows only a tail for a mid-length secret", () => {
+    // Alphabet fixture tests masking boundaries; not an issued credential.
+    // foxguard: ignore[js/no-hardcoded-secret]
     const secret = "abcdefghijklmno";
     const redacted = redactSecret(secret);
 
@@ -638,6 +642,8 @@ describe("accountEnvPatch", () => {
 
   it("does not mutate its inputs and never reads process.env", () => {
     const previous = process.env.ANTHROPIC_API_KEY;
+    // Synthetic ambient value tests environment isolation, not authentication.
+    // foxguard: ignore[js/no-hardcoded-secret]
     process.env.ANTHROPIC_API_KEY = "sk-ambient";
     try {
       const store = addAccount(empty(), "anthropic", { kind: "api_key", secret: "sk-stored" }).store;
