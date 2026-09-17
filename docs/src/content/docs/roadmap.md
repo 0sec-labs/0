@@ -20,7 +20,7 @@ Use these guides for current instructions. The dated plans below preserve earlie
 ## 0cloud
 
 **0cloud remains in development.** Managed testing has no public onboarding or launch date.
-The separate **0sec Cloud** inference service follows the availability described in
+The hosted inference path follows the availability described in
 [Getting started](/getting-started/#hosted-models-draft).
 
 ## Desktop

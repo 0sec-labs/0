@@ -1,6 +1,6 @@
 ---
 title: Console
-description: The 0sec interactive chat console — talk to the engine, run tools, manage sessions, and navigate every surface from one terminal UI.
+description: The 0security interactive chat console — talk to the engine, run tools, manage sessions, and navigate every surface from one terminal UI.
 ---
 
 `0sec console` opens an interactive chat session with the 0sec engine. From one

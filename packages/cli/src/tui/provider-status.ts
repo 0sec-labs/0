@@ -260,12 +260,12 @@ export function providerStates(env: Record<string, string | undefined>): Provide
 }
 
 /**
- * Whether 0sec Cloud credentials are configured for this environment.
+ * Whether 0cloud credentials are configured for this environment.
  *
- * The BYOK providers above authenticate one upstream vendor each; 0sec Cloud is
+ * The BYOK providers above authenticate one upstream vendor each; 0cloud is
  * a different axis — a single Bearer token that reaches every route the account
  * can address, provider keys held service-side. When it is present the `/model`
- * picker can offer those routes as an extra "0sec Cloud" group alongside the
+ * picker can offer those routes as an extra "0cloud" group alongside the
  * BYOK rows, so this reports only "is a cloud token configured", never which
  * models it reaches (that is a live catalogue read, and its failure must not
  * hide the BYOK list).

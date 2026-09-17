@@ -184,7 +184,7 @@ export async function hostedBrowserLoginFlow(opts: HostedBrowserLoginOptions = {
     return { ok: false, error: "Sign-in timed out. Try again.", recoverable: true };
   };
   try {
-    opts.onStatus?.("opening", "Opening browser for 0sec Cloud sign-in.", loginUrl);
+    opts.onStatus?.("opening", "Opening browser for 0cloud sign-in.", loginUrl);
     signal.throwIfAborted();
     try {
       await awaitLoginStep(Promise.resolve().then(() => {
@@ -242,9 +242,9 @@ export async function hostedBrowserLoginFlow(opts: HostedBrowserLoginOptions = {
             try {
               persistCredentials(host, token, opts.homeDir);
             } catch {
-              return { ok: false, error: "Could not save 0sec Cloud credentials." };
+              return { ok: false, error: "Could not save 0cloud credentials." };
             }
-            opts.onStatus?.("ready", "Signed in to 0sec Cloud.");
+            opts.onStatus?.("ready", "Signed in to 0cloud.");
             return { ok: true, host };
           }
           if (status === "pending") continue;
@@ -255,7 +255,7 @@ export async function hostedBrowserLoginFlow(opts: HostedBrowserLoginOptions = {
         if (res.status === 410) return { ok: false, error: "Sign-in request expired. Try again.", recoverable: true };
         return {
           ok: false,
-          error: `0sec Cloud sign-in unavailable (HTTP ${res.status}). Use your own provider or try again later.`,
+          error: `0cloud sign-in unavailable (HTTP ${res.status}). Use your own provider or try again later.`,
           recoverable: res.status === 429 || res.status >= 500,
         };
       } finally {
@@ -309,7 +309,7 @@ export async function runLogin(opts: LoginOptions): Promise<void> {
     try {
       persistCredentials(host, tok, opts.homeDir);
     } catch {
-      consolePresentationOutput.stderr(chalk.red("Could not save 0sec Cloud credentials."), "auth.login.save-error");
+      consolePresentationOutput.stderr(chalk.red("Could not save 0cloud credentials."), "auth.login.save-error");
       process.exitCode = EXIT_USER_ERROR;
       return;
     }

@@ -611,7 +611,7 @@ function statusRoleColor(
 
 function startupRecoveryText(detail: string): string {
   if (/no provider credential found/i.test(detail)) {
-    return "Use /connect to sign in to 0sec Cloud, or use your own API key or provider subscription.";
+    return "Use /connect to sign in to 0cloud, or use your own API key or provider subscription.";
   }
   const recovery = connectionRecoveryForError(detail);
   if (recovery?.providerId === "chatgpt-codex") {
@@ -2031,7 +2031,7 @@ export function ChatScreen({
         : isProviderConfigured(targetProvider, env);
       if (!configured) {
         const label = targetProvider === "hosted"
-          ? "0sec Cloud"
+          ? "0cloud"
           : PROVIDERS.find((candidate) => candidate.id === targetProvider)?.label ?? targetProvider;
         appendEntry({
           kind: "notice",
@@ -2055,7 +2055,7 @@ export function ChatScreen({
     modelIdRef.current = applied;
     const providerNow = runtime.getConfigurationDiagnostics().provider;
     const providerLabel = providerNow === "hosted"
-      ? "0sec Cloud"
+      ? "0cloud"
       : PROVIDERS.find((candidate) => candidate.id === providerNow)?.label ?? providerNow;
     appendEntry({
       kind: "notice",
@@ -2104,7 +2104,7 @@ export function ChatScreen({
     }
     const provider = providerId as NonNullable<RuntimeConfig["provider"]>;
     const providerLabel = providerId === "hosted"
-      ? "0sec Cloud"
+      ? "0cloud"
       : knownProvider?.label ?? providerId;
     // Keep the choice staged so /new inherits it too; then apply it LIVE to
     // this audit's running runtime (deferred to the turn boundary when busy).

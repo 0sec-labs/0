@@ -1,19 +1,19 @@
 <p align="center">
   <a href="https://0.security/harness/">
-    <img src="https://raw.githubusercontent.com/0sec-labs/0sec/main/assets/readme-cover.png" alt="Your self-improving cybersecurity team. An ivory paper sculpture with a crimson edge." width="100%">
+    <img src="https://raw.githubusercontent.com/0sec-labs/0sec/main/assets/readme-cover.png" alt="Your self-improving cybersecurity team. An ivory paper sculpture with an orange edge." width="100%">
   </a>
 </p>
 
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/0sec-labs/0sec/main/assets/0sec-aperture-white.svg">
-    <img src="https://raw.githubusercontent.com/0sec-labs/0sec/main/assets/0sec-aperture-ink.svg" alt="0sec" width="176">
+    <img src="https://raw.githubusercontent.com/0sec-labs/0sec/main/assets/0sec-aperture-ink.svg" alt="0security" width="320">
   </picture>
 </p>
 
 <p align="center">
-  <strong>Hack any software before attackers do.</strong><br/>
-  An open-source, multi-model cybersecurity harness for authorized security research.
+  <strong>We make software secure itself.</strong><br/>
+  Your self-improving, open-source cybersecurity team. <a href="#research-preview">Research Preview</a>.
 </p>
 
 <p align="center">
@@ -21,7 +21,7 @@
 </p>
 
 <p align="center">
-  <a href="https://0.security"><img src="https://img.shields.io/badge/site-0.security-DC2626?style=flat-square&amp;labelColor=1A1815" alt="0.security"></a>
+  <a href="https://0.security"><img src="https://img.shields.io/badge/site-0.security-FD802E?style=flat-square&amp;labelColor=1A1815" alt="0.security"></a>
   <a href="https://docs.0.security/"><img src="https://img.shields.io/badge/docs-0.security-1A1815?style=flat-square&amp;labelColor=1A1815" alt="Documentation"></a>
   <a href="https://github.com/0sec-labs/foxguard"><img src="https://img.shields.io/badge/scanner-Foxguard-1A1815?style=flat-square&amp;labelColor=1A1815" alt="Foxguard scanner"></a>
 </p>
@@ -29,11 +29,11 @@
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-1A1815?style=flat-square&amp;labelColor=1A1815" alt="License: MIT OR Apache-2.0"></a>
   <a href="https://github.com/0sec-labs/0sec/releases/latest"><img src="https://img.shields.io/github/v/release/0sec-labs/0sec?style=flat-square&amp;labelColor=1A1815&amp;color=1A1815" alt="Latest release"></a>
-  <a href="#research-preview"><img src="https://img.shields.io/badge/status-research%20preview-DC2626?style=flat-square&amp;labelColor=1A1815" alt="Status: research preview"></a>
+  <a href="#research-preview"><img src="https://img.shields.io/badge/status-research%20preview-FD802E?style=flat-square&amp;labelColor=1A1815" alt="Status: research preview"></a>
 </p>
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/0sec-labs/0sec/main/assets/demo-intro.gif" alt="0sec interactive CLI demonstration" width="840">
+  <img src="https://raw.githubusercontent.com/0sec-labs/0sec/main/assets/demo-intro.gif" alt="0security interactive CLI demonstration" width="840">
 </p>
 
 ## Get started

@@ -36,7 +36,7 @@ export function registerHostedCommand(program: Command): void {
   // ── 0sec login (alias for 0sec auth login) ──
   program
     .command("login")
-    .description("Sign in to 0sec Cloud (optional for your own provider)")
+    .description("Sign in to 0cloud (optional for your own provider)")
     .option("--host <url>", `Cloud host (default ${DEFAULT_CLOUD_HOST})`)
     .option("--token <value>", "Skip the browser flow and persist this token directly")
     .action(async (opts: { host?: string; token?: string }) => {
@@ -46,7 +46,7 @@ export function registerHostedCommand(program: Command): void {
   // ── 0sec models ──
   program
     .command("models")
-    .description("List 0sec Cloud models and catalog rates")
+    .description("List 0cloud models and catalog rates")
     .option("--json", "Output raw JSON instead of a formatted table")
     .action(async (opts: { json?: boolean }) => {
       await runModels(opts);
@@ -167,7 +167,7 @@ async function runModels(opts: { json?: boolean }): Promise<void> {
     }
 
     consolePresentationOutput.stdout(
-      `\n${chalk.bold("0sec Cloud models (catalog base rates):")}\n` +
+      `\n${chalk.bold("0cloud models (catalog base rates):")}\n` +
         rows.join("\n") + "\nCredit charges use catalog rates, peak multipliers and provider usage receipts.\n",
       "hosted.models-list",
     );

@@ -31,7 +31,7 @@ export default defineConfig({
   },
   integrations: [
     starlight({
-      title: "0sec",
+      title: "0security",
       favicon: "/favicon.svg",
       head: [
         { tag: "link", attrs: { rel: "icon", href: "/favicon.ico", sizes: "32x32" } },
@@ -43,7 +43,7 @@ export default defineConfig({
       logo: {
         dark: "./src/assets/0sec-aperture-white.svg",
         light: "./src/assets/0sec-aperture-dark.svg",
-        alt: "0sec",
+        alt: "0security",
         replacesTitle: true,
       },
       social: [
@@ -86,7 +86,7 @@ export default defineConfig({
           ],
         },
         {
-          label: "0sec Cloud",
+          label: "0cloud",
           items: [
             { label: "Setup", link: "/getting-started/#hosted-models-draft" },
             { label: "Access & credentials", link: "/api-keys/#hosted-inference-draft" },

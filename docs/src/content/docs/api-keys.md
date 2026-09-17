@@ -3,8 +3,9 @@ title: API Keys
 description: Supported LLM providers, environment variables, credential priority, model routing, and provider failover.
 ---
 
-0sec Cloud will offer open cybersecurity models and 0sec-curated options through
-one connection and inference-credit balance, without supplier-account setup.
+0cloud offers hosted model access and end-to-end managed security work through one platform.
+Hosted inference uses a shared inference-credit balance without supplier-account setup;
+managed security has separate access and billing.
 Alternatively, use your own API key or supported subscription without a Cloud account.
 
 <a id="hosted-inference-draft"></a>
@@ -264,7 +265,7 @@ In the hosted-enabled CLI candidate, open `/connect` and select **ChatGPT
 Codex** under **Provider subscription**. 0sec runs `codex login --device-auth`,
 shows the device instructions, and reloads `~/.codex/auth.json` after success.
 Choose **OpenAI** under **Use my own API key** for `OPENAI_API_KEY` access.
-The separate **0sec Cloud → Sign in** choice authorizes a Cloud organization.
+The separate **0cloud → Sign in** choice authorizes a Cloud organization.
 
 Every `0sec` run loads that file into the environment before any subcommand
 runs, so a codex-login file is picked up everywhere — the console `/providers`

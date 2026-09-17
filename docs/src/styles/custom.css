@@ -1,5 +1,5 @@
-/* 0sec documentation: warm paper, ink, canonical aperture marks.
- * Reading layouts stay left-aligned; crimson identifies primary actions. */
+/* 0security documentation: warm paper, ink, canonical aperture marks.
+ * Reading layouts stay left-aligned; orange identifies primary actions. */
 
 /* Satoshi Variable (self-hosted on 0.security CDN) */
 @font-face {
@@ -406,8 +406,8 @@ pre {
 }
 
 .docs-hero-actions a.primary {
-  background: #DC2626;
-  border-color: #DC2626;
+  background: #A7470B;
+  border-color: #A7470B;
   color: #FFFFFF;
 }
 

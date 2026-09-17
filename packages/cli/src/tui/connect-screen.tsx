@@ -244,18 +244,18 @@ function hostedStateTone(theme: Theme, phase: HostedDeviceAuthUpdate["phase"]): 
  * The title for the cloud sign-in state.
  */
 function hostedStateTitle(phase: HostedDeviceAuthUpdate["phase"]): string {
-  if (phase === "failed") return "0sec Cloud sign-in unavailable";
+  if (phase === "failed") return "0cloud sign-in unavailable";
   switch (phase) {
     case "ready":
-      return "Signed in to 0sec Cloud";
+      return "Signed in to 0cloud";
     case "cancelled":
-      return "0sec Cloud sign-in cancelled";
+      return "0cloud sign-in cancelled";
     case "timeout":
-      return "0sec Cloud sign-in timed out";
+      return "0cloud sign-in timed out";
     case "opener-failed":
       return "Open this URL to sign in";
     default:
-      return "Signing in to 0sec Cloud";
+      return "Signing in to 0cloud";
   }
 }
 
@@ -543,7 +543,7 @@ export function ConnectScreen({ frame, onBack, onExit, recovery, onConnected, en
     applyHosted({
       providerId: "hosted",
       phase: "opening",
-      message: "Starting 0sec Cloud sign-in…",
+      message: "Starting 0cloud sign-in…",
     });
     hostedSessionRef.current = startHostedDeviceAuth({
       homeDir,
@@ -557,7 +557,7 @@ export function ConnectScreen({ frame, onBack, onExit, recovery, onConnected, en
       onConnected: () => {
         hostedSessionRef.current = undefined;
         setAuthEpoch((current) => current + 1);
-        setNotice("signed in to 0sec Cloud");
+        setNotice("signed in to 0cloud");
         onConnected?.("hosted");
       },
     });
@@ -762,7 +762,7 @@ export function ConnectScreen({ frame, onBack, onExit, recovery, onConnected, en
 
     if (hostedHere && hosted) {
       const tone = hostedStateTone(theme, hosted.phase);
-      title = "0sec Cloud";
+      title = "0cloud";
       meta = hostedStateMeta(hosted.phase);
       metaFg = tone;
       lines.push(...wrap(hostedStateTitle(hosted.phase), tone, true), blank());
@@ -798,7 +798,7 @@ export function ConnectScreen({ frame, onBack, onExit, recovery, onConnected, en
       lines.push(blank(), ...wrap("[⏎] save · [esc] cancel", theme.MUTED));
     } else {
       const codexRecovery = recovery?.providerId === "chatgpt-codex";
-      title = isCloud ? "0sec Cloud" : provider?.label ?? connectDetailTitleLabel();
+      title = isCloud ? "0cloud" : provider?.label ?? connectDetailTitleLabel();
       meta = recovering ? "reconnect" : connectDetailTitleMeta(shownRow, cloudConnected);
       metaFg = recovering
         ? theme.ERROR
@@ -881,7 +881,7 @@ export function ConnectScreen({ frame, onBack, onExit, recovery, onConnected, en
   // ── status line ──────────────────────────────────────────────────────────
   // Never the secret: the input sub-step reports only the masked length.
   const statusText = inHosted
-    ? hosted?.message ?? "signing in to 0sec Cloud..."
+    ? hosted?.message ?? "signing in to 0cloud..."
     : hostedVisible && hosted
       ? hosted.phase === "ready" ? "Cloud login saved; access and credits checked when used" : hosted.message
       : oauthVisible && oauth

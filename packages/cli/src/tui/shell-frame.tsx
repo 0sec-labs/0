@@ -48,7 +48,7 @@ export function OverlayFrame({
 }
 
 // Keep every frame four cells wide so the footer never jitters. The animation
-// may glitch the wordmark, but it must remain recognizably 0sec.
+// may glitch the wordmark, but it must remain recognizably 0sec (executable name).
 const BRAND_WORD_FRAMES = [
   "0sec",
   "0sec",

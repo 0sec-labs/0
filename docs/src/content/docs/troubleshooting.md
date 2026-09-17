@@ -197,7 +197,7 @@ matches an `out_of_scope` deny rule (deny takes precedence). See
 | `3` | Network error (host unreachable, DNS failure) |
 | `1` | Other error |
 
-For an operator-provided host, retry `0sec auth login` or use the manual token path below. See [0sec Cloud setup](/getting-started/#hosted-models-draft) for availability.
+For an operator-provided host, retry `0sec auth login` or use the manual token path below. See [0cloud setup](/getting-started/#hosted-models-draft) for availability.
 
 ```bash
 0sec auth login --host https://control-plane.example.com --token "your-token"

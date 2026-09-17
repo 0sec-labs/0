@@ -1,13 +1,13 @@
 # Changelog
 
-All notable changes to 0sec (the open-source CLI + agent harness) are tracked
+All notable changes to 0security (the open-source CLI + agent harness) are tracked
 here. The history before v0.11.0 lives in the git log and on the GitHub
 Releases page; this file starts the human-readable summary from v0.11.0
 onwards. Entries before v0.13.0 predate the pwnkit → 0sec rename and keep the
 old product name as written.
 
 The format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
-and 0sec adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
+and 0security adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 on the published npm package and the GitHub Release tag.
 
 ## [Unreleased]
@@ -18,6 +18,15 @@ on the published npm package and the GitHub Release tag.
   Previously, an unscoped or out-of-scope configured target could receive a
   probe before the scan was refused. The probe now refuses redirects and
   cancels their response bodies.
+
+### Changed
+
+- Present the product as **0security**, with a full wordmark and orange branding
+  across the CLI, dashboard, desktop app, documentation, and README assets.
+  The `0sec` executable, package identifiers, configuration paths, desktop
+  profile location, and release artifact names remain compatible.
+- Clarify the Research Preview mission and 0cloud's hosted inference and managed
+  security roles while preserving local and BYOK operation.
 
 ### Fixed
 

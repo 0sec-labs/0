@@ -1,8 +1,8 @@
 {
   "name": "@0sec/desktop",
   "version": "0.15.0",
-  "description": "Native desktop control plane for the 0sec security harness.",
-  "author": "0sec Labs",
+  "description": "Native desktop workspace for the 0security cybersecurity team.",
+  "author": "0security",
   "repository": {
     "type": "git",
     "url": "https://github.com/0sec-labs/0sec.git"
@@ -23,9 +23,9 @@
   },
   "build": {
     "appId": "com.0security.osec",
-    "productName": "0sec",
+    "productName": "0security",
     "executableName": "0sec",
-    "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
+    "artifactName": "0sec-${version}-${os}-${arch}.${ext}",
     "icon": "build/icon.png",
     "asar": true,
     "files": [
@@ -57,7 +57,7 @@
         "deb"
       ],
       "category": "Development",
-      "maintainer": "0sec Labs",
+      "maintainer": "0security",
       "syncDesktopName": true
     },
     "mac": {

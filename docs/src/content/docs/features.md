@@ -108,6 +108,5 @@ results are not current-target guarantees.
 ## Related products
 
 See [Integrations](/integrations/) for connected tools and
-[Roadmap](/roadmap/#0cloud) for managed 0cloud status. Optional
-[0sec Cloud inference](/getting-started/#hosted-models-draft) has separate setup and availability.
+[Roadmap](/roadmap/#0cloud) for managed 0cloud status. [0cloud](/getting-started/#hosted-models-draft) offers hosted model access and managed security work with separate setup and availability.
 See [Commands](/commands/) for the full CLI reference.

@@ -16,7 +16,7 @@ export const TERMINAL_BLOCK_LOGO = [
 ] as const;
 export const TERMINAL_BLOCK_LOGO_FULL_WIDTH = 88;
 
-/** Original compact mark for columns too narrow for the full word. */
+/** Compact abbreviation (first letters) for columns too narrow for the full wordmark. */
 export const TERMINAL_BLOCK_LOGO_COMPACT = [
   " ######   #######  #######   ######",
   "##  //##  ##       ##       ##     ",

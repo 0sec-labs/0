@@ -45,7 +45,7 @@ export function startHostedDeviceAuth(options: StartHostedDeviceAuthOptions): { 
     else if (phase !== "timeout") onUpdate({ phase: "failed", message: result.error });
     onSettled?.(result);
   }, () => {
-    if (!controller.signal.aborted) onUpdate({ phase: "failed", message: "0sec Cloud sign-in could not complete. Use your own provider or try again." });
+    if (!controller.signal.aborted) onUpdate({ phase: "failed", message: "0cloud sign-in could not complete. Use your own provider or try again." });
   });
   return { cancel: () => controller.abort() };
 }

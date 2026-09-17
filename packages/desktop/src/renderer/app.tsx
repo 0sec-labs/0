@@ -268,7 +268,7 @@ export function DesktopApp() {
   return (
     <div className="app-shell">
       <div className={`titlebar${isMac ? " macos" : ""}`}>
-        <span className="titlebar-title">0sec</span>
+        <span className="titlebar-title">0security</span>
       </div>
       {error && (
         <div className="error-banner" role="alert">

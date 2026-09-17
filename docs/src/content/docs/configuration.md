@@ -437,7 +437,7 @@ new process. See [development engine replacement](/improvement-plane/#developmen
 
 ## Console credential store
 
-In the hosted-enabled CLI candidate, `/connect` offers **0sec Cloud → Sign in**,
+In the hosted-enabled CLI candidate, `/connect` offers **0cloud → Sign in**,
 **Use my own API key**, and a separate **Provider subscription** section.
 Cloud uses browser authorization; ChatGPT Codex uses device sign-in and its
 own auth file. Local and direct-provider workflows need no Cloud account.

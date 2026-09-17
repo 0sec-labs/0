@@ -19,10 +19,10 @@ export function connectionRecoveryForError(error: string): ConnectionRecovery | 
 
   // Cloud credentials are not upstream provider keys. In particular, scope,
   // credit, catalog and service failures must never open a vendor's key form.
-  if (/0sec[- ]cloud|0sec hosted models|RuntimeConfig\.provider\s*=\s*hosted/i.test(detail)) {
+  if (/0cloud|0sec[- ]cloud|0sec hosted models|RuntimeConfig\.provider\s*=\s*hosted/i.test(detail)) {
     if (/\b(?:HTTP|API error)\s*:?\s*401\b/i.test(detail)
       || /RuntimeConfig\.provider\s*=\s*hosted has no configured credentials/i.test(detail)) {
-      return { providerId: "hosted", title: "Sign in to 0sec Cloud", detail };
+      return { providerId: "hosted", title: "Sign in to 0cloud", detail };
     }
     return null;
   }

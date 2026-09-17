@@ -192,7 +192,7 @@ there is no login flow.
 
 ## Cloud auth
 
-`0sec auth` manages scoped organization credentials. For 0sec Cloud availability and operator-host setup, see [Getting started](/getting-started/#hosted-models-draft). Local API-key and subscription use require no 0sec account.
+`0sec auth` manages scoped organization credentials. For 0cloud availability and operator-host setup, see [Getting started](/getting-started/#hosted-models-draft). Local API-key and subscription use require no 0sec account.
 
 **Source:** `packages/cli/src/commands/auth.ts`
 

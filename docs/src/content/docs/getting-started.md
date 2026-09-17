@@ -4,7 +4,7 @@ description: Install 0sec, configure a provider, define scope, and run your firs
 ---
 
 Install the 0sec Research Preview, connect a model, and scan an authorized target.
-Choose [0sec Cloud](#hosted-models-draft) or [use your own API key](#use-my-own-api-key).
+Choose [0cloud](#hosted-models-draft) or [use your own API key](#use-my-own-api-key).
 
 ## Install
 
@@ -60,7 +60,7 @@ For a real scan, mount scope and persist any output you need before using
 ## Configure a provider
 
 In the hosted-enabled CLI candidate, run `0sec` to open chat, then `/connect`.
-Choose **0sec Cloud → Sign in**, **Use my own API key**, or
+Choose **0cloud → Sign in**, **Use my own API key**, or
 **Provider subscription**. Cloud sign-in opens your browser; **Esc** returns
 to chat. The full terminal interface requires Bun.
 
@@ -76,9 +76,9 @@ an available model and sufficient credit.
 > Cloud inference isn't available in production yet. This setup requires the
 > hosted-enabled CLI and an approved test service.
 
-0sec Cloud will bring open cybersecurity models and 0sec-curated options to one
-connection and inference-credit balance, without supplier-account setup.
-Tools run locally; managed testing and 0review have separate access and billing.
+0cloud offers hosted model access and end-to-end managed security work.
+Hosted inference uses a shared inference-credit balance without supplier-account setup;
+managed testing and 0review have separate access and billing.
 
 1. Set `HOSTED_TEST_HOST` to the operator-provided URL. Log in below, choose
    your organization, and authorize the CLI.
@@ -106,7 +106,7 @@ See [billing and errors](/api-keys/#hosted-inference-draft) and
 ### Use my own API key
 
 Your provider handles authentication and billing. Local, BYOK and supported
-provider-subscription workflows need no 0sec Cloud account.
+provider-subscription workflows need no 0cloud account.
 
 Set one provider key:
 
