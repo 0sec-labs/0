@@ -301,10 +301,32 @@ describe("connectDialogItems — the projection onto the shared picker", () => {
     const rows = buildConnectRows({ states: EMPTY });
     expect(connectDialogItems({ rows })[0]?.current).toBe(false);
     expect(connectDialogItems({ rows })[0]?.meta).toBe("sign in");
+    // Credentials stored but not yet verified → "login saved"
     const signedIn = connectDialogItems({ rows, cloudConnected: true })[0];
     expect(signedIn?.current).toBe(true);
     expect(signedIn?.meta).toBe("login saved");
-    const repairing = connectDialogItems({ rows, cloudConnected: true, recoveryProviderId: "hosted" })[0];
+    // Verified token → "connected"
+    const verified = connectDialogItems({ rows, cloudConnected: true, hostedVerification: { kind: "verified" } })[0];
+    expect(verified?.current).toBe(true);
+    expect(verified?.meta).toBe("connected");
+    // Rejected token → "rejected"
+    const rejected = connectDialogItems({ rows, cloudConnected: true, hostedVerification: { kind: "rejected" } })[0];
+    expect(rejected?.current).toBe(false);
+    expect(rejected?.meta).toBe("rejected");
+    // Server disabled inference → "not enabled"
+    const disabled = connectDialogItems({ rows, cloudConnected: true, hostedVerification: { kind: "disabled" } })[0];
+    expect(disabled?.current).toBe(true);
+    expect(disabled?.meta).toBe("not enabled");
+    // No credits → "no credits"
+    const noCredits = connectDialogItems({ rows, cloudConnected: true, hostedVerification: { kind: "no-credits" } })[0];
+    expect(noCredits?.current).toBe(true);
+    expect(noCredits?.meta).toBe("no credits");
+    // Unreachable → "offline"
+    const offline = connectDialogItems({ rows, cloudConnected: true, hostedVerification: { kind: "unreachable" } })[0];
+    expect(offline?.current).toBe(false);
+    expect(offline?.meta).toBe("offline");
+    // Recovering should still override
+    const repairing = connectDialogItems({ rows, cloudConnected: true, recoveryProviderId: "hosted", hostedVerification: { kind: "verified" } })[0];
     expect(repairing?.current).toBe(false);
     expect(repairing?.meta).toBe("reconnect");
   });
@@ -437,11 +459,12 @@ describe("connected reporting, masks and hints", () => {
     const line = connectStatusLine(rows);
     expect(line).toMatch(/connected: 1 of \d+ providers/);
     expect(connectStatusLine([])).toBe("no providers to connect");
-    // The title meta counts the same rows, and never counts the cloud row.
+    // The title meta counts the same rows, and cloud is only counted when verified.
     const counts = connectConnectedCounts(rows);
     expect(counts.connected).toBe(1);
     expect(counts.total).toBe(PROVIDERS.length);
-    expect(connectConnectedCounts([])).toEqual({ connected: 0, total: 0 });
+    expect(counts.cloudVerified).toBe(false);
+    expect(connectConnectedCounts([])).toEqual({ connected: 0, total: 0, cloudVerified: false });
   });
 
   it("never echoes the credential and caps the mask length it leaks", () => {

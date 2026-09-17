@@ -338,6 +338,8 @@ export interface ConnectItemsInput {
     /** This provider is the one being repaired. */
     readonly recovering?: string;
   };
+  /** Live backend verification of the saved cloud sign-in. */
+  hostedVerification?: HostedVerificationStatus;
 }
 
 /**
@@ -360,6 +362,7 @@ export function connectDialogItems({
   cloudConnected,
   recoveryProviderId,
   tones,
+  hostedVerification,
 }: ConnectItemsInput): DialogItem[] {
   const items: DialogItem[] = [];
   // Subtitles are rows in the row model; fold them onto the item above.
@@ -372,15 +375,63 @@ export function connectDialogItems({
 
   for (const row of rows) {
     if (row.kind === "cloud") {
-      const connected = cloudConnected === true && recoveryProviderId !== "hosted";
+      // Cloud item state depends on backend verification, not just credential
+      // presence. A saved token that the server rejects is not a connection.
+      const stored = cloudConnected === true;
+      const recovering = recoveryProviderId === "hosted";
+      let meta: string;
+      let current: boolean;
+      let tone: string | undefined;
+      if (recovering) {
+        meta = "reconnect";
+        current = false;
+        tone = tones?.recovering;
+      } else if (!stored) {
+        meta = "sign in";
+        current = false;
+        tone = undefined;
+      } else if (!hostedVerification || hostedVerification.kind === "pending") {
+        // Credentials exist but verification hasn't completed yet.
+        meta = "login saved";
+        current = true;
+        tone = tones?.connected;
+      } else {
+        switch (hostedVerification.kind) {
+          case "verified":
+            meta = "connected";
+            current = true;
+            tone = tones?.connected;
+            break;
+          case "rejected":
+            meta = "rejected";
+            current = false;
+            tone = tones?.recovering;
+            break;
+          case "disabled":
+            meta = "not enabled";
+            current = true;
+            tone = tones?.connected;
+            break;
+          case "no-credits":
+            meta = "no credits";
+            current = true;
+            tone = undefined;
+            break;
+          case "unreachable":
+            meta = "offline";
+            current = false;
+            tone = undefined;
+            break;
+        }
+      }
       items.push({
         id: CLOUD_ITEM_ID,
         label: CLOUD_LABEL,
         description: "Sign in once to use the 0security-managed model catalog",
-        meta: recoveryProviderId === "hosted" ? "reconnect" : connected ? "login saved" : "sign in",
+        meta,
         category: CLOUD_GROUP.label,
-        current: connected,
-        tone: recoveryProviderId === "hosted" ? tones?.recovering : connected ? tones?.connected : undefined,
+        current,
+        tone,
       });
       continue;
     }
@@ -669,6 +720,8 @@ export interface ConnectCounts {
   readonly connected: number;
   /** Distinct providers offered, the cloud row excluded. */
   readonly total: number;
+  /** Cloud sign-in verified against the backend. */
+  readonly cloudVerified: boolean;
 }
 
 /**
@@ -677,8 +730,12 @@ export interface ConnectCounts {
  * Counted off the same `provider.connected` the rows carry, so it can never
  * disagree with the dots and checks the list draws, and the cloud row is left
  * out of both numbers: it is a sign-in, not one of the providers.
+ * `cloudVerified` is set from the caller-supplied verification status.
  */
-export function connectConnectedCounts(rows: readonly ConnectRow[]): ConnectCounts {
+export function connectConnectedCounts(
+  rows: readonly ConnectRow[],
+  hostedVerification?: HostedVerificationStatus,
+): ConnectCounts {
   const seen = new Set<string>();
   let connected = 0;
   for (const row of rows) {
@@ -688,14 +745,18 @@ export function connectConnectedCounts(rows: readonly ConnectRow[]): ConnectCoun
     seen.add(row.provider.id);
     if (row.provider.connected) connected += 1;
   }
-  return { connected, total: seen.size };
+  return { connected, total: seen.size, cloudVerified: hostedVerification?.kind === "verified" };
 }
 
-/** The always-on status line under the list: how many providers are connected. */
-export function connectStatusLine(rows: readonly ConnectRow[]): string {
-  const { connected, total } = connectConnectedCounts(rows);
-  if (total === 0) return "no providers to connect";
-  if (connected === 0) return "no providers connected yet - select one to connect";
+/** The always-on status line under the list: how many providers and cloud are connected. */
+export function connectStatusLine(rows: readonly ConnectRow[], hostedVerification?: HostedVerificationStatus): string {
+  const { connected, total, cloudVerified } = connectConnectedCounts(rows, hostedVerification);
+  const totalSources = total + (cloudVerified ? 1 : 0);
+  if (totalSources === 0) return "no providers to connect";
+  if (totalSources === 1 && cloudVerified) return "connected to 0cloud";
+  if (connected === 0 && !cloudVerified) return "no providers connected yet - select one to connect";
+  if (cloudVerified && connected === 0) return "connected: 0cloud";
+  if (cloudVerified) return `connected: 0cloud + ${connected} of ${total} provider${total === 1 ? "" : "s"}`;
   return `connected: ${connected} of ${total} provider${total === 1 ? "" : "s"}`;
 }
 

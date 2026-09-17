@@ -382,8 +382,9 @@ export function ConnectScreen({ frame, onBack, onExit, recovery, onConnected, en
       // others: connected reads green, a provider awaiting repair reads as an
       // error. Both come off state the row model already verified.
       tones: { connected: theme.SUCCESS, recovering: theme.ERROR },
+      hostedVerification,
     }),
-    [rows, cloudConnected, recovery?.providerId, theme.SUCCESS, theme.ERROR],
+    [rows, cloudConnected, recovery?.providerId, theme.SUCCESS, theme.ERROR, hostedVerification],
   );
   const totalRows = useMemo(() => connectDisplayRowCount(items), [items]);
 
@@ -460,6 +461,7 @@ export function ConnectScreen({ frame, onBack, onExit, recovery, onConnected, en
       cloudConnected,
       recoveryProviderId: recovery?.providerId,
       tones: { connected: theme.SUCCESS, recovering: theme.ERROR },
+      hostedVerification,
     });
 
   const move = (delta: number) => {
@@ -896,7 +898,7 @@ export function ConnectScreen({ frame, onBack, onExit, recovery, onConnected, en
               ? notice
               : isCloudRow && cloudState.warning
                 ? cloudState.warning
-                : connectStatusLine(rows);
+                : connectStatusLine(rows, hostedVerification);
   const statusFg = inHosted
     ? theme.ACCENT
     : hostedVisible && hosted
@@ -906,9 +908,13 @@ export function ConnectScreen({ frame, onBack, onExit, recovery, onConnected, en
         : recovery ? theme.ERROR : inInput ? theme.ACCENT : isCloudRow && cloudState.warning ? theme.WARNING : theme.MUTED;
 
   const hint = connectFooterHint(mode, filter.length > 0);
-  const counts = connectConnectedCounts(rows);
+  const counts = connectConnectedCounts(rows, hostedVerification);
   const titleText = `${operatorIcon(SCREEN_KEY, symbols)} ${operatorTitle(SCREEN_KEY)}`;
-  const titleMeta = counts.total === 0 ? "" : `${counts.connected}/${counts.total} connected`;
+  const cloudMeta = counts.cloudVerified ? "cloud" : "";
+  const titleMeta = (cloudMeta && counts.total === 0) ? cloudMeta
+    : cloudMeta ? `${cloudMeta} | ${counts.connected}/${counts.total}`
+    : counts.total === 0 ? ""
+    : `${counts.connected}/${counts.total} connected`;
   const title = computeConnectTitleLayout(contentWidth, titleMeta.length);
 
   const body = (
