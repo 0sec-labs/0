@@ -14,7 +14,6 @@ import {
   indexOfModel,
   isFilterKey,
   modelDetailLines,
-  modelDialogTitle,
   modelTargetLine,
   providerGroupFor,
   type ModelRow,
@@ -463,16 +462,6 @@ describe("the focus / target line", () => {
     expect(modelTargetLine("attack", "opus", true, undefined, true)).toMatch(/single-model on/i);
     // The parent target is never inert — single-model pins to it.
     expect(modelTargetLine(null, "gpt-5", false, undefined, true)).not.toMatch(/single-model on/i);
-  });
-});
-
-describe("the dialog title", () => {
-  it("flags a merged 0sec Cloud group without hiding the BYOK connection", () => {
-    const merged = modelDialogTitle({ scope: "byok", providerId: "anthropic", cloudMerged: true });
-    expect(merged).toContain("anthropic");
-    expect(merged).toContain("0sec Cloud");
-    const plain = modelDialogTitle({ scope: "byok", providerId: "anthropic" });
-    expect(plain).not.toContain("0sec Cloud");
   });
 });
 

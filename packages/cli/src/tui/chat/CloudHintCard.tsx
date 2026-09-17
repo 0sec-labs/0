@@ -49,7 +49,7 @@ export const CLOUD_HINT_MIN_ROWS = 1;
 /** The widest the card will ever draw, so a wide sidebar does not stretch prose. */
 const MAX_BODY_LINES = 2;
 
-const TITLE = "0sec Cloud";
+const TITLE = "0cloud";
 const BODY = "Connect an account to run audits on hosted models.";
 const ACTION = "Connect";
 const DISMISS = "✕";

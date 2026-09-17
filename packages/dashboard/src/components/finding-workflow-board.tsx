@@ -298,7 +298,7 @@ function WorkflowCard({
             <GripVertical className="size-3.5" />
             {group.latest.category}
             {selected ? (
-              <span className="rounded-sm bg-primary/10 px-1.5 py-0.5 text-primary">
+              <span className="rounded-sm bg-primary/10 px-1.5 py-0.5 text-primary-text">
                 Open
               </span>
             ) : null}

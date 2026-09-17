@@ -47,7 +47,7 @@ export function EventTimeline({
                   <TableRow key={event.id}>
                     <TableCell>
                       <div className="flex items-start gap-3">
-                        <div className="mt-0.5 inline-flex size-8 items-center justify-center rounded-md border border-border bg-muted text-primary">
+                        <div className="mt-0.5 inline-flex size-8 items-center justify-center rounded-md border border-border bg-muted text-primary-text">
                           <Icon className="size-4" />
                         </div>
                         <div className="space-y-1">

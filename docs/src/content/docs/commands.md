@@ -2205,7 +2205,7 @@ Probe S3 public access and takeover risks, or validate AWS credentials. Read-onl
 0sec cloud
 ```
 
-These commands inspect authorized cloud infrastructure. Managed testing is documented under [0cloud](/roadmap/#0cloud); 0sec Cloud account setup uses the [connection guide](/getting-started/#hosted-models-draft).
+These commands inspect authorized cloud infrastructure. Managed testing is documented under [0cloud](/roadmap/#0cloud); 0cloud account setup uses the [connection guide](/getting-started/#hosted-models-draft).
 
 Guide: [Read the workflow](/research-workflows/).
 
@@ -2680,7 +2680,7 @@ Write a program's structured_scopes to ~/.0sec/scopes/<handle>.json
 
 ### login
 
-Sign in to 0sec Cloud through the browser. This uses the same login flow as `auth login`; your own provider credentials work without a Cloud account.
+Sign in to 0cloud through the browser. This uses the same login flow as `auth login`; your own provider credentials work without a Cloud account.
 
 ```text
 0sec login [options]

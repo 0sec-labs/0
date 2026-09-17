@@ -579,7 +579,7 @@ function SidebarNavItem({
               : "text-foreground/80 hover:bg-primary/6 hover:text-foreground",
           )}
         >
-          <Icon className={cn("mt-0.5 size-4 shrink-0", isActive && "text-primary")} />
+          <Icon className={cn("mt-0.5 size-4 shrink-0", isActive && "text-primary-text")} />
           <div className="min-w-0 flex-1">
             <div className="truncate">{label}</div>
             <div

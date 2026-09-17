@@ -56,4 +56,4 @@ A vuln report covers exploitability and severity. An adversarial-eval report sho
 <span id="relationship-to-0sec-cloud"></span>
 ## Product scope
 
-Run local evaluations through `0sec`. Managed testing belongs to **0cloud**; recurring adversarial evaluation remains planned. **0sec Cloud** is the optional inference service. These products have separate access and billing.
+Run local evaluations through `0sec`. Managed testing belongs to **0cloud**; recurring adversarial evaluation remains planned. **0cloud** offers hosted model access and end-to-end managed security work. These products have separate access and billing.

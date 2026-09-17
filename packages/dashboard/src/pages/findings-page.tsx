@@ -924,7 +924,7 @@ function FindingFamilyInspector({
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0 space-y-2">
               <div className="flex items-center gap-2">
-                <MessageSquare className="size-4 text-primary" />
+                <MessageSquare className="size-4 text-primary-text" />
                 <CardEyebrow>Continue in console</CardEyebrow>
               </div>
               <div className="text-sm font-medium text-foreground">{handoffTitle}</div>
@@ -1024,7 +1024,7 @@ function FindingFamilyInspector({
         {data.workflow.reviewGate !== "none" || data.workflow.persistedStatus !== data.workflow.phase ? (
           <div className="rounded-lg border border-border bg-muted/35 px-3 py-3 text-sm text-muted-foreground">
             <div className="flex items-center gap-2 font-medium text-foreground">
-              <WandSparkles className="size-4 text-primary" />
+              <WandSparkles className="size-4 text-primary-text" />
               Autonomous workflow signal
             </div>
             <div className="mt-1">

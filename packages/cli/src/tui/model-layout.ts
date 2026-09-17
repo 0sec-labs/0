@@ -872,7 +872,7 @@ export function modelDialogTitle({ scope, providerId, showAll = false, cloudMerg
   if (scope === "unknown") return `${head} · no connection`;
   const connection = sanitizeTuiText(providerId ?? "");
   const source = cloudMerged
-    ? `${connection.length > 0 ? connection : "BYOK"} + 0sec Cloud`
+    ? `${connection.length > 0 ? connection : "BYOK"} + 0cloud`
     : connection.length > 0 ? connection : "BYOK";
   return `${head} · ${source} · ${showAll ? "all synced" : "curated"}`;
 }

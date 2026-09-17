@@ -644,7 +644,7 @@ function ProbeLane({
         <div>
           <CardEyebrow>Lane 1 · Probe</CardEyebrow>
           <CardTitle className="mt-2 flex items-center gap-2">
-            <Zap className="size-4 text-primary" />
+            <Zap className="size-4 text-primary-text" />
             Probe firings
           </CardTitle>
           <CardDescription>
@@ -757,7 +757,7 @@ function LeadLane({
         <div>
           <CardEyebrow>Lane 2 · Leads</CardEyebrow>
           <CardTitle className="mt-2 flex items-center gap-2">
-            <FileSearch className="size-4 text-primary" />
+            <FileSearch className="size-4 text-primary-text" />
             Seed worklist
           </CardTitle>
           <CardDescription>
@@ -802,7 +802,7 @@ function LeadLane({
                     </div>
                   </div>
                   {isSelected ? (
-                    <div className="mt-2 flex items-center gap-1 text-[10px] text-primary">
+                    <div className="mt-2 flex items-center gap-1 text-[10px] text-primary-text">
                       <ChevronUp className="size-3" />
                       probe lane is highlighting the originating fire
                       <ArrowRight className="ml-auto size-3" />
@@ -839,7 +839,7 @@ function HuntLane({
         <div>
           <CardEyebrow>Lane 3 · Hunt</CardEyebrow>
           <CardTitle className="mt-2 flex items-center gap-2">
-            <Bot className="size-4 text-primary" />
+            <Bot className="size-4 text-primary-text" />
             Agent activity
           </CardTitle>
           <CardDescription>
@@ -850,7 +850,7 @@ function HuntLane({
       <CardContent className="flex flex-1 flex-col gap-3">
         {selectedLead ? (
           <div className="rounded-md border border-primary/20 bg-primary/4 px-3 py-3">
-            <div className="flex items-center gap-2 text-[10px] font-medium uppercase tracking-widest text-primary">
+            <div className="flex items-center gap-2 text-[10px] font-medium uppercase tracking-widest text-primary-text">
               <Target className="size-3" />
               Targeting lead
             </div>
@@ -919,7 +919,7 @@ function HuntCardView({
     <div className="mt-2 flex items-center justify-between text-[10px] text-muted-foreground">
       <span>{formatRelativeTs(card.ts, baseTs)}</span>
       {interactive ? (
-        <span className="flex items-center gap-1 text-primary">
+        <span className="flex items-center gap-1 text-primary-text">
           <ArrowRight className="size-3" />
           {highlightLead ? "linked to selected lead" : "click to highlight lead"}
         </span>
@@ -945,7 +945,7 @@ function ToolUseBody({ event }: { event: Extract<osecHuntEvent, { kind: "tool_us
     <div className="space-y-1">
       <div className="flex items-start justify-between gap-2">
         <div className="flex min-w-0 items-center gap-2">
-          <Terminal className="size-3.5 shrink-0 text-primary" />
+          <Terminal className="size-3.5 shrink-0 text-primary-text" />
           <span className="truncate text-sm font-medium text-foreground">{event.tool}</span>
           {typeof event.turn === "number" ? (
             <span className="font-mono text-[10px] text-muted-foreground">turn {event.turn}</span>
@@ -959,7 +959,7 @@ function ToolUseBody({ event }: { event: Extract<osecHuntEvent, { kind: "tool_us
         </div>
       ) : null}
       {event.file ? (
-        <div className="font-mono text-[11px] text-primary">
+        <div className="font-mono text-[11px] text-primary-text">
           {event.file}{typeof event.line === "number" ? `:${event.line}` : ""}
         </div>
       ) : null}
@@ -986,7 +986,7 @@ function FindingBody({ event }: { event: Extract<osecHuntEvent, { kind: "finding
         <div className="text-[11px] text-muted-foreground">{event.category}</div>
       ) : null}
       {event.file ? (
-        <div className="font-mono text-[11px] text-primary">
+        <div className="font-mono text-[11px] text-primary-text">
           {event.file}{typeof event.line === "number" ? `:${event.line}` : ""}
         </div>
       ) : null}

@@ -32,9 +32,12 @@ if (!app.isPackaged && developmentDebugPort !== undefined) {
   app.commandLine.appendSwitch("remote-debugging-port", String(developmentDebugPort));
 }
 
-// Explicit app name so the macOS app-menu label is "0sec" regardless of the
-// npm package name (@0sec/desktop). Must be set before 'ready'.
+// Keep the existing profile namespace while updating the visible app name.
+// Resolve it before renaming so explicit user-data-dir overrides also survive.
 app.name = "0sec";
+const userDataPath = app.getPath("userData");
+app.name = "0security";
+app.setPath("userData", userDataPath);
 
 let mainWindow: BrowserWindow | null = null;
 let dashboard: DashboardSidecar | null = null;
@@ -87,7 +90,7 @@ function createWindow(): BrowserWindow {
     minHeight: 600,
     show: false,
     backgroundColor: nativeTheme.shouldUseDarkColors ? "#161615" : "#f5f5f3",
-    title: "0sec",
+    title: "0security",
     webPreferences: {
       contextIsolation: true,
       sandbox: true,
@@ -135,7 +138,7 @@ async function showMainWindow(): Promise<BrowserWindow | null> {
 
 function showWindowError(error: unknown): void {
   if (!isQuitting) {
-    dialog.showErrorBox("0sec could not open", error instanceof Error ? error.message : String(error));
+    dialog.showErrorBox("0security could not open", error instanceof Error ? error.message : String(error));
   }
 }
 
@@ -249,7 +252,7 @@ function installApplicationMenu(): void {
     {
       role: "help",
       submenu: [
-        { label: "0sec Documentation", click: () => { void shell.openExternal("https://docs.0.security"); } },
+        { label: "0security Documentation", click: () => { void shell.openExternal("https://docs.0.security"); } },
       ],
     },
   ];
@@ -363,7 +366,7 @@ if (!app.requestSingleInstanceLock()) {
   }).catch((error: unknown) => {
     if (isQuitting) return;
     const message = error instanceof Error ? error.message : String(error);
-    dialog.showErrorBox("0sec could not start", message);
+    dialog.showErrorBox("0security could not start", message);
     void stopApplication().finally(() => app.exit(1));
   });
 

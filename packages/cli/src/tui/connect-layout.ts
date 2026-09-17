@@ -145,10 +145,10 @@ export interface ConnectGroup {
  * them, but the shared picker groups by category, so it needs one of its own —
  * and it sorts first because `buildConnectRows` emits it first.
  */
-const CLOUD_GROUP: ConnectGroup = { id: "cloud", label: "0sec Cloud" };
+const CLOUD_GROUP: ConnectGroup = { id: "cloud", label: "0cloud" };
 /** The picker id the cloud row commits with; the runtime calls it "hosted". */
 const CLOUD_ITEM_ID = "hosted";
-const CLOUD_LABEL = "0sec Cloud";
+const CLOUD_LABEL = "0cloud";
 const POPULAR_GROUP: ConnectGroup = { id: "popular", label: "Use my own API key" };
 const ALL_GROUP: ConnectGroup = { id: "all", label: "Other API providers" };
 const SUBSCRIPTION_GROUP: ConnectGroup = { id: "subscription", label: "Provider subscription" };
@@ -286,7 +286,7 @@ export function buildConnectRows({
     .sort((a, b) => compareStrings(a.id, b.id));
 
   const rows: ConnectRow[] = [];
-  if (terms.every((term) => "hosted 0sec cloud sign in".includes(term))) rows.push({ kind: "cloud" });
+  if (terms.every((term) => "hosted 0cloud sign in".includes(term))) rows.push({ kind: "cloud" });
 
   const pushGroup = (group: ConnectGroup, providers: readonly ConnectProvider[]) => {
     const shown = providers.filter(matches);
@@ -344,7 +344,7 @@ export interface ConnectItemsInput {
  * Projects the connect rows onto the console's one shared picker.
  *
  * `DialogItem` carries the group as `category`, so the picker draws the same
- * "0sec Cloud / Use my own API key / Other API providers / Provider
+ * "0cloud / Use my own API key / Other API providers / Provider
  * subscription" headings the hand-rolled list drew, and it searches them. The
  * subtitle that used to occupy a row of its own becomes the item's
  * `description`, which costs no row and cannot be landed on by the cursor.
@@ -376,7 +376,7 @@ export function connectDialogItems({
       items.push({
         id: CLOUD_ITEM_ID,
         label: CLOUD_LABEL,
-        description: "Sign in once to use the 0sec-managed model catalog",
+        description: "Sign in once to use the 0security-managed model catalog",
         meta: recoveryProviderId === "hosted" ? "reconnect" : connected ? "login saved" : "sign in",
         category: CLOUD_GROUP.label,
         current: connected,
@@ -516,38 +516,38 @@ export function connectDetailLines(
       if (!compact) lines.push({ text: "", tone: "blank" });
     };
 
-    push("0sec Cloud", "title");
+    push("0cloud", "title");
     separate();
-    push("Sign in once to use the 0sec-managed model catalog.", "text");
+    push("Sign in once to use the 0security-managed model catalog.", "text");
     push("Model access and credits are checked when used.", "muted");
     separate();
     if (connected) {
       const v = hostedVerification;
       if (!v || v.kind === "pending") {
-        push("Verifying your 0sec Cloud sign-in\u2026", "muted");
+        push("Verifying your 0cloud sign-in\u2026", "muted");
       } else if (v.kind === "verified") {
         push(
           typeof v.remainingUsd === "number"
-            ? `Verified with 0sec Cloud \u2014 $${v.remainingUsd.toFixed(2)} in credits.`
-            : "Verified with 0sec Cloud.",
+            ? `Connected to 0cloud \u2014 $${v.remainingUsd.toFixed(2)} in credits.`
+            : "Connected to 0cloud.",
           "ok",
         );
       } else if (v.kind === "rejected") {
-        push("Sign-in saved, but 0sec Cloud rejected the token \u2014 press Enter to sign in again.", "warn");
+        push("Sign-in saved, but 0cloud rejected the token \u2014 press Enter to sign in again.", "warn");
       } else if (v.kind === "disabled") {
         push("Signed in \u2014 hosted inference isn\u2019t enabled yet. Use your own provider key for now.", "muted");
       } else if (v.kind === "no-credits") {
         push("Signed in, but this account is out of inference credits.", "warn");
       } else {
-        push("Sign-in saved; couldn\u2019t reach 0sec Cloud to verify right now.", "muted");
+        push("Sign-in saved; couldn\u2019t reach 0cloud to verify right now.", "muted");
       }
     } else {
       push("Cloud login not configured.", "muted");
     }
-    push("Use your own API key or provider subscription without a 0sec account.", "muted");
+    push("Use your own API key or provider subscription without a 0cloud account.", "muted");
     separate();
     push(
-      "Enter: open browser for 0sec Cloud sign-in.",
+      "Enter: open browser for 0cloud sign-in.",
       "muted",
     );
     return lines;

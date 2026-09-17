@@ -70,7 +70,7 @@ export interface TuiSettings {
    * works again; every keyboard path is unaffected either way.
    */
   mouseSupport: boolean;
-  /** Block "0SEC" mark on the empty transcript. */
+  /** Block "0SECURITY" wordmark on the empty transcript. */
   showLogo: boolean;
   /** Surface runtime stdout/stderr as transcript notices. */
   showRuntimeNotices: boolean;
@@ -189,7 +189,7 @@ export interface TuiSettings {
    */
   elapsedTimer: "left" | "off";
   /**
-   * Intro animation style for the "0SEC" logo. One-shot reveals: "glitch" (a
+   * Intro animation style for the "0SECURITY" wordmark. One-shot reveals: "glitch" (a
    * neon-flecked scramble that resolves — the default), "matrix" (a green
    * matrix-rain cascade), "wave" (a rippling cyan wavefront), "neon" (a
    * neon-sign warm-up flicker), "strike" (a red slash strikes through the 0),
@@ -385,7 +385,7 @@ const DEFS: readonly TuiSettingDef[] = [
   {
     key: "showLogo",
     label: "Logo",
-    description: 'Block "0SEC" mark shown on an empty transcript.',
+    description: 'Block "0SECURITY" wordmark shown on an empty transcript.',
     kind: "boolean",
     default: true,
     group: "Display",
@@ -658,7 +658,7 @@ const DEFS: readonly TuiSettingDef[] = [
     key: "logoAnimation",
     label: "Logo animation",
     description:
-      'Intro animation for the "0SEC" logo: glitch (a neon-flecked scramble that resolves — the default), rainbow (a looping hue sweep), matrix (a green matrix-rain cascade), wave (a rippling cyan wavefront), neon (a neon-sign warm-up flicker), shimmer (a bright comet with a gradient tail), pulse (the slash breathes), strike (an orange slash strikes through the 0), draw (letters draw in behind a pen tip), fade (a centre-out bloom), typein (per-cell reveal), sweep (a bright bar wipes across) or off (static).',
+      'Intro animation for the "0SECURITY" wordmark: glitch (a neon-flecked scramble that resolves — the default), rainbow (a looping hue sweep), matrix (a green matrix-rain cascade), wave (a rippling cyan wavefront), neon (a neon-sign warm-up flicker), shimmer (a bright comet with a gradient tail), pulse (the slash breathes), strike (an orange slash strikes through the 0), draw (letters draw in behind a pen tip), fade (a centre-out bloom), typein (per-cell reveal), sweep (a bright bar wipes across) or off (static).',
     kind: "enum",
     default: "glitch",
     choices: [

@@ -272,8 +272,8 @@ export function ModelScreen({
 
   // A hosted *runtime* (`providerId === "hosted"`) still gets the pure hosted
   // catalogue with no BYOK fallback — that lane is unchanged. What is new is the
-  // BYOK lane: when 0sec Cloud credentials exist, the account can reach every
-  // route the cloud lists, so those are folded in as an extra "0sec Cloud"
+  // BYOK lane: when 0cloud credentials exist, the account can reach every
+  // route the cloud lists, so those are folded in as an extra "0cloud"
   // group alongside the BYOK rows rather than being hidden until the runtime
   // itself is hosted. The old "two catalogues, never mixed" rule held because a
   // hosted id's numbers must never be borrowed from a public Models.dev row of
@@ -282,7 +282,7 @@ export function ModelScreen({
   // number — this only lets both authoritative catalogues appear at once.
   const isHosted = providerId === HOSTED_PROVIDER_ID;
   const isByok = !isHosted;
-  // 0sec Cloud credentials present → the BYOK lane merges the cloud catalogue.
+  // 0cloud credentials present → the BYOK lane merges the cloud catalogue.
   // Read once per mount for the same reason provider credentials are: they are
   // process/file-level and cannot change under a screen with no way to set them.
   const cloudCreds = useMemo(() => cloudConfigured(env ?? process.env), [env]);
@@ -440,7 +440,7 @@ export function ModelScreen({
   // The hosted list has no provider-credential story to group by — the account
   // holds the keys — so it groups by upstream vendor and filters over the
   // fields the service actually published. The `prefix` names the group: the
-  // pure hosted lane calls it "Hosted", the BYOK merge calls it "0sec Cloud" so
+  // pure hosted lane calls it "Hosted", the BYOK merge calls it "0cloud" so
   // its routes read as one extra group beside the credential-grouped BYOK rows.
   const hostedItems = (query: string, prefix: string): DialogItem[] => {
     const terms = query.toLowerCase().trim().split(/\s+/).filter(Boolean);
@@ -466,13 +466,13 @@ export function ModelScreen({
   );
   const byokItems = useMemo(() => modelDialogItems(modelOnlyRows), [modelOnlyRows]);
   // Pure hosted → the hosted catalogue only. BYOK → the credential-grouped BYOK
-  // rows, with the 0sec Cloud group appended when cloud creds exist. Appending
+  // rows, with the 0cloud group appended when cloud creds exist. Appending
   // (rather than prepending) leaves the operator's chosen BYOK ordering untouched
-  // and reads as "…and these are also reachable through 0sec Cloud".
+  // and reads as "…and these are also reachable through 0cloud".
   const items = isHosted
     ? hostedItems(filter, "Hosted")
     : mergeCloud
-      ? [...byokItems, ...hostedItems(filter, "0sec Cloud")]
+      ? [...byokItems, ...hostedItems(filter, "0cloud")]
       : byokItems;
   const hostedById = useMemo(
     () => new Map(hostedCatalog.map((model) => [model.id, model])),
@@ -570,10 +570,10 @@ export function ModelScreen({
   // note" rather than an empty picker.
   const cloudStatus = mergeCloud
     ? hostedError
-      ? `${symbols.warning} 0sec Cloud offline: ${hostedError} · Ctrl+R retry`
+      ? `${symbols.warning} 0cloud offline: ${hostedError} · Ctrl+R retry`
       : hostedSnapshot
-        ? `0sec Cloud · ${hostedCatalog.length} route${hostedCatalog.length === 1 ? "" : "s"}`
-        : "0sec Cloud · loading…"
+        ? `0cloud · ${hostedCatalog.length} route${hostedCatalog.length === 1 ? "" : "s"}`
+        : "0cloud · loading…"
     : null;
   // A hosted error is only fatal on the *pure* hosted lane, where there is no
   // other list to fall back to. In the merge it is just the cloud suffix above.
@@ -612,7 +612,7 @@ export function ModelScreen({
         filter: filterRef.current,
         activeModel,
       }));
-    return mergeCloud ? [...byok, ...hostedItems(filterRef.current, "0sec Cloud")] : byok;
+    return mergeCloud ? [...byok, ...hostedItems(filterRef.current, "0cloud")] : byok;
   };
   const highlight = (index: number) => {
     const item = currentItems()[index];
@@ -731,7 +731,7 @@ export function ModelScreen({
 
     const compact = pane.height < 12;
 
-    // A hosted/cloud row (pure hosted lane, or a "0sec Cloud" row in the merged
+    // A hosted/cloud row (pure hosted lane, or a "0cloud" row in the merged
     // BYOK lane) is detailed from the service's OWN catalogue; a BYOK row falls
     // through to the priced/synced detail below. Dispatching on membership in
     // the hosted catalogue rather than on `isHosted` is what lets both kinds of
