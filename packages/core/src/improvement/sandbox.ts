@@ -197,7 +197,6 @@ async function runDockerSnapshot(
     const uid = process.getuid();
     const gid = process.getgid();
     const start = performance.now();
-    let created = false;
     let attemptedCreate = false;
     let execution: EvolutionExecution = { exitCode: null, stdout: "", stderr: "", durationMs: 0, timedOut: false };
     try {
@@ -214,7 +213,6 @@ async function runDockerSnapshot(
         "--tmpfs", "/tmp:rw,noexec,nosuid,nodev,size=64m",
         image, "/bin/sh", "-c", workerScript(config),
       ], Math.min(config.timeoutMs, 30000), signal);
-      created = true;
       signal?.throwIfAborted();
       const recoveryBudget = config.timeoutMs - (performance.now() - start);
       if (recoveryBudget <= 0) throw new Error("sandbox timeout during container creation");

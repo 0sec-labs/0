@@ -1,7 +1,7 @@
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { parseEvolutionConfig } from "./config.js";
 import { snapshotEvolutionSource } from "./registry.js";
 import { createDockerEvolutionSandbox, resolveEvolutionImage } from "./sandbox.js";
@@ -96,7 +96,10 @@ describe.skipIf(process.platform !== "linux" || process.getuid?.() === 0)("super
     await expect.poll(() => descendantRunning(fixture.pidFile)).toBe(false);
   }, 10000);
 
-  it("marks cleanupFailed when container removal fails after guest creation", async () => {
+  it.each([0, 1])("stops admissions after uncertain cleanup with create exit %i", async (createExit) => {
+    // A failed teardown deliberately stops this process's admission pool.
+    vi.resetModules();
+    const { createDockerEvolutionSandbox } = await import("./sandbox.js");
     const directory = mkdtempSync(join(tmpdir(), "0sec-docker-cleanup-"));
     directories.push(directory);
     const removed = join(directory, "removed");
@@ -107,7 +110,7 @@ const { spawn } = require('node:child_process');
 const { writeFileSync } = require('node:fs');
 const op = process.argv[2];
 if (op === 'rm') { writeFileSync(${JSON.stringify(removed)}, 'removed'); process.exit(1); }
-if (op === 'create') { console.log('fixture-container'); process.exit(0); }
+if (op === 'create') { console.log('fixture-container'); process.exit(${createExit}); }
 if (op === 'start') {
   const child = spawn(process.execPath, ['-e', 'setTimeout(() => {}, 30000)'], { stdio: 'inherit' });
   writeFileSync(${JSON.stringify(pidFile)}, JSON.stringify({ parent: process.pid, child: child.pid }));
@@ -138,8 +141,8 @@ if (op === 'start') {
       },
     });
     expect(outcome.cleanupFailed).toBe(true);
-    expect(outcome.error).toMatch(/cleanup/);
     expect(existsSync(removed)).toBe(true);
-    await expect.poll(() => descendantRunning(pidFile)).toBe(false);
+    if (createExit === 0) await expect.poll(() => descendantRunning(pidFile)).toBe(false);
+    await expect(createDockerEvolutionSandbox(binary)({ config, snapshot, input: null })).rejects.toThrow();
   });
 });

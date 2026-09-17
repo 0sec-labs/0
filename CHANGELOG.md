@@ -21,6 +21,11 @@ on the published npm package and the GitHub Release tag.
 
 ### Changed
 
+- Bound executable-plugin and source-evolution guest admission per controller
+  by active count, aggregate memory/CPU, and a bounded FIFO queue. Deadlines
+  cover queued work; nested calls fail promptly when capacity is unavailable.
+  Reservations stay held through teardown, and uncertain cleanup stops new
+  admissions. Docker remains the default; guests are not reused.
 - Present the product as **0security**, with a full wordmark and orange branding
   across the CLI, dashboard, desktop app, documentation, and README assets.
   The `0sec` executable, package identifiers, configuration paths, desktop

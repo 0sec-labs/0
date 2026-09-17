@@ -441,6 +441,13 @@ The backend isolates executable plugins and evolution workers. The controller
 and authorized host tools execute outside it. Every invocation starts a fresh
 guest; smolvm incurs VM startup overhead.
 
+Plugin validation imports and invocations share the controller's
+[worker admission budgets](/improvement-plane/#worker-admission-and-scale)
+with source evolution. Root calls use a bounded FIFO queue; nested calls
+reserve additional resources immediately or fail rather than deadlock.
+Timeouts include queue wait, and uncertain guest cleanup stops new admissions.
+Listing versions and changing rollback metadata do not start guests.
+
 #### Version lifecycle diagram
 
 ```
