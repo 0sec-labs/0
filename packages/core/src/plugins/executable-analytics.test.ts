@@ -48,6 +48,8 @@ afterEach(async () => {
 });
 
 it("captures redacted helper modules as well as the submitted entry source", async () => {
+  // Synthetic alphabet token exercises submitted-code redaction; never authenticates.
+  // foxguard: ignore[js/no-hardcoded-secret]
   const secret = "sk-ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
   const entry = 'export { probe } from "./helper.mts";';
   await manager.submit({
