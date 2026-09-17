@@ -174,6 +174,8 @@ describe("redactContent — credential-only capture", () => {
 
 describe("redactContent — exact target-auth values", () => {
   it("removes operator-supplied auth secrets by exact match", () => {
+    // Synthetic cookie value exercises exact-match scrubbing.
+    // foxguard: ignore[js/no-hardcoded-secret]
     const secret = "my-target-session-cookie-value";
     const out = redactContent(`Cookie carried ${secret} inline`, {
       authSecretValues: [secret],

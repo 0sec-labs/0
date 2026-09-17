@@ -3382,12 +3382,12 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
       // refresh never gets a request issued for it. `abort` is undefined for
       // every caller that passes no operator signal, making this a no-op.
       abort?.throwIfCancelled();
-      // buildUrl() is the configured LLM provider endpoint (operator-set via
-      // provider config / 0SEC_* env), never user/attacker input; same
-      // trusted endpoint the client already POSTed to, now wrapped in retry.
-      // foxguard: ignore[js/no-ssrf]
       let res: Response;
       try {
+        // buildUrl() is the configured LLM provider endpoint (operator-set via
+        // provider config / 0SEC_* env), never user/attacker input; same
+        // trusted endpoint the client already POSTed to, now wrapped in retry.
+        // foxguard: ignore[js/no-ssrf]
         res = await fetch(this.buildUrl(), {
           method: "POST",
           headers: await this.ensureFreshHeaders(),

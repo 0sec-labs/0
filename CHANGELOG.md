@@ -12,6 +12,13 @@ on the published npm package and the GitHub Release tag.
 
 ## [Unreleased]
 
+### Security
+
+- Move automatic HTTP target classification after engagement-scope admission.
+  Previously, an unscoped or out-of-scope configured target could receive a
+  probe before the scan was refused. The probe now refuses redirects and
+  cancels their response bodies.
+
 ### Fixed
 
 - Fail closed when `connect` cannot establish enrollment readiness or inspect

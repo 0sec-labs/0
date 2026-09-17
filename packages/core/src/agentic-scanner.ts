@@ -522,12 +522,8 @@ function hasDirectChatGptCodexProvider(
   return diagnostics.valid && diagnostics.provider === "chatgpt-codex";
 }
 
-/**
- * Auto-detect whether an HTTP target is a web app vs an AI/API endpoint.
- * If the target serves HTML and the user requested "deep" mode,
- * automatically switch to "web" mode for better coverage.
- */
-async function normalizeScanConfig(config: ScanConfig): Promise<ScanConfig> {
+/** Normalize target spelling without making requests before scope admission. */
+function normalizeScanConfig(config: ScanConfig): ScanConfig {
   if (config.repoPath) {
     config = { ...config, repoPath: resolveLocalTargetPath(config.repoPath) };
   }
@@ -548,7 +544,11 @@ async function normalizeScanConfig(config: ScanConfig): Promise<ScanConfig> {
   ) {
     config = { ...config, target: `https://${config.target.trim()}` };
   }
+  return config;
+}
 
+/** Classify an admitted target. Redirects require separate scope admission. */
+async function detectScanMode(config: ScanConfig): Promise<ScanConfig> {
   // Only auto-route for default/deep mode on HTTP targets
   const requestedMode = config.mode ?? "deep";
   if (requestedMode !== "deep") return config;
@@ -564,14 +564,21 @@ async function normalizeScanConfig(config: ScanConfig): Promise<ScanConfig> {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), Math.min(config.timeout ?? 30_000, 8_000));
     try {
+      // Scope admission precedes this probe; redirects are never followed.
+      // foxguard: ignore[js/no-ssrf]
       const response = await fetch(config.target, {
         method: "GET",
+        redirect: "manual",
         headers: {
           Accept: "text/html,application/xhtml+xml,application/json;q=0.9,*/*;q=0.8",
         },
         signal: controller.signal,
       });
       limiter.noteResponse(config.target, response);
+      if (response.status >= 300 && response.status < 400) {
+        await response.body?.cancel();
+        return config;
+      }
       const contentType = response.headers.get("content-type")?.toLowerCase() ?? "";
       const body = await response.text();
 
@@ -885,7 +892,7 @@ export async function agenticScan(opts: AgenticScanOptions): Promise<ScanReport>
     return runCraftScanStage(opts.config, opts.craftTarget, opts.craft, emit);
   }
 
-  const config = await normalizeScanConfig(opts.config);
+  let config = normalizeScanConfig(opts.config);
 
   // Programmatic scope ingestion (0sec#215). Load once at the top and
   // pass the parsed `ScopePolicy` to every agent config below. The CLI
@@ -934,6 +941,13 @@ export async function agenticScan(opts: AgenticScanOptions): Promise<ScanReport>
   // should see now, not after the loud default has already run. Resolving to
   // the `standard` posture is a no-op — nothing changes unless opted in.
   const enteredPosture = resolveEngagementForConfig(config);
+
+  const detectedConfig = await detectScanMode(config);
+  if (detectedConfig !== config) {
+    // Keep the admitted scope snapshot across the mode-only config copy.
+    if (scope) scopePolicyCache.set(detectedConfig, scope);
+    config = detectedConfig;
+  }
 
   const runState = await (async () => {
     try {

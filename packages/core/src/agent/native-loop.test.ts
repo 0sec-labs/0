@@ -1191,6 +1191,8 @@ describe("compactMessagesWithLLM — preserve credential-bearing messages (0sec#
   // etc.) — otherwise the line would leak into the regex-derived
   // "Additional extracted context" block even with the feature disabled,
   // and the negative assertion would be impossible.
+  // Synthetic narrative fixture exercises credential preservation during compaction.
+  // foxguard: ignore[js/no-hardcoded-secret]
   const CREDENTIAL_LINE = "Recovered the operator credential mfsmpKraken72 from the login portal";
 
   function buildThirtyMessageConversation(): NativeMessage[] {

@@ -2211,6 +2211,8 @@ describe("resolveFailoverProvider", () => {
   });
 
   it("resolves deepseek when key is present", () => {
+    // Synthetic provider-auth fixture; resolution only, no network request.
+    // foxguard: ignore[js/no-hardcoded-secret]
     process.env.DEEPSEEK_API_KEY = "ds-key";
     const cfg = resolveFailoverProvider("deepseek", "deepseek-v4-flash");
     expect(cfg).not.toBeUndefined();
@@ -2219,6 +2221,8 @@ describe("resolveFailoverProvider", () => {
   });
 
   it("resolves openrouter when key is present", () => {
+    // Synthetic provider-auth fixture; resolution only, no network request.
+    // foxguard: ignore[js/no-hardcoded-secret]
     process.env.OPENROUTER_API_KEY = "sk-or-fallback";
     const cfg = resolveFailoverProvider("openrouter", "qwen/qwen-2.5-coder-32b-instruct");
     expect(cfg).not.toBeUndefined();
@@ -2227,6 +2231,8 @@ describe("resolveFailoverProvider", () => {
   });
 
   it("resolves azure when key and base URL are present", () => {
+    // Synthetic provider-auth fixture; resolution only, no network request.
+    // foxguard: ignore[js/no-hardcoded-secret]
     process.env.AZURE_OPENAI_API_KEY = "az-key";
     process.env.AZURE_OPENAI_BASE_URL = "https://test.openai.azure.com";
     const cfg = resolveFailoverProvider("azure", "gpt-5-deployment");
@@ -2236,6 +2242,8 @@ describe("resolveFailoverProvider", () => {
   });
 
   it("returns undefined for azure when base URL is missing", () => {
+    // Synthetic provider-auth fixture; resolution only, no network request.
+    // foxguard: ignore[js/no-hardcoded-secret]
     process.env.AZURE_OPENAI_API_KEY = "az-key";
     delete process.env.AZURE_OPENAI_BASE_URL;
     // No base URL from the codex config either (no file present)
@@ -2243,6 +2251,8 @@ describe("resolveFailoverProvider", () => {
   });
 
   it("resolves anthropic when key is present", () => {
+    // Synthetic provider-auth fixture; resolution only, no network request.
+    // foxguard: ignore[js/no-hardcoded-secret]
     process.env.ANTHROPIC_API_KEY = "sk-ant-fallback";
     const cfg = resolveFailoverProvider("anthropic", "claude-sonnet-4-20250514");
     expect(cfg).not.toBeUndefined();
@@ -2355,7 +2365,11 @@ describe("LlmApiRuntime cross-provider failover (0SEC_LLM_FALLBACK)", () => {
 
   it("fails over to the next provider after exhausting the 429 budget", async () => {
     // Primary: OpenAI. Fallback: OpenRouter with a different model.
+    // Synthetic key used only by mocked provider requests.
+    // foxguard: ignore[js/no-hardcoded-secret]
     process.env.OPENAI_API_KEY = "sk-openai-primary";
+    // Synthetic key used only by mocked provider requests.
+    // foxguard: ignore[js/no-hardcoded-secret]
     process.env.OPENROUTER_API_KEY = "sk-or-fallback";
     // Urgent: 0SEC_LLM_FALLBACK entries and 12 429s for the primary.
     // Tune 429 budget so it exhausts quickly: 1 retry then failover.
@@ -2463,7 +2477,11 @@ describe("LlmApiRuntime cross-provider failover (0SEC_LLM_FALLBACK)", () => {
   });
 
   it("surfaces the terminal error when the fallback chain is exhausted", async () => {
+    // Synthetic key used only by mocked provider requests.
+    // foxguard: ignore[js/no-hardcoded-secret]
     process.env.OPENAI_API_KEY = "sk-openai-primary";
+    // Synthetic key used only by mocked provider requests.
+    // foxguard: ignore[js/no-hardcoded-secret]
     process.env.OPENROUTER_API_KEY = "sk-or-fallback";
     process.env["0SEC_LLM_429_MAX_RETRIES"] = "0";
     process.env["0SEC_LLM_FALLBACK"] = "openrouter:qwen/qwen-2.5-coder-32b-instruct";
@@ -2519,7 +2537,11 @@ describe("LlmApiRuntime cross-provider failover (0SEC_LLM_FALLBACK)", () => {
   });
 
   it("does NOT fail over for non-429 errors", async () => {
+    // Synthetic key used only by mocked provider requests.
+    // foxguard: ignore[js/no-hardcoded-secret]
     process.env.OPENAI_API_KEY = "sk-openai-primary";
+    // Synthetic key used only by mocked provider requests.
+    // foxguard: ignore[js/no-hardcoded-secret]
     process.env.OPENROUTER_API_KEY = "sk-or-fallback";
     process.env["0SEC_LLM_FALLBACK"] = "openrouter:qwen/qwen-2.5-coder-32b-instruct";
 

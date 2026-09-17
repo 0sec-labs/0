@@ -133,6 +133,8 @@ function shouldHarvestLoot(toolName: string): boolean {
 //
 // Exported for unit tests.
 const REASONING_PREFIX_RE =
+  // Each repetition starts with a non-whitespace marker, fixing its boundary.
+  // foxguard: ignore[js/no-unsafe-regex]
   /^\s*(?:[*_>#-]\s*)*(?:thought|reasoning|plan)\s*:\s*/i;
 const SENTENCE_SPLIT_RE = /(?<=[.!?])\s+/;
 const REASONING_MAX_LEN = 140;
