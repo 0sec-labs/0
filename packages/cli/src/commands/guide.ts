@@ -6,8 +6,8 @@
 // auth/approval/cost boundaries. Output is versioned so agents refresh on
 // upgrade, and capability layers are distinguished honestly:
 //
-//   1. engine     — features in THIS installed CLI version (works offline)
-//   2. service    — what the configured cloud answers right now (live probe)
+//   1. engine     — features in THIS installed CLI version
+//   2. service    — reachability only; health does not verify identity or access
 //   3. account    — what this account/org may use (entitlements, when known)
 //
 // Everything below states only shipped, qualified behavior with measured
@@ -42,20 +42,30 @@ interface GuideServiceStates {
 
 const CAPABILITIES: Capability[] = [
   {
+    id: "hosted-inference",
+    summary: "Use 0cloud model access while the harness and its tools execute locally. Provider credentials remain on the service.",
+    when: "You want hosted models without setting up a supplier account, rather than moving tool execution into a managed run.",
+    command: "0sec models --json",
+    layer: "service",
+    requiresAuth: true,
+    limitations: "Model availability, account entitlement and funding are checked separately. Model allowance does not grant managed execution, review credits or repair publication. Use 0sec balance --json for account allowance; health alone proves none of these.",
+  },
+  {
     id: "secure-lifecycle",
     summary: "Investigate a repository, behaviorally reproduce each finding with a frozen probe, repair across multiple files, run your regression command, and independently verify the fix in a fresh checkout.",
-    when: "You want verified repairs, not a report. This is the primary workflow.",
+    when: "You want to run the repair workflow with your own execution resources. Use connect for qualified managed execution.",
     command: "0sec secure <repo> --test-command \"npm test\"",
     layer: "engine",
     limitations: "Model quality varies; every acceptance gate is executable evidence, not model opinion. Investigation is not signal-cancellable mid-flight (workflow deadline applies).",
   },
   {
     id: "connect",
-    summary: "One-command cloud onboarding: verify auth, auto-detect the test command, start the first secure run immediately, install a recurring schedule.",
+    summary: "Request managed repository security work and recurring runs after repository readiness checks and explicit policy approval.",
     when: "Point 0cloud by 0security at a repository and let it work continuously.",
     command: "0sec connect https://github.com/org/repo",
     layer: "service",
     requiresAuth: true,
+    limitations: "Unavailable enrollment APIs block dispatch. GitHub App approval is an action-required browser handoff, not an implemented polling session. In JSON mode, --yes is required before new work starts. A created scan with failed recurrence returns action-required with its scan id, not ready.",
   },
   {
     id: "review",
@@ -102,7 +112,7 @@ const CAPABILITIES: Capability[] = [
 ];
 
 const ARCHITECTURE = {
-  summary: "0security is the open engine and CLI (this binary). 0cloud by 0security is the hosted platform that runs the same engine in managed sandboxes on a schedule and on repository events.",
+  summary: "0security is the open engine and CLI brand; the executable remains 0sec. 0cloud by 0security offers two paths: hosted inference with local tools, or managed security execution using the same engine. These paths have separate access and funding.",
   lifecycle: [
     "prepare — pin a clean managed checkout of your repository",
     "investigate — source review with tool-using agents under budgets",
@@ -115,7 +125,7 @@ const ARCHITECTURE = {
   evidence:
     "Measured on this engine (2026-09-16, DeepSeek V4 Flash): a complete find→reproduce→repair→verify cycle finished in ~84s at ~$0.02–0.03 model cost, repairing a two-file authorization defect on the first attempt. Cost per repair is tracked from real provider usage, never estimated.",
   boundaries: {
-    auth: "Cloud actions need `0sec auth login` (browser, scoped token). Engine runs offline with your own provider keys.",
+    auth: "Cloud actions need `0sec auth login` and the relevant service entitlement. Local/BYOK runs need no cloud account; provider requests can still use the network. A health response does not verify account identity or product access.",
     approval: "Verified patches are retained as artifacts by default. Publishing a PR is a separate gated action; nothing merges or deploys itself.",
     cost: "Per-run cost ceilings (0SEC_COST_CEILING_USD / --cost-ceiling) bound model spend; the cloud adds account budgets. A run that exhausts budget stops and reports blocked, never fake-clean.",
     scope: "Live-target work requires an explicit scope file. Only test systems you own or are authorized to assess.",
@@ -137,12 +147,12 @@ function states(serviceProbe: ServiceProbe, account: unknown): GuideServiceState
     service: {
       status: serviceProbe,
       note: serviceProbe === "ok"
-        ? "0cloud by 0security is reachable with your credentials."
+        ? "0cloud health is reachable. Account identity, repository access, entitlements and funding are not verified by this probe."
         : serviceProbe === "unauthenticated"
-          ? "Run 0sec auth login to enable service capabilities."
+          ? "The health probe rejected the credentials. Run 0sec auth login; product access still needs its own checks."
           : serviceProbe === "unreachable"
-            ? "Cloud unreachable from here; engine capabilities keep working offline."
-            : "Service state not probed (no credentials configured).",
+            ? "Cloud health is unreachable from here. Local workflows retain their own provider and network requirements."
+            : "Service state not probed (no credentials configured); account access is unknown.",
     },
     account,
   };
@@ -161,11 +171,38 @@ async function probeService(): Promise<ServiceProbe> {
   }
 }
 
-function printHuman(topic: string | undefined, service: GuideServiceStates): void {
+// Use the same registered Commander tree that drives help and sync-cli-docs.mjs.
+function commandPath(command: Command): string {
+  return command.parent ? `${commandPath(command.parent)} ${command.name()}` : command.name();
+}
+
+function collectCommands(command: Command): Command[] {
+  const visible = new Set(command.createHelp().visibleCommands(command));
+  return command.commands.filter((child) => visible.has(child))
+    .flatMap((child) => [child, ...collectCommands(child)]);
+}
+
+function commandMetadata(command: Command) {
+  return {
+    name: commandPath(command).replace(/^0sec /, ""),
+    description: command.description(),
+    usage: `${commandPath(command)} ${command.usage()}`,
+    aliases: command.aliases(),
+    arguments: command.registeredArguments.map((arg) => ({
+      name: arg.name(), description: arg.description, required: arg.required, variadic: arg.variadic,
+    })),
+    options: command.createHelp().visibleOptions(command).map((option) => ({
+      flags: option.flags, description: option.description, mandatory: option.mandatory,
+      choices: option.argChoices,
+    })),
+  };
+}
+
+function printHuman(topic: string | undefined, service: GuideServiceStates, commands: Command[]): void {
   const out: string[] = [];
   out.push(`0security guide (installed ${VERSION})`);
   out.push("");
-  out.push("0security is the open engine and CLI that secures software: it finds vulnerabilities, proves them, repairs the cause, and verifies the repair. 0cloud by 0security is the hosted platform running the same engine continuously.");
+  out.push(ARCHITECTURE.summary);
   out.push("");
   if (!topic) {
     out.push("Capabilities:");
@@ -186,7 +223,7 @@ function printHuman(topic: string | undefined, service: GuideServiceStates): voi
     out.push("");
     out.push("Service: " + service.service.note);
     out.push("");
-    out.push("Topics: 0sec guide <capability-id> | 0sec guide architecture | 0sec guide limits | 0sec guide --json");
+    out.push("Topics: 0sec guide <capability-id> | 0sec guide commands | 0sec guide \"auth login\" | 0sec guide architecture | 0sec guide limits | 0sec guide --json");
     out.push("Refresh after upgrade; this guide is versioned with the CLI.");
   } else if (topic === "architecture") {
     out.push(`Lifecycle: ${ARCHITECTURE.lifecycle.join(" → ")}`);
@@ -195,16 +232,22 @@ function printHuman(topic: string | undefined, service: GuideServiceStates): voi
   } else if (topic === "limits") {
     for (const l of ARCHITECTURE.limitations) out.push(`  - ${l}`);
     for (const c of CAPABILITIES.filter((x) => x.limitations)) out.push(`  - [${c.id}] ${c.limitations}`);
+  } else if (topic === "commands") {
+    for (const command of commands) out.push(`${commandPath(command)} — ${command.description()}`);
+    out.push("Use 0sec guide \"<command path>\" for its registered arguments and options.");
   } else {
     const cap = CAPABILITIES.find((c) => c.id === topic);
-    if (!cap) throw new InvalidArgumentError(`Unknown topic '${topic}'. Run 0sec guide for the list.`);
-    out.push(`${cap.id} [${cap.layer}]`);
-    out.push(cap.summary);
-    out.push("");
-    out.push(`When: ${cap.when}`);
-    if (cap.command) out.push(`Run: ${cap.command}`);
-    if (cap.requiresAuth) out.push("Requires: 0sec auth login");
-    if (cap.limitations) out.push(`Limitations: ${cap.limitations}`);
+    const command = commands.find((c) => commandPath(c).replace(/^0sec /, "") === topic);
+    if (cap) {
+      out.push(`${cap.id} [${cap.layer}]`);
+      out.push(cap.summary);
+      out.push("");
+      out.push(`When: ${cap.when}`);
+      if (cap.command) out.push(`Run: ${cap.command}`);
+      if (cap.requiresAuth) out.push("Requires: 0sec auth login and the relevant service access");
+      if (cap.limitations) out.push(`Limitations: ${cap.limitations}`);
+    }
+    if (command) out.push(command.helpInformation());
   }
   process.stdout.write(out.join("\n") + "\n");
 }
@@ -213,7 +256,7 @@ export function registerGuideCommand(program: Command): void {
   program
     .command("guide")
     .description("Agent-readable product and capability guide (versioned; use --json for machines)")
-    .argument("[topic]", "capability id, 'architecture', or 'limits'")
+    .argument("[topic]", "capability id, command path, 'commands', 'architecture', or 'limits'")
     .option("--format <format>", "Output format: human or json", "human")
     .option("--json", "Shorthand for --format json", false)
     .action(async (topic: string | undefined, opts: { format: string; json: boolean }) => {
@@ -221,8 +264,15 @@ export function registerGuideCommand(program: Command): void {
       if (format !== "human" && format !== "json") {
         throw new InvalidArgumentError("--format must be human or json.");
       }
+      const commands = collectCommands(program);
+      const capability = CAPABILITIES.find((c) => c.id === topic);
+      const command = commands.find((c) => commandPath(c).replace(/^0sec /, "") === topic);
+      if (topic && !capability && !command && !["commands", "architecture", "limits"].includes(topic)) {
+        throw new InvalidArgumentError(`Unknown topic '${topic}'. Run 0sec guide for the list.`);
+      }
       const service = states(await probeService(), {
-        note: "Entitlements are resolved by the service at dispatch; this CLI does not cache plan state.",
+        status: "unknown",
+        note: "Health does not verify account identity or entitlement. Product access is resolved by its service endpoint.",
       });
       if (format === "json") {
         process.stdout.write(
@@ -230,8 +280,10 @@ export function registerGuideCommand(program: Command): void {
             {
               version: VERSION,
               product: "0security (open engine + CLI); 0cloud by 0security (hosted platform)",
-              capabilities: CAPABILITIES,
-              architecture: ARCHITECTURE,
+              capabilities: topic ? (capability ? [capability] : []) : CAPABILITIES,
+              commands: (topic && topic !== "commands" ? (command ? [command] : []) : commands).map(commandMetadata),
+              architecture: !topic || topic === "architecture" ? ARCHITECTURE : undefined,
+              limitations: topic === "limits" ? ARCHITECTURE.limitations : undefined,
               states: service,
             },
             null,
@@ -240,6 +292,6 @@ export function registerGuideCommand(program: Command): void {
         );
         return;
       }
-      printHuman(topic, service);
+      printHuman(topic, service, commands);
     });
 }

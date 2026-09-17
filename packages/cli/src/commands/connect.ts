@@ -29,7 +29,6 @@ import {
   loadCloudCredentials,
   CloudAuthMissingError,
   CloudForbiddenError,
-  CloudNetworkError,
 } from "@0sec/core";
 
 // ── types ──
@@ -79,7 +78,7 @@ interface ConnectJsonResult {
  * Shape returned by the proposed cloud enrollment-readiness endpoint.
  * PROPOSED: GET /api/enrollment/status?target=<repo>
  * Expected 200: { authenticated: true, org: { id, name, slug }, installation: { installed, install_url? }, repo_accessible: boolean }
- * Expected 4xx/5xx: the endpoint is not yet deployed — caller falls back gracefully.
+ * Missing or failed checks block enrollment; health alone is not authorization.
  */
 interface EnrollmentStatusResponse {
   authenticated: boolean;
@@ -92,7 +91,7 @@ interface EnrollmentStatusResponse {
  * Shape returned by the proposed schedule-lookup endpoint.
  * PROPOSED: GET /api/scan-schedules?target=<repo>
  * Expected 200: { schedules: [{ id, cron_expression, next_run_at, target_id }] }
- * Expected 404: endpoint not yet deployed.
+ * A failed lookup cannot be treated as an empty list.
  */
 interface ScheduleListResponse {
   schedules: Array<{
@@ -102,6 +101,13 @@ interface ScheduleListResponse {
     target_id: string;
     publication_policy?: string;
   }>;
+}
+
+interface ExistingSchedule {
+  id: string;
+  cron: string;
+  next_run_at: string | null;
+  publication_policy?: string;
 }
 
 // ── repo resolution ──
@@ -210,10 +216,8 @@ function detectTestCommandClone(repoUrl: string): { command: string; source: str
  * PROPOSED CLOUD ENDPOINT: GET /api/enrollment/status?target=<repo>
  * This endpoint resolves the repo URL, checks the operator's org membership,
  * verifies the org's GitHub App installation covers the repo, and returns
- * the combined status. When the endpoint is not yet deployed, we return
- * an ok placeholder so the implementation is forward-compatible.
- *
- * Future iterations should drop the catch-all and let errors propagate.
+ * the combined status. Missing, failed or malformed readiness responses block
+ * dispatch. Never infer authorization from a reachable health endpoint.
  */
 async function checkEnrollmentReadiness(
   client: CloudClient,
@@ -224,30 +228,32 @@ async function checkEnrollmentReadiness(
     const status = await client.getJson<EnrollmentStatusResponse>(
       `/api/enrollment/status?target=${encodedTarget}`,
     );
-    if (!status.authenticated) {
+    if (status.authenticated !== true) {
       return { ok: false, reason: "not-authenticated" };
     }
-    if (!status.installation.installed) {
+    if (typeof status.org?.id !== "string" || !status.org.id
+      || typeof status.org.slug !== "string" || !status.org.slug) {
+      return { ok: false, reason: "enrollment-check-failed" };
+    }
+    if (status.installation?.installed !== true) {
       return {
         ok: false,
         reason: "github-app-not-installed",
-        action_url: status.installation.install_url ?? `${client["host"]}/cloud/install`,
+        action_url: status.installation?.install_url
+          ?? `${client["host"]}/${encodeURIComponent(status.org.slug)}/integrations`,
       };
     }
-    if (!status.repo_accessible) {
+    if (status.repo_accessible !== true) {
       return { ok: false, reason: "repo-not-accessible" };
     }
     return { ok: true, status };
   } catch (err) {
-    // PROPOSED ENDPOINT: if the endpoint returns 404/501 or the path is unknown,
-    // the cloud hasn't deployed it yet. Fall through so we can still connect;
-    // the cloud will validate access at scan-creation time.
-    // When this endpoint is deployed, remove this catch-all and let
-    // CloudNetworkError/CloudUnauthorizedError/CloudForbiddenError propagate.
-    if (err instanceof CloudNetworkError) throw err;
-    if (err instanceof CloudUnauthorizedError) throw err;
-    if (err instanceof CloudForbiddenError) throw err;
-    return { ok: true, status: { authenticated: true, org: { id: "", name: "", slug: "" }, installation: { installed: true }, repo_accessible: true } };
+    return {
+      ok: false,
+      reason: err instanceof CloudUnauthorizedError ? "token-rejected"
+        : err instanceof CloudForbiddenError ? "enrollment-forbidden"
+        : "enrollment-check-failed",
+    };
   }
 }
 
@@ -255,52 +261,25 @@ async function checkEnrollmentReadiness(
  * Check for an existing scan schedule for the target repo.
  *
  * PROPOSED CLOUD ENDPOINT: GET /api/scan-schedules?target=<repo>
- * Returns existing schedules for this repo. When the endpoint is not yet
- * deployed, return null — the POST will be idempotent on the server side.
+ * A lookup failure must reach the caller before it can dispatch new work.
  */
 async function findExistingSchedule(
   client: CloudClient,
   repo: string,
-): Promise<{ id: string; cron: string; next_run_at: string | null; publication_policy?: string } | null> {
+): Promise<ExistingSchedule | null> {
   const encodedTarget = encodeURIComponent(repo);
-  try {
-    const result = await client.getJson<ScheduleListResponse>(
-      `/api/scan-schedules?target=${encodedTarget}`,
-    );
-    if (result.schedules && result.schedules.length > 0) {
-      const s = result.schedules[0]!;
-      return { id: s.id, cron: s.cron_expression, next_run_at: s.next_run_at, publication_policy: s.publication_policy };
-    }
-    return null;
-  } catch {
-    // PROPOSED ENDPOINT: not yet deployed — assume no existing schedule.
-    return null;
+  const result = await client.getJson<ScheduleListResponse>(
+    `/api/scan-schedules?target=${encodedTarget}`,
+  );
+  if (!Array.isArray(result?.schedules)) {
+    throw new Error("Invalid schedule-list response.");
   }
-}
-
-/**
- * Initiate a GitHub App install authorization via the browser poll flow.
- * Mirrors auth.ts hostedBrowserLoginFlow, scoped to repo-level access.
- *
- * PROPOSED CLOUD ENDPOINT: GET /cli-connect/sessions/<session>
- * Returns { status: "pending"|"ready"|"expired", install_url?: string } on 200.
- * The session is created when the operator visits /cli-connect?session=<s>&repo=<r>.
- *
- * Until deployed, we return action-required with the manual install URL.
- * Future implementation: use randomBytes(9).toString("base64url") for session id,
- * open browser to /cli-connect?session=<s>&repo=<r>, poll /cli-connect/sessions/<s>,
- * and return ok when status is "ready".
- */
-async function connectBrowserFlow(
-  client: CloudClient,
-  repo: string,
-): Promise<{ ok: true } | { ok: false; error: string; action_url?: string }> {
-  // Remove this early-return once the cloud provides the session-mint flow.
-  return {
-    ok: false,
-    error: "GitHub App authorization is needed. Visit the organization settings to install the 0sec GitHub App on this repository.",
-    action_url: `${client["host"]}/cloud/install?repo=${encodeURIComponent(repo)}`,
-  };
+  const s = result.schedules[0];
+  if (result.schedules.length === 0) return null;
+  if (!s || typeof s.id !== "string" || !s.id || typeof s.cron_expression !== "string") {
+    throw new Error("Invalid schedule in lookup response.");
+  }
+  return { id: s.id, cron: s.cron_expression, next_run_at: s.next_run_at, publication_policy: s.publication_policy };
 }
 
 // ── interactive confirm ──
@@ -481,7 +460,24 @@ export async function runConnect(repoArg: string | undefined, opts: ConnectActio
   }
 
   // ── 5. Check for existing schedule (idempotent reconnect) ──
-  const existingSchedule = await findExistingSchedule(client, repoUrl);
+  let existingSchedule: ExistingSchedule | null;
+  try {
+    existingSchedule = await findExistingSchedule(client, repoUrl);
+  } catch (lookupError) {
+    const message = `Could not check existing schedules: ${lookupError instanceof Error ? lookupError.message : String(lookupError)}. No scan was started.`;
+    if (isJson) {
+      out(JSON.stringify({
+        state: "action-required",
+        repo: repoUrl,
+        reason: "schedule-lookup-failed",
+        message,
+      } satisfies ConnectJsonResult));
+    } else {
+      err(chalk.red(message));
+    }
+    process.exitCode = 2;
+    return;
+  }
   if (existingSchedule) {
     if (isJson) {
       out(JSON.stringify({
@@ -535,14 +531,25 @@ export async function runConnect(repoArg: string | undefined, opts: ConnectActio
 
   // ── 7. Policy confirmation ──
   const publicationPolicy = opts.publicationPolicy ?? "off";
-  if (!opts.yes && !isJson) {
+  if (!opts.yes && isJson) {
+    out(JSON.stringify({
+      state: "action-required",
+      repo: repoUrl,
+      reason: "confirmation_required",
+      test_command: testCommand,
+      message: `Review the test command, schedule (${opts.schedule ? opts.cron : "one-shot"}), publication policy (${publicationPolicy}) and per-run budget (${opts.costCeiling === undefined ? "service limits" : `USD ${opts.costCeiling}`}). Rerun with --yes to approve before starting work.`,
+    } satisfies ConnectJsonResult));
+    process.exitCode = 2;
+    return;
+  }
+  if (!opts.yes) {
     err([
       "",
       chalk.bold("Review configuration:"),
       `  Test command:         ${testCommand}`,
       `  Schedule:             ${opts.schedule ? opts.cron : "none (one-shot)"}`,
       `  Publication policy:   ${publicationPolicy}`,
-      opts.costCeiling ? `  Monthly budget (USD): ${opts.costCeiling}` : "",
+      opts.costCeiling ? `  Per-run budget (USD): ${opts.costCeiling}` : "",
       "",
     ].filter(Boolean).join("\n"));
 
@@ -593,23 +600,34 @@ export async function runConnect(repoArg: string | undefined, opts: ConnectActio
   // ── 9. Create schedule ──
   let scheduleResult: { id: string; next_run_at: string | null } | null = null;
   if (opts.schedule) {
-    if (!scan.target_id) {
-      if (!isJson) err(` ${chalk.yellow("Scan created without a target id — skipping schedule.\n")}`);
-    } else {
-      try {
-        scheduleResult = await client.postJson<{ id: string; next_run_at: string | null }>(
-          "/api/scan-schedules",
-          {
-            target_id: scan.target_id,
-            cron_expression: opts.cron,
-            scan_mode: "secure",
-            secure_config: secureConfig,
-          },
-        );
-      } catch (scheduleError) {
-        const errorMessage = scheduleError instanceof Error ? scheduleError.message : String(scheduleError);
-        if (!isJson) err(` ${chalk.yellow(`Schedule creation failed: ${errorMessage}\n`)}`);
+    try {
+      if (!scan.target_id) throw new Error("The created scan has no target id.");
+      scheduleResult = await client.postJson<{ id: string; next_run_at: string | null }>(
+        "/api/scan-schedules",
+        {
+          target_id: scan.target_id,
+          cron_expression: opts.cron,
+          scan_mode: "secure",
+          secure_config: secureConfig,
+        },
+      );
+      if (!scheduleResult?.id) throw new Error("Schedule creation returned no schedule id.");
+    } catch (scheduleError) {
+      const message = `Scan ${scan.id} was created, but recurrence could not be confirmed: ${scheduleError instanceof Error ? scheduleError.message : String(scheduleError)}. Inspect this scan before retrying enrollment to avoid duplicate work.`;
+      if (isJson) {
+        out(JSON.stringify({
+          state: "action-required",
+          repo: repoUrl,
+          reason: "schedule-creation-failed",
+          scan_id: scan.id,
+          test_command: testCommand,
+          message,
+        } satisfies ConnectJsonResult));
+      } else {
+        err(chalk.red(message));
       }
+      process.exitCode = 1;
+      return;
     }
   }
 

@@ -7,7 +7,7 @@ tableOfContents:
 ---
 
 Find the command, arguments, and options for your task. This reference covers
-**59 top-level commands** and their registered subcommands.
+**60 top-level commands** and their registered subcommands.
 
 For a worked example, start with [Scan Workflows](/scan-workflows/),
 [Console](/console/), or [Research Workflows](/research-workflows/).
@@ -2770,42 +2770,109 @@ Check configured control-plane credentials against `/health`.
 0sec auth status
 ```
 
-### connect
+### guide
 
-Connect an authorized repository to managed Cloud security runs: start a
-`secure` run immediately, then create a recurring schedule.
+Discover the installed CLI's capabilities, execution boundaries and command
+contracts. Hosted inference with local tools and managed security execution are
+separate paths. Use `0sec --help` to check whether your installed build contains
+`guide`; its addition follows the v0.18.0 release.
 
 ```text
-0sec connect [options] <repo>
+0sec guide [options] [topic]
 ```
 
-Authenticate once, then connect the repository:
+```bash
+0sec guide
+0sec guide hosted-inference
+0sec guide commands --json
+0sec guide "auth login" --json
+```
+
+The command catalogue is generated from the registered Commander tree, including
+nested commands, arguments, options and aliases. Capability prose explains when
+to use a workflow. Refresh the guide after updating the CLI; do not infer command
+availability from a separate copied onboarding prompt.
+
+JSON output distinguishes installed capabilities, service health and account
+state. A successful health probe means only that the endpoint answered. Account
+identity, repository access, product entitlement and funding remain unknown
+until checked by their service endpoints. `guide` does not authorize or start a
+run. Unknown topics fail before probing the service.
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `topic` | No | capability id, command path, 'commands', 'architecture', or 'limits' |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--format <format>` | `human` | Output format: human or json |
+| `--json` | `false` | Shorthand for --format json |
+
+### connect
+
+Request a managed `secure` run and optional recurrence for an authorized
+repository. Readiness and schedule lookups must succeed before creating work.
+Unavailable enrollment APIs block dispatch rather than assuming authorization.
+
+```text
+0sec connect [options] [repo]
+```
+
+Authenticate, then review and approve the connection:
 
 ```bash
 0sec auth login
-0sec connect https://github.com/org/repo
+0sec connect https://github.com/org/repo --test-command "npm test"
 ```
 
-The repository must be an HTTPS Git URL you own or are authorized to assess.
-When `--test-command` is omitted, the CLI makes a temporary shallow clone and
-detects a regression command from Node package scripts, a Makefile, Python
-project files, Cargo, or Go. If detection fails, supply `--test-command`;
-`--setup-command` specifies setup or build work before the remote tests.
+With no repository argument, the CLI reads the current checkout's `origin`
+remote. SSH-style Git remotes are normalized to HTTPS. You must own the target
+or be authorized to assess it. When `--test-command` is omitted, the detector
+can use a temporary shallow clone to inspect Node package scripts, a Makefile,
+Python project files, Cargo or Go. Prefer an explicit regression command when
+automatic detection is unsuitable. `--setup-command` specifies setup/build work.
 
-Scheduling defaults to daily at 03:00 UTC. Use `--cron` to change the schedule,
-or `--no-schedule` for only the immediate run. The CLI prints the first run's
-Cloud URL and the created schedule's next run time. If the scan has no target
-ID, it warns and skips schedule creation.
+For a noninteractive agent, request JSON and inspect any required action first:
 
-Managed runs retain verified patches and evidence for review; this command
-does not publish pull requests. Model-provider access and per-run
-`--cost-ceiling` are separate from the CLI's Cloud authentication.
+```bash
+0sec connect --format json --test-command "npm test"
+# After reviewing the scope, cadence, per-run budget and publication policy:
+0sec connect --format json --test-command "npm test" --yes
+```
+
+JSON mode without `--yes` returns `action-required` with
+`reason: "confirmation_required"` before starting new work. An existing
+connection may return `no-open` because it creates no new work. Missing GitHub
+App access returns an installation URL where available; this browser handoff
+does not claim that a browser-poll enrollment session is implemented.
+
+Scheduling defaults to daily at 03:00 UTC. Use `--cron` to change it, or
+`--no-schedule` for an approved one-shot run. The per-run `--cost-ceiling` is
+not a monthly subscription allowance.
+
+| JSON state | Meaning |
+| --- | --- |
+| `ready` | The scan was created and requested recurrence was confirmed. |
+| `no-open` | An existing schedule was found; no new work was created. |
+| `action-required` | Enrollment, authorization, approval or an operation failed; inspect `reason` and `message`. |
+
+Readiness and schedule-lookup failures exit with status 2 and create no work.
+If a scan was created but scheduling failed or no target ID was returned,
+the command exits 1 with `action-required`, `reason: "schedule-creation-failed"`
+and the existing `scan_id`. Inspect that scan before retrying; it is not rolled
+back and blindly retrying can duplicate work. Terminal mode also reports this
+partial outcome without a connected-success banner.
+
+`--publication-policy off|manual|auto` requests the service's repair-publication
+policy. Service support, access and independently verified repair evidence are
+separate requirements; the flag is not proof of a working publication path.
+This command does not directly publish a PR or automatically merge one.
 
 Guide: [Cloud authentication](/api-keys/).
 
 | Argument | Required | Description |
 | --- | --- | --- |
-| `repo` | Yes | HTTPS git URL of the repository you own or are authorized to assess |
+| `repo` | No | HTTPS git URL of the repository (default: current directory's git remote origin) |
 
 | Option | Registered default | Description |
 | --- | --- | --- |
@@ -2815,6 +2882,9 @@ Guide: [Cloud authentication](/api-keys/).
 | `--cost-ceiling <usd>` | — | Per-run model cost ceiling in USD |
 | `--cron <expression>` | `0 3 * * *` | Recurring schedule (cron). Default: daily at 03:00 UTC |
 | `--no-schedule` | — | Only run once, do not install a recurring schedule |
+| `--format <fmt>` | `terminal` | Output format: terminal \| json |
+| `--publication-policy <policy>` | `off` | Publication policy: off \| manual \| auto. Default: off |
+| `--yes` | — | Skip interactive confirmation before scheduling |
 
 ## XBOW benchmark runner
 

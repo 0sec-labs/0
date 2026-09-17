@@ -12,6 +12,19 @@ on the published npm package and the GitHub Release tag.
 
 ## [Unreleased]
 
+### Fixed
+
+- Fail closed when `connect` cannot establish enrollment readiness or inspect
+  existing schedules. Missing/malformed endpoints no longer fabricate repository
+  authorization. GitHub App installation remains an action-required handoff.
+- Require explicit `--yes` approval for new work in JSON mode. A failed
+  recurrence operation preserves the created scan ID and reports incomplete
+  enrollment instead of success. The budget confirmation describes a per-run
+  ceiling, not a monthly allowance.
+- Keep guide account state unknown after a health response. Add hosted inference
+  as a separate service capability, discover command contracts from registered
+  metadata, and reject unknown JSON topics consistently with human output.
+
 ## [0.18.0] - 2026-09-16
 
 ### Added
