@@ -12,6 +12,13 @@ on the published npm package and the GitHub Release tag.
 
 ## [Unreleased]
 
+## [0.19.0] - 2026-09-18
+
+### Added
+
+- `0sec guide` provides an agent-readable product and capability reference,
+  with command contracts discovered from registered CLI metadata.
+
 ### Security
 
 - Move automatic HTTP target classification after engagement-scope admission.
