@@ -270,6 +270,68 @@ After evaluation passes, a candidate enters canary:
   destination. Rollback preserves the retired version's snapshot and receipt in
   the registry alongside the parent.
 
+### Worker admission and scale
+
+Source-evolution workers and executable-plugin guests share one admission gate
+per controller process, across Docker and smolvm. It reserves worker slots,
+configured guest memory, and CPU until teardown completes. It does not pool or
+reuse guest state. Evaluation cases still run sequentially in fresh guests.
+
+Set these environment variables before the controller's first worker starts:
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `0SEC_WORKER_MAX_ACTIVE` | `4` | Maximum active guest reservations |
+| `0SEC_WORKER_MAX_QUEUED` | `64` | Maximum waiting root calls |
+| `0SEC_WORKER_MEMORY_MB` | Half of available process memory, capped at `8192` MiB and floored at `32` MiB | Aggregate guest-memory budget |
+| `0SEC_WORKER_CPUS` | Node's available parallelism | Aggregate configured guest CPU budget |
+
+Overrides must be positive finite numbers; all except CPU must be integers.
+A request larger than its resource budget fails immediately. Root calls wait
+in FIFO order; a full queue rejects new work. The existing execution timeout
+covers queue wait, preparation, and execution. Queue time is not added to the
+backend execution duration used for compute-cost accounting.
+
+Cancellation removes queued calls before they can boot. Active reservations
+remain held while the backend cancels and cleans up. A nested plugin call
+gets its own reservation immediately or fails for insufficient capacity:
+it never waits behind a parent that is holding the resources it needs.
+
+Unconfirmed teardown stops further admissions and rejects queued work.
+Inspect the reported container or retained smolvm run directory, verify that
+the remaining guest resources have been removed, then restart the controller.
+An elapsed cleanup timeout is not proof that resources were released.
+
+This is **not a host-wide or distributed scheduler**. Multiple controllers
+need explicit per-process budgets whose sum leaves room for host/runtime
+overhead, plus host or orchestrator resource limits. For a remote Docker daemon,
+configure budgets for the worker host rather than relying on controller-host
+defaults. Plugin metadata operations such as listing and rollback do not boot
+guests; admitting new plugin code does, because validation imports that code.
+
+#### Runtime cost qualification
+
+A local Linux/KVM measurement on 2026-09-17 used the same cached Node 24 Alpine
+image, one CPU and 512 MiB per guest, non-root execution, no guest network,
+and read-only snapshots through the actual sandbox APIs. Three sequential
+short jobs per backend, with alternating backend order, measured:
+
+| Backend | End-to-end duration range |
+|---|---|
+| Docker | 297–318 ms |
+| smolvm 1.14.6 | 2.72–3.69 s |
+
+These are small-fixture lifecycle timings on one i9-13900 host, not fleet
+throughput, production-toolbox timings, or isolated kernel-boot measurements.
+The same qualification exercised 26 guests, nested calls, a two-worker
+ceiling, cancellation, source immutability and fresh guest state, with no
+new containers or smolvm staging directories left afterward.
+
+Docker remains the default. Choose smolvm for its separate guest kernel,
+not an assumed speedup. Do not share dirty guests between evaluation cases
+or tenants to remove startup cost. No Rust rewrite or warm-pool performance
+claim follows from these measurements.
+
 ### Runtime prerequisites
 
 With the default Docker backend, the config's `image` must be:
