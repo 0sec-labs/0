@@ -1,4 +1,6 @@
-//! Explicit read-only cloud metadata client. No credential discovery or engine configuration.
+//! Explicit cloud metadata and hosted login transport. No credential discovery or writes.
+mod login;
+pub use login::{LoginCredential, LoginError, LoginOptions, LoginSession};
 mod models;
 pub use models::*;
 use reqwest::{

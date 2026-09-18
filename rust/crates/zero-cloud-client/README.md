@@ -42,3 +42,45 @@ No uploads, account mutations, live-account requests or paid inference are
 implemented. Tests use localhost listeners for routes/headers, nested errors,
 normalization, actual redirect isolation, no retries, byte limits, cancellation
 and deadlines. Run `cargo test -p zero-cloud-client --locked`.
+
+## Hosted browser login transport
+
+`LoginSession::new(host, LoginOptions::default())` implements the existing hosted
+browser-session flow in `packages/cli/src/commands/auth.ts`, not an OAuth device
+code protocol. Construction makes no requests. `browser_url()` is the explicit
+user-facing URL `<host>/cli-auth?session=ID`; `wait(cancellation)` consumes the
+session and polls unauthenticated `GET <host>/cli-auth/sessions/ID`. The ID is nine
+cryptographically random bytes encoded into 12 base64url characters, matching the
+legacy client's 72-bit entropy and shape. No server implementation or independent
+server TTL contract is present in this checkout.
+
+Default limits match the legacy client: 150 attempts, a two-second wait before
+each request, a five-minute overall deadline, and ten seconds per request. The
+native overall deadline starts at session construction, including time spent
+showing/opening the browser URL. Configurable limits are bounded to 150 attempts,
+30-second intervals, five minutes overall, ten seconds/request and 64 KiB bodies;
+interval and timeouts must be positive. HTTP 202/204/404 and JSON `status: pending`
+continue polling. HTTP 410 or JSON `status: expired` stops as expired. A ready
+response accepts `token` or the legacy `access_token` alias; an absent status is
+accepted for compatible receivers. A token paired with any non-ready explicit
+status is rejected. Tokens must be valid bounded header values without internal
+whitespace or controls. No response-supplied polling interval is interpreted.
+
+Only pending responses are polled again. Redirects, rate limits (429), server
+errors and malformed/oversized responses are terminal; `recoverable()` reports
+whether a caller may offer a separate new login. Retry-After is not automatically
+followed. Unlike the legacy client's transport-error continuation, native network
+errors and per-request timeouts stop immediately. There are no automatic HTTP
+retries. Hosts require HTTPS except loopback HTTP and cannot contain URL
+credentials, query or fragment. Errors never include request URLs, session IDs,
+response bodies or credentials.
+
+`LoginCredential` exposes its host and `expose_token()` only through explicit
+accessors and implements neither Debug nor Serialize; the same applies to the
+session. This library never opens a browser, reads or writes credentials, invokes
+shells, claims inference availability, or calls a live login service in tests.
+Callers must deliberately display the login URL and handle the returned credential
+privately. The credential remains an ordinary in-memory string, without a claim
+of memory zeroization. Localhost tests cover the actual routes, pending/ready and
+expiry, legacy aliases, early-token rejection, rate/outage termination, redirects,
+limits, cancellation, and secret-free diagnostics.
