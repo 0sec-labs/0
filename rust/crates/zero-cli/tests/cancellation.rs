@@ -31,6 +31,7 @@ async fn receive(stdout: &mut BufReader<ChildStdout>) -> Value {
 
 // This fixture tests CLI cancellation orchestration, not real Docker isolation.
 enum Stop {
+    Admission,
     Request,
     Eof,
     Signal,
@@ -108,9 +109,22 @@ esac
         Some(json!({"session_id":session,"command_id":"command","request":request})),
     )
     .await;
-    let started = receive(&mut output).await;
-    assert_eq!(started["event"]["type"], "started", "{started}");
-    if matches!(stop, Stop::Request) {
+    let admitted = receive(&mut output).await;
+    assert_eq!(admitted["event"]["type"], "admitted", "{admitted}");
+    assert_eq!(admitted["event"]["session_id"], session);
+    assert_eq!(admitted["event"]["command_id"], "command");
+    assert_eq!(admitted["event"]["execution_id"], "cancel-test");
+    assert!(
+        !admitted["event"]["operation_id"]
+            .as_str()
+            .unwrap()
+            .is_empty()
+    );
+    if !matches!(stop, Stop::Admission) {
+        let started = receive(&mut output).await;
+        assert_eq!(started["event"]["type"], "started", "{started}");
+    }
+    if matches!(stop, Stop::Request | Stop::Admission) {
         send(
             &mut input,
             4,
@@ -128,7 +142,19 @@ esac
             }
             if message["id"] == 3 {
                 assert_eq!(message["reply"]["result"]["status"], "cancelled");
-                assert_eq!(message["reply"]["result"]["cleanup"]["status"], "confirmed");
+                assert_eq!(
+                    message["reply"]["operation"]["id"],
+                    admitted["event"]["operation_id"]
+                );
+                assert_eq!(message["reply"]["operation"]["status"], "cancelled");
+                let cleanup = message["reply"]["result"]["cleanup"]["status"]
+                    .as_str()
+                    .unwrap();
+                if matches!(stop, Stop::Admission) {
+                    assert!(matches!(cleanup, "not_created" | "confirmed"));
+                } else {
+                    assert_eq!(cleanup, "confirmed");
+                }
                 finished = true;
             }
         }
@@ -166,7 +192,9 @@ esac
         .unwrap()
         .unwrap();
     assert!(status.success());
-    assert!(dir.path().join("removed").exists());
+    if !matches!(stop, Stop::Admission) {
+        assert!(dir.path().join("removed").exists());
+    }
     // Transport reconnection must not replay the cancelled external effect.
     let retry = Command::new(env!("CARGO_BIN_EXE_0sec-native"))
         .arg("--state")
@@ -204,4 +232,9 @@ async fn eof_cancels_execution_and_waits_for_confirmed_cleanup() {
 #[tokio::test]
 async fn sigterm_cancels_execution_before_exiting() {
     exercise(Stop::Signal).await;
+}
+
+#[tokio::test]
+async fn cancellation_after_durable_admission_is_accepted_and_settled() {
+    exercise(Stop::Admission).await;
 }

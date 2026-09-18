@@ -30,6 +30,8 @@ zero-executor = { path = "crates/zero-executor" }
 zero-evidence = { path = "crates/zero-evidence" }
 zero-engine = { path = "crates/zero-engine" }
 zero-provider = { path = "crates/zero-provider" }
+zero-sandbox = { path = "crates/zero-sandbox" }
+zero-smolvm = { path = "crates/zero-smolvm" }
 
 [workspace.lints.rust]
 unsafe_code = "deny"

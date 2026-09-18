@@ -70,6 +70,11 @@ pub enum Command {
         command_id: String,
         request: ExecutionRequest,
     },
+    RunSandbox {
+        session_id: String,
+        command_id: String,
+        request: sandbox::SandboxRequest,
+    },
     RunAgent {
         session_id: String,
         command_id: String,
@@ -165,6 +170,11 @@ pub enum Reply {
     Execution {
         operation: Operation,
         result: Option<ExecutionResult>,
+        duplicate: bool,
+    },
+    Sandbox {
+        operation: Operation,
+        result: Option<sandbox::SandboxResult>,
         duplicate: bool,
     },
     Agent {

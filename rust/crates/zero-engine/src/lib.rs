@@ -2,6 +2,7 @@
 mod agent;
 mod inference;
 mod lifecycle;
+mod sandbox;
 
 use std::{
     collections::HashMap,
@@ -47,6 +48,7 @@ struct Shared {
     control: Mutex<Control>,
     changed: Notify,
     executor: Arc<DockerExecutor>,
+    sandbox: Arc<zero_sandbox::SandboxExecutor>,
     providers: Mutex<HashMap<String, inference::Profile>>,
     owner: String,
     // Retained by workers even when the client handle is dropped.
@@ -103,6 +105,25 @@ impl Drop for WorkerGuard {
     }
 }
 
+fn emit_admission(
+    events: &mpsc::Sender<ExecutionEvent>,
+    operation: &zero_protocol::Operation,
+    execution_id: &str,
+    cancel: &CancellationToken,
+) {
+    if events
+        .try_send(ExecutionEvent::Admitted {
+            session_id: operation.session_id.clone(),
+            command_id: operation.command_id.clone(),
+            operation_id: operation.id.clone(),
+            execution_id: execution_id.into(),
+        })
+        .is_err()
+    {
+        cancel.cancel();
+    }
+}
+
 pub struct Engine {
     shared: Arc<Shared>,
 }
@@ -118,16 +139,29 @@ impl Engine {
         path: impl AsRef<Path>,
         docker_binary: Option<PathBuf>,
     ) -> Result<Self, EngineError> {
+        Self::open_with_backends(path, docker_binary, None)
+    }
+    pub fn open_with_backends(
+        path: impl AsRef<Path>,
+        docker_binary: Option<PathBuf>,
+        smolvm_binary: Option<PathBuf>,
+    ) -> Result<Self, EngineError> {
         let (store, owner, file) = lifecycle::open_owned_store(path.as_ref())?;
         let executor = docker_binary
             .map(DockerExecutor::with_binary)
             .unwrap_or_default();
+        let mut smolvm = zero_smolvm::SmolvmConfig::default();
+        if let Some(binary) = smolvm_binary {
+            smolvm.binary = binary;
+        }
+        let sandbox = zero_sandbox::SandboxExecutor::with_backends(executor.clone(), smolvm);
         Ok(Self {
             shared: Arc::new(Shared {
                 store: Mutex::new(store),
                 control: Mutex::new(Control::default()),
                 changed: Notify::new(),
                 executor: Arc::new(executor),
+                sandbox: Arc::new(sandbox),
                 providers: Mutex::new(HashMap::new()),
                 owner,
                 _lock: file,
@@ -140,6 +174,8 @@ impl Engine {
             "native_session_journal",
             "idempotent_execution_admission",
             "offline_docker_snapshot",
+            "offline_sandbox_snapshot",
+            "operation_admission_events",
             "execution_cancellation",
             "finding_reconciliation",
             "responses_inference",
@@ -176,6 +212,16 @@ impl Engine {
                 .execute(session_id, command_id, request, event_tx)
                 .await;
         }
+        if let Command::RunSandbox {
+            session_id,
+            command_id,
+            request,
+        } = command
+        {
+            return self
+                .run_sandbox(session_id, command_id, request, event_tx)
+                .await;
+        }
         if let Command::RunAgent {
             session_id,
             command_id,
@@ -195,7 +241,14 @@ impl Engine {
         } = command
         {
             return self
-                .infer(session_id, command_id, provider, request, reservation)
+                .infer(
+                    session_id,
+                    command_id,
+                    provider,
+                    request,
+                    reservation,
+                    event_tx,
+                )
                 .await;
         }
         let mut control = lock(&self.shared.control)?;
@@ -281,7 +334,10 @@ impl Engine {
             Command::Reconcile(request) => zero_evidence::reconcile(request)
                 .map(Reply::Reconciled)
                 .map_err(|e| EngineError::State(e.to_string())),
-            Command::Execute { .. } | Command::Infer { .. } | Command::RunAgent { .. } => {
+            Command::Execute { .. }
+            | Command::Infer { .. }
+            | Command::RunAgent { .. }
+            | Command::RunSandbox { .. } => {
                 unreachable!("execution dispatched before acquiring synchronous locks")
             }
         }
@@ -343,6 +399,7 @@ impl Engine {
                     cancel: cancel.clone(),
                 },
             );
+            emit_admission(&event_tx, &operation, &request.execution_id, &cancel);
             let (sender, receiver) = oneshot::channel();
             let shared = Arc::clone(&self.shared);
             tokio::spawn(async move {

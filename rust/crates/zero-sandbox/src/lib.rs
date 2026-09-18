@@ -72,6 +72,9 @@ impl SandboxExecutor {
                 let identity = resolved.clone();
                 let image = image.clone();
                 let events = Arc::new(move |event| match event {
+                    // Admission is emitted by the engine, never the Docker primitive.
+                    ExecutionEvent::Admitted { .. } => {}
+                    ExecutionEvent::Sandbox { event } => sink(event),
                     ExecutionEvent::Started {
                         execution_id,
                         image_id,

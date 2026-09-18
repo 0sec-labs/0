@@ -158,3 +158,25 @@ it into the appropriate wire shape and requests streamed usage. Both `infer`
 and `agent` honor the profile's wire choice. Localhost tests cover Chat usage
 settlement, exact retries, and a two-turn rejected-tool/reasoning replay without
 running any container tools.
+
+## Explicit shared sandbox backend
+
+```sh
+0sec-native --docker-bin /path/to/docker --smolvm-bin /path/to/smolvm sandbox --session SESSION_ID --command-id UNIQUE_ID --request sandbox.json
+```
+
+`sandbox` accepts the shared `SandboxRequest` schema: the snapshot/program/limits
+fields match `exec`, but `backend` replaces the top-level Docker `image` field.
+Use `"backend":{"type":"docker","image":"local:image"}` or
+`"backend":{"type":"smolvm","image_archive":"/absolute/local/image.tar","archive_digest":"sha256:...","storage_gb":1}`.
+Smolvm requires integer CPUs and qualified local prerequisites. Missing smolvm,
+KVM, archive or digest qualification fails without falling back to Docker.
+The command uses the configured backend for disposable execution; it does not
+pull images, install runtimes or provision host prerequisites.
+
+`--smolvm-bin` is now global and also remains accepted after `doctor`.
+App-server `run_sandbox` executes concurrently and supports cancellation; its
+one-shot exit succeeds only when the durable parent operation succeeds.
+Agent request `execution` accepts either the existing legacy Docker object or
+the explicit shared sandbox object above. These local adapters do not establish
+production security-scan parity or hosted-cloud execution support.

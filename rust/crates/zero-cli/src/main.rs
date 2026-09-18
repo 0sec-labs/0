@@ -40,14 +40,18 @@ async fn run(args: Args) -> Result<bool, Box<dyn Error>> {
         println!("{}", serde_json::to_string(&pin)?);
         return Ok(true);
     }
-    if let Command::Doctor {
-        timeout_ms,
-        smolvm_bin,
-    } = &args.command
-    {
-        return doctor::run(&args, *timeout_ms, smolvm_bin).await;
+    if let Command::Doctor { timeout_ms } = &args.command {
+        let smolvm = args
+            .smolvm_bin
+            .as_deref()
+            .unwrap_or_else(|| std::path::Path::new("smolvm"));
+        return doctor::run(&args, *timeout_ms, smolvm).await;
     }
-    let engine = Arc::new(Engine::open(&args.state, args.docker_bin)?);
+    let engine = Arc::new(Engine::open_with_backends(
+        &args.state,
+        args.docker_bin,
+        args.smolvm_bin,
+    )?);
     if let Some(path) = args.providers {
         providers::configure(&engine, &path).await?;
     }
@@ -109,6 +113,19 @@ async fn run(args: Args) -> Result<bool, Box<dyn Error>> {
                 request: serde_json::from_slice(&bytes)?,
             }
         }
+        Command::Sandbox {
+            session,
+            command_id,
+            request,
+        } => {
+            let bytes = providers::read_bounded(&request).await?;
+            EngineCommand::RunSandbox {
+                session_id: session,
+                command_id,
+                request: serde_json::from_slice(&bytes)
+                    .map_err(|_| "Invalid sandbox request JSON")?,
+            }
+        }
         Command::Infer {
             session,
             command_id,
@@ -162,7 +179,8 @@ async fn run(args: Args) -> Result<bool, Box<dyn Error>> {
         Reply::Error { .. } => false,
         Reply::Execution { operation, .. }
         | Reply::Inference { operation, .. }
-        | Reply::Agent { operation, .. } => {
+        | Reply::Agent { operation, .. }
+        | Reply::Sandbox { operation, .. } => {
             matches!(operation.status, zero_protocol::OperationStatus::Succeeded)
         }
         _ => true,

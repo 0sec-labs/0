@@ -14,6 +14,9 @@ pub struct Args {
     /// Docker executable path; useful for an explicitly selected local installation.
     #[arg(long, global = true)]
     pub docker_bin: Option<PathBuf>,
+    /// Explicit smolvm executable; backend selection never falls back to Docker.
+    #[arg(long, global = true)]
+    pub smolvm_bin: Option<PathBuf>,
     /// Provider profiles; secrets are read from explicitly named environment variables.
     #[arg(long, global = true)]
     pub providers: Option<PathBuf>,
@@ -27,8 +30,6 @@ pub enum Command {
     Doctor {
         #[arg(long, default_value_t = 2000, value_parser = clap::value_parser!(u64).range(10..=30000))]
         timeout_ms: u64,
-        #[arg(long, default_value = "smolvm")]
-        smolvm_bin: PathBuf,
     },
     /// Print the versioned application protocol JSON Schema.
     Schema,
@@ -44,6 +45,15 @@ pub enum Command {
     },
     /// Execute a JSON execution request in a session's isolated backend.
     Exec {
+        #[arg(long)]
+        session: String,
+        #[arg(long)]
+        command_id: String,
+        #[arg(long)]
+        request: PathBuf,
+    },
+    /// Run a pinned snapshot program on its explicitly selected backend.
+    Sandbox {
         #[arg(long)]
         session: String,
         #[arg(long)]

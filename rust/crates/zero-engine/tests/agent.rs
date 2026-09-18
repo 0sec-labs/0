@@ -178,7 +178,7 @@ impl Setup {
                 model: "fixture".into(),
                 instructions: "Use only offered tools".into(),
                 prompt: "Inspect the authorized snapshot".into(),
-                execution,
+                execution: execution.into(),
                 max_turns: 3,
                 reservation_per_turn: 5,
             },

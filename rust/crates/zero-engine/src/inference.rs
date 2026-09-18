@@ -52,6 +52,7 @@ impl Engine {
         provider: String,
         request: ResponsesRequest,
         reservation: u64,
+        events: mpsc::Sender<ExecutionEvent>,
     ) -> Result<Reply, EngineError> {
         zero_provider::validate_request(&request).map_err(|e| EngineError::State(e.to_string()))?;
         if reservation == 0 {
@@ -127,6 +128,7 @@ impl Engine {
                     cancel: cancel.clone(),
                 },
             );
+            emit_admission(&events, &operation, &operation.command_id, &cancel);
             let shared = Arc::clone(&self.shared);
             let (sender, receiver) = oneshot::channel();
             tokio::spawn(async move {
@@ -161,6 +163,24 @@ pub(super) async fn run_inference(
     request: ResponsesRequest,
     cancel: CancellationToken,
 ) -> Result<Reply, EngineError> {
+    // A token cancelled before dispatch is positive evidence that this owner
+    // never contacted the provider. Cancellation after this boundary remains
+    // uncertain unless the provider returns final usage.
+    if cancel.is_cancelled() {
+        let mut store = lock(&shared.store)?;
+        store.settle_budget(session_id, operation_id, 0)?;
+        let operation = store.settle_operation(
+            operation_id,
+            &shared.owner,
+            OperationStatus::Cancelled,
+            &serde_json::json!({"reason":"cancelled_before_dispatch","external_effects_started":false}),
+        )?;
+        return Ok(Reply::Inference {
+            operation,
+            completion: None,
+            duplicate: false,
+        });
+    }
     let rates = profile.rates;
     let result = tokio::spawn(async move { profile.client.complete(&request, cancel).await }).await;
     let completion = match result {

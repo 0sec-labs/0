@@ -1770,6 +1770,8 @@ dependencies = [
  "zero-executor",
  "zero-protocol",
  "zero-provider",
+ "zero-sandbox",
+ "zero-smolvm",
  "zero-store",
 ]
 
@@ -1807,6 +1809,16 @@ dependencies = [
  "tokio-util",
  "uuid",
  "zero-protocol",
+]
+
+[[package]]
+name = "zero-plugin"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "sha2",
+ "thiserror",
 ]
 
 [[package]]

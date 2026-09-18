@@ -85,6 +85,7 @@ impl Engine {
                     cancel: cancel.clone(),
                 },
             );
+            emit_admission(&events, &operation, &operation.command_id, &cancel);
             let shared = Arc::clone(&self.shared);
             let (sender, receiver) = oneshot::channel();
             tokio::spawn(async move {
@@ -197,12 +198,19 @@ async fn run_actor(
         .await?;
         let Reply::Inference {
             operation,
-            completion: Some(completion),
+            completion,
             ..
         } = reply
         else {
-            output.status = AgentStatus::Unknown;
-            output.error = Some("provider outcome is uncertain; reservation retained".into());
+            return Err(EngineError::State("unexpected inference reply".into()));
+        };
+        let Some(completion) = completion else {
+            if operation.status == OperationStatus::Cancelled {
+                output.status = AgentStatus::Cancelled;
+            } else {
+                output.status = AgentStatus::Unknown;
+                output.error = Some("provider outcome is uncertain; reservation retained".into());
+            }
             break;
         };
         if operation.status != OperationStatus::Succeeded {
@@ -255,7 +263,7 @@ async fn run_actor(
                 output.status = AgentStatus::Cancelled;
                 break 'turns;
             }
-            let mut execution = request.execution.clone();
+            let mut execution = request.execution.sandbox_request();
             execution.execution_id = format!("agent-{parent}-{turn}-{index}");
             let permitted = if name == "execute_snapshot" {
                 arguments
@@ -283,9 +291,15 @@ async fn run_actor(
                 &serde_json::json!({"parent_operation":parent,"kind":"agent_tool","call_id":id,"request":execution}),
             )?;
             output.tool_calls += 1;
-            let reply =
-                run_owned(shared, &child.id, execution, cancel.clone(), events.clone()).await?;
-            let Reply::Execution {
+            let reply = sandbox::run_sandbox_owned(
+                shared,
+                &child.id,
+                execution,
+                cancel.clone(),
+                events.clone(),
+            )
+            .await?;
+            let Reply::Sandbox {
                 operation,
                 result: Some(result),
                 ..
@@ -297,7 +311,8 @@ async fn run_actor(
             };
             if matches!(
                 result.cleanup,
-                zero_protocol::CleanupStatus::Unconfirmed { .. }
+                zero_protocol::sandbox::SandboxCleanup::Unconfirmed { .. }
+                    | zero_protocol::sandbox::SandboxCleanup::Unknown { .. }
             ) || operation.status == OperationStatus::Unknown
             {
                 output.status = AgentStatus::Unknown;

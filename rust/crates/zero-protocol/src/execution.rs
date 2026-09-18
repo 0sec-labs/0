@@ -149,6 +149,15 @@ pub enum OutputStream {
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ExecutionEvent {
+    Admitted {
+        session_id: String,
+        command_id: String,
+        operation_id: String,
+        execution_id: String,
+    },
+    Sandbox {
+        event: crate::sandbox::SandboxEvent,
+    },
     Started {
         execution_id: String,
         image_id: String,

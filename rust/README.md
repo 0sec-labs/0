@@ -5,7 +5,7 @@ Integration branch: `the-great-rust-rewrite`.
 This is an experimental implementation, not a replacement release. Native crates
 currently provide a versioned JSON protocol, SQLite session journal and budget
 ledger, single-owner engine, offline Docker snapshot execution, source-preserving
-finding reconciliation, a qualified-profile smolvm batch adapter, Responses
+finding reconciliation, explicit Docker/smolvm snapshot backends, Responses/Chat
 inference with durable accounting, a bounded offline snapshot agent, and a CLI
 with an NDJSON app-server. Production scan commands, remaining provider adapters,
 full agent orchestration, evolution integration and TUI
@@ -41,3 +41,16 @@ Node image and is skipped by the default suite. See its source for configuration
 Keep one owner for shared protocol changes and Cargo.lock. Production TypeScript
 commands remain the behavioral reference during migration. Release defaults and
 cloud images change only after the relevant parity gates.
+
+Sandbox requests select Docker or smolvm explicitly; failed prerequisites never
+select a different backend. Both use verified private snapshot staging and the
+same durable operation, cancellation and retry semantics. The smolvm profile
+requires Linux/KVM, the qualified runtime, and a prepared local archive. Guest
+output is buffered until completion. Its opt-in engine integration test exercises
+a real two-turn agent using a loopback provider fixture, not paid inference.
+
+App-server clients receive an `admitted` event with operation/session/command and
+execution IDs once a new effect has durable ownership. Wait for this event before
+cancelling an asynchronously submitted command. It is not proof that a process or
+provider request has started. Cancellation known to precede provider dispatch
+releases the reservation at zero charge; uncertain remote outcomes retain it.

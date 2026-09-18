@@ -32,15 +32,16 @@ upgrading scaffolds or model assessments into successful verification.
 | --- | --- | --- |
 | Wire schema | `crates/zero-protocol`: strict versioned requests, replies, execution/session values, JSON Schema | Stable compatibility policy, generated external clients, negotiated additions and schema migration tests |
 | Native state | `crates/zero-store`: SQLite sessions, command admission, owner-bound operation settlement, ordered events, budget reservation/settlement, transactional epoch recovery and schema v1→v2 migration | Prompt/message/context/evidence storage; further schema upgrades; explicit legacy import; durable multi-process campaign accounting |
-| Application engine | `crates/zero-engine`: session queries, idempotent execution, cancellation, engine ownership lock, uncertain-operation recovery, finding reconciliation, durable Responses inference, bounded offline snapshot agent | Remaining providers, full tools/permissions and agent workflows, queued/steering input, complete session checkpoints and generation lifecycle |
+| Application engine | `crates/zero-engine`: session queries, idempotent execution, cancellation, engine ownership lock, uncertain-operation recovery, finding reconciliation, durable Responses/Chat inference, bounded offline Docker/smolvm snapshot agent | Remaining providers, full tools/permissions and agent workflows, queued/steering input, complete session checkpoints and generation lifecycle |
 | Batch execution | `crates/zero-executor`: validated snapshot pin/copy, local image identity, nonroot Linux offline Docker lifecycle, bounded raw output, cancellation and explicit cleanup outcome | All other execution profiles below; real Docker qualification remains separate from injected CLI fixtures |
-| MicroVM execution | `crates/zero-smolvm`: explicit pinned archive, qualified runtime version, nonroot offline batch lifecycle; real guest/cleanup smoke passed | Engine/backend selection integration, snapshot attestation, broader isolation/SIGKILL qualification and interactive execution |
+| MicroVM execution | `crates/zero-smolvm` and `zero-sandbox`: explicit pinned archive, qualified runtime version, nonroot offline batch lifecycle, verified snapshot staging and native engine/agent selection; real guest and engine/agent smoke passed | Broader isolation/SIGKILL qualification, live-provider matrix and interactive execution |
 | Provider transport | `crates/zero-provider`: bounded Responses/Chat SSE, explicit routes, final/provisional usage distinction, integer rate accounting and conservative uncertainty | Anthropic/other wires, OAuth/hosted auth, full routing, live-provider qualification |
+| Plugin admission | `crates/zero-plugin`: strict manifests, hashed artifacts, exact dependency graph, host grants and bounded inert RPC framing | Executable broker, durable policy, engine/generation integration; no plugin code is run by admission |
 | Generation registry | `crates/zero-evolution`: immutable artifacts/receipts, eligibility, instance-bound preparation, activation CAS, leases and current-state rollback | Runtime graph preparation/disposal, evaluator execution, plugin/agent integration and campaign qualification |
 | Cloud wire adapter | `crates/zero-cloud-compat`: result/event framing, typed outcomes, cost provenance and atomic report writing | Scanner integration, ordered scan-total accounting, uploads and managed deployment qualification |
 | Finding reduction | `crates/zero-evidence`: source IDs/provenance retained through complete reconciliation, explicit disposition accounting | Discovery, independent vulnerability oracles, storage/export and disclosure eligibility; reconciliation is not truth validation |
-| CLI | `crates/zero-cli`: `schema`, `snapshot pin`, `session create/list/show/events/budget`, `exec`, `infer`, `agent`, `app-server`, help/version; separate `.0sec/native/state.db` | All legacy commands below; UX/exit/schema compatibility; installer and platform release qualification |
-| Stdio lifecycle | Initialize/version gate, correlated replies, bounded NDJSON framing, concurrent execute/cancel, EOF/SIGINT/SIGTERM cleanup | Durable event streaming/reconnect contract, cancellation admission ordering, authenticated remote transports if required |
+| CLI | `crates/zero-cli`: `schema`, `snapshot pin`, `session create/list/show/events/budget/reconcile-usage`, `exec`, `sandbox`, `infer`, `agent`, `doctor`, `app-server`, help/version; separate `.0sec/native/state.db` | All legacy commands below; UX/exit/schema compatibility; installer and platform release qualification |
+| Stdio lifecycle | Initialize/version gate, correlated replies, bounded NDJSON framing, concurrent execute/cancel, durable-admission notification before cancellation, EOF/SIGINT/SIGTERM cleanup | Durable event streaming/reconnect contract, authenticated remote transports if required |
 
 Current acceptance sources include crate unit and integration tests for CLI
 subprocesses, storage/epoch recovery, provider HTTP fixtures, engine accounting,
@@ -79,8 +80,9 @@ external-CLI assumptions merely because a registry description promises parity.
 Source of truth: `packages/cli/src/index.ts` registers the exports in
 `packages/cli/src/commands/index.ts`; `scripts/sync-cli-docs.mjs` and
 `docs/src/content/docs/commands.md` cover public options. Paths in this table are
-relative to `packages/cli/src/commands/`. **Every legacy command in this table is
-native-absent**; similarly named native session primitives do not implement it.
+relative to `packages/cli/src/commands/`. **Legacy command parity remains open**; native `doctor` provides a narrower
+runtime/state/provider diagnostic and similarly named session primitives do not
+implement legacy session workflows.
 Port nested options/aliases and exit behavior from the defining file, not just
 the displayed command name. Tests live primarily under `commands/__tests__/`
 and the owning Core module.
