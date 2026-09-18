@@ -509,6 +509,12 @@ impl State {
             self.status = "A turn is already running".into();
             return vec![];
         }
+        // The durable queued request retains the explicit initial parent for
+        // retries. New prompts must follow current history after any run attempt,
+        // even when a worker Error arrives before its admission event.
+        if let Some(profile) = &mut self.options.profile {
+            profile.continuation_of = None;
+        }
         self.active = Some(Active {
             input: input.id.clone(),
             command: input.run_command_id.clone(),

@@ -229,7 +229,11 @@ nonzero, even if previously accepted inputs completed.
 `app-server` subprocess with the explicit state, provider and harness configuration;
 the frontend never opens the state database. Omitting `--session` opens session
 selection. Omitting `--request` allows inspection without a submission profile.
-The profile prompt is never submitted on startup.
+The profile prompt is never submitted on startup. An explicit profile
+`continuation_of` selects the initial parent. Once an acknowledged input is
+dispatched, that input retains its parent for exact retry; subsequent prompts
+follow the pending queue or current retained conversation instead of repeatedly
+forking from the initial parent. Unknown or ineligible outcomes require recovery.
 
 Tab switches between sessions, conversation and durable queue. Enter selects a
 session or submits the conversation composer; bracketed paste inserts text,

@@ -432,3 +432,194 @@ fn cancellation_intent_retries_on_admission_and_does_not_claim_false_acceptance(
     );
     assert!(ui.halted);
 }
+
+#[test]
+fn explicit_launch_continuation_applies_to_initial_input_then_follows_local_history() {
+    for (status, agent_status, continuable) in [
+        ("succeeded", "completed", true),
+        ("failed", "turn_limit", true),
+        ("unknown", "unknown", false),
+        ("failed", "failed", false),
+        ("succeeded", "completed", false),
+    ] {
+        let mut ui = state();
+        let mut initial_profile = profile();
+        initial_profile.continuation_of = Some("explicit-fork".into());
+        ui.options.profile = Some(initial_profile.clone());
+        ui.latest = Some(history(1, "older-history", "succeeded", "completed", true));
+        ready(&mut ui);
+        ui.paste("initial fork prompt");
+        let rejected = ui.enqueue();
+        assert!(
+            matches!(&rejected[0].command, Command::QueueAgent { request, .. }
+            if request.continuation_of.as_deref() == Some("explicit-fork"))
+        );
+        response(
+            &mut ui,
+            &rejected[0],
+            json!({"type":"error","code":"fixture","message":"not admitted"}),
+        );
+        assert_eq!(
+            serde_json::to_value(ui.options.profile.as_ref().unwrap()).unwrap(),
+            serde_json::to_value(&initial_profile).unwrap()
+        );
+        assert_eq!(ui.composer, "initial fork prompt");
+
+        let accepted = ui.enqueue();
+        let mut input = queued("initial", 1, QueuedAgentStatus::Pending);
+        if let Command::QueueAgent {
+            request,
+            command_id,
+            ..
+        } = &accepted[0].command
+        {
+            assert_eq!(request.continuation_of.as_deref(), Some("explicit-fork"));
+            input.request = request.clone();
+            input.command_id = command_id.clone();
+        } else {
+            panic!("expected durable enqueue");
+        }
+        let run = response(
+            &mut ui,
+            &accepted[0],
+            json!({"type":"agent_queued","input":input,"duplicate":false}),
+        );
+        initial_profile.continuation_of = None;
+        assert_eq!(
+            serde_json::to_value(ui.options.profile.as_ref().unwrap()).unwrap(),
+            serde_json::to_value(&initial_profile).unwrap()
+        );
+        let refreshed = response(
+            &mut ui,
+            &run[0],
+            json!({
+                "type":"agent", "operation":{"id":"local-outcome","session_id":"session","command_id":"queued:initial","payload":{},"status":status,"owner":null,"outcome":null},
+                "result":{"status":agent_status,"text":"outcome","turns":1,"tool_calls":0,"error":null},"duplicate":false
+            }),
+        );
+        initial_profile.continuation_of = None;
+        assert_eq!(
+            serde_json::to_value(ui.options.profile.as_ref().unwrap()).unwrap(),
+            serde_json::to_value(&initial_profile).unwrap(),
+            "only the initial anchor changes"
+        );
+        ui.paste("follow-up prompt");
+        assert!(ui.enqueue().is_empty(), "must await fresh retained context");
+        response(
+            &mut ui,
+            &refreshed[0],
+            history_reply(json!([history(
+                2,
+                "local-outcome",
+                status,
+                agent_status,
+                continuable
+            )])),
+        );
+        response(
+            &mut ui,
+            &refreshed[1],
+            json!({"type":"agent_queue","inputs":[]}),
+        );
+
+        // Changing sessions and returning must not restore the initial fork.
+        ui.open("other-session".into());
+        let reopened = ui.open("session".into());
+        response(
+            &mut ui,
+            &reopened[0],
+            history_reply(json!([history(
+                2,
+                "local-outcome",
+                status,
+                agent_status,
+                continuable
+            )])),
+        );
+        response(
+            &mut ui,
+            &reopened[1],
+            json!({"type":"agent_queue","inputs":[]}),
+        );
+        let next = ui.enqueue();
+        if continuable {
+            assert!(
+                matches!(&next[0].command, Command::QueueAgent { request, after_input: None, .. }
+                if request.continuation_of.as_deref() == Some("local-outcome"))
+            );
+        } else {
+            assert!(
+                next.is_empty(),
+                "unsafe outcomes must not fall back to the initial fork"
+            );
+            assert!(ui.status.contains("needs recovery"));
+            assert_eq!(ui.composer, "follow-up prompt");
+        }
+    }
+}
+
+#[test]
+fn worker_error_before_or_after_admission_event_cannot_reuse_initial_anchor() {
+    for admission_seen in [false, true] {
+        let mut ui = state();
+        ui.options.profile.as_mut().unwrap().continuation_of = Some("explicit-fork".into());
+        ready(&mut ui);
+        let mut input = queued("local", 1, QueuedAgentStatus::Pending);
+        input.request.continuation_of = Some("explicit-fork".into());
+        ui.queue.push(input.clone());
+        let run = ui.start(input);
+        if admission_seen {
+            ui.event(ExecutionEvent::Admitted {
+                session_id: "session".into(),
+                command_id: "queued:local".into(),
+                operation_id: "local-unknown".into(),
+                execution_id: "queued:local".into(),
+            });
+        }
+        let refreshed = response(
+            &mut ui,
+            &run[0],
+            json!({"type":"error","code":"fixture","message":"worker failed"}),
+        );
+        assert!(
+            ui.options
+                .profile
+                .as_ref()
+                .unwrap()
+                .continuation_of
+                .is_none()
+        );
+        assert_eq!(
+            ui.queue[0].request.continuation_of.as_deref(),
+            Some("explicit-fork"),
+            "durable input preserves the original retry intent"
+        );
+        ui.paste("follow-up");
+        assert!(
+            ui.enqueue().is_empty(),
+            "wait for refreshed durable outcome"
+        );
+        response(
+            &mut ui,
+            &refreshed[0],
+            history_reply(json!([history(
+                1,
+                "local-unknown",
+                "unknown",
+                "unknown",
+                false
+            )])),
+        );
+        let mut settled = queued("local", 1, QueuedAgentStatus::Unknown);
+        settled.operation_id = Some("local-unknown".into());
+        let page = response(
+            &mut ui,
+            &refreshed[1],
+            json!({"type":"agent_queue","inputs":[settled]}),
+        );
+        response(&mut ui, &page[0], json!({"type":"agent_queue","inputs":[]}));
+        assert!(ui.enqueue().is_empty());
+        assert!(ui.status.contains("needs recovery"));
+        assert_eq!(ui.composer, "follow-up");
+    }
+}
