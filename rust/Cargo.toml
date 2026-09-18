@@ -28,6 +28,7 @@ zero-protocol = { path = "crates/zero-protocol" }
 zero-store = { path = "crates/zero-store" }
 zero-executor = { path = "crates/zero-executor" }
 zero-evidence = { path = "crates/zero-evidence" }
+zero-source = { path = "crates/zero-source" }
 zero-engine = { path = "crates/zero-engine" }
 zero-provider = { path = "crates/zero-provider" }
 zero-sandbox = { path = "crates/zero-sandbox" }
