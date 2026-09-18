@@ -211,3 +211,15 @@ inputs require explicit resumption. See the [CLI guide](crates/zero-cli/README.m
 for controls and shutdown behavior. Its findings view adds native source-review
 discovery and explicit operator triage; acceptance leaves hypotheses unverified.
 Approval/question dialogs, legacy finding families and full terminal parity remain open.
+
+
+Native agent requests can opt into bounded joined subagents through
+`delegation_policy`: host-defined roles choose provider/model, curated tools,
+turn/reservation limits, `max_parallel` (1–4) and `max_children` (1–16 per root
+operation). The model's `delegate_tasks` tool accepts only named roles and task
+prompts. Children share the session budget and pinned execution authority, cannot
+nest delegation or submit findings, and are all joined before the parent settles.
+Results are ordered untrusted data with durable child receipts. Cancellation
+waits for child cleanup; uncertain work retains its budget holds. See the
+[migration record](MIGRATION.md#bounded-joined-subagents) for continuation and
+remaining workflow boundaries.

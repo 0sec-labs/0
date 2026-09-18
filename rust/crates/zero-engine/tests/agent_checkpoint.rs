@@ -180,6 +180,7 @@ impl Setup {
                 source_submission_max_hypotheses: None,
                 provider: "local".into(),
                 context_policy: None,
+                delegation_policy: None,
                 model: "fixture".into(),
                 instructions: "Use only offered tools".into(),
                 prompt: "Inspect the authorized snapshot".into(),

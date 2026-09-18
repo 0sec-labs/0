@@ -3,6 +3,7 @@ mod agent;
 mod agent_checkpoint;
 mod agent_context;
 mod agent_context_history;
+mod agent_delegation;
 mod agent_plugins;
 mod agent_source;
 mod agent_submission;
@@ -247,6 +248,7 @@ impl Engine {
             "chat_completions_inference",
             "anthropic_messages_inference",
             "bounded_offline_snapshot_agent",
+            "bounded_joined_subagents",
             "durable_agent_input_queue",
             "explicit_context_projection",
             "generation_pinned_offline_plugins",

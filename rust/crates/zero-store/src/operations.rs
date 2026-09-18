@@ -54,6 +54,82 @@ fn operation(conn: &Connection, id: &str) -> Result<Operation> {
     })
 }
 impl Store {
+    /// Admit and start one fresh, bounded group before any external dispatch.
+    /// A duplicate anywhere rejects the whole batch; callers replay the owning
+    /// root receipt rather than restarting children independently.
+    pub fn admit_owned_batch(
+        &mut self,
+        session: &str,
+        owner: &str,
+        intents: &[(String, Value)],
+    ) -> Result<Vec<Operation>> {
+        nonempty(owner)?;
+        if owner.len() > 4096 || !(1..=17).contains(&intents.len()) {
+            return Err(Error::Invalid(
+                "owned batch requires 1..17 intents and a bounded owner".into(),
+            ));
+        }
+        let mut commands = std::collections::BTreeSet::new();
+        let mut encoded_intents = Vec::with_capacity(intents.len());
+        let mut bytes = 0usize;
+        for (command, payload) in intents {
+            nonempty(command)?;
+            if command.len() > 4096 || !commands.insert(command) {
+                return Err(Error::Invalid(
+                    "batch command identities must be bounded and unique".into(),
+                ));
+            }
+            let text = encoded(payload)?;
+            bytes = bytes.saturating_add(text.len());
+            if text.len() > 4 * 1024 * 1024 || bytes > 32 * 1024 * 1024 {
+                return Err(Error::Invalid(
+                    "batch payload exceeds per-intent or aggregate bound".into(),
+                ));
+            }
+            let hash = format!("{:x}", Sha256::digest(text.as_bytes()));
+            encoded_intents.push((command, text, hash));
+        }
+        let tx = self
+            .conn
+            .transaction_with_behavior(TransactionBehavior::Immediate)?;
+        crate::get_session(&tx, session)?;
+        let mut operations = Vec::with_capacity(intents.len());
+        for (command, text, hash) in encoded_intents {
+            let exists: bool = tx.query_row(
+                "SELECT EXISTS(SELECT 1 FROM operations WHERE session_id=?1 AND command_id=?2)",
+                params![session, command],
+                |row| row.get(0),
+            )?;
+            if exists {
+                return Err(Error::Conflict(command.clone()));
+            }
+            let id = uuid::Uuid::new_v4().to_string();
+            tx.execute("INSERT INTO operations(id,session_id,command_id,payload,payload_hash,status) VALUES (?1,?2,?3,?4,?5,'admitted')",params![id,session,command,text,hash])?;
+            let mut op = operation(&tx, &id)?;
+            append(
+                &tx,
+                session,
+                "command_admitted",
+                &serde_json::to_value(&op)?,
+            )?;
+            tx.execute(
+                "UPDATE operations SET status='running',owner=?2 WHERE id=?1",
+                params![id, owner],
+            )?;
+            op.status = OperationStatus::Running;
+            op.owner = Some(owner.into());
+            append(
+                &tx,
+                session,
+                "operation_started",
+                &serde_json::to_value(&op)?,
+            )?;
+            operations.push(op);
+        }
+        tx.commit()?;
+        Ok(operations)
+    }
+
     /// Durable host detail for an operation owned by this exact controller.
     /// The fixed outer kind prevents details from impersonating lifecycle events.
     /// Terminal details allow recording lease release after outcome settlement.

@@ -14,6 +14,9 @@ pub struct AgentRequest {
     /// User prompts and protected legacy context remain verbatim.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub context_policy: Option<crate::context::ContextPolicy>,
+    /// Host-authored roles for bounded joined tasks; omitted requests retain their identity.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub delegation_policy: Option<crate::delegation::DelegationPolicy>,
     /// Explicitly continue a completed or checkpointed turn-limit agent operation in this session. Its
     /// persisted final provider request and replay supply immutable history;
     /// previous effects are never executed again. Omission starts fresh.

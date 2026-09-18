@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 pub mod agent;
 mod binary;
 pub mod context;
+pub mod delegation;
 pub mod discovery;
 pub mod execution;
 pub mod history;

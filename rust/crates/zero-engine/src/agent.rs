@@ -1,11 +1,37 @@
 //! Bounded session actor. Model output selects only the explicitly offered tool.
 use super::*;
+use futures_util::FutureExt;
 use zero_protocol::{
     agent::{AgentRequest, AgentResult, AgentStatus},
     model::{Content, ResponsesRequest, ToolDefinition},
 };
 
+pub(super) struct PreparedActor {
+    pub request: AgentRequest,
+    pub profile: inference::Profile,
+    pub history: agent_context::History,
+    pub plugins: Option<agent_plugins::Context>,
+    pub source: Option<agent_source::Context>,
+    pub template: ResponsesRequest,
+    pub delegation: Option<agent_delegation::Context>,
+    pub checkpoint: bool,
+}
+
 pub(super) fn validate_initial(request: &AgentRequest) -> Result<ResponsesRequest, EngineError> {
+    if let Some(policy) = &request.delegation_policy {
+        policy
+            .validate()
+            .map_err(|e| EngineError::State(e.to_string()))?;
+        if request
+            .plugin_tools
+            .iter()
+            .any(|p| p.alias == "delegate_tasks")
+        {
+            return Err(EngineError::State(
+                "plugin alias shadows delegated tool".into(),
+            ));
+        }
+    }
     request
         .execution
         .validate()
@@ -134,6 +160,15 @@ impl Engine {
                         payload["wire_api"] = serde_json::to_value(profile.client.wire_api())?;
                     }
                     profile.stamp(&mut payload)?;
+                    if request.delegation_policy.is_some() {
+                        payload["delegation_context"] = agent_delegation::retry_identity(
+                            &self.shared,
+                            &request,
+                            prior.payload.get("delegation_context").ok_or_else(|| {
+                                EngineError::State("missing historical delegation context".into())
+                            })?,
+                        )?;
+                    }
                     if request.context_policy.is_some() {
                         payload["context_template"] = prior
                             .payload
@@ -175,8 +210,6 @@ impl Engine {
             let plugins = agent_plugins::capture(&self.shared, &session, &request.plugin_tools)?;
             let mut store = lock(&self.shared.store)?;
             let source = agent_source::capture(&store, &session_id, &request)?;
-            let input =
-                continuation_input(&store, &session_id, &request, &profile, plugins.as_ref())?;
             // A context lineage keeps its original offered schemas across upgrades.
             // continuation_input has already validated the ancestor's request and
             // hash-bound template; only fresh conversations capture current tools.
@@ -190,6 +223,16 @@ impl Engine {
             } else {
                 model_request(&request, vec![], plugins.as_ref())
             };
+            let delegation =
+                agent_delegation::capture(&self.shared, &request, &template, plugins.as_ref())?;
+            let input = continuation_input(
+                &store,
+                &session_id,
+                &request,
+                &profile,
+                plugins.as_ref(),
+                delegation.as_ref(),
+            )?;
             let mut projected = template.clone();
             projected.input = input.projected(request.context_policy.as_ref())?;
             profile
@@ -201,8 +244,11 @@ impl Engine {
                 payload["wire_api"] = serde_json::to_value(profile.client.wire_api())?;
             }
             profile.stamp(&mut payload)?;
+            if let Some(context) = &delegation {
+                payload["delegation_context"] = context.identity.clone();
+            }
             if request.context_policy.is_some() {
-                payload["context_template"] = serde_json::to_value(template)?;
+                payload["context_template"] = serde_json::to_value(&template)?;
             }
             if let Some(context) = &plugins {
                 payload["plugin_context"] = context.identity.clone();
@@ -239,11 +285,16 @@ impl Engine {
                     &guard.shared,
                     &session_id,
                     &operation.id,
-                    request,
-                    profile,
-                    input,
-                    plugins,
-                    source,
+                    PreparedActor {
+                        request,
+                        profile,
+                        history: input,
+                        plugins,
+                        source,
+                        template,
+                        delegation,
+                        checkpoint: true,
+                    },
                     cancel,
                     events,
                     progress_events,
@@ -270,6 +321,7 @@ fn continuation_input(
     request: &AgentRequest,
     profile: &inference::Profile,
     plugins: Option<&agent_plugins::Context>,
+    delegation: Option<&agent_delegation::Context>,
 ) -> Result<agent_context::History, EngineError> {
     let mut history = agent_context::History::new(Vec::new(), request.context_policy.as_ref())?;
     if let Some(parent_id) = &request.continuation_of {
@@ -280,6 +332,7 @@ fn continuation_input(
                 OperationStatus::Succeeded | OperationStatus::Failed
             )
             || parent.payload["kind"] != "offline_snapshot_agent"
+            || parent.payload.get("parent_operation").is_some()
         {
             return Err(EngineError::State(
                 "continuation requires a completed agent operation in this session".into(),
@@ -300,6 +353,8 @@ fn continuation_input(
                 .unwrap_or_else(|| serde_json::json!("responses")),
         )?;
         if prior.context_policy != request.context_policy
+            || prior.delegation_policy != request.delegation_policy
+            || parent.payload.get("delegation_context") != delegation.map(|d| &d.identity)
             || prior.source_submission_max_hypotheses != request.source_submission_max_hypotheses
             || prior.source_snapshot_tools != request.source_snapshot_tools
             || prior.source_review_operation_id != request.source_review_operation_id
@@ -338,6 +393,7 @@ fn continuation_input(
                 "continuation requires a completed provider turn".into(),
             ));
         }
+        agent_delegation::validate_parent_receipts(store, &parent, result.turns)?;
         if turn_limit {
             let input = agent_checkpoint::load(store, session, parent_id, &result)?;
             let last = store.get_operation_by_command(
@@ -437,6 +493,9 @@ fn model_request(
     if let Some(plugins) = plugins {
         model.tools.extend(plugins.tools.clone());
     }
+    if let Some(policy) = &request.delegation_policy {
+        model.tools.push(agent_delegation::definition(policy));
+    }
     model
 }
 fn child_operation(
@@ -468,16 +527,12 @@ async fn run_rounds(
     cancel: CancellationToken,
     events: mpsc::Sender<ExecutionEvent>,
     progress_events: Option<mpsc::Sender<ExecutionEvent>>,
+    template: ResponsesRequest,
+    delegation: Option<agent_delegation::Context>,
+    joined: &mut agent_delegation::JoinedTasks,
 ) -> Result<(AgentResult, Vec<serde_json::Value>), EngineError> {
     let mut input = history.input;
     let mut context_state = history.state;
-    let template = if request.context_policy.is_some() {
-        serde_json::from_value::<ResponsesRequest>(
-            lock(&shared.store)?.get_operation(parent)?.payload["context_template"].clone(),
-        )?
-    } else {
-        model_request(&request, vec![], plugins.as_ref())
-    };
     let mut output = AgentResult {
         status: AgentStatus::TurnLimit,
         text: String::new(),
@@ -700,6 +755,51 @@ async fn run_rounds(
                 output.status = AgentStatus::Cancelled;
                 break 'turns;
             }
+            if !model.tools.iter().any(|tool| tool.name == name) {
+                input.push(serde_json::json!({"type":"function_call_output","call_id":id,"output":"Tool rejected: tool was not offered by the host."}));
+                continue;
+            }
+            if name == "delegate_tasks" && request.delegation_policy.is_some() {
+                let Some(context) = delegation.as_ref() else {
+                    input.push(serde_json::json!({"type":"function_call_output","call_id":id,"output":"Tool rejected: delegated actors cannot create children."}));
+                    continue;
+                };
+                let batch = match context.prepare(shared, session, &request, arguments, joined.used)
+                {
+                    Ok(batch) => batch,
+                    Err(error) => {
+                        input.push(serde_json::json!({"type":"function_call_output","call_id":id,"output":format!("Tool rejected: {error}")}));
+                        continue;
+                    }
+                };
+                let result = agent_delegation::run_joined(
+                    shared,
+                    session,
+                    parent,
+                    &format!("{parent}:tool:{turn}:{index}"),
+                    &id,
+                    context,
+                    batch,
+                    joined,
+                    cancel.clone(),
+                    events.clone(),
+                    progress_events.clone(),
+                )
+                .await?;
+                output.tool_calls += 1;
+                if result.uncertain {
+                    output.status = AgentStatus::Unknown;
+                    output.error =
+                        Some("delegated child completion or cleanup is uncertain".into());
+                    break 'turns;
+                }
+                if cancel.is_cancelled() {
+                    output.status = AgentStatus::Cancelled;
+                    break 'turns;
+                }
+                input.push(serde_json::json!({"type":"function_call_output","call_id":id,"output":result.output}));
+                continue;
+            }
             if let Some(bundle) = source.as_ref().filter(|_| agent_source::is_tool(&name)) {
                 let context = Arc::clone(bundle);
                 let tool = name.clone();
@@ -920,173 +1020,204 @@ fn settle_agent(shared: &Shared, parent: &str, output: AgentResult) -> Result<Re
     })
 }
 
-#[allow(clippy::too_many_arguments)]
-async fn run_actor(
-    shared: &Arc<Shared>,
-    session: &str,
-    parent: &str,
-    request: AgentRequest,
-    profile: inference::Profile,
-    input: agent_context::History,
-    plugins: Option<agent_plugins::Context>,
-    mut source: Option<agent_source::Context>,
+pub(super) fn run_actor<'a>(
+    shared: &'a Arc<Shared>,
+    session: &'a str,
+    parent: &'a str,
+    actor: PreparedActor,
     cancel: CancellationToken,
     events: mpsc::Sender<ExecutionEvent>,
     progress_events: Option<mpsc::Sender<ExecutionEvent>>,
-) -> Result<Reply, EngineError> {
-    let empty = |status, error| AgentResult {
-        status,
-        text: String::new(),
-        turns: 0,
-        tool_calls: 0,
-        error,
-        continuation_artifact: None,
-        source_recovery_path: None,
-        source_review: None,
-    };
-    let mut preparation_error = None;
-    if request.source_snapshot_tools {
-        let pin = request.execution.sandbox_request().snapshot;
-        let cancellation = cancel.clone();
-        // Never detach a blocking copy when cancelled: the owner must receive
-        // its handle and finish cleanup before settling the operation.
-        let prepared = tokio::task::spawn_blocking(move || {
-            zero_source::SnapshotInvestigation::prepare_checked(&pin, &|| {
-                if cancellation.is_cancelled() {
-                    Err("source preparation cancelled".into())
-                } else {
-                    Ok(())
-                }
-            })
-        })
-        .await;
-        match prepared {
-            Ok(Ok(snapshot)) => {
-                let retained = (|| {
-                    let bytes = snapshot
-                        .catalog_bytes()
-                        .map_err(|e| EngineError::State(e.to_string()))?;
-                    let mut store = lock(&shared.store)?;
-                    let digest = store.retain_operation_artifact(
-                        parent,
-                        &shared.owner,
-                        "source.snapshot_catalog",
-                        &bytes,
-                    )?;
-                    store.append_operation_event(parent,&shared.owner,"source.snapshot_prepared",
-                        &serde_json::json!({"path":snapshot.root(),"snapshot_digest":snapshot.snapshot_digest(),"catalog_artifact":digest}))?;
-                    Ok::<_, EngineError>(())
-                })();
-                source = Some(agent_source::Context::Snapshot(snapshot));
-                if let Err(error) = retained {
-                    preparation_error = Some(error.to_string());
-                }
-            }
-            Ok(Err(error)) => preparation_error = Some(error.to_string()),
-            Err(error) => preparation_error = Some(error.to_string()),
-        }
-    }
-    let source = source.map(Arc::new);
-    let prepared_path = source.as_ref().and_then(|context| match context.as_ref() {
-        agent_source::Context::Snapshot(snapshot) => {
-            Some(snapshot.root().to_string_lossy().into_owned())
-        }
-        agent_source::Context::Retained(_) => None,
-    });
-    let work = if let Some(error) = preparation_error {
-        Ok((
-            empty(
-                if cancel.is_cancelled() {
-                    AgentStatus::Cancelled
-                } else {
-                    AgentStatus::Failed
-                },
-                Some(error),
-            ),
-            input.input,
-        ))
-    } else {
-        run_rounds(
-            shared,
-            session,
-            parent,
+) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<Reply, EngineError>> + Send + 'a>> {
+    Box::pin(async move {
+        let PreparedActor {
             request,
             profile,
-            input,
+            history: input,
             plugins,
-            source.clone(),
-            cancel.clone(),
-            events,
-            progress_events,
-        )
-        .await
-    };
-    let cleanup = match source {
-        Some(context) => {
-            tokio::task::spawn_blocking(move || match Arc::try_unwrap(context) {
-                Ok(context) => context.cleanup(),
-                Err(_) => Err(zero_source::snapshot_investigation::SnapshotError::Invalid(
-                    "source reader still owns private copy",
-                )),
+            mut source,
+            template,
+            delegation,
+            checkpoint,
+        } = actor;
+        let empty = |status, error| AgentResult {
+            status,
+            text: String::new(),
+            turns: 0,
+            tool_calls: 0,
+            error,
+            continuation_artifact: None,
+            source_recovery_path: None,
+            source_review: None,
+        };
+        let mut preparation_error = None;
+        if request.source_snapshot_tools {
+            let pin = request.execution.sandbox_request().snapshot;
+            let cancellation = cancel.clone();
+            // Never detach a blocking copy when cancelled: the owner must receive
+            // its handle and finish cleanup before settling the operation.
+            let prepared = tokio::task::spawn_blocking(move || {
+                zero_source::SnapshotInvestigation::prepare_checked(&pin, &|| {
+                    if cancellation.is_cancelled() {
+                        Err("source preparation cancelled".into())
+                    } else {
+                        Ok(())
+                    }
+                })
             })
-            .await
-        }
-        None => Ok(Ok(())),
-    };
-    let mut recovery = prepared_path;
-    let cleanup_error = match cleanup {
-        Ok(Ok(())) => None,
-        Ok(Err(error)) => {
-            if let zero_source::snapshot_investigation::SnapshotError::Cleanup { path } = &error {
-                recovery = Some(path.to_string_lossy().into_owned());
+            .await;
+            match prepared {
+                Ok(Ok(snapshot)) => {
+                    let retained = (|| {
+                        let bytes = snapshot
+                            .catalog_bytes()
+                            .map_err(|e| EngineError::State(e.to_string()))?;
+                        let mut store = lock(&shared.store)?;
+                        let digest = store.retain_operation_artifact(
+                            parent,
+                            &shared.owner,
+                            "source.snapshot_catalog",
+                            &bytes,
+                        )?;
+                        store.append_operation_event(parent,&shared.owner,"source.snapshot_prepared",
+                        &serde_json::json!({"path":snapshot.root(),"snapshot_digest":snapshot.snapshot_digest(),"catalog_artifact":digest}))?;
+                        Ok::<_, EngineError>(())
+                    })();
+                    source = Some(agent_source::Context::Snapshot(snapshot));
+                    if let Err(error) = retained {
+                        preparation_error = Some(error.to_string());
+                    }
+                }
+                Ok(Err(error)) => preparation_error = Some(error.to_string()),
+                Err(error) => preparation_error = Some(error.to_string()),
             }
-            Some(error.to_string())
         }
-        Err(error) => Some(error.to_string()),
-    };
-    let (mut output, input) = match work {
-        Ok(value) => value,
-        Err(error) => {
-            if let Some(cleanup_error) = cleanup_error {
+        let source = source.map(Arc::new);
+        let prepared_path = source.as_ref().and_then(|context| match context.as_ref() {
+            agent_source::Context::Snapshot(snapshot) => {
+                Some(snapshot.root().to_string_lossy().into_owned())
+            }
+            agent_source::Context::Retained(_) => None,
+        });
+        let mut joined = agent_delegation::JoinedTasks::new();
+        let work = if let Some(error) = preparation_error {
+            Ok((
+                empty(
+                    if cancel.is_cancelled() {
+                        AgentStatus::Cancelled
+                    } else {
+                        AgentStatus::Failed
+                    },
+                    Some(error),
+                ),
+                input.input,
+            ))
+        } else {
+            match std::panic::AssertUnwindSafe(run_rounds(
+                shared,
+                session,
+                parent,
+                request,
+                profile,
+                input,
+                plugins,
+                source.clone(),
+                cancel.clone(),
+                events,
+                progress_events,
+                template,
+                delegation,
+                &mut joined,
+            ))
+            .catch_unwind()
+            .await
+            {
+                Ok(result) => result,
+                Err(_) => Err(EngineError::State(
+                    "agent round panicked; owned children require reconciliation".into(),
+                )),
+            }
+        };
+        // Never drop/abort joined actors when the round future errors or unwinds.
+        // Their own source copies/backend cleanup must finish before root settlement.
+        let drained = joined.drain(shared, &cancel).await;
+        let cleanup = match source {
+            Some(context) => {
+                tokio::task::spawn_blocking(move || match Arc::try_unwrap(context) {
+                    Ok(context) => context.cleanup(),
+                    Err(_) => Err(zero_source::snapshot_investigation::SnapshotError::Invalid(
+                        "source reader still owns private copy",
+                    )),
+                })
+                .await
+            }
+            None => Ok(Ok(())),
+        };
+        let mut recovery = prepared_path;
+        let cleanup_error = match cleanup {
+            Ok(Ok(())) => None,
+            Ok(Err(error)) => {
+                if let zero_source::snapshot_investigation::SnapshotError::Cleanup { path } = &error
+                {
+                    recovery = Some(path.to_string_lossy().into_owned());
+                }
+                Some(error.to_string())
+            }
+            Err(error) => Some(error.to_string()),
+        };
+        let (mut output, input) = match work.and_then(|value| drained.map(|_| value)) {
+            Ok(value) => value,
+            Err(error) => {
+                // Unexpected actor/journal failures close admission; all already
+                // owned work is cancelled and drained before releasing its lock.
+                if let Ok(mut control) = shared.control.lock() {
+                    control.closing = true;
+                    for active in control.active.values() {
+                        active.cancel.cancel();
+                    }
+                }
                 let mut output = empty(
                     AgentStatus::Unknown,
-                    Some(format!("{error}; {cleanup_error}")),
+                    Some(match cleanup_error {
+                        Some(cleanup) => format!("{error}; {cleanup}"),
+                        None => error.to_string(),
+                    }),
                 );
                 output.source_recovery_path = recovery;
-                let _ = settle_agent(shared, parent, output);
+                return settle_agent(shared, parent, output);
             }
-            return Err(error);
+        };
+        if let Some(error) = cleanup_error {
+            output.status = AgentStatus::Unknown;
+            output.error = Some(error);
+            output.source_recovery_path = recovery;
         }
-    };
-    if let Some(error) = cleanup_error {
-        output.status = AgentStatus::Unknown;
-        output.error = Some(error);
-        output.source_recovery_path = recovery;
-    }
-    if cancel.is_cancelled()
-        && matches!(
-            output.status,
-            AgentStatus::TurnLimit | AgentStatus::Completed
-        )
-    {
-        output.status = AgentStatus::Cancelled;
-    }
-    if output.status == AgentStatus::TurnLimit {
-        let mut store = lock(&shared.store)?;
-        match agent_checkpoint::save(
-            &mut store,
-            &shared.owner,
-            session,
-            parent,
-            output.turns,
-            input,
-        ) {
-            Ok(digest) => output.continuation_artifact = Some(digest),
-            Err(error) => {
-                output.status = AgentStatus::Failed;
-                output.error = Some(format!("could not retain continuation checkpoint: {error}"));
+        if cancel.is_cancelled()
+            && matches!(
+                output.status,
+                AgentStatus::TurnLimit | AgentStatus::Completed
+            )
+        {
+            output.status = AgentStatus::Cancelled;
+        }
+        if output.status == AgentStatus::TurnLimit && checkpoint {
+            let mut store = lock(&shared.store)?;
+            match agent_checkpoint::save(
+                &mut store,
+                &shared.owner,
+                session,
+                parent,
+                output.turns,
+                input,
+            ) {
+                Ok(digest) => output.continuation_artifact = Some(digest),
+                Err(error) => {
+                    output.status = AgentStatus::Failed;
+                    output.error =
+                        Some(format!("could not retain continuation checkpoint: {error}"));
+                }
             }
         }
-    }
-    settle_agent(shared, parent, output)
+        settle_agent(shared, parent, output)
+    })
 }

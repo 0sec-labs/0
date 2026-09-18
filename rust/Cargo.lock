@@ -2146,6 +2146,7 @@ name = "zero-engine"
 version = "0.1.0"
 dependencies = [
  "fs2",
+ "futures-util",
  "libc",
  "rusqlite",
  "serde",

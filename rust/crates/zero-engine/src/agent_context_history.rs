@@ -104,6 +104,7 @@ pub(super) fn validate(
             || visited.len() > zero_context::MAX_INPUT_ITEMS
             || op.session_id != parent.session_id
             || op.payload["kind"] != "offline_snapshot_agent"
+            || op.payload.get("parent_operation").is_some()
         {
             return Err(error("invalid bounded context lineage"));
         }
@@ -112,6 +113,7 @@ pub(super) fn validate(
             return Err(error("context lineage policy/round mismatch"));
         }
         if req.provider != request.provider
+            || req.delegation_policy != request.delegation_policy
             || req.model != request.model
             || req.instructions != request.instructions
             || req.source_review_operation_id != request.source_review_operation_id
@@ -126,6 +128,7 @@ pub(super) fn validate(
                 "hosted_catalog",
                 "plugin_context",
                 "context_template",
+                "delegation_context",
             ]
             .iter()
             .any(|key| op.payload.get(key) != parent.payload.get(key))
@@ -215,6 +218,56 @@ pub(super) fn validate(
             }
             if witness.replay != completion.replay {
                 return Err(error("context replay differs from original completion"));
+            }
+            for (call_index, call) in completion
+                .content
+                .iter()
+                .filter_map(|item| {
+                    if let zero_protocol::model::Content::ToolCall { id, name, .. } = item {
+                        Some((id, name))
+                    } else {
+                        None
+                    }
+                })
+                .enumerate()
+            {
+                if call.1 != "delegate_tasks" {
+                    continue;
+                }
+                let output = witness
+                    .tool_outputs
+                    .get(call_index)
+                    .ok_or_else(|| error("context delegation output missing"))?;
+                if output["call_id"] != *call.0 {
+                    return Err(error("context delegation output correlation mismatch"));
+                }
+                match journal.command(
+                    &parent.session_id,
+                    &format!("{}:tool:{index}:{call_index}", ancestor.id),
+                )? {
+                    Some(group) => {
+                        if group.payload["kind"] != "agent_delegation"
+                            || group.payload["parent_operation"] != ancestor.id
+                            || group.payload["call_id"] != *call.0
+                        {
+                            return Err(error("context delegation group identity mismatch"));
+                        }
+                        let derived = agent_delegation::validate_receipt(store, &group)?;
+                        if output["output"].as_str() != Some(derived.as_str()) {
+                            return Err(error(
+                                "context delegation output differs from child receipts",
+                            ));
+                        }
+                    }
+                    None => {
+                        if !output["output"]
+                            .as_str()
+                            .is_some_and(|s| s.starts_with("Tool rejected:"))
+                        {
+                            return Err(error("context delegation output lacks settled group"));
+                        }
+                    }
+                }
             }
             if !witness.tool_outputs.is_empty() {
                 // The immediate next request must retain this entire most-recent round.

@@ -32,7 +32,7 @@ upgrading scaffolds or model assessments into successful verification.
 | --- | --- | --- |
 | Wire schema | `crates/zero-protocol`: strict versioned requests, replies, execution/session values, JSON Schema | Stable compatibility policy, generated external clients, negotiated additions and schema migration tests |
 | Native state | `crates/zero-store`: SQLite sessions, command admission, owner-bound operation settlement, ordered events, budget reservation/settlement, transactional epoch recovery and schema v1/v2/v3/v4/v5→v6 migration, optional activation epoch pins and immutable operation artifacts | Full UI message projection, semantic compaction and retained-history retrieval; further schema upgrades; explicit legacy import; durable multi-process campaign accounting |
-| Application engine | `crates/zero-engine`: session queries, idempotent execution, cancellation, engine ownership lock, uncertain-operation recovery, finding reconciliation, durable Responses/Chat/Anthropic inference, bounded offline Docker/smolvm snapshot agent with explicit completed-turn continuation durable FIFO inputs and explicit byte-bounded context projection from immutable journal records | Remaining providers, full tools/permissions and agent workflows, mid-turn steering input, interrupted-turn checkpoints and generation lifecycle |
+| Application engine | `crates/zero-engine`: session queries, idempotent execution, cancellation, engine ownership lock, uncertain-operation recovery, finding reconciliation, durable Responses/Chat/Anthropic inference, bounded offline Docker/smolvm snapshot agent with explicit completed-turn continuation, durable FIFO inputs, bounded joined subagents and explicit byte-bounded context projection from immutable journal records | Remaining providers, full tools/permissions and agent workflows, mid-turn steering input, interrupted-turn checkpoints and generation lifecycle |
 | Batch execution | `crates/zero-executor`: validated snapshot pin/copy, local image identity, nonroot Linux offline Docker lifecycle, bounded raw output, cancellation and explicit cleanup outcome | All other execution profiles below; real Docker qualification remains separate from injected CLI fixtures |
 | MicroVM execution | `crates/zero-smolvm` and `zero-sandbox`: explicit pinned archive, qualified runtime version, nonroot offline batch lifecycle, verified snapshot staging and native engine/agent selection; real guest and engine/agent smoke passed | Broader isolation/SIGKILL qualification, live-provider matrix and interactive execution |
 | Source review | `crates/zero-source` and engine `source.rs`: bounded selected source bundle, grounded structured hypotheses, retained request/bundle/completion/submission, same-session provenance and exact retry; `source-review` CLI | Source exploration, automatic investigation and specialist verification; hypotheses remain unverified, including successful model submissions |
@@ -756,3 +756,45 @@ tests cover continuation, stale responses, notes, explicit conflicts/rebase,
 retry receipt/current-state separation and navigation guards. A real PTY fixture
 proves offline selection and explicit triage persistence, inert pasted note text,
 unchanged Unverified evidence/accounting and terminal restoration/child cleanup.
+
+
+### Bounded joined subagents
+
+An optional host-authored `AgentRequest.delegation_policy` supplies named roles,
+provider/model routes, curated tools, per-child turn/reservation limits, a
+parallelism cap (1–4), and a total admitted-child cap (1–16) for one root operation.
+The model can request only `{tasks: [{role, prompt}]}` through `delegate_tasks`.
+Every batch is validated before one transaction admits its group and ordered
+children. Children cannot delegate recursively or submit source hypotheses;
+their tools must be a subset of the parent's offered authority. Snapshot,
+execution resources, source scope and plugin authority remain pinned.
+
+The root owns cancellation and joins every child before settlement, including
+error/unwind and backend cleanup paths. Children reserve against the same session
+budget before inference; this is an admission reservation rule, not a guarantee
+that externally reported usage cannot exceed its reservation. Unknown outcomes
+cancel siblings and retain uncertain reservations. Known failed/turn-limited
+children appear as explicit partial, untrusted results. Parent turn/tool counts
+remain parent-only, and child progress retains its immediate ancestry.
+
+Ordered group receipts bind original provider tasks, captured role authority and
+child outcomes. Retained artifacts and subsequent provider replay are validated
+on continuation/checkpoint restoration. Exact root retry does not rerun children;
+a supplied changed child route/rate conflicts, while a cached terminal receipt
+can be read after an unused child profile is removed. Delegated child operations
+cannot be resumed through public continuation. Existing requests without a
+policy retain their serialization and behavior.
+
+This advances gate A's subagent ownership requirement. Detached workers,
+inter-agent messages, mid-turn steering, child-specific terminal presentation and
+self-improvement/promotion remain separate open gates. This slice does not change
+production TypeScript routing or authorize autonomous source publication.
+
+Qualification: the Rust 1.85 workspace run passed 618 tests with 11 explicit
+backend/environment ignores. After the final child-local cancellation correction,
+the engine/CLI suites were rerun; the final delegation suite contains nine passing
+real-engine fixtures, plus a private panic/drain ownership test and three atomic
+store-batch tests. Strict production workspace Clippy and formatting passed.
+The new backend fixtures use independently keyed fake containers and loopback
+model servers: they prove lifecycle/accounting, not actual sandbox isolation or
+live-provider behavior. No paid calls or production rollout were performed.

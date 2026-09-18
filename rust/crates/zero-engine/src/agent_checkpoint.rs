@@ -86,7 +86,7 @@ fn validate(store: &Store, checkpoint: &Checkpoint) -> Result<(), EngineError> {
         .content
         .iter()
         .filter_map(|c| match c {
-            Content::ToolCall { id, .. } => Some(id),
+            Content::ToolCall { id, name, .. } => Some((id, name)),
             _ => None,
         })
         .collect();
@@ -94,6 +94,7 @@ fn validate(store: &Store, checkpoint: &Checkpoint) -> Result<(), EngineError> {
         || calls.len() > 32
         || calls
             .iter()
+            .map(|(id, _)| id)
             .collect::<std::collections::BTreeSet<_>>()
             .len()
             != calls.len()
@@ -110,7 +111,7 @@ fn validate(store: &Store, checkpoint: &Checkpoint) -> Result<(), EngineError> {
             "checkpoint changed provider replay or omitted tool results",
         ));
     }
-    for (index, (id, item)) in calls
+    for (index, ((id, name), item)) in calls
         .iter()
         .zip(&checkpoint.input[prefix.len()..])
         .enumerate()
@@ -135,6 +136,20 @@ fn validate(store: &Store, checkpoint: &Checkpoint) -> Result<(), EngineError> {
                     )
                 {
                     return Err(error("checkpoint includes unsettled tool effects"));
+                }
+                if name.as_str() == "delegate_tasks" || child.payload["kind"] == "agent_delegation"
+                {
+                    if name.as_str() != "delegate_tasks"
+                        || child.payload["kind"] != "agent_delegation"
+                    {
+                        return Err(error("checkpoint delegation tool kind mismatch"));
+                    }
+                    let output = agent_delegation::validate_receipt(store, &child)?;
+                    if item["output"].as_str() != Some(output.as_str()) {
+                        return Err(error(
+                            "checkpoint delegation output differs from child receipts",
+                        ));
+                    }
                 }
             }
             // Denied/unoffered tools have no child, but their exact error output is retained.
