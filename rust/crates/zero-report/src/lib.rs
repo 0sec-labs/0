@@ -1,4 +1,5 @@
 //! Pure legacy report renderers. Rendering never establishes finding validity.
+mod html;
 mod markdown;
 use serde_json::{Value, json};
 use std::collections::HashSet;

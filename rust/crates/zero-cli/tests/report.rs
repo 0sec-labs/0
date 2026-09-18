@@ -82,6 +82,7 @@ fn report_help_and_protocol_schema_bypass_input_and_configuration() {
     assert!(help.status.success());
     assert!(String::from_utf8_lossy(&help.stdout).contains("sarif"));
     assert!(String::from_utf8_lossy(&help.stdout).contains("markdown"));
+    assert!(String::from_utf8_lossy(&help.stdout).contains("html"));
     let schema = cli(&dir).arg("schema").output().unwrap();
     assert!(schema.status.success());
     let schema: Value = serde_json::from_slice(&schema.stdout).unwrap();
@@ -163,6 +164,49 @@ fn report_markdown_matches_legacy_fixture_without_engine_or_credential_access() 
     std::fs::write(&input, report.to_string()).unwrap();
     let output = cli(&dir)
         .args(["report", "--format", "markdown", "--input"])
+        .arg(&input)
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(2));
+    assert!(output.stdout.is_empty());
+    assert!(!String::from_utf8_lossy(&output.stderr).contains("fixture-secret"));
+}
+
+#[test]
+fn report_html_is_self_contained_and_metadata_bypasses_state() {
+    let dir = TempDir::new().unwrap();
+    let input = dir.path().join("html.json");
+    let source = include_bytes!("../../zero-report/tests/fixtures/html-report.json");
+    std::fs::write(&input, source).unwrap();
+    let output = cli(&dir)
+        .args(["report", "--format", "html", "--input"])
+        .arg(&input)
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let rendered = String::from_utf8(output.stdout).unwrap();
+    assert_eq!(
+        rendered,
+        format!(
+            "{}\n",
+            zero_report::Report::parse(source).unwrap().html().unwrap()
+        )
+    );
+    assert!(rendered.starts_with("<!DOCTYPE html>"));
+    assert!(rendered.contains("Content-Security-Policy"));
+    assert!(rendered.contains("Reproduction steps"));
+    assert!(rendered.contains("Remediation"));
+    assert!(!rendered.contains("<script>"));
+    assert!(!dir.path().join("never").exists());
+    let mut malformed: Value = serde_json::from_slice(source).unwrap();
+    malformed["durationMs"] = serde_json::json!("fixture-secret");
+    std::fs::write(&input, malformed.to_string()).unwrap();
+    let output = cli(&dir)
+        .args(["report", "--format", "html", "--input"])
         .arg(&input)
         .output()
         .unwrap();

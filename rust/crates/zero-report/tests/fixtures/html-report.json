@@ -1,0 +1,214 @@
+{
+  "id": "scan-fixture",
+  "target": "https://example.invalid/a?b=\"quoted\"",
+  "startedAt": "2026-09-18T00:00:00.000Z",
+  "completedAt": "2026-09-18T00:01:00.000Z",
+  "executionSuccessful": false,
+  "findings": [
+    {
+      "id": "finding-4",
+      "templateId": "rule-4",
+      "title": "Finding 4",
+      "description": "fixture only",
+      "severity": "info",
+      "category": "injection",
+      "status": "false-positive",
+      "evidence": {
+        "request": "GET /fixture",
+        "response": "HTTP/1.1 200",
+        "analysis": "fixture only"
+      },
+      "confidence": 0,
+      "pocSteps": []
+    },
+    {
+      "id": "finding-3",
+      "templateId": "rule-3",
+      "title": "Finding 3",
+      "description": "fixture only",
+      "severity": "low",
+      "category": "injection",
+      "status": "discovered",
+      "evidence": {
+        "request": "GET /fixture",
+        "response": "HTTP/1.1 200",
+        "analysis": "fixture only"
+      },
+      "confidence": 0,
+      "pocSteps": []
+    },
+    {
+      "id": "finding-2",
+      "templateId": "rule-2",
+      "title": "Finding 2",
+      "description": "fixture only",
+      "severity": "medium",
+      "category": "injection",
+      "status": "discovered",
+      "evidence": {
+        "request": "GET /fixture",
+        "response": "HTTP/1.1 200",
+        "analysis": "fixture only"
+      },
+      "confidence": 0,
+      "pocSteps": []
+    },
+    {
+      "id": "finding-1",
+      "templateId": "same-rule",
+      "title": "Finding 1",
+      "description": "fixture only",
+      "severity": "high",
+      "category": "injection",
+      "status": "confirmed",
+      "evidence": {
+        "request": "GET /fixture",
+        "response": "HTTP/1.1 200",
+        "analysis": "fixture only"
+      },
+      "confidence": 0,
+      "pocSteps": [],
+      "remediation": {
+        "summary": "Use a parameterised query.",
+        "steps": [
+          "Replace string concatenation",
+          "Add a regression test"
+        ],
+        "codeExample": {
+          "before": "q + input",
+          "after": "db.query(sql, [input])",
+          "language": "ts"
+        },
+        "references": [
+          "https://owasp.org/sqli"
+        ]
+      }
+    },
+    {
+      "id": "finding-0",
+      "templateId": "same-rule",
+      "title": "Quoted \"title\" \u2014 Unicode",
+      "description": "Fixture <script>not executed</script>",
+      "severity": "critical",
+      "category": "injection",
+      "status": "discovered",
+      "evidence": {
+        "summary": "unverified fixture",
+        "request": "literal bytes",
+        "response": "HTTP/1.1 200",
+        "analysis": "fixture only"
+      },
+      "fingerprint": "stable",
+      "cvssScore": 0,
+      "confidence": 0,
+      "findingRank": 0,
+      "cvssVector": "CVSS:fixture",
+      "publishability": {
+        "decision": "hold"
+      },
+      "noveltyVerdict": "possibly-known",
+      "dedupRefs": [],
+      "advisoryMatches": [],
+      "verification_result": {
+        "outcome": "inconclusive"
+      },
+      "inlineValidation": {
+        "verified": false
+      },
+      "supplyChain": {
+        "package": "fixture"
+      },
+      "kernelExploit": {
+        "attempted": false
+      },
+      "semanticDedupe": {
+        "canonicalId": "finding-0"
+      },
+      "futureField": {
+        "keep": "all JSON fields"
+      },
+      "pocSteps": [
+        {
+          "id": "step-0",
+          "kind": "shell",
+          "summary": "shell data only",
+          "action": {
+            "type": "shell",
+            "cmd": "printf fixture",
+            "cwd": "/workspace"
+          },
+          "expect": {
+            "fixture": true
+          }
+        },
+        {
+          "id": "step-1",
+          "kind": "http",
+          "summary": "http data only",
+          "action": {
+            "type": "http",
+            "method": "GET",
+            "url": "https://example.invalid/fixture",
+            "headers": {
+              "X-Fixture": "inert"
+            }
+          },
+          "expect": {
+            "fixture": true
+          }
+        },
+        {
+          "id": "step-2",
+          "kind": "docker",
+          "summary": "docker data only",
+          "action": {
+            "type": "docker",
+            "image": "fixture:local",
+            "args": [
+              "true"
+            ]
+          },
+          "expect": {
+            "fixture": true
+          }
+        },
+        {
+          "id": "step-3",
+          "kind": "note",
+          "summary": "note data only",
+          "action": {
+            "type": "note"
+          },
+          "expect": {
+            "fixture": true
+          }
+        }
+      ]
+    }
+  ],
+  "unknownExtension": {
+    "nested": [
+      1,
+      false,
+      null,
+      "retained"
+    ]
+  },
+  "scanDepth": "deep",
+  "durationMs": 12000,
+  "summary": {
+    "totalFindings": 5,
+    "totalAttacks": 8,
+    "critical": 1,
+    "high": 1,
+    "medium": 1,
+    "low": 1,
+    "info": 1
+  },
+  "warnings": [
+    {
+      "stage": "verify",
+      "message": "A probe timed out"
+    }
+  ]
+}

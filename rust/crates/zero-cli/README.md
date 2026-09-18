@@ -278,6 +278,7 @@ No plugin management, generation activation or legacy plugin parity is implied.
 0sec-native report --input report.json --format json
 0sec-native report --input report.json --format sarif
 0sec-native report --input report.json --format markdown
+0sec-native report --input report.json --format html
 ```
 
 This renders an existing legacy report without running a scan, validating a
@@ -290,7 +291,11 @@ reproduction steps. It escapes supplied markup, discloses evidence/step elisions
 and says “No findings reported” for empty reports without inferring target safety.
 Evidence excerpts use 4,000 Unicode characters and show at most 20 PoC steps;
 JSON/SARIF retain complete evidence. Missing Markdown metadata is marked
-“not supplied.” Rendering does not redact supplied secrets.
+“not supplied.” HTML is a self-contained report with severity-sorted cards,
+warnings, proof steps and remediation; all supplied markup and URLs are inert
+text, with no scripts or external resources. It uses the same evidence/step
+limits and explicit elision notices. Missing metadata remains “not supplied”;
+no empty report gets a clean verdict. Rendering does not redact supplied secrets.
 
 Input is capped at 16 MiB and read with a five-second deadline. Stdout writes
 have a five-second deadline and respond to SIGINT/SIGTERM. Success exits 0,
@@ -474,3 +479,13 @@ continuations require the original pin to remain available; exact retries do not
 A cleanup failure returns `Unknown` with a recovery path and cannot advertise a
 continuation checkpoint. Full filesystem and cancellation limits are documented
 in [the source tool contract](../zero-engine/SOURCE-TOOLS.md).
+
+### Adaptive review submissions
+
+In an `agent --request` file, combine `source_snapshot_tools: true` with
+`source_submission_max_hypotheses: 8` (or another limit from 1 to 32) to require
+structured findings after investigation. The model submits selected paths and
+hash/line citations through `submit_source_hypotheses`; prose alone cannot finish
+this mode. `result.source_review` retains unverified hypotheses and artifact
+hashes. Its operation ID can be used as `source_operation_id` for an explicit
+`source-reproduce` request. This does not infer reproduction or a clean verdict.
