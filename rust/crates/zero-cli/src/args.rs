@@ -26,6 +26,15 @@ pub struct Args {
 
 #[derive(Debug, Subcommand)]
 pub enum Command {
+    /// Read hosted service metadata with an explicitly named token environment variable.
+    Hosted {
+        #[arg(long, global = true)]
+        host: Option<String>,
+        #[arg(long, global = true, default_value = "0SEC_CLOUD_TOKEN")]
+        token_env: String,
+        #[command(subcommand)]
+        command: crate::hosted::HostedCommand,
+    },
     /// Inspect native prerequisites locally without opening the state database.
     Doctor {
         #[arg(long, default_value_t = 2000, value_parser = clap::value_parser!(u64).range(10..=30000))]

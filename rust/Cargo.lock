@@ -1739,6 +1739,7 @@ dependencies = [
  "tokio",
  "tokio-util",
  "uuid",
+ "zero-cloud-client",
  "zero-engine",
  "zero-executor",
  "zero-protocol",

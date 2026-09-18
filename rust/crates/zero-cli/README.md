@@ -212,3 +212,26 @@ cancellation/cleanup and exits nonzero. Failed, cancelled or Unknown turns stop
 without submitting queued prompts; inspect the printed operation ID in session
 events/budget and reconcile unknown usage explicitly. This is a scripted line
 console foundation, not full-screen TUI parity or recovery of interrupted work.
+
+## Read-only hosted metadata
+
+```sh
+0sec-native hosted health
+0sec-native hosted --host https://cloud.0.security --token-env MY_HOSTED_TOKEN models
+0sec-native hosted account
+0sec-native hosted usage
+```
+
+The host comes from `--host`, then `0SEC_CLOUD_HOST`, then
+`https://cloud.0.security`. The bearer token is read only from the variable named
+by `--token-env` (default `0SEC_CLOUD_TOKEN`). No credential files are read and no
+login credentials are written. These commands bypass the native state database,
+Docker, and provider profile configuration entirely; help/schema read no tokens.
+
+Successful responses are JSON on stdout. HTTP/network/timeout/cancellation errors
+produce sanitized stderr and exit 1; missing token or invalid configuration
+exits 2. Requests have a fixed 30-second deadline and 1 MiB response limit.
+SIGINT/SIGTERM cancels a live request. Redirects/retries are disabled and HTTPS is
+required except loopback HTTP. This surface only reads health, model catalog,
+credit balance and request usage; it neither starts hosted inference nor uploads
+scans. Account percentages remain service-reported, never reconstructed locally.

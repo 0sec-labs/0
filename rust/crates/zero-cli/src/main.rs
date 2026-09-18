@@ -2,6 +2,7 @@ mod args;
 mod console;
 mod doctor;
 mod framing;
+mod hosted;
 mod providers;
 mod server;
 
@@ -66,6 +67,14 @@ async fn run(args: Args) -> Result<bool, Box<dyn Error>> {
         let pin = zero_executor::pin_snapshot(root).map_err(std::io::Error::other)?;
         println!("{}", serde_json::to_string(&pin)?);
         return Ok(true);
+    }
+    if let Command::Hosted {
+        host,
+        token_env,
+        command,
+    } = &args.command
+    {
+        return hosted::run(host.as_deref(), token_env, command).await;
     }
     if let Command::Doctor { timeout_ms } = &args.command {
         let smolvm = args
@@ -192,7 +201,8 @@ async fn run(args: Args) -> Result<bool, Box<dyn Error>> {
         | Command::Snapshot { .. }
         | Command::Doctor { .. }
         | Command::AppServer
-        | Command::Console { .. } => unreachable!(),
+        | Command::Console { .. }
+        | Command::Hosted { .. } => unreachable!(),
     };
     let (events, mut event_rx) = mpsc::channel(128);
     // One-shot commands reserve stdout for their final JSON result.
