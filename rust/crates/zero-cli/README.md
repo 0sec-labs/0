@@ -378,3 +378,24 @@ operations settle before their final JSON is written, so a stalled stdout reader
 does not hold active guest work. Blocking host filesystem operations retain the
 usual OS limitations; the exporter awaits its private writer before returning
 from a handled signal.
+
+`source-reproduce --session SESSION --command-id COMMAND --request request.json`
+executes an explicit host-owned frozen plan against a successful source-review
+operation in the same session. The request supplies `source_operation_id` and
+`plan`: schema version 1, oracle version `zero-verification-exact-output-v1`,
+retained hypothesis and source-bundle identities,
+the original exact snapshot pin, pinned backend, limits, repeated attack cases,
+and legitimate controls with exact exit/stdout/stderr observations (bytes are
+base64 on the wire). Provider output cannot authorize this command or edit its
+oracle. No provider configuration is needed to reproduce already retained source.
+
+Exit zero means a completed assessment: either `observed_for_plan` or
+`not_observed`. Inspect the assessment disposition; neither is a general
+vulnerability-verification or safety verdict, and `vulnerability_reportable`
+remains false. Inconclusive, cancelled, unknown and setup failures exit nonzero.
+Signals cancel the owned child and await settlement/cleanup. Exact retries return
+the durable result after source deletion without restarting the observation
+matrix. Use `artifact list`/`artifact export` to inspect or retain the plan,
+observations, and assessment attached to the resulting operation. This surface
+does not propose probes, repair source, run arbitrary model-granted commands, or
+establish a reportable finding.

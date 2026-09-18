@@ -116,6 +116,15 @@ pub enum Command {
         #[arg(long)]
         request: PathBuf,
     },
+    /// Observe an explicit frozen host plan against retained source-review evidence.
+    SourceReproduce {
+        #[arg(long)]
+        session: String,
+        #[arg(long)]
+        command_id: String,
+        #[arg(long)]
+        request: PathBuf,
+    },
     /// Submit selected pinned source for structured, unverified hypotheses.
     SourceReview {
         #[arg(long)]
