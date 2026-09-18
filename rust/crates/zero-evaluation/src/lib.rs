@@ -1,5 +1,6 @@
 //! Controller-owned offline fixture evaluation. No production activation authority.
 mod driver;
+mod inspect;
 mod ledger;
 mod score;
 mod types;

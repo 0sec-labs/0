@@ -83,34 +83,8 @@ impl Ledger {
     }
     pub fn reopen(root: &Path) -> Result<Self> {
         let (conn, lock, root) = open(root, false)?;
-        let app: i64 = conn.pragma_query_value(None, "application_id", |r| r.get(0))?;
-        let version: i64 = conn.pragma_query_value(None, "user_version", |r| r.get(0))?;
-        if app != 1514493505 || version != 1 {
-            return Err(invalid("foreign evaluation database"));
-        }
-        let objects: Vec<(String, String)> = conn
-            .prepare(
-                "SELECT type,name FROM sqlite_schema WHERE name NOT LIKE 'sqlite_%' ORDER BY name",
-            )?
-            .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?
-            .collect::<std::result::Result<_, _>>()?;
-        if objects
-            != vec![
-                ("table".into(), "attempts".into()),
-                ("table".into(), "run".into()),
-            ]
-        {
-            return Err(invalid("unexpected evaluation schema objects"));
-        }
-        let (run, raw, expected): (String, String, String) =
-            conn.query_row("SELECT id,plan,digest FROM run", [], |r| {
-                Ok((r.get(0)?, r.get(1)?, r.get(2)?))
-            })?;
-        if raw.len() > 1024 * 1024 || digest(raw.as_bytes()) != expected {
-            return Err(invalid("plan integrity"));
-        }
-        let plan: Plan = serde_json::from_str(&raw)?;
-        plan.validate()?;
+        validate_identity(&conn)?;
+        let (run, plan) = crate::inspect::read_plan(&conn)?;
         let owner = uuid::Uuid::new_v4().to_string();
         let mut value = Self {
             conn,
@@ -157,22 +131,25 @@ impl Ledger {
         Ok(())
     }
     pub fn attempts(&self) -> Result<Vec<Attempt>> {
-        let mut q = self.conn.prepare("SELECT json FROM attempts ORDER BY id")?;
-        let rows = q.query_map([], |r| r.get::<_, String>(0))?;
-        let mut out = vec![];
-        for row in rows {
-            let raw = row?;
-            if raw.len() > 512 * 1024 || out.len() >= 1536 {
-                return Err(invalid("attempt evidence bound"));
-            }
-            out.push(serde_json::from_str(&raw)?);
-        }
-        Ok(out)
+        crate::inspect::read_attempts(&self.conn, &self.plan)
+    }
+    pub fn can_reserve_attempt(&self, index: usize) -> Result<bool> {
+        let (total, current): (usize, usize) = self.conn.query_row(
+            "SELECT coalesce(sum(length(CAST(json AS BLOB))),0),coalesce(max(CASE WHEN id=?1 THEN length(CAST(json AS BLOB)) ELSE 0 END),0) FROM attempts", [index], |r| Ok((r.get(0)?,r.get(1)?)))?;
+        Ok(total.saturating_sub(current).saturating_add(512 * 1024)
+            <= crate::inspect::MAX_EVIDENCE_BYTES)
     }
     pub fn save(&self, a: &Attempt) -> Result<()> {
         let raw = serde_json::to_string(a)?;
         if raw.len() > 512 * 1024 {
             return Err(invalid("attempt evidence bound"));
+        }
+        let (total, current): (usize, usize) = self.conn.query_row(
+            "SELECT coalesce(sum(length(CAST(json AS BLOB))),0),coalesce(max(CASE WHEN id=?1 THEN length(CAST(json AS BLOB)) ELSE 0 END),0) FROM attempts", [a.index], |r| Ok((r.get(0)?,r.get(1)?)))?;
+        if total.saturating_sub(current).saturating_add(raw.len())
+            > crate::inspect::MAX_EVIDENCE_BYTES
+        {
+            return Err(invalid("aggregate serialized evidence bound"));
         }
         if self.conn.execute(
             "UPDATE attempts SET json=?1 WHERE id=?2",
@@ -184,17 +161,7 @@ impl Ledger {
         Ok(())
     }
     pub fn report(&self) -> Result<Option<Report>> {
-        let raw: Option<String> = self
-            .conn
-            .query_row("SELECT report FROM run", [], |r| r.get(0))?;
-        let report: Option<Report> = raw.map(|s| serde_json::from_str(&s)).transpose()?;
-        if let Some(ref stored) = report {
-            let measured = crate::score::score(&self.run, &self.plan, &self.attempts()?)?;
-            if serde_json::to_vec(stored)? != serde_json::to_vec(&measured)? {
-                return Err(invalid("stored report/evidence integrity mismatch"));
-            }
-        }
-        Ok(report)
+        crate::inspect::read_report(&self.conn, &self.run, &self.plan, &self.attempts()?)
     }
     pub fn finish(&self, r: &Report) -> Result<()> {
         self.conn.execute(
@@ -262,5 +229,29 @@ fn open(_: &Path, _: bool) -> Result<(Connection, File, PathBuf)> {
 
 fn configure_owned_database(conn: &Connection) -> Result<()> {
     conn.execute_batch("PRAGMA synchronous=FULL; PRAGMA journal_mode=DELETE;")?;
+    Ok(())
+}
+
+pub(crate) fn validate_identity(conn: &Connection) -> Result<()> {
+    let app: i64 = conn.pragma_query_value(None, "application_id", |r| r.get(0))?;
+    let version: i64 = conn.pragma_query_value(None, "user_version", |r| r.get(0))?;
+    if app != 1514493505 || version != 1 {
+        return Err(invalid("foreign evaluation database"));
+    }
+    let objects: Vec<(String, String)> = conn
+        .prepare(
+            "SELECT type,name FROM sqlite_schema WHERE name NOT LIKE 'sqlite_%' ORDER BY name",
+        )?
+        .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?
+        .collect::<std::result::Result<_, _>>()?;
+    if objects
+        != vec![
+            ("table".into(), "attempts".into()),
+            ("table".into(), "run".into()),
+        ]
+    {
+        return Err(invalid("unexpected evaluation schema objects"));
+    }
+
     Ok(())
 }

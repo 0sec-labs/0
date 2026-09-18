@@ -77,3 +77,16 @@ ZERO_EVALUATION_DOCKER_IMAGE=sha256:<existing-local-image-id> \
 ```
 
 It never pulls an image. The fixture needs Node available as `node` in that image.
+
+`Evaluation::inspect(root)` opens a read-only SQLite snapshot without taking the
+owner lock or rewriting interrupted attempts. Its bounded serialized summary
+contains run/plan identity, attempt-state counts, slot totals and an optional
+verified report; it exposes no inputs, expected answers or raw output. It works
+while the controller still holds its exclusive ownership lock. `reopen` remains
+an explicit recovery action and is not used for ordinary status inspection.
+Reads check SQL byte lengths before materializing JSON and enforce a 32 MiB total
+serialized-attempt limit, 512 KiB per attempt, 1 MiB plan and 64 KiB report. Before
+each dispatch the writer reserves room for one full maximum-sized attempt. Lack
+of evidence capacity stops scheduling as Inconclusive, without truncating output
+or starting another guest. These serialized limits include JSON/base64 expansion
+separately from the plan's raw output allowance.

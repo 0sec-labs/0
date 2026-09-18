@@ -40,6 +40,11 @@ pub(crate) fn score(run: &str, plan: &Plan, attempts: &[Attempt]) -> Result<Repo
             Lane::NegativeControl => negatives &= solved[1],
         }
     }
+    if attempts.iter().any(|a| {
+        a.error.as_deref() == Some("serialized evidence capacity cannot cover next attempt")
+    }) {
+        reasons.push("serialized evidence capacity exhausted before next dispatch".into());
+    }
     if !matrix {
         reasons.push("incomplete paired matrix, failed execution, or unsettled effects".into());
     }

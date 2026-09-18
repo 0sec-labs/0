@@ -206,6 +206,11 @@ async fn measured_runner_outputs_drive_eligibility_without_production_activation
     let inputs = fs::read_to_string(f.dir.path().join("inputs.jsonl")).unwrap();
     assert!(!inputs.contains("expected"));
     assert!(!inputs.contains("held"));
+    let inspection = Evaluation::inspect(&f.root()).unwrap();
+    assert_eq!(
+        inspection.report.unwrap().receipt_digest,
+        report.receipt_digest
+    );
     let calls = fs::read(f.dir.path().join("calls.jsonl")).unwrap();
     drop(e);
     let mut reopened = Evaluation::reopen(&f.root()).unwrap();
@@ -254,6 +259,19 @@ async fn interrupted_waiter_reopens_unknown_without_replay() {
         .is_err()
     );
     assert!(e.attempts().unwrap().iter().any(|a| a.state == "running"));
+    let before = fs::read(f.root().join("evaluation.sqlite")).unwrap();
+    let status = Evaluation::inspect(&f.root()).unwrap();
+    assert_eq!(status.states.get("running"), Some(&1));
+    assert_eq!(status.reserved_slots, 1);
+    assert!(status.report.is_none());
+    let visible = serde_json::to_string(&status).unwrap();
+    for hidden in ["case_id", "expected", "input", "stdout", "stderr", "answer"] {
+        assert!(!visible.contains(hidden));
+    }
+    assert_eq!(
+        before,
+        fs::read(f.root().join("evaluation.sqlite")).unwrap()
+    );
     drop(e);
     let mut e = Evaluation::reopen(&f.root()).unwrap();
     assert!(e.attempts().unwrap().iter().any(|a| a.state == "unknown"));
@@ -444,4 +462,80 @@ fn rejected_foreign_wal_database_is_not_mutated() {
         .pragma_query_value(None, "journal_mode", |r| r.get(0))
         .unwrap();
     assert_eq!(mode, "wal");
+}
+
+#[test]
+fn readonly_inspection_rejects_oversized_text_before_parsing() {
+    for column in ["report", "attempt", "plan"] {
+        let f = Fixture::new();
+        let _e = f.create();
+        let db = rusqlite::Connection::open(f.root().join("evaluation.sqlite")).unwrap();
+        match column {
+            "report" => db
+                .execute_batch("UPDATE run SET report=hex(zeroblob(40000));")
+                .unwrap(),
+            "attempt" => db
+                .execute_batch("UPDATE attempts SET json=hex(zeroblob(300000)) WHERE id=0;")
+                .unwrap(),
+            "plan" => db
+                .execute_batch("UPDATE run SET plan=hex(zeroblob(600000));")
+                .unwrap(),
+            _ => unreachable!(),
+        }
+        drop(db);
+        assert!(Evaluation::inspect(&f.root()).is_err(), "{column}");
+    }
+}
+#[test]
+fn readonly_inspection_rejects_aggregate_oversize_under_per_row_limit() {
+    let mut f = Fixture::new();
+    f.plan.repeats = 8;
+    f.plan.attempt_budget = 96;
+    for x in 3..6 {
+        f.plan.cases.push(Case {
+            id: format!("extra-{x}"),
+            lane: Lane::Development,
+            input: json!({"x":x}),
+            expected: json!({"answer":x}),
+        });
+    }
+    let _e = f.create();
+    let db = rusqlite::Connection::open(f.root().join("evaluation.sqlite")).unwrap();
+    db.execute_batch("UPDATE attempts SET json=hex(zeroblob(200000));")
+        .unwrap();
+    drop(db);
+    let error = Evaluation::inspect(&f.root()).unwrap_err().to_string();
+    assert!(error.contains("evidence bounds"), "{error}");
+}
+
+#[tokio::test]
+async fn insufficient_serialized_evidence_headroom_stops_before_dispatch() {
+    let mut f = Fixture::new();
+    f.plan.repeats = 8;
+    f.plan.attempt_budget = 96;
+    for x in 3..6 {
+        f.plan.cases.push(Case {
+            id: format!("extra-{x}"),
+            lane: Lane::Development,
+            input: json!({"x":x}),
+            expected: json!({"answer":x}),
+        });
+    }
+    let mut e = f.create();
+    // Model a nearly full but still bounded ledger. Existing rows remain valid
+    // JSON under the per-record cap; their diagnostic content is never exposed.
+    let db = rusqlite::Connection::open(f.root().join("evaluation.sqlite")).unwrap();
+    db.execute(
+        "UPDATE attempts SET json=json_set(json,'$.error',?1) WHERE id>0",
+        ["x".repeat(350_000)],
+    )
+    .unwrap();
+    drop(db);
+    let r = e.run(&f.runner, CancellationToken::new()).await.unwrap();
+    assert_eq!(r.decision, EvaluationDecision::Inconclusive);
+    assert_eq!(r.attempted, 0);
+    assert!(r.reasons.iter().any(|s| s.contains("evidence capacity")));
+    assert!(!f.dir.path().join("calls.jsonl").exists());
+    let status = Evaluation::inspect(&f.root()).unwrap();
+    assert_eq!(status.report.unwrap().receipt_digest, r.receipt_digest);
 }

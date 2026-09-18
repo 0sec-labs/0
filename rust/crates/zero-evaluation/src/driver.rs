@@ -15,6 +15,10 @@ pub struct Evaluation {
     instances: Option<[Instance; 2]>,
 }
 impl Evaluation {
+    /// Read one bounded SQLite snapshot without claiming an owner or recovering work.
+    pub fn inspect(root: &Path) -> Result<crate::Inspection> {
+        crate::inspect::inspect(root)
+    }
     /// Root must not exist. Source is read-only: production is never bootstrapped
     /// or activated. Only verified generation/plugin artifact closure is copied.
     pub fn create(root: &Path, source: &Registry, plan: Plan, grants: &HostGrants) -> Result<Self> {
@@ -66,6 +70,12 @@ impl Evaluation {
         let attempts = self.ledger.attempts()?;
         for mut attempt in attempts {
             if cancel.is_cancelled() {
+                break;
+            }
+            if !self.ledger.can_reserve_attempt(attempt.index)? {
+                attempt.error =
+                    Some("serialized evidence capacity cannot cover next attempt".into());
+                self.ledger.save(&attempt)?;
                 break;
             }
             let case = self

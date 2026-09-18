@@ -163,3 +163,17 @@ pub struct Report {
     pub evidence_digest: String,
     pub receipt_digest: String,
 }
+
+/// Bounded host status view; contains no case inputs, expected values or raw output.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Inspection {
+    pub schema_version: u32,
+    pub run_id: String,
+    pub plan_digest: String,
+    pub started: bool,
+    pub attempt_budget: usize,
+    pub states: std::collections::BTreeMap<String, usize>,
+    pub settled: usize,
+    pub reserved_slots: usize,
+    pub report: Option<Report>,
+}
