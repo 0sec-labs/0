@@ -1,4 +1,5 @@
 mod args;
+mod artifact;
 mod console;
 mod doctor;
 mod evaluation;
@@ -56,6 +57,9 @@ fn main() -> std::process::ExitCode {
 }
 
 async fn run(args: Args) -> Result<bool, Box<dyn Error>> {
+    if let Command::Artifact { command } = &args.command {
+        return artifact::run(&args.state, command).await;
+    }
     if let Command::Evaluation { command } = &args.command {
         return evaluation::run(
             command,
@@ -65,10 +69,7 @@ async fn run(args: Args) -> Result<bool, Box<dyn Error>> {
         .await;
     }
     if matches!(args.command, Command::Schema) {
-        println!(
-            "{}",
-            serde_json::to_string_pretty(&zero_protocol::schema())?
-        );
+        write_json(&zero_protocol::schema(), true).await?;
         return Ok(true);
     }
     if let Command::Report { input, format } = &args.command {
@@ -79,7 +80,7 @@ async fn run(args: Args) -> Result<bool, Box<dyn Error>> {
     } = &args.command
     {
         let pin = zero_executor::pin_snapshot(root).map_err(std::io::Error::other)?;
-        println!("{}", serde_json::to_string(&pin)?);
+        write_json(&pin, false).await?;
         return Ok(true);
     }
     if let Command::Hosted {
@@ -257,7 +258,8 @@ async fn run(args: Args) -> Result<bool, Box<dyn Error>> {
         | Command::Console { .. }
         | Command::Hosted { .. }
         | Command::Report { .. }
-        | Command::Evaluation { .. } => unreachable!(),
+        | Command::Evaluation { .. }
+        | Command::Artifact { .. } => unreachable!(),
     };
     let (events, mut event_rx) = mpsc::channel(128);
     // One-shot commands reserve stdout for their final JSON result.
@@ -285,6 +287,27 @@ async fn run(args: Args) -> Result<bool, Box<dyn Error>> {
         }
         _ => true,
     };
-    println!("{}", serde_json::to_string(&reply)?);
+    write_json(&reply, false).await?;
     Ok(success)
+}
+
+// Owned engine work has settled before one-shot output starts. Slow readers may
+// prevent delivery, but cannot hold the process or its signal handler forever.
+async fn write_json(value: &impl serde::Serialize, pretty: bool) -> Result<(), Box<dyn Error>> {
+    use tokio::io::AsyncWriteExt;
+    let mut bytes = if pretty {
+        serde_json::to_vec_pretty(value)?
+    } else {
+        serde_json::to_vec(value)?
+    };
+    bytes.push(b'\n');
+    let mut stdout = tokio::io::stdout();
+    tokio::select! {
+        result = tokio::time::timeout(std::time::Duration::from_secs(5), async {
+            stdout.write_all(&bytes).await?;
+            stdout.flush().await
+        }) => result.map_err(|_| "JSON output deadline exceeded")??,
+        _ = server::shutdown_signal() => return Err("JSON output interrupted".into()),
+    }
+    Ok(())
 }

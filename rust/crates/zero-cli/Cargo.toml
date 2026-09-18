@@ -18,6 +18,7 @@ tokio-util.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 zero-protocol.workspace = true
+zero-store.workspace = true
 zero-engine = { path = "../zero-engine" }
 zero-executor.workspace = true
 zero-provider.workspace = true

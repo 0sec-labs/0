@@ -353,3 +353,28 @@ Prose alone is not a result. This command performs no reproduction, patching,
 behavioral validation, or uploads beyond the explicitly configured model request.
 An exact command retry returns its durable result without rereading deleted source
 or issuing another provider request. Failed or unknown operations exit nonzero.
+
+## Retained operation artifacts
+
+```sh
+0sec-native --state .0sec/native/state.db artifact list --session SESSION --operation OPERATION
+0sec-native --state .0sec/native/state.db artifact export --session SESSION \
+  --operation OPERATION --name source.bundle --output retained-source.json
+```
+
+These commands open the existing schema-v4 journal read-only, without claiming
+engine ownership, migrating state, recovering operations or loading credentials.
+They work while an engine owns the journal. Listing exposes attachment names and
+hashes. Export verifies the retained content hash and creates a new file atomically;
+it never overwrites an existing destination. Files are private (0600 on Unix),
+and source bytes are written only to the explicitly requested destination.
+Output paths must be UTF-8 for the JSON receipt. An interrupted output stream or
+failed directory sync can occur after the complete file was published; inspect
+the destination before retrying. Repeated export to an existing path fails.
+
+One-shot JSON output, schema/snapshot output and ordinary JSON configuration or
+request reads have five-second deadlines and respond to shutdown signals. Engine
+operations settle before their final JSON is written, so a stalled stdout reader
+does not hold active guest work. Blocking host filesystem operations retain the
+usual OS limitations; the exporter awaits its private writer before returning
+from a handled signal.

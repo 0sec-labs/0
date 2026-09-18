@@ -29,6 +29,11 @@ pub struct Args {
 
 #[derive(Debug, Subcommand)]
 pub enum Command {
+    /// Inspect or export retained operation bytes without taking engine ownership.
+    Artifact {
+        #[command(subcommand)]
+        command: crate::artifact::ArtifactCommand,
+    },
     /// Measure offline plugin fixtures; this does not promote production code.
     Evaluation {
         #[command(subcommand)]

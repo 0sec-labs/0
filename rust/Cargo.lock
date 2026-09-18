@@ -1774,6 +1774,7 @@ dependencies = [
  "zero-report",
  "zero-sandbox",
  "zero-smolvm",
+ "zero-store",
 ]
 
 [[package]]

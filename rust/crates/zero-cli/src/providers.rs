@@ -21,16 +21,23 @@ struct Profile {
 }
 
 pub async fn read_bounded(path: &Path) -> Result<Vec<u8>, Box<dyn Error>> {
-    let mut bytes = Vec::new();
-    tokio::fs::File::open(path)
-        .await?
-        .take((MAX_FRAME_BYTES + 1) as u64)
-        .read_to_end(&mut bytes)
-        .await?;
-    if bytes.len() > MAX_FRAME_BYTES {
-        return Err("JSON file exceeds the frame byte limit".into());
+    let read = async {
+        let mut bytes = Vec::new();
+        tokio::fs::File::open(path)
+            .await?
+            .take((MAX_FRAME_BYTES + 1) as u64)
+            .read_to_end(&mut bytes)
+            .await?;
+        if bytes.len() > MAX_FRAME_BYTES {
+            return Err("JSON file exceeds the frame byte limit".into());
+        }
+        Ok(bytes)
+    };
+    tokio::select! {
+        result = tokio::time::timeout(Duration::from_secs(5), read) =>
+            result.map_err(|_| "JSON input deadline exceeded")?,
+        _ = crate::server::shutdown_signal() => Err("JSON input interrupted".into()),
     }
-    Ok(bytes)
 }
 
 pub async fn load(path: &Path) -> Result<Vec<(String, ProviderClient, Rates)>, Box<dyn Error>> {
