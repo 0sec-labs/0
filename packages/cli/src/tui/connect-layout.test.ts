@@ -26,6 +26,53 @@ import {
 } from "./connect-layout.js";
 import { PROVIDERS, providerStates } from "./provider-status.js";
 
+/** Minimal CreditAccount fixture for dialog items tests. */
+const cloudAcct = {
+  schemaVersion: "credits-v1",
+  snapshotAt: "2026-09-18T12:00:00.000Z",
+  policyVersion: "credits-v1",
+  scope: { orgId: "test-org" },
+  state: "ready" as const,
+  reason: null,
+  free: {
+    state: "active" as const,
+    claimableCreditNanos: "0",
+    spendableCreditNanos: "90000000000",
+    heldCreditNanos: "10000000000",
+    resetAt: "2026-10-01T00:00:00.000Z",
+  },
+  subscription: {
+    state: "none" as const,
+    priceCents: 1500 as const,
+    periodStart: null,
+    periodEnd: null,
+    windows: [] as Array<{
+      kind: "monthly" | "weekly" | "five_hour";
+      limitCreditNanos: string | null;
+      settledCreditNanos: string | null;
+      heldCreditNanos: string | null;
+      availableCreditNanos: string | null;
+      resetsAt: string;
+    }>,
+  },
+  prepaid: {
+    spendableCreditNanos: "0",
+    heldCreditNanos: "0",
+    settledDeficitCreditNanos: "0",
+    holdShortfallCreditNanos: "0",
+    consentEnabled: false,
+  },
+  purchase: {
+    enabled: true,
+    presets: [{ principalCents: 1000, creditNanos: "1000000000000" }],
+    customMinCents: 1000,
+    customMaxCents: 100000,
+    stepCents: 100 as const,
+    currency: "usd" as const,
+  },
+  admission: { eligible: true, reason: null },
+} as const;
+
 const isInteger = (value: number): boolean => Number.isInteger(value) && value >= 0;
 
 /**
@@ -312,14 +359,20 @@ describe("connectDialogItems — the projection onto the shared picker", () => {
     const rejected = connectDialogItems({ rows, cloudConnected: true, hostedVerification: { kind: "rejected" } })[0];
     expect(rejected?.current).toBe(false);
     expect(rejected?.meta).toBe("rejected");
-    // Server disabled inference → "not enabled"
-    const disabled = connectDialogItems({ rows, cloudConnected: true, hostedVerification: { kind: "disabled" } })[0];
+    // Server disabled inference (via DTO state) → "not enabled"
+    const disabled = connectDialogItems({
+      rows, cloudConnected: true,
+      hostedVerification: { kind: "verified", account: { ...cloudAcct, state: "disabled", reason: "policy_disabled" } },
+    })[0];
     expect(disabled?.current).toBe(true);
     expect(disabled?.meta).toBe("not enabled");
-    // No credits → "no credits"
-    const noCredits = connectDialogItems({ rows, cloudConnected: true, hostedVerification: { kind: "no-credits" } })[0];
-    expect(noCredits?.current).toBe(true);
-    expect(noCredits?.meta).toBe("no credits");
+    // Unavailable → "offline"
+    const unavailable = connectDialogItems({
+      rows, cloudConnected: true,
+      hostedVerification: { kind: "verified", account: { ...cloudAcct, state: "unavailable", reason: "ledger_unavailable" } },
+    })[0];
+    expect(unavailable?.current).toBe(false);
+    expect(unavailable?.meta).toBe("offline");
     // Unreachable → "offline"
     const offline = connectDialogItems({ rows, cloudConnected: true, hostedVerification: { kind: "unreachable" } })[0];
     expect(offline?.current).toBe(false);
@@ -539,9 +592,60 @@ describe("cloud verification in the detail pane", () => {
       .map((l) => `${l.tone}:${l.text}`)
       .join("\n");
 
-  it("shows the confirmed credit balance when verified", () => {
-    const out = render({ kind: "verified", remainingUsd: 12.5 });
-    expect(out).toContain("$12.50");
-    expect(out).toContain("ok:"); // success tone
+  it("shows a pending line while verifying", () => {
+    expect(render({ kind: "pending" })).toContain("Verifying your 0cloud");
+    expect(render(undefined)).toContain("Verifying your 0cloud");
+  });
+  it("shows connected when verified with a ready account", () => {
+    const out = render({ kind: "verified", account: cloudAcct as import("./hosted-balance.js").CreditAccount });
+    expect(out).toContain("Connected to 0cloud");
+    expect(out).toContain("ok:");
+  });
+  it("shows connected when verified with null account (unsupported schema)", () => {
+    const out = render({ kind: "verified" });
+    expect(out).toContain("Connected to 0cloud");
+    expect(out).toContain("ok:");
+  });
+  it("shows disabled state from DTO, not as separate status", () => {
+    const out = render({
+      kind: "verified",
+      account: { ...cloudAcct, state: "disabled", reason: "policy_disabled" } as import("./hosted-balance.js").CreditAccount,
+    });
+    expect(out).toContain("Signed in to 0cloud");
+    expect(out).toContain("enabled");
+    expect(out).toContain("ok:");
+    expect(out).not.toContain("rejected");
+  });
+  it("shows unavailable state with reason from DTO", () => {
+    const out = render({
+      kind: "verified",
+      account: { ...cloudAcct, state: "unavailable", reason: "ledger_unavailable" } as import("./hosted-balance.js").CreditAccount,
+    });
+    expect(out).toContain("Signed in to 0cloud");
+    expect(out).toContain("unavailable");
+    expect(out).toContain("ledger_unavailable");
+  });
+  it("shows restricted state with reason from DTO", () => {
+    const out = render({
+      kind: "verified",
+      account: { ...cloudAcct, state: "restricted", reason: "debt" } as import("./hosted-balance.js").CreditAccount,
+    });
+    expect(out).toContain("Signed in to 0cloud");
+    expect(out).toContain("restricted");
+    expect(out).toContain("debt");
+  });
+  it("tells the operator to sign in again when the token is rejected", () => {
+    const out = render({ kind: "rejected" });
+    expect(out).toContain("rejected the token");
+    expect(out).toContain("warn:");
+  });
+  it("distinguishes an unreachable backend from a bad token", () => {
+    expect(render({ kind: "unreachable" })).toContain("couldn");
+    expect(render({ kind: "unreachable" })).not.toContain("rejected");
+  });
+  it("never claims verification for a not-connected cloud row", () => {
+    const out = connectDetailLines({ row: cloudRow, cloudConnected: false }, 60).map((l) => l.text).join("\n");
+    expect(out).toContain("not configured");
+    expect(out).not.toContain("Connected to 0cloud");
   });
 });

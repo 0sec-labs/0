@@ -1,52 +1,337 @@
 import { describe, expect, it } from "vitest";
-import type { InferenceAccountResponse } from "@0sec/core";
-import { formatHostedBalance, hostedBalanceState } from "./hosted-balance.js";
+import {
+  formatHostedBalance,
+  hostedBalanceState,
+  formatCreditNanos,
+  formatCreditNanosCompact,
+  formatBalanceDetail,
+  type CreditAccount,
+} from "./hosted-balance.js";
 
-function account(remainingPercent: number | null): InferenceAccountResponse {
+// ── Fixtures (synthetic, matching frozen CreditAccount contract) ──
+
+function freeActive(overrides?: Partial<CreditAccount["free"]>): CreditAccount["free"] {
   return {
-    remainingUsd: 500,
-    currency: "USD",
-    credits: { featureId: "inference_credits", granted: 100, remaining: 42, remainingPercent, nextResetAt: null },
+    state: "active",
+    claimableCreditNanos: "0",
+    spendableCreditNanos: "90000000000",
+    heldCreditNanos: "10000000000",
+    resetAt: "2026-10-01T00:00:00.000Z",
+    ...overrides,
   };
 }
 
-const display = (value: InferenceAccountResponse | null | undefined) => formatHostedBalance(hostedBalanceState(value));
+function noSubscription(): CreditAccount["subscription"] {
+  return {
+    state: "none",
+    priceCents: 1500 as const,
+    periodStart: null,
+    periodEnd: null,
+    windows: [],
+  };
+}
+
+function noPrepaid(): CreditAccount["prepaid"] {
+  return {
+    spendableCreditNanos: "0",
+    heldCreditNanos: "0",
+    settledDeficitCreditNanos: "0",
+    holdShortfallCreditNanos: "0",
+    consentEnabled: false,
+  };
+}
+
+function readyAccount(overrides?: Partial<CreditAccount>): CreditAccount {
+  return {
+    schemaVersion: "credits-v1",
+    snapshotAt: "2026-09-18T12:00:00.000Z",
+    policyVersion: "credits-v1",
+    scope: { orgId: "test-org" },
+    state: "ready",
+    reason: null,
+    free: freeActive(),
+    subscription: noSubscription(),
+    prepaid: noPrepaid(),
+    purchase: {
+      enabled: true,
+      presets: [
+        { principalCents: 1000, creditNanos: "1000000000000" },
+      ],
+      customMinCents: 1000,
+      customMaxCents: 100000,
+      stepCents: 100 as const,
+      currency: "usd" as const,
+    },
+    admission: { eligible: true, reason: null },
+    ...overrides,
+  };
+}
+
+const display = (value: CreditAccount | null | undefined) =>
+  formatHostedBalance(hostedBalanceState(value));
+
+// ── hostedBalanceState / formatHostedBalance ──
 
 describe("hosted balance presentation", () => {
-  it.each([
-    [0, "0"], [100, "100"], [0.001, "<0.1"], [0.0999, "<0.1"],
-    [0.1, "0.1"], [42.34, "42.3"], [99.9, "99.9"], [99.999, ">99.9"],
-  ])("renders authoritative %s without false exhaustion or fullness", (percent, label) => {
-    expect(display(account(percent))).toBe(`Cloud: ${label}% remaining`);
-  });
-
-  it("distinguishes pending data from unavailable data and exhausted credit", () => {
-    expect(formatHostedBalance({ status: "loading" })).toBe("Cloud: Loading…");
+  it("distinguishes pending data from unavailable data and zero credit", () => {
+    expect(formatHostedBalance({ status: "loading" })).toBe("Cloud: Loading\u2026");
     expect(display(null)).toBe("Cloud: Unavailable");
-    expect(display(account(0))).toBe("Cloud: 0% remaining");
-  });
-
-  it("keeps absent and old-gateway balances unavailable despite a USD balance", () => {
     expect(display(undefined)).toBe("Cloud: Unavailable");
-    expect(display({ ...account(42), credits: null })).toBe("Cloud: Unavailable");
-    const legacy = { remainingUsd: 500, currency: "USD" } as InferenceAccountResponse;
-    expect(display(legacy)).toBe("Cloud: Unavailable");
-    expect(display(account(null))).toBe("Cloud: Unavailable");
+    expect(display(readyAccount())).toBe("Cloud: Free 90B nanos");
   });
 
-  it.each([NaN, Infinity, -Infinity, -1, 100.1, "42", undefined])("rejects invalid percentage %s rather than clamping or coercing", (invalid) => {
-    const malformed = account(invalid as number);
-    expect(display(malformed)).toBe("Cloud: Unavailable");
-    expect(formatHostedBalance({ status: "ready", remainingPercent: invalid as number })).toBe("Cloud: Unavailable");
+  it("shows free credits when free is active", () => {
+    const acct = readyAccount();
+    expect(display(acct)).toBe("Cloud: Free 90B nanos");
   });
 
-  it("never reconstructs a percentage from grants, credit units, USD, or reset", () => {
-    const first = account(37.5);
-    const second: InferenceAccountResponse = {
-      ...first, remainingUsd: 0,
-      credits: { ...first.credits!, granted: null, remaining: 99999, nextResetAt: 1 },
-    };
-    expect(display(first)).toBe("Cloud: 37.5% remaining");
-    expect(display(second)).toBe("Cloud: 37.5% remaining");
+  it("shows free claimable when eligible_unclaimed", () => {
+    const acct = readyAccount({
+      free: {
+        state: "eligible_unclaimed",
+        claimableCreditNanos: "50000000000",
+        spendableCreditNanos: "0",
+        heldCreditNanos: "0",
+        resetAt: "2026-10-01T00:00:00.000Z",
+      },
+    });
+    expect(display(acct)).toBe("Cloud: Free 50B nanos claimable");
+  });
+
+  it("shows subscription window when subscription is active", () => {
+    const acct = readyAccount({
+      free: {
+        state: "ineligible",
+        claimableCreditNanos: "0",
+        spendableCreditNanos: "0",
+        heldCreditNanos: "0",
+        resetAt: "2026-10-01T00:00:00.000Z",
+      },
+      subscription: {
+        state: "active",
+        priceCents: 1500 as const,
+        periodStart: "2026-09-01T00:00:00.000Z",
+        periodEnd: "2026-10-01T00:00:00.000Z",
+        windows: [
+          {
+            kind: "monthly",
+            limitCreditNanos: "2000000000000",
+            settledCreditNanos: "100000000000",
+            heldCreditNanos: "50000000000",
+            availableCreditNanos: "1850000000000",
+            resetsAt: "2026-10-01T00:00:00.000Z",
+          },
+          {
+            kind: "weekly",
+            limitCreditNanos: "1000000000000",
+            settledCreditNanos: "100000000000",
+            heldCreditNanos: "50000000000",
+            availableCreditNanos: "850000000000",
+            resetsAt: "2026-09-21T00:00:00.000Z",
+          },
+        ],
+      },
+    });
+    // Shows the most constrained (smallest available) window
+    expect(display(acct)).toBe("Cloud: Subscription 850B nanos available");
+  });
+
+  it("shows prepaid when no free or subscription balance", () => {
+    const acct = readyAccount({
+      free: {
+        state: "ineligible",
+        claimableCreditNanos: "0",
+        spendableCreditNanos: "0",
+        heldCreditNanos: "0",
+        resetAt: "2026-10-01T00:00:00.000Z",
+      },
+      prepaid: {
+        spendableCreditNanos: "50000000000000",
+        heldCreditNanos: "0",
+        settledDeficitCreditNanos: "0",
+        holdShortfallCreditNanos: "0",
+        consentEnabled: true,
+      },
+    });
+    expect(display(acct)).toBe("Cloud: Prepaid 50T nanos");
+  });
+
+  it("shows truthful zero when all sources are zero", () => {
+    const acct = readyAccount({
+      free: {
+        state: "expired",
+        claimableCreditNanos: "0",
+        spendableCreditNanos: "0",
+        heldCreditNanos: "0",
+        resetAt: null,
+      },
+      subscription: {
+        state: "none",
+        priceCents: 1500 as const,
+        periodStart: null,
+        periodEnd: null,
+        windows: [],
+      },
+      prepaid: {
+        spendableCreditNanos: "0",
+        heldCreditNanos: "0",
+        settledDeficitCreditNanos: "0",
+        holdShortfallCreditNanos: "0",
+        consentEnabled: false,
+      },
+    });
+    expect(display(acct)).toBe("Cloud: 0 nanos");
+  });
+
+  it("keeps unavailable on disabled/unavailable/restricted state", () => {
+    expect(display(readyAccount({ state: "disabled", reason: "policy_disabled" }))).toBe("Cloud: Unavailable");
+    expect(display(readyAccount({ state: "unavailable", reason: "ledger_unavailable" }))).toBe("Cloud: Unavailable");
+    expect(display(readyAccount({ state: "restricted", reason: "debt" }))).toBe("Cloud: Unavailable");
+  });
+
+  it("keeps unavailable for null (unsupported/malformed) accounts", () => {
+    expect(display(null)).toBe("Cloud: Unavailable");
+    expect(display(undefined)).toBe("Cloud: Unavailable");
+  });
+});
+
+// ── formatCreditNanos ──
+
+describe("formatCreditNanos", () => {
+  it("formats small numbers exactly", () => {
+    expect(formatCreditNanos("0")).toBe("0");
+    expect(formatCreditNanos("1")).toBe("1");
+    expect(formatCreditNanos("999")).toBe("999");
+  });
+
+  it("inserts thousands separators", () => {
+    expect(formatCreditNanos("1000")).toBe("1,000");
+    expect(formatCreditNanos("1000000")).toBe("1,000,000");
+    expect(formatCreditNanos("90000000000")).toBe("90,000,000,000");
+    expect(formatCreditNanos("123456789012345678")).toBe("123,456,789,012,345,678");
+  });
+
+  it("returns null for null or undefined", () => {
+    expect(formatCreditNanos(null)).toBeNull();
+    expect(formatCreditNanos(undefined)).toBeNull();
+  });
+
+  it("returns null for unparseable input", () => {
+    expect(formatCreditNanos("not-a-number")).toBeNull();
+  });
+});
+
+// ── formatCreditNanosCompact ──
+
+describe("formatCreditNanosCompact", () => {
+  it("shows small values exactly", () => {
+    expect(formatCreditNanosCompact("0")).toBe("0");
+    expect(formatCreditNanosCompact("1")).toBe("1");
+    expect(formatCreditNanosCompact("999999")).toBe("999999");
+  });
+
+  it("shows billions with B suffix", () => {
+    expect(formatCreditNanosCompact("1000000000")).toBe("1B");
+    expect(formatCreditNanosCompact("1500000000")).toBe("1.5B");
+    expect(formatCreditNanosCompact("90000000000")).toBe("90B");
+    expect(formatCreditNanosCompact("999999999999")).toBe("999.99B");
+  });
+
+  it("shows trillions with T suffix", () => {
+    expect(formatCreditNanosCompact("1000000000000")).toBe("1T");
+    expect(formatCreditNanosCompact("1500000000000")).toBe("1.5T");
+    expect(formatCreditNanosCompact("50000000000000")).toBe("50T");
+  });
+});
+
+// ── formatBalanceDetail ──
+
+describe("formatBalanceDetail", () => {
+  it("shows unavailable for null account", () => {
+    expect(formatBalanceDetail(null)).toContain("Credit data unavailable");
+  });
+
+  it("shows state and reason when not ready", () => {
+    const out = formatBalanceDetail(readyAccount({ state: "disabled", reason: "policy_disabled" }));
+    expect(out).toContain("disabled");
+    expect(out).toContain("policy_disabled");
+  });
+
+  it("shows free detail when ready", () => {
+    const acct = readyAccount();
+    const out = formatBalanceDetail(acct);
+    expect(out).toContain("Free state");
+    expect(out).toContain("active");
+    expect(out).toContain("90,000,000,000");
+  });
+
+  it("shows subscription windows when active", () => {
+    const acct = readyAccount({
+      free: {
+        state: "ineligible",
+        claimableCreditNanos: "0",
+        spendableCreditNanos: "0",
+        heldCreditNanos: "0",
+        resetAt: "2026-10-01T00:00:00.000Z",
+      },
+      subscription: {
+        state: "active",
+        priceCents: 1500 as const,
+        periodStart: "2026-09-01T00:00:00.000Z",
+        periodEnd: "2026-10-01T00:00:00.000Z",
+        windows: [
+          {
+            kind: "monthly",
+            limitCreditNanos: "2000000000000",
+            settledCreditNanos: "100000000000",
+            heldCreditNanos: "50000000000",
+            availableCreditNanos: "1850000000000",
+            resetsAt: "2026-10-01T00:00:00.000Z",
+          },
+        ],
+      },
+    });
+    const out = formatBalanceDetail(acct);
+    expect(out).toContain("Subscription state");
+    expect(out).toContain("Window (monthly)");
+    expect(out).toContain("1,850,000,000,000");
+  });
+
+  it("shows prepaid spendable", () => {
+    const acct = readyAccount({
+      prepaid: {
+        spendableCreditNanos: "50000000000000",
+        heldCreditNanos: "0",
+        settledDeficitCreditNanos: "0",
+        holdShortfallCreditNanos: "0",
+        consentEnabled: true,
+      },
+    });
+    const out = formatBalanceDetail(acct);
+    expect(out).toContain("50,000,000,000,000");
+  });
+
+  it("shows prepaid deficit when non-zero", () => {
+    const acct = readyAccount({
+      prepaid: {
+        spendableCreditNanos: "50000000000000",
+        heldCreditNanos: "0",
+        settledDeficitCreditNanos: "1000000000",
+        holdShortfallCreditNanos: "0",
+        consentEnabled: true,
+      },
+    });
+    const out = formatBalanceDetail(acct);
+    expect(out).toContain("Prepaid deficit");
+    expect(out).toContain("1000000000");
+  });
+
+  it("never reconstructs a percentage or supplier cost", () => {
+    const acct = readyAccount();
+    const out = formatBalanceDetail(acct);
+    expect(out).not.toContain("percent");
+    expect(out).not.toContain("USD");
+    expect(out).not.toContain("supplier");
+    expect(out).not.toContain("remainingPercent");
   });
 });

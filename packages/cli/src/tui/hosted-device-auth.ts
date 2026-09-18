@@ -1,6 +1,7 @@
-import { loadCloudCredentials, CloudClient, CloudError, CloudUnauthorizedError, CloudForbiddenError } from "@0sec/core";
+import { loadCloudCredentials, CloudClient, CloudUnauthorizedError, CloudForbiddenError } from "@0sec/core";
 import type { HostedVerificationStatus } from "./connect-layout.js";
 import { hostedBrowserLoginFlow, type HostedBrowserLoginOptions, type HostedLoginPhase, type LoginResult } from "../commands/auth.js";
+import type { CreditAccount } from "./hosted-balance.js";
 
 export interface HostedDeviceAuthUpdate {
   phase: HostedLoginPhase | "failed";
@@ -51,12 +52,12 @@ export function startHostedDeviceAuth(options: StartHostedDeviceAuthOptions): { 
 }
 
 /**
- * Verify a saved 0sec Cloud sign-in against the backend by calling the
- * Bearer-authenticated account endpoint (`GET /api/inference/account`). This is
- * the real check the connect screen shows instead of trusting that the browser
- * flow merely completed: a good token returns the account (and its credit
- * balance); a refused token (401/403) proves the sign-in is stale; any other
- * failure is a transient network problem, not a bad token. Never throws.
+ * Verify a saved 0cloud sign-in against the backend by calling the
+ * Bearer-authenticated account endpoint (`GET /api/inference/account`).
+ * Every successful HTTP 200 produces `verified`, carrying the typed DTO
+ * (which may be null for unsupported schemas, or have state=disabled/
+ * unavailable/restricted — these are not auth failures). A refused token
+ * (401/403) is `rejected`. Any other failure is `unreachable`.
  */
 export async function verifyHostedConnection(opts: {
   env: Record<string, string | undefined>;
@@ -68,16 +69,9 @@ export async function verifyHostedConnection(opts: {
   const client = new CloudClient({ host: creds.host, token: creds.token, fetchImpl: opts.fetchImpl });
   try {
     const account = await client.getInferenceAccount();
-    return { kind: "verified", remainingUsd: typeof account.remainingUsd === "number" ? account.remainingUsd : undefined };
+    return { kind: "verified", account: (account as CreditAccount | undefined) ?? undefined };
   } catch (error) {
     if (error instanceof CloudUnauthorizedError || error instanceof CloudForbiddenError) return { kind: "rejected" };
-    if (error instanceof CloudError) {
-      // The gateway distinguishes a deliberate service gate from an outage via a
-      // body code; surface that instead of a blanket "unreachable".
-      if (error.code === "inference_disabled") return { kind: "disabled" };
-      if (error.status === 402 || error.code === "insufficient_funds") return { kind: "no-credits" };
-      // provider_unavailable / billing_unavailable / other 5xx are genuine outages.
-    }
     return { kind: "unreachable" };
   }
 }
