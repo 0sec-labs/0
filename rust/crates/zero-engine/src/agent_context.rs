@@ -1,4 +1,6 @@
 //! Immutable full history and hash-bound deterministic request projections.
+#[path = "agent_steering_history.rs"]
+mod steering_history;
 use super::*;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -134,6 +136,7 @@ pub(super) fn load(
         {
             return Err(error("context metadata without explicit policy"));
         }
+        steering_history::validate(store, parent, child, model)?;
         return Ok(None);
     };
     policy.validate().map_err(error)?;

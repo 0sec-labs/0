@@ -15,7 +15,7 @@ fn schema_v2_migration_keeps_unpinned_history_and_persists_distinct_activation_e
     let before = store.events(&old.id, 0, 100).unwrap();
     drop(store);
     let conn = rusqlite::Connection::open(&path).unwrap();
-    conn.execute_batch("DROP TABLE source_triage_decisions; DROP TABLE agent_inputs; DROP TABLE operation_artifacts; DROP TABLE artifacts; ALTER TABLE sessions DROP COLUMN generation_epoch; PRAGMA user_version=2;")
+    conn.execute_batch("DROP TABLE agent_steering; DROP TABLE agent_steering_windows; DROP TABLE source_triage_decisions; DROP TABLE agent_inputs; DROP TABLE operation_artifacts; DROP TABLE artifacts; ALTER TABLE sessions DROP COLUMN generation_epoch; PRAGMA user_version=2;")
         .unwrap();
     drop(conn);
     let mut store = Store::open(&path).unwrap();

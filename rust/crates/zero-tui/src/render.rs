@@ -161,6 +161,31 @@ pub fn draw(frame: &mut Frame, state: &State) {
                     }
                 }
             }
+            if let Some(target) = &state.steering.target {
+                lines.push(Line::styled(
+                    format!("Steering for operation {}", safe(target)),
+                    Style::default().fg(Color::Cyan),
+                ));
+                lines.push(Line::from(
+                    "Captured means journaled in an inference request, not provider receipt.",
+                ));
+                for message in &state.steering.messages {
+                    lines.push(Line::from(format!(
+                        "#{} {:?} {}{}",
+                        message.sequence,
+                        message.status,
+                        safe(&message.id),
+                        message
+                            .inference_operation_id
+                            .as_ref()
+                            .map(|id| format!(" → inference {}", safe(id)))
+                            .unwrap_or_default()
+                    )));
+                    for text in safe(&message.prompt).lines() {
+                        lines.push(Line::from(text.to_owned()));
+                    }
+                }
+            }
             if lines.is_empty() {
                 lines.push(Line::from(
                     "No recorded turns. Enter saves your first prompt to the durable queue.",
@@ -199,7 +224,7 @@ pub fn draw(frame: &mut Frame, state: &State) {
                 Block::default()
                     .borders(Borders::ALL)
                     .title(if state.options.profile.is_some() {
-                        "Composer · Enter queue · Shift-Enter newline · paste never executes"
+                        "Composer · Enter queue · Ctrl-T steer active · Shift-Enter newline"
                     } else {
                         "Browse only · --request profile required for new prompts"
                     }),
@@ -224,6 +249,6 @@ pub fn draw(frame: &mut Frame, state: &State) {
     if state.help {
         let area = frame.area();
         frame.render_widget(Clear, area);
-        frame.render_widget(Paragraph::new("Native protocol terminal — experimental\n\nTab: sessions / conversation / queue / findings\nFindings: Enter selects; a/s/r opens operator decision note\nCtrl-S submits note; Esc discards; Ctrl-B rebases after conflict\nFindings Ctrl-L next page / Ctrl-G refresh; evidence stays Unverified\nEnter: select session, or durably queue composer\nShift-Enter: newline; bracketed paste only inserts\nCtrl-R: explicitly run selected pending queue input\nCtrl-X: cancel active turn or selected pending input\nCtrl-C: cancel active turn, otherwise quit\nCtrl-N / n in session list: create session with explicit launch budget\nCtrl-L: next session/queue page or older history\nPageUp / PageDown: conversation scroll\nCtrl-U: clear composer; arrows/Home/End edit Unicode text\nCtrl-Q: quit; app-server owns cancellation and cleanup\nF1: close help\n\nSaved pending work never starts merely by opening a session.\nLive deltas and tool drafts are provisional; final replies are authoritative.\nUnknown or failed work keeps its journal and stops automatic draining.").block(Block::default().borders(Borders::ALL).title("Help")).wrap(Wrap{trim:false}),area);
+        frame.render_widget(Paragraph::new("Native protocol terminal — experimental\n\nTab: sessions / conversation / queue / findings\nFindings: Enter selects; a/s/r opens operator decision note\nCtrl-S submits note; Esc discards; Ctrl-B rebases after conflict\nFindings Ctrl-L next page / Ctrl-G refresh; evidence stays Unverified\nEnter: select session, or durably queue composer\nCtrl-T: steer admitted active conversation; Enter remains queue\nPending/Captured/Undelivered notes retain their operation identity\nShift-Enter: newline; bracketed paste only inserts\nCtrl-R: explicitly run selected pending queue input\nCtrl-X: cancel active turn or selected pending input\nCtrl-C: cancel active turn, otherwise quit\nCtrl-N / n in session list: create session with explicit launch budget\nCtrl-L: next session/queue page or older history\nPageUp / PageDown: conversation scroll\nCtrl-U: clear composer; arrows/Home/End edit Unicode text\nCtrl-Q: quit; app-server owns cancellation and cleanup\nF1: close help\n\nSaved pending work never starts merely by opening a session.\nLive deltas and tool drafts are provisional; final replies are authoritative.\nUnknown or failed work keeps its journal and stops automatic draining.").block(Block::default().borders(Borders::ALL).title("Help")).wrap(Wrap{trim:false}),area);
     }
 }

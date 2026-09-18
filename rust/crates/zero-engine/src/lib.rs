@@ -6,6 +6,7 @@ mod agent_context_history;
 mod agent_delegation;
 mod agent_plugins;
 mod agent_source;
+mod agent_steering;
 mod agent_submission;
 mod discovery;
 mod history;
@@ -23,6 +24,7 @@ mod source_report;
 mod triage;
 mod workflow_provenance;
 
+pub use agent_steering::read_agent_steering;
 pub use discovery::read_source_reviews;
 pub use source_report::{read_source_report, read_source_workflow_report};
 pub use triage::{read_source_finding, read_source_findings};
@@ -67,6 +69,7 @@ struct Active {
 struct Control {
     closing: bool,
     active: HashMap<String, Active>,
+    actors: HashMap<String, agent_steering::Target>,
 }
 
 struct Shared {
@@ -249,6 +252,7 @@ impl Engine {
             "anthropic_messages_inference",
             "bounded_offline_snapshot_agent",
             "bounded_joined_subagents",
+            "durable_boundary_steering",
             "durable_agent_input_queue",
             "explicit_context_projection",
             "generation_pinned_offline_plugins",
@@ -407,6 +411,15 @@ impl Engine {
                 )
                 .await;
         }
+        if let Command::SteerAgent {
+            session_id,
+            operation_id,
+            command_id,
+            prompt,
+        } = command
+        {
+            return self.steer_agent(&session_id, &operation_id, &command_id, &prompt);
+        }
         let mut control = lock(&self.shared.control)?;
         if control.closing {
             return Err(EngineError::State("engine is shutting down".into()));
@@ -456,6 +469,19 @@ impl Engine {
                 input_id,
             } => Ok(Reply::AgentInput {
                 input: lock(&self.shared.store)?.cancel_queued_agent(&session_id, &input_id)?,
+            }),
+            Command::AgentSteering {
+                session_id,
+                operation_id,
+                after_sequence,
+                limit,
+            } => Ok(Reply::AgentSteering {
+                messages: lock(&self.shared.store)?.agent_steering(
+                    &session_id,
+                    &operation_id,
+                    after_sequence,
+                    limit,
+                )?,
             }),
             Command::SourceReviews {
                 session_id,
@@ -599,6 +625,7 @@ impl Engine {
                 .map(Reply::Reconciled)
                 .map_err(|e| EngineError::State(e.to_string())),
             Command::Execute { .. }
+            | Command::SteerAgent { .. }
             | Command::Infer { .. }
             | Command::ReproduceSource { .. }
             | Command::ValidateSourceRepair { .. }

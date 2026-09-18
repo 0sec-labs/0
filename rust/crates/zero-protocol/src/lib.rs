@@ -20,6 +20,7 @@ pub mod repair;
 pub mod sandbox;
 pub mod session;
 pub mod source;
+pub mod steering;
 pub mod triage;
 pub mod verification;
 mod verification_binary;
@@ -150,6 +151,18 @@ pub enum Command {
         session_id: String,
         command_id: String,
         request: source::SourceReviewRequest,
+    },
+    SteerAgent {
+        session_id: String,
+        operation_id: String,
+        command_id: String,
+        prompt: String,
+    },
+    AgentSteering {
+        session_id: String,
+        operation_id: String,
+        after_sequence: u64,
+        limit: u32,
     },
     QueueAgent {
         session_id: String,
@@ -312,6 +325,13 @@ pub enum Reply {
         operation: Operation,
         result: Option<source::SourceReviewOutcome>,
         duplicate: bool,
+    },
+    AgentSteered {
+        message: steering::AgentSteeringMessage,
+        duplicate: bool,
+    },
+    AgentSteering {
+        messages: Vec<steering::AgentSteeringMessage>,
     },
     AgentQueued {
         input: queue::QueuedAgent,

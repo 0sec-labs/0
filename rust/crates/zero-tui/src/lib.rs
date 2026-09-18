@@ -3,6 +3,7 @@ mod client;
 pub mod findings;
 pub mod render;
 pub mod state;
+pub mod steering;
 use crossterm::{
     event::{DisableBracketedPaste, EnableBracketedPaste, Event, EventStream},
     execute,

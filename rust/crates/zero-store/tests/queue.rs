@@ -215,7 +215,7 @@ fn v4_migration_preserves_artifacts_and_readonly_never_migrates() {
     drop(s);
     let conn = rusqlite::Connection::open(&path).unwrap();
     conn.execute_batch(
-        "DROP TABLE source_triage_decisions; DROP TABLE agent_inputs; PRAGMA user_version=4;",
+        "DROP TABLE agent_steering; DROP TABLE agent_steering_windows; DROP TABLE source_triage_decisions; DROP TABLE agent_inputs; PRAGMA user_version=4;",
     )
     .unwrap();
     drop(conn);

@@ -12,6 +12,7 @@ mod providers;
 mod report;
 mod server;
 mod source_report;
+mod steering;
 mod tui;
 
 use args::{Args, Command, QueueCommand, SessionCommand, SnapshotCommand};
@@ -68,6 +69,9 @@ async fn run(args: Args) -> Result<bool, Box<dyn Error>> {
     } = &args.command
     {
         return tui::run(&args, session.clone(), request.as_deref(), *budget_limit).await;
+    }
+    if let Command::Steer { command } = args.command {
+        return steering::run(&args.state, command).await;
     }
     if let Command::Findings { command } = args.command {
         return findings::run(&args.state, command).await;
@@ -367,7 +371,8 @@ async fn run(args: Args) -> Result<bool, Box<dyn Error>> {
                     .map_err(|_| "Invalid agent request JSON")?,
             }
         }
-        Command::Findings { .. }
+        Command::Steer { .. }
+        | Command::Findings { .. }
         | Command::SourceReport { .. }
         | Command::Schema
         | Command::Snapshot { .. }

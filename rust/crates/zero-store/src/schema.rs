@@ -8,7 +8,7 @@ pub fn initialize(conn: &mut Connection) -> Result<()> {
     if application != 0 && application != APPLICATION_ID {
         return Err(Error::ForeignDatabase);
     }
-    if !(0..=6).contains(&version) {
+    if !(0..=7).contains(&version) {
         return Err(Error::Schema(version));
     }
     if application == 0 {
@@ -50,6 +50,13 @@ CREATE TABLE operation_artifacts(operation_id TEXT NOT NULL REFERENCES operation
         tx.execute_batch("CREATE TABLE source_triage_decisions(id TEXT PRIMARY KEY,session_id TEXT NOT NULL REFERENCES sessions(id),source_operation_id TEXT NOT NULL REFERENCES operations(id),hypothesis_id TEXT NOT NULL,source_review_sha256 TEXT NOT NULL REFERENCES artifacts(digest),revision INTEGER NOT NULL CHECK(revision>0),command_id TEXT NOT NULL,status TEXT NOT NULL CHECK(status IN ('new','accepted','suppressed')),note TEXT NOT NULL CHECK(length(CAST(note AS BLOB))<=4096),created_at_ms INTEGER NOT NULL CHECK(created_at_ms>=0),UNIQUE(session_id,command_id),UNIQUE(source_operation_id,hypothesis_id,revision));")?;
         tx.pragma_update(None, "user_version", 6)?;
     }
+    if version < 7 {
+        tx.execute_batch("CREATE TABLE agent_steering_windows(operation_id TEXT PRIMARY KEY REFERENCES operations(id),sealed INTEGER NOT NULL CHECK(sealed IN (0,1)));
+CREATE TABLE agent_steering(id TEXT PRIMARY KEY,session_id TEXT NOT NULL REFERENCES sessions(id),operation_id TEXT NOT NULL REFERENCES operations(id),sequence INTEGER NOT NULL CHECK(sequence>0),command_id TEXT NOT NULL,prompt TEXT NOT NULL CHECK(length(CAST(prompt AS BLOB))<=16384),inference_operation_id TEXT REFERENCES operations(id),capture_sequence INTEGER,UNIQUE(session_id,command_id),UNIQUE(session_id,sequence),CHECK((inference_operation_id IS NULL)=(capture_sequence IS NULL)));
+CREATE INDEX agent_steering_target ON agent_steering(operation_id,sequence);
+CREATE INDEX agent_steering_inference ON agent_steering(inference_operation_id);")?;
+        tx.pragma_update(None, "user_version", 7)?;
+    }
     tx.commit()?;
     Ok(())
 }
@@ -63,7 +70,7 @@ pub(super) fn validate_current(conn: &Connection) -> Result<()> {
     if application != APPLICATION_ID {
         return Err(Error::ForeignDatabase);
     }
-    if version != 6 {
+    if version != 7 {
         return Err(Error::Schema(version));
     }
     let observed = crate::readonly::definitions(conn)?;

@@ -41,6 +41,11 @@ pub struct Args {
 
 #[derive(Debug, Subcommand)]
 pub enum Command {
+    /// Inspect durable steering history; live send is available in console/TUI/app-server.
+    Steer {
+        #[command(subcommand)]
+        command: crate::steering::SteeringCommand,
+    },
     /// Inspect retained source hypotheses and record operator triage.
     Findings {
         #[command(subcommand)]

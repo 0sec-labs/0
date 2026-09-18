@@ -353,7 +353,7 @@ fn validate_actor_receipts(
                 return Err(error("delegation next request correlation differs"));
             }
             let model: ResponsesRequest = serde_json::from_value(next.payload["request"].clone())?;
-            model.input
+            agent_steering::strip_captured_input(store, &next, model.input)?
         };
         let start = input
             .len()

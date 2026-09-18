@@ -51,8 +51,8 @@ Inputs still buffered in the terminal/reader but not acknowledged are not durabl
 
 An app-server accepts enqueue/list/cancel requests while another turn runs.
 Another CLI process cannot open a database already owned by that engine; use the
-existing app-server connection for concurrent input. Remote IPC, mid-turn steering,
-subagent messages, interrupted-turn continuation and context compaction remain
+existing app-server connection for concurrent input. Remote IPC, peer-to-peer subagent messages, interrupted-turn continuation and
+context compaction remain
 separate work. Queuing does not freeze a live provider connection or quoted price
 before dispatch; explicit configured profiles govern dispatch, and predecessor
 continuation checks prohibit changing an already established authority.
@@ -62,3 +62,44 @@ existing journal/artifacts. Read-only exporters require the current exact schema
 and never perform migrations. Open an older native database with the writable
 engine before using current read-only export. This is not a legacy TypeScript DB
 import or a change to production CLI/release routing.
+
+
+## Steering an active agent
+
+`SteerAgent` stores supplementary operator text addressed to one exact running
+agent operation. It does not cancel an inference or change tools, provider,
+resource limits, source scope, role authority or turn budget. Root actors and
+actually dispatched joined children can be targeted; waiting children cannot.
+The next complete model/tool-round boundary appends pending messages as protected
+user input. A message arriving during a final text response can request another
+model turn only within the existing turn limit. Ordinary queued inputs remain
+separate follow-up operations.
+
+The caller supplies a command ID. Exact retry returns the same immutable intent
+and its current status, even after the actor stops or the engine restarts; changing
+target or text conflicts. Each target accepts at most 32 pending and 128 total
+messages, each at most 16 KiB of UTF-8 without NUL. Listing has a sequence cursor,
+1–100 rows and a 1 MiB page. Advance by the last returned sequence until empty.
+Status can change for an existing sequence, so refresh from zero to observe
+capture, rather than treating an append-only cursor as a status subscription.
+
+- `Pending`: accepted durably; not yet included in an admitted inference.
+- `Captured`: the exact text and ID are bound to a persisted inference request.
+  This does not assert that the provider received or followed it. Budget rejection
+  or cancellation can still prevent dispatch after capture.
+- `Undelivered`: the target sealed or stopped before capture. These messages do
+  not automatically move to a continuation, queued turn, or resumed process.
+
+Final-boundary sealing and admission serialize in the store. Once sealed, new
+messages are rejected while exact retries remain readable. Cancellation,
+turn-limit exhaustion, terminal source submission, preparation failures and
+Unknown recovery can leave explicit Undelivered messages. Source-review steering
+supplements the original question; it does not replace the bundle's original
+question or turn model claims into verified findings.
+
+Schema 7 adds inbox and sealing tables. Immutable enqueue events and original
+inference admission records witness the capture receipt. Capture and inference
+admission commit atomically. Context/checkpoint/continuation validation retains
+these messages and rejects altered inputs without reissuing historical effects.
+The read-only CLI can inspect them while an engine owns the database; live input
+uses that owner's app-server, console or TUI connection.

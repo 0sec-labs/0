@@ -555,6 +555,20 @@ async fn run_rounds(
                 break;
             }
         }
+        // This immutable pending prefix is captured only by the following
+        // durable inference admission; newly accepted messages wait a boundary.
+        let steering =
+            lock(&shared.store)?.pending_agent_steering(session, parent, &shared.owner)?;
+        for message in &steering {
+            if let Some(state) = &mut context_state {
+                if let Err(error) = state.append_user(&message.prompt) {
+                    output.status = AgentStatus::Failed;
+                    output.error = Some(error.to_string());
+                    break 'turns;
+                }
+            }
+            input.push(serde_json::json!({"role":"user","content":message.prompt}));
+        }
         let projected = match agent_context::project_input(
             &input,
             context_state.as_ref(),
@@ -585,6 +599,9 @@ async fn run_rounds(
         }
         let mut child_payload = serde_json::json!({"parent_operation":parent,"kind":"agent_inference","request":model,"endpoint":profile.client.endpoint_identity(),"rates":profile.rates,"wire_api":profile.client.wire_api()});
         profile.stamp(&mut child_payload)?;
+        if !steering.is_empty() {
+            child_payload["steering"] = serde_json::to_value(&steering)?;
+        }
         if let (Some(state), Some(policy)) =
             (context_state.as_ref(), request.context_policy.as_ref())
         {
@@ -597,11 +614,13 @@ async fn run_rounds(
                 }
             }
         }
-        let child = child_operation(
-            shared,
+        let child = lock(&shared.store)?.admit_steered_inference(
             session,
+            parent,
+            &shared.owner,
             &format!("{parent}:model:{turn}"),
             &child_payload,
+            &steering,
         )?;
         {
             let mut store = lock(&shared.store)?;
@@ -724,8 +743,8 @@ async fn run_rounds(
                     output.error = Some(error.to_string());
                     break;
                 }
-                input.extend(completion.replay.clone());
             }
+            input.extend(completion.replay.clone());
             output.status = AgentStatus::Completed;
             output.text = completion
                 .content
@@ -740,6 +759,22 @@ async fn run_rounds(
                 output.status = AgentStatus::Failed;
                 output.error =
                     Some("provider completed without a final answer or tool call".into());
+            }
+            if output.status == AgentStatus::Completed
+                && turn + 1 < request.max_turns
+                && !cancel.is_cancelled()
+                && !lock(&shared.store)?.seal_agent_steering(
+                    session,
+                    parent,
+                    &shared.owner,
+                    false,
+                )?
+            {
+                // A final answer raced an accepted operator message. Preserve
+                // that exact replay, then service the inbox without extra turns.
+                output.status = AgentStatus::TurnLimit;
+                output.text.clear();
+                continue;
             }
             break;
         }
@@ -1030,6 +1065,7 @@ pub(super) fn run_actor<'a>(
     progress_events: Option<mpsc::Sender<ExecutionEvent>>,
 ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<Reply, EngineError>> + Send + 'a>> {
     Box::pin(async move {
+        let _target = agent_steering::TargetGuard::enter(shared, session, parent, &cancel)?;
         let PreparedActor {
             request,
             profile,
@@ -1140,6 +1176,9 @@ pub(super) fn run_actor<'a>(
         };
         // Never drop/abort joined actors when the round future errors or unwinds.
         // Their own source copies/backend cleanup must finish before root settlement.
+        let sealed = lock(&shared.store).and_then(|mut store| {
+            Ok(store.seal_agent_steering(session, parent, &shared.owner, true)?)
+        });
         let drained = joined.drain(shared, &cancel).await;
         let cleanup = match source {
             Some(context) => {
@@ -1165,7 +1204,7 @@ pub(super) fn run_actor<'a>(
             }
             Err(error) => Some(error.to_string()),
         };
-        let (mut output, input) = match work.and_then(|value| drained.map(|_| value)) {
+        let (mut output, input) = match work.and_then(|value| sealed.and(drained).map(|_| value)) {
             Ok(value) => value,
             Err(error) => {
                 // Unexpected actor/journal failures close admission; all already

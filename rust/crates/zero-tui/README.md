@@ -17,6 +17,9 @@ and explicit session creation, but cannot enqueue a new prompt.
 - Enter durably queues the composer; Shift-Enter inserts a newline. Unicode
   paste only inserts text. Drafts remain until acknowledgment; editing is held
   during the acknowledgment to avoid silently losing a rejected draft.
+- Ctrl-T in Conversation submits the composer to the admitted active root turn.
+  Enter still queues a separate follow-up. The draft is held until acknowledgment;
+  a rejected submission preserves its exact target/text command ID for retry.
 - Ctrl-R explicitly runs the selected pending input. Opening a saved session
   never dispatches pending work. Newly acknowledged local follow-ups drain FIFO
   only after a completed conversational turn and behind existing pending work.
@@ -71,6 +74,19 @@ short byte-limited page; Ctrl-G returns to the first page. Each new page replace
 the prior window. Esc moves back; PageUp/PageDown scroll detail. Read responses
 are scoped to session, selection, and refresh generation. Source hashes and
 citations remain visible; no arbitrary local source reads or model tools are added.
+
+Steering receipts retain their target operation across turn completion. Pending
+means accepted for a later complete model boundary; Captured means included in a
+journaled inference request, not proof of provider receipt; Undelivered means it
+was not captured before the actor ended. Capture does not abort an active request,
+extend the turn limit or change provider, tool, sandbox or budget authority. A
+new inference progress event and final reply trigger bounded status refreshes;
+advisory progress can be dropped, so final journal receipts remain authoritative.
+Reopening a session loads receipts for its newest displayed operation. Up to 128
+receipts with 16 KiB prompts are retained for one clearly labeled target; read
+pages are bounded to 50 records / 1 MiB and continue until empty. The standalone
+`steer list` command can inspect other explicit operation IDs, including children.
+There is no individual steering cancellation or visual delegated-child selector.
 
 This implements fullscreen conversation, queue, and native source-triage workflows,
 not legacy TUI parity. There are no source editors, approval widgets, search, terminal panes,

@@ -188,6 +188,7 @@ pub(super) fn validate(
                     &format!("{}:model:{index}", ancestor.id),
                 )?
                 .ok_or_else(|| error("original context model operation missing"))?;
+            expected.extend(agent_steering::captured_input(store, &origin)?);
             let witness = witnesses
                 .next()
                 .ok_or_else(|| error("context omitted an original completed round"))?;
@@ -284,7 +285,7 @@ pub(super) fn validate(
                         }
                         let model: ResponsesRequest =
                             serde_json::from_value(next.payload["request"].clone())?;
-                        model.input
+                        agent_steering::strip_captured_input(store, &next, model.input)?
                     }
                     None => {
                         let result: AgentResult =
@@ -339,6 +340,7 @@ pub(super) fn validate(
             expected.extend_from_slice(witness.tool_outputs);
         }
     }
+    expected.extend(agent_steering::captured_input(store, current)?);
     if witnesses.next().is_some() || expected != state.input() {
         return Err(error(
             "context full history differs from original prompts/rounds",

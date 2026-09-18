@@ -62,7 +62,7 @@ requires the current exact schema and never performs migration. See
 
 Schema v6 adds immutable source-hypothesis triage decisions. Native v5 migration
 preserves source artifacts, queue entries, reservations and operation ownership.
-`open_read_only` accepts only the exact current v6 schema; it never migrates an
+`open_read_only` accepts only the exact current v7 schema; it never migrates an
 older database, claims an epoch, recovers operations, or creates default records.
 
 A record is identified by session, source operation, hypothesis ID and the
@@ -151,3 +151,27 @@ row, and an oversized first admission fails without advancing the cursor. Each
 page uses one SQLite read snapshot; refresh from the head to discover attachments
 created after an earlier page was read. None of these reads claims engine
 ownership, recovers operations, reserves budget, or accesses a provider.
+
+
+Schema v7 adds durable agent steering inboxes and terminal seals. A message is
+scoped to one root or delegated actor operation; it never changes its model,
+provider, tools, budget, or execution authority. Intent command IDs are unique
+within the session's steering namespace. Exact retries compare the original
+operation and prompt before checking whether the actor still accepts messages.
+
+Prompts are limited to 16 KiB UTF-8, with 32 pending and 128 total messages per
+actor. A fresh inference admission atomically binds an ordered pending prefix
+and its exact text to the immutable `command_admitted` event. `Captured` means
+that a request was journaled, not that a provider received or acted on it.
+Uncaptured intent becomes `Undelivered` after terminal settlement, epoch recovery,
+or an explicit terminal seal; it is never automatically replayed. Sealing and
+checking pending intent use the same immediate transaction, so a final-boundary
+race either leaves a pending message to service or explicitly rejects admission.
+
+Read pages contain at most 100 messages and 1 MiB serialized output. Event
+witnesses are cached within the read transaction and limited to 64 MiB of raw
+materialization; a page may stop early at either bound. Continue using the last
+returned message sequence until an empty page. Captured labels and inference
+replay both validate original enqueue and capture events. SQL size checks precede
+witness/prompt decoding; source/provider outcome bodies are not read. Read-only
+opening requires exact schema v7 and performs no migration or ownership recovery.

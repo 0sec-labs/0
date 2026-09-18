@@ -6,7 +6,7 @@ use crate::{
 use std::{collections::VecDeque, error::Error, future::Future, pin::Pin, sync::Arc};
 use tokio::{
     io::{AsyncWriteExt, BufReader},
-    sync::mpsc,
+    sync::{mpsc, watch},
 };
 use zero_engine::Engine;
 use zero_protocol::{
@@ -31,6 +31,8 @@ pub async fn run(
 ) -> Result<bool, Box<dyn Error>> {
     let (events, mut event_rx) = mpsc::channel(128);
     let diagnostic_engine = engine.clone();
+    let (admitted_tx, admitted_rx) = watch::channel(None::<(String, String)>);
+    let (active_tx, active_rx) = watch::channel(None::<String>);
     let drain = tokio::spawn(async move {
         while let Some(event) = event_rx.recv().await {
             if let ExecutionEvent::Admitted {
@@ -39,6 +41,9 @@ pub async fn run(
                 ..
             } = event
             {
+                if active_rx.borrow().as_deref() == Some(command_id.as_str()) {
+                    admitted_tx.send_replace(Some((command_id.clone(), operation_id.clone())));
+                }
                 if let Err(error) = diagnostic(&format!(
                     "admitted operation {operation_id} command {command_id}"
                 ))
@@ -51,7 +56,15 @@ pub async fn run(
         }
         Ok::<(), std::io::Error>(())
     });
-    let result = conversation(engine.clone(), session, profile, events.clone()).await;
+    let result = conversation(
+        engine.clone(),
+        session,
+        profile,
+        events.clone(),
+        admitted_rx,
+        active_tx,
+    )
+    .await;
     let shutdown = engine.shutdown().await;
     drop(events);
     let drained = drain.await?;
@@ -65,6 +78,8 @@ async fn conversation(
     session: String,
     profile: AgentRequest,
     events: mpsc::Sender<ExecutionEvent>,
+    admitted: watch::Receiver<Option<(String, String)>>,
+    active_command: watch::Sender<Option<String>>,
 ) -> Result<bool, Box<dyn Error>> {
     // A single reader owns read_frame across awaits. Cancelling/recreating that
     // future for every completed turn would lose a partially consumed line.
@@ -81,7 +96,7 @@ async fn conversation(
     }));
     let signal = server::shutdown_signal();
     tokio::pin!(signal);
-    diagnostic("Experimental line console. Each accepted line is durably queued; EOF drains accepted inputs, interruption leaves pending inputs for explicit resumption.").await?;
+    diagnostic("Experimental line console. Ordinary lines are durably queued; /steer TEXT addresses the admitted active turn, //steer escapes literal text. EOF drains accepted inputs; interruption leaves pending inputs for explicit resumption.").await?;
     let mut pending = VecDeque::<(String, String)>::new();
     let mut previous = None;
     let mut active: Option<Active> = None;
@@ -100,6 +115,7 @@ async fn conversation(
             }
             reply = async { match active.as_mut() { Some((_,work)) => work.as_mut().await, None => std::future::pending().await } }, if active.is_some() => {
                 let (command, _) = active.take().ok_or("Missing completed console turn")?;
+                active_command.send_replace(None);
                 let completed = tokio::select! {
                     biased;
                     _ = &mut signal => return Ok(false),
@@ -110,6 +126,7 @@ async fn conversation(
             _ = std::future::ready(()), if active.is_none() && !pending.is_empty() => {
                 let (input, command) = pending.pop_front().ok_or("Missing pending console input")?;
                 diagnostic(&format!("command {command}")).await?;
+                active_command.send_replace(Some(command.clone()));
                 let owner = engine.clone();
                 let events = events.clone();
                 let session_id = session.clone();
@@ -125,6 +142,21 @@ async fn conversation(
                 let Frame::Data(bytes) = frame else { return Err("Console prompt exceeds frame byte limit".into()); };
                 let prompt=String::from_utf8(bytes).map_err(|_| "Console prompt must be UTF-8")?;
                 if prompt.trim().is_empty() { continue; }
+                let prompt=match console_line(prompt) {
+                    ConsoleLine::Followup(prompt)=>prompt,
+                    ConsoleLine::Steer(prompt)=>{
+                        let operation=active.as_ref().and_then(|(command,_)|admitted.borrow().as_ref().filter(|(seen,_)|seen==command).map(|(_,operation)|operation.clone()));
+                        let Some(operation_id)=operation else {rejected=true;diagnostic("Steering not sent: no admitted active turn. Nothing was queued.").await?;continue;};
+                        let command_id=format!("console-steer-{}",uuid::Uuid::new_v4());
+                        let reply=engine.handle(Command::SteerAgent{session_id:session.clone(),operation_id,command_id,prompt},events.clone()).await;
+                        match reply {
+                            Reply::AgentSteered{message,..}=>diagnostic(&format!("steering message {} {:?} operation {} — Captured means journaled, not provider receipt",message.id,message.status,message.operation_id)).await?,
+                            Reply::Error{code,message}=>{rejected=true;diagnostic(&format!("Steering not sent: {code}: {message}. Nothing was queued.")).await?;},
+                            _=>return Err("Unexpected steering reply".into()),
+                        }
+                        continue;
+                    }
+                };
                 let mut request=profile.clone();
                 request.prompt=prompt;
                 if previous.is_some() { request.continuation_of=None; }
@@ -146,6 +178,27 @@ async fn conversation(
             _ = std::future::ready(()), if eof && active.is_none() && pending.is_empty() => return Ok(!rejected),
         }
     }
+}
+
+enum ConsoleLine {
+    Followup(String),
+    Steer(String),
+}
+fn console_line(prompt: String) -> ConsoleLine {
+    if let Some(rest) = prompt.strip_prefix("//steer") {
+        if rest.is_empty() || rest.starts_with(char::is_whitespace) {
+            return ConsoleLine::Followup(prompt[1..].to_owned());
+        }
+    }
+    if let Some(rest) = prompt.strip_prefix("/steer") {
+        if rest.is_empty() {
+            return ConsoleLine::Steer(String::new());
+        }
+        if let Some(first) = rest.chars().next().filter(|c| c.is_whitespace()) {
+            return ConsoleLine::Steer(rest[first.len_utf8()..].to_owned());
+        }
+    }
+    ConsoleLine::Followup(prompt)
 }
 
 async fn finish(reply: Reply, command: &str, interrupted: bool) -> Result<bool, Box<dyn Error>> {
@@ -199,6 +252,23 @@ pub(crate) fn terminal_text(value: &str) -> String {
 }
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn steering_control_is_explicit_and_literal_escape_preserves_exact_text() {
+        use super::{ConsoleLine, console_line};
+        assert!(matches!(console_line("/steer λ ".into()),ConsoleLine::Steer(s) if s=="λ "));
+        assert!(matches!(console_line("/steer".into()),ConsoleLine::Steer(s) if s.is_empty()));
+        assert!(
+            matches!(console_line("//steer λ ".into()),ConsoleLine::Followup(s) if s=="/steer λ ")
+        );
+        for input in [
+            " /steer not a command",
+            "/steering literal",
+            "//steering literal",
+        ] {
+            assert!(matches!(console_line(input.into()),ConsoleLine::Followup(s) if s==input));
+        }
+    }
+
     #[test]
     fn model_terminal_controls_are_inert_but_text_layout_is_retained() {
         assert_eq!(

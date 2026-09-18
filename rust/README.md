@@ -223,3 +223,17 @@ Results are ordered untrusted data with durable child receipts. Cancellation
 waits for child cleanup; uncertain work retains its budget holds. See the
 [migration record](MIGRATION.md#bounded-joined-subagents) for continuation and
 remaining workflow boundaries.
+
+
+Active agents accept explicit durable steering at model-round boundaries. In the
+TUI conversation, Ctrl-T sends the composer to the admitted active root; Enter
+still queues a follow-up. In the line console, `/steer TEXT` addresses the active
+turn and `//steer TEXT` queues literal `/steer TEXT`. App-server clients can address
+an exact running root or dispatched child with `SteerAgent`. `steer list` reads
+retained status without owning the engine or loading provider configuration.
+
+A saved message is Pending until its exact text is Captured in a journaled model
+request. Captured does not prove provider receipt. Messages left when the target
+stops are Undelivered and never automatically run in another turn. Steering
+preserves the target's tools, provider, source scope, resource and turn limits.
+See [durable input semantics](crates/zero-engine/QUEUE.md#steering-an-active-agent).

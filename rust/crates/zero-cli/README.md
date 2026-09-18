@@ -298,7 +298,7 @@ Within `app-server`, `queue_agent`, `agent_queue` and `cancel_queued_agent` rema
 available while `run_queued_agent` executes. A separate CLI process cannot access
 the engine through these commands while another process owns its state database;
 use the existing app-server connection, console or TUI for live input. Mid-turn
-steering is not implemented by the durable queue.
+steering uses a separate durable receipt, described below.
 
 ## Read-only hosted metadata
 
@@ -684,3 +684,37 @@ does not cancel paid work or sandbox tools.
 Progress and operational events use independent queues, so progress may precede
 its admission notification. Correlate by session/operation IDs rather than
 assuming admission-first delivery.
+
+
+## Explicit mid-turn steering
+
+In the fullscreen Conversation view, Ctrl-T sends the held composer to the
+admitted active root operation; Enter still queues a separate follow-up. The
+console recognizes `/steer TEXT` while an admitted turn runs; `//steer TEXT`
+queues the literal `/steer TEXT`. Idle, empty, late or rejected steering never
+falls back to a queued prompt. Rejected console input makes the eventual exit
+nonzero. The profile's provider, tools, instructions and budget remain fixed.
+
+Steering accepts at most 16 KiB of UTF-8 text, 32 pending messages and 128 total
+messages per target operation. It waits for a complete model boundary and does
+not interrupt an in-flight provider request or extend the turn budget. Receipt
+states are Pending (durably accepted), Captured (bound to an inference request,
+not proof of provider receipt), and Undelivered (not captured before completion
+or interruption). Cancellation may leave usage Unknown while preserving an
+Undelivered message. Receipt status, not live text, is authoritative.
+
+```sh
+0sec-native --state .0sec/native/state.db steer list \
+  --session SESSION_ID --operation OPERATION_ID --after-sequence 0 --limit 50
+```
+
+`steer list` works while another process owns the engine. It reads an existing
+state database without migration/recovery, providers, harness loading or network
+calls; it does not create missing state. Pages contain at most 100 records / 1 MiB.
+Advance the cursor to the last returned sequence until empty; refresh from zero
+to observe mutable statuses. TUI reopening loads the newest displayed operation's
+receipts. Live TUI sends always target its active root; app-server `SteerAgent`
+also accepts an explicitly identified running delegated child. App-server sends
+use session/operation/command IDs plus exact prompt text; exact retries retain
+identity, while changed payloads conflict. TUI errors retain the draft/command ID
+for retry; acknowledgments remain associated with their original operation.

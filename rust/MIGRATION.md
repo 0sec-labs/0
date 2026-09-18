@@ -31,8 +31,8 @@ upgrading scaffolds or model assessments into successful verification.
 | Surface | Native owner and current behavior | Remaining acceptance gate |
 | --- | --- | --- |
 | Wire schema | `crates/zero-protocol`: strict versioned requests, replies, execution/session values, JSON Schema | Stable compatibility policy, generated external clients, negotiated additions and schema migration tests |
-| Native state | `crates/zero-store`: SQLite sessions, command admission, owner-bound operation settlement, ordered events, budget reservation/settlement, transactional epoch recovery and schema v1/v2/v3/v4/v5→v6 migration, optional activation epoch pins and immutable operation artifacts | Full UI message projection, semantic compaction and retained-history retrieval; further schema upgrades; explicit legacy import; durable multi-process campaign accounting |
-| Application engine | `crates/zero-engine`: session queries, idempotent execution, cancellation, engine ownership lock, uncertain-operation recovery, finding reconciliation, durable Responses/Chat/Anthropic inference, bounded offline Docker/smolvm snapshot agent with explicit completed-turn continuation, durable FIFO inputs, bounded joined subagents and explicit byte-bounded context projection from immutable journal records | Remaining providers, full tools/permissions and agent workflows, mid-turn steering input, interrupted-turn checkpoints and generation lifecycle |
+| Native state | `crates/zero-store`: SQLite sessions, command admission, owner-bound operation settlement, ordered events, budget reservation/settlement, transactional epoch recovery and schema v1/v2/v3/v4/v5/v6→v7 migration, optional activation epoch pins and immutable operation artifacts | Full UI message projection, semantic compaction and retained-history retrieval; further schema upgrades; explicit legacy import; durable multi-process campaign accounting |
+| Application engine | `crates/zero-engine`: session queries, idempotent execution, cancellation, engine ownership lock, uncertain-operation recovery, finding reconciliation, durable Responses/Chat/Anthropic inference, bounded offline Docker/smolvm snapshot agent with explicit completed-turn continuation, durable FIFO inputs, active-agent steering, bounded joined subagents and explicit byte-bounded context projection from immutable journal records | Remaining providers, full tools/permissions and agent workflows, mid-turn steering input, interrupted-turn checkpoints and generation lifecycle |
 | Batch execution | `crates/zero-executor`: validated snapshot pin/copy, local image identity, nonroot Linux offline Docker lifecycle, bounded raw output, cancellation and explicit cleanup outcome | All other execution profiles below; real Docker qualification remains separate from injected CLI fixtures |
 | MicroVM execution | `crates/zero-smolvm` and `zero-sandbox`: explicit pinned archive, qualified runtime version, nonroot offline batch lifecycle, verified snapshot staging and native engine/agent selection; real guest and engine/agent smoke passed | Broader isolation/SIGKILL qualification, live-provider matrix and interactive execution |
 | Source review | `crates/zero-source` and engine `source.rs`: bounded selected source bundle, grounded structured hypotheses, retained request/bundle/completion/submission, same-session provenance and exact retry; `source-review` CLI | Source exploration, automatic investigation and specialist verification; hypotheses remain unverified, including successful model submissions |
@@ -798,3 +798,39 @@ store-batch tests. Strict production workspace Clippy and formatting passed.
 The new backend fixtures use independently keyed fake containers and loopback
 model servers: they prove lifecycle/accounting, not actual sandbox isolation or
 live-provider behavior. No paid calls or production rollout were performed.
+
+
+### Durable active-agent steering
+
+The legacy code has two distinct behaviors: chat `busyInputMode=steer` queues a
+follow-up and interrupts the main turn (`chat-screen.tsx`), while scan/native-loop
+`getPendingUserMessages` injects input at model-round boundaries and checks again
+before final retirement. This slice implements explicit, durable boundary input;
+existing queue and cancellation commands retain their separate meanings.
+
+Schema 7 records exact target/command/text intent and atomically binds selected
+messages to the next inference admission. The protocol exposes `SteerAgent` and
+`AgentSteering`; root and dispatched joined-child targets retain their existing
+authority and turn limits. Captured means persisted request, not provider receipt.
+A final-boundary seal closes the acceptance race; uncaptured terminal messages are
+Undelivered and never silently rerun. Original review questions remain unchanged,
+with supplementary operator messages retained in actual provider evidence.
+
+Protected context spans and ordinary full histories both validate carried inputs
+against durable capture receipts across checkpoints and continuation. This closes
+the boundary-steering portion of gate A; peer messaging, interrupt-and-resume
+checkpoints, detached actors, semantic compaction and full legacy frontend parity
+remain open. See [input semantics](crates/zero-engine/QUEUE.md#steering-an-active-agent).
+
+
+Qualification: actual Rust 1.85 workspace testing passed 643 tests with 11
+explicit backend/environment ignores. Final engine qualification passed 165 tests;
+final CLI/TUI qualification passed 144. The final two lineage fixtures separately
+prove earlier steering/route corruption rejection and continuation across 34
+ordinary operations, avoiding an accidental per-conversation 32-operation cap.
+Strict production workspace Clippy, focused lineage-test Clippy and formatting
+passed. New fixtures use loopback providers, independently keyed fake containers,
+real subprocess signals and real PTYs; they do not claim live-provider or sandbox
+isolation qualification. Schema migration, rollback of interrupted capture,
+terminal admission races, byte-bounded witness reads, frozen retry targets and
+terminal restoration are exercised. Production TypeScript routing is unchanged.

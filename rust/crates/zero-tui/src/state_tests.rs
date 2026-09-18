@@ -623,3 +623,144 @@ fn worker_error_before_or_after_admission_event_cannot_reuse_initial_anchor() {
         assert_eq!(ui.composer, "follow-up");
     }
 }
+
+#[test]
+fn steering_shortcut_holds_draft_and_remains_bound_after_active_turn_changes() {
+    let mut ui = state();
+    ready(&mut ui);
+    ui.paste("direction λ\nsecond line");
+    let ctrl = |c| KeyEvent::new(KeyCode::Char(c), KeyModifiers::CONTROL);
+    assert!(ui.key(ctrl('t')).is_empty());
+    assert!(!ui.composer.is_empty());
+    let _run = ui.start(queued("first", 1, QueuedAgentStatus::Pending));
+    assert!(ui.key(ctrl('t')).is_empty(), "unadmitted turn cannot steer");
+    ui.active.as_mut().unwrap().operation = Some("root-one".into());
+    let actions = ui.key(ctrl('t'));
+    let Command::SteerAgent {
+        session_id,
+        operation_id,
+        command_id,
+        prompt,
+    } = &actions[0].command
+    else {
+        panic!("steer")
+    };
+    assert_eq!(operation_id, "root-one");
+    let draft = ui.composer.clone();
+    ui.paste("not appended");
+    ui.key(ctrl('u'));
+    ui.key(key(KeyCode::Backspace));
+    assert!(ui.key(key(KeyCode::Enter)).is_empty());
+    assert!(ui.key(ctrl('n')).is_empty());
+    assert_eq!(ui.composer, draft);
+    assert!(
+        !ui.key(ctrl('x')).is_empty(),
+        "cancellation remains available"
+    );
+    ui.active = None;
+    let _ = ui.start(queued("second", 2, QueuedAgentStatus::Pending));
+    ui.active.as_mut().unwrap().operation = Some("root-two".into());
+    let reads = response(
+        &mut ui,
+        &actions[0],
+        json!({"type":"agent_steered","duplicate":false,"message":{"id":"message","session_id":session_id,"operation_id":operation_id,"command_id":command_id,"sequence":1,"prompt":prompt,"status":"pending","inference_operation_id":null}}),
+    );
+    assert!(ui.composer.is_empty());
+    assert_eq!(ui.steering.target.as_deref(), Some("root-one"));
+    assert!(
+        matches!(&reads[0].command,Command::AgentSteering{operation_id,..} if operation_id=="root-one")
+    );
+    let retry_text = "new queued followup";
+    ui.paste(retry_text);
+    assert!(
+        matches!(
+            ui.key(key(KeyCode::Enter))[0].command,
+            Command::QueueAgent { .. }
+        ),
+        "Enter keeps queue semantics"
+    );
+}
+
+#[test]
+fn steering_refreshes_on_new_inference_only_and_paste_never_sends() {
+    let mut ui = state();
+    ready(&mut ui);
+    let _ = ui.start(queued("first", 1, QueuedAgentStatus::Pending));
+    ui.active.as_mut().unwrap().operation = Some("root".into());
+    ui.paste("steer");
+    let sent = ui.key(KeyEvent::new(KeyCode::Char('t'), KeyModifiers::CONTROL));
+    let Command::SteerAgent { command_id, .. } = &sent[0].command else {
+        panic!()
+    };
+    response(
+        &mut ui,
+        &sent[0],
+        json!({"type":"agent_steered","duplicate":false,"message":{"id":"m","session_id":"session","operation_id":"root","command_id":command_id,"sequence":1,"prompt":"steer","status":"pending","inference_operation_id":null}}),
+    );
+    let event = |op: &str, sequence| ServerMessage::Event {
+        protocol_version: PROTOCOL_VERSION,
+        event: ExecutionEvent::ModelProgress {
+            session_id: "session".into(),
+            operation_id: op.into(),
+            parent_operation_id: Some("root".into()),
+            sequence,
+            progress: ProviderProgress::TextDelta {
+                item_index: 0,
+                content_index: 0,
+                text: "visible".into(),
+            },
+        },
+    };
+    let refresh = ui.message(event("model-two", 1)).unwrap();
+    assert!(matches!(
+        refresh[0].command,
+        Command::AgentSteering {
+            after_sequence: 0,
+            ..
+        }
+    ));
+    assert!(ui.message(event("model-two", 2)).unwrap().is_empty());
+    assert_eq!(
+        ui.steering.messages[0].status,
+        zero_protocol::steering::AgentSteeringStatus::Pending
+    );
+    assert!(!ui.message(event("model-three", 1)).unwrap().is_empty());
+}
+
+#[test]
+fn reopened_history_loads_retained_steering_without_replacing_an_acknowledged_target() {
+    let mut ui = state();
+    let reads = ui.refresh();
+    let receipt_reads = response(
+        &mut ui,
+        &reads[0],
+        history_reply(json!([history(
+            8,
+            "reopened",
+            "succeeded",
+            "completed",
+            true
+        )])),
+    );
+    assert!(
+        matches!(&receipt_reads[0].command,Command::AgentSteering{operation_id,after_sequence:0,..} if operation_id=="reopened")
+    );
+    let newer = ui.refresh();
+    assert!(
+        response(
+            &mut ui,
+            &newer[0],
+            history_reply(json!([history(9, "new-root", "running", "unknown", false)]))
+        )
+        .is_empty()
+    );
+    assert_eq!(ui.steering.target.as_deref(), Some("reopened"));
+    ui.open("different-session".into());
+    response(
+        &mut ui,
+        &receipt_reads[0],
+        json!({"type":"agent_steering","messages":[{"id":"old","session_id":"session","operation_id":"reopened","sequence":1,"command_id":"steer","prompt":"retained","status":"undelivered","inference_operation_id":null}]}),
+    );
+    assert!(ui.steering.messages.is_empty());
+    assert!(ui.steering.target.is_none());
+}
