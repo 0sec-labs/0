@@ -13,7 +13,7 @@ pub fn initialize(conn: &mut Connection) -> Result<()> {
     }
     if application == 0 {
         let tables: i64 = tx.query_row(
-            "SELECT COUNT(*) FROM sqlite_master WHERE name NOT LIKE 'sqlite_%'",
+            "SELECT COUNT(*) FROM sqlite_master WHERE name NOT GLOB 'sqlite_*'",
             [],
             |r| r.get(0),
         )?;
@@ -43,5 +43,28 @@ CREATE TABLE operation_artifacts(operation_id TEXT NOT NULL REFERENCES operation
         tx.pragma_update(None, "user_version", 4)?;
     }
     tx.commit()?;
+    Ok(())
+}
+
+/// Validate before any table reads, without mutating the inspected database.
+/// Use the same DDL as writable initialization to include columns, constraints,
+/// views/triggers and explicit indexes in the current exact-schema check.
+pub(super) fn validate_current(conn: &Connection) -> Result<()> {
+    let application: i64 = conn.pragma_query_value(None, "application_id", |r| r.get(0))?;
+    let version: i64 = conn.pragma_query_value(None, "user_version", |r| r.get(0))?;
+    if application != APPLICATION_ID {
+        return Err(Error::ForeignDatabase);
+    }
+    if version != 4 {
+        return Err(Error::Schema(version));
+    }
+    let observed = crate::readonly::definitions(conn)?;
+    // Only this independent in-memory reference is initialized. The inspected
+    // connection is SQLite READ_ONLY and its transaction contains only reads.
+    let mut reference = Connection::open_in_memory()?;
+    initialize(&mut reference)?;
+    if observed != crate::readonly::definitions(&reference)? {
+        return Err(Error::ForeignDatabase);
+    }
     Ok(())
 }

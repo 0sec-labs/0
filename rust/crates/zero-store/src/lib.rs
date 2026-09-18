@@ -3,6 +3,7 @@ mod artifacts;
 mod budget;
 mod lifecycle;
 mod operations;
+mod readonly;
 mod schema;
 use rusqlite::{Connection, OptionalExtension, Transaction, TransactionBehavior, params};
 use serde_json::Value;
