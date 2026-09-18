@@ -539,3 +539,18 @@ async fn insufficient_serialized_evidence_headroom_stops_before_dispatch() {
     let status = Evaluation::inspect(&f.root()).unwrap();
     assert_eq!(status.report.unwrap().receipt_digest, r.receipt_digest);
 }
+
+#[test]
+fn sqlite_like_user_view_is_rejected_by_inspection_and_recovery() {
+    let f = Fixture::new();
+    drop(f.create());
+    let path = f.root().join("evaluation.sqlite");
+    let db = rusqlite::Connection::open(&path).unwrap();
+    db.execute_batch("CREATE VIEW sqliteXshadow AS SELECT 1;")
+        .unwrap();
+    drop(db);
+    let before = fs::read(&path).unwrap();
+    assert!(Evaluation::inspect(&f.root()).is_err());
+    assert!(Evaluation::reopen(&f.root()).is_err());
+    assert_eq!(before, fs::read(&path).unwrap());
+}

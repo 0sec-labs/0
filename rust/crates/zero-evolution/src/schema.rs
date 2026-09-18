@@ -12,7 +12,7 @@ pub(crate) fn initialize(conn: &mut Connection, schema: &str, state: &str) -> Re
     }
     if app == 0 {
         let count: i64 = tx.query_row(
-            "SELECT count(*) FROM sqlite_master WHERE name NOT LIKE 'sqlite_%'",
+            "SELECT count(*) FROM sqlite_master WHERE name NOT GLOB 'sqlite_*'",
             [],
             |r| r.get(0),
         )?;
@@ -48,6 +48,16 @@ pub(crate) fn validate_existing(conn: &Connection) -> Result<()> {
         return Err(Error::Invalid(
             "foreign or unsupported registry database".into(),
         ));
+    }
+    // '_' is literal in GLOB: LIKE 'sqlite_%' would also hide legal user
+    // objects such as sqliteXshadow. Exactly the eight registry tables exist.
+    let objects: i64 = conn.query_row(
+        "SELECT count(*) FROM sqlite_schema WHERE name NOT GLOB 'sqlite_*'",
+        [],
+        |r| r.get(0),
+    )?;
+    if objects != 8 {
+        return Err(Error::Invalid("unexpected registry schema objects".into()));
     }
     for (table, columns) in [
         ("artifacts", "digest,bytes"),

@@ -407,3 +407,41 @@ fn readonly_registry_reads_verified_artifacts_and_refuses_writes_or_initializati
         .unwrap();
     assert!(Registry::open_read_only(&path).is_err());
 }
+
+#[test]
+fn sqlite_like_user_names_are_not_hidden_or_claimed() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("foreign.sqlite");
+    let conn = rusqlite::Connection::open(&path).unwrap();
+    conn.execute_batch("CREATE VIEW sqliteXshadow AS SELECT 42 AS value;")
+        .unwrap();
+    let before = std::fs::read(&path).unwrap();
+    assert!(Registry::open(&path, "v1", &json!({})).is_err());
+    assert!(Registry::open_read_only(&path).is_err());
+    assert_eq!(before, std::fs::read(&path).unwrap());
+    let app: i64 = conn
+        .pragma_query_value(None, "application_id", |r| r.get(0))
+        .unwrap();
+    assert_eq!(app, 0);
+    let version: i64 = conn
+        .pragma_query_value(None, "user_version", |r| r.get(0))
+        .unwrap();
+    assert_eq!(version, 0);
+    let value: i64 = conn
+        .query_row("SELECT value FROM sqliteXshadow", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(value, 42);
+}
+#[test]
+fn read_only_registry_rejects_extra_sqlite_like_user_view() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("registry.sqlite");
+    drop(Registry::open(&path, "v1", &json!({})).unwrap());
+    let conn = rusqlite::Connection::open(&path).unwrap();
+    conn.execute_batch("CREATE VIEW sqliteXshadow AS SELECT 1;")
+        .unwrap();
+    drop(conn);
+    let before = std::fs::read(&path).unwrap();
+    assert!(Registry::open_read_only(&path).is_err());
+    assert_eq!(before, std::fs::read(&path).unwrap());
+}

@@ -240,7 +240,7 @@ pub(crate) fn validate_identity(conn: &Connection) -> Result<()> {
     }
     let objects: Vec<(String, String)> = conn
         .prepare(
-            "SELECT type,name FROM sqlite_schema WHERE name NOT LIKE 'sqlite_%' ORDER BY name",
+            "SELECT type,name FROM sqlite_schema WHERE name NOT GLOB 'sqlite_*' ORDER BY name",
         )?
         .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?
         .collect::<std::result::Result<_, _>>()?;
