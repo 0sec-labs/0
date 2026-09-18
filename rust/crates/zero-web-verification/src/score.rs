@@ -1,4 +1,4 @@
-use crate::{FrozenPlan, Result, invalid, plan::digest};
+use crate::{ObservationMatrix, Result, invalid, plan::digest};
 use std::collections::{BTreeMap, BTreeSet};
 use zero_protocol::{
     OperationStatus,
@@ -8,15 +8,16 @@ use zero_protocol::{
 /// Caller must authenticate every attempt against its retained execution journal.
 /// This pure scorer cannot turn a caller-authored observation into proof.
 pub fn assess(
-    plan: &FrozenPlan,
+    plan: &impl ObservationMatrix,
     attempts: &[WebVerificationAttempt],
     stop: Option<WebVerificationStop>,
 ) -> Result<WebVerificationAssessment> {
     if attempts.len() > 24 || serde_json::to_vec(attempts).map_err(invalid)?.len() > 262144 {
         return Err(invalid("web observation matrix exceeds bound"));
     }
-    let p = plan.plan();
-    let expected = p.repeats * p.cases.len() as u32;
+    let cases = plan.cases();
+    let repeats = plan.repeats();
+    let expected = repeats * cases.len() as u32;
     let mut reasons = BTreeSet::new();
     let mut ids = BTreeSet::new();
     let mut cells = BTreeSet::new();
@@ -35,7 +36,7 @@ pub fn assess(
         unknown |=
             a.operation_status == OperationStatus::Unknown || a.possible_dispatch && !a.complete;
         cancelled |= a.operation_status == OperationStatus::Cancelled;
-        let index = p.cases.iter().position(|c| c.name == a.case_name);
+        let index = cases.iter().position(|c| c.name == a.case_name);
         if !ids.insert(&a.operation_id)
             || a.operation_id.is_empty()
             || a.operation_id.len() > 256
@@ -49,8 +50,8 @@ pub fn assess(
             reasons.insert("unexpected_case");
             continue;
         };
-        if a.repeat_index >= p.repeats
-            || position != a.repeat_index as usize * p.cases.len() + index
+        if a.repeat_index >= repeats
+            || position != a.repeat_index as usize * cases.len() + index
             || plan.request_sha256(index, a.repeat_index).ok().as_deref() != Some(&a.request_sha256)
         {
             invalid_identity = true;
@@ -78,9 +79,9 @@ pub fn assess(
             unstable = true;
             reasons.insert("unstable_repetitions");
         }
-        let matched = a.status == Some(p.cases[index].expected.status)
-            && a.body_sha256.as_ref() == Some(&p.cases[index].expected.body_sha256);
-        match p.cases[index].role {
+        let matched = a.status == Some(cases[index].expected.status)
+            && a.body_sha256.as_ref() == Some(&cases[index].expected.body_sha256);
+        match cases[index].role {
             WebCaseRole::Attack => {
                 if matched {
                     observed += 1
@@ -124,8 +125,8 @@ pub fn assess(
     Ok(WebVerificationAssessment {
         schema_version: 1,
         disposition,
-        oracle_version: p.oracle_version.clone(),
-        plan_sha256: plan.plan_sha256().into(),
+        oracle_version: crate::ORACLE_VERSION.into(),
+        plan_sha256: plan.matrix_sha256().into(),
         expected_attempts: expected,
         completed_attempts: complete,
         observed_attempts: observed,

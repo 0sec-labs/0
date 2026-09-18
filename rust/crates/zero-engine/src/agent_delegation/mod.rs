@@ -96,6 +96,12 @@ pub(super) fn capture(
                 "snapshot-free delegated roles must explicitly offer http_request",
             ));
         }
+        if role.tools.iter().any(|t| t == "run_web_experiment")
+            && request.web_experiment_policy.is_some()
+            && !role.tools.iter().any(|t| t == "http_request")
+        {
+            return Err(error("experiment roles must also offer http_request"));
+        }
         let mut tools = vec![];
         for name in &role.tools {
             if matches!(
@@ -245,6 +251,10 @@ fn child_request(parent: &AgentRequest, role: &DelegationRole, prompt: &str) -> 
     request.continuation_of = None;
     request.source_submission_max_hypotheses = None;
     request.web_submission_max_hypotheses = None;
+    request.web_experiment_policy = parent
+        .web_experiment_policy
+        .clone()
+        .filter(|_| role.tools.iter().any(|t| t == "run_web_experiment"));
     request.context_policy = None;
     request.tool_approval_policy = agent_approvals::inherited(parent, &role.tools);
     request.http_profile = parent
@@ -337,4 +347,121 @@ impl Context {
             payloads,
         })
     }
+}
+
+/// Authenticate one still-running joined actor without requiring a terminal group.
+pub(crate) fn validate_member(
+    store: &Store,
+    root: &Operation,
+    group: &Operation,
+    child: &Operation,
+) -> Result<(), EngineError> {
+    let parent = zero_protocol::agent::validate_actor_payload(&root.payload).map_err(error)?;
+    let policy = parent
+        .delegation_policy
+        .as_ref()
+        .ok_or_else(|| error("joined policy absent"))?;
+    policy.validate().map_err(error)?;
+    let tasks: Vec<Task> = serde_json::from_value(group.payload["tasks"].clone())?;
+    let commands: Vec<String> = serde_json::from_value(group.payload["child_commands"].clone())?;
+    let i = child.payload["delegation_index"]
+        .as_u64()
+        .and_then(|n| usize::try_from(n).ok())
+        .ok_or_else(|| error("joined index absent"))?;
+    if tasks.is_empty()
+        || tasks.len() > policy.max_children as usize
+        || commands.len() != tasks.len()
+        || i >= tasks.len()
+        || root.session_id != group.session_id
+        || child.session_id != root.session_id
+        || group.payload["kind"] != "agent_delegation"
+        || group.payload["parent_operation"] != root.id
+        || child.payload["parent_operation"] != root.id
+        || child.payload["delegation_group_command"] != group.command_id
+        || commands[i] != child.command_id
+        || commands[i] != format!("{}:agent:{i}", group.command_id)
+        || group.payload["delegation_context_sha256"] != hash(&root.payload["delegation_context"])?
+    {
+        return Err(error("joined membership identity differs"));
+    }
+    let task = &tasks[i];
+    let role = policy
+        .roles
+        .iter()
+        .find(|r| r.name == task.role)
+        .ok_or_else(|| error("joined role absent"))?;
+    let identity = root.payload["delegation_context"]["roles"]
+        .as_array()
+        .and_then(|r| r.iter().find(|r| r["name"] == role.name))
+        .ok_or_else(|| error("joined role capture absent"))?;
+    if child.payload["request"] != serde_json::to_value(child_request(&parent, role, &task.prompt))?
+        || child.payload["delegation_template"] != identity["template"]
+        || [
+            "endpoint",
+            "rates",
+            "wire_api",
+            "hosted_catalog",
+            "plugin_context",
+            "http_context",
+            "http_output_version",
+        ]
+        .iter()
+        .any(|key| child.payload.get(key) != identity.get(key))
+    {
+        return Err(error("joined captured authority differs"));
+    }
+    let (turn, index) = group
+        .command_id
+        .strip_prefix(&format!("{}:tool:", root.id))
+        .and_then(|s| s.split_once(':'))
+        .and_then(|(a, b)| Some((a.parse::<u32>().ok()?, b.parse::<usize>().ok()?)))
+        .filter(|(a, b)| *a < 32 && *b < 32)
+        .ok_or_else(|| error("joined original command invalid"))?;
+    let origin =
+        store.get_operation_by_command(&root.session_id, &format!("{}:model:{turn}", root.id))?;
+    if serde_json::to_vec(&origin)?.len() > 16 * 1024 * 1024
+        || origin.status != OperationStatus::Succeeded
+        || origin.payload["kind"] != "agent_inference"
+        || origin.payload["parent_operation"] != root.id
+    {
+        return Err(error("joined original inference differs"));
+    }
+    let completion: zero_protocol::model::Completion = serde_json::from_value(
+        origin
+            .outcome
+            .ok_or_else(|| error("joined origin outcome absent"))?,
+    )?;
+    let calls: Vec<_> = completion
+        .content
+        .iter()
+        .filter_map(|c| {
+            if let zero_protocol::model::Content::ToolCall {
+                id,
+                name,
+                arguments,
+            } = c
+            {
+                Some((id, name, arguments))
+            } else {
+                None
+            }
+        })
+        .collect();
+    if completion.status != zero_protocol::model::CompletionStatus::Completed
+        || completion.error.is_some()
+        || calls.len() > 32
+    {
+        return Err(error("joined original inference incomplete"));
+    }
+    let (id, name, args) = calls
+        .get(index)
+        .ok_or_else(|| error("joined original task missing"))?;
+    let original: Arguments = serde_json::from_value((*args).clone())?;
+    if name.as_str() != "delegate_tasks"
+        || group.payload["call_id"] != **id
+        || serde_json::to_value(original.tasks)? != serde_json::to_value(tasks)?
+    {
+        return Err(error("joined original tasks changed"));
+    }
+    Ok(())
 }

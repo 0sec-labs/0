@@ -134,3 +134,106 @@ fn mismatched_citations_links_and_reportability_are_rejected() {
         assert!(render(&parsed, Format::Json).is_err(), "{path}");
     }
 }
+fn experimental() -> WebWorkflowReport {
+    let mut r = fixture();
+    r.experiments
+        .push(serde_json::from_str(include_str!("fixtures/web_experiment.json")).unwrap());
+    r
+}
+#[test]
+fn experiments_preserve_old_json_and_distinguish_predictions_from_observations() {
+    assert!(
+        serde_json::to_value(fixture())
+            .unwrap()
+            .get("experiments")
+            .is_none()
+    );
+    let r = experimental();
+    let json = render(&r, Format::Json).unwrap();
+    let restored: WebWorkflowReport = serde_json::from_str(&json).unwrap();
+    assert_eq!(
+        serde_json::to_value(r).unwrap(),
+        serde_json::to_value(restored).unwrap()
+    );
+    for format in [Format::Markdown, Format::Html] {
+        let out = render(&experimental(), format).unwrap();
+        for label in [
+            "Model conjecture",
+            "Model predictions",
+            "Independent measured feedback",
+            "previous-experiment",
+            "existing target state",
+            "Unverified",
+        ] {
+            assert!(out.contains(label), "{label}");
+        }
+        assert!(!out.contains("<script>"));
+        if matches!(format, Format::Markdown) {
+            assert!(!out.contains("[link](javascript:"));
+        } else {
+            assert!(!out.contains("href="));
+        }
+        assert!(out.contains(&hash('3')) || out.contains(&"3".repeat(64)));
+    }
+}
+#[test]
+fn active_and_cancelled_experiments_do_not_invent_success_or_require_terminal_claims() {
+    let mut r = experimental();
+    r.run.review = None;
+    r.experiments[0].operation_status = zero_protocol::OperationStatus::Running;
+    r.experiments[0].outcome = None;
+    assert!(
+        render(&r, Format::Html)
+            .unwrap()
+            .contains("no terminal assessment")
+    );
+    let mut r = experimental();
+    r.run.review = None;
+    let e = &mut r.experiments[0];
+    e.operation_status = zero_protocol::OperationStatus::Cancelled;
+    let o = e.outcome.as_mut().unwrap();
+    o.stop = Some(zero_protocol::web::WebVerificationStop::Cancelled);
+    o.attempts.clear();
+    o.children.clear();
+    o.assessment.disposition = zero_protocol::verification::Disposition::Cancelled;
+    o.assessment.completed_attempts = 0;
+    o.assessment.observed_attempts = 0;
+    o.assessment.control_attempts = 0;
+    assert!(render(&r, Format::Json).unwrap().contains("cancelled"));
+}
+#[test]
+fn experiment_scope_prediction_identity_attempt_order_and_reportability_are_checked() {
+    let base = serde_json::to_value(experimental()).unwrap();
+    for (path, value) in [
+        ("/experiments/0/web_operation_id", json!("foreign")),
+        ("/experiments/0/session_id", json!("foreign")),
+        ("/experiments/0/operation_status", json!("unknown")),
+        (
+            "/experiments/0/outcome/assessment/observed_attempts",
+            json!(1),
+        ),
+        (
+            "/experiments/0/hypothesis/title",
+            json!("different conjecture"),
+        ),
+        (
+            "/experiments/0/outcome/assessment/plan_sha256",
+            json!(hash('9')),
+        ),
+        (
+            "/experiments/0/outcome/assessment/vulnerability_reportable",
+            json!(true),
+        ),
+        ("/experiments/0/outcome/attempts/0/repeat_index", json!(1)),
+        ("/experiments/0/outcome/children/0", json!("wrong")),
+        ("/experiments/0/policy/max_cases", json!(1)),
+    ] {
+        let mut v = base.clone();
+        *v.pointer_mut(path).unwrap() = value;
+        let r: WebWorkflowReport = serde_json::from_value(v).unwrap();
+        assert!(render(&r, Format::Json).is_err(), "{path}");
+    }
+    let mut r = experimental();
+    r.experiments.push(r.experiments[0].clone());
+    assert!(render(&r, Format::Json).is_err());
+}

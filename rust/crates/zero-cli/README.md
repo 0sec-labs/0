@@ -987,3 +987,47 @@ and 64 MiB of validated body inspection plus one response sentinel. Unavailable
 or omitted evidence is labeled explicitly. Up to 32 explicitly linked verification
 receipts have their own matrix and provenance read bounds; that work is separate
 from the discovery-body prefix. Oversized reports fail explicitly.
+
+### Agent-chosen web experiments
+
+A host request can opt in with `"web_experiment_policy":{"schema_version":1,
+"max_experiments":3,"max_cases":4,"max_repeats":2}` and `http_profile`.
+The agent can propose an attack/control response matrix, observe independent
+measurements, revise its conjecture, delegate permitted work, or stop without
+using the allowance. This does not require terminal hypothesis submission;
+`web_submission_max_hypotheses` remains a separate opt-in. The policy supplies
+limits, not a minimum number of experiments or a vulnerability verdict.
+
+Inspect retained work without provider or target configuration:
+
+```sh
+0sec-native web experiments --session SESSION --operation WEB_RUN
+0sec-native web experiment --session SESSION --operation WEB_RUN --experiment EXPERIMENT
+0sec-native web report --session SESSION --operation WEB_RUN \
+  --experiment FIRST_EXPERIMENT --experiment REVISED_EXPERIMENT --format html
+```
+
+Experiment list pages use `--after-sequence` and `--limit` (1–32); an empty scan
+window with `next_after_sequence` still has more records. Detail binds the actor,
+model turn, tool call, conjecture revision, frozen predictions, and independent
+measured attempts. `assessment.plan_sha256` identifies the experiment's frozen
+matrix. Artifact byte digests for `experiment.hypothesis` and `experiment.matrix`
+identify retained wrappers; they are distinct from conjecture and prediction
+matrix identities. Running experiments have no terminal assessment. Cancelled
+and uncertain results retain their partial observations.
+
+Reports include only explicitly selected experiment IDs, with at most 32
+combined experiment/host-verification links. Empty experiment arrays are omitted
+from the existing version-1 report schema. A matched prediction means only that
+this exact matrix matched under the same static identity and existing target
+state: it is not a generic verified finding, reportability grant, or evolution
+promotion. The existing HTTP account, experiment allowance, model session
+budget, and cancellation ownership remain shared by joined children and explicit
+continuations. Inherited approval policy still gates an exact whole experiment
+when required; ordinary Enter, pasted text, questions, and steering cannot grant
+that approval.
+
+In the TUI's Web view, select a run and press `x` for its experiments, then Enter
+for detail. Up/Down selects a measured attempt and `e` opens its retained evidence;
+`p` follows the retained prior-revision link. Ctrl-L pages and Ctrl-G refreshes.
+These controls inspect records and never start an experiment.

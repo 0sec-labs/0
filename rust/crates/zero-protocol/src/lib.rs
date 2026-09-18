@@ -28,6 +28,7 @@ pub mod triage;
 pub mod verification;
 mod verification_binary;
 pub mod web;
+pub mod web_experiment;
 pub use execution::*;
 pub use session::*;
 
@@ -181,10 +182,23 @@ pub enum Command {
         command_id: String,
         request: web::WebVerificationRequest,
     },
+    WebExperiments {
+        session_id: String,
+        web_operation_id: String,
+        after_sequence: u64,
+        limit: u32,
+    },
+    WebExperiment {
+        session_id: String,
+        web_operation_id: String,
+        experiment_operation_id: String,
+    },
     WebWorkflowReport {
         session_id: String,
         operation_id: String,
         verification_ids: Vec<String>,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        experiment_ids: Vec<String>,
     },
     SourceReviews {
         session_id: String,
@@ -444,6 +458,12 @@ pub enum Reply {
         operation: Operation,
         result: Option<web::WebVerificationOutcome>,
         duplicate: bool,
+    },
+    WebExperiments {
+        page: web_experiment::WebExperimentsPage,
+    },
+    WebExperiment {
+        experiment: web_experiment::WebExperimentReport,
     },
     WebWorkflowReport {
         report: web::WebWorkflowReport,

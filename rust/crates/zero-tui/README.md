@@ -166,3 +166,21 @@ CLI commands. The TUI does not implicitly approve or launch a matrix, infer a
 clean result from an empty list, or label an HTTP observation as a verified
 vulnerability. Browser/session/OAST and semantic security oracles remain outside
 this bounded static-identity workflow.
+
+## Agent experiment history
+
+From a selected Web run, `x` opens agent-chosen experiments; Enter inspects the
+selected record. These lists include active and partial work, with no implied
+success or safety from an empty page. Ctrl-L advances the bounded scan cursor
+through empty windows and Ctrl-G refreshes. Only one 20-row metadata page and one
+experiment detail (at most 8 MiB) are held. Session and selection epochs discard
+late responses.
+
+Detail separates the model's conjecture and predicted exact responses from
+independently measured feedback. Up/Down selects a measured attempt; `e` opens
+its exact retained response, with the existing bounded base64 byte-range reader.
+Esc returns to experiment detail, and `p` follows the prior conjecture revision
+with its expected digest. Enter, pasted text, and Ctrl-S cannot launch an
+experiment or grant permission here. Existing question/approval overlays and
+active cancellation shortcuts keep their meanings. Experiment success never
+changes a hypothesis to verified or permits evolution promotion.

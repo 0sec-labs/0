@@ -110,3 +110,28 @@ fn check_admission(
     }
     Ok(())
 }
+
+pub(super) fn validate_experiment_consumption(
+    conn: &Connection,
+    effect: &Operation,
+    key: &str,
+    reads: &mut Reads,
+) -> Result<()> {
+    let mut cache = Cache {
+        reads: std::mem::take(reads),
+        intents: BTreeMap::new(),
+    };
+    let result = read::checked(conn, &effect.session_id, key, &mut cache);
+    *reads = cache.reads;
+    let checked = result?;
+    if checked
+        .record
+        .consumption
+        .as_ref()
+        .map(|c| c.effect_operation_id.as_str())
+        != Some(effect.id.as_str())
+    {
+        return Err(bad("experiment lacks exact approval consumption"));
+    }
+    Ok(())
+}

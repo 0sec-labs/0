@@ -120,3 +120,192 @@ fn authority_and_oracle_identity_change_full_intent() {
     v["plan"]["oracle_version"] = json!("model-says-pass");
     assert!(FrozenPlan::from_intent(&v).is_err());
 }
+fn experiment() -> FrozenExperiment {
+    let host = fixture();
+    FrozenExperiment::new(
+        "session",
+        "actor",
+        "inference",
+        "call",
+        zero_protocol::web_experiment::WebExperimentPolicy {
+            schema_version: 1,
+            max_experiments: 2,
+            max_cases: 4,
+            max_repeats: 3,
+        },
+        zero_protocol::web_experiment::WebExperimentProposal {
+            hypothesis: zero_protocol::web_experiment::WebExperimentHypothesis {
+                title: "Model prediction".into(),
+                explanation: "Chosen by model, not security proof".into(),
+                prior_revision: None,
+            },
+            purpose: "Distinguish attack and control responses".into(),
+            cases: host.plan().cases.clone(),
+            repeats: 2,
+        },
+        host.intent()["http_context"].clone(),
+        None,
+    )
+    .unwrap()
+}
+#[test]
+fn experiment_has_real_actor_origin_and_shared_measurement_without_fake_review() {
+    let p = experiment();
+    assert!(p.intent().get("plan").is_none());
+    assert!(p.intent().get("web_operation_id").is_none());
+    assert_eq!(p.intent()["actor_operation_id"], "actor");
+    let q = FrozenExperiment::from_intent(p.intent()).unwrap();
+    assert_eq!(q.intent_sha256(), p.intent_sha256());
+    assert_eq!(
+        q.request(0, 0).unwrap().headers["content-type"],
+        "application/json"
+    );
+    assert!(q.proposal().cases[0].request.headers.is_empty());
+    let host = fixture();
+    let attempts = observations(&host);
+    let result = assess(&p, &attempts, None).unwrap();
+    assert_eq!(result.disposition, Disposition::ObservedForPlan);
+    assert!(!result.vulnerability_reportable);
+    assert_eq!(result.plan_sha256, p.matrix_sha256());
+    let child = p.child_payload("experiment", 0, 0).unwrap();
+    assert_eq!(child["origin"]["kind"], "frozen_agent_experiment");
+    assert_eq!(child["origin"]["intent_sha256"], p.intent_sha256());
+    assert!(child.get("call_id").is_none());
+}
+#[test]
+fn experiment_policy_origin_prediction_revision_and_gate_all_bind_identity() {
+    let p = experiment();
+    for (key, value) in [
+        ("actor_operation_id", json!("different")),
+        ("hypothesis", json!({"title":"forged"})),
+        ("matrix_sha256", json!(format!("sha256:{}", "0".repeat(64)))),
+        ("oracle_version", json!("model-pass")),
+    ] {
+        let mut bad = p.intent().clone();
+        bad[key] = value;
+        assert!(FrozenExperiment::from_intent(&bad).is_err(), "{key}");
+    }
+    let mut proposal = p.proposal().clone();
+    proposal.hypothesis.prior_revision = Some(zero_protocol::web_experiment::WebPriorRevision {
+        operation_id: "previous".into(),
+        hypothesis_sha256: format!("sha256:{}", "a".repeat(64)),
+    });
+    let revised = FrozenExperiment::new(
+        "session",
+        "actor",
+        "inference",
+        "call",
+        p.policy().clone(),
+        proposal,
+        p.intent()["http_context"].clone(),
+        Some(zero_protocol::approvals::ToolApprovalPolicy {
+            require_approval: vec!["http_request".into()],
+        }),
+    )
+    .unwrap();
+    assert!(revised.approval_required());
+    assert_ne!(p.hypothesis_sha256(), revised.hypothesis_sha256());
+    assert_ne!(p.intent_sha256(), revised.intent_sha256());
+    assert_eq!(p.matrix_sha256(), revised.matrix_sha256());
+    let mut policy = p.policy().clone();
+    policy.max_repeats = 2;
+    let mut proposal = p.proposal().clone();
+    proposal.repeats = 3;
+    assert!(
+        FrozenExperiment::new(
+            "session",
+            "actor",
+            "inference",
+            "call",
+            policy,
+            proposal,
+            p.intent()["http_context"].clone(),
+            None
+        )
+        .is_err()
+    );
+}
+#[test]
+fn experiment_rejects_caller_success_fields_scope_escape_and_oversized_parent() {
+    let p = experiment();
+    let mut forged = serde_json::to_value(p.proposal()).unwrap();
+    forged["vulnerability_reportable"] = json!(true);
+    assert!(
+        serde_json::from_value::<zero_protocol::web_experiment::WebExperimentProposal>(forged)
+            .is_err()
+    );
+    let mut proposal = p.proposal().clone();
+    proposal.cases[0].request.url = "https://ungranted.invalid".into();
+    assert!(
+        FrozenExperiment::new(
+            "session",
+            "actor",
+            "inference",
+            "call",
+            p.policy().clone(),
+            proposal,
+            p.intent()["http_context"].clone(),
+            None
+        )
+        .is_err()
+    );
+    let mut proposal = p.proposal().clone();
+    for c in &mut proposal.cases {
+        c.request.body = Some("\u{0001}".repeat(600_000));
+    }
+    assert!(
+        FrozenExperiment::new(
+            "session",
+            "actor",
+            "inference",
+            "call",
+            p.policy().clone(),
+            proposal,
+            p.intent()["http_context"].clone(),
+            None
+        )
+        .is_err()
+    );
+}
+#[test]
+fn experiment_roundtrip_retains_host_attribution_without_claiming_caller_headers() {
+    let p = experiment();
+    let mut context = p.intent()["http_context"].clone();
+    let mut profile: zero_protocol::http::HttpProfilePolicy =
+        serde_json::from_value(context["profile"].clone()).unwrap();
+    profile.attribution = Some(zero_protocol::http::HttpAttribution {
+        headers: std::collections::BTreeMap::from([(
+            "x-fixture-attribution".into(),
+            "host-owned".into(),
+        )]),
+        user_agent_token: Some("fixture-agent".into()),
+    });
+    let profile = zero_http::normalize_policy(profile).unwrap();
+    let digest = hash(&profile).unwrap();
+    context["profile"] = serde_json::to_value(profile).unwrap();
+    context["profile_sha256"] = json!(digest);
+    context["account_id"] = json!(
+        hash(
+            &json!({"session_id":"session","original_root_command":"root","profile_sha256":digest})
+        )
+        .unwrap()
+    );
+    let p = FrozenExperiment::new(
+        "session",
+        "actor",
+        "inference",
+        "call",
+        p.policy().clone(),
+        p.proposal().clone(),
+        context,
+        None,
+    )
+    .unwrap();
+    let r = FrozenExperiment::from_intent(p.intent()).unwrap();
+    assert_eq!(r.intent_sha256(), p.intent_sha256());
+    assert_eq!(
+        r.intent()["http_context"]["profile"]["attribution"]["headers"]["x-fixture-attribution"],
+        "host-owned"
+    );
+    assert!(r.proposal().cases[0].request.headers.is_empty());
+}

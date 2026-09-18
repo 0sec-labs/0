@@ -392,6 +392,7 @@ async fn real_microvm_engine_and_agent_ownership_accounting_and_durable_retry() 
         delegation_policy: None,
         operator_questions: false,
         http_profile: None,
+        web_experiment_policy: None,
         tool_approval_policy: None,
         model: "loopback".into(),
         instructions: "Only execute the offered snapshot tool".into(),

@@ -202,6 +202,9 @@ impl Store {
             "tool_approval_consumed",
             &json!({"approval_operation_id":key,"intent_sha256":digest,"consumption":consumption}),
         )?;
+        if operation.payload["kind"] == "agent_web_experiment" {
+            crate::web_experiment::admit(&tx, &operation)?;
+        }
         read::checked(&tx, session, key, &mut Cache::default())?;
         tx.commit()?;
         Ok(operation)

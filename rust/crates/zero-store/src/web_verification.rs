@@ -123,6 +123,9 @@ pub(super) fn parent(conn: &Connection, op: &Operation) -> Result<FrozenPlan> {
     Ok(frozen)
 }
 pub(super) fn effect(conn: &Connection, op: &Operation) -> Result<()> {
+    if op.payload["origin"]["kind"] == "frozen_agent_experiment" {
+        return crate::web_experiment::effect(conn, op);
+    }
     let parent_id = text(&op.payload, "parent_operation")?;
     let verification = operation(conn, parent_id)?;
     if verification.payload["kind"] != "host_web_verification" && op.payload.get("origin").is_none()

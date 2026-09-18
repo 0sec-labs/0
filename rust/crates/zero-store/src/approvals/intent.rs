@@ -77,7 +77,12 @@ pub(super) fn derive(
     policy
         .validate()
         .map_err(|e| Error::Invalid(e.to_string()))?;
-    if !policy.require_approval.iter().any(|n| n == alias) {
+    if !policy.require_approval.iter().any(|n| {
+        n == alias
+            || (alias == "run_web_experiment"
+                && actor.payload["request"]["web_experiment_policy"].is_object()
+                && n == "http_request")
+    }) {
         return Err(bad("tool was not selected for approval by host"));
     }
     let definitions: Vec<ToolDefinition> =
@@ -86,7 +91,24 @@ pub(super) fn derive(
     if offered.len() != 1 {
         return Err(bad("approved tool was not uniquely offered"));
     }
-    let expected = if alias == "execute_snapshot" {
+    let expected = if alias == "run_web_experiment"
+        && actor.payload["request"]["web_experiment_policy"].is_object()
+    {
+        let synthetic = Operation {
+            id: "pending-experiment".into(),
+            session_id: actor.session_id.clone(),
+            command_id: command.into(),
+            payload: effect.clone(),
+            status: OperationStatus::Admitted,
+            owner: None,
+            outcome: None,
+        };
+        let frozen = crate::web_experiment::source(conn, &synthetic, &mut cache.reads)?;
+        if !frozen.approval_required() {
+            return Err(bad("experiment does not require approval"));
+        }
+        effect.clone()
+    } else if alias == "execute_snapshot" {
         let object = args
             .as_object()
             .filter(|v| v.len() == 1 && v.contains_key("argv"))

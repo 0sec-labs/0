@@ -76,6 +76,49 @@ Possible effects that cannot be established dominate as `Unknown`. All results
 retain `vulnerability_reportable: false`. Equality of redacted bytes cannot prove
 cross-principal disclosure or establish a category-specific vulnerability.
 
+## Adaptive experiments inside an investigation
+
+Opt in on the agent request with:
+
+```json
+{"web_experiment_policy":{"schema_version":1,"max_experiments":8,"max_cases":4,"max_repeats":2}}
+```
+
+An HTTP profile is required. Policy ceilings are 32 admitted experiments, 8 cases
+per experiment and 3 repeats; each matrix requires an attack and a legitimate
+control and at least two repeats. These are ceilings, not a required procedure.
+The model may finish with no experiments. A role offering `run_web_experiment`
+also needs `http_request`; authorized children inherit the same experiment policy
+and original HTTP account.
+
+`run_web_experiment` accepts a provisional hypothesis, purpose, requests and exact
+response predictions. Feedback contains independently measured disposition,
+attempts, bounded untrusted body previews and evidence handles. A revision can
+reference an earlier retained hypothesis by experiment operation and digest.
+The model can correct its predictions or abandon the hypothesis. Predictions
+matching fresh responses never grant vulnerability-reportable or evolution-eligible
+status. The host controls measurement semantics and resource admission.
+
+If the captured approval policy gates `http_request` or `run_web_experiment`,
+one approval binds the complete matrix before dispatch. Admission consumes the
+approval and an experiment slot atomically. All requests share existing HTTP
+budgets, rates and cooldowns. Failure or cancellation does not refund a slot;
+uncertain effects retain their evidence and are never silently retried.
+
+Malformed proposals receive bounded tool rejection with no effects. In the
+opt-in adaptive mode, invalid terminal citations can be corrected in a later
+turn; a retention failure or uncertain effect is not an argument retry.
+
+```sh
+0sec-native web experiments --session SESSION --operation WEB_RUN
+0sec-native web experiment --session SESSION --operation WEB_RUN --experiment EXPERIMENT
+0sec-native web report --session SESSION --operation WEB_RUN --experiment EXPERIMENT
+```
+
+Reports accept explicitly linked experiments alongside host verification runs.
+The Web TUI provides experiment selection and retained response inspection.
+Readonly reconstruction needs neither provider credentials nor target access.
+
 ## Inspection, triage and reports
 
 `web runs` discovers partial roots even without a terminal review. `web show`,
@@ -96,7 +139,8 @@ matrix; it does not contact providers or targets or resolve current credentials.
 Partial evidence and its limitations remain visible. Reports make no implicit
 latest-run selection.
 
-SQLite schema 11 adds independent web triage decisions. Existing writable native
+SQLite schema 11 adds independent web triage decisions; schema 12 adds durable
+experiment admissions and quota witnesses. Existing writable native
 databases migrate; readonly readers require the exact current schema. This is
 not a legacy TypeScript database importer.
 

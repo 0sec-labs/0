@@ -141,9 +141,14 @@ fn validate(store: &Store, checkpoint: &Checkpoint) -> Result<(), EngineError> {
                     parent.payload["request"]["tool_approval_policy"]["require_approval"]
                         .as_array()
                         .is_some_and(|aliases| {
-                            aliases
-                                .iter()
-                                .any(|alias| alias.as_str() == Some(name.as_str()))
+                            aliases.iter().any(|alias| {
+                                alias.as_str() == Some(name.as_str())
+                                    || (name.as_str() == "run_web_experiment"
+                                        && parent.payload["request"]
+                                            .get("web_experiment_policy")
+                                            .is_some()
+                                        && alias.as_str() == Some("http_request"))
+                            })
                         });
                 if approval_required || child.payload["kind"] == "agent_approved_tool" {
                     if !approval_required || child.payload["kind"] != "agent_approved_tool" {
@@ -154,6 +159,21 @@ fn validate(store: &Store, checkpoint: &Checkpoint) -> Result<(), EngineError> {
                         return Err(error(
                             "checkpoint approved tool output differs from receipt",
                         ));
+                    }
+                }
+                let native_experiment = name.as_str() == "run_web_experiment"
+                    && parent.payload["request"]
+                        .get("web_experiment_policy")
+                        .is_some();
+                if (native_experiment && !approval_required)
+                    || child.payload["kind"] == "agent_web_experiment"
+                {
+                    if !native_experiment || child.payload["kind"] != "agent_web_experiment" {
+                        return Err(error("checkpoint experiment identity mismatch"));
+                    }
+                    let value = agent_web_experiment::validate_receipt(store, &child)?;
+                    if item["output"].as_str() != Some(value.as_str()) {
+                        return Err(error("checkpoint experiment output differs"));
                     }
                 }
                 let native_http = name.as_str() == "http_request"

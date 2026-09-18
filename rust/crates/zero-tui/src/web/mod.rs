@@ -8,6 +8,7 @@ use zero_protocol::{
         HttpEvidenceMetadata, HttpEvidenceRange, WebFindingRecord, WebHttpOperation, WebRun,
         WebRunCandidate, WebTriageDecision, WebTriageStatus,
     },
+    web_experiment::{WebExperimentCandidate, WebExperimentReport},
 };
 
 const PAGE_BYTES: usize = 2 * 1024 * 1024;
@@ -19,9 +20,18 @@ pub enum Screen {
     Overview,
     Observations,
     Evidence,
+    Experiments,
+    Experiment,
 }
 #[derive(Clone)]
 pub enum Read {
+    Experiments {
+        after: u64,
+    },
+    Experiment {
+        operation: String,
+        hypothesis: Option<String>,
+    },
     Run,
     Observations {
         after: u64,
@@ -88,6 +98,10 @@ pub struct Findings {
     pub busy: bool,
     pub run: Option<WebRun>,
     pub observations: Vec<WebHttpOperation>,
+    pub experiments: Vec<WebExperimentCandidate>,
+    pub experiment: Option<WebExperimentReport>,
+    experiment_cursor: Option<u64>,
+    evidence_back: Screen,
     pub evidence: Option<HttpEvidenceMetadata>,
     pub range: Option<HttpEvidenceRange>,
     pub citation_index: usize,
@@ -119,6 +133,10 @@ impl Default for Findings {
             busy: false,
             run: None,
             observations: vec![],
+            experiments: vec![],
+            experiment: None,
+            experiment_cursor: None,
+            evidence_back: Screen::Observations,
             evidence: None,
             range: None,
             citation_index: 0,
@@ -178,6 +196,23 @@ impl Findings {
         let review = self.review.as_ref().map(|r| r.operation_id.clone());
         let hypothesis = self.detail.as_ref().map(|f| f.hypothesis.id.clone());
         let command = match &kind {
+            Read::Experiments { after } => Command::WebExperiments {
+                session_id: session.clone(),
+                web_operation_id: match review.clone() {
+                    Some(id) => id,
+                    None => return vec![],
+                },
+                after_sequence: *after,
+                limit: 20,
+            },
+            Read::Experiment { operation, .. } => Command::WebExperiment {
+                session_id: session.clone(),
+                web_operation_id: match review.clone() {
+                    Some(id) => id,
+                    None => return vec![],
+                },
+                experiment_operation_id: operation.clone(),
+            },
             Read::Run => Command::WebRun {
                 session_id: session.clone(),
                 operation_id: match review.clone() {
@@ -405,12 +440,22 @@ impl Findings {
                         self.screen = Screen::Overview;
                         self.observations.clear();
                     }
+                    Screen::Experiments => {
+                        self.screen = Screen::Overview;
+                        self.experiments.clear();
+                    }
+                    Screen::Experiment => {
+                        self.screen = Screen::Experiments;
+                        self.experiment = None;
+                    }
                     Screen::Evidence => {
-                        self.screen = Screen::Observations;
+                        self.screen = self.evidence_back;
                         self.evidence = None;
                         self.range = None;
                         self.detail = None;
-                        return self.issue(Read::Observations { after: 0 });
+                        if self.screen == Screen::Observations {
+                            return self.issue(Read::Observations { after: 0 });
+                        }
                     }
                     Screen::Hypotheses => {
                         self.screen = Screen::Overview;
@@ -428,6 +473,13 @@ impl Findings {
             KeyCode::Down => {
                 let len = if self.screen == Screen::Reviews {
                     self.reviews.len()
+                } else if self.screen == Screen::Experiments {
+                    self.experiments.len()
+                } else if self.screen == Screen::Experiment {
+                    self.experiment
+                        .as_ref()
+                        .and_then(|e| e.outcome.as_ref())
+                        .map_or(0, |o| o.attempts.len())
                 } else if self.screen == Screen::Observations {
                     self.observations.len()
                 } else {
@@ -462,6 +514,19 @@ impl Findings {
                         return self.issue(Read::Detail { after: 0 });
                     }
                 }
+                Screen::Experiments => {
+                    if let Some(e) = self.experiments.get(self.selected).cloned() {
+                        self.advance();
+                        self.experiment = None;
+                        self.selected = 0;
+                        self.screen = Screen::Experiment;
+                        return self.issue(Read::Experiment {
+                            operation: e.operation_id,
+                            hypothesis: e.hypothesis_sha256,
+                        });
+                    }
+                }
+                Screen::Experiment => {}
                 Screen::Detail => {}
                 Screen::Overview => {
                     self.advance();
@@ -471,6 +536,7 @@ impl Findings {
                 Screen::Observations => {
                     if let Some(o) = self.observations.get(self.selected).cloned() {
                         self.advance();
+                        self.evidence_back = Screen::Observations;
                         self.screen = Screen::Evidence;
                         self.evidence = None;
                         self.range = None;
@@ -482,10 +548,52 @@ impl Findings {
                 }
                 Screen::Evidence => {}
             },
+            KeyCode::Char('x') if !self.busy && self.review.is_some() => {
+                self.advance();
+                self.detail = None;
+                self.experiment = None;
+                self.selected = 0;
+                self.screen = Screen::Experiments;
+                return self.issue(Read::Experiments { after: 0 });
+            }
+            KeyCode::Char('p') if !self.busy && self.screen == Screen::Experiment => {
+                if let Some(prior) = self
+                    .experiment
+                    .as_ref()
+                    .and_then(|e| e.hypothesis.prior_revision.clone())
+                {
+                    self.advance();
+                    self.experiment = None;
+                    self.selected = 0;
+                    return self.issue(Read::Experiment {
+                        operation: prior.operation_id,
+                        hypothesis: Some(prior.hypothesis_sha256),
+                    });
+                }
+            }
             KeyCode::Char('e') if !self.busy && self.review.is_some() => {
                 self.advance();
                 self.evidence = None;
                 self.range = None;
+                if self.screen == Screen::Experiment {
+                    if let Some(t) = self
+                        .experiment
+                        .as_ref()
+                        .and_then(|e| e.outcome.as_ref())
+                        .and_then(|o| o.attempts.get(self.selected))
+                        .cloned()
+                    {
+                        self.evidence_back = Screen::Experiment;
+                        self.screen = Screen::Evidence;
+                        return self.issue(Read::Evidence {
+                            operation: t.operation_id,
+                            manifest: t.response_manifest_sha256,
+                        });
+                    }
+                    self.status="No measured attempt selected; active or empty experiments do not imply success".into();
+                    return vec![];
+                }
+                self.evidence_back = Screen::Observations;
                 if self.screen == Screen::Detail {
                     if let Some(c) = self
                         .detail
@@ -567,7 +675,10 @@ impl Findings {
             }),
             Screen::Hypotheses => self.next_finding.map(|offset| Read::Findings { offset }),
             Screen::Detail => self.next_history.map(|after| Read::Detail { after }),
-            Screen::Overview => None,
+            Screen::Overview | Screen::Experiment => None,
+            Screen::Experiments => self
+                .experiment_cursor
+                .map(|after| Read::Experiments { after }),
             Screen::Observations => self
                 .observation_cursor
                 .map(|after| Read::Observations { after }),
@@ -588,6 +699,16 @@ impl Findings {
             Screen::Hypotheses => Read::Findings { offset: 0 },
             Screen::Detail => Read::Detail { after: 0 },
             Screen::Overview => Read::Run,
+            Screen::Experiments => Read::Experiments { after: 0 },
+            Screen::Experiment => {
+                let Some(e) = &self.experiment else {
+                    return vec![];
+                };
+                Read::Experiment {
+                    operation: e.operation_id.clone(),
+                    hypothesis: Some(e.hypothesis.hypothesis_sha256.clone()),
+                }
+            }
             Screen::Observations => Read::Observations { after: 0 },
             Screen::Evidence => {
                 let Some(e) = &self.evidence else {
@@ -661,8 +782,76 @@ impl Findings {
             }
             return Ok(vec![]);
         }
-        bounded(&reply)?;
+        if matches!(pending.kind, Read::Experiment { .. }) {
+            if serde_json::to_vec(&reply)?.len() > 8 * 1024 * 1024 {
+                return Err(Error::Protocol("experiment detail exceeds 8 MiB".into()));
+            }
+        } else {
+            bounded(&reply)?;
+        }
         match (pending.kind, reply) {
+            (Read::Experiments { after }, Reply::WebExperiments { page }) => {
+                if page.experiments.len() > 20
+                    || page.next_after_sequence.is_some_and(|n| n <= after)
+                {
+                    return Err(Error::Protocol("experiment page/cursor".into()));
+                }
+                let mut previous = after;
+                for e in &page.experiments {
+                    if e.sequence <= previous {
+                        return Err(Error::Protocol("experiment ordering".into()));
+                    }
+                    previous = e.sequence;
+                }
+                self.experiments = page.experiments;
+                self.experiment_cursor = page.next_after_sequence;
+                self.selected = 0;
+                self.status=if self.experiment_cursor.is_some(){"Agent experiments: metadata only. Enter inspects; Ctrl-L continues even through empty scan windows."}else{"Agent experiments: metadata only. Empty does not establish safety."}.into();
+            }
+            (
+                Read::Experiment {
+                    operation,
+                    hypothesis,
+                },
+                Reply::WebExperiment { experiment },
+            ) => {
+                if experiment.schema_version != 1
+                    || experiment.session_id != pending.session
+                    || Some(experiment.web_operation_id.as_str()) != pending.review.as_deref()
+                    || experiment.operation_id != operation
+                    || hypothesis
+                        .as_ref()
+                        .is_some_and(|d| d != &experiment.hypothesis.hypothesis_sha256)
+                    || experiment.hypothesis.title != experiment.proposal.hypothesis.title
+                    || experiment.hypothesis.explanation
+                        != experiment.proposal.hypothesis.explanation
+                    || experiment.hypothesis.prior_revision
+                        != experiment.proposal.hypothesis.prior_revision
+                    || self
+                        .experiments
+                        .iter()
+                        .find(|e| e.operation_id == operation)
+                        .and_then(|e| e.hypothesis_sha256.as_ref())
+                        .is_some_and(|d| d != &experiment.hypothesis.hypothesis_sha256)
+                    || experiment.outcome.as_ref().is_some_and(|o| {
+                        o.assessment.vulnerability_reportable
+                            || o.assessment.plan_sha256 != experiment.matrix_sha256
+                            || o.attempts.len() > 24
+                    })
+                {
+                    return Err(Error::Protocol("experiment detail correlation".into()));
+                }
+                experiment
+                    .policy
+                    .validate()
+                    .map_err(|_| Error::Protocol("experiment policy".into()))?;
+                experiment
+                    .proposal
+                    .validate()
+                    .map_err(|_| Error::Protocol("experiment proposal".into()))?;
+                self.experiment = Some(experiment);
+                self.status="Model predictions are separate from measured feedback. Up/Down selects attempt; e evidence; p prior revision. Security conclusion not established.".into();
+            }
             (Read::Run, Reply::WebRun { run }) => {
                 if run.session_id != pending.session
                     || Some(run.operation_id.as_str()) != pending.review.as_deref()
@@ -674,7 +863,7 @@ impl Findings {
                     r.web_review_sha256 = run.artifacts.get("web.review").cloned();
                 }
                 self.run = Some(run);
-                self.status="Partial runs remain inspectable. Enter hypotheses; e retained HTTP observations. No safety conclusion.".into();
+                self.status="Partial runs remain inspectable. Enter hypotheses; e retained HTTP observations; x agent experiments. No safety conclusion.".into();
             }
             (Read::Observations { after }, Reply::WebHttpOperations { page }) => {
                 if page.operations.len() > 20

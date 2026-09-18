@@ -14,10 +14,15 @@ pub fn draw(frame: &mut Frame, area: Rect, editor: Rect, state: &Findings) {
         Screen::Detail => "Hypothesis detail — Unverified",
         Screen::Overview => "Web run — partial results are not a verdict",
         Screen::Observations => "Retained HTTP observations",
+        Screen::Experiments => "Agent experiments — metadata only",
+        Screen::Experiment => "Experiment — model predictions / independent measurements",
         Screen::Evidence => "Retained HTTP evidence — redacted decoded bytes",
     };
     let block = Block::default().borders(Borders::ALL).title(title);
-    if matches!(state.screen, Screen::Overview | Screen::Evidence) {
+    if matches!(
+        state.screen,
+        Screen::Overview | Screen::Evidence | Screen::Experiment
+    ) {
         let mut lines = vec![];
         if state.screen == Screen::Overview {
             if let Some(run) = &state.run {
@@ -50,7 +55,84 @@ pub fn draw(frame: &mut Frame, area: Rect, editor: Rect, state: &Findings) {
                 if let Some(error) = &run.error {
                     lines.push(Line::from(safe(error)));
                 }
-                lines.push(Line::from("Enter: unverified hypotheses · e: HTTP observations, including partial outcomes"));
+                lines.push(Line::from("Enter: unverified hypotheses · e: HTTP observations · x: agent experiments, including partial outcomes"));
+            }
+        } else if state.screen == Screen::Experiment {
+            if let Some(e) = &state.experiment {
+                lines.extend([
+                    Line::from(format!(
+                        "{} · {:?}",
+                        safe(&e.operation_id),
+                        e.operation_status
+                    )),
+                    Line::from(
+                        "Model conjecture — Unverified. Security conclusion: not established.",
+                    ),
+                    Line::from(safe(&e.hypothesis.title)),
+                    Line::from(safe(&e.hypothesis.explanation)),
+                    Line::from(format!("Purpose: {}", safe(&e.proposal.purpose))),
+                    Line::from(format!(
+                        "Revision {}",
+                        safe(&e.hypothesis.hypothesis_sha256)
+                    )),
+                    Line::from(format!("Intent {}", safe(&e.intent_sha256))),
+                    Line::from(format!("Matrix {}", safe(&e.matrix_sha256))),
+                    Line::from("Model predictions (exact matching is not a security oracle):"),
+                ]);
+                if let Some(p) = &e.hypothesis.prior_revision {
+                    lines.push(Line::from(format!(
+                        "Prior {} · {}",
+                        safe(&p.operation_id),
+                        safe(&p.hypothesis_sha256)
+                    )));
+                }
+                for c in &e.proposal.cases {
+                    lines.push(Line::from(format!(
+                        "{} {:?}: {} {} => status {} / body {}",
+                        safe(&c.name),
+                        c.role,
+                        safe(&c.request.method),
+                        safe(&c.request.url),
+                        c.expected.status,
+                        safe(&c.expected.body_sha256)
+                    )));
+                }
+                if let Some(o) = &e.outcome {
+                    lines.push(Line::from(format!(
+                        "Independent measured feedback: {:?}, completed {}/{}",
+                        o.assessment.disposition,
+                        o.assessment.completed_attempts,
+                        o.assessment.expected_attempts
+                    )));
+                    for reason in &o.assessment.reasons {
+                        lines.push(Line::from(safe(reason)));
+                    }
+                    for (i, t) in o.attempts.iter().enumerate() {
+                        lines.push(Line::from(format!(
+                            "{} {} repeat {}: {:?}, HTTP {:?}, complete {}, operation {}",
+                            if i == state.selected { ">" } else { " " },
+                            safe(&t.case_name),
+                            t.repeat_index,
+                            t.operation_status,
+                            t.status,
+                            t.complete,
+                            safe(&t.operation_id)
+                        )));
+                    }
+                    lines.push(Line::from(format!(
+                        "Stop {:?}; error {}",
+                        o.stop,
+                        safe(o.error.as_deref().unwrap_or("none retained"))
+                    )));
+                } else {
+                    lines.push(Line::from(
+                        "Active experiment; terminal measured feedback is unavailable.",
+                    ));
+                }
+                lines.push(Line::from("Same static identity and existing target state; no generic vulnerability verification."));
+                lines.push(Line::from(
+                    "Up/Down: select measured attempt · e: retained evidence · p: prior revision",
+                ));
             }
         } else if let Some(e) = &state.evidence {
             lines.extend([
@@ -119,6 +201,19 @@ pub fn draw(frame: &mut Frame, area: Rect, editor: Rect, state: &Findings) {
                             .as_deref()
                             .map(safe)
                             .unwrap_or_else(|| "No terminal submission".into())
+                    ))
+                })
+                .collect(),
+            Screen::Experiments => state
+                .experiments
+                .iter()
+                .map(|e| {
+                    ListItem::new(format!(
+                        "{} {:?} {}\n  revision {}",
+                        e.sequence,
+                        e.operation_status,
+                        safe(&e.operation_id),
+                        safe(e.hypothesis_sha256.as_deref().unwrap_or("unavailable"))
                     ))
                 })
                 .collect(),
@@ -249,6 +344,6 @@ pub fn draw(frame: &mut Frame, area: Rect, editor: Rect, state: &Findings) {
             editor,
         );
     } else {
-        frame.render_widget(Paragraph::new("Enter: select run / hypothesis / evidence · Esc: back\ne: HTTP observations / selected citation · Detail: a accept · s suppress · r reopen (operator decisions only)\nCtrl-L: next page · Ctrl-G: refresh · PgUp/PgDn: scroll").block(Block::default().borders(Borders::ALL).title("Web investigation — evidence remains Unverified")).wrap(Wrap {trim:false}),editor);
+        frame.render_widget(Paragraph::new("Enter: select run / hypothesis / evidence · Esc: back\nx: agent experiments · e: HTTP observations / selected citation · Detail: a accept · s suppress · r reopen (operator decisions only)\nCtrl-L: next page · Ctrl-G: refresh · PgUp/PgDn: scroll").block(Block::default().borders(Borders::ALL).title("Web investigation — evidence remains Unverified")).wrap(Wrap {trim:false}),editor);
     }
 }

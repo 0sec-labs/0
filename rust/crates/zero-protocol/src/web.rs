@@ -314,4 +314,6 @@ pub struct WebWorkflowReport {
     pub observations: Vec<WebReportObservation>,
     pub observations_truncated: bool,
     pub verifications: Vec<WebVerificationReport>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub experiments: Vec<crate::web_experiment::WebExperimentReport>,
 }

@@ -45,10 +45,14 @@ pub fn read_tool_approval_intent(
 }
 
 pub(super) fn required(request: &AgentRequest, name: &str) -> bool {
-    request
-        .tool_approval_policy
-        .as_ref()
-        .is_some_and(|p| p.require_approval.iter().any(|n| n == name))
+    request.tool_approval_policy.as_ref().is_some_and(|p| {
+        p.require_approval.iter().any(|n| {
+            n == name
+                || (name == "run_web_experiment"
+                    && request.web_experiment_policy.is_some()
+                    && n == "http_request")
+        })
+    })
 }
 pub(super) fn inherited(parent: &AgentRequest, tools: &[String]) -> Option<ToolApprovalPolicy> {
     let require_approval = parent
@@ -86,6 +90,7 @@ pub(super) fn validate_policy(request: &AgentRequest) -> Result<(), EngineError>
         if native_non_effect
             || (name != "execute_snapshot"
                 && !(name == "http_request" && request.http_profile.is_some())
+                && !(name == "run_web_experiment" && request.web_experiment_policy.is_some())
                 && !request.plugin_tools.iter().any(|b| &b.alias == name))
         {
             return Err(error(
@@ -131,6 +136,10 @@ pub(super) fn validate_plugins(
 }
 
 pub(super) enum Effect {
+    Experiment {
+        context: agent_http::Context,
+        prepared: Box<agent_web_experiment::Prepared>,
+    },
     Http {
         context: agent_http::Context,
         request: zero_http::PreparedRequest,
@@ -145,6 +154,7 @@ pub(super) enum Effect {
 impl Effect {
     fn payload(&self, actor: &str, call: &str) -> Value {
         match self {
+            Self::Experiment { prepared, .. } => prepared.payload.clone(),
             Self::Http { context, request } => context.payload(actor, call, request),
             Self::Snapshot(request) => {
                 json!({"parent_operation":actor,"kind":"agent_tool","call_id":call,"request":request})
@@ -160,7 +170,7 @@ impl Effect {
     }
     fn revalidate(&self, shared: &Shared) -> Result<(), EngineError> {
         match self {
-            Self::Http { .. } => Ok(()),
+            Self::Http { .. } | Self::Experiment { .. } => Ok(()),
             Self::Snapshot(request) => request.validate().map_err(error),
             Self::Plugin {
                 context,
@@ -396,6 +406,16 @@ pub(super) async fn run(
     };
     guard.effect = Some(operation.id.clone());
     let operation = match effect {
+        Effect::Experiment { context, prepared } => {
+            web_experiment::execute_admitted(
+                shared,
+                operation,
+                &context,
+                prepared.frozen,
+                cancel.clone(),
+            )
+            .await?
+        }
         Effect::Http { context, request } => {
             agent_http::execute_admitted(shared, operation, &context, request, cancel.clone())
                 .await?

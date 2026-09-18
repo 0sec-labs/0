@@ -12,6 +12,7 @@ mod agent_source;
 mod agent_steering;
 mod agent_submission;
 mod agent_web;
+mod agent_web_experiment;
 mod discovery;
 mod history;
 mod inference;
@@ -26,6 +27,8 @@ mod source;
 mod source_provenance;
 mod source_report;
 mod triage;
+mod web_experiment;
+mod web_experiment_read;
 mod web_read;
 mod web_triage;
 mod web_verification;
@@ -38,6 +41,9 @@ pub use agent_steering::read_agent_steering;
 pub use discovery::{read_source_reviews, read_web_runs};
 pub use source_report::{read_source_report, read_source_workflow_report};
 pub use triage::{read_source_finding, read_source_findings};
+pub use web_experiment_read::{
+    read_web_experiment, read_web_experiments, read_web_workflow_report_with_experiments,
+};
 pub use web_read::{
     read_http_metadata, read_http_range, read_web_http_operations, read_web_run,
     read_web_workflow_report,
@@ -591,6 +597,38 @@ impl Engine {
                     limit,
                 )?,
             }),
+            Command::WebExperiments {
+                session_id,
+                web_operation_id,
+                after_sequence,
+                limit,
+            } => {
+                let store = lock(&self.shared.store)?;
+                Ok(Reply::WebExperiments {
+                    page: web_experiment_read::experiments(
+                        &store,
+                        &session_id,
+                        &web_operation_id,
+                        after_sequence,
+                        limit,
+                    )?,
+                })
+            }
+            Command::WebExperiment {
+                session_id,
+                web_operation_id,
+                experiment_operation_id,
+            } => {
+                let store = lock(&self.shared.store)?;
+                Ok(Reply::WebExperiment {
+                    experiment: web_experiment_read::experiment(
+                        &store,
+                        &session_id,
+                        &web_operation_id,
+                        &experiment_operation_id,
+                    )?,
+                })
+            }
             Command::WebRuns {
                 session_id,
                 before_sequence,
@@ -656,14 +694,16 @@ impl Engine {
                 session_id,
                 operation_id,
                 verification_ids,
+                experiment_ids,
             } => {
                 let store = lock(&self.shared.store)?;
                 Ok(Reply::WebWorkflowReport {
-                    report: web_read::workflow_report(
+                    report: web_experiment_read::workflow_report(
                         &store,
                         &session_id,
                         &operation_id,
                         &verification_ids,
+                        &experiment_ids,
                     )?,
                 })
             }

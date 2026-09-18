@@ -20,6 +20,9 @@ pub struct AgentRequest {
     /// Named host-configured target HTTP authority; omitted profiles offer no native HTTP tool.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub http_profile: Option<String>,
+    /// Allow model-selected experiments within the captured HTTP authority.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub web_experiment_policy: Option<crate::web_experiment::WebExperimentPolicy>,
     /// Explicit one-invocation approval for selected existing executable tools.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tool_approval_policy: Option<crate::approvals::ToolApprovalPolicy>,
@@ -158,6 +161,15 @@ impl AgentRequest {
                 "snapshot-free actors require an HTTP profile and cannot use source snapshot modes"
                     .into(),
             ));
+        }
+        if let Some(policy) = &self.web_experiment_policy {
+            policy.validate()?;
+            if self.http_profile.is_none() || self.source_submission_max_hypotheses.is_some() {
+                return Err(crate::ValidationError(
+                    "web experiments require HTTP authority and no source terminal submission"
+                        .into(),
+                ));
+            }
         }
         if let Some(max) = self.web_submission_max_hypotheses {
             if !(1..=32).contains(&max)

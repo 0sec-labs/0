@@ -65,6 +65,16 @@ pub(super) fn validate_initial(request: &AgentRequest) -> Result<ResponsesReques
             "agent requires a prompt, 1..32 turns and nonzero per-turn reservation".into(),
         ));
     }
+    if request.web_experiment_policy.is_some()
+        && request
+            .plugin_tools
+            .iter()
+            .any(|p| p.alias == "run_web_experiment")
+    {
+        return Err(EngineError::State(
+            "native experiment alias collides with plugin".into(),
+        ));
+    }
     if request.web_submission_max_hypotheses.is_some()
         && request
             .plugin_tools
@@ -424,6 +434,7 @@ fn continuation_input(
             || parent.payload.get("delegation_context") != delegation.map(|d| &d.identity)
             || prior.source_submission_max_hypotheses != request.source_submission_max_hypotheses
             || prior.web_submission_max_hypotheses != request.web_submission_max_hypotheses
+            || prior.web_experiment_policy != request.web_experiment_policy
             || prior.source_snapshot_tools != request.source_snapshot_tools
             || prior.source_review_operation_id != request.source_review_operation_id
             || prior.plugin_tools != request.plugin_tools
@@ -555,6 +566,9 @@ fn model_request(
     }
     if let Some(max) = request.web_submission_max_hypotheses {
         model.tools.push(agent_web::definition(max));
+    }
+    if let Some(policy) = &request.web_experiment_policy {
+        model.tools.push(agent_web_experiment::definition(policy));
     }
     if request.http_profile.is_some() {
         model.tools.push(agent_http::definition());
@@ -771,6 +785,7 @@ async fn run_rounds(
                 _ => None,
             })
             .collect();
+        let mut web_submission_rejection = None;
         if let Some(max) = request.web_submission_max_hypotheses {
             if calls
                 .iter()
@@ -785,19 +800,28 @@ async fn run_rounds(
                     output.status = AgentStatus::Cancelled;
                     break;
                 }
-                match prepared
-                    .and_then(|prepared| agent_web::retain(shared, parent, &child.id, prepared))
-                {
-                    Ok(review) => {
-                        output.web_review = Some(review);
-                        output.status = AgentStatus::Completed;
+                match prepared {
+                    Err(error) if request.web_experiment_policy.is_some() => {
+                        web_submission_rejection = Some(agent_web_experiment::rejection(format!(
+                            "terminal web submission invalid: {error}"
+                        )));
                     }
-                    Err(error) => {
-                        output.status = AgentStatus::Failed;
-                        output.error = Some(error.to_string());
+                    prepared => {
+                        match prepared.and_then(|prepared| {
+                            agent_web::retain(shared, parent, &child.id, prepared)
+                        }) {
+                            Ok(review) => {
+                                output.web_review = Some(review);
+                                output.status = AgentStatus::Completed;
+                            }
+                            Err(error) => {
+                                output.status = AgentStatus::Failed;
+                                output.error = Some(error.to_string());
+                            }
+                        }
+                        break;
                     }
                 }
-                break;
             }
             if calls.is_empty() {
                 output.status = AgentStatus::Failed;
@@ -912,6 +936,12 @@ async fn run_rounds(
                 input.push(serde_json::json!({"type":"function_call_output","call_id":id,"output":"Tool rejected: tool was not offered by the host."}));
                 continue;
             }
+            if let Some(reason) = &web_submission_rejection {
+                input.push(
+                    serde_json::json!({"type":"function_call_output","call_id":id,"output":reason}),
+                );
+                continue;
+            }
             if name == "ask_operator" && request.operator_questions {
                 let question = serde_json::from_value::<
                     zero_protocol::questions::OperatorQuestionRequest,
@@ -986,6 +1016,92 @@ async fn run_rounds(
                     break 'turns;
                 }
                 input.push(serde_json::json!({"type":"function_call_output","call_id":id,"output":result.output}));
+                continue;
+            }
+            if name == "run_web_experiment" && request.web_experiment_policy.is_some() {
+                let context = http
+                    .as_ref()
+                    .ok_or_else(|| EngineError::State("experiment HTTP authority absent".into()))?;
+                let prepared = {
+                    let store = lock(&shared.store)?;
+                    let actor = store.get_operation(parent)?;
+                    agent_web_experiment::prepare(
+                        &store,
+                        &actor,
+                        &child,
+                        &id,
+                        arguments.clone(),
+                        context,
+                    )
+                };
+                let prepared = match prepared {
+                    Ok(p) => p,
+                    Err(reason) => {
+                        input.push(serde_json::json!({"type":"function_call_output","call_id":id,"output":agent_web_experiment::rejection(reason)}));
+                        continue;
+                    }
+                };
+                let command = format!("{parent}:tool:{turn}:{index}");
+                let result = if prepared.frozen.approval_required() {
+                    agent_approvals::run(
+                        shared,
+                        session,
+                        parent,
+                        &command,
+                        &child,
+                        &id,
+                        &name,
+                        agent_approvals::Effect::Experiment {
+                            context: context.clone(),
+                            prepared: Box::new(prepared),
+                        },
+                        &cancel,
+                        &events,
+                    )
+                    .await?
+                } else {
+                    let admission = lock(&shared.store)?.admit_web_experiment(
+                        session,
+                        parent,
+                        &shared.owner,
+                        &command,
+                        &prepared.payload,
+                    );
+                    let operation = match admission {
+                        Ok(op) => op,
+                        Err(reason) => {
+                            input.push(serde_json::json!({"type":"function_call_output","call_id":id,"output":agent_web_experiment::rejection(reason)}));
+                            continue;
+                        }
+                    };
+                    let operation = web_experiment::execute_admitted(
+                        shared,
+                        operation,
+                        context,
+                        prepared.frozen,
+                        cancel.clone(),
+                    )
+                    .await?;
+                    match operation.status {
+                        OperationStatus::Unknown => agent_approvals::ResultKind::Unknown(
+                            "experiment dispatch or response is uncertain".into(),
+                        ),
+                        OperationStatus::Cancelled => agent_approvals::ResultKind::Cancelled,
+                        _ => agent_approvals::ResultKind::Output(
+                            agent_web_experiment::validate_receipt(
+                                &*lock(&shared.store)?,
+                                &operation,
+                            )?,
+                        ),
+                    }
+                };
+                output.tool_calls += 1;
+                match result {
+                    agent_approvals::ResultKind::Output(value)=>input.push(serde_json::json!({"type":"function_call_output","call_id":id,"output":value})),
+                    agent_approvals::ResultKind::Cancelled=>{output.status=AgentStatus::Cancelled;break 'turns;},
+                    agent_approvals::ResultKind::Unknown(reason)=>{output.status=AgentStatus::Unknown;output.error=Some(reason);break 'turns;},
+                    agent_approvals::ResultKind::Failed(reason)=>{output.status=AgentStatus::Failed;output.error=Some(reason);break 'turns;},
+                }
                 continue;
             }
             if let Some(context) = http.as_ref().filter(|_| name == "http_request") {

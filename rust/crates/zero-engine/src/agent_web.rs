@@ -53,12 +53,34 @@ pub(super) fn owns_evidence(
     effect_id: &str,
 ) -> Result<bool, EngineError> {
     let effect = store.get_operation(effect_id)?;
-    if effect.payload["kind"] != "agent_http" || effect.payload.get("origin").is_some() {
+    if effect.payload["kind"] != "agent_http" {
         return Ok(false);
     }
-    let Some(actor_id) = effect.payload["parent_operation"].as_str() else {
+    let actor_id = if effect.payload["origin"]["kind"] == "frozen_agent_experiment" {
+        let (experiment, _) = web_experiment::effect_origin(store, &effect)?;
+        agent_web_experiment::origin(store, &experiment)?.1.id
+    } else if effect.payload.get("origin").is_some() {
         return Ok(false);
+    } else {
+        effect.payload["parent_operation"]
+            .as_str()
+            .ok_or_else(|| error("HTTP actor absent"))?
+            .to_owned()
     };
+    let actor = store.get_operation(&actor_id)?;
+    if actor.session_id != effect.session_id
+        || actor.payload["http_context"] != effect.payload["http_context"]
+    {
+        return Err(error("HTTP effect authority differs from actor"));
+    }
+    owns_actor(store, root_id, &actor_id)
+}
+/// Bounded actor membership without recursively re-reading its tool receipts.
+pub(crate) fn owns_actor(
+    store: &Store,
+    root_id: &str,
+    actor_id: &str,
+) -> Result<bool, EngineError> {
     let actor = store.get_operation(actor_id)?;
     let mut root = store.get_operation(root_id)?;
     let session = root.session_id.clone();
@@ -71,7 +93,6 @@ pub(super) fn owns_evidence(
     for _ in 0..32 {
         if !seen.insert(root.id.clone())
             || root.session_id != session
-            || effect.session_id != session
             || actor.session_id != session
         {
             return Err(error("invalid web evidence ancestry"));
@@ -80,13 +101,13 @@ pub(super) fn owns_evidence(
         if read_bytes > 64 * 1024 * 1024
             || root.payload["http_context"] != root_context
             || actor.payload["http_context"] != root_context
-            || effect.payload["http_context"] != root_context
         {
             return Err(error("web lineage authority differs or exceeds read bound"));
         }
         let request = zero_protocol::agent::validate_actor_payload(&root.payload).map_err(error)?;
         if root.payload.get("parent_operation").is_some()
-            || request.web_submission_max_hypotheses.is_none()
+            || (request.web_submission_max_hypotheses.is_none()
+                && request.web_experiment_policy.is_none())
         {
             return Err(error("not a web investigation root"));
         }
@@ -109,6 +130,8 @@ pub(super) fn owns_evidence(
                 agent_delegation::validate_receipt(store, &group)?;
                 return Ok(true);
             }
+            agent_delegation::validate_member(store, &root, &group, &actor)?;
+
             // Partial runs remain inspectable, but never positively citable.
             let commands = group.payload["child_commands"].as_array();
             if commands.is_some_and(|v| v.iter().any(|c| c.as_str() == Some(&actor.command_id))) {
@@ -434,7 +457,8 @@ pub(super) fn load_run(store: &Store, session: &str, id: &str) -> Result<WebRun,
     let request =
         zero_protocol::agent::validate_actor_payload(&operation.payload).map_err(error)?;
     if operation.session_id != session
-        || request.web_submission_max_hypotheses.is_none()
+        || (request.web_submission_max_hypotheses.is_none()
+            && request.web_experiment_policy.is_none())
         || operation.payload.get("parent_operation").is_some()
     {
         return Err(error("not a web investigation root in this session"));

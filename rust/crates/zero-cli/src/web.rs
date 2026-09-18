@@ -57,6 +57,22 @@ pub enum WebCommand {
         #[arg(long,default_value_t=32,value_parser=clap::value_parser!(u32).range(1..=32))]
         limit: u32,
     },
+    /// Discover model-proposed experiments, including partial or unknown work.
+    Experiments {
+        #[command(flatten)]
+        target: Target,
+        #[arg(long, default_value_t = 0)]
+        after_sequence: u64,
+        #[arg(long,default_value_t=20,value_parser=clap::value_parser!(u32).range(1..=32))]
+        limit: u32,
+    },
+    /// Inspect a conjecture, its model predictions and independently measured feedback.
+    Experiment {
+        #[command(flatten)]
+        target: Target,
+        #[arg(long)]
+        experiment: String,
+    },
     Findings {
         #[command(flatten)]
         target: Target,
@@ -121,6 +137,8 @@ pub enum WebCommand {
         target: Target,
         #[arg(long = "verification")]
         verifications: Vec<String>,
+        #[arg(long = "experiment")]
+        experiments: Vec<String>,
         #[arg(long, value_enum, default_value = "json")]
         format: Format,
     },
@@ -204,6 +222,37 @@ pub async fn readonly(state: &Path, value: &WebCommand) -> Result<bool, Box<dyn 
                 .await?,
             }
         }
+        WebCommand::Experiments {
+            target,
+            after_sequence,
+            limit,
+        } => {
+            let (session, root, after, limit) = (
+                target.session.clone(),
+                target.operation.clone(),
+                *after_sequence,
+                *limit,
+            );
+            Reply::WebExperiments {
+                page: inspect(move || {
+                    zero_engine::read_web_experiments(&path, &session, &root, after, limit)
+                })
+                .await?,
+            }
+        }
+        WebCommand::Experiment { target, experiment } => {
+            let (session, root, id) = (
+                target.session.clone(),
+                target.operation.clone(),
+                experiment.clone(),
+            );
+            Reply::WebExperiment {
+                experiment: inspect(move || {
+                    zero_engine::read_web_experiment(&path, &session, &root, &id)
+                })
+                .await?,
+            }
+        }
         WebCommand::Findings {
             target,
             offset,
@@ -277,17 +326,26 @@ pub async fn readonly(state: &Path, value: &WebCommand) -> Result<bool, Box<dyn 
         WebCommand::Report {
             target,
             verifications,
+            experiments,
             format,
         } => {
-            let (s, id, links, format) = (
+            let (s, id, links, experiments, format) = (
                 target.session.clone(),
                 target.operation.clone(),
                 verifications.clone(),
+                experiments.clone(),
                 *format,
             );
-            let report =
-                inspect(move || zero_engine::read_web_workflow_report(&path, &s, &id, &links))
-                    .await?;
+            let report = inspect(move || {
+                zero_engine::read_web_workflow_report_with_experiments(
+                    &path,
+                    &s,
+                    &id,
+                    &links,
+                    &experiments,
+                )
+            })
+            .await?;
             let format = match format {
                 Format::Json => zero_report::WebReportFormat::Json,
                 Format::Markdown => zero_report::WebReportFormat::Markdown,

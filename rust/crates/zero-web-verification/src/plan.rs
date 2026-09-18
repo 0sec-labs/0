@@ -1,12 +1,12 @@
 use crate::{Result, invalid};
 use serde::{Deserialize, Serialize};
-use serde_json::{Value, json};
+use serde_json::Value;
 use sha2::{Digest, Sha256};
-use std::collections::BTreeSet;
+
 use zero_protocol::{
     approvals::ToolApprovalPolicy,
-    http::{HttpProfilePolicy, HttpRequestArguments, HttpRequestIntent},
-    web::{WebCaseRole, WebVerificationPlan},
+    http::{HttpProfilePolicy, HttpRequestIntent},
+    web::WebVerificationPlan,
 };
 pub const ORACLE_VERSION: &str = "zero-web-exact-response-v1";
 const MAX_PLAN: usize = 4 * 1024 * 1024;
@@ -44,7 +44,7 @@ pub(crate) fn digest(s: &str) -> bool {
                 .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
     })
 }
-fn id(s: &str) -> bool {
+pub(crate) fn id(s: &str) -> bool {
     !s.is_empty() && s.len() <= 256 && !s.chars().any(char::is_control)
 }
 impl FrozenPlan {
@@ -68,72 +68,14 @@ impl FrozenPlan {
         if serde_json::to_vec(&plan).map_err(invalid)?.len() > MAX_PLAN {
             return Err(invalid("web plan exceeds4MiB bound"));
         }
-        let profile: HttpProfilePolicy =
-            serde_json::from_value(context["profile"].clone()).map_err(invalid)?;
-        let profile = zero_http::normalize_policy(profile).map_err(invalid)?;
-        let profile_sha256 = hash(&profile)?;
-        let name = context["profile_name"]
-            .as_str()
-            .filter(|v| id(v))
-            .ok_or_else(|| invalid("HTTP profile name missing"))?;
-        let command = context["original_root_command"]
-            .as_str()
-            .filter(|v| id(v))
-            .ok_or_else(|| invalid("HTTP root command missing"))?;
-        let expected = json!({"schema_version":1,"profile_name":name,"profile":profile,"profile_sha256":profile_sha256,"account_id":hash(&json!({"session_id":session,"original_root_command":command,"profile_sha256":profile_sha256}))?,"original_root_command":command});
-        if context != expected {
-            return Err(invalid("HTTP authority/account identity differs"));
-        }
+        let profile = crate::matrix::profile(session, &context)?;
         if let Some(policy) = &approval {
             policy.validate().map_err(invalid)?;
         }
         let approval_required = approval
             .as_ref()
             .is_some_and(|p| p.require_approval.iter().any(|s| s == "http_request"));
-        let mut names = BTreeSet::new();
-        let mut attacks = BTreeSet::new();
-        let mut controls = BTreeSet::new();
-        for case in &mut plan.cases {
-            if case.name.is_empty()
-                || case.name.len() > 64
-                || !case
-                    .name
-                    .bytes()
-                    .all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-')
-                || !names.insert(case.name.clone())
-                || !(100..=599).contains(&case.expected.status)
-                || !digest(&case.expected.body_sha256)
-            {
-                return Err(invalid("invalid web case identity or expected response"));
-            }
-            let request =
-                zero_http::normalize_intent(&profile, case.request.clone()).map_err(invalid)?;
-            case.request = HttpRequestArguments {
-                url: request.url.clone(),
-                method: request.method.clone(),
-                headers: case
-                    .request
-                    .headers
-                    .iter()
-                    .map(|(name, value)| (name.to_ascii_lowercase(), value.clone()))
-                    .collect(),
-                body: request.body.clone(),
-            };
-            match case.role {
-                WebCaseRole::Attack => {
-                    attacks.insert(hash(&request)?);
-                }
-                WebCaseRole::LegitimateControl => {
-                    controls.insert(hash(&request)?);
-                }
-            }
-        }
-        if attacks.is_empty() || controls.is_empty() || attacks.iter().any(|r| controls.contains(r))
-        {
-            return Err(invalid(
-                "web plan needs distinct attack and legitimate control requests",
-            ));
-        }
+        crate::matrix::normalize_cases(&profile, &mut plan.cases, plan.repeats)?;
         if serde_json::to_vec(&plan).map_err(invalid)?.len() > MAX_PLAN {
             return Err(invalid("normalized web plan exceeds4MiB"));
         }

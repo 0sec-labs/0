@@ -1,5 +1,11 @@
 //! Pure host-frozen HTTP observation plans. No network, credentials or model verdicts.
+mod experiment;
+mod experiment_tool;
+pub use experiment_tool::experiment_tool_definition;
+mod matrix;
+pub use experiment::FrozenExperiment;
 mod plan;
+pub use matrix::ObservationMatrix;
 mod score;
 pub use plan::{FrozenPlan, ORACLE_VERSION, hash};
 pub use score::assess;

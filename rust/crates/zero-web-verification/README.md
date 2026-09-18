@@ -32,3 +32,29 @@ attempt metadata. Engine reports reconstruct actual HTTP receipts and body hashe
 with at most 24 × 16 MiB of body reads, one body at a time; original review citation
 validation has its separate aggregate bound. No cookie capture, identity switching,
 remote reset, browser execution, callback service, or raw-secret oracle is implied.
+
+## Inline agent experiments
+
+`FrozenExperiment` uses the same sealed observation-matrix scorer and request
+normalization as `FrozenPlan`, with an explicit actual actor/inference/tool-call
+origin. It does not manufacture a completed review or a host verification plan.
+The host's `WebExperimentPolicy` bounds case/repeat counts and the separate Store
+account-wide admission quota. The model chooses its provisional hypothesis,
+purpose, requests and expected responses. Those expected responses are predictions,
+not host-established security truth. Matching them never makes a vulnerability or
+strategy improvement reportable.
+
+The frozen intent binds the captured HTTP context/account, experiment policy,
+inherited approval policy, versioned matrix and immutable hypothesis revision.
+Both `http_request` and `run_web_experiment` approval gates require permission for
+the exact whole matrix. The controller additionally authenticates prior-revision
+lineage and actual original offered tool/arguments; the pure library does not
+pretend a supplied operation ID proves those facts. Parent payloads bind source
+operation hashes, and HTTP children use `frozen_agent_experiment` explicitly.
+
+Parent/child payloads must fit the 4 MiB atomic owned-admission limit, including
+the optional approval link. The fresh internal executor inherits cancellation
+and the original account rather than creating a new root. Read-only reassessment
+uses actual retained HTTP outcomes, exact matrix positions and immutable recovery
+witnesses; owner loss yields Unknown with unavailable response fields where no
+response receipt exists. No recovery path runs a request again.

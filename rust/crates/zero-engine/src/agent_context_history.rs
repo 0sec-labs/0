@@ -112,7 +112,8 @@ pub(super) fn validate(
         if req.context_policy.as_ref() != Some(policy) || count > 32 {
             return Err(error("context lineage policy/round mismatch"));
         }
-        if req.web_submission_max_hypotheses != request.web_submission_max_hypotheses
+        if req.web_experiment_policy != request.web_experiment_policy
+            || req.web_submission_max_hypotheses != request.web_submission_max_hypotheses
             || req.http_profile != request.http_profile
             || req.tool_approval_policy != request.tool_approval_policy
             || req.operator_questions != request.operator_questions
@@ -239,12 +240,12 @@ pub(super) fn validate(
                 .enumerate()
             {
                 let question = call.1 == "ask_operator" && request.operator_questions;
-                let approved = request.tool_approval_policy.as_ref().is_some_and(|policy| {
-                    policy.require_approval.iter().any(|alias| alias == call.1)
-                });
+                let approved = agent_approvals::required(&request, call.1);
                 let delegation = call.1 == "delegate_tasks" && request.delegation_policy.is_some();
                 let http = call.1 == "http_request" && request.http_profile.is_some();
-                if !delegation && !question && !approved && !http {
+                let experiment =
+                    call.1 == "run_web_experiment" && request.web_experiment_policy.is_some();
+                if !delegation && !question && !approved && !http && !experiment {
                     continue;
                 }
                 let output = witness
@@ -261,6 +262,8 @@ pub(super) fn validate(
                     Some(group) => {
                         let expected_kind = if approved {
                             "agent_approved_tool"
+                        } else if experiment {
+                            "agent_web_experiment"
                         } else if question {
                             "agent_operator_question"
                         } else if http {
@@ -276,6 +279,8 @@ pub(super) fn validate(
                         }
                         let derived = if approved {
                             agent_approvals::validate_receipt(store, &group)?
+                        } else if experiment {
+                            agent_web_experiment::validate_receipt(store, &group)?
                         } else if question {
                             agent_questions::validate_receipt(store, &group)?
                         } else if http {

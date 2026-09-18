@@ -12,17 +12,17 @@ roles and delegated task prompts, and early completion. Maximum turns, parallel
 children and tool limits are ceilings, not instructions to exhaust them. An empty
 web submission means no submitted hypotheses, never that a target is safe.
 
-The current structured web path retains hypotheses at terminal submission.
-Independent frozen-plan execution happens after that investigation ends. This
-prevents a formal experiment/result/revision loop inside the same active actor,
-even though ordinary HTTP observations already inform later model choices.
+With opt-in `web_experiment_policy`, `run_web_experiment` retains a provisional
+hypothesis and freezes the agent's selected bounded requests. Fresh effects
+return measured observations to the same active actor. The model can revise,
+abandon, delegate, test again or stop without exhausting its allowance. Ordinary
+HTTP observations remain available. Existing final reviews stay immutable and
+terminal, and external host-authored verification remains separate.
 
-The next capability is an opt-in nonterminal experiment tool: atomically retain
-a provisional hypothesis, freeze the agent's selected bounded requests, execute
-fresh effects and return measured observations. The model can revise, abandon,
-delegate, test again or stop. It must not fabricate a completed review to reuse
-the external verification path or recursively start public Engine commands.
-Existing final reviews stay immutable and terminal.
+Experiment admission and its original-account quota commit together. A gated
+matrix consumes one exact approval in the same transaction. Failure, cancellation
+and restart never refund an experiment admission. Prior revisions require causal,
+retained hypothesis evidence from the investigation's authorized lineage.
 
 Model-authored expected responses are predictions. Matching one can establish
 `ObservedForPlan`; it does not establish a vulnerability or an improvement in
@@ -38,9 +38,9 @@ caller-supplied reservation, must remain visible, and block later admissions.
 Unknown usage retains its hold. Do not advertise a guaranteed invoice ceiling
 without a supported conservative billing bound or provider-enforced cap.
 
-HTTP children, continuations and linked verification share the original root's
+HTTP children, continuations, adaptive experiments and linked verification share the original root's
 request/byte account, rate limits and cooldown. A new independently authorized
-root creates a new account. Inline experiments must inherit the original account;
+root creates a new account. Inline experiments inherit the original account;
 a future controller cannot start new roots to replenish it. The model currently
 has no tool granting session creation, account replacement or reconciliation.
 
@@ -87,15 +87,14 @@ failed attempts.
 
 ## Implementation order
 
-1. Add nonterminal agent-chosen experiments inside the current owned investigation,
-   sharing its monetary/HTTP authority and a durable experiment quota. Return
-   repairable input rejection without effects; never treat uncertain effects as
-   a retryable argument error. Keep external independent verification available.
+1. Qualify the opt-in nonterminal experiment loop inside the current owned
+   investigation, including shared monetary/HTTP authority, durable experiment
+   quota, repairable input rejection and retained uncertainty.
 2. Add campaign accounting and real agent-strategy evaluation, protected final
    exposure, development-only feedback and a measured eligibility bridge.
 3. Qualify autonomous candidate generation, separate canary, activation and rollback
    before broadening the writable artifact surface or claiming measured improvement.
 
-These are implementation requirements, not claims that the proposed capabilities
-are already complete. Scanner, browser/auth/session, cloud, arbitrary source
+The experiment loop implements the first boundary. Campaign evaluation and
+autonomous evolution remain requirements, not completed capabilities. Scanner, browser/auth/session, cloud, arbitrary source
 self-rewriting and production release parity remain in [MIGRATION.md](MIGRATION.md).

@@ -124,6 +124,9 @@ impl Store {
                 "operation_started",
                 &serde_json::to_value(&op)?,
             )?;
+            if op.payload["kind"] == "agent_web_experiment" {
+                crate::web_experiment::admit(&tx, &op)?;
+            }
             operations.push(op);
         }
         tx.commit()?;
@@ -196,6 +199,11 @@ impl Store {
         payload: &Value,
     ) -> Result<Admission> {
         nonempty(command_id)?;
+        if payload["kind"] == "agent_web_experiment" {
+            return Err(Error::Invalid(
+                "experiments require atomic owned admission".into(),
+            ));
+        }
         let payload_text = encoded(payload)?;
         let hash = format!("{:x}", Sha256::digest(payload_text.as_bytes()));
         let tx = self

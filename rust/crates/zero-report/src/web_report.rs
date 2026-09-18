@@ -94,7 +94,11 @@ fn validate(report: &WebWorkflowReport) -> Result<()> {
     }
     if serde_json::to_vec(report).map_err(|_| Error::Json)?.len() > MAX_REPORT_BYTES
         || report.observations.len() > 128
-        || report.verifications.len() > 32
+        || report
+            .verifications
+            .len()
+            .saturating_add(report.experiments.len())
+            > 32
     {
         return Err(Error::Limit);
     }
@@ -320,6 +324,211 @@ fn validate(report: &WebWorkflowReport) -> Result<()> {
             return Err(Error::Field("web oracle success"));
         }
     }
+    let mut experiment_children = BTreeSet::new();
+    for e in &report.experiments {
+        if !links.insert(&e.operation_id)
+            || e.schema_version != 1
+            || e.session_id != run.session_id
+            || e.web_operation_id != run.operation_id
+        {
+            return Err(Error::Field("experiment linkage"));
+        }
+        for id in [
+            &e.operation_id,
+            &e.actor_operation_id,
+            &e.inference_operation_id,
+            &e.call_id,
+        ] {
+            text(id, 4096)?;
+        }
+        e.policy
+            .validate()
+            .map_err(|_| Error::Field("experiment host policy"))?;
+        e.proposal
+            .validate()
+            .map_err(|_| Error::Field("experiment model proposal"))?;
+        if e.proposal.cases.len() > e.policy.max_cases as usize
+            || e.proposal.repeats > e.policy.max_repeats
+            || e.hypothesis.title != e.proposal.hypothesis.title
+            || e.hypothesis.explanation != e.proposal.hypothesis.explanation
+            || e.hypothesis.prior_revision != e.proposal.hypothesis.prior_revision
+        {
+            return Err(Error::Field("experiment conjecture/policy"));
+        }
+        if let Some(prior) = &e.hypothesis.prior_revision {
+            if prior.operation_id == e.operation_id
+                || report
+                    .experiments
+                    .iter()
+                    .find(|other| other.operation_id == prior.operation_id)
+                    .is_some_and(|other| {
+                        other.hypothesis.hypothesis_sha256 != prior.hypothesis_sha256
+                    })
+            {
+                return Err(Error::Field("experiment prior revision identity"));
+            }
+        }
+        for d in [
+            &e.intent_sha256,
+            &e.matrix_sha256,
+            &e.hypothesis.hypothesis_sha256,
+        ] {
+            digest(d)?;
+        }
+        artifacts(&e.artifacts)?;
+        // Hypothesis and measured-matrix artifacts wrap data; their byte hashes are
+        // distinct from the conjecture identity and frozen prediction matrix hash.
+        if e.artifacts
+            .get("experiment.intent")
+            .is_some_and(|d| d != &e.intent_sha256)
+        {
+            return Err(Error::Field("experiment intent artifact identity"));
+        }
+        let Some(o) = &e.outcome else {
+            if !matches!(
+                e.operation_status,
+                OperationStatus::Running | OperationStatus::Admitted
+            ) {
+                return Err(Error::Field("terminal experiment feedback missing"));
+            }
+            continue;
+        };
+        let a = &o.assessment;
+        if matches!(
+            e.operation_status,
+            OperationStatus::Running | OperationStatus::Admitted
+        ) || a.schema_version != 1
+            || a.oracle_version != "zero-web-exact-response-v1"
+            || a.plan_sha256 != e.matrix_sha256
+            || a.vulnerability_reportable
+            || a.expected_attempts != e.proposal.repeats * e.proposal.cases.len() as u32
+            || a.completed_attempts > a.expected_attempts
+            || a.observed_attempts > a.completed_attempts
+            || a.control_attempts > a.expected_attempts
+            || o.attempts.len() > a.expected_attempts as usize
+            || o.children.len() != o.attempts.len()
+            || a.completed_attempts as usize
+                != o.attempts
+                    .iter()
+                    .filter(|t| {
+                        t.complete
+                            && t.possible_dispatch
+                            && t.operation_status == OperationStatus::Succeeded
+                    })
+                    .count()
+        {
+            return Err(Error::Field("experiment independent measurement"));
+        }
+        use zero_protocol::verification::Disposition;
+        let expected_status = match a.disposition {
+            Disposition::ObservedForPlan | Disposition::NotObserved => OperationStatus::Succeeded,
+            Disposition::Unknown => OperationStatus::Unknown,
+            Disposition::Cancelled => OperationStatus::Cancelled,
+            Disposition::Inconclusive => OperationStatus::Failed,
+        };
+        if e.operation_status != expected_status {
+            return Err(Error::Field("experiment assessment lifecycle"));
+        }
+        let mut measured_attacks = 0;
+        let mut measured_controls = 0;
+        artifacts(&o.artifacts)?;
+        for (i, t) in o.attempts.iter().enumerate() {
+            let case = &e.proposal.cases[i % e.proposal.cases.len()];
+            if t.case_name != case.name
+                || t.repeat_index != i as u32 / e.proposal.cases.len() as u32
+                || o.children[i] != t.operation_id
+                || !experiment_children.insert(t.operation_id.clone())
+                || report
+                    .verifications
+                    .iter()
+                    .any(|v| v.outcome.children.contains(&t.operation_id))
+            {
+                return Err(Error::Field("experiment attempt ordering"));
+            }
+            if let Some(observation) = report
+                .observations
+                .iter()
+                .find(|o| o.operation.operation_id == t.operation_id)
+            {
+                if observation.operation.operation_status != t.operation_status
+                    || observation.operation.response_manifest_sha256 != t.response_manifest_sha256
+                    || observation.evidence.as_ref().is_some_and(|e| {
+                        Some(&e.retained_body_sha256) != t.body_sha256.as_ref()
+                            || e.status != t.status
+                            || e.complete != t.complete
+                    })
+                {
+                    return Err(Error::Field("experiment observation correlation"));
+                }
+            }
+            if t.complete
+                && t.possible_dispatch
+                && t.operation_status == OperationStatus::Succeeded
+                && t.status == Some(case.expected.status)
+                && t.body_sha256.as_ref() == Some(&case.expected.body_sha256)
+            {
+                match case.role {
+                    WebCaseRole::Attack => measured_attacks += 1,
+                    WebCaseRole::LegitimateControl => measured_controls += 1,
+                }
+            }
+            digest(&t.request_sha256)?;
+            if let Some(d) = &t.response_manifest_sha256 {
+                digest(d)?;
+            }
+            if let Some(d) = &t.body_sha256 {
+                digest(d)?;
+            }
+            if t.complete
+                && (t.operation_status != OperationStatus::Succeeded
+                    || !t.possible_dispatch
+                    || t.response_manifest_sha256.is_none()
+                    || t.body_sha256.is_none()
+                    || !t.status.is_some_and(|s| (100..=599).contains(&s)))
+            {
+                return Err(Error::Field("experiment complete attempt"));
+            }
+        }
+        if a.observed_attempts != measured_attacks || a.control_attempts != measured_controls {
+            return Err(Error::Field("experiment measured counts"));
+        }
+        if e.operation_status == OperationStatus::Succeeded {
+            let required_controls = e
+                .proposal
+                .cases
+                .iter()
+                .filter(|c| c.role == WebCaseRole::LegitimateControl)
+                .count() as u32
+                * e.proposal.repeats;
+            let required_attacks = a.expected_attempts - required_controls;
+            let mut repeated = BTreeMap::new();
+            if measured_controls != required_controls
+                || (a.disposition == Disposition::ObservedForPlan
+                    && measured_attacks != required_attacks)
+                || (a.disposition == Disposition::NotObserved
+                    && measured_attacks == required_attacks)
+                || o.attempts.iter().any(|t| {
+                    repeated
+                        .insert(&t.case_name, (t.status, t.body_sha256.as_ref()))
+                        .is_some_and(|old| old != (t.status, t.body_sha256.as_ref()))
+                })
+            {
+                return Err(Error::Field("experiment stable attack/control outcome"));
+            }
+        }
+        if e.operation_status == OperationStatus::Succeeded
+            && (o.stop.is_some()
+                || o.error.is_some()
+                || a.completed_attempts != a.expected_attempts
+                || !matches!(
+                    a.disposition,
+                    zero_protocol::verification::Disposition::ObservedForPlan
+                        | zero_protocol::verification::Disposition::NotObserved
+                ))
+        {
+            return Err(Error::Field("experiment success"));
+        }
+    }
     Ok(())
 }
 type Section = (String, Vec<(String, String)>);
@@ -441,6 +650,52 @@ fn sections(report: &WebWorkflowReport) -> Result<Vec<Section>> {
                 .map(|(k, v)| (k.clone(), v.clone())),
         );
         sections.push(("Independent frozen-plan observations".into(), fields));
+    }
+    for e in &report.experiments {
+        let mut fields=vec![
+            ("Operation / actor / inference".into(),format!("{} / {} / {}",e.operation_id,e.actor_operation_id,e.inference_operation_id)),
+            ("Execution status".into(),format!("{:?}",e.operation_status)),
+            ("Model conjecture — Unverified".into(),e.hypothesis.title.clone()),
+            ("Model explanation".into(),e.hypothesis.explanation.clone()),
+            ("Model experiment purpose".into(),e.proposal.purpose.clone()),
+            ("Hypothesis revision SHA256".into(),e.hypothesis.hypothesis_sha256.clone()),
+            ("Prior revision".into(),wire(serde_json::to_value(&e.hypothesis.prior_revision).map_err(|_|Error::Json)?)?),
+            ("Intent SHA256".into(),e.intent_sha256.clone()),
+            ("Matrix SHA256".into(),e.matrix_sha256.clone()),
+            ("Captured host limits".into(),wire(serde_json::to_value(&e.policy).map_err(|_|Error::Json)?)?),
+            ("Model predictions — not a security oracle".into(),wire(serde_json::to_value(&e.proposal.cases).map_err(|_|Error::Json)?)?),
+            ("Measurement limits".into(),"Exact response matching under the same static identity and existing target state. No target reset, cross-principal proof, generic verification, or evolution promotion. Assessment plan_sha256 identifies this experiment matrix.".into()),
+        ];
+        if let Some(o) = &e.outcome {
+            fields.push((
+                "Independent measured feedback".into(),
+                wire(serde_json::to_value(&o.assessment).map_err(|_| Error::Json)?)?,
+            ));
+            fields.push((
+                "Stop / error".into(),
+                format!(
+                    "{:?} / {}",
+                    o.stop,
+                    o.error.as_deref().unwrap_or("none retained")
+                ),
+            ));
+            for t in &o.attempts {
+                fields.push((
+                    format!("Measured {} repeat {}", t.case_name, t.repeat_index),
+                    wire(serde_json::to_value(t).map_err(|_| Error::Json)?)?,
+                ));
+            }
+        } else {
+            fields.push((
+                "Independent measured feedback".into(),
+                "Experiment remains active; no terminal assessment is asserted.".into(),
+            ));
+        }
+        fields.extend(e.artifacts.iter().map(|(k, v)| (k.clone(), v.clone())));
+        sections.push((
+            "Agent-chosen experiment — predictions and measurements".into(),
+            fields,
+        ));
     }
     Ok(sections)
 }

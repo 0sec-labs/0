@@ -1065,3 +1065,51 @@ results do not qualify live targets/providers or production publication.
 
 The operator's agent-choice/independent-evaluation boundary and the next work
 identified by parallel source audits are retained in [AUTONOMY.md](AUTONOMY.md).
+
+### Adaptive experiments under host authority
+
+The native `run_web_experiment` tool adds an opt-in hypothesis/experiment/feedback/
+revision loop inside the current actor. Models choose bounded matrices, allowed
+investigators and when to stop. A shared pure exact-response assessor independently
+measures fresh requests. Predictions, provisional hypotheses and terminal claims
+remain distinct from independently qualified security findings or strategy quality.
+
+Store schema 12 adds original-account experiment admissions with immutable quota
+witnesses. Owned admission, experiment quota and any complete-matrix approval
+consumption commit atomically. Admission failures roll back the whole transition;
+cancellation, execution failure and restart do not replenish quota. HTTP effects
+still consume the original request/byte account. Prior revisions require causal
+retained hypothesis artifacts, actual model calls and authorized ancestry.
+
+Captured policy, native tool definitions, model arguments, operation admissions and
+completion hashes bind execution and history replay. Plain and projected checkpoint
+continuations preserve these identities. Joined investigators share limits and can
+return citable measured observations. Adaptive actors can correct invalid terminal
+citations without a mandatory operator workflow. Existing non-opt-in behavior and
+terminal review immutability remain intact.
+
+Typed discovery/detail APIs, CLI export and the Web TUI expose explicitly selected
+experiments, partial outcomes and retained body evidence. Readonly reconstruction
+works without current provider profiles or target access. Reported prediction
+matches never enable `vulnerability_reportable` or `evolution_eligible`.
+
+Qualification uses local provider/target sockets and SQLite, including feedback-led
+revision, early stopping, approval deny/consume, quota exhaustion, tampering,
+checkpoint continuation, cancellation, actual process death, no replay, offline
+reports and terminal restoration. The integrating checkpoint records final test
+counts. No live targets, paid providers or production publication are included.
+
+Remaining autonomy work: durable campaign-wide accounting across independent
+roots, real agent-strategy evaluation, protected scenario-family holdouts and
+exposure history, independently measured eligibility, candidate generation,
+separate canary, activation and rollback. This experiment loop is a prerequisite;
+it is not yet a self-evolving agent or a complete security scanner replacement.
+
+Adaptive checkpoint qualification: the frozen-source actual Rust 1.85 workspace
+run completed with 863 passed, zero failed and 11 explicit backend/platform
+ignores. Strict workspace production Clippy and formatting passed. The six
+Store tests include escaped maximum-length provisional hypotheses and a source
+inference larger than the frozen-effect bound. Independent reviews covered
+Store authority/accounting and frontend completeness; the resulting fixes are
+included in this same qualification. These are local fixture proofs, not a
+production release or a claim of measured improvement by a live model.

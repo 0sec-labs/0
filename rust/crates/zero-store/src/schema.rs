@@ -8,7 +8,7 @@ pub fn initialize(conn: &mut Connection) -> Result<()> {
     if application != 0 && application != APPLICATION_ID {
         return Err(Error::ForeignDatabase);
     }
-    if !(0..=11).contains(&version) {
+    if !(0..=12).contains(&version) {
         return Err(Error::Schema(version));
     }
     if application == 0 {
@@ -85,6 +85,12 @@ CREATE TABLE http_rates(account_id TEXT NOT NULL REFERENCES http_accounts(id),ho
         tx.execute_batch("CREATE TABLE web_triage_decisions(id TEXT PRIMARY KEY,session_id TEXT NOT NULL REFERENCES sessions(id),web_operation_id TEXT NOT NULL REFERENCES operations(id),hypothesis_id TEXT NOT NULL,web_review_sha256 TEXT NOT NULL REFERENCES artifacts(digest),revision INTEGER NOT NULL CHECK(revision>0),command_id TEXT NOT NULL,status TEXT NOT NULL CHECK(status IN ('new','accepted','suppressed')),note TEXT NOT NULL CHECK(length(CAST(note AS BLOB))<=4096),created_at_ms INTEGER NOT NULL CHECK(created_at_ms>=0),UNIQUE(session_id,command_id),UNIQUE(web_operation_id,hypothesis_id,revision));")?;
         tx.pragma_update(None, "user_version", 11)?;
     }
+    if version < 12 {
+        tx.execute_batch("CREATE TABLE web_experiment_admissions(operation_id TEXT PRIMARY KEY REFERENCES operations(id),session_id TEXT NOT NULL REFERENCES sessions(id),account_id TEXT NOT NULL,policy_sha256 TEXT NOT NULL,intent_sha256 TEXT NOT NULL,hypothesis_sha256 TEXT NOT NULL,sequence INTEGER NOT NULL CHECK(sequence>0),UNIQUE(session_id,sequence));
+CREATE INDEX web_experiment_account ON web_experiment_admissions(account_id,sequence);
+CREATE INDEX web_experiment_quota_events ON events(session_id,json_extract(payload,'$.account_id'),sequence) WHERE kind='web_experiment_admitted';")?;
+        tx.pragma_update(None, "user_version", 12)?;
+    }
     tx.commit()?;
     Ok(())
 }
@@ -98,7 +104,7 @@ pub(super) fn validate_current(conn: &Connection) -> Result<()> {
     if application != APPLICATION_ID {
         return Err(Error::ForeignDatabase);
     }
-    if version != 11 {
+    if version != 12 {
         return Err(Error::Schema(version));
     }
     let observed = crate::readonly::definitions(conn)?;

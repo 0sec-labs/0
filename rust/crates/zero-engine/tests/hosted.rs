@@ -214,6 +214,7 @@ fn agent(dir: &std::path::Path) -> zero_protocol::agent::AgentRequest {
         delegation_policy: None,
         operator_questions: false,
         http_profile: None,
+        web_experiment_policy: None,
         tool_approval_policy: None,
         model: "fixture".into(),
         instructions: "fixture".into(),

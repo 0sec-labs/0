@@ -31,6 +31,12 @@ pub(super) fn effect_output(
         .clone()
         .ok_or_else(|| error("approved effect outcome missing"))?;
     let output = match effect.payload["kind"].as_str() {
+        Some("agent_web_experiment") => {
+            return Ok((
+                effect.status,
+                Some(agent_web_experiment::validate_receipt(store, effect)?),
+            ));
+        }
         Some("agent_http") => {
             return Ok((
                 effect.status,

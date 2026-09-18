@@ -57,6 +57,7 @@ fn authority(request: &AgentRequest) -> Result<Value, EngineError> {
         "operator_questions":request.operator_questions,
         "tool_approval_policy":request.tool_approval_policy,
         "http_profile":request.http_profile,
+        "web_experiment_policy":request.web_experiment_policy,
         "web_submission_max_hypotheses":request.web_submission_max_hypotheses,
         "context_policy":request.context_policy}),
     )
@@ -293,11 +294,15 @@ pub(super) fn validate(
                     {
                         return Err(error("steering predecessor tool result differs"));
                     }
-                    let approved = req.tool_approval_policy.as_ref().is_some_and(|policy| {
-                        policy.require_approval.iter().any(|alias| alias == name)
-                    });
+                    let approved = agent_approvals::required(&req, name);
                     let http = name == "http_request" && req.http_profile.is_some();
-                    if approved || http || (name == "ask_operator" && req.operator_questions) {
+                    let experiment =
+                        name == "run_web_experiment" && req.web_experiment_policy.is_some();
+                    if approved
+                        || http
+                        || experiment
+                        || (name == "ask_operator" && req.operator_questions)
+                    {
                         match store.get_operation_by_command(
                             &ancestor.session_id,
                             &format!("{}:tool:{index}:{call_index}", ancestor.id),
@@ -305,6 +310,8 @@ pub(super) fn validate(
                             Ok(question) => {
                                 let kind = if approved {
                                     "agent_approved_tool"
+                                } else if experiment {
+                                    "agent_web_experiment"
                                 } else if http {
                                     "agent_http"
                                 } else {
@@ -312,6 +319,8 @@ pub(super) fn validate(
                                 };
                                 let derived = if approved {
                                     agent_approvals::validate_receipt(store, &question)?
+                                } else if experiment {
+                                    agent_web_experiment::validate_receipt(store, &question)?
                                 } else if http {
                                     agent_http::validate_receipt(store, &question)?
                                 } else {

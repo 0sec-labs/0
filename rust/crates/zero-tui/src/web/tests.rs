@@ -347,3 +347,140 @@ fn web_draft_survives_help_and_question_overlays_and_blocks_view_changes() {
     state.key(key(KeyCode::Tab));
     assert_eq!(state.view, crate::state::View::Sessions);
 }
+fn experiment_fixture() -> WebExperimentReport {
+    serde_json::from_str(include_str!(
+        "../../../zero-report/tests/fixtures/web_experiment.json"
+    ))
+    .unwrap()
+}
+fn experiments() -> Findings {
+    let mut ui = overview();
+    let actions = ui.key(key(KeyCode::Char('x')));
+    let e = experiment_fixture();
+    reply(
+        &mut ui,
+        actions,
+        Reply::WebExperiments {
+            page: zero_protocol::web_experiment::WebExperimentsPage {
+                experiments: vec![WebExperimentCandidate {
+                    sequence: 20,
+                    operation_id: e.operation_id,
+                    actor_operation_id: e.actor_operation_id,
+                    operation_status: e.operation_status,
+                    hypothesis_sha256: Some(e.hypothesis.hypothesis_sha256),
+                }],
+                next_after_sequence: None,
+            },
+        },
+    );
+    ui
+}
+#[test]
+fn experiment_pages_continue_empty_windows_and_drop_cross_session_details() {
+    let mut ui = overview();
+    let a = ui.key(key(KeyCode::Char('x')));
+    reply(
+        &mut ui,
+        a,
+        Reply::WebExperiments {
+            page: zero_protocol::web_experiment::WebExperimentsPage {
+                experiments: vec![],
+                next_after_sequence: Some(99),
+            },
+        },
+    );
+    assert_eq!(ui.screen, Screen::Experiments);
+    assert!(ui.status.contains("Ctrl-L"));
+    let a = ui.key(ctrl('l'));
+    assert!(matches!(
+        a[0].command,
+        Command::WebExperiments {
+            after_sequence: 99,
+            ..
+        }
+    ));
+    let mut ui = experiments();
+    let a = ui.key(key(KeyCode::Enter));
+    ui.enter(Some("other-session"));
+    assert!(
+        ui.reply(
+            a.into_iter().next().unwrap().pending,
+            Reply::WebExperiment {
+                experiment: experiment_fixture()
+            }
+        )
+        .unwrap()
+        .is_empty()
+    );
+    assert!(ui.experiment.is_none());
+}
+#[test]
+fn experiment_predictions_measurements_and_exact_attempt_evidence_are_distinct() {
+    let mut ui = experiments();
+    let a = ui.key(key(KeyCode::Enter));
+    reply(
+        &mut ui,
+        a,
+        Reply::WebExperiment {
+            experiment: experiment_fixture(),
+        },
+    );
+    assert_eq!(ui.screen, Screen::Experiment);
+    let mut term = Terminal::new(TestBackend::new(160, 55)).unwrap();
+    term.draw(|f| render::draw(f, Rect::new(0, 0, 160, 50), Rect::new(0, 50, 160, 5), &ui))
+        .unwrap();
+    let text = term
+        .backend()
+        .buffer()
+        .content
+        .iter()
+        .map(|c| c.symbol())
+        .collect::<String>();
+    for label in [
+        "Model conjecture",
+        "Model predictions",
+        "Independent measured feedback",
+        "Unverified",
+    ] {
+        assert!(text.contains(label), "{label}");
+    }
+    assert!(!text.contains('\u{1b}'));
+    ui.key(key(KeyCode::Down));
+    let a = ui.key(key(KeyCode::Char('e')));
+    assert!(
+        matches!(&a[0].command,Command::HttpEvidence{operation_id,..} if operation_id=="experiment-0-control")
+    );
+    assert_eq!(ui.screen, Screen::Evidence);
+    ui.key(key(KeyCode::Esc));
+    assert_eq!(ui.screen, Screen::Experiment);
+    assert!(ui.experiment.is_some());
+    let a = ui.key(key(KeyCode::Char('p')));
+    assert!(
+        matches!(&a[0].command,Command::WebExperiment{experiment_operation_id,..} if experiment_operation_id=="previous-experiment")
+    );
+    let mut forged = experiment_fixture();
+    forged.operation_id = "previous-experiment".into();
+    assert!(
+        ui.reply(
+            a.into_iter().next().unwrap().pending,
+            Reply::WebExperiment { experiment: forged }
+        )
+        .is_err()
+    );
+}
+#[test]
+fn active_experiment_has_no_fabricated_assessment_and_no_permission_actions() {
+    let mut ui = experiments();
+    let a = ui.key(key(KeyCode::Enter));
+    let mut e = experiment_fixture();
+    e.operation_status = OperationStatus::Running;
+    e.outcome = None;
+    reply(&mut ui, a, Reply::WebExperiment { experiment: e });
+    ui.paste("approve");
+    assert!(ui.key(key(KeyCode::Enter)).is_empty());
+    assert!(ui.key(ctrl('s')).is_empty());
+    assert!(ui.draft.is_none());
+    assert!(ui.key(key(KeyCode::Char('e'))).is_empty());
+    assert_eq!(ui.screen, Screen::Experiment);
+    assert!(ui.status.contains("No measured attempt"));
+}

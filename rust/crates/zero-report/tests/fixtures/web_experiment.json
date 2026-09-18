@@ -1,0 +1,147 @@
+{
+  "schema_version": 1,
+  "session_id": "session",
+  "web_operation_id": "review",
+  "operation_id": "experiment",
+  "operation_status": "succeeded",
+  "actor_operation_id": "review",
+  "inference_operation_id": "model-2",
+  "call_id": "experiment-call",
+  "policy": {
+    "schema_version": 1,
+    "max_experiments": 4,
+    "max_cases": 2,
+    "max_repeats": 2
+  },
+  "proposal": {
+    "hypothesis": {
+      "title": "Adaptive conjecture <script>claim</script>",
+      "explanation": "Model hypothesis, not a measured fact",
+      "prior_revision": {
+        "operation_id": "previous-experiment",
+        "hypothesis_sha256": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+      }
+    },
+    "purpose": "Probe changed response [link](javascript:alert(1))",
+    "repeats": 2,
+    "cases": [
+      {
+        "name": "attack",
+        "role": "attack",
+        "request": {
+          "url": "http://127.0.0.1:1234/target/one",
+          "method": "GET",
+          "headers": {}
+        },
+        "expected": {
+          "status": 200,
+          "body_sha256": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        }
+      },
+      {
+        "name": "control",
+        "role": "legitimate_control",
+        "request": {
+          "url": "http://127.0.0.1:1234/target/two",
+          "method": "GET",
+          "headers": {}
+        },
+        "expected": {
+          "status": 403,
+          "body_sha256": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+        }
+      }
+    ]
+  },
+  "hypothesis": {
+    "hypothesis_sha256": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+    "title": "Adaptive conjecture <script>claim</script>",
+    "explanation": "Model hypothesis, not a measured fact",
+    "prior_revision": {
+      "operation_id": "previous-experiment",
+      "hypothesis_sha256": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+    }
+  },
+  "intent_sha256": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+  "matrix_sha256": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+  "artifacts": {
+    "experiment.intent": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+    "experiment.hypothesis": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
+    "experiment.matrix": "sha256:5555555555555555555555555555555555555555555555555555555555555555"
+  },
+  "outcome": {
+    "assessment": {
+      "schema_version": 1,
+      "disposition": "observed_for_plan",
+      "oracle_version": "zero-web-exact-response-v1",
+      "plan_sha256": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+      "expected_attempts": 4,
+      "completed_attempts": 4,
+      "observed_attempts": 2,
+      "control_attempts": 2,
+      "reasons": [
+        "All predictions matched fresh retained responses"
+      ],
+      "vulnerability_reportable": false
+    },
+    "attempts": [
+      {
+        "case_name": "attack",
+        "repeat_index": 0,
+        "operation_id": "experiment-0-attack",
+        "operation_status": "succeeded",
+        "request_sha256": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "response_manifest_sha256": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "status": 200,
+        "body_sha256": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "complete": true,
+        "possible_dispatch": true
+      },
+      {
+        "case_name": "control",
+        "repeat_index": 0,
+        "operation_id": "experiment-0-control",
+        "operation_status": "succeeded",
+        "request_sha256": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "response_manifest_sha256": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "status": 403,
+        "body_sha256": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "complete": true,
+        "possible_dispatch": true
+      },
+      {
+        "case_name": "attack",
+        "repeat_index": 1,
+        "operation_id": "experiment-1-attack",
+        "operation_status": "succeeded",
+        "request_sha256": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "response_manifest_sha256": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "status": 200,
+        "body_sha256": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "complete": true,
+        "possible_dispatch": true
+      },
+      {
+        "case_name": "control",
+        "repeat_index": 1,
+        "operation_id": "experiment-1-control",
+        "operation_status": "succeeded",
+        "request_sha256": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "response_manifest_sha256": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "status": 403,
+        "body_sha256": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "complete": true,
+        "possible_dispatch": true
+      }
+    ],
+    "children": [
+      "experiment-0-attack",
+      "experiment-0-control",
+      "experiment-1-attack",
+      "experiment-1-control"
+    ],
+    "artifacts": {},
+    "stop": null,
+    "error": null
+  }
+}

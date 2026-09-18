@@ -30,10 +30,15 @@ pub(super) fn origin(
     store: &Store,
     effect: &Operation,
 ) -> Result<(Operation, Operation), EngineError> {
-    let pair = if effect.payload.get("origin").is_some() {
-        crate::web_verification::effect_origin(store, effect)?
-    } else {
-        model_origin(store, effect)?
+    let pair = match effect.payload.get("origin") {
+        Some(origin) if origin["kind"] == "frozen_web_plan" => {
+            crate::web_verification::effect_origin(store, effect)?
+        }
+        Some(origin) if origin["kind"] == "frozen_agent_experiment" => {
+            crate::web_experiment::effect_origin(store, effect)?
+        }
+        Some(_) => return Err(error("unsupported HTTP effect origin")),
+        None => model_origin(store, effect)?,
     };
     let actor_version = match pair.0.payload.get("http_output_version") {
         None => 1,

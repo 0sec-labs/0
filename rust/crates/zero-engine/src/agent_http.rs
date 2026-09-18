@@ -78,7 +78,9 @@ pub(super) fn capture(
     {
         return Err(error("continuation HTTP authority or account changed"));
     }
-    let output_version = if request.web_submission_max_hypotheses.is_some() {
+    let output_version = if request.web_submission_max_hypotheses.is_some()
+        || request.web_experiment_policy.is_some()
+    {
         2
     } else {
         prior

@@ -54,15 +54,19 @@ fn candidate(
     }
     let payload = admission.get("payload").ok_or_else(invalid)?;
     if payload.get("parent_operation").is_some()
-        || payload["request"]["web_submission_max_hypotheses"].is_null()
+        || (payload["request"]["web_submission_max_hypotheses"].is_null()
+            && payload["request"]["web_experiment_policy"].is_null())
     {
         return Ok(None);
     }
-    let max = payload["request"]["web_submission_max_hypotheses"]
-        .as_u64()
-        .filter(|n| (1..=32).contains(n))
-        .ok_or_else(invalid)?;
-    let _ = max;
+    if let Some(max) = payload["request"]
+        .get("web_submission_max_hypotheses")
+        .filter(|v| !v.is_null())
+    {
+        max.as_u64()
+            .filter(|n| (1..=32).contains(n))
+            .ok_or_else(invalid)?;
+    }
     zero_protocol::agent::validate_actor_payload(payload).map_err(|_| invalid())?;
     // Read metadata only, never live request/outcome or artifact blobs.
     let (actual_session,actual_command,status,attached,digest):(Option<String>,Option<String>,Option<String>,bool,Option<String>)=conn.query_row("SELECT CASE WHEN length(CAST(o.session_id AS BLOB))<=4096 THEN o.session_id END,CASE WHEN length(CAST(o.command_id AS BLOB))<=4096 THEN o.command_id END,CASE WHEN length(CAST(o.status AS BLOB))<=32 THEN o.status END,a.operation_id IS NOT NULL,CASE WHEN length(CAST(a.digest AS BLOB))<=71 THEN a.digest END FROM operations o LEFT JOIN operation_artifacts a ON a.operation_id=o.id AND a.name='web.review' WHERE o.id=?1",[id],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?,r.get(4)?))).optional()?.ok_or_else(invalid)?;

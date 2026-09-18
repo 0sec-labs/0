@@ -247,6 +247,7 @@ pub(crate) fn workflow_report(
         observations,
         observations_truncated: truncated,
         verifications,
+        experiments: vec![],
     };
     if serde_json::to_vec(&report)?.len() > 16 * 1024 * 1024 {
         return Err(error("Web workflow report exceeds 16 MiB"));
