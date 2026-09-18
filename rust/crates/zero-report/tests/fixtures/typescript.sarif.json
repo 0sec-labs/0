@@ -1,0 +1,353 @@
+{
+  "$schema": "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/main/sarif-2.1/schema/sarif-schema-2.1.0.json",
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "0sec",
+          "version": "fixture-version",
+          "informationUri": "https://github.com/0sec-labs/0sec",
+          "rules": [
+            {
+              "id": "same-rule",
+              "name": "Quoted \"title\" — Unicode",
+              "shortDescription": {
+                "text": "Quoted \"title\" — Unicode"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "category": "injection",
+                "severity": "critical"
+              }
+            },
+            {
+              "id": "rule-2",
+              "name": "Finding 2",
+              "shortDescription": {
+                "text": "Finding 2"
+              },
+              "defaultConfiguration": {
+                "level": "warning"
+              },
+              "properties": {
+                "category": "injection",
+                "severity": "medium"
+              }
+            },
+            {
+              "id": "rule-3",
+              "name": "Finding 3",
+              "shortDescription": {
+                "text": "Finding 3"
+              },
+              "defaultConfiguration": {
+                "level": "note"
+              },
+              "properties": {
+                "category": "injection",
+                "severity": "low"
+              }
+            },
+            {
+              "id": "rule-4",
+              "name": "Finding 4",
+              "shortDescription": {
+                "text": "Finding 4"
+              },
+              "defaultConfiguration": {
+                "level": "note"
+              },
+              "properties": {
+                "category": "injection",
+                "severity": "info"
+              }
+            }
+          ]
+        }
+      },
+      "results": [
+        {
+          "ruleId": "same-rule",
+          "level": "error",
+          "message": {
+            "text": "Fixture <script>not executed</script>"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "https://example.invalid/a?b=\"quoted\""
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "primary": "stable|same-rule|injection|Quoted \"title\" — Unicode|https://example.invalid/a?b=\"quoted\""
+          },
+          "codeFlows": [
+            {
+              "threadFlows": [
+                {
+                  "locations": [
+                    {
+                      "location": {
+                        "physicalLocation": {
+                          "artifactLocation": {
+                            "uri": "https://example.invalid/a?b=\"quoted\""
+                          }
+                        },
+                        "message": {
+                          "text": "shell: shell data only"
+                        },
+                        "properties": {
+                          "stepId": "step-0",
+                          "kind": "shell",
+                          "action": {
+                            "type": "shell",
+                            "command": "printf fixture",
+                            "cwd": "/workspace"
+                          },
+                          "expect": {
+                            "fixture": true
+                          }
+                        }
+                      }
+                    },
+                    {
+                      "location": {
+                        "physicalLocation": {
+                          "artifactLocation": {
+                            "uri": "https://example.invalid/a?b=\"quoted\""
+                          }
+                        },
+                        "message": {
+                          "text": "http: http data only"
+                        },
+                        "properties": {
+                          "stepId": "step-1",
+                          "kind": "http",
+                          "action": {
+                            "type": "http",
+                            "method": "GET",
+                            "url": "https://example.invalid/fixture",
+                            "headers": {
+                              "X-Fixture": "inert"
+                            }
+                          },
+                          "expect": {
+                            "fixture": true
+                          }
+                        }
+                      }
+                    },
+                    {
+                      "location": {
+                        "physicalLocation": {
+                          "artifactLocation": {
+                            "uri": "https://example.invalid/a?b=\"quoted\""
+                          }
+                        },
+                        "message": {
+                          "text": "docker: docker data only"
+                        },
+                        "properties": {
+                          "stepId": "step-2",
+                          "kind": "docker",
+                          "action": {
+                            "type": "docker",
+                            "image": "fixture:local",
+                            "args": [
+                              "true"
+                            ]
+                          },
+                          "expect": {
+                            "fixture": true
+                          }
+                        }
+                      }
+                    },
+                    {
+                      "location": {
+                        "physicalLocation": {
+                          "artifactLocation": {
+                            "uri": "https://example.invalid/a?b=\"quoted\""
+                          }
+                        },
+                        "message": {
+                          "text": "note: note data only"
+                        },
+                        "properties": {
+                          "stepId": "step-3",
+                          "kind": "note",
+                          "action": {
+                            "type": "note"
+                          },
+                          "expect": {
+                            "fixture": true
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "properties": {
+            "findingId": "finding-0",
+            "category": "injection",
+            "severity": "critical",
+            "status": "discovered",
+            "evidence": {
+              "summary": "unverified fixture",
+              "request": "literal bytes"
+            },
+            "cvssScore": 0,
+            "cvssVector": "CVSS:fixture",
+            "confidence": 0,
+            "publishability": {
+              "decision": "hold"
+            },
+            "noveltyVerdict": "possibly-known",
+            "dedupRefs": [],
+            "advisoryMatches": [],
+            "verificationResult": {
+              "outcome": "inconclusive"
+            },
+            "inlineValidation": {
+              "verified": false
+            },
+            "supplyChain": {
+              "package": "fixture"
+            },
+            "kernelExploit": {
+              "attempted": false
+            },
+            "semanticDedupe": {
+              "canonicalId": "finding-0"
+            },
+            "findingRank": 0
+          }
+        },
+        {
+          "ruleId": "same-rule",
+          "level": "error",
+          "message": {
+            "text": "fixture only"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "https://example.invalid/a?b=\"quoted\""
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "primary": "same-rule|injection|Finding 1|https://example.invalid/a?b=\"quoted\""
+          },
+          "properties": {
+            "findingId": "finding-1",
+            "category": "injection",
+            "severity": "high",
+            "status": "discovered",
+            "evidence": {},
+            "confidence": 0
+          }
+        },
+        {
+          "ruleId": "rule-2",
+          "level": "warning",
+          "message": {
+            "text": "fixture only"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "https://example.invalid/a?b=\"quoted\""
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "primary": "rule-2|injection|Finding 2|https://example.invalid/a?b=\"quoted\""
+          },
+          "properties": {
+            "findingId": "finding-2",
+            "category": "injection",
+            "severity": "medium",
+            "status": "discovered",
+            "evidence": {},
+            "confidence": 0
+          }
+        },
+        {
+          "ruleId": "rule-3",
+          "level": "note",
+          "message": {
+            "text": "fixture only"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "https://example.invalid/a?b=\"quoted\""
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "primary": "rule-3|injection|Finding 3|https://example.invalid/a?b=\"quoted\""
+          },
+          "properties": {
+            "findingId": "finding-3",
+            "category": "injection",
+            "severity": "low",
+            "status": "discovered",
+            "evidence": {},
+            "confidence": 0
+          }
+        },
+        {
+          "ruleId": "rule-4",
+          "level": "note",
+          "message": {
+            "text": "fixture only"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "https://example.invalid/a?b=\"quoted\""
+                }
+              }
+            }
+          ],
+          "partialFingerprints": {
+            "primary": "rule-4|injection|Finding 4|https://example.invalid/a?b=\"quoted\""
+          },
+          "properties": {
+            "findingId": "finding-4",
+            "category": "injection",
+            "severity": "info",
+            "status": "false-positive",
+            "evidence": {},
+            "confidence": 0
+          }
+        }
+      ],
+      "invocations": [
+        {
+          "executionSuccessful": false,
+          "startTimeUtc": "2026-09-18T00:00:00.000Z",
+          "endTimeUtc": "2026-09-18T00:01:00.000Z"
+        }
+      ]
+    }
+  ]
+}

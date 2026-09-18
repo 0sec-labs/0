@@ -1891,6 +1891,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "zero-report"
+version = "0.1.0"
+dependencies = [
+ "serde_json",
+ "thiserror",
+]
+
+[[package]]
 name = "zero-sandbox"
 version = "0.1.0"
 dependencies = [
