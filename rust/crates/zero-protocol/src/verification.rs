@@ -1,24 +1,26 @@
-use serde::{Deserialize, Serialize};
-use zero_protocol::{
+use crate::{
     SnapshotPin,
     sandbox::{SandboxBackend, SandboxRequest, SandboxResult},
 };
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+use serde::{Deserialize, Serialize};
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum Mode {
     Attack,
     LegitimateControl,
 }
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ExactOutput {
     pub exit_code: i32,
-    #[serde(with = "crate::binary")]
+    #[serde(with = "crate::verification_binary")]
+    #[schemars(with = "String")]
     pub stdout: Vec<u8>,
-    #[serde(with = "crate::binary")]
+    #[serde(with = "crate::verification_binary")]
+    #[schemars(with = "String")]
     pub stderr: Vec<u8>,
 }
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Case {
     pub id: String,
@@ -30,7 +32,7 @@ pub struct Case {
     #[serde(default)]
     pub safe_expected: Option<ExactOutput>,
 }
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Limits {
     pub timeout_ms: u64,
@@ -38,7 +40,7 @@ pub struct Limits {
     pub cpus: f64,
     pub max_output_bytes: usize,
 }
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Plan {
     pub schema_version: u32,
@@ -53,7 +55,7 @@ pub struct Plan {
 }
 /// Supplied only by the trusted executor journal. These are retained observations,
 /// not a signed attestation; deserializing bytes cannot establish their provenance.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Evidence {
     pub case_id: String,
@@ -61,7 +63,7 @@ pub struct Evidence {
     pub request: SandboxRequest,
     pub result: SandboxResult,
 }
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum Disposition {
     ObservedForPlan,
@@ -70,7 +72,7 @@ pub enum Disposition {
     Cancelled,
     Unknown,
 }
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum Reason {
     CompleteExactObservation,
@@ -86,7 +88,7 @@ pub enum Reason {
     UnstableRepeatedOutput,
     LegitimateControlMismatch,
 }
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct Assessment {
     pub schema_version: u32,
     pub oracle_version: String,
@@ -102,4 +104,28 @@ pub struct Assessment {
     /// Always false: the oracle establishes outputs under this plan, not a generic finding.
     pub vulnerability_reportable: bool,
     pub assessment_digest: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct SourceReproductionRequest {
+    pub source_operation_id: String,
+    pub plan: Plan,
+}
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum ReproductionStop {
+    Cancelled,
+    SetupFailed,
+    SupervisorFailed,
+    EventConsumerUnavailable,
+}
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct ReproductionOutcome {
+    pub assessment: Option<Assessment>,
+    pub artifacts: std::collections::BTreeMap<String, String>,
+    pub children: Vec<String>,
+    pub external_effects_started: bool,
+    pub stop_reason: Option<ReproductionStop>,
+    pub error: Option<String>,
 }

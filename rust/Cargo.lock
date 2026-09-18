@@ -1823,6 +1823,7 @@ dependencies = [
  "zero-smolvm",
  "zero-source",
  "zero-store",
+ "zero-verification",
 ]
 
 [[package]]
@@ -2025,6 +2026,19 @@ dependencies = [
  "tempfile",
  "thiserror",
  "uuid",
+ "zero-protocol",
+]
+
+[[package]]
+name = "zero-verification"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "sha2",
+ "tempfile",
+ "thiserror",
+ "zero-executor",
  "zero-protocol",
 ]
 

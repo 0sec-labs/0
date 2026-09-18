@@ -4,6 +4,7 @@ mod agent_plugins;
 mod inference;
 mod lifecycle;
 mod plugin;
+mod reproduction;
 mod sandbox;
 mod source;
 
@@ -194,6 +195,7 @@ impl Engine {
             "bounded_offline_snapshot_agent",
             "generation_pinned_offline_plugins",
             "unverified_source_review",
+            "host_frozen_source_observation",
         ]
         .map(String::from)
         .to_vec()
@@ -215,6 +217,16 @@ impl Engine {
         command: Command,
         event_tx: mpsc::Sender<ExecutionEvent>,
     ) -> Result<Reply, EngineError> {
+        if let Command::ReproduceSource {
+            session_id,
+            command_id,
+            request,
+        } = command
+        {
+            return self
+                .reproduce_source(session_id, command_id, request, event_tx)
+                .await;
+        }
         if let Command::ReviewSource {
             session_id,
             command_id,
@@ -374,6 +386,7 @@ impl Engine {
                 .map_err(|e| EngineError::State(e.to_string())),
             Command::Execute { .. }
             | Command::Infer { .. }
+            | Command::ReproduceSource { .. }
             | Command::ReviewSource { .. }
             | Command::RunAgent { .. }
             | Command::RunSandbox { .. }

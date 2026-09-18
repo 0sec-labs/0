@@ -1,12 +1,12 @@
 //! Frozen host-owned exact-output observations. No execution or vulnerability verdict.
-mod binary;
 mod plan;
 mod score;
-mod types;
 pub use plan::FrozenPlan;
 pub use score::assess;
 use sha2::{Digest, Sha256};
-pub use types::*;
+pub use zero_protocol::verification::{
+    Assessment, Case, Disposition, Evidence, ExactOutput, Limits, Mode, Plan, Reason,
+};
 pub const ORACLE_VERSION: &str = "zero-verification-exact-output-v1";
 pub const MAX_PLAN_BYTES: usize = 1024 * 1024;
 pub const MAX_EVIDENCE_BYTES: usize = 32 * 1024 * 1024;

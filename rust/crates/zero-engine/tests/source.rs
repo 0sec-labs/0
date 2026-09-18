@@ -424,3 +424,422 @@ async fn lost_admission_delivery_cancels_before_source_read_or_http() {
     assert_eq!(budget(&engine, &session).await, (0, 0));
     engine.shutdown().await.unwrap();
 }
+
+use std::os::unix::fs::PermissionsExt;
+use zero_protocol::verification::{
+    Case, Disposition, ExactOutput, Limits, Mode, Plan, SourceReproductionRequest,
+};
+struct ReproFixture {
+    dir: tempfile::TempDir,
+    engine: Engine,
+    session: String,
+    source: String,
+    plan: Plan,
+}
+impl ReproFixture {
+    async fn new(scenario: &str) -> Self {
+        let dir = tempfile::tempdir().unwrap();
+        let request = request(dir.path());
+        let http = Http::new(vec![response(&request)], false).await;
+        let fake=include_str!("../../zero-executor/tests/fixtures/fake-docker.py").replace("elif args[0] == \"start\":", "elif args[0] == \"start\":\n    import sqlite3\n    db=sqlite3.connect(root / \"state.db\")\n    assert db.execute(\"SELECT count(*) FROM operation_artifacts WHERE name=\'reproduction.plan\'\").fetchone()[0]>0\n    assert db.execute(\"SELECT count(*) FROM operation_artifacts WHERE name=\'reproduction.request\'\").fetchone()[0]>0");
+        fs::write(dir.path().join("docker"), fake).unwrap();
+        fs::set_permissions(dir.path().join("docker"), fs::Permissions::from_mode(0o700)).unwrap();
+        fs::write(dir.path().join("scenario.txt"), scenario).unwrap();
+        let engine =
+            Engine::open(dir.path().join("state.db"), Some(dir.path().join("docker"))).unwrap();
+        http.configure(&engine);
+        let session = session(&engine, 100).await;
+        let (source, hypothesis, bundle) =
+            match call(&engine, command(&session, request.clone())).await {
+                Reply::SourceReview {
+                    operation,
+                    result: Some(result),
+                    ..
+                } => (
+                    operation.id,
+                    result.review.unwrap().hypotheses[0].id.clone(),
+                    result.artifacts["source.bundle"].clone(),
+                ),
+                r => panic!("{r:?}"),
+            };
+        let plan = Plan {
+            schema_version: 1,
+            oracle_version: zero_verification::ORACLE_VERSION.into(),
+            hypothesis_id: hypothesis,
+            source_bundle_digest: bundle,
+            snapshot: request.source.snapshot,
+            backend: zero_protocol::sandbox::SandboxBackend::Docker {
+                image: format!("sha256:{}", "a".repeat(64)),
+            },
+            limits: Limits {
+                timeout_ms: 700,
+                memory_mb: 128,
+                cpus: 0.5,
+                max_output_bytes: 1024,
+            },
+            repeats: 2,
+            cases: vec![
+                Case {
+                    id: "attack".into(),
+                    mode: Mode::Attack,
+                    argv: vec!["node".into(), "app.js".into(), "attack".into()],
+                    stdin: Some("attack-output\n".into()),
+                    expected: ExactOutput {
+                        exit_code: 0,
+                        stdout: b"attack-output\n".to_vec(),
+                        stderr: b"fixture diagnostic\n".to_vec(),
+                    },
+                    safe_expected: None,
+                },
+                Case {
+                    id: "control".into(),
+                    mode: Mode::LegitimateControl,
+                    argv: vec!["node".into(), "app.js".into(), "control".into()],
+                    stdin: Some("legitimate-output\n".into()),
+                    expected: ExactOutput {
+                        exit_code: 0,
+                        stdout: b"legitimate-output\n".to_vec(),
+                        stderr: b"fixture diagnostic\n".to_vec(),
+                    },
+                    safe_expected: None,
+                },
+            ],
+        };
+        Self {
+            dir,
+            engine,
+            session,
+            source,
+            plan,
+        }
+    }
+    fn command(&self, id: &str) -> Command {
+        Command::ReproduceSource {
+            session_id: self.session.clone(),
+            command_id: id.into(),
+            request: SourceReproductionRequest {
+                source_operation_id: self.source.clone(),
+                plan: self.plan.clone(),
+            },
+        }
+    }
+    fn calls(&self) -> usize {
+        fs::read_to_string(self.dir.path().join("calls.jsonl"))
+            .unwrap_or_default()
+            .lines()
+            .count()
+    }
+}
+#[tokio::test]
+async fn reproduction_retains_exact_matrix_and_retries_after_source_deletion() {
+    let f = ReproFixture::new("echo").await;
+    let result = match call(&f.engine, f.command("repro")).await {
+        Reply::SourceReproduction {
+            operation,
+            result: Some(result),
+            ..
+        } => {
+            assert_eq!(operation.status, OperationStatus::Succeeded);
+            result
+        }
+        r => panic!("{r:?}"),
+    };
+    let assessment = result.assessment.unwrap();
+    assert_eq!(assessment.disposition, Disposition::ObservedForPlan);
+    assert!(!assessment.vulnerability_reportable);
+    assert_eq!(assessment.observed_attempts, 4);
+    assert_eq!(result.children.len(), 4);
+    let store = zero_store::Store::open(f.dir.path().join("state.db")).unwrap();
+    let mut evidence = vec![];
+    let mut ids = std::collections::BTreeSet::new();
+    for child in result.children {
+        let artifacts = store.operation_artifacts(&child).unwrap();
+        let item: zero_verification::Evidence =
+            serde_json::from_slice(&store.artifact(&artifacts["reproduction.evidence"]).unwrap())
+                .unwrap();
+        assert!(ids.insert(item.request.execution_id.clone()));
+        assert_eq!(
+            store.artifact(&artifacts["reproduction.request"]).unwrap(),
+            serde_json::to_vec(&item.request).unwrap()
+        );
+        evidence.push(item);
+    }
+    let recomputed = zero_verification::assess(
+        &zero_verification::FrozenPlan::new(f.plan.clone()).unwrap(),
+        &evidence,
+    )
+    .unwrap();
+    assert_eq!(assessment.assessment_digest, recomputed.assessment_digest);
+    assert_eq!(budget(&f.engine, &f.session).await, (2, 0));
+    let calls = f.calls();
+    let command = f.command("repro");
+    f.engine.shutdown().await.unwrap();
+    drop(f.engine);
+    fs::remove_dir_all(f.dir.path().join("source")).unwrap();
+    let engine = Engine::open(
+        f.dir.path().join("state.db"),
+        Some(f.dir.path().join("docker")),
+    )
+    .unwrap();
+    assert!(matches!(
+        call(&engine, command).await,
+        Reply::SourceReproduction {
+            duplicate: true,
+            ..
+        }
+    ));
+    assert_eq!(
+        fs::read_to_string(f.dir.path().join("calls.jsonl"))
+            .unwrap()
+            .lines()
+            .count(),
+        calls
+    );
+    engine.shutdown().await.unwrap();
+}
+#[tokio::test]
+async fn reproduction_attack_mismatch_is_completed_observation_and_control_failure_is_inconclusive()
+{
+    for control in [false, true] {
+        let mut f = ReproFixture::new("echo").await;
+        f.plan.cases[usize::from(control)].expected.stdout = b"different output".to_vec();
+        match call(&f.engine, f.command("repro")).await {
+            Reply::SourceReproduction {
+                operation,
+                result: Some(result),
+                ..
+            } => {
+                let assessment = result.assessment.unwrap();
+                assert_eq!(assessment.observed_attempts, 4);
+                assert_eq!(
+                    assessment.disposition,
+                    if control {
+                        Disposition::Inconclusive
+                    } else {
+                        Disposition::NotObserved
+                    }
+                );
+                assert_eq!(
+                    operation.status,
+                    if control {
+                        OperationStatus::Failed
+                    } else {
+                        OperationStatus::Succeeded
+                    }
+                );
+            }
+            r => panic!("{r:?}"),
+        };
+        f.engine.shutdown().await.unwrap();
+    }
+}
+#[tokio::test]
+async fn reproduction_rejects_cross_session_hypothesis_bundle_and_root_changes() {
+    let f = ReproFixture::new("echo").await;
+    for mutation in 0..4 {
+        let mut cmd = f.command(&format!("bad-{mutation}"));
+        if let Command::ReproduceSource {
+            session_id,
+            request,
+            ..
+        } = &mut cmd
+        {
+            match mutation {
+                0 => *session_id = session(&f.engine, 100).await,
+                1 => request.plan.hypothesis_id = "invented".into(),
+                2 => request.plan.source_bundle_digest = format!("sha256:{}", "b".repeat(64)),
+                _ => request.plan.snapshot.root = f.dir.path().display().to_string(),
+            }
+        }
+        match call(&f.engine, cmd).await {
+            Reply::SourceReproduction {
+                operation,
+                result: Some(result),
+                ..
+            } => {
+                assert_eq!(operation.status, OperationStatus::Failed);
+                assert!(!result.external_effects_started);
+            }
+            r => panic!("{r:?}"),
+        };
+    }
+    assert_eq!(f.calls(), 0);
+    f.engine.shutdown().await.unwrap();
+}
+#[tokio::test]
+async fn reproduction_plan_or_child_retention_failure_never_launches() {
+    for name in ["reproduction.plan", "reproduction.request"] {
+        let f = ReproFixture::new("echo").await;
+        let db = rusqlite::Connection::open(f.dir.path().join("state.db")).unwrap();
+        db.execute_batch(&format!("CREATE TRIGGER reject_repro BEFORE INSERT ON operation_artifacts WHEN NEW.name='{name}' BEGIN SELECT RAISE(ABORT,'injected retention failure'); END;")).unwrap();
+        match tokio::time::timeout(Duration::from_secs(3), call(&f.engine, f.command("repro")))
+            .await
+            .unwrap()
+        {
+            Reply::SourceReproduction {
+                operation,
+                result: Some(result),
+                ..
+            } => {
+                assert_eq!(operation.status, OperationStatus::Failed);
+                assert!(!result.external_effects_started);
+            }
+            r => panic!("{r:?}"),
+        };
+        assert_eq!(f.calls(), 0);
+        f.engine.shutdown().await.unwrap();
+    }
+}
+#[tokio::test]
+async fn reproduction_unknown_cleanup_stops_matrix_and_preserves_recovery() {
+    let f = ReproFixture::new("cleanup-fail").await;
+    let outcome = match call(&f.engine, f.command("repro")).await {
+        Reply::SourceReproduction {
+            operation,
+            result: Some(result),
+            ..
+        } => {
+            assert_eq!(operation.status, OperationStatus::Unknown);
+            assert_eq!(
+                result.assessment.as_ref().unwrap().disposition,
+                Disposition::Unknown
+            );
+            assert_eq!(result.children.len(), 1);
+            result
+        }
+        r => panic!("{r:?}"),
+    };
+    let calls = f.calls();
+    assert!(matches!(
+        call(&f.engine, f.command("repro")).await,
+        Reply::SourceReproduction {
+            duplicate: true,
+            ..
+        }
+    ));
+    assert_eq!(f.calls(), calls);
+    let store = zero_store::Store::open(f.dir.path().join("state.db")).unwrap();
+    let artifacts = store.operation_artifacts(&outcome.children[0]).unwrap();
+    let item: zero_verification::Evidence =
+        serde_json::from_slice(&store.artifact(&artifacts["reproduction.evidence"]).unwrap())
+            .unwrap();
+    if let zero_protocol::sandbox::SandboxCleanup::Unconfirmed {
+        recovery:
+            zero_protocol::sandbox::SandboxRecovery::Docker {
+                snapshot_dir: Some(path),
+                ..
+            },
+    } = item.result.cleanup
+    {
+        assert!(std::path::Path::new(&path).exists());
+        fs::remove_dir_all(path).unwrap();
+    } else {
+        panic!("expected durable recovery")
+    };
+    f.engine.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn reproduction_cancel_before_first_attempt_keeps_empty_matrix_inconclusive() {
+    let f = ReproFixture::new("echo").await;
+    let (tx, rx) = mpsc::channel(1);
+    drop(rx);
+    match f.engine.handle(f.command("repro"), tx).await {
+        Reply::SourceReproduction {
+            operation,
+            result: Some(result),
+            ..
+        } => {
+            assert_eq!(operation.status, OperationStatus::Cancelled);
+            assert_eq!(
+                result.assessment.unwrap().disposition,
+                Disposition::Inconclusive
+            );
+            assert!(!result.external_effects_started);
+            assert!(result.children.is_empty());
+        }
+        r => panic!("{r:?}"),
+    };
+    assert_eq!(f.calls(), 0);
+    f.engine.shutdown().await.unwrap();
+}
+#[tokio::test]
+async fn reproduction_cancel_active_child_waits_for_cleanup_and_stops_remaining_cases() {
+    let f = ReproFixture::new("hang").await;
+    let command = f.command("repro");
+    let session = f.session.clone();
+    let engine = Arc::new(f.engine);
+    let owner = engine.clone();
+    let (tx, mut rx) = mpsc::channel(64);
+    let task = tokio::spawn(async move { owner.handle(command, tx).await });
+    tokio::time::timeout(Duration::from_secs(3), async {
+        loop {
+            if matches!(
+                rx.recv().await,
+                Some(zero_protocol::ExecutionEvent::Sandbox {
+                    event: zero_protocol::sandbox::SandboxEvent::Output { .. }
+                })
+            ) {
+                break;
+            }
+        }
+    })
+    .await
+    .unwrap();
+    assert!(matches!(
+        call(
+            &engine,
+            Command::Cancel {
+                session_id: session,
+                execution_id: "repro".into()
+            }
+        )
+        .await,
+        Reply::Cancelled { accepted: true, .. }
+    ));
+    match task.await.unwrap() {
+        Reply::SourceReproduction {
+            operation,
+            result: Some(result),
+            ..
+        } => {
+            assert_eq!(operation.status, OperationStatus::Cancelled);
+            assert_eq!(
+                result.assessment.unwrap().disposition,
+                Disposition::Cancelled
+            );
+            assert_eq!(result.children.len(), 1);
+        }
+        r => panic!("{r:?}"),
+    };
+    assert!(!f.dir.path().join("container.json").exists());
+    engine.shutdown().await.unwrap();
+}
+#[tokio::test]
+async fn reproduction_rejects_source_outcome_artifact_substitution() {
+    let f = ReproFixture::new("echo").await;
+    let store = zero_store::Store::open(f.dir.path().join("state.db")).unwrap();
+    let source = store.get_operation(&f.source).unwrap();
+    let mut outcome = source.outcome.unwrap();
+    outcome["artifacts"]["source.bundle"] = json!(format!("sha256:{}", "f".repeat(64)));
+    rusqlite::Connection::open(f.dir.path().join("state.db"))
+        .unwrap()
+        .execute(
+            "UPDATE operations SET outcome=?1 WHERE id=?2",
+            rusqlite::params![outcome.to_string(), f.source],
+        )
+        .unwrap();
+    match call(&f.engine, f.command("repro")).await {
+        Reply::SourceReproduction {
+            operation,
+            result: Some(result),
+            ..
+        } => {
+            assert_eq!(operation.status, OperationStatus::Failed);
+            assert!(!result.external_effects_started);
+        }
+        r => panic!("{r:?}"),
+    };
+    assert_eq!(f.calls(), 0);
+    f.engine.shutdown().await.unwrap();
+}

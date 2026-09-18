@@ -14,6 +14,8 @@ pub mod plugin;
 pub mod sandbox;
 pub mod session;
 pub mod source;
+pub mod verification;
+mod verification_binary;
 pub use execution::*;
 pub use session::*;
 
@@ -86,6 +88,11 @@ pub enum Command {
         session_id: String,
         command_id: String,
         request: sandbox::SandboxRequest,
+    },
+    ReproduceSource {
+        session_id: String,
+        command_id: String,
+        request: verification::SourceReproductionRequest,
     },
     ReviewSource {
         session_id: String,
@@ -197,6 +204,11 @@ pub enum Reply {
     Sandbox {
         operation: Operation,
         result: Option<sandbox::SandboxResult>,
+        duplicate: bool,
+    },
+    SourceReproduction {
+        operation: Operation,
+        result: Option<verification::ReproductionOutcome>,
         duplicate: bool,
     },
     SourceReview {
