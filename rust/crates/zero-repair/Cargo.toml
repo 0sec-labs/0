@@ -1,0 +1,18 @@
+[package]
+name = "zero-repair"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+[dependencies]
+zero-protocol.workspace = true
+zero-executor.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+thiserror.workspace = true
+[dev-dependencies]
+tempfile.workspace = true
+[lints]
+workspace = true
