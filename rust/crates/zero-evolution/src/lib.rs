@@ -54,6 +54,18 @@ impl Registry {
             owner: uuid::Uuid::new_v4().to_string(),
         })
     }
+    /// Open an existing registry for artifact/evidence inspection only. SQLite
+    /// enforces read-only access even if a caller invokes a mutation method.
+    /// This never creates, initializes, migrates, or changes journal mode.
+    pub fn open_read_only(path: impl AsRef<Path>) -> Result<Self> {
+        let conn = Connection::open_with_flags(path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)?;
+        conn.busy_timeout(Duration::from_secs(5))?;
+        schema::validate_existing(&conn)?;
+        Ok(Self {
+            conn,
+            owner: uuid::Uuid::new_v4().to_string(),
+        })
+    }
     pub fn put_artifact(&mut self, bytes: &[u8]) -> Result<String> {
         if bytes.is_empty() || bytes.len() > MAX_ARTIFACT_BYTES {
             return Err(Error::Invalid("artifact must be 1..64 MiB".into()));

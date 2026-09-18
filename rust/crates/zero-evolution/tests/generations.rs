@@ -370,3 +370,40 @@ fn lost_acquisition_reply_is_recoverable_by_bounded_filtered_pages() {
             .is_err()
     );
 }
+
+#[test]
+fn readonly_registry_reads_verified_artifacts_and_refuses_writes_or_initialization() {
+    let temp = tempfile::tempdir().unwrap();
+    let path = temp.path().join("registry.db");
+    let mut writer = open(&path);
+    let digest = writer.put_artifact(b"retained").unwrap();
+    drop(writer);
+    let before = std::fs::read(&path).unwrap();
+    let mut reader = Registry::open_read_only(&path).unwrap();
+    assert_eq!(reader.artifact(&digest).unwrap(), b"retained");
+    assert!(reader.put_artifact(b"new").is_err());
+    assert_eq!(reader.current().unwrap().epoch, 0);
+    drop(reader);
+    assert_eq!(std::fs::read(&path).unwrap(), before);
+    let missing = temp.path().join("missing.db");
+    assert!(Registry::open_read_only(&missing).is_err());
+    assert!(!missing.exists());
+    let foreign = temp.path().join("foreign.db");
+    let connection = rusqlite::Connection::open(&foreign).unwrap();
+    connection
+        .execute_batch("PRAGMA journal_mode=WAL; CREATE TABLE unrelated(value TEXT);")
+        .unwrap();
+    assert!(Registry::open_read_only(&foreign).is_err());
+    let mode: String = connection
+        .pragma_query_value(None, "journal_mode", |r| r.get(0))
+        .unwrap();
+    assert_eq!(mode, "wal");
+    drop(connection);
+    let connection = rusqlite::Connection::open(&path).unwrap();
+    connection
+        .execute_batch(
+            "DROP TABLE artifacts; CREATE VIEW artifacts AS SELECT 'x' AS digest, 'x' AS bytes;",
+        )
+        .unwrap();
+    assert!(Registry::open_read_only(&path).is_err());
+}
