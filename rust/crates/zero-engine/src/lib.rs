@@ -69,7 +69,18 @@ struct Shared {
     plugin_root: PathBuf,
     owner: String,
     // Retained by workers even when the client handle is dropped.
-    _lock: File,
+    _lock: OwnershipLock,
+}
+
+/// flock belongs to an open file description, which fork inherits until exec
+/// applies CLOEXEC. Merely closing our descriptor can therefore leave a lock
+/// temporarily held by an unrelated child. Explicitly unlock only when the last
+/// Shared owner drops, after the preceding Store and runtime fields are gone.
+struct OwnershipLock(File);
+impl Drop for OwnershipLock {
+    fn drop(&mut self) {
+        let _ = fs2::FileExt::unlock(&self.0);
+    }
 }
 
 #[derive(Default)]
@@ -207,7 +218,7 @@ impl Engine {
                 plugins: Mutex::new(None),
                 plugin_root,
                 owner,
-                _lock: file,
+                _lock: OwnershipLock(file),
             }),
         })
     }

@@ -107,10 +107,67 @@ async fn completion_notification_follows_release_of_last_engine_reference() {
     );
     guard.settled = true;
     drop(engine);
+    assert!(Engine::open(&path, None).is_err()); // Worker still owns the lock.
     let notification = workers.changed.notified();
     drop(guard);
     notification.await;
     assert_eq!(workers.count.load(Ordering::Acquire), 0);
     assert!(weak.upgrade().is_none());
     assert!(Engine::open(path, None).is_ok());
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+#[allow(unsafe_code)] // Only the signal-safe pre-exec synchronization fixture.
+fn final_owner_release_is_not_delayed_by_a_child_waiting_before_exec() {
+    use std::{
+        io::{Read, Write},
+        os::{
+            fd::AsRawFd,
+            unix::{net::UnixStream, process::CommandExt},
+        },
+        process::Command,
+    };
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("state.db");
+    let engine = Engine::open(&path, None).unwrap();
+    let (mut controller, child_socket) = UnixStream::pair().unwrap();
+    controller
+        .set_read_timeout(Some(Duration::from_secs(5)))
+        .unwrap();
+    let child_fd = child_socket.as_raw_fd();
+    let mut command = Command::new("/bin/true");
+    // SAFETY: after fork this callback calls only async-signal-safe read/write
+    // on an already-open socket; it allocates nothing and acquires no Rust lock.
+    unsafe {
+        command.pre_exec(move || {
+            let mut byte = 1u8;
+            if libc::write(child_fd, (&byte as *const u8).cast(), 1) != 1
+                || libc::read(child_fd, (&mut byte as *mut u8).cast(), 1) != 1
+            {
+                libc::_exit(125);
+            }
+            Ok(())
+        });
+    }
+    let spawning = std::thread::spawn(move || {
+        let mut child = command.spawn().unwrap();
+        drop(child_socket);
+        child.wait().unwrap()
+    });
+    let mut ready = [0];
+    controller.read_exact(&mut ready).unwrap();
+    // The other process has inherited the lock's open file description and is
+    // deliberately stopped before exec can apply CLOEXEC. It does no DB work.
+    assert!(Engine::open(&path, None).is_err());
+    drop(engine);
+    let reopened = Engine::open(&path, None);
+    // Always release/reap the child before assertions, including on regression.
+    controller.write_all(&[1]).unwrap();
+    assert!(spawning.join().unwrap().success());
+    assert!(
+        reopened.is_ok(),
+        "final owner left inherited lock held: {:?}",
+        reopened.err()
+    );
 }
