@@ -173,6 +173,33 @@ impl Registry {
         tool: &str,
         input: Value,
     ) -> Result<Invocation, Error> {
+        let (selected, pins) = self.authorized(id, digest, tool)?;
+        selected.parameters.accepts(&input)?;
+        Ok(Invocation {
+            manifest_digest: digest.into(),
+            dependency_pins: pins,
+            tool: tool.into(),
+            input,
+            capabilities: selected.capabilities.clone(),
+        })
+    }
+    /// Read-only tool discovery under the same host and dependency policy as
+    /// invocation preparation. This does not authorize effects or acquire leases.
+    pub fn authorized_tool(
+        &self,
+        id: &str,
+        digest: &str,
+        tool: &str,
+    ) -> Result<crate::Tool, Error> {
+        self.authorized(id, digest, tool)
+            .map(|(tool, _)| tool.clone())
+    }
+    fn authorized(
+        &self,
+        id: &str,
+        digest: &str,
+        tool: &str,
+    ) -> Result<(&crate::Tool, BTreeMap<String, String>), Error> {
         let record = self.entries.get(id).ok_or(Error::Denied)?;
         if record.admission.manifest_digest != digest {
             return Err(Error::Identity);
@@ -188,14 +215,7 @@ impl Registry {
         }
         let mut pins = BTreeMap::new();
         self.dependencies_ready(id, &mut pins)?;
-        selected.parameters.accepts(&input)?;
-        Ok(Invocation {
-            manifest_digest: digest.into(),
-            dependency_pins: pins,
-            tool: tool.into(),
-            input,
-            capabilities: selected.capabilities.clone(),
-        })
+        Ok((selected, pins))
     }
     fn dependencies_ready(
         &self,

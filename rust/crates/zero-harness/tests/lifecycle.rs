@@ -529,3 +529,37 @@ fn noncanonical_manifest_binding_is_rejected_instead_of_relabeling_identity() {
     ));
     assert!(h.current().unwrap().generation.is_none());
 }
+
+#[test]
+fn readonly_preflight_checks_epoch_and_input_without_acquiring_leases() {
+    let s = Setup::new();
+    let mut h = s.harness();
+    let pin = s.activate(&mut h);
+    let (digest, tool) = h.tool_definition(&pin, "inspector", "inspect").unwrap();
+    assert_eq!(tool.name, "inspect");
+    assert_eq!(
+        h.validate_call(&pin, "inspector", "inspect", json!({}))
+            .unwrap()
+            .manifest_digest,
+        digest
+    );
+    assert!(
+        h.validate_call(&pin, "inspector", "inspect", json!({"unexpected": true}))
+            .is_err()
+    );
+    assert!(h.unreleased(None, None, 10).unwrap().is_empty());
+    let wrong_epoch = zero_harness::GenerationPin {
+        generation: pin.generation.clone(),
+        epoch: pin.epoch + 1,
+    };
+    assert!(matches!(h.prepared_graph(&wrong_epoch), Err(Error::Stale)));
+    assert!(matches!(
+        h.tool_definition(&wrong_epoch, "inspector", "inspect"),
+        Err(Error::Stale)
+    ));
+    assert!(matches!(
+        h.validate_call(&wrong_epoch, "inspector", "inspect", json!({})),
+        Err(Error::Stale)
+    ));
+    assert!(h.unreleased(None, None, 10).unwrap().is_empty());
+}

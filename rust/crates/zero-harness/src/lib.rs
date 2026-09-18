@@ -204,6 +204,46 @@ impl Harness {
         self.graphs.insert(pin.generation.clone(), prepared.graph);
         Ok(pin)
     }
+    /// Read-only preflight against the active activation epoch. Call admission
+    /// still rechecks the epoch atomically when it acquires its durable lease.
+    pub fn prepared_graph(&self, expected: &GenerationPin) -> Result<&PreparedGraph> {
+        if GenerationPin::from_state(&self.registry.current()?)? != *expected {
+            return Err(Error::Stale);
+        }
+        self.graphs
+            .get(&expected.generation)
+            .map(Arc::as_ref)
+            .ok_or(Error::NotPrepared)
+    }
+    pub fn tool_definition(
+        &self,
+        expected: &GenerationPin,
+        plugin: &str,
+        tool: &str,
+    ) -> Result<(String, zero_plugin::Tool)> {
+        let graph = self.prepared_graph(expected)?;
+        let digest = graph
+            .plugin_digest(plugin)
+            .ok_or(Error::Binding("plugin not in generation"))?;
+        Ok((
+            digest.to_owned(),
+            graph.plugins.authorized_tool(plugin, digest, tool)?,
+        ))
+    }
+    /// Validate input without staging files, acquiring a lease or starting work.
+    pub fn validate_call(
+        &self,
+        expected: &GenerationPin,
+        plugin: &str,
+        tool: &str,
+        input: Value,
+    ) -> Result<Invocation> {
+        let graph = self.prepared_graph(expected)?;
+        let digest = graph
+            .plugin_digest(plugin)
+            .ok_or(Error::Binding("plugin not in generation"))?;
+        Ok(graph.plugins.prepare_call(plugin, digest, tool, input)?)
+    }
     /// Caller supplies the session's expected generation and activation epoch.
     /// Acquisition is durable and atomic; a concurrent switch cannot silently
     /// repin an invocation to a different implementation.

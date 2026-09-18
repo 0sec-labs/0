@@ -161,12 +161,31 @@ fn flags_do_not_grant_authority_and_dependency_grants_are_separate() {
         registry.prepare_call("a", &digest, "inspect", json!({"path":"file"})),
         Err(Error::Denied)
     ));
+    assert!(matches!(
+        registry.authorized_tool("a", &digest, "inspect"),
+        Err(Error::Denied)
+    ));
     enable(&mut registry, "a");
     assert!(matches!(
         registry.prepare_call("a", &digest, "inspect", json!({"path":"file"})),
         Err(Error::Denied)
     ));
+    assert!(matches!(
+        registry.authorized_tool("a", &digest, "inspect"),
+        Err(Error::Denied)
+    ));
     let dependency = enable(&mut registry, "b");
+    assert_eq!(
+        registry
+            .authorized_tool("a", &digest, "inspect")
+            .unwrap()
+            .name,
+        "inspect"
+    );
+    assert!(matches!(
+        registry.authorized_tool("a", &sha256(b"wrong"), "inspect"),
+        Err(Error::Identity)
+    ));
     let call = registry
         .prepare_call("a", &digest, "inspect", json!({"path":"file"}))
         .unwrap();
@@ -204,6 +223,10 @@ fn flags_do_not_grant_authority_and_dependency_grants_are_separate() {
         .unwrap();
     assert!(matches!(
         registry.prepare_call("a", &digest, "inspect", json!({"path":"file"})),
+        Err(Error::Denied)
+    ));
+    assert!(matches!(
+        registry.authorized_tool("a", &digest, "inspect"),
         Err(Error::Denied)
     ));
 }
