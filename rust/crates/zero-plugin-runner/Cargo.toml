@@ -1,0 +1,23 @@
+[package]
+name = "zero-plugin-runner"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+[dependencies]
+zero-harness = { path = "../zero-harness" }
+zero-plugin = { path = "../zero-plugin" }
+zero-sandbox = { path = "../zero-sandbox" }
+zero-protocol.workspace = true
+zero-executor.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
+serde_json.workspace = true
+tempfile.workspace = true
+thiserror.workspace = true
+[dev-dependencies]
+zero-evolution = { path = "../zero-evolution" }
+zero-smolvm = { path = "../zero-smolvm" }
+[lints]
+workspace = true
