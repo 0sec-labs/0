@@ -222,10 +222,13 @@ console foundation, not full-screen TUI parity or recovery of interrupted work.
 0sec-native hosted usage
 ```
 
-The host comes from `--host`, then `0SEC_CLOUD_HOST`, then
-`https://cloud.0.security`. The bearer token is read only from the variable named
-by `--token-env` (default `0SEC_CLOUD_TOKEN`). No credential files are read and no
-login credentials are written. These commands bypass the native state database,
+The nonempty trimmed token named by `--token-env` (default `0SEC_CLOUD_TOKEN`)
+wins. With an environment token, the host is `--host`, then `0SEC_CLOUD_HOST`,
+then `https://cloud.0.security`. If the default token variable is absent or empty,
+read `~/.0sec/cloud.env`; its token is paired with its file host (or the canonical
+host when omitted), ignoring an unrelated environment host. `--host` always
+overrides the selected source. A custom `--token-env` never falls back to the
+default credential file. No login credentials are written. These commands bypass the native state database,
 Docker, and provider profile configuration entirely; help/schema read no tokens.
 
 Successful responses are JSON on stdout. HTTP/network/timeout/cancellation errors
@@ -289,3 +292,18 @@ No output file is created implicitly; use shell redirection if desired. Failed
 input validation emits no partial report, though interrupted output writes can
 leave a partial stdout stream. This exporter does not establish source-review
 or scanner parity.
+
+
+Hosted credential files use literal `KEY=VALUE` lines, with blank lines and `#`
+comments ignored. No shell commands, expansions or escapes are evaluated. Reads
+are bounded to 64 KiB and five seconds; errors never include raw lines, tokens or
+credential paths. Compared with the legacy warn-only loader, native resolution
+rejects Unix files whose mode is not exactly 0600, final-component symlinks,
+nonregular files, duplicate keys, quoted values and malformed entries. It never
+changes file permissions itself. POSIX permission enforcement is unavailable on
+non-Unix platforms; this is not a claim of Windows ACL validation. File fallback
+requires absolute `HOME` (or `USERPROFILE` on Windows), without querying an OS
+account database if those are absent. Help/schema still bypass all resolution.
+Tests use only temporary home directories and loopback fixtures; no real
+credential files are modified. Device login and credential storage commands
+remain unimplemented.

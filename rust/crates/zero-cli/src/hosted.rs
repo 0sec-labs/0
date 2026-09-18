@@ -1,4 +1,6 @@
-//! Explicit read-only metadata calls; no credential files or native state.
+//! Read-only hosted metadata with explicit environment/legacy credential resolution.
+#[path = "credentials.rs"]
+mod credentials;
 use clap::Subcommand;
 use std::{error::Error, time::Duration};
 use tokio::io::AsyncWriteExt;
@@ -18,26 +20,10 @@ pub async fn run(
     token_env: &str,
     command: &HostedCommand,
 ) -> Result<bool, Box<dyn Error>> {
-    if token_env.is_empty()
-        || !token_env
-            .bytes()
-            .all(|b| b.is_ascii_alphanumeric() || b == b'_')
-    {
-        return Err("Invalid hosted token environment variable name".into());
-    }
-    let host = match host {
-        Some(host) => host.to_owned(),
-        None => match std::env::var("0SEC_CLOUD_HOST") {
-            Ok(host) => host,
-            Err(std::env::VarError::NotPresent) => "https://cloud.0.security".into(),
-            Err(_) => return Err("Hosted host environment variable is not UTF-8".into()),
-        },
-    };
-    let token =
-        std::env::var(token_env).map_err(|_| "Hosted token environment variable is unavailable")?;
+    let credentials = credentials::resolve(host, token_env).await?;
     let client = CloudClient::new(
-        host.trim(),
-        token.trim(),
+        &credentials.host,
+        &credentials.token,
         Duration::from_secs(30),
         1024 * 1024,
     )?;
