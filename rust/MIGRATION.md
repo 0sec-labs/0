@@ -107,7 +107,20 @@ preparation retention failure, cancellation and uncertain cleanup.
 `ValidatedCandidateForPlan` means that these exact frozen cases passed in both
 private copies. It does not install the replacement, grant disclosure or mark a
 vulnerability reportable; it is not complete legacy `fix` parity or independent
-proof of repair quality. Real smolvm repair qualification remains open.
+proof of repair quality. The equivalent 12-observation CLI fixture also passed on real smolvm 1.14.6
+with the prepared local Node archive and nonroot KVM access (50.26 s); broader
+smolvm repair and platform qualification remain open.
+
+### Explicit turn-limit continuation
+
+A complete tool round at the configured turn limit can retain a versioned
+`agent.continuation` artifact. A new explicit `continuation_of` command validates
+its exact provider replay, correlated settled tool outputs and unchanged authority
+before admitting new work. Historical effects are never reissued. Cancelled,
+unknown, generic failed and uncheckpointed operations remain ineligible. Existing
+usage holds remain reserved; only new work incurs a new reservation/charge.
+See [continuation boundaries](crates/zero-engine/CONTINUATION.md). This does not
+implement interrupted-turn recovery, durable queues or context compaction.
 
 ### Retained source investigation
 

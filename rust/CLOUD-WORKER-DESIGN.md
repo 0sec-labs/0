@@ -6,9 +6,10 @@ read-only cloud metadata, and legacy framing helpers are separate capabilities.
 
 ## Existing contract, traced from repository sources
 
-The managed worker/controller implementation is not present in this checkout.
-The following is evidence from the legacy producer and local consumers, not a
-claim that a deployed worker accepts every native payload.
+The managed worker/controller source is available in the sibling `0cloud`
+repository. The [consumer audit](CLOUD-CONSUMER-AUDIT.md) pins its source and
+corrects the initial producer-only assumptions. The table below records the
+legacy producer; it is not a claim of native deployment compatibility.
 
 | Boundary | Actual producer behavior | Source |
 | --- | --- | --- |
@@ -118,20 +119,22 @@ write failure; prefer explicit no-clobber output for this new command.
 
 ## Subsequent compatibility and delivery
 
-1. Qualify the proposed operation envelope with the actual worker/controller and
-   report consumer. Obtain its source/schema or a pinned fixture; do not assume
-   the existing final-report route accepts native-operation envelopes.
+1. Use the pinned worker/controller source and existing acceptance fixtures in
+   [the consumer audit](CLOUD-CONSUMER-AUDIT.md). Its current final-report contract
+   does not accept the native-operation envelope as a completed scan report.
+   Keep that envelope local and explicitly distinct until a consumer change is
+   separately designed and qualified.
 2. Add an explicit legacy terminal adapter only for operation/report kinds whose
    semantics can be represented honestly. Unsupported managed scan kinds fail
    with exit 2 and an explanation, never an empty successful scan. Keep generic
    and secure command classifications distinct. Preserve known accounting aliases
    and omit unknown quantities; require explicit USD provenance for dollar fields.
-3. Add bounded, explicitly authorized delivery to the existing final-report route
-   after consumer qualification. Keep sink identity/scan ID supplied by the host,
-   encode the ID as one path segment, use no redirects or automatic POST retries,
-   validate HTTPS except fixture loopback, cap bytes/deadline, and redact failures.
-   Record delivery status separately from execution status. A timed-out upload
-   can have reached the server: report delivery uncertainty, not “not sent.”
+3. Preserve controller ownership of report recovery and retrying publication.
+   A native managed workflow must write the validated legacy report atomically
+   to `0SEC_REPORT_PATH`; stdout markers alone are insufficient. Do not add a
+   competing final-report retry loop to the engine. Any separately authorized
+   direct publication must use its own explicit mode, bounded deadlines, no
+   redirects and delivery uncertainty distinct from execution outcomes.
 4. Introduce an actual managed invocation only when native scope enforcement,
    authentication injection, per-host rate limits, wall-clock cancellation,
    credit/reservation handling, and scanner execution are implemented and tested.
