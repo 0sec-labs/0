@@ -3,7 +3,7 @@ title: Configuration
 description: Runtime modes, scan modes, depth settings, state paths, env vars, feature flags, and diagnostics.
 ---
 
-> Status: 2026-09-13. Living document.
+> Status: 2026-09-18. Living document.
 
 Configure command options, provider credentials, console settings and run storage
 separately. Each section below gives its precedence rules.
@@ -419,11 +419,18 @@ permissions, including credential access.
 Start a new development console from the built checkout:
 
 ```bash
-env 0SEC_DEV_SOURCE_ROOT="$PWD" bun packages/cli/dist/index.js console
+./scripts/0dev.sh console
 ```
 
-A configured `0dev` launcher can set the same variable. Existing sessions that
-started without this source-update wrapper cannot acquire it retroactively.
+The `0dev` launcher targets `https://dev.0sec.ai` and sets
+`0SEC_DEV_SOURCE_ROOT` to its checkout. Cloud login, reads and logout use
+`~/.0sec/dev/cloud.env`; production `~/.0sec/cloud.env` and private CLI
+`~/.0cloud/credentials.json` are not changed. Inherited Cloud tokens are ignored.
+HOME, BYOK credentials and other console settings remain unchanged.
+
+Normal `0sec` keeps its production default. `--host` takes precedence over
+`0SEC_CLOUD_HOST` for login. Restart existing sessions to use the new launcher;
+they cannot acquire its source-update environment retroactively.
 
 When enabled, changed Core source is built into an immutable generation and
 activated at an idle boundary. Conversation, scope decisions, task progress and

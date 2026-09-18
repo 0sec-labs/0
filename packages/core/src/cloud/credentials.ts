@@ -2,7 +2,7 @@
 //
 // Resolution order (first match wins):
 //   1. Environment: 0SEC_CLOUD_HOST + 0SEC_CLOUD_TOKEN
-//   2. ~/.0sec/cloud.env (line-by-line `KEY=VALUE`, no `dotenv` dep)
+//   2. ~/.0sec/cloud.env (0dev uses ~/.0sec/dev/cloud.env)
 //
 // 0SEC_CLOUD_HOST is optional — if absent, we fall back to the
 // canonical production host. 0SEC_CLOUD_TOKEN is required.
@@ -21,7 +21,7 @@
 // messages. `CloudAuthMissingError` carries no secret material.
 
 import { readFileSync, statSync } from "node:fs";
-import { homeStateDir } from "@0sec/shared";
+import { cloudStateDir } from "@0sec/shared";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
@@ -76,8 +76,8 @@ export function loadCloudCredentials(opts: LoadCloudCredentialsOptions = {}): Cl
     return { host: envHost, token: envTok, source: "env" };
   }
 
-  // 2. ~/.0sec/cloud.env fallback.
-  const path = join(homeStateDir(opts.homeDir), "cloud.env");
+  // 2. Saved credentials for this production or development profile.
+  const path = join(cloudStateDir(opts.homeDir, env), "cloud.env");
   let raw: string;
   try {
     raw = readFileSync(path, "utf-8");
@@ -85,8 +85,7 @@ export function loadCloudCredentials(opts: LoadCloudCredentialsOptions = {}): Cl
     const code = (err as { code?: string }).code;
     if (code === "ENOENT") {
       throw new CloudAuthMissingError(
-        `0sec-cloud credentials not found. Run \`0sec auth login\` or set 0SEC_CLOUD_TOKEN in env, ` +
-          `or create ${path} (chmod 600) with 0SEC_CLOUD_TOKEN=… (optionally 0SEC_CLOUD_HOST=…).`,
+        `0sec-cloud credentials not found. Run \`${env["0SEC_DEV_SOURCE_ROOT"]?.trim() ? "0dev" : "0sec"} auth login\`.`,
       );
     }
     throw err;
@@ -113,7 +112,7 @@ export function loadCloudCredentials(opts: LoadCloudCredentialsOptions = {}): Cl
       `0sec-cloud credentials in ${path} are incomplete: 0SEC_CLOUD_TOKEN is required.`,
     );
   }
-  const fileHost = normaliseHost(parsed["0SEC_CLOUD_HOST"]?.trim() ?? DEFAULT_CLOUD_HOST);
+  const fileHost = normaliseHost(parsed["0SEC_CLOUD_HOST"]?.trim() ?? env["0SEC_CLOUD_HOST"]?.trim() ?? DEFAULT_CLOUD_HOST);
   return { host: fileHost, token: fileTok, source: "file" };
 }
 

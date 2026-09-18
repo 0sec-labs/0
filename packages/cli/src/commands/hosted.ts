@@ -38,7 +38,7 @@ export function registerHostedCommand(program: Command): void {
   program
     .command("login")
     .description("Sign in to 0sec Cloud (optional for your own provider)")
-    .option("--host <url>", `Cloud host (default ${DEFAULT_CLOUD_HOST})`)
+    .option("--host <url>", "Cloud host (defaults to 0SEC_CLOUD_HOST or production)")
     .option("--token <value>", "Skip the browser flow and persist this token directly")
     .action(async (opts: { host?: string; token?: string }) => {
       await runLogin(opts);
