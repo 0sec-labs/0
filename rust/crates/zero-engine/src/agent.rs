@@ -53,8 +53,15 @@ impl Engine {
                 .get(&request.provider)
                 .cloned()
                 .ok_or_else(|| EngineError::State("provider profile is not configured".into()))?;
+            profile
+                .client
+                .validate(&initial)
+                .map_err(|e| EngineError::State(e.to_string()))?;
             let mut store = lock(&self.shared.store)?;
-            let payload = serde_json::json!({"kind":"offline_snapshot_agent","request":request,"endpoint":profile.client.endpoint_identity(),"rates":profile.rates});
+            let mut payload = serde_json::json!({"kind":"offline_snapshot_agent","request":request,"endpoint":profile.client.endpoint_identity(),"rates":profile.rates});
+            if profile.client.wire_api() != zero_protocol::model::WireApi::Responses {
+                payload["wire_api"] = serde_json::to_value(profile.client.wire_api())?;
+            }
             let admission = store.admit_command(&session_id, &command_id, &payload)?;
             if admission.duplicate {
                 let result = admission
@@ -151,7 +158,7 @@ async fn run_actor(
         }
         let model = model_request(&request, input.clone());
         // Validate accumulated context before reserving/spending or admitting an effect.
-        if zero_provider::validate_request(&model).is_err() {
+        if profile.client.validate(&model).is_err() {
             output.status = AgentStatus::Failed;
             output.error = Some("agent context exceeds provider request bounds".into());
             break;
@@ -160,7 +167,7 @@ async fn run_actor(
             shared,
             session,
             &format!("{parent}:model:{turn}"),
-            &serde_json::json!({"parent_operation":parent,"kind":"agent_inference","request":model,"endpoint":profile.client.endpoint_identity(),"rates":profile.rates}),
+            &serde_json::json!({"parent_operation":parent,"kind":"agent_inference","request":model,"endpoint":profile.client.endpoint_identity(),"rates":profile.rates,"wire_api":profile.client.wire_api()}),
         )?;
         {
             let mut store = lock(&shared.store)?;

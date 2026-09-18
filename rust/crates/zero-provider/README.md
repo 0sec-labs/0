@@ -1,8 +1,8 @@
 # Native provider transport
 
-Initial implementation: explicit OpenAI Responses-compatible SSE endpoints.
+Implemented wires: explicit Responses and Chat Completions SSE endpoints.
 No implicit provider selection, automatic retries, OAuth refresh, paid test calls,
-Chat Completions, Anthropic Messages or cloud broker adapter yet.
+Anthropic Messages or cloud broker adapter yet.
 
 The endpoint and credentials are separate from serializable request values.
 HTTPS is required except explicit loopback HTTP test/local endpoints. Redirects
@@ -32,3 +32,18 @@ Contract references checked 2026-09-18 using the OpenAI Docs skill:
 Existing 0sec provider tests remain the broader parity reference, especially
 `packages/core/src/runtime/responses-provider.test.ts` and
 `packages/core/src/runtime/llm-api.stream-retry.test.ts`.
+
+## Explicit Chat Completions routes
+
+Select `wire_api: "chat_completions"` in the native provider profile. Responses
+remains the default; endpoint URLs are never guessed or rewritten. This adapter
+supports text messages and function tools with `max_completion_tokens` and
+`stream_options.include_usage`. It rejects unsupported multimodal input and
+cross-wire reasoning instead of silently flattening it.
+
+Chat replay carries a model-bound assistant-message envelope. Tool IDs,
+`reasoning_content` and one complete `reasoning_details` array survive the next
+turn. Ambiguous incremental reasoning-details formats fail explicitly. A usable
+completion requires a consistent finish reason and `[DONE]`; final accounting
+requires the trailing empty-choices usage frame. Stream errors do not expose
+provider error bodies. No retry or provider fallback is automatic.

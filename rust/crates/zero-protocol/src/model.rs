@@ -1,6 +1,16 @@
 //! Credential-free provider request, result and accounting values.
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+#[derive(
+    Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum WireApi {
+    #[default]
+    Responses,
+    ChatCompletions,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum CompletionStatus {

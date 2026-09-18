@@ -34,7 +34,8 @@ pub struct Endpoint {
     authorization: Option<HeaderValue>,
 }
 impl Endpoint {
-    /// Exact Responses URL, including its complete gateway prefix.
+    /// Exact provider URL, including its complete gateway prefix. The historical
+    /// constructor name does not select the wire; ProviderClient does.
     pub fn responses(url: &str, api_key: Option<&str>) -> Result<Self, TransportError> {
         let url = Url::parse(url).map_err(|_| TransportError::InvalidEndpoint)?;
         let loopback = url.host_str().is_some_and(|host| {
@@ -72,6 +73,7 @@ pub struct ProviderClient {
     endpoint: Endpoint,
     timeout: Duration,
     max_bytes: usize,
+    wire: crate::WireApi,
 }
 impl ProviderClient {
     /// Endpoint identity excludes credentials and query strings.
@@ -80,6 +82,14 @@ impl ProviderClient {
     }
     pub fn new(
         endpoint: Endpoint,
+        timeout: Duration,
+        max_bytes: usize,
+    ) -> Result<Self, TransportError> {
+        Self::with_wire(endpoint, crate::WireApi::Responses, timeout, max_bytes)
+    }
+    pub fn with_wire(
+        endpoint: Endpoint,
+        wire: crate::WireApi,
         timeout: Duration,
         max_bytes: usize,
     ) -> Result<Self, TransportError> {
@@ -99,15 +109,48 @@ impl ProviderClient {
             endpoint,
             timeout,
             max_bytes,
+            wire,
         })
     }
-    /// No implicit retries: a lost reply may still have consumed provider budget.
+    pub fn wire_api(&self) -> crate::WireApi {
+        self.wire
+    }
+    pub fn validate(&self, request: &ResponsesRequest) -> Result<(), TransportError> {
+        self.encode(request).map(|_| ())
+    }
+    fn encode(&self, request: &ResponsesRequest) -> Result<serde_json::Value, TransportError> {
+        match self.wire {
+            crate::WireApi::Responses => {
+                if request.input.iter().any(|item| {
+                    item.get("type")
+                        .and_then(serde_json::Value::as_str)
+                        .is_some_and(|kind| kind.starts_with("chat_completion_"))
+                }) {
+                    return Err(TransportError::InvalidRequest);
+                }
+                crate::request_body(request)
+            }
+            crate::WireApi::ChatCompletions => crate::chat::encode(request),
+        }
+    }
+    /// Compatibility entry point for an explicitly configured Responses route.
     pub async fn responses(
         &self,
         request: &ResponsesRequest,
         cancel: CancellationToken,
     ) -> Result<Completion, TransportError> {
-        let body = crate::request_body(request)?;
+        if self.wire != crate::WireApi::Responses {
+            return Err(TransportError::InvalidRequest);
+        }
+        self.complete(request, cancel).await
+    }
+    /// No implicit retries: a lost reply may still have consumed provider budget.
+    pub async fn complete(
+        &self,
+        request: &ResponsesRequest,
+        cancel: CancellationToken,
+    ) -> Result<Completion, TransportError> {
+        let body = self.encode(request)?;
         if cancel.is_cancelled() {
             return Err(TransportError::Cancelled);
         }
@@ -142,7 +185,12 @@ impl ProviderClient {
             return Err(TransportError::InvalidResponse);
         }
         let mut decoder = Decoder::default();
-        let mut accumulator = Accumulator::default();
+        let mut accumulator = match self.wire {
+            crate::WireApi::Responses => StreamAccumulator::Responses(Accumulator::default()),
+            crate::WireApi::ChatCompletions => {
+                StreamAccumulator::Chat(crate::chat::Accumulator::new(&request.model))
+            }
+        };
         let mut received = 0usize;
         loop {
             let chunk = tokio::select! {
@@ -184,6 +232,25 @@ impl ProviderClient {
         }
     }
 }
+enum StreamAccumulator {
+    Responses(Accumulator),
+    Chat(crate::chat::Accumulator),
+}
+impl StreamAccumulator {
+    fn event(&mut self, data: &[u8]) -> Result<(), TransportError> {
+        match self {
+            Self::Responses(a) => a.event(data),
+            Self::Chat(a) => a.event(data),
+        }
+    }
+    fn finish(self, interrupted: Option<&str>) -> Completion {
+        match self {
+            Self::Responses(a) => a.finish(interrupted),
+            Self::Chat(a) => a.finish(interrupted),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

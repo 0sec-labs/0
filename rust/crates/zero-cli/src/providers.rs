@@ -2,13 +2,18 @@ use serde::Deserialize;
 use std::{collections::BTreeMap, error::Error, path::Path, time::Duration};
 use tokio::io::AsyncReadExt;
 use zero_engine::Engine;
-use zero_protocol::{MAX_FRAME_BYTES, model::Rates};
+use zero_protocol::{
+    MAX_FRAME_BYTES,
+    model::{Rates, WireApi},
+};
 use zero_provider::{Endpoint, ProviderClient};
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Profile {
     url: String,
+    #[serde(default)]
+    wire_api: WireApi,
     api_key_env: String,
     rates: Rates,
     timeout_ms: u64,
@@ -61,8 +66,9 @@ pub async fn load(path: &Path) -> Result<Vec<(String, ProviderClient, Rates)>, B
             return Err("Provider credential environment variable is empty".into());
         }
         let endpoint = Endpoint::responses(&profile.url, Some(&key))?;
-        let client = ProviderClient::new(
+        let client = ProviderClient::with_wire(
             endpoint,
+            profile.wire_api,
             Duration::from_millis(profile.timeout_ms),
             profile.max_response_bytes,
         )?;

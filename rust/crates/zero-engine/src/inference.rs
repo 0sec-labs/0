@@ -82,7 +82,16 @@ impl Engine {
                 .get(&provider)
                 .cloned()
                 .ok_or_else(|| EngineError::State("provider profile is not configured".into()))?;
-            let payload = serde_json::json!({"kind":"responses_inference","provider":provider,"endpoint":profile.client.endpoint_identity(),"rates":profile.rates,"request":request,"reservation":reservation});
+            profile
+                .client
+                .validate(&request)
+                .map_err(|e| EngineError::State(e.to_string()))?;
+            let mut payload = serde_json::json!({"kind":"responses_inference","provider":provider,"endpoint":profile.client.endpoint_identity(),"rates":profile.rates,"request":request,"reservation":reservation});
+            // Existing default-Responses admissions keep their exact retry identity.
+            if profile.client.wire_api() != zero_protocol::model::WireApi::Responses {
+                payload["kind"] = serde_json::json!("chat_inference");
+                payload["wire_api"] = serde_json::to_value(profile.client.wire_api())?;
+            }
             let mut store = lock(&self.shared.store)?;
             let admission = store.admit_command(&session_id, &command_id, &payload)?;
             if admission.duplicate {
@@ -153,8 +162,7 @@ pub(super) async fn run_inference(
     cancel: CancellationToken,
 ) -> Result<Reply, EngineError> {
     let rates = profile.rates;
-    let result =
-        tokio::spawn(async move { profile.client.responses(&request, cancel).await }).await;
+    let result = tokio::spawn(async move { profile.client.complete(&request, cancel).await }).await;
     let completion = match result {
         Ok(Ok(completion)) => completion,
         Ok(Err(error)) => {

@@ -143,6 +143,7 @@ impl Engine {
             "execution_cancellation",
             "finding_reconciliation",
             "responses_inference",
+            "chat_completions_inference",
             "bounded_offline_snapshot_agent",
         ]
         .map(String::from)

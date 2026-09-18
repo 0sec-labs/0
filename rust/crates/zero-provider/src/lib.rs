@@ -1,4 +1,5 @@
 //! Bounded provider transport. Provider replies are data, never tool authority.
+mod chat;
 mod responses;
 mod sse;
 mod transport;

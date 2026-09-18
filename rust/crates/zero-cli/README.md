@@ -146,3 +146,15 @@ held reservation. It leaves the operation Unknown and does not retry the provide
 request or convert its missing output into a successful result. An exact command
 retry still returns the original unresolved outcome. Engine rejection exits 1;
 missing or invalid CLI arguments exit 2.
+
+Provider profiles may explicitly set `"wire_api":"chat_completions"` for a Chat
+Completions streaming endpoint, or `"wire_api":"responses"` for Responses.
+Omitting it preserves the Responses default. The URL is used exactly as supplied;
+no path rewriting, API guessing, or automatic fallback occurs. For example, a
+Chat profile uses `"url":"https://YOUR_PROVIDER/v1/chat/completions"` alongside
+`"wire_api":"chat_completions"` and the same explicit credential/rates/limits.
+The CLI request remains the native request schema; the selected codec converts
+it into the appropriate wire shape and requests streamed usage. Both `infer`
+and `agent` honor the profile's wire choice. Localhost tests cover Chat usage
+settlement, exact retries, and a two-turn rejected-tool/reasoning replay without
+running any container tools.
