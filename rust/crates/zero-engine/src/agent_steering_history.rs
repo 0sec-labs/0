@@ -49,7 +49,7 @@ impl Journal<'_> {
 fn authority(request: &AgentRequest) -> Result<Value, EngineError> {
     Ok(
         serde_json::json!({"provider":request.provider,"model":request.model,
-        "instructions":request.instructions,"execution":request.execution.sandbox_request(),
+        "instructions":request.instructions,"execution":request.execution_identity(),
         "source_review_operation_id":request.source_review_operation_id,
         "source_snapshot_tools":request.source_snapshot_tools,
         "source_submission_max_hypotheses":request.source_submission_max_hypotheses,
@@ -57,6 +57,7 @@ fn authority(request: &AgentRequest) -> Result<Value, EngineError> {
         "operator_questions":request.operator_questions,
         "tool_approval_policy":request.tool_approval_policy,
         "http_profile":request.http_profile,
+        "web_submission_max_hypotheses":request.web_submission_max_hypotheses,
         "context_policy":request.context_policy}),
     )
 }
@@ -143,7 +144,7 @@ pub(super) fn validate(
         if !visited.insert(ancestor.id.clone())
             || visited.len() > zero_context::MAX_INPUT_ITEMS
             || ancestor.session_id != parent.session_id
-            || ancestor.payload["kind"] != "offline_snapshot_agent"
+            || zero_protocol::agent::validate_actor_payload(&ancestor.payload).is_err()
         {
             return Err(error("steering history ancestry differs or exceeds bound"));
         }
@@ -157,6 +158,7 @@ pub(super) fn validate(
                 "plugin_context",
                 "delegation_context",
                 "http_context",
+                "http_output_version",
             ]
             .iter()
             .any(|key| ancestor.payload.get(key) != parent.payload.get(key))

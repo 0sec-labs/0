@@ -7,6 +7,14 @@ use zero_protocol::{
     },
 };
 use zero_store::Store;
+fn valid_actor_request() -> serde_json::Value {
+    let sha = format!("sha256:{}", "a".repeat(64));
+    let value = json!({"provider":"fixture","model":"fixture","instructions":"unchanged","prompt":"original","max_turns":3,"reservation_per_turn":1,"execution":{"execution_id":"profile","image":"fixture:local","snapshot":{"id":"s","root":"/tmp/source","digest":sha,"files":[{"path":"entry","digest":sha,"bytes":0}]},"argv":["true"],"timeout_ms":1000,"memory_mb":128,"cpus":1,"max_output_bytes":1024}});
+    let request: zero_protocol::agent::AgentRequest = serde_json::from_value(value).unwrap();
+    request.validate_capabilities().unwrap();
+    serde_json::to_value(request).unwrap()
+}
+
 fn request() -> Request {
     serde_json::from_value(json!({"questions":[{"header":"Choose","question":"Which local fixture?","options":[{"label":"A"},{"label":"B"}],"allow_custom":true}]})).unwrap()
 }
@@ -26,7 +34,16 @@ impl Fixture {
         let mut store = Store::open(dir.path().join("state.db")).unwrap();
         store.claim_engine_epoch("owner").unwrap();
         let session = store.create_session("g", 100).unwrap().id;
-        let actor=store.admit_command(&session,"actor",&json!({"kind":"offline_snapshot_agent","request":{"operator_questions":true,"instructions":"unchanged"}})).unwrap().operation;
+        let mut request_payload = valid_actor_request();
+        request_payload["operator_questions"] = json!(true);
+        let actor = store
+            .admit_command(
+                &session,
+                "actor",
+                &json!({"kind":"offline_snapshot_agent","request":request_payload}),
+            )
+            .unwrap()
+            .operation;
         let actor = store.begin_operation(&actor.id, "owner").unwrap();
         let origin=store.admit_command(&session,&format!("{}:model:0",actor.id),&json!({"kind":"agent_inference","parent_operation":actor.id,"request":{"tools":[{"name":"ask_operator"}]}})).unwrap().operation;
         store.begin_operation(&origin.id, "owner").unwrap();
@@ -389,7 +406,7 @@ fn schema_seven_migration_preserves_journal_and_readonly_never_migrates() {
     let original = f.store.get_operation(&f.actor.id).unwrap().payload;
     drop(f.store);
     let conn = rusqlite::Connection::open(&path).unwrap();
-    conn.execute_batch("DROP INDEX http_receipt_events; DROP INDEX http_rate_events; DROP TABLE http_rates; DROP TABLE http_dispatches; DROP TABLE http_accounts; DROP TABLE tool_approval_consumptions; DROP TABLE tool_approval_decisions; DROP TABLE tool_approvals; DROP TABLE operator_question_decisions; DROP TABLE operator_questions; PRAGMA user_version=7;").unwrap();
+    conn.execute_batch("DROP TABLE web_triage_decisions; DROP INDEX http_receipt_events; DROP INDEX http_rate_events; DROP TABLE http_rates; DROP TABLE http_dispatches; DROP TABLE http_accounts; DROP TABLE tool_approval_consumptions; DROP TABLE tool_approval_decisions; DROP TABLE tool_approvals; DROP TABLE operator_question_decisions; DROP TABLE operator_questions; PRAGMA user_version=7;").unwrap();
     drop(conn);
     assert!(Store::open_read_only(&path).is_err());
     let store = Store::open(&path).unwrap();

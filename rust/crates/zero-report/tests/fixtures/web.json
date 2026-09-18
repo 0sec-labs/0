@@ -1,0 +1,153 @@
+{
+  "schema_version": 1,
+  "report_kind": "web_observations",
+  "verification_state": "unverified",
+  "security_conclusion": "not_established",
+  "run": {
+    "session_id": "session",
+    "operation_id": "review",
+    "command_id": "run",
+    "operation_status": "succeeded",
+    "agent_status": "completed",
+    "error": null,
+    "authority": {
+      "profile_name": "target",
+      "profile_sha256": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+      "account_id": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
+      "profile": {
+        "schema_version": 1,
+        "base_url": "http://127.0.0.1:1234/target/",
+        "in_scope": [
+          "127.0.0.1"
+        ],
+        "out_of_scope": [],
+        "denied_hosts": [],
+        "allowed_path_prefixes": [
+          "/target"
+        ],
+        "denied_path_prefixes": [],
+        "allowed_methods": [
+          "GET",
+          "POST"
+        ],
+        "allowed_headers": [
+          "content-type",
+          "accept",
+          "x-fixture"
+        ],
+        "redirect": {
+          "mode": "manual"
+        },
+        "limits": {
+          "timeout_ms": 2000,
+          "max_request_body_bytes": 4096,
+          "max_response_wire_bytes": 65536,
+          "max_response_decoded_bytes": 65536,
+          "max_request_header_bytes": 8192,
+          "max_request_headers": 32,
+          "max_response_header_bytes": 8192,
+          "max_response_headers": 32,
+          "max_dns_answers": 16,
+          "max_dns_cname_depth": 4,
+          "max_dns_queries": 8
+        },
+        "rate": {
+          "default": {
+            "requests_per_interval": 10,
+            "interval_ms": 1000,
+            "burst": 2
+          },
+          "per_host": {},
+          "jitter_ms": 0
+        },
+        "budget": {
+          "max_requests": 8,
+          "max_request_body_bytes": 32768,
+          "max_response_decoded_bytes": 524288
+        }
+      }
+    },
+    "review": {
+      "schema_version": 1,
+      "request_sha256": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+      "completion_sha256": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+      "submission_call_id": "submit-1",
+      "model": "fixture",
+      "provider_response_id": "response-1",
+      "hypotheses": [
+        {
+          "id": "claim-1",
+          "state": "unverified",
+          "claim": {
+            "title": "Possible cross-object response",
+            "category": "authorization",
+            "explanation": "The response needs an independent control.",
+            "claimed_impact": "Possible data exposure",
+            "claimed_severity": "high",
+            "citations": [
+              {
+                "operation_id": "http-1",
+                "response_manifest_sha256": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "part": {
+                  "type": "body",
+                  "offset": 0,
+                  "length": 4
+                }
+              }
+            ]
+          }
+        }
+      ],
+      "evidence": [
+        {
+          "operation_id": "http-1",
+          "response_manifest_sha256": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "retained_body_sha256": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "retained_bytes": 4,
+          "status": 200
+        }
+      ]
+    },
+    "artifacts": {
+      "web.request": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+      "web.completion": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+      "web.review": "sha256:5555555555555555555555555555555555555555555555555555555555555555"
+    }
+  },
+  "observations": [
+    {
+      "operation": {
+        "sequence": 3,
+        "operation_id": "http-1",
+        "actor_operation_id": "review",
+        "operation_status": "succeeded",
+        "response_manifest_sha256": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "evidence": {
+        "session_id": "session",
+        "operation_id": "http-1",
+        "operation_status": "succeeded",
+        "response_manifest_sha256": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "retained_body_sha256": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "retained_bytes": 4,
+        "complete": true,
+        "url": "http://127.0.0.1:1234/target/one",
+        "status": 200,
+        "headers": [
+          [
+            "content-type",
+            "text/plain"
+          ]
+        ],
+        "wire_bytes": 4,
+        "decoded_bytes": 4,
+        "artifacts": {
+          "http.response": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      },
+      "error": null
+    }
+  ],
+  "observations_truncated": false,
+  "verifications": []
+}

@@ -11,6 +11,7 @@ mod agent_questions;
 mod agent_source;
 mod agent_steering;
 mod agent_submission;
+mod agent_web;
 mod discovery;
 mod history;
 mod inference;
@@ -25,15 +26,24 @@ mod source;
 mod source_provenance;
 mod source_report;
 mod triage;
+mod web_read;
+mod web_triage;
+mod web_verification;
 mod workflow_provenance;
 
 pub use agent_approvals::{read_tool_approval, read_tool_approval_intent, read_tool_approvals};
 pub use agent_http::{read_http_evidence, read_http_operation};
 pub use agent_questions::{read_operator_question, read_operator_questions};
 pub use agent_steering::read_agent_steering;
-pub use discovery::read_source_reviews;
+pub use discovery::{read_source_reviews, read_web_runs};
 pub use source_report::{read_source_report, read_source_workflow_report};
 pub use triage::{read_source_finding, read_source_findings};
+pub use web_read::{
+    read_http_metadata, read_http_range, read_web_http_operations, read_web_run,
+    read_web_workflow_report,
+};
+pub use web_triage::{read_web_finding, read_web_findings};
+pub use web_verification::{prepare_web_verification, read_web_verification};
 
 use std::{
     collections::HashMap,
@@ -394,6 +404,19 @@ impl Engine {
                 .run_queued_agent(session_id, input_id, event_tx, progress_tx)
                 .await;
         }
+        if let Command::PrepareWebVerification { session_id, plan } = command {
+            return self.prepare_web_verification(session_id, plan);
+        }
+        if let Command::VerifyWebHypothesis {
+            session_id,
+            command_id,
+            request,
+        } = command
+        {
+            return self
+                .verify_web_hypothesis(session_id, command_id, request, event_tx)
+                .await;
+        }
         if let Command::RunAgent {
             session_id,
             command_id,
@@ -568,6 +591,82 @@ impl Engine {
                     limit,
                 )?,
             }),
+            Command::WebRuns {
+                session_id,
+                before_sequence,
+                limit,
+            } => Ok(Reply::WebRuns {
+                page: lock(&self.shared.store)?.web_runs(&session_id, before_sequence, limit)?,
+            }),
+            Command::WebRun {
+                session_id,
+                operation_id,
+            } => {
+                let store = lock(&self.shared.store)?;
+                Ok(Reply::WebRun {
+                    run: agent_web::load_run(&store, &session_id, &operation_id)?,
+                })
+            }
+            Command::WebHttpOperations {
+                session_id,
+                web_operation_id,
+                after_sequence,
+                limit,
+            } => {
+                let store = lock(&self.shared.store)?;
+                Ok(Reply::WebHttpOperations {
+                    page: web_read::http_operations(
+                        &store,
+                        &session_id,
+                        &web_operation_id,
+                        after_sequence,
+                        limit,
+                    )?,
+                })
+            }
+            Command::HttpEvidence {
+                session_id,
+                operation_id,
+            } => {
+                let store = lock(&self.shared.store)?;
+                Ok(Reply::HttpEvidence {
+                    evidence: web_read::http_evidence(&store, &session_id, &operation_id)?.0,
+                })
+            }
+            Command::HttpEvidenceRange {
+                session_id,
+                operation_id,
+                expected_manifest_sha256,
+                offset,
+                limit,
+            } => {
+                let store = lock(&self.shared.store)?;
+                Ok(Reply::HttpEvidenceRange {
+                    range: web_read::http_range(
+                        &store,
+                        &session_id,
+                        &operation_id,
+                        &expected_manifest_sha256,
+                        offset,
+                        limit,
+                    )?,
+                })
+            }
+            Command::WebWorkflowReport {
+                session_id,
+                operation_id,
+                verification_ids,
+            } => {
+                let store = lock(&self.shared.store)?;
+                Ok(Reply::WebWorkflowReport {
+                    report: web_read::workflow_report(
+                        &store,
+                        &session_id,
+                        &operation_id,
+                        &verification_ids,
+                    )?,
+                })
+            }
             Command::SourceReviews {
                 session_id,
                 before_sequence,
@@ -579,6 +678,62 @@ impl Engine {
                     limit,
                 )?,
             }),
+            Command::WebFindings {
+                session_id,
+                web_operation_id,
+                offset,
+                limit,
+            } => {
+                let store = lock(&self.shared.store)?;
+                Ok(Reply::WebFindings {
+                    findings: web_triage::findings(
+                        &store,
+                        &session_id,
+                        &web_operation_id,
+                        offset,
+                        limit,
+                    )?,
+                })
+            }
+            Command::WebFinding {
+                session_id,
+                web_operation_id,
+                hypothesis_id,
+                after_revision,
+                limit,
+            } => {
+                let store = lock(&self.shared.store)?;
+                let (finding, history) = web_triage::finding(
+                    &store,
+                    &session_id,
+                    &web_operation_id,
+                    &hypothesis_id,
+                    after_revision,
+                    limit,
+                )?;
+                Ok(Reply::WebFinding { finding, history })
+            }
+            Command::TriageWebFinding {
+                session_id,
+                command_id,
+                web_operation_id,
+                hypothesis_id,
+                status,
+                expected_revision,
+                note,
+            } => {
+                let mut store = lock(&self.shared.store)?;
+                web_triage::decide(
+                    &mut store,
+                    &session_id,
+                    &command_id,
+                    &web_operation_id,
+                    &hypothesis_id,
+                    status,
+                    expected_revision,
+                    &note,
+                )
+            }
             Command::SourceFindings {
                 session_id,
                 source_operation_id,
@@ -717,6 +872,8 @@ impl Engine {
             | Command::ReproduceSource { .. }
             | Command::ValidateSourceRepair { .. }
             | Command::ReviewSource { .. }
+            | Command::PrepareWebVerification { .. }
+            | Command::VerifyWebHypothesis { .. }
             | Command::RunAgent { .. }
             | Command::RunQueuedAgent { .. }
             | Command::RunSandbox { .. }

@@ -40,7 +40,7 @@ pub(super) fn entry(row: &Row<'_>, session: &str) -> Result<ConversationEntry> {
         || admission.outcome.is_some()
         || admission.payload != request
         || format!("{:x}", Sha256::digest(payload.as_bytes())) != hash
-        || request["kind"] != "offline_snapshot_agent"
+        || zero_protocol::agent::validate_actor_payload(&request).is_err()
         || request.get("parent_operation").is_some()
     {
         return Err(invalid("admission and operation identities disagree"));
@@ -80,7 +80,8 @@ pub(super) fn entry(row: &Row<'_>, session: &str) -> Result<ConversationEntry> {
                 return Err(invalid("agent outcome status contradicts operation status"));
             }
             let checkpoint: Option<String> = row.get(12)?;
-            result.continuable = output.source_review.is_none()
+            result.continuable = output.web_review.is_none()
+                && output.source_review.is_none()
                 && output.source_recovery_path.is_none()
                 && output.error.is_none()
                 && (1..=32).contains(&output.turns)

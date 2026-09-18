@@ -1023,3 +1023,45 @@ integration mismatch, lost 429 cooldowns on rejected headers, and projection
 corruption that could otherwise hide spent quota or refill a bucket. The final
 checks include those fixes. These local fixtures do not add a claim of real
 managed deployment, arbitrary workload isolation or production release parity.
+
+### Native web investigation and independent observation plans
+
+Legacy entry points: the web `scan` orchestration, structured hypothesis/verify
+stages, retained finding triage and report flows. The native owners are
+`agent_web`, `web_verification`, `web_read`, `web_triage`, `zero-web-verification`,
+Store schema 11 and typed CLI/TUI protocol views. See
+[WEB-WORKFLOW.md](WEB-WORKFLOW.md) for the exact contract.
+
+This adds snapshot-free scoped actors, terminal cited Unverified web claims,
+original-account fresh HTTP matrices, complete-plan approval digests, exact
+status/redacted-body observations, partial run discovery, independent CAS triage
+and explicitly linked report reconstruction. Existing execution-enabled actor
+wire identities and native HTTP v1 tool results remain unchanged. Web HTTP v2
+handles are opt-in and separately captured. Schema 11 adds web triage history;
+readonly access never migrates.
+
+The supported execution environment for these proofs is the local Linux fixture
+runner with real loopback HTTP/provider sockets and retained SQLite state.
+Focused checks cover no-snapshot/no-Docker investigations, joined evidence,
+invalid/foreign citations, empty terminal submissions, fresh exact matrices,
+failed controls, cancellation, exact retries, independent account enforcement,
+partial catalogs and tampered triage history. Final workspace qualification is
+recorded with the integrating commit. No live targets or paid providers were used.
+
+Remaining: category-specific independent security oracles; browser/crawl/WAF/OAST
+workflows; cookie/login/reauth/CSRF and multiple principals; resettable server
+state; specialist finding schemas, legacy command compatibility and detection
+quality. The exact-response oracle never grants vulnerability-reportable status.
+This advances the scoped web path and does not retire those parity gates or
+change production publication.
+
+Web checkpoint qualification: the actual Rust 1.85 workspace run completed with
+826 passed, zero failed and 11 explicit backend/platform ignores. Subsequent
+narrow metadata and terminal/cancellation UI corrections were requalified with
+14 engine web tests, the two executable CLI web workflows, the real Web PTY,
+57 TUI tests, five queue tests and the console output/shutdown regression.
+Strict production Clippy and formatting checks passed. These local fixture
+results do not qualify live targets/providers or production publication.
+
+The operator's agent-choice/independent-evaluation boundary and the next work
+identified by parallel source audits are retained in [AUTONOMY.md](AUTONOMY.md).

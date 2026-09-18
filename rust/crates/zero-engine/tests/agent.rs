@@ -183,6 +183,7 @@ impl Setup {
                 source_review_operation_id: None,
                 source_snapshot_tools: false,
                 source_submission_max_hypotheses: None,
+                web_submission_max_hypotheses: None,
                 provider: "local".into(),
                 context_policy: None,
                 delegation_policy: None,
@@ -192,7 +193,7 @@ impl Setup {
                 model: "fixture".into(),
                 instructions: "Use only offered tools".into(),
                 prompt: "Inspect the authorized snapshot".into(),
-                execution: execution.into(),
+                execution: Some(execution.into()),
                 max_turns: 3,
                 reservation_per_turn: 5,
             },
@@ -639,9 +640,9 @@ async fn continuation_rejects_other_session_changed_authority_and_unknown_parent
     base.continuation_of = Some(parent);
     let mut changed = base.clone();
     changed.execution = {
-        let mut sandbox = changed.execution.sandbox_request();
+        let mut sandbox = changed.snapshot_request().unwrap();
         sandbox.memory_mb += 128;
-        sandbox.into()
+        Some(sandbox.into())
     };
     let mut instructions = base.clone();
     instructions.instructions = "new authority".into();
@@ -733,7 +734,7 @@ fn anthropic_response(tool: bool, cache_write: u64) -> String {
 async fn anthropic_tool_replay_and_completed_continuation_keep_signed_history_and_usage() {
     use zero_protocol::model::WireApi;
     let f = Setup::new("echo");
-    f.request.execution.validate().unwrap();
+    f.request.validate_capabilities().unwrap();
     let http = Http::new(
         vec![
             anthropic_response(true, 0),

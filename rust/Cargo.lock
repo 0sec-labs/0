@@ -2384,6 +2384,7 @@ dependencies = [
 name = "zero-engine"
 version = "0.1.0"
 dependencies = [
+ "base64",
  "fs2",
  "futures-util",
  "httpdate",
@@ -2413,6 +2414,7 @@ dependencies = [
  "zero-source",
  "zero-store",
  "zero-verification",
+ "zero-web-verification",
 ]
 
 [[package]]
@@ -2650,12 +2652,14 @@ dependencies = [
  "uuid",
  "zero-http",
  "zero-protocol",
+ "zero-web-verification",
 ]
 
 [[package]]
 name = "zero-tui"
 version = "0.1.0"
 dependencies = [
+ "base64",
  "crossterm",
  "futures-util",
  "ratatui",
@@ -2676,6 +2680,18 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.20",
  "zero-executor",
+ "zero-protocol",
+]
+
+[[package]]
+name = "zero-web-verification"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "sha2",
+ "thiserror 2.0.20",
+ "zero-http",
  "zero-protocol",
 ]
 

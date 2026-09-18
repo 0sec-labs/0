@@ -55,8 +55,7 @@ pub(super) fn validate_initial(request: &AgentRequest) -> Result<ResponsesReques
         }
     }
     request
-        .execution
-        .validate()
+        .validate_capabilities()
         .map_err(|e| EngineError::State(e.to_string()))?;
     if !(1..=32).contains(&request.max_turns)
         || request.reservation_per_turn == 0
@@ -64,6 +63,16 @@ pub(super) fn validate_initial(request: &AgentRequest) -> Result<ResponsesReques
     {
         return Err(EngineError::State(
             "agent requires a prompt, 1..32 turns and nonzero per-turn reservation".into(),
+        ));
+    }
+    if request.web_submission_max_hypotheses.is_some()
+        && request
+            .plugin_tools
+            .iter()
+            .any(|p| p.alias == "submit_web_hypotheses")
+    {
+        return Err(EngineError::State(
+            "plugin alias shadows web submission".into(),
         ));
     }
     if let Some(max) = request.source_submission_max_hypotheses {
@@ -177,11 +186,14 @@ impl Engine {
                 lock(&self.shared.store)?.get_operation_by_command(&session_id, &command_id);
             match prior {
                 Ok(prior) => {
-                    let mut payload = serde_json::json!({"kind":"offline_snapshot_agent","request":request,"endpoint":profile.client.endpoint_identity(),"rates":profile.rates});
+                    let mut payload = serde_json::json!({"kind":zero_protocol::agent::actor_kind(&request),"request":request,"endpoint":profile.client.endpoint_identity(),"rates":profile.rates});
                     if profile.client.wire_api() != zero_protocol::model::WireApi::Responses {
                         payload["wire_api"] = serde_json::to_value(profile.client.wire_api())?;
                     }
                     profile.stamp(&mut payload)?;
+                    if let Some(version) = prior.payload.get("http_output_version") {
+                        payload["http_output_version"] = version.clone();
+                    }
                     if request.http_profile.is_some() {
                         payload["http_context"] = agent_http::retry_identity(
                             &self.shared,
@@ -280,7 +292,7 @@ impl Engine {
                 .client
                 .validate(&projected)
                 .map_err(|e| EngineError::State(e.to_string()))?;
-            let mut payload = serde_json::json!({"kind":"offline_snapshot_agent","request":request,"endpoint":profile.client.endpoint_identity(),"rates":profile.rates});
+            let mut payload = serde_json::json!({"kind":zero_protocol::agent::actor_kind(&request),"request":request,"endpoint":profile.client.endpoint_identity(),"rates":profile.rates});
             if profile.client.wire_api() != zero_protocol::model::WireApi::Responses {
                 payload["wire_api"] = serde_json::to_value(profile.client.wire_api())?;
             }
@@ -296,6 +308,9 @@ impl Engine {
             }
             if let Some(context) = &http {
                 payload["http_context"] = context.identity.clone();
+                if context.output_version == 2 {
+                    payload["http_output_version"] = serde_json::json!(2);
+                }
             }
             let admission = store.admit_command(&session_id, &command_id, &payload)?;
             if admission.duplicate {
@@ -377,7 +392,7 @@ fn continuation_input(
                 parent.status,
                 OperationStatus::Succeeded | OperationStatus::Failed
             )
-            || parent.payload["kind"] != "offline_snapshot_agent"
+            || zero_protocol::agent::validate_actor_payload(&parent.payload).is_err()
             || parent.payload.get("parent_operation").is_some()
         {
             return Err(EngineError::State(
@@ -400,12 +415,15 @@ fn continuation_input(
         )?;
         if prior.http_profile != request.http_profile
             || parent.payload.get("http_context") != http.map(|h| &h.identity)
+            || parent.payload["http_output_version"].as_u64().unwrap_or(1)
+                != u64::from(http.map(|h| h.output_version).unwrap_or(1))
             || prior.tool_approval_policy != request.tool_approval_policy
             || prior.operator_questions != request.operator_questions
             || prior.context_policy != request.context_policy
             || prior.delegation_policy != request.delegation_policy
             || parent.payload.get("delegation_context") != delegation.map(|d| &d.identity)
             || prior.source_submission_max_hypotheses != request.source_submission_max_hypotheses
+            || prior.web_submission_max_hypotheses != request.web_submission_max_hypotheses
             || prior.source_snapshot_tools != request.source_snapshot_tools
             || prior.source_review_operation_id != request.source_review_operation_id
             || prior.plugin_tools != request.plugin_tools
@@ -413,8 +431,8 @@ fn continuation_input(
             || prior.provider != request.provider
             || prior.model != request.model
             || prior.instructions != request.instructions
-            || serde_json::to_value(prior.execution.sandbox_request())?
-                != serde_json::to_value(request.execution.sandbox_request())?
+            || serde_json::to_value(prior.execution_identity())?
+                != serde_json::to_value(request.execution_identity())?
             || parent.payload["endpoint"] != profile.client.endpoint_identity()
             || parent.payload["rates"] != serde_json::to_value(profile.rates)?
             || parent.payload.get("hosted_catalog").cloned()
@@ -427,7 +445,7 @@ fn continuation_input(
         {
             return Err(EngineError::State("continuation must retain its provider, model, instructions, rates and pinned execution profile".into()));
         }
-        if result.source_review.is_some() {
+        if result.source_review.is_some() || result.web_review.is_some() {
             return Err(EngineError::State(
                 "a terminal source submission cannot be continued as conversation".into(),
             ));
@@ -532,6 +550,12 @@ fn model_request(
     let mut model = ResponsesRequest{model:request.model.clone(),instructions:request.instructions.clone(),input,max_output_tokens:8192,
         tools:vec![ToolDefinition{name:"execute_snapshot".into(),description:"Run an argv vector in the explicitly pinned offline snapshot sandbox. This cannot change the image, mounts, networking, limits or host files. The working copy is disposable for each call.".into(),
             parameters:serde_json::json!({"type":"object","properties":{"argv":{"type":"array","items":{"type":"string"},"minItems":1,"maxItems":128}},"required":["argv"],"additionalProperties":false})}]};
+    if request.execution.is_none() {
+        model.tools.clear();
+    }
+    if let Some(max) = request.web_submission_max_hypotheses {
+        model.tools.push(agent_web::definition(max));
+    }
     if request.http_profile.is_some() {
         model.tools.push(agent_http::definition());
     }
@@ -599,6 +623,7 @@ async fn run_rounds(
         continuation_artifact: None,
         source_recovery_path: None,
         source_review: None,
+        web_review: None,
     };
     'turns: for turn in 0..request.max_turns {
         if cancel.is_cancelled() {
@@ -641,7 +666,8 @@ async fn run_rounds(
         let mut model = template.clone();
         model.input = projected;
         // Adaptive evidence must be retainable before another provider charge.
-        if request.source_submission_max_hypotheses.is_some()
+        if (request.source_submission_max_hypotheses.is_some()
+            || request.web_submission_max_hypotheses.is_some())
             && serde_json::to_vec(&model)?.len() > zero_source::MAX_ARTIFACT_BYTES
         {
             output.status = AgentStatus::Failed;
@@ -745,6 +771,41 @@ async fn run_rounds(
                 _ => None,
             })
             .collect();
+        if let Some(max) = request.web_submission_max_hypotheses {
+            if calls
+                .iter()
+                .any(|(_, name, _)| name == "submit_web_hypotheses")
+            {
+                let prepared = {
+                    let store = lock(&shared.store)?;
+                    let operation = store.get_operation(parent)?;
+                    agent_web::prepare(&store, &operation, max, model.clone(), completion.clone())
+                };
+                if cancel.is_cancelled() {
+                    output.status = AgentStatus::Cancelled;
+                    break;
+                }
+                match prepared
+                    .and_then(|prepared| agent_web::retain(shared, parent, &child.id, prepared))
+                {
+                    Ok(review) => {
+                        output.web_review = Some(review);
+                        output.status = AgentStatus::Completed;
+                    }
+                    Err(error) => {
+                        output.status = AgentStatus::Failed;
+                        output.error = Some(error.to_string());
+                    }
+                }
+                break;
+            }
+            if calls.is_empty() {
+                output.status = AgentStatus::Failed;
+                output.error =
+                    Some("structured web submission required; final prose is not a review".into());
+                break;
+            }
+        }
         if let Some(max) = request.source_submission_max_hypotheses {
             if calls
                 .iter()
@@ -1147,7 +1208,9 @@ async fn run_rounds(
                 input.push(serde_json::json!({"type":"function_call_output","call_id":id,"output":serde_json::to_string(&serde_json::json!({"untrusted_plugin_data":result.untrusted_reply,"error":result.error,"status":operation.status}))?}));
                 continue;
             }
-            let mut execution = request.execution.sandbox_request();
+            let mut execution = request
+                .snapshot_request()
+                .map_err(|e| EngineError::State(e.to_string()))?;
             execution.execution_id = format!("agent-{parent}-{turn}-{index}");
             let permitted = if name == "execute_snapshot" {
                 arguments
@@ -1298,10 +1361,14 @@ pub(super) fn run_actor<'a>(
             continuation_artifact: None,
             source_recovery_path: None,
             source_review: None,
+            web_review: None,
         };
         let mut preparation_error = None;
         if request.source_snapshot_tools {
-            let pin = request.execution.sandbox_request().snapshot;
+            let pin = request
+                .snapshot_request()
+                .map_err(|e| EngineError::State(e.to_string()))?
+                .snapshot;
             let cancellation = cancel.clone();
             // Never detach a blocking copy when cancelled: the owner must receive
             // its handle and finish cleanup before settling the operation.

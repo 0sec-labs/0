@@ -18,7 +18,7 @@ fn setup() -> Setup {
     f.request.tool_approval_policy = Some(ToolApprovalPolicy {
         require_approval: vec!["execute_snapshot".into()],
     });
-    match &mut f.request.execution {
+    match f.request.execution.as_mut().unwrap() {
         zero_protocol::agent::AgentExecution::Docker(r) => {
             r.image = format!("sha256:{}", "a".repeat(64))
         }
@@ -111,7 +111,7 @@ async fn approve_or_deny_gates_exact_invocation_without_any_predecision_backend_
         );
         assert_eq!(
             intent["effect_payload"]["request"]["snapshot"]["digest"],
-            f.request.execution.sandbox_request().snapshot.digest
+            f.request.snapshot_request().unwrap().snapshot.digest
         );
         let mut wrong = r.clone();
         wrong.intent_sha256 = format!("sha256:{}", "f".repeat(64));
@@ -306,7 +306,7 @@ async fn invalid_calls_and_unsupported_or_mutable_profiles_do_not_request_permis
     f.request.tool_approval_policy = Some(ToolApprovalPolicy {
         require_approval: vec!["execute_snapshot".into()],
     });
-    if let zero_protocol::agent::AgentExecution::Docker(r) = &mut f.request.execution {
+    if let zero_protocol::agent::AgentExecution::Docker(r) = f.request.execution.as_mut().unwrap() {
         r.image = "local:mutable".into();
     }
     assert!(matches!(

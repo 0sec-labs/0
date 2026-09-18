@@ -57,7 +57,7 @@ fn validate(store: &Store, checkpoint: &Checkpoint) -> Result<(), EngineError> {
     if checkpoint.version != 1
         || parent.session_id != checkpoint.session_id
         || checkpoint.parent_payload_sha256 != digest(&parent.payload)?
-        || parent.payload["kind"] != "offline_snapshot_agent"
+        || zero_protocol::agent::validate_actor_payload(&parent.payload).is_err()
         || parent.payload["request"]["max_turns"].as_u64() != Some(u64::from(checkpoint.next_turn))
     {
         return Err(error("checkpoint authority or terminal turn mismatch"));

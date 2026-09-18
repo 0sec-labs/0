@@ -40,10 +40,14 @@ pub struct AgentRequest {
     /// Require a terminal structured source submission after snapshot investigation.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub source_submission_max_hypotheses: Option<u32>,
+    /// Terminal unverified claims over this web workflow's retained observations.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub web_submission_max_hypotheses: Option<u32>,
     /// execute_snapshot uses this pinned offline execution profile. The model
     /// supplies argv only; it cannot choose mounts, image, network or limits.
     /// Explicit plugin tools use the separately configured host launch profile.
-    pub execution: AgentExecution,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub execution: Option<AgentExecution>,
     /// Explicit aliases for a curated subset of host-authorized pinned plugins.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub plugin_tools: Vec<PluginToolBinding>,
@@ -80,6 +84,8 @@ pub struct AgentResult {
     pub source_recovery_path: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub source_review: Option<crate::source::SourceReviewOutcome>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub web_review: Option<crate::web::WebReviewOutcome>,
 }
 
 /// Legacy Docker-shaped requests retain their serialized retry identity. New
@@ -117,4 +123,75 @@ impl From<crate::sandbox::SandboxRequest> for AgentExecution {
 
 fn is_false(value: &bool) -> bool {
     !*value
+}
+
+/// Existing execution-enabled actors retain their historical serialized kind.
+pub fn actor_kind(request: &AgentRequest) -> &'static str {
+    if request.execution.is_some() {
+        "offline_snapshot_agent"
+    } else {
+        "scoped_web_agent"
+    }
+}
+impl AgentRequest {
+    pub fn execution_identity(&self) -> Option<crate::sandbox::SandboxRequest> {
+        self.execution.as_ref().map(AgentExecution::sandbox_request)
+    }
+    pub fn snapshot_request(
+        &self,
+    ) -> Result<crate::sandbox::SandboxRequest, crate::ValidationError> {
+        self.execution_identity()
+            .ok_or_else(|| crate::ValidationError("snapshot execution is not authorized".into()))
+    }
+    pub fn validate_capabilities(&self) -> Result<(), crate::ValidationError> {
+        if let Some(execution) = &self.execution {
+            execution.validate()?;
+        } else if self
+            .http_profile
+            .as_ref()
+            .is_none_or(|name| name.is_empty())
+            || self.source_snapshot_tools
+            || self.source_review_operation_id.is_some()
+            || self.source_submission_max_hypotheses.is_some()
+        {
+            return Err(crate::ValidationError(
+                "snapshot-free actors require an HTTP profile and cannot use source snapshot modes"
+                    .into(),
+            ));
+        }
+        if let Some(max) = self.web_submission_max_hypotheses {
+            if !(1..=32).contains(&max)
+                || self.http_profile.is_none()
+                || self.source_submission_max_hypotheses.is_some()
+            {
+                return Err(crate::ValidationError("web submission requires HTTP authority,1..32 hypotheses and no source terminal submission".into()));
+            }
+        }
+        Ok(())
+    }
+}
+/// A tag alone never grants actor authority. Validate its strict captured request.
+pub fn validate_actor_payload(
+    payload: &serde_json::Value,
+) -> Result<AgentRequest, crate::ValidationError> {
+    let request: AgentRequest = serde_json::from_value(
+        payload
+            .get("request")
+            .cloned()
+            .ok_or_else(|| crate::ValidationError("actor request absent".into()))?,
+    )
+    .map_err(|_| crate::ValidationError("invalid captured actor request".into()))?;
+    request.validate_capabilities()?;
+    if payload["kind"] != actor_kind(&request) {
+        return Err(crate::ValidationError(
+            "actor kind and capabilities differ".into(),
+        ));
+    }
+    if payload.get("parent_operation").is_some() && request.web_submission_max_hypotheses.is_some()
+    {
+        return Err(crate::ValidationError(
+            "joined children cannot terminal-submit web hypotheses".into(),
+        ));
+    }
+    Ok(request)
 }

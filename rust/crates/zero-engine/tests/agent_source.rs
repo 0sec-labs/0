@@ -335,7 +335,7 @@ async fn retained_read_list_search_have_exact_identity_and_no_filesystem_or_back
     assert_eq!(outputs[0]["text"], "const greeting = 'retained';\n");
     assert_eq!(
         outputs[0]["citation"],
-        json!({"path":"app.js","sha256":f.request.execution.sandbox_request().snapshot.files.iter().find(|v|v.path=="app.js").unwrap().digest,"start_line":1,"end_line":1})
+        json!({"path":"app.js","sha256":f.request.snapshot_request().unwrap().snapshot.files.iter().find(|v|v.path=="app.js").unwrap().digest,"start_line":1,"end_line":1})
     );
     assert_eq!(outputs[1]["files"].as_array().unwrap().len(), 1);
     assert_eq!(outputs[1]["files"][0]["path"], "app.js");
@@ -476,7 +476,9 @@ async fn source_session_snapshot_and_root_mismatch_fail_before_provider_dispatch
     let other = session(&f.engine).await;
     for mutation in 0..3 {
         let mut request = f.request.clone();
-        if let zero_protocol::agent::AgentExecution::Docker(execution) = &mut request.execution {
+        if let zero_protocol::agent::AgentExecution::Docker(execution) =
+            request.execution.as_mut().unwrap()
+        {
             match mutation {
                 1 => execution.snapshot.digest = format!("sha256:{}", "0".repeat(64)),
                 2 => execution.snapshot.root = f.dir.path().display().to_string(),
@@ -643,7 +645,7 @@ async fn explicit_search_modes_preserve_citations_authority_and_default_literal_
         assert_eq!(outputs[5]["matches"].as_array().unwrap().len(), 1);
         assert_eq!(outputs[5]["truncated"], true);
         assert_eq!(outputs[6]["matches"], json!([]));
-        let pin = f.request.execution.sandbox_request().snapshot;
+        let pin = f.request.snapshot_request().unwrap().snapshot;
         let digest = &pin
             .files
             .iter()

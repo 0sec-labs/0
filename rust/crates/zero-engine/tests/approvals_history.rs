@@ -41,7 +41,9 @@ async fn exercise(projected: bool, approve: bool) {
     let mut f = Setup::new(vec![], 1, 1);
     f.request.delegation_policy = None;
     f.request.max_turns = 1;
-    if let zero_protocol::agent::AgentExecution::Docker(execution) = &mut f.request.execution {
+    if let zero_protocol::agent::AgentExecution::Docker(execution) =
+        f.request.execution.as_mut().unwrap()
+    {
         execution.image = format!("sha256:{}", "a".repeat(64));
     }
     f.request.tool_approval_policy =

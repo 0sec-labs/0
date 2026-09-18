@@ -38,7 +38,7 @@ fn derive_bounded(
     )?;
     charge(bytes, &root)?;
     if root.session_id != group.session_id
-        || root.payload["kind"] != "offline_snapshot_agent"
+        || zero_protocol::agent::validate_actor_payload(&root.payload).is_err()
         || root.payload.get("parent_operation").is_some()
     {
         return Err(error("delegation root identity mismatch"));
@@ -125,7 +125,7 @@ fn derive_bounded(
         charge(bytes, &child)?;
         if child.session_id != group.session_id
             || child.payload["parent_operation"] != root.id
-            || child.payload["kind"] != "offline_snapshot_agent"
+            || zero_protocol::agent::validate_actor_payload(&child.payload).is_err()
             || child.payload["delegation_group_command"] != group.command_id
             || child.payload["delegation_index"] != index
             || child.payload["delegation_role"] != task.role
@@ -161,7 +161,14 @@ fn derive_bounded(
         } else {
             None
         };
-        if identity.get("http_context") != expected_http
+        let expected_version = if expected_http.is_some() {
+            root.payload.get("http_output_version")
+        } else {
+            None
+        };
+        if identity.get("http_output_version") != expected_version
+            || child.payload.get("http_output_version") != expected_version
+            || identity.get("http_context") != expected_http
             || child.payload.get("http_context") != expected_http
         {
             return Err(error("delegated HTTP authority or shared account differs"));
@@ -258,7 +265,7 @@ pub(crate) fn validate_parent_receipts(
         if !visited.insert(ancestor.id.clone())
             || visited.len() > 32
             || ancestor.session_id != parent.session_id
-            || ancestor.payload["kind"] != "offline_snapshot_agent"
+            || zero_protocol::agent::validate_actor_payload(&ancestor.payload).is_err()
             || ancestor.payload.get("parent_operation").is_some()
             || ancestor.payload.get("delegation_context")
                 != parent.payload.get("delegation_context")

@@ -11,7 +11,7 @@ budget_limit })`. A profile is an explicit `AgentRequest`; its initial prompt
 is never submitted automatically. Without a profile the UI supports browsing
 and explicit session creation, but cannot enqueue a new prompt.
 
-- Tab switches sessions, conversation, queue and Findings. Enter selects a session.
+- Tab switches sessions, conversation, queue, Findings and Web. Enter selects a session.
 - `n` in session selection, or Ctrl-N, creates a session with the launch budget
   (default zero). No provider, price, model, image or plugin generation is inferred.
 - Enter durably queues the composer; Shift-Enter inserts a newline. Unicode
@@ -137,3 +137,32 @@ identities; Ctrl-L advances and Ctrl-G refreshes. Each record is bounded to 96 K
 with an 8 KiB preview. Session/read epochs and immutable intent/decision checks
 prevent stale pages or hints from retargeting a decision. The original question
 inbox remains information-only and cannot supply permission grants.
+
+## Web workflows
+
+The fifth Tab view discovers web roots, including partial/failed/cancelled work
+without a terminal submission. Enter selects a run and shows captured HTTP
+authority and status; Enter again opens unverified hypotheses, while `e` opens
+retained HTTP operations. Hypothesis detail uses `[`/`]` to select a citation
+and `e` to inspect the exact retained manifest and body range. No inspection
+reloads credentials or contacts a target.
+
+Evidence shows response completeness separately from operation status, indexed
+redacted headers and wire/decoded/retained byte counts. Body windows are 4 KiB;
+Ctrl-L requests the next range with the exact expected manifest digest. UTF-8
+replacement is labeled and exact base64 remains visible. Lists/history keep one
+bounded page; empty discovery pages with a cursor can be continued. Failure to
+validate evidence remains visible instead of hiding a candidate.
+
+Web triage uses its own revision/digest/command-bound note editor: `a` accept,
+`s` suppress, `r` reopen, Ctrl-S submit, Esc discard. Enter/paste never submits.
+Uncertain retries preserve the original intent; conflicts require explicit
+Ctrl-B rebase after a successful refresh. Accepted claims remain Unverified.
+Pending mutations and drafts block navigation; question/approval overlays keep
+them intact. Global active cancellation and quit remain available.
+
+Verification plans and JSON/Markdown/HTML exports use the explicit `web`
+CLI commands. The TUI does not implicitly approve or launch a matrix, infer a
+clean result from an empty list, or label an HTTP observation as a verified
+vulnerability. Browser/session/OAST and semantic security oracles remain outside
+this bounded static-identity workflow.

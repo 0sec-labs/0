@@ -885,3 +885,114 @@ fn approval_overlay_preserves_question_draft_and_global_cancel_without_paste_aut
     );
     assert!(ui.active.as_ref().unwrap().cancel_requested);
 }
+#[test]
+fn terminal_web_review_leaves_local_followups_pending_after_refresh() {
+    let mut ui = state();
+    ready(&mut ui);
+    let first = queued("one", 1, QueuedAgentStatus::Pending);
+    let mut next = queued("two", 2, QueuedAgentStatus::Pending);
+    next.after_input = Some(first.id.clone());
+    ui.queue = vec![first.clone(), next.clone()];
+    ui.local.insert(next.id.clone());
+    let run = ui.start(first);
+    let report: zero_protocol::web::WebWorkflowReport =
+        serde_json::from_str(include_str!("../../zero-report/tests/fixtures/web.json")).unwrap();
+    let result = json!({"type":"agent","operation":{"id":"parent","session_id":"session","command_id":"queued:one","payload":{},"status":"succeeded","owner":null,"outcome":null},"result":{"status":"completed","text":"","turns":2,"tool_calls":2,"error":null,"web_review":{"review":report.run.review,"artifacts":report.run.artifacts,"inference_operation":"model-2"}},"duplicate":false});
+    let refresh = response(&mut ui, &run[0], result);
+    assert!(ui.halted);
+    for request in refresh {
+        let replies = match request.command {
+            Command::SessionHistory { .. } => Some(history_reply(json!([history(
+                1,
+                "parent",
+                "succeeded",
+                "completed",
+                false
+            )]))),
+            Command::AgentQueue { .. } => Some(json!({"type":"agent_queue","inputs":[]})),
+            _ => None,
+        };
+        if let Some(reply) = replies {
+            let actions = response(&mut ui, &request, reply);
+            assert!(
+                !actions
+                    .iter()
+                    .any(|r| matches!(r.command, Command::RunQueuedAgent { .. }))
+            );
+        }
+    }
+    // Even if the next local row is supplied by a later queue page, no auto-run.
+    ui.merge_queue(next);
+    ready(&mut ui);
+    assert!(ui.auto().is_empty());
+    assert!(ui.active.is_none());
+}
+#[test]
+fn web_view_displays_cancel_acknowledgment_and_retained_final_status() {
+    let mut ui = state();
+    ready(&mut ui);
+    let run = ui.start(queued("active", 1, QueuedAgentStatus::Pending));
+    ui.view = View::Web;
+    let cancel = ui.cancel();
+    assert!(ui.web.status.contains("awaiting acknowledgment"));
+    response(
+        &mut ui,
+        &cancel[0],
+        json!({"type":"cancelled","execution_id":"queued:active","accepted":false}),
+    );
+    assert!(ui.web.status.contains("not accepted"));
+    let cancel = ui.cancel();
+    response(
+        &mut ui,
+        &cancel[0],
+        json!({"type":"cancelled","execution_id":"queued:active","accepted":true}),
+    );
+    assert!(
+        ui.web
+            .status
+            .contains("waiting for retained result and cleanup")
+    );
+    let mut terminal = ratatui::Terminal::new(ratatui::backend::TestBackend::new(140, 38)).unwrap();
+    terminal
+        .draw(|frame| crate::render::draw(frame, &ui))
+        .unwrap();
+    let text = terminal
+        .backend()
+        .buffer()
+        .content
+        .iter()
+        .map(|c| c.symbol())
+        .collect::<String>();
+    assert!(text.contains("Cancellation accepted"));
+    response(
+        &mut ui,
+        &run[0],
+        json!({"type":"agent","operation":{"id":"parent","session_id":"session","command_id":"queued:active","payload":{},"status":"unknown","owner":null,"outcome":null},"result":{"status":"unknown","text":"","turns":1,"tool_calls":1,"error":"Uncertain"},"duplicate":false}),
+    );
+    assert!(ui.web.status.contains("Unknown"));
+    assert!(ui.web.status.contains("pending inputs retained"));
+    assert!(ui.halted);
+}
+
+#[test]
+fn web_view_does_not_hide_cancel_rejection_or_worker_error() {
+    let mut ui = state();
+    ready(&mut ui);
+    let run = ui.start(queued("active", 1, QueuedAgentStatus::Pending));
+    ui.view = View::Web;
+    let cancel = ui.cancel();
+    response(
+        &mut ui,
+        &cancel[0],
+        json!({"type":"error","code":"state","message":"Cancellation command rejected"}),
+    );
+    assert_eq!(ui.web.status, "Cancellation command rejected");
+    response(
+        &mut ui,
+        &run[0],
+        json!({"type":"error","code":"state","message":"Worker settlement unavailable; inspect retained journal"}),
+    );
+    assert!(ui.web.status.contains("Worker settlement unavailable"));
+    assert!(ui.halted);
+    assert!(ui.active.is_none());
+}

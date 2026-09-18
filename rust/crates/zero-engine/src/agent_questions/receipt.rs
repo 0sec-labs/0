@@ -17,7 +17,7 @@ pub(crate) fn validate_receipt(store: &Store, tool: &Operation) -> Result<String
     let request: AgentRequest = serde_json::from_value(actor.payload["request"].clone())?;
     if !request.operator_questions
         || actor.session_id != tool.session_id
-        || actor.payload["kind"] != "offline_snapshot_agent"
+        || zero_protocol::agent::validate_actor_payload(&actor.payload).is_err()
         || tool.payload["parent_operation"] != actor.id
         || record.operation_id != tool.id
     {

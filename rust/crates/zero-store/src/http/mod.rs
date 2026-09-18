@@ -98,7 +98,7 @@ impl Store {
         )?;
         let root = crate::operations::operation(&tx, &root_id)?;
         if root.payload.get("http_context") != Some(context)
-            || root.payload.get("kind").and_then(Value::as_str) != Some("offline_snapshot_agent")
+            || zero_protocol::agent::validate_actor_payload(&root.payload).is_err()
             || root.payload.pointer("/request/http_profile") != context.get("profile_name")
         {
             return Err(conflict());
@@ -161,6 +161,7 @@ impl Store {
             .conn
             .transaction_with_behavior(TransactionBehavior::Immediate)?;
         let op = owned(&tx, session, effect, owner)?;
+        crate::web_verification::effect(&tx, &op)?;
         let (account_session, context): (String, String) = tx.query_row(
             "SELECT session_id,context FROM http_accounts WHERE id=?1",
             [account],
@@ -173,6 +174,16 @@ impl Store {
             || intent.get("profile_sha256") != context.get("profile_sha256")
         {
             return Err(conflict());
+        }
+        if index == 0 && op.payload.get("origin").is_some() {
+            let planned: zero_protocol::http::HttpRequestIntent =
+                serde_json::from_value(op.payload["request"].clone())?;
+            if intent["url"] != planned.url
+                || intent["method"] != planned.method
+                || request != planned.body.as_ref().map_or(0, |b| b.len() as u64)
+            {
+                return Err(conflict());
+            }
         }
         let profile = context.get("profile").ok_or_else(invalid)?;
         let policy: HttpProfilePolicy = serde_json::from_value(profile.clone())?;

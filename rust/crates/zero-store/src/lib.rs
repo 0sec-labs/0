@@ -14,6 +14,9 @@ mod readonly;
 mod schema;
 mod steering;
 mod triage;
+mod web_discovery;
+mod web_triage;
+mod web_verification;
 use rusqlite::{Connection, OptionalExtension, Transaction, TransactionBehavior, params};
 use serde_json::Value;
 use std::{

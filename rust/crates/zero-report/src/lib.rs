@@ -2,10 +2,13 @@
 mod html;
 mod markdown;
 mod source_report;
+mod web_report;
 use serde_json::{Value, json};
 pub use source_report::{SourceReportFormat, render_source_report};
 use std::collections::HashSet;
+pub use web_report::{WebReportFormat, render_web_report};
 pub use zero_protocol::source::SourceReport;
+pub use zero_protocol::web::WebWorkflowReport;
 pub const MAX_REPORT_BYTES: usize = 16 * 1024 * 1024;
 #[derive(Debug, thiserror::Error)]
 pub enum Error {

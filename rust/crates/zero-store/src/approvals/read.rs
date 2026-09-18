@@ -63,8 +63,8 @@ pub(super) fn checked(
     let root = cache.reads.operation(conn, &root_id)?;
     if actor.session_id != session
         || root.session_id != session
-        || actor.payload["kind"] != "offline_snapshot_agent"
-        || root.payload["kind"] != "offline_snapshot_agent"
+        || zero_protocol::agent::validate_actor_payload(&actor.payload).is_err()
+        || zero_protocol::agent::validate_actor_payload(&root.payload).is_err()
         || root.payload.get("parent_operation").is_some()
         || actor.payload["parent_operation"]
             .as_str()

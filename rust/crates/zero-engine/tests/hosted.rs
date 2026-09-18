@@ -218,7 +218,7 @@ fn agent(dir: &std::path::Path) -> zero_protocol::agent::AgentRequest {
         model: "fixture".into(),
         instructions: "fixture".into(),
         prompt: "hello".into(),
-        execution: execution.into(),
+        execution: Some(execution.into()),
         max_turns: 1,
         reservation_per_turn: 10,
         plugin_tools: vec![],
@@ -226,6 +226,7 @@ fn agent(dir: &std::path::Path) -> zero_protocol::agent::AgentRequest {
         source_review_operation_id: None,
         source_snapshot_tools: false,
         source_submission_max_hypotheses: None,
+        web_submission_max_hypotheses: None,
     }
 }
 #[tokio::test]
@@ -446,7 +447,7 @@ async fn agent_and_source_policy_fail_before_admission_or_budget_or_source_copy(
     let dir = tempfile::tempdir().unwrap();
     let db = dir.path().join("state.db");
     let request = agent(dir.path());
-    let snapshot = request.execution.sandbox_request().snapshot;
+    let snapshot = request.snapshot_request().unwrap().snapshot;
     std::fs::remove_dir_all(dir.path().join("source")).unwrap();
     let engine = Engine::open(&db, None).unwrap();
     configure(&engine, &pin);
@@ -493,7 +494,7 @@ async fn source_records_catalog_and_readonly_export_rejects_child_pin_downgrade(
     let dir = tempfile::tempdir().unwrap();
     let db = dir.path().join("state.db");
     let profile = agent(dir.path());
-    let snapshot = profile.execution.sandbox_request().snapshot;
+    let snapshot = profile.snapshot_request().unwrap().snapshot;
     let arguments=json!({"hypotheses":[{"title":"Unverified claim","claimed_severity":"low","explanation":"Review this value.","citations":[{"path":"code.js","sha256":snapshot.files[0].digest,"start_line":1,"end_line":1}]}]}).to_string();
     let http=Http::with_output(json!([{"type":"function_call","call_id":"submit","name":"submit_source_hypotheses","arguments":arguments}])).await;
     let pin = pin(&http, 8192, "cloud");

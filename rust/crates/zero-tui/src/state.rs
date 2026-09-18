@@ -14,11 +14,13 @@ pub enum View {
     Conversation,
     Queue,
     Findings,
+    Web,
 }
 #[derive(Clone)]
 enum Pending {
     Init,
     Findings(crate::findings::Pending),
+    Web(crate::web::Pending),
     Steering(crate::steering::Pending),
     Questions(crate::questions::Pending),
     Approvals(crate::approvals::Pending),
@@ -59,6 +61,7 @@ pub struct Active {
 pub struct State {
     pub options: Options,
     pub findings: crate::findings::Findings,
+    pub web: crate::web::Findings,
     pub steering: crate::steering::Steering,
     pub questions: crate::questions::Questions,
     pub approvals: crate::approvals::Approvals,
@@ -112,6 +115,7 @@ impl State {
             session,
             options,
             findings: crate::findings::Findings::default(),
+            web: crate::web::Findings::default(),
             steering: crate::steering::Steering::default(),
             questions: crate::questions::Questions::default(),
             approvals: crate::approvals::Approvals::default(),
@@ -148,6 +152,12 @@ impl State {
             id: RequestId::Text(id),
             command,
         }
+    }
+    fn web_actions(&mut self, actions: Vec<crate::web::Action>) -> Vec<Request> {
+        actions
+            .into_iter()
+            .map(|a| self.request(a.command, Pending::Web(a.pending)))
+            .collect()
     }
     fn finding_actions(&mut self, actions: Vec<crate::findings::Action>) -> Vec<Request> {
         actions
@@ -268,6 +278,7 @@ impl State {
             return vec![];
         }
         self.findings.reset();
+        self.web.reset();
         self.steering.reset();
         self.questions.reset();
         self.approvals.reset();
@@ -305,6 +316,10 @@ impl State {
         }
         if self.questions.open {
             self.questions.paste(text);
+            return;
+        }
+        if self.view == View::Web {
+            self.web.paste(text);
             return;
         }
         if self.view == View::Findings {
@@ -363,6 +378,14 @@ impl State {
         {
             let actions = self.questions.key(key);
             return self.question_actions(actions);
+        }
+        if self.view == View::Web
+            && !self.help
+            && !global
+            && !matches!(key.code, KeyCode::Tab | KeyCode::F(1))
+        {
+            let actions = self.web.key(key);
+            return self.web_actions(actions);
         }
         if self.view == View::Findings
             && !self.help
@@ -428,6 +451,11 @@ impl State {
             KeyCode::F(1) => self.help = !self.help,
             KeyCode::Esc if self.help => self.help = false,
             KeyCode::Tab => {
+                if self.web.blocks_navigation() {
+                    self.web.status =
+                        "Finish or discard the decision draft before switching views".into();
+                    return vec![];
+                }
                 if self.findings.blocks_navigation() {
                     self.findings.status =
                         "Finish or discard the decision draft before switching views".into();
@@ -437,9 +465,14 @@ impl State {
                     View::Sessions => View::Conversation,
                     View::Conversation => View::Queue,
                     View::Queue => View::Findings,
-                    View::Findings => View::Sessions,
+                    View::Findings => View::Web,
+                    View::Web => View::Sessions,
                 };
                 self.selected = 0;
+                if self.view == View::Web {
+                    let actions = self.web.enter(self.session.as_deref());
+                    return self.web_actions(actions);
+                }
                 if self.view == View::Findings {
                     let actions = self.findings.enter(self.session.as_deref());
                     return self.finding_actions(actions);
@@ -515,6 +548,7 @@ impl State {
             || self.questions.blocks_navigation()
             || self.steering.sending
             || self.findings.blocks_navigation()
+            || self.web.blocks_navigation()
             || self.pending.values().any(|p| {
                 matches!(
                     p,
@@ -542,7 +576,7 @@ impl State {
             return vec![self.sessions_page()];
         };
         match self.view {
-            View::Findings => vec![],
+            View::Findings | View::Web => vec![],
             View::Sessions => {
                 if self.session_cursor.is_some() {
                     vec![self.sessions_page()]
@@ -743,6 +777,11 @@ impl State {
                     "Cancellation requested for active conversation; awaiting acknowledgment"
                         .into();
             }
+            if self.view == View::Web {
+                self.web.status =
+                    "Cancellation requested for active conversation; awaiting acknowledgment"
+                        .into();
+            }
             return vec![self.request(
                 Command::Cancel {
                     session_id: session,
@@ -834,6 +873,10 @@ impl State {
                     self.status = self.steering.notice.clone();
                     return Ok(self.steering_actions(actions));
                 }
+                if let Pending::Web(tag) = pending {
+                    let actions = self.web.reply(tag, *reply)?;
+                    return Ok(self.web_actions(actions));
+                }
                 if let Pending::Findings(tag) = pending {
                     let actions = self.findings.reply(tag, *reply)?;
                     return Ok(self.finding_actions(actions));
@@ -848,6 +891,13 @@ impl State {
                 }
                 if let Reply::Error { message, .. } = reply.as_ref() {
                     self.status = safe(message);
+                    if matches!(pending, Pending::Run | Pending::Cancel) {
+                        if self.view == View::Web {
+                            self.web.status = self.status.clone();
+                        } else if self.view == View::Findings {
+                            self.findings.status = self.status.clone();
+                        }
+                    }
                     if matches!(pending, Pending::Init) {
                         return Err(Error::Protocol(self.status.clone()));
                     }
@@ -870,7 +920,8 @@ impl State {
                 }
                 let value = serde_json::to_value(reply.as_ref())?;
                 match pending {
-                    Pending::Findings(_)
+                    Pending::Web(_)
+                    | Pending::Findings(_)
                     | Pending::Steering(_)
                     | Pending::Questions(_)
                     | Pending::Approvals(_) => {
@@ -1077,6 +1128,7 @@ impl State {
                                 && result.as_ref().is_some_and(|r| {
                                     r.status == zero_protocol::agent::AgentStatus::Completed
                                         && r.source_review.is_none()
+                                        && r.web_review.is_none()
                                 }));
                         if let Some(input) = self.queue.iter_mut().find(|q| q.id == active.input) {
                             input.operation_id = Some(operation.id.clone());
@@ -1106,6 +1158,8 @@ impl State {
                         );
                         if self.view == View::Findings {
                             self.findings.status = self.status.clone();
+                        } else if self.view == View::Web {
+                            self.web.status = self.status.clone();
                         }
                         let mut out = self.refresh();
                         out.extend(self.refresh_steering());
@@ -1126,6 +1180,8 @@ impl State {
                         .into();
                         if self.view == View::Findings {
                             self.findings.status = self.status.clone();
+                        } else if self.view == View::Web {
+                            self.web.status = self.status.clone();
                         }
                         Ok(vec![])
                     }

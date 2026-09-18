@@ -27,6 +27,7 @@ pub mod steering;
 pub mod triage;
 pub mod verification;
 mod verification_binary;
+pub mod web;
 pub use execution::*;
 pub use session::*;
 
@@ -118,6 +119,72 @@ pub enum Command {
         session_id: String,
         command_id: String,
         request: verification::SourceReproductionRequest,
+    },
+    WebRuns {
+        session_id: String,
+        before_sequence: Option<u64>,
+        limit: u32,
+    },
+    WebRun {
+        session_id: String,
+        operation_id: String,
+    },
+    WebHttpOperations {
+        session_id: String,
+        web_operation_id: String,
+        after_sequence: u64,
+        limit: u32,
+    },
+    WebFindings {
+        session_id: String,
+        web_operation_id: String,
+        #[serde(default)]
+        offset: u32,
+        #[serde(default = "triage::finding_limit")]
+        limit: u32,
+    },
+    WebFinding {
+        session_id: String,
+        web_operation_id: String,
+        hypothesis_id: String,
+        #[serde(default)]
+        after_revision: u64,
+        #[serde(default = "triage::history_limit")]
+        limit: u32,
+    },
+    TriageWebFinding {
+        session_id: String,
+        command_id: String,
+        web_operation_id: String,
+        hypothesis_id: String,
+        status: web::WebTriageStatus,
+        expected_revision: u64,
+        note: String,
+    },
+    HttpEvidence {
+        session_id: String,
+        operation_id: String,
+    },
+    HttpEvidenceRange {
+        session_id: String,
+        operation_id: String,
+        expected_manifest_sha256: String,
+        offset: u64,
+        limit: u32,
+    },
+    PrepareWebVerification {
+        session_id: String,
+        plan: web::WebVerificationPlan,
+    },
+    VerifyWebHypothesis {
+        session_id: String,
+        command_id: String,
+        request: web::WebVerificationRequest,
+    },
+    WebWorkflowReport {
+        session_id: String,
+        operation_id: String,
+        verification_ids: Vec<String>,
     },
     SourceReviews {
         session_id: String,
@@ -342,6 +409,44 @@ pub enum Reply {
         operation: Operation,
         result: Option<verification::ReproductionOutcome>,
         duplicate: bool,
+    },
+    WebRuns {
+        page: web::WebRunsPage,
+    },
+    WebRun {
+        run: web::WebRun,
+    },
+    WebHttpOperations {
+        page: web::WebHttpOperationsPage,
+    },
+    WebFindings {
+        findings: Vec<web::WebFindingRecord>,
+    },
+    WebFinding {
+        finding: web::WebFindingRecord,
+        history: Vec<web::WebTriageDecision>,
+    },
+    WebFindingTriaged {
+        finding: web::WebFindingRecord,
+        decision: web::WebTriageDecision,
+        duplicate: bool,
+    },
+    HttpEvidence {
+        evidence: web::HttpEvidenceMetadata,
+    },
+    HttpEvidenceRange {
+        range: web::HttpEvidenceRange,
+    },
+    WebVerificationPrepared {
+        preparation: web::WebVerificationPreparation,
+    },
+    WebVerification {
+        operation: Operation,
+        result: Option<web::WebVerificationOutcome>,
+        duplicate: bool,
+    },
+    WebWorkflowReport {
+        report: web::WebWorkflowReport,
     },
     SourceReviews {
         page: discovery::SourceReviewPage,

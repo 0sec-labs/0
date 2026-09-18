@@ -710,19 +710,22 @@ fn agent_request(f: &Fixture) -> AgentRequest {
         source_review_operation_id: None,
         source_snapshot_tools: false,
         source_submission_max_hypotheses: None,
-        execution: zero_protocol::ExecutionRequest {
-            execution_id: "profile".into(),
-            image: "local:test".into(),
-            snapshot: zero_executor::pin_snapshot(&source).unwrap(),
-            argv: vec!["true".into()],
-            build_argv: None,
-            stdin: None,
-            timeout_ms: 1000,
-            memory_mb: 128,
-            cpus: 0.5,
-            max_output_bytes: 8192,
-        }
-        .into(),
+        web_submission_max_hypotheses: None,
+        execution: Some(
+            zero_protocol::ExecutionRequest {
+                execution_id: "profile".into(),
+                image: "local:test".into(),
+                snapshot: zero_executor::pin_snapshot(&source).unwrap(),
+                argv: vec!["true".into()],
+                build_argv: None,
+                stdin: None,
+                timeout_ms: 1000,
+                memory_mb: 128,
+                cpus: 0.5,
+                max_output_bytes: 8192,
+            }
+            .into(),
+        ),
         plugin_tools: vec![PluginToolBinding {
             alias: "inspect_plugin".into(),
             plugin: "fixture".into(),

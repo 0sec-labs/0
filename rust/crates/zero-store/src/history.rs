@@ -148,8 +148,8 @@ impl Store {
  CASE WHEN length(CAST(payload_hash AS BLOB))<=64 THEN payload_hash END,request,outcome,
  (SELECT CASE WHEN length(CAST(a.digest AS BLOB))<=71 THEN a.digest END FROM operation_artifacts a WHERE a.operation_id=candidates.id AND a.name='agent.continuation')
  FROM candidates WHERE admission IS NULL
- OR (json_extract(admission,'$.payload.kind')='offline_snapshot_agent' AND json_type(admission,'$.payload.parent_operation') IS NULL)
- OR (json_extract(request,'$.kind')='offline_snapshot_agent' AND json_type(request,'$.parent_operation') IS NULL)
+ OR (json_extract(admission,'$.payload.kind') IN ('offline_snapshot_agent','scoped_web_agent') AND json_type(admission,'$.payload.parent_operation') IS NULL)
+ OR (json_extract(request,'$.kind') IN ('offline_snapshot_agent','scoped_web_agent') AND json_type(request,'$.parent_operation') IS NULL)
  ORDER BY sequence DESC LIMIT ?3")?;
         let mut rows = statement.query(params![
             session,

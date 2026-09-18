@@ -235,7 +235,7 @@ dispatched, that input retains its parent for exact retry; subsequent prompts
 follow the pending queue or current retained conversation instead of repeatedly
 forking from the initial parent. Unknown or ineligible outcomes require recovery.
 
-Tab switches between sessions, conversation, durable queue and findings. Enter selects a
+Tab switches between sessions, conversation, durable queue, findings and web. Enter selects a
 session or submits the conversation composer; bracketed paste inserts text,
 including newlines, without submitting. Ctrl-N creates a session with
 `--budget-limit` (default zero). Ctrl-R explicitly runs a selected pending input;
@@ -924,3 +924,66 @@ retention. HTTP 4xx/5xx can be complete observations; a dispatched incomplete
 response remains uncertain and an exact retry reads its receipt without sending
 another target request. Neither a response nor its approval is a vulnerability
 verification or a safety verdict.
+
+### Structured web workflows and retained evidence
+
+Use the existing `agent --request web.json` entry point with `http_profile` and
+`web_submission_max_hypotheses: 1..32`. Omit `execution` for an HTTP-only actor;
+no snapshot or Docker profile is fabricated. The host HTTP profile still defines
+scope, credentials, rate and byte budgets. Terminal web submissions contain
+**unverified hypotheses**, with citations into retained redacted responses.
+A failed/cancelled run can retain useful observations without a terminal review.
+
+```sh
+0sec-native web runs --session SESSION
+0sec-native web show --session SESSION --operation WEB_RUN
+0sec-native web observations --session SESSION --operation WEB_RUN
+0sec-native web findings --session SESSION --operation WEB_RUN
+0sec-native web evidence --session SESSION --operation HTTP_OPERATION
+0sec-native web range --session SESSION --operation HTTP_OPERATION \
+  --expected-manifest sha256:DIGEST --offset 0 --limit 4096
+```
+
+These reads bypass current profile files and do not acquire engine ownership or
+contact targets. Metadata includes completeness, lifecycle status, header
+indices, retained body digest and byte counts. Range responses contain exact
+base64 bytes, at most 64 KiB; offsets refer to redacted decoded bytes, not raw
+network data. Catalog pages can be empty with an advancing cursor. Continue
+`--after-sequence`/`--before-sequence` as returned, rather than assuming exhaustion.
+
+`web finding` adds `--hypothesis ID` and decision-history pagination. `web accept`,
+`suppress`, and `reopen` require `--command-id`, `--expected-revision`, and the
+explicit run/hypothesis; `--note` records operator intent. Acceptance does not
+change the hypothesis's `unverified` state or establish reportability.
+
+`web verify-prepare --session SESSION --plan plan.json` validates a host-authored
+plan and prints the exact complete-plan intent and digest without dispatch.
+`web verify --session SESSION --command-id ID --plan plan.json --expected-intent
+sha256:DIGEST` executes its fresh bounded attack/control matrix. If inherited
+HTTP policy requires approval, also supply `--approve-plan sha256:DIGEST` with
+that exact digest. There is no implicit approval or per-case approval shortcut.
+A retained terminal command retry returns its outcome and does not resume calls.
+
+`web report --session SESSION --operation WEB_RUN --verification VERIFICATION_ID
+--format json|markdown|html` exports the selected workflow and optional explicit
+verification links (repeat `--verification`). Export revalidates evidence and
+reassesses linked attempts offline. An observed result qualifies only the frozen
+plan under the same static identity and existing target state; it is not a
+cross-principal vulnerability verdict. Partial/empty reports never imply safety.
+See [the workflow contract](../../WEB-WORKFLOW.md) for oracle/state limitations.
+
+The terminal's fifth **Web** view works without a provider profile. Select a run
+with Enter, then Enter for hypotheses or `e` for retained HTTP operations.
+In hypothesis detail, `[`/`]` select a citation and `e` inspects its exact
+manifest/range. `Ctrl-L` pages lists/history or the next 4 KiB of body evidence;
+`Ctrl-G` refreshes; Esc goes back. Body display labels UTF-8 replacement and
+also shows exact base64. `a`/`s`/`r` opens an operator decision note, Ctrl-S submits,
+and pasted text/Enter only edits. Conflicts preserve the note and revision;
+Ctrl-B explicitly rebases to a refreshed record. No TUI key silently executes a
+verification plan; use the explicit prepare/verify CLI workflow.
+
+Web reports bound discovery to 4096 scanned journal rows, 128 displayed observations,
+and 64 MiB of validated body inspection plus one response sentinel. Unavailable
+or omitted evidence is labeled explicitly. Up to 32 explicitly linked verification
+receipts have their own matrix and provenance read bounds; that work is separate
+from the discovery-body prefix. Oversized reports fail explicitly.

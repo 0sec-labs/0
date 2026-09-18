@@ -18,6 +18,7 @@ mod server;
 mod source_report;
 mod steering;
 mod tui;
+mod web;
 
 use args::{Args, Command, QueueCommand, SessionCommand, SnapshotCommand};
 use clap::Parser;
@@ -66,6 +67,15 @@ fn main() -> std::process::ExitCode {
 }
 
 async fn run(args: Args) -> Result<bool, Box<dyn Error>> {
+    let mut web_dispatch = None;
+    if let Command::Web { command } = &args.command {
+        if command.requires_dispatch() {
+            web_dispatch = Some(web::command(command).await?);
+        } else {
+            return web::readonly(&args.state, command).await;
+        }
+    }
+
     if let Command::Tui {
         session,
         request,
@@ -194,6 +204,9 @@ async fn run(args: Args) -> Result<bool, Box<dyn Error>> {
         return console::run(engine, session.clone(), profile).await;
     }
     let command = match args.command {
+        Command::Web { .. } => web_dispatch
+            .take()
+            .ok_or("Web dispatch intent unavailable")?,
         Command::Queue { command } => match command {
             QueueCommand::Enqueue {
                 session,
@@ -444,6 +457,7 @@ async fn run(args: Args) -> Result<bool, Box<dyn Error>> {
         | Reply::SourceReproduction { operation, .. }
         | Reply::SourceRepair { operation, .. }
         | Reply::SourceReview { operation, .. }
+        | Reply::WebVerification { operation, .. }
         | Reply::Plugin { operation, .. } => {
             matches!(operation.status, zero_protocol::OperationStatus::Succeeded)
         }

@@ -21,7 +21,7 @@ impl Store {
         let mut cache = Cache::default();
         let actor = cache.reads.operation(&tx, actor_id)?;
         owner(&actor, session, who)?;
-        if actor.payload["kind"] != "offline_snapshot_agent" {
+        if zero_protocol::agent::validate_actor_payload(&actor.payload).is_err() {
             return Err(bad("approval target is not an actor"));
         }
         let root_id = actor.payload["parent_operation"]
@@ -29,7 +29,7 @@ impl Store {
             .unwrap_or(actor_id);
         let root = cache.reads.operation(&tx, root_id)?;
         owner(&root, session, who)?;
-        if root.payload["kind"] != "offline_snapshot_agent"
+        if zero_protocol::agent::validate_actor_payload(&root.payload).is_err()
             || root.payload.get("parent_operation").is_some()
         {
             return Err(bad("approval root differs"));

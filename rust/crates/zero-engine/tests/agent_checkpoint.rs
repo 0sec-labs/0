@@ -178,6 +178,7 @@ impl Setup {
                 source_review_operation_id: None,
                 source_snapshot_tools: false,
                 source_submission_max_hypotheses: None,
+                web_submission_max_hypotheses: None,
                 provider: "local".into(),
                 context_policy: None,
                 delegation_policy: None,
@@ -187,7 +188,7 @@ impl Setup {
                 model: "fixture".into(),
                 instructions: "Use only offered tools".into(),
                 prompt: "Inspect the authorized snapshot".into(),
-                execution: execution.into(),
+                execution: Some(execution.into()),
                 max_turns: 3,
                 reservation_per_turn: 5,
             },
@@ -485,9 +486,9 @@ async fn changed_authority_or_cross_session_cannot_use_turn_limit_checkpoint() {
                 0 => *session_id = other.clone(),
                 1 => request.instructions.push_str(" changed"),
                 _ => {
-                    let mut execution = request.execution.sandbox_request();
+                    let mut execution = request.snapshot_request().unwrap();
                     execution.snapshot.root = f.dir.path().display().to_string();
-                    request.execution = execution.into();
+                    request.execution = Some(execution.into());
                 }
             }
         }
@@ -500,7 +501,7 @@ async fn changed_authority_or_cross_session_cannot_use_turn_limit_checkpoint() {
 async fn unknown_cleanup_has_no_checkpoint_and_cannot_be_continued() {
     let mut f = Setup::new("cleanup-fail");
     f.request.max_turns = 1;
-    if let zero_protocol::agent::AgentExecution::Docker(r) = &mut f.request.execution {
+    if let zero_protocol::agent::AgentExecution::Docker(r) = f.request.execution.as_mut().unwrap() {
         r.timeout_ms = 1000;
     }
     let http = Http::new(vec![tool_turn(), answer()], false).await;

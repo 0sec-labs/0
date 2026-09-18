@@ -124,7 +124,14 @@ pub(super) fn derive(
             serde_json::from_value((*args).clone())?;
         let request = zero_http::normalize_intent(&policy, arguments)
             .map_err(|_| bad("HTTP approval request rejected"))?;
-        json!({"parent_operation":actor.id,"kind":"agent_http","call_id":call,"http_context":context,"request":request})
+        let mut payload = json!({"parent_operation":actor.id,"kind":"agent_http","call_id":call,"http_context":context,"request":request});
+        if let Some(version) = actor.payload.get("http_output_version") {
+            if version != 2 {
+                return Err(bad("unsupported HTTP approval output version"));
+            }
+            payload["http_output_version"] = json!(2);
+        }
+        payload
     } else {
         let bindings: Vec<zero_protocol::agent::PluginToolBinding> = serde_json::from_value(
             actor.payload["request"]

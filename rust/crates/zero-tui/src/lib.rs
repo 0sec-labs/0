@@ -6,6 +6,7 @@ pub mod questions;
 pub mod render;
 pub mod state;
 pub mod steering;
+pub mod web;
 use crossterm::{
     event::{DisableBracketedPaste, EnableBracketedPaste, Event, EventStream},
     execute,

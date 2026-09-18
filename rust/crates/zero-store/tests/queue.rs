@@ -3,7 +3,7 @@ use serde_json::json;
 use zero_protocol::{agent::AgentRequest, queue::QueuedAgentStatus as Status};
 use zero_store::{OperationStatus, Store};
 fn request(prompt: &str) -> AgentRequest {
-    serde_json::from_value(json!({"provider":"p","model":"m","instructions":"i","prompt":prompt,"execution":{"execution_id":"e","image":"local","argv":["true"],"snapshot":{"id":"s","root":"/tmp/source","digest":"sha256:abc","files":[]},"timeout_ms":1000,"memory_mb":128,"cpus":0.5,"max_output_bytes":1024},"max_turns":2,"reservation_per_turn":10})).unwrap()
+    serde_json::from_value(json!({"provider":"p","model":"m","instructions":"i","prompt":prompt,"execution":{"execution_id":"e","image":"local","argv":["true"],"snapshot":{"id":"s","root":"/tmp/source","digest":format!("sha256:{}","a".repeat(64)),"files":[{"path":"a","bytes":0,"digest":format!("sha256:{}","b".repeat(64))}]},"timeout_ms":1000,"memory_mb":128,"cpus":0.5,"max_output_bytes":1024},"max_turns":2,"reservation_per_turn":10})).unwrap()
 }
 fn admit(store: &mut Store, session: &str, id: &str) -> String {
     let row = store.resolve_queued_agent(session, id).unwrap();
@@ -215,7 +215,7 @@ fn v4_migration_preserves_artifacts_and_readonly_never_migrates() {
     drop(s);
     let conn = rusqlite::Connection::open(&path).unwrap();
     conn.execute_batch(
-        "DROP INDEX http_receipt_events; DROP INDEX http_rate_events; DROP TABLE http_rates; DROP TABLE http_dispatches; DROP TABLE http_accounts; DROP TABLE tool_approval_consumptions; DROP TABLE tool_approval_decisions; DROP TABLE tool_approvals; DROP TABLE operator_question_decisions; DROP TABLE operator_questions; DROP TABLE agent_steering; DROP TABLE agent_steering_windows; DROP TABLE source_triage_decisions; DROP TABLE agent_inputs; PRAGMA user_version=4;",
+        "DROP TABLE web_triage_decisions; DROP INDEX http_receipt_events; DROP INDEX http_rate_events; DROP TABLE http_rates; DROP TABLE http_dispatches; DROP TABLE http_accounts; DROP TABLE tool_approval_consumptions; DROP TABLE tool_approval_decisions; DROP TABLE tool_approvals; DROP TABLE operator_question_decisions; DROP TABLE operator_questions; DROP TABLE agent_steering; DROP TABLE agent_steering_windows; DROP TABLE source_triage_decisions; DROP TABLE agent_inputs; PRAGMA user_version=4;",
     )
     .unwrap();
     drop(conn);
@@ -485,4 +485,48 @@ fn resolved_dependency_validates_exact_parent_identity_without_recursive_history
         assert!(s.queued_agent(&session, &b.id).is_err(), "{mutation}");
         assert!(s.resolve_queued_agent(&session, &b.id).is_err());
     }
+}
+
+#[test]
+fn queued_web_actor_is_typed_and_terminal_submission_cannot_feed_a_continuation() {
+    let mut store = Store::open(":memory:").unwrap();
+    let session = store.create_session("g", 100).unwrap().id;
+    let mut web = request("web");
+    web.execution = None;
+    web.http_profile = Some("scope".into());
+    web.web_submission_max_hypotheses = Some(2);
+    let (first, _) = store.enqueue_agent(&session, "web", &web, &None).unwrap();
+    let (next, _) = store
+        .enqueue_agent(&session, "after", &web, &Some(first.id.clone()))
+        .unwrap();
+    let resolved = store.resolve_queued_agent(&session, &first.id).unwrap();
+    let op = store
+        .admit_command(
+            &session,
+            &resolved.run_command_id,
+            &json!({"kind":"scoped_web_agent","request":resolved.resolved_request}),
+        )
+        .unwrap()
+        .operation;
+    store.begin_operation(&op.id, "owner").unwrap();
+    store
+        .settle_operation(
+            &op.id,
+            "owner",
+            OperationStatus::Succeeded,
+            &json!({"status":"completed"}),
+        )
+        .unwrap();
+    assert_eq!(
+        store.queued_agent(&session, &first.id).unwrap().status,
+        Status::Succeeded
+    );
+    assert!(store.resolve_queued_agent(&session, &next.id).is_err());
+    assert!(
+        store
+            .queued_agent(&session, &next.id)
+            .unwrap()
+            .resolved_request
+            .is_none()
+    );
 }

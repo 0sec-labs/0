@@ -13,3 +13,13 @@ pub fn read_source_reviews(
 ) -> Result<SourceReviewPage, EngineError> {
     Ok(Store::open_read_only(state)?.source_reviews(session, before_sequence, limit)?)
 }
+
+/// Discover partial web roots without acquiring ownership or reading evidence.
+pub fn read_web_runs(
+    state: &Path,
+    session: &str,
+    before: Option<u64>,
+    limit: u32,
+) -> Result<zero_protocol::web::WebRunsPage, EngineError> {
+    Ok(Store::open_read_only(state)?.web_runs(session, before, limit)?)
+}

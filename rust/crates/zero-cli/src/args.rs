@@ -44,6 +44,11 @@ pub struct Args {
 
 #[derive(Debug, Subcommand)]
 pub enum Command {
+    /// Inspect scoped web hypotheses/evidence or explicitly execute a frozen host verification plan.
+    Web {
+        #[command(subcommand)]
+        command: crate::web::WebCommand,
+    },
     /// Inspect retained, redacted target HTTP evidence without network or owner access.
     Http {
         #[command(subcommand)]

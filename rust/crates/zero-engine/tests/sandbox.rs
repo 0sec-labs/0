@@ -386,6 +386,7 @@ async fn real_microvm_engine_and_agent_ownership_accounting_and_durable_retry() 
         source_review_operation_id: None,
         source_snapshot_tools: false,
         source_submission_max_hypotheses: None,
+        web_submission_max_hypotheses: None,
         provider: "fixture".into(),
         context_policy: None,
         delegation_policy: None,
@@ -395,7 +396,7 @@ async fn real_microvm_engine_and_agent_ownership_accounting_and_durable_retry() 
         model: "loopback".into(),
         instructions: "Only execute the offered snapshot tool".into(),
         prompt: "Inspect this pinned fixture".into(),
-        execution: f.request.clone().into(),
+        execution: Some(f.request.clone().into()),
         max_turns: 3,
         reservation_per_turn: 5,
     };

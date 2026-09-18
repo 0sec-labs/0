@@ -64,7 +64,12 @@ pub(super) fn capture(
     }
     let source = source_provenance::load(store, session, id)?;
     if serde_json::to_value(&source.snapshot)?
-        != serde_json::to_value(&request.execution.sandbox_request().snapshot)?
+        != serde_json::to_value(
+            &request
+                .snapshot_request()
+                .map_err(|e| EngineError::State(e.to_string()))?
+                .snapshot,
+        )?
     {
         return Err(error(
             "source tool authority differs from pinned execution snapshot",

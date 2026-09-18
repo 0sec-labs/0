@@ -8,7 +8,7 @@ use zero_protocol::{
 use zero_store::{OperationStatus, Store};
 
 fn payload(prompt: &str) -> Value {
-    json!({"kind":"offline_snapshot_agent","request":{"provider":"private-provider","model":"private-model","instructions":"HOST-INSTRUCTIONS-SECRET","prompt":prompt,"execution":{"execution_id":"e","image":"local","argv":["true"],"snapshot":{"id":"s","root":"/private-source-root","digest":"sha256:abc","files":[]},"timeout_ms":1000,"memory_mb":128,"cpus":0.5,"max_output_bytes":1024},"max_turns":2,"reservation_per_turn":10},"endpoint":"PRIVATE-ENDPOINT"})
+    json!({"kind":"offline_snapshot_agent","request":{"provider":"private-provider","model":"private-model","instructions":"HOST-INSTRUCTIONS-SECRET","prompt":prompt,"execution":{"execution_id":"e","image":"local","argv":["true"],"snapshot":{"id":"s","root":"/private-source-root","digest":format!("sha256:{}","a".repeat(64)),"files":[{"path":"a","bytes":0,"digest":format!("sha256:{}","b".repeat(64))}]},"timeout_ms":1000,"memory_mb":128,"cpus":0.5,"max_output_bytes":1024},"max_turns":2,"reservation_per_turn":10},"endpoint":"PRIVATE-ENDPOINT"})
 }
 fn admit(store: &mut Store, session: &str, command: &str, prompt: &str) -> String {
     store
@@ -368,4 +368,27 @@ fn continuation_hint_excludes_structured_source_recovery_and_missing_checkpoint(
         let page = store.session_history(&session, None, 1).unwrap();
         assert_eq!(page.entries[0].continuable, expected, "{command}");
     }
+}
+
+#[test]
+fn completed_web_submission_is_visible_but_not_continuable() {
+    let mut store = Store::open(":memory:").unwrap();
+    let session = store.create_session("g", 100).unwrap().id;
+    let request = json!({"provider":"p","model":"m","instructions":"i","prompt":"web prompt","http_profile":"scope","web_submission_max_hypotheses":2,"max_turns":2,"reservation_per_turn":10});
+    let op = store
+        .admit_command(
+            &session,
+            "web",
+            &json!({"kind":"scoped_web_agent","request":request}),
+        )
+        .unwrap()
+        .operation;
+    store.begin_operation(&op.id, "owner").unwrap();
+    let digest = format!("sha256:{}", "a".repeat(64));
+    let review = json!({"schema_version":1,"request_sha256":digest,"completion_sha256":digest,"submission_call_id":"submit","model":"m","provider_response_id":null,"hypotheses":[],"evidence":[]});
+    store.settle_operation(&op.id,"owner",OperationStatus::Succeeded,&json!({"status":"completed","text":"empty submission","turns":1,"tool_calls":1,"error":null,"web_review":{"review":review,"artifacts":{},"inference_operation":"inference"}})).unwrap();
+    let page = store.session_history(&session, None, 32).unwrap();
+    assert_eq!(page.entries.len(), 1);
+    assert!(!page.entries[0].continuable);
+    assert_eq!(page.entries[0].operation_id, op.id);
 }

@@ -5,6 +5,7 @@ use zero_protocol::{agent::AgentRequest, http::HttpRequestArguments, model::Tool
 mod execution;
 mod receipt;
 pub(super) use execution::execute_admitted;
+pub(super) use receipt::load as checked_evidence;
 pub(crate) use receipt::validate_receipt;
 
 fn error(message: impl std::fmt::Display) -> EngineError {
@@ -19,6 +20,7 @@ fn hash(value: &impl serde::Serialize) -> Result<String, EngineError> {
 #[derive(Clone)]
 pub(super) struct Context {
     pub identity: Value,
+    pub output_version: u32,
     pub client: Arc<zero_http::Client>,
 }
 impl Engine {
@@ -76,7 +78,19 @@ pub(super) fn capture(
     {
         return Err(error("continuation HTTP authority or account changed"));
     }
-    Ok(Some(Context { identity, client }))
+    let output_version = if request.web_submission_max_hypotheses.is_some() {
+        2
+    } else {
+        prior
+            .as_ref()
+            .and_then(|op| op.payload["http_output_version"].as_u64())
+            .unwrap_or(1) as u32
+    };
+    Ok(Some(Context {
+        identity,
+        client,
+        output_version,
+    }))
 }
 fn identity(
     session: &str,
@@ -128,7 +142,11 @@ impl Context {
         self.client.prepare(args).map_err(error)
     }
     pub fn payload(&self, actor: &str, call: &str, request: &zero_http::PreparedRequest) -> Value {
-        json!({"kind":"agent_http","parent_operation":actor,"call_id":call,"http_context":self.identity,"request":request.intent()})
+        let mut payload = json!({"kind":"agent_http","parent_operation":actor,"call_id":call,"http_context":self.identity,"request":request.intent()});
+        if self.output_version == 2 {
+            payload["http_output_version"] = json!(2);
+        }
+        payload
     }
 }
 

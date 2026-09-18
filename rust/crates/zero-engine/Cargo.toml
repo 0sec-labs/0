@@ -7,6 +7,8 @@ license.workspace = true
 publish.workspace = true
 
 [dependencies]
+base64 = "0.22"
+zero-web-verification = { path = "../zero-web-verification" }
 httpdate = "1"
 zero-http = { path = "../zero-http" }
 futures-util.workspace = true

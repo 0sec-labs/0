@@ -27,116 +27,182 @@ fn field<'a>(value: &'a Value, name: &str) -> Result<&'a str> {
         .ok_or_else(|| invalid("missing admission identity"))
 }
 impl Store {
-    /// Scans at most 128 journal rows, before filtering by kind or attachment.
-    /// Empty pages can have continuation cursors. No operation request/outcome
-    /// or artifact bytes are read, and this never claims inspection eligibility.
+    /// Bounded attachment catalog. Empty pages can still carry a journal cursor.
     pub fn source_reviews(
         &self,
         session: &str,
         before: Option<u64>,
         limit: u32,
     ) -> Result<SourceReviewPage> {
-        id(session)?;
-        if !(1..=32).contains(&limit) {
-            return Err(invalid("limit must be 1..32"));
-        }
-        // An inclusive bound lets SQLite use both parts of the journal primary
-        // key without an OR predicate, including the largest valid sequence.
-        let upper = before.map(integer).transpose()?.map_or(i64::MAX, |n| n - 1);
-        let tx = self.conn.unchecked_transaction()?;
-        if tx
-            .query_row("SELECT 1 FROM sessions WHERE id=?1", [session], |_| Ok(()))
-            .optional()?
-            .is_none()
-        {
-            return Err(Error::NotFound(session.into()));
-        }
-        let mut statement = tx.prepare(
-            "SELECT sequence,
+        let page = scan(
+            &self.conn,
+            session,
+            before,
+            limit,
+            |conn, session, sequence, admission| {
+                candidate(conn, session, sequence, admission)?
+                    .map(serde_json::to_value)
+                    .transpose()
+                    .map_err(Into::into)
+            },
+        )?;
+        Ok(SourceReviewPage {
+            reviews: page
+                .entries
+                .into_iter()
+                .map(serde_json::from_value)
+                .collect::<std::result::Result<_, _>>()?,
+            next_before_sequence: page.next_before_sequence,
+        })
+    }
+}
+pub(super) struct RawPage {
+    pub entries: Vec<Value>,
+    pub next_before_sequence: Option<u64>,
+}
+/// Shared bounded journal scanning for source attachments and partial web roots.
+/// Pickers return metadata only; detail endpoints own full provenance checks.
+pub(super) fn scan(
+    conn: &Connection,
+    session: &str,
+    before: Option<u64>,
+    limit: u32,
+    pick: impl Fn(&Connection, &str, u64, &Value) -> Result<Option<Value>>,
+) -> Result<RawPage> {
+    scan_direction(conn, session, before, limit, false, pick)
+}
+pub(super) fn scan_forward(
+    conn: &Connection,
+    session: &str,
+    after: Option<u64>,
+    limit: u32,
+    pick: impl Fn(&Connection, &str, u64, &Value) -> Result<Option<Value>>,
+) -> Result<RawPage> {
+    scan_direction(conn, session, after, limit, true, pick)
+}
+fn scan_direction(
+    conn: &Connection,
+    session: &str,
+    cursor: Option<u64>,
+    limit: u32,
+    forward: bool,
+    pick: impl Fn(&Connection, &str, u64, &Value) -> Result<Option<Value>>,
+) -> Result<RawPage> {
+    id(session)?;
+    if !(1..=32).contains(&limit) {
+        return Err(invalid("limit must be 1..32"));
+    }
+    // An inclusive bound lets SQLite use both parts of the journal primary
+    // key without an OR predicate, including the largest valid sequence.
+    let bound = if forward {
+        cursor.map(integer).transpose()?.unwrap_or(0)
+    } else {
+        cursor.map(integer).transpose()?.map_or(i64::MAX, |n| n - 1)
+    };
+    let tx = conn.unchecked_transaction()?;
+    if tx
+        .query_row("SELECT 1 FROM sessions WHERE id=?1", [session], |_| Ok(()))
+        .optional()?
+        .is_none()
+    {
+        return Err(Error::NotFound(session.into()));
+    }
+    let query = if forward {
+        "SELECT sequence,
  CASE WHEN length(CAST(kind AS BLOB))<=128 THEN kind END,
  CASE WHEN kind='command_admitted' THEN length(CAST(payload AS BLOB)) ELSE 0 END
- FROM events WHERE session_id=?1 AND sequence<=?2 ORDER BY sequence DESC LIMIT ?3",
-        )?;
-        let mut rows = statement.query(params![session, upper, SCAN_ROWS])?;
-        let mut page = SourceReviewPage {
-            reviews: vec![],
-            next_before_sequence: None,
+ FROM events WHERE session_id=?1 AND sequence>?2 ORDER BY sequence ASC LIMIT ?3"
+    } else {
+        "SELECT sequence,
+ CASE WHEN length(CAST(kind AS BLOB))<=128 THEN kind END,
+ CASE WHEN kind='command_admitted' THEN length(CAST(payload AS BLOB)) ELSE 0 END
+ FROM events WHERE session_id=?1 AND sequence<=?2 ORDER BY sequence DESC LIMIT ?3"
+    };
+    let mut statement = tx.prepare(query)?;
+    let mut rows = statement.query(params![session, bound, SCAN_ROWS])?;
+    let mut page = RawPage {
+        entries: vec![],
+        next_before_sequence: None,
+    };
+    let mut consumed = None;
+    let mut read_bytes = 0usize;
+    while page.entries.len() < limit as usize {
+        let Some(row) = rows.next()? else {
+            break;
         };
-        let mut consumed = None;
-        let mut read_bytes = 0usize;
-        while page.reviews.len() < limit as usize {
-            let Some(row) = rows.next()? else {
+        let sequence: u64 = row.get(0)?;
+        if sequence == 0 {
+            return Err(invalid("journal sequence must be positive"));
+        }
+        let kind = row
+            .get::<_, Option<String>>(1)?
+            .ok_or_else(|| invalid("oversized journal kind"))?;
+        if kind.is_empty() {
+            return Err(invalid("empty journal kind"));
+        }
+        if kind != "command_admitted" {
+            if read_bytes.saturating_add(kind.len()) > READ_BYTES {
                 break;
-            };
-            let sequence: u64 = row.get(0)?;
-            if sequence == 0 {
-                return Err(invalid("journal sequence must be positive"));
             }
-            let kind = row
-                .get::<_, Option<String>>(1)?
-                .ok_or_else(|| invalid("oversized journal kind"))?;
-            if kind.is_empty() {
-                return Err(invalid("empty journal kind"));
+            read_bytes = read_bytes.saturating_add(kind.len());
+            consumed = Some(sequence);
+            continue;
+        }
+        let bytes: usize = row.get(2)?;
+        let cost = bytes
+            .saturating_add(METADATA_BYTES)
+            .saturating_add(kind.len());
+        if bytes > ADMISSION_BYTES || read_bytes.saturating_add(cost) > READ_BYTES {
+            if consumed.is_none() {
+                return Err(invalid(
+                    "first admission exceeds 32 MiB row / 64 MiB page read budget; cursor unchanged",
+                ));
             }
-            if kind != "command_admitted" {
-                if read_bytes.saturating_add(kind.len()) > READ_BYTES {
-                    break;
-                }
-                read_bytes = read_bytes.saturating_add(kind.len());
-                consumed = Some(sequence);
-                continue;
-            }
-            let bytes: usize = row.get(2)?;
-            let cost = bytes
-                .saturating_add(METADATA_BYTES)
-                .saturating_add(kind.len());
-            if bytes > ADMISSION_BYTES || read_bytes.saturating_add(cost) > READ_BYTES {
+            break;
+        }
+        read_bytes += cost;
+        // Phase two fetches the bounded bytes only after the page quota
+        // decision, in the same read snapshot as the metadata scan.
+        let encoded: String = tx.query_row(
+            "SELECT payload FROM events WHERE session_id=?1 AND sequence=?2",
+            params![session, integer(sequence)?],
+            |r| r.get(0),
+        )?;
+        let admission: Value = serde_json::from_str(&encoded)?;
+        if let Some(review) = pick(&tx, session, sequence, &admission)? {
+            page.entries.push(review);
+            page.next_before_sequence = Some(sequence);
+            if serde_json::to_vec(&page.entries)?.len().saturating_add(128) > PAGE_BYTES {
+                page.entries.pop();
                 if consumed.is_none() {
                     return Err(invalid(
-                        "first admission exceeds 32 MiB row / 64 MiB page read budget; cursor unchanged",
+                        "first candidate exceeds page byte budget; cursor unchanged",
                     ));
                 }
                 break;
             }
-            read_bytes += cost;
-            // Phase two fetches the bounded bytes only after the page quota
-            // decision, in the same read snapshot as the metadata scan.
-            let encoded: String = tx.query_row(
-                "SELECT payload FROM events WHERE session_id=?1 AND sequence=?2",
-                params![session, integer(sequence)?],
-                |r| r.get(0),
-            )?;
-            let admission: Value = serde_json::from_str(&encoded)?;
-            if let Some(review) = candidate(&tx, session, sequence, &admission)? {
-                page.reviews.push(review);
-                page.next_before_sequence = Some(sequence);
-                if serde_json::to_vec(&page)?.len() > PAGE_BYTES {
-                    page.reviews.pop();
-                    if consumed.is_none() {
-                        return Err(invalid(
-                            "first candidate exceeds page byte budget; cursor unchanged",
-                        ));
-                    }
-                    break;
-                }
-            }
-            consumed = Some(sequence);
         }
-        page.next_before_sequence = match consumed {
-            Some(sequence)
-                if tx.query_row(
-                    "SELECT EXISTS(SELECT 1 FROM events WHERE session_id=?1 AND sequence<?2)",
-                    params![session, integer(sequence)?],
-                    |r| r.get::<_, bool>(0),
-                )? =>
-            {
-                Some(sequence)
-            }
-            _ => None,
-        };
-        Ok(page)
+        consumed = Some(sequence);
     }
+    page.next_before_sequence = match consumed {
+        Some(sequence)
+            if tx.query_row(
+                if forward {
+                    "SELECT EXISTS(SELECT 1 FROM events WHERE session_id=?1 AND sequence>?2)"
+                } else {
+                    "SELECT EXISTS(SELECT 1 FROM events WHERE session_id=?1 AND sequence<?2)"
+                },
+                params![session, integer(sequence)?],
+                |r| r.get::<_, bool>(0),
+            )? =>
+        {
+            Some(sequence)
+        }
+        _ => None,
+    };
+    Ok(page)
 }
+
 fn candidate(
     conn: &Connection,
     session: &str,

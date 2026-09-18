@@ -91,9 +91,17 @@ pub(super) fn capture(
                 role.provider
             ))
         })?;
+        if request.execution.is_none() && !role.tools.iter().any(|t| t == "http_request") {
+            return Err(error(
+                "snapshot-free delegated roles must explicitly offer http_request",
+            ));
+        }
         let mut tools = vec![];
         for name in &role.tools {
-            if matches!(name.as_str(), "delegate_tasks" | "submit_source_hypotheses") {
+            if matches!(
+                name.as_str(),
+                "delegate_tasks" | "submit_source_hypotheses" | "submit_web_hypotheses"
+            ) {
                 return Err(error(
                     "delegated roles cannot delegate or submit structured reviews",
                 ));
@@ -147,6 +155,9 @@ pub(super) fn capture(
             .cloned();
         if let Some(context) = &http {
             identity["http_context"] = context.identity.clone();
+            if context.output_version == 2 {
+                identity["http_output_version"] = json!(2);
+            }
         }
         identities.push(identity);
         roles.push(Role {
@@ -205,6 +216,9 @@ pub(super) fn retry_identity(
         }
         if let Some(context) = entry.get("http_context") {
             identity["http_context"] = context.clone();
+            if let Some(version) = entry.get("http_output_version") {
+                identity["http_output_version"] = version.clone();
+            }
         }
         if let Some(plugins) = entry.get("plugin_context") {
             identity["plugin_context"] = plugins.clone();
@@ -230,6 +244,7 @@ fn child_request(parent: &AgentRequest, role: &DelegationRole, prompt: &str) -> 
     request.delegation_policy = None;
     request.continuation_of = None;
     request.source_submission_max_hypotheses = None;
+    request.web_submission_max_hypotheses = None;
     request.context_policy = None;
     request.tool_approval_policy = agent_approvals::inherited(parent, &role.tools);
     request.http_profile = parent
@@ -289,7 +304,7 @@ impl Context {
             role.profile.validate(&model)?;
             let source = agent_source::capture(&*lock(&shared.store)?, session, &request)?;
             let history = agent_context::History::new(model.input, None)?;
-            let mut payload = json!({"kind":"offline_snapshot_agent","request":request,"endpoint":role.profile.client.endpoint_identity(),"rates":role.profile.rates,"wire_api":role.profile.client.wire_api(),"delegation_role":task.role,"delegation_template":role.template});
+            let mut payload = json!({"kind":zero_protocol::agent::actor_kind(&request),"request":request,"endpoint":role.profile.client.endpoint_identity(),"rates":role.profile.rates,"wire_api":role.profile.client.wire_api(),"delegation_role":task.role,"delegation_template":role.template});
             role.profile.stamp(&mut payload)?;
             if let Some(policy) = &parent.tool_approval_policy {
                 payload["delegation_root_approval_policy"] = serde_json::to_value(policy)?;
@@ -299,6 +314,9 @@ impl Context {
             }
             if let Some(context) = &role.http {
                 payload["http_context"] = context.identity.clone();
+                if context.output_version == 2 {
+                    payload["http_output_version"] = json!(2);
+                }
             }
             payloads.push(payload);
             actors.push(agent::PreparedActor {

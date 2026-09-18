@@ -26,7 +26,31 @@ pub(super) fn status(outcome: &HttpOutcome, dispatches: &[Value]) -> OperationSt
         OperationStatus::Failed
     }
 }
-fn origin(store: &Store, effect: &Operation) -> Result<(Operation, Operation), EngineError> {
+pub(super) fn origin(
+    store: &Store,
+    effect: &Operation,
+) -> Result<(Operation, Operation), EngineError> {
+    let pair = if effect.payload.get("origin").is_some() {
+        crate::web_verification::effect_origin(store, effect)?
+    } else {
+        model_origin(store, effect)?
+    };
+    let actor_version = match pair.0.payload.get("http_output_version") {
+        None => 1,
+        Some(v) if v == 2 => 2,
+        _ => return Err(error("unsupported HTTP actor output version")),
+    };
+    let effect_version = match effect.payload.get("http_output_version") {
+        None => 1,
+        Some(v) if v == 2 => 2,
+        _ => return Err(error("unsupported HTTP effect output version")),
+    };
+    if actor_version != effect_version {
+        return Err(error("HTTP effect output version differs from owner"));
+    }
+    Ok(pair)
+}
+fn model_origin(store: &Store, effect: &Operation) -> Result<(Operation, Operation), EngineError> {
     let actor_id = effect.payload["parent_operation"]
         .as_str()
         .ok_or_else(|| error("HTTP actor absent"))?;
@@ -51,12 +75,11 @@ fn origin(store: &Store, effect: &Operation) -> Result<(Operation, Operation), E
         return Err(error("HTTP call position invalid"));
     }
     if actor.session_id != effect.session_id
-        || actor.payload["kind"] != "offline_snapshot_agent"
         || actor.payload.get("http_context") != effect.payload.get("http_context")
     {
         return Err(error("HTTP actor authority differs"));
     }
-    let request: AgentRequest = serde_json::from_value(actor.payload["request"].clone())?;
+    let request = zero_protocol::agent::validate_actor_payload(&actor.payload).map_err(error)?;
     if request.http_profile.as_deref() != effect.payload["http_context"]["profile_name"].as_str()
         || request.http_profile.is_none()
     {
@@ -185,7 +208,7 @@ pub(super) fn retain(
         json!({"schema_version":1,"http_response_artifact":digest,"http_request_artifact":request,"account_id":effect.payload["http_context"]["account_id"],"profile_sha256":effect.payload["http_context"]["profile_sha256"],"dispatch":outcome.dispatch,"disposition":outcome.disposition,"error":outcome.error}),
     )
 }
-pub(super) fn load(
+pub(crate) fn load(
     store: &Store,
     effect: &Operation,
 ) -> Result<(Value, HttpOutcome, Vec<u8>), EngineError> {
@@ -335,7 +358,9 @@ pub(crate) fn validate_receipt(store: &Store, effect: &Operation) -> Result<Stri
     if outcome.response.is_none() {
         text.clear();
     }
-    Ok(serde_json::to_string(
-        &json!({"untrusted_http_data":true,"disposition":outcome.disposition,"response":outcome.response.as_ref().map(|r|json!({"url":r.url,"status":r.status,"headers":r.headers,"body_text":text,"body_display_truncated":truncated,"retained_redacted_body_sha256":manifest["body"]["sha256"],"decoded_bytes":r.decoded_bytes})),"error":outcome.error}),
-    )?)
+    let mut output = json!({"untrusted_http_data":true,"disposition":outcome.disposition,"response":outcome.response.as_ref().map(|r|json!({"url":r.url,"status":r.status,"headers":r.headers,"body_text":text,"body_display_truncated":truncated,"retained_redacted_body_sha256":manifest["body"]["sha256"],"decoded_bytes":r.decoded_bytes})),"error":outcome.error});
+    if effect.payload["http_output_version"] == 2 {
+        output["observation"] = json!({"operation_id":effect.id,"response_manifest_sha256":effect.outcome.as_ref().and_then(|v|v.get("http_response_artifact")),"retained_body_sha256":manifest["body"]["sha256"],"retained_bytes":manifest["body"]["bytes"],"completeness":if effect.status==OperationStatus::Succeeded&&outcome.disposition==HttpDisposition::CompleteResponse{"complete"}else{"incomplete"}});
+    }
+    Ok(serde_json::to_string(&output)?)
 }

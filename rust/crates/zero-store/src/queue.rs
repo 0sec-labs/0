@@ -27,9 +27,9 @@ fn validate_resolved(conn: &Connection, input: &QueuedAgent) -> Result<()> {
             ));
         }
         let parent = conn.query_row(
-            "SELECT o.id,CASE WHEN length(CAST(q.resolved_request AS BLOB))<=?4 THEN q.resolved_request END,CASE WHEN length(CAST(json_extract(o.payload,'$.request') AS BLOB))<=?4 THEN json_extract(o.payload,'$.request') END FROM agent_inputs q JOIN operations o ON o.session_id=q.session_id AND o.command_id=q.run_command_id WHERE q.session_id=?1 AND q.id=?2 AND q.sequence<?3 AND q.cancelled=0 AND o.status='succeeded' AND json_extract(o.payload,'$.kind')='offline_snapshot_agent' AND json_extract(o.outcome,'$.status')='completed'",
+            "SELECT o.id,CASE WHEN length(CAST(q.resolved_request AS BLOB))<=?4 THEN q.resolved_request END,CASE WHEN length(CAST(json_extract(o.payload,'$.request') AS BLOB))<=?4 THEN json_extract(o.payload,'$.request') END,json_extract(o.payload,'$.kind') FROM agent_inputs q JOIN operations o ON o.session_id=q.session_id AND o.command_id=q.run_command_id WHERE q.session_id=?1 AND q.id=?2 AND q.sequence<?3 AND q.cancelled=0 AND o.status='succeeded' AND json_extract(o.payload,'$.kind') IN ('offline_snapshot_agent','scoped_web_agent') AND json_extract(o.outcome,'$.status')='completed'",
             params![input.session_id,predecessor,integer(input.sequence)?,RESOLVED_BYTES],
-            |r|Ok((r.get::<_,String>(0)?,r.get::<_,Option<String>>(1)?,r.get::<_,Option<String>>(2)?))
+            |r|Ok((r.get::<_,String>(0)?,r.get::<_,Option<String>>(1)?,r.get::<_,Option<String>>(2)?,r.get::<_,Option<String>>(3)?))
         ).optional()?.ok_or_else(||Error::Conflict("resolved queue predecessor is not an earlier completed agent in this session".into()))?;
         let parse = |text: Option<String>| -> Result<Value> {
             let text = text.ok_or_else(|| {
@@ -44,7 +44,15 @@ fn validate_resolved(conn: &Connection, input: &QueuedAgent) -> Result<()> {
             ));
         }
         // Require the retained request to remain an actual typed agent request.
-        let _: AgentRequest = serde_json::from_value(parent_request)?;
+        let predecessor_request = zero_protocol::agent::validate_actor_payload(
+            &serde_json::json!({"kind":parent.3,"request":parent_request}),
+        )
+        .map_err(|e| Error::Invalid(e.to_string()))?;
+        if predecessor_request.web_submission_max_hypotheses.is_some() {
+            return Err(Error::Conflict(
+                "terminal web submission is not continuable".into(),
+            ));
+        }
         expected.continuation_of = Some(parent.0);
     }
     if encoded(&expected)? != encoded(resolved)? {
@@ -76,7 +84,10 @@ fn input(conn: &Connection, session: &str, id: &str) -> Result<QueuedAgent> {
             Error::Invalid("queue operation request absent or oversized".into())
         })?)?;
         if cancelled
-            || kind.as_deref() != Some("offline_snapshot_agent")
+            || zero_protocol::agent::validate_actor_payload(
+                &serde_json::json!({"kind":kind,"request":request}),
+            )
+            .is_err()
             || request != serde_json::to_value(resolved)?
         {
             return Err(Error::Conflict("queue operation identity mismatch".into()));
@@ -249,7 +260,10 @@ impl Store {
         let mut request = old.request.clone();
         if let Some(predecessor) = &old.after_input {
             let previous = input(&tx, session, predecessor)?;
-            if previous.sequence >= old.sequence || previous.status != Status::Succeeded {
+            if previous.sequence >= old.sequence
+                || previous.status != Status::Succeeded
+                || previous.request.web_submission_max_hypotheses.is_some()
+            {
                 return Err(Error::Conflict(
                     "queue predecessor has not completed successfully".into(),
                 ));

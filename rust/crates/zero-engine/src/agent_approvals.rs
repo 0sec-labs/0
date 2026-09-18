@@ -67,10 +67,17 @@ pub(super) fn validate_policy(request: &AgentRequest) -> Result<(), EngineError>
     };
     policy.validate().map_err(error)?;
     if required(request, "execute_snapshot") {
-        immutable_backend(&request.execution.sandbox_request().backend)?;
+        immutable_backend(
+            &request
+                .snapshot_request()
+                .map_err(|e| EngineError::State(e.to_string()))?
+                .backend,
+        )?;
     }
     for name in &policy.require_approval {
-        let native_non_effect = (name == "ask_operator" && request.operator_questions)
+        let native_non_effect = (name == "submit_web_hypotheses"
+            && request.web_submission_max_hypotheses.is_some())
+            || (name == "ask_operator" && request.operator_questions)
             || (name == "delegate_tasks" && request.delegation_policy.is_some())
             || (name == "submit_source_hypotheses"
                 && request.source_submission_max_hypotheses.is_some())

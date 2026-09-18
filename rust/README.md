@@ -269,3 +269,8 @@ and [transport contract](crates/zero-http/README.md).
 without contacting the target. Add `--evidence` for complete binary-safe base64
 bytes. An observed HTTP error status is distinct from an incomplete or uncertain
 request; uncertain effects retain their budget reservation and are not replayed.
+
+The native web workflow connects HTTP-only investigation, terminal cited
+Unverified hypotheses, explicit fresh verification matrices, operator triage and
+retained reports. See [WEB-WORKFLOW.md](WEB-WORKFLOW.md) for authority, approval,
+state and evidence limits; this remains a bounded subset of scanner parity.

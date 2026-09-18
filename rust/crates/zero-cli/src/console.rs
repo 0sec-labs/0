@@ -160,12 +160,14 @@ async fn conversation(
                 active_command.send_replace(None);
                 awaiting_questions.clear();
                 awaiting_approvals.clear();
+                let terminal_review=matches!(&reply,Reply::Agent{operation,result:Some(result),..} if operation.status==OperationStatus::Succeeded && result.status==AgentStatus::Completed && (result.source_review.is_some() || result.web_review.is_some()));
                 let completed = tokio::select! {
                     biased;
                     _ = &mut signal => return Ok(false),
                     result = finish(reply, &command, false) => result?,
                 };
                 if !completed { return Ok(false); }
+                if terminal_review {diagnostic("Terminal structured review completed; accepted follow-ups remain pending. A review is not a continuable conversation.").await?;return Ok(!rejected);}
             }
             _ = std::future::ready(()), if active.is_none() && !pending.is_empty() => {
                 let (input, command) = pending.pop_front().ok_or("Missing pending console input")?;
@@ -362,7 +364,12 @@ async fn finish(reply: Reply, command: &str, interrupted: bool) -> Result<bool, 
                 .await
                 .map_err(|_| "Console output stalled")??;
             }
-            diagnostic(&format!("checkpoint operation {}", operation.id)).await?;
+            let label = if result.source_review.is_some() || result.web_review.is_some() {
+                "terminal review operation"
+            } else {
+                "checkpoint operation"
+            };
+            diagnostic(&format!("{label} {}", operation.id)).await?;
             Ok(!interrupted)
         }
         Reply::Agent { operation, .. } => {

@@ -1,6 +1,14 @@
 use serde_json::{Value, json};
 use zero_protocol::{Operation, OperationStatus, steering::AgentSteeringStatus as Status};
 use zero_store::Store;
+fn valid_actor_request() -> serde_json::Value {
+    let sha = format!("sha256:{}", "a".repeat(64));
+    let value = json!({"provider":"fixture","model":"fixture","instructions":"unchanged","prompt":"original","max_turns":3,"reservation_per_turn":1,"execution":{"execution_id":"profile","image":"fixture:local","snapshot":{"id":"s","root":"/tmp/source","digest":sha,"files":[{"path":"entry","digest":sha,"bytes":0}]},"argv":["true"],"timeout_ms":1000,"memory_mb":128,"cpus":1,"max_output_bytes":1024}});
+    let request: zero_protocol::agent::AgentRequest = serde_json::from_value(value).unwrap();
+    request.validate_capabilities().unwrap();
+    serde_json::to_value(request).unwrap()
+}
+
 fn setup() -> (tempfile::TempDir, Store, String, Operation) {
     let dir = tempfile::tempdir().unwrap();
     let mut store = Store::open(dir.path().join("state.db")).unwrap();
@@ -9,7 +17,7 @@ fn setup() -> (tempfile::TempDir, Store, String, Operation) {
         .admit_command(
             &session,
             "actor",
-            &json!({"kind":"offline_snapshot_agent","request":{"prompt":"original"}}),
+            &json!({"kind":"offline_snapshot_agent","request":valid_actor_request()}),
         )
         .unwrap()
         .operation;
@@ -304,7 +312,7 @@ fn schema6_migrates_and_readonly_does_not_migrate() {
     let path = dir.path().join("state.db");
     let conn = rusqlite::Connection::open(&path).unwrap();
     conn.execute_batch(
-        "DROP INDEX http_receipt_events; DROP INDEX http_rate_events; DROP TABLE http_rates; DROP TABLE http_dispatches; DROP TABLE http_accounts; DROP TABLE tool_approval_consumptions; DROP TABLE tool_approval_decisions; DROP TABLE tool_approvals; DROP TABLE operator_question_decisions; DROP TABLE operator_questions; DROP TABLE agent_steering; DROP TABLE agent_steering_windows; PRAGMA user_version=6;",
+        "DROP TABLE web_triage_decisions; DROP INDEX http_receipt_events; DROP INDEX http_rate_events; DROP TABLE http_rates; DROP TABLE http_dispatches; DROP TABLE http_accounts; DROP TABLE tool_approval_consumptions; DROP TABLE tool_approval_decisions; DROP TABLE tool_approvals; DROP TABLE operator_question_decisions; DROP TABLE operator_questions; DROP TABLE agent_steering; DROP TABLE agent_steering_windows; PRAGMA user_version=6;",
     )
     .unwrap();
     drop(conn);

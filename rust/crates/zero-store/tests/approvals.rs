@@ -7,6 +7,14 @@ use zero_protocol::{
     },
 };
 use zero_store::Store;
+fn valid_actor_request() -> serde_json::Value {
+    let sha = format!("sha256:{}", "a".repeat(64));
+    let value = json!({"provider":"fixture","model":"fixture","instructions":"unchanged","prompt":"original","max_turns":3,"reservation_per_turn":1,"execution":{"execution_id":"profile","image":"fixture:local","snapshot":{"id":"s","root":"/tmp/source","digest":sha,"files":[{"path":"entry","digest":sha,"bytes":0}]},"argv":["true"],"timeout_ms":1000,"memory_mb":128,"cpus":1,"max_output_bytes":1024}});
+    let request: zero_protocol::agent::AgentRequest = serde_json::from_value(value).unwrap();
+    request.validate_capabilities().unwrap();
+    serde_json::to_value(request).unwrap()
+}
+
 struct Fixture {
     dir: tempfile::TempDir,
     store: Store,
@@ -33,6 +41,11 @@ impl Fixture {
         let binding = json!({"alias":alias,"plugin":"checker","tool":"check"});
         let context = json!({"generation":"g","epoch":1,"selected":[{"binding":binding,"manifest":sha}],"launch":{"backend":{"type":"docker","image":sha},"interpreter":["node"],"timeout_ms":1000,"memory_mb":128,"cpus":1,"max_output_bytes":1024}});
         let mut payload = json!({"kind":"offline_snapshot_agent","request":{"execution":execution,"tool_approval_policy":{"require_approval":[alias]},"plugin_tools":if plugin{vec![binding.clone()]}else{vec![]}}});
+        let specific = payload["request"].clone();
+        payload["request"] = valid_actor_request();
+        for (key, value) in specific.as_object().unwrap() {
+            payload["request"][key] = value.clone();
+        }
         if plugin {
             payload["plugin_context"] = context.clone();
         }
@@ -537,7 +550,7 @@ fn schema_eight_readonly_rejects_without_migration_then_write_preserves_journal(
     let before = f.actor.payload.clone();
     drop(f.store);
     let conn = rusqlite::Connection::open(&path).unwrap();
-    conn.execute_batch("DROP INDEX http_receipt_events; DROP INDEX http_rate_events; DROP TABLE http_rates; DROP TABLE http_dispatches; DROP TABLE http_accounts; DROP TABLE tool_approval_consumptions; DROP TABLE tool_approval_decisions; DROP TABLE tool_approvals; PRAGMA user_version=8;").unwrap();
+    conn.execute_batch("DROP TABLE web_triage_decisions; DROP INDEX http_receipt_events; DROP INDEX http_rate_events; DROP TABLE http_rates; DROP TABLE http_dispatches; DROP TABLE http_accounts; DROP TABLE tool_approval_consumptions; DROP TABLE tool_approval_decisions; DROP TABLE tool_approvals; PRAGMA user_version=8;").unwrap();
     drop(conn);
     assert!(Store::open_read_only(&path).is_err());
     let store = Store::open(&path).unwrap();

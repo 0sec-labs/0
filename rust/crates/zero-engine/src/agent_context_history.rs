@@ -103,7 +103,7 @@ pub(super) fn validate(
         if !visited.insert(op.id.clone())
             || visited.len() > zero_context::MAX_INPUT_ITEMS
             || op.session_id != parent.session_id
-            || op.payload["kind"] != "offline_snapshot_agent"
+            || zero_protocol::agent::validate_actor_payload(&op.payload).is_err()
             || op.payload.get("parent_operation").is_some()
         {
             return Err(error("invalid bounded context lineage"));
@@ -112,7 +112,8 @@ pub(super) fn validate(
         if req.context_policy.as_ref() != Some(policy) || count > 32 {
             return Err(error("context lineage policy/round mismatch"));
         }
-        if req.http_profile != request.http_profile
+        if req.web_submission_max_hypotheses != request.web_submission_max_hypotheses
+            || req.http_profile != request.http_profile
             || req.tool_approval_policy != request.tool_approval_policy
             || req.operator_questions != request.operator_questions
             || req.provider != request.provider
@@ -123,8 +124,8 @@ pub(super) fn validate(
             || req.source_snapshot_tools != request.source_snapshot_tools
             || req.source_submission_max_hypotheses != request.source_submission_max_hypotheses
             || req.plugin_tools != request.plugin_tools
-            || serde_json::to_value(req.execution.sandbox_request())?
-                != serde_json::to_value(request.execution.sandbox_request())?
+            || serde_json::to_value(req.execution_identity())?
+                != serde_json::to_value(request.execution_identity())?
             || [
                 "endpoint",
                 "rates",
@@ -133,6 +134,7 @@ pub(super) fn validate(
                 "context_template",
                 "delegation_context",
                 "http_context",
+                "http_output_version",
             ]
             .iter()
             .any(|key| op.payload.get(key) != parent.payload.get(key))

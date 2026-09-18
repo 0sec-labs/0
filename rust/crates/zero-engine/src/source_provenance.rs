@@ -43,7 +43,10 @@ pub(super) fn load(store: &Store, session: &str, id: &str) -> Result<Validated, 
                 return Err(error("agent did not finish a structured source review"));
             }
             (
-                request.execution.sandbox_request().snapshot,
+                request
+                    .snapshot_request()
+                    .map_err(|e| EngineError::State(e.to_string()))?
+                    .snapshot,
                 result
                     .source_review
                     .ok_or_else(|| error("agent source review absent"))?,

@@ -265,7 +265,7 @@ async fn source_tools_read_private_copy_after_original_changes_and_retry_after_d
     let prepared = f.prepared();
     let staged = PathBuf::from(prepared["path"].as_str().unwrap());
     assert!(staged.exists());
-    let pin = f.request.execution.sandbox_request().snapshot;
+    let pin = f.request.snapshot_request().unwrap().snapshot;
     assert_eq!(prepared["snapshot_digest"], pin.digest);
     let store = zero_store::Store::open_read_only(f.dir.path().join("state.db")).unwrap();
     assert!(
@@ -759,7 +759,7 @@ async fn adaptive_review_retains_actual_provider_evidence_and_supports_reproduct
                 oracle_version: "zero-verification-exact-output-v1".into(),
                 hypothesis_id: review.hypotheses[0].id.clone(),
                 source_bundle_digest: review.bundle_sha256,
-                snapshot: f.request.execution.sandbox_request().snapshot,
+                snapshot: f.request.snapshot_request().unwrap().snapshot,
                 backend: zero_protocol::sandbox::SandboxBackend::Docker {
                     image: format!("sha256:{}", "a".repeat(64)),
                 },

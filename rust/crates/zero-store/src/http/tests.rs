@@ -19,7 +19,7 @@ fn fixture_at(path: impl AsRef<std::path::Path>) -> (Store, String, Value, Strin
             "owner",
             &[(
                 "root".into(),
-                json!({"kind":"offline_snapshot_agent","request":{"http_profile":"test"},"http_context":context}),
+                json!({"kind":"scoped_web_agent","request":{"provider":"p","model":"m","instructions":"i","prompt":"p","max_turns":2,"reservation_per_turn":10,"http_profile":"test"},"http_context":context}),
             )],
         )
         .unwrap();
@@ -27,13 +27,14 @@ fn fixture_at(path: impl AsRef<std::path::Path>) -> (Store, String, Value, Strin
     (store, session, context, account)
 }
 fn effect(store: &mut Store, session: &str, context: &Value, name: &str) -> String {
+    let parent = store.get_operation_by_command(session, "root").unwrap().id;
     store
         .admit_owned_batch(
             session,
             "owner",
             &[(
                 name.into(),
-                json!({"kind":"agent_http","http_context":context}),
+                json!({"kind":"agent_http","parent_operation":parent,"http_context":context}),
             )],
         )
         .unwrap()[0]
@@ -129,7 +130,7 @@ fn cooldown_is_shared_and_recovery_never_releases_uncertain_reservation() {
             "next",
             &[(
                 "three".into(),
-                json!({"kind":"agent_http","http_context":c}),
+                json!({"kind":"agent_http","parent_operation":s.get_operation_by_command(&session,"root").unwrap().id,"http_context":c}),
             )],
         )
         .unwrap()[0]
@@ -249,7 +250,7 @@ fn redirect_admission_binds_url_and_method_to_previous_complete_observation() {
         c["original_root_command"] = json!("redirect-root");
         let account=hash(&json!({"session_id":session,"original_root_command":"redirect-root","profile_sha256":c["profile_sha256"]})).unwrap();
         c["account_id"] = json!(account);
-        s.admit_owned_batch(&session,"owner",&[("redirect-root".into(),json!({"kind":"offline_snapshot_agent","request":{"http_profile":"test"},"http_context":c}))]).unwrap();
+        s.admit_owned_batch(&session,"owner",&[("redirect-root".into(),json!({"kind":"scoped_web_agent","request":{"provider":"p","model":"m","instructions":"i","prompt":"p","max_turns":2,"reservation_per_turn":10,"http_profile":"test"},"http_context":c}))]).unwrap();
         s.ensure_http_account(&session, &c).unwrap();
         let e = effect(&mut s, &session, &c, "redirect-effect");
         let initial = intent(&c);

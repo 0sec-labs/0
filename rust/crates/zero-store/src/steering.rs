@@ -39,7 +39,9 @@ pub(super) fn operation(conn: &Connection, key: &str) -> Result<Operation> {
 fn target(conn: &Connection, session: &str, key: &str, owner: Option<&str>) -> Result<Operation> {
     id(session)?;
     let op = operation(conn, key)?;
-    if op.session_id != session || op.payload["kind"] != "offline_snapshot_agent" {
+    if op.session_id != session
+        || zero_protocol::agent::validate_actor_payload(&op.payload).is_err()
+    {
         return Err(conflict("steering target is not an agent in this session"));
     }
     if let Some(owner) = owner {

@@ -39,7 +39,7 @@ impl TargetGuard {
         if actor.session_id != session
             || actor.status != OperationStatus::Running
             || actor.owner.as_deref() != Some(&shared.owner)
-            || actor.payload["kind"] != "offline_snapshot_agent"
+            || zero_protocol::agent::validate_actor_payload(&actor.payload).is_err()
             || root_operation.session_id != session
             || root_operation.payload.get("parent_operation").is_some()
             || !control
@@ -107,7 +107,7 @@ impl Engine {
             || actor.session_id != session
             || actor.status != OperationStatus::Running
             || actor.owner.as_deref() != Some(&self.shared.owner)
-            || actor.payload["kind"] != "offline_snapshot_agent"
+            || zero_protocol::agent::validate_actor_payload(&actor.payload).is_err()
             || root_operation.session_id != session
             || root_operation.status != OperationStatus::Running
             || root_operation.payload.get("parent_operation").is_some()
