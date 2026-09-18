@@ -45,7 +45,7 @@ upgrading scaffolds or model assessments into successful verification.
 | Generation graph | `crates/zero-harness`: verified complete plugin/artifact/policy graph, activation epoch pins, durable invocation leases and current-state rollback | Measured evaluator promotion and native process replacement; persisted session epochs and direct engine calls are implemented |
 | Generation registry | `crates/zero-evolution`: immutable artifacts/receipts, eligibility, instance-bound preparation, activation CAS, leases and current-state rollback | Runtime graph disposal, measured evidence import/promotion, campaign qualification and native process handoff |
 | Fixture evaluation | `crates/zero-evaluation`: isolated paired baseline/candidate execution, frozen exact JSON oracles, durable attempt budgets, observed outcomes and deterministic receipts; real Docker fixture passed | Portable evidence import, independent corpus governance, production eligibility/canary and autonomous candidate writing; fixture eligibility is not a detection-quality claim |
-| Report rendering | `crates/zero-report`: bounded legacy JSON preservation and SARIF rendering with an actual TypeScript formatter golden fixture | Full workflow integration and report schema qualification; rendering does not verify findings |
+| Report rendering | `crates/zero-report`: bounded legacy JSON preservation, SARIF and Markdown rendering with actual TypeScript formatter golden fixtures | Full workflow integration and report schema qualification; rendering does not verify findings |
 | Hosted metadata | `crates/zero-cloud-client`: explicit authenticated health/catalog/account/usage GETs, bounded browser-session login polling, typed gateway errors and credit normalization; CLI resolves environment or private legacy `cloud.env` credentials | Live service qualification, provider OAuth/refresh, price identity/inference routing, upload/accounting and managed-worker qualification |
 | Cloud wire adapter | `crates/zero-cloud-compat`: result/event framing, typed outcomes, cost provenance and atomic report writing | Scanner integration, ordered scan-total accounting, uploads and managed deployment qualification |
 | Finding reduction | `crates/zero-evidence`: source IDs/provenance retained through complete reconciliation, explicit disposition accounting | Discovery, independent vulnerability oracles, storage/export and disclosure eligibility; reconciliation is not truth validation |
@@ -337,3 +337,23 @@ make it an independently registered top-level command.
 
 The branch is complete when these product and deployment gates are satisfied or
 explicitly retired with a migration decision—not when the Rust workspace builds.
+
+## Latest incremental acceptance: listing and Markdown
+
+Source listing commits `87bb98d8` and `804221e5` expose every authorized file
+through bounded deterministic pages; the engine fixture traverses 67 files with
+no duplicates or backend work. Scope, malformed cursor and byte-limited page
+regressions preserve the same source authority on every page.
+
+`3594beb8` adds `report --format markdown`, matching an actual TypeScript golden
+fixture for ordinary supplied report data. Hostile markup and code fences are
+escaped, missing metadata is explicit, and an empty report does not become a
+clean-target verdict. Seven renderer tests and five executable report tests pass
+on current Rust and Rust 1.85. This is renderer parity for the tested format,
+not scanner, managed-worker, HTML/PDF or complete report-workflow parity.
+
+The combined workspace run passed 389 tests and production Clippy before the
+last added Markdown output-expansion regression; that additional test passed
+separately on both compilers. The next source workflow gap remains converting
+adaptive investigation into a retained, structurally validated hypothesis
+submission; prose from the generic agent is not a source-review result.
