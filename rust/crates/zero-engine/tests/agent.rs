@@ -174,6 +174,7 @@ impl Setup {
         Self {
             dir,
             request: AgentRequest {
+                continuation_of: None,
                 provider: "local".into(),
                 model: "fixture".into(),
                 instructions: "Use only offered tools".into(),
@@ -512,5 +513,180 @@ async fn empty_completed_response_is_not_a_successful_agent_answer() {
     assert_eq!(http.count(), 1);
     assert!(fixture.docker_calls().is_empty());
     assert_eq!(budget(&engine, &id).await.charged, 2);
+    engine.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn continuation_after_restart_replays_history_without_reissuing_prior_effects() {
+    let f = Setup::new("echo");
+    let http = Http::new(
+        vec![
+            complete(json!([tool(
+                "prior-tool",
+                "execute_snapshot",
+                json!({"argv":["true"]})
+            )])),
+            answer(),
+            answer(),
+        ],
+        false,
+    )
+    .await;
+    let engine = f.engine();
+    http.configure(&engine);
+    let s = session(&engine, 100).await;
+    let parent = match call(&engine, f.command(&s)).await {
+        Reply::Agent { operation, .. } => {
+            assert_eq!(operation.status, OperationStatus::Succeeded);
+            operation.id
+        }
+        r => panic!("{r:?}"),
+    };
+    let prior_calls = f.docker_calls();
+    assert_eq!(http.count(), 2);
+    engine.shutdown().await.unwrap();
+    drop(engine);
+    let engine = f.engine();
+    http.configure(&engine);
+    let mut request = f.request.clone();
+    request.continuation_of = Some(parent.clone());
+    request.prompt = "Explain the previous result".into();
+    let command = Command::RunAgent {
+        session_id: s.clone(),
+        command_id: "follow-up".into(),
+        request,
+    };
+    let completed = match call(&engine, command.clone()).await {
+        Reply::Agent {
+            operation,
+            result: Some(result),
+            duplicate: false,
+        } => {
+            assert_eq!(result.status, AgentStatus::Completed);
+            operation.id
+        }
+        r => panic!("{r:?}"),
+    };
+    let requests = http.requests.lock().unwrap().clone();
+    let input = requests[2]["input"].as_array().unwrap();
+    assert_eq!(input[0]["content"], f.request.prompt);
+    assert!(
+        input
+            .iter()
+            .any(|v| v["type"] == "function_call" && v["call_id"] == "prior-tool")
+    );
+    assert!(
+        input
+            .iter()
+            .any(|v| v["type"] == "function_call_output" && v["call_id"] == "prior-tool")
+    );
+    assert!(
+        input
+            .iter()
+            .any(|v| v["type"] == "message" && v["content"][0]["text"] == "finished assessment")
+    );
+    assert_eq!(
+        input.last().unwrap()["content"],
+        "Explain the previous result"
+    );
+    assert_eq!(f.docker_calls(), prior_calls);
+    assert_eq!(budget(&engine, &s).await.charged, 6);
+    engine.shutdown().await.unwrap();
+    drop(engine);
+    let engine = f.engine();
+    http.configure(&engine);
+    match call(&engine, command).await {
+        Reply::Agent {
+            operation,
+            duplicate: true,
+            ..
+        } => assert_eq!(operation.id, completed),
+        r => panic!("{r:?}"),
+    }
+    assert_eq!(http.count(), 3);
+    assert_eq!(f.docker_calls(), prior_calls);
+    assert_eq!(budget(&engine, &s).await.charged, 6);
+    engine.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn continuation_rejects_other_session_changed_authority_and_unknown_parent_before_admission()
+{
+    let f = Setup::new("echo");
+    let http = Http::new(vec![answer()], false).await;
+    let engine = f.engine();
+    http.configure(&engine);
+    let s = session(&engine, 100).await;
+    let other = session(&engine, 100).await;
+    let parent = match call(&engine, f.command(&s)).await {
+        Reply::Agent { operation, .. } => operation.id,
+        r => panic!("{r:?}"),
+    };
+    let mut base = f.request.clone();
+    base.continuation_of = Some(parent);
+    let mut changed = base.clone();
+    changed.execution = {
+        let mut sandbox = changed.execution.sandbox_request();
+        sandbox.memory_mb += 128;
+        sandbox.into()
+    };
+    let mut instructions = base.clone();
+    instructions.instructions = "new authority".into();
+    for (index, (id, request)) in [
+        (other, base),
+        (s.clone(), changed),
+        (s.clone(), instructions),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        assert!(matches!(
+            call(
+                &engine,
+                Command::RunAgent {
+                    session_id: id,
+                    command_id: format!("rejected-{index}"),
+                    request
+                }
+            )
+            .await,
+            Reply::Error { .. }
+        ));
+    }
+    assert_eq!(http.count(), 1);
+    let store = zero_store::Store::open(f.dir.path().join("native.sqlite")).unwrap();
+    assert!(store.get_operation_by_command(&s, "rejected-1").is_err());
+    assert!(store.get_operation_by_command(&s, "rejected-2").is_err());
+    drop(store);
+    engine.shutdown().await.unwrap();
+
+    let f = Setup::new("echo");
+    let http = Http::new(vec![": incomplete\n\n".into()], false).await;
+    let engine = f.engine();
+    http.configure(&engine);
+    let s = session(&engine, 100).await;
+    let parent = match call(&engine, f.command(&s)).await {
+        Reply::Agent { operation, .. } => {
+            assert_eq!(operation.status, OperationStatus::Unknown);
+            operation.id
+        }
+        r => panic!("{r:?}"),
+    };
+    let mut request = f.request.clone();
+    request.continuation_of = Some(parent);
+    assert!(matches!(
+        call(
+            &engine,
+            Command::RunAgent {
+                session_id: s.clone(),
+                command_id: "not-a-recovery".into(),
+                request
+            }
+        )
+        .await,
+        Reply::Error { .. }
+    ));
+    assert_eq!(http.count(), 1);
+    assert_eq!(budget(&engine, &s).await.reserved, 5);
     engine.shutdown().await.unwrap();
 }

@@ -54,3 +54,12 @@ execution IDs once a new effect has durable ownership. Wait for this event befor
 cancelling an asynchronously submitted command. It is not proof that a process or
 provider request has started. Cancellation known to precede provider dispatch
 releases the reservation at zero charge; uncertain remote outcomes retain it.
+
+Agent requests may set `continuation_of` to a completed agent operation ID in the
+same session. The engine restores the last persisted provider input and complete
+replay, including previous tool results, before appending the new prompt. It
+requires the same model, provider route/rates, instructions and pinned execution
+profile. Omitting the field starts a fresh history; selecting an earlier completed
+operation explicitly branches. Unknown/interrupted operations cannot be continued
+through this path, and no prior effect is reissued. The journal remains schema v2;
+this reconstructs history from already durable records rather than duplicating it.

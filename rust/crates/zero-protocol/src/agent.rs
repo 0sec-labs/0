@@ -10,6 +10,11 @@ pub struct AgentRequest {
     pub model: String,
     pub instructions: String,
     pub prompt: String,
+    /// Explicitly continue a completed agent operation in this session. Its
+    /// persisted final provider request and replay supply immutable history;
+    /// previous effects are never executed again. Omission starts fresh.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub continuation_of: Option<String>,
     /// Every tool call uses this pinned offline execution profile. The model
     /// supplies argv only; it cannot choose mounts, image, network or limits.
     pub execution: AgentExecution,

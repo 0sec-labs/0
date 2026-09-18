@@ -58,6 +58,11 @@ impl Engine {
                 .validate(&initial)
                 .map_err(|e| EngineError::State(e.to_string()))?;
             let mut store = lock(&self.shared.store)?;
+            let input = continuation_input(&store, &session_id, &request, &profile)?;
+            profile
+                .client
+                .validate(&model_request(&request, input.clone()))
+                .map_err(|e| EngineError::State(e.to_string()))?;
             let mut payload = serde_json::json!({"kind":"offline_snapshot_agent","request":request,"endpoint":profile.client.endpoint_identity(),"rates":profile.rates});
             if profile.client.wire_api() != zero_protocol::model::WireApi::Responses {
                 payload["wire_api"] = serde_json::to_value(profile.client.wire_api())?;
@@ -97,6 +102,7 @@ impl Engine {
                     &operation.id,
                     request,
                     profile,
+                    input,
                     cancel,
                     events,
                 )
@@ -111,6 +117,85 @@ impl Engine {
             .await
             .map_err(|_| EngineError::State("agent owner stopped before settlement".into()))?
     }
+}
+
+/// Reconstruct a completed turn from immutable journal records. No historical
+/// tool or provider request is re-issued. This also permits explicit branching
+/// from any completed turn, while preserving the execution/provider authority.
+fn continuation_input(
+    store: &Store,
+    session: &str,
+    request: &AgentRequest,
+    profile: &inference::Profile,
+) -> Result<Vec<serde_json::Value>, EngineError> {
+    let mut input = Vec::new();
+    if let Some(parent_id) = &request.continuation_of {
+        let parent = store.get_operation(parent_id)?;
+        if parent.session_id != session
+            || parent.status != OperationStatus::Succeeded
+            || parent.payload["kind"] != "offline_snapshot_agent"
+        {
+            return Err(EngineError::State(
+                "continuation requires a completed agent operation in this session".into(),
+            ));
+        }
+        let prior: AgentRequest = serde_json::from_value(parent.payload["request"].clone())?;
+        let result: AgentResult = serde_json::from_value(
+            parent
+                .outcome
+                .ok_or_else(|| EngineError::State("continuation has no outcome".into()))?,
+        )?;
+        let wire: zero_protocol::model::WireApi = serde_json::from_value(
+            parent
+                .payload
+                .get("wire_api")
+                .cloned()
+                .unwrap_or_else(|| serde_json::json!("responses")),
+        )?;
+        if prior.provider != request.provider
+            || prior.model != request.model
+            || prior.instructions != request.instructions
+            || serde_json::to_value(prior.execution.sandbox_request())?
+                != serde_json::to_value(request.execution.sandbox_request())?
+            || parent.payload["endpoint"] != profile.client.endpoint_identity()
+            || parent.payload["rates"] != serde_json::to_value(profile.rates)?
+            || wire != profile.client.wire_api()
+        {
+            return Err(EngineError::State("continuation must retain its provider, model, instructions, rates and pinned execution profile".into()));
+        }
+        if result.status != AgentStatus::Completed || result.turns == 0 {
+            return Err(EngineError::State(
+                "continuation requires a completed provider turn".into(),
+            ));
+        }
+        let last = store.get_operation_by_command(
+            session,
+            &format!("{parent_id}:model:{}", result.turns - 1),
+        )?;
+        if last.status != OperationStatus::Succeeded
+            || last.payload["parent_operation"] != *parent_id
+        {
+            return Err(EngineError::State(
+                "continuation provider journal is incomplete".into(),
+            ));
+        }
+        let model: ResponsesRequest = serde_json::from_value(last.payload["request"].clone())?;
+        let completion: zero_protocol::model::Completion =
+            serde_json::from_value(last.outcome.ok_or_else(|| {
+                EngineError::State("continuation provider outcome is absent".into())
+            })?)?;
+        if completion.status != zero_protocol::model::CompletionStatus::Completed
+            || completion.replay.is_empty()
+        {
+            return Err(EngineError::State(
+                "continuation has no complete replay data".into(),
+            ));
+        }
+        input = model.input;
+        input.extend(completion.replay);
+    }
+    input.push(serde_json::json!({"role":"user","content":request.prompt}));
+    Ok(input)
 }
 
 fn model_request(request: &AgentRequest, input: Vec<serde_json::Value>) -> ResponsesRequest {
@@ -141,6 +226,7 @@ async fn run_actor(
     parent: &str,
     request: AgentRequest,
     profile: inference::Profile,
+    mut input: Vec<serde_json::Value>,
     cancel: CancellationToken,
     events: mpsc::Sender<ExecutionEvent>,
 ) -> Result<Reply, EngineError> {
@@ -151,7 +237,6 @@ async fn run_actor(
         tool_calls: 0,
         error: None,
     };
-    let mut input = vec![serde_json::json!({"role":"user","content":request.prompt})];
     'turns: for turn in 0..request.max_turns {
         if cancel.is_cancelled() {
             output.status = AgentStatus::Cancelled;

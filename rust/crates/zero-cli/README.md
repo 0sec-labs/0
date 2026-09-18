@@ -180,3 +180,14 @@ one-shot exit succeeds only when the durable parent operation succeeds.
 Agent request `execution` accepts either the existing legacy Docker object or
 the explicit shared sandbox object above. These local adapters do not establish
 production security-scan parity or hosted-cloud execution support.
+
+Agent JSON may include `"continuation_of":"PRIOR_AGENT_OPERATION_ID"` with a new
+command ID and follow-up `prompt`. This reconstructs the completed parent's last
+provider input and final replay from durable records, including its final answer;
+it never reissues prior provider or tool calls. Each continuation can run in a
+new executable process. Keep the same session, provider/model, instructions,
+rates, wire API, endpoint and pinned execution profile. Unknown or incomplete
+parents are rejected. Omitting the field starts fresh; reusing a command ID with
+an identical request returns its recorded outcome rather than adding a turn.
+This is continuation of completed conversations, not automatic recovery of
+interrupted operations.

@@ -57,6 +57,18 @@ impl Store {
     pub fn get_operation(&self, id: &str) -> Result<Operation> {
         operation(&self.conn, id)
     }
+    pub fn get_operation_by_command(&self, session: &str, command: &str) -> Result<Operation> {
+        let id: String = self
+            .conn
+            .query_row(
+                "SELECT id FROM operations WHERE session_id=?1 AND command_id=?2",
+                params![session, command],
+                |r| r.get(0),
+            )
+            .optional()?
+            .ok_or_else(|| Error::NotFound(command.into()))?;
+        operation(&self.conn, &id)
+    }
     pub fn admit_command(
         &mut self,
         session: &str,
