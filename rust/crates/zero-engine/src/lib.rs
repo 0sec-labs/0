@@ -180,6 +180,7 @@ impl Engine {
             "finding_reconciliation",
             "responses_inference",
             "chat_completions_inference",
+            "anthropic_messages_inference",
             "bounded_offline_snapshot_agent",
         ]
         .map(String::from)

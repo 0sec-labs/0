@@ -1,4 +1,6 @@
 //! Bounded provider transport. Provider replies are data, never tool authority.
+mod anthropic;
+mod anthropic_stream;
 mod chat;
 mod responses;
 mod sse;
@@ -99,3 +101,6 @@ mod tests {
         );
     }
 }
+
+#[cfg(test)]
+mod anthropic_tests;

@@ -5,7 +5,7 @@ Integration branch: `the-great-rust-rewrite`.
 This is an experimental implementation, not a replacement release. Native crates
 currently provide a versioned JSON protocol, SQLite session journal and budget
 ledger, single-owner engine, offline Docker snapshot execution, source-preserving
-finding reconciliation, explicit Docker/smolvm snapshot backends, Responses/Chat
+finding reconciliation, explicit Docker/smolvm snapshot backends, Responses/Chat/Anthropic Messages
 inference with durable accounting, a bounded offline snapshot agent, and a CLI
 with an NDJSON app-server. Production scan commands, remaining provider adapters,
 full agent orchestration, evolution integration and TUI

@@ -90,7 +90,11 @@ impl Engine {
             let mut payload = serde_json::json!({"kind":"responses_inference","provider":provider,"endpoint":profile.client.endpoint_identity(),"rates":profile.rates,"request":request,"reservation":reservation});
             // Existing default-Responses admissions keep their exact retry identity.
             if profile.client.wire_api() != zero_protocol::model::WireApi::Responses {
-                payload["kind"] = serde_json::json!("chat_inference");
+                payload["kind"] = serde_json::json!(match profile.client.wire_api() {
+                    zero_protocol::model::WireApi::ChatCompletions => "chat_inference",
+                    zero_protocol::model::WireApi::AnthropicMessages => "anthropic_inference",
+                    zero_protocol::model::WireApi::Responses => unreachable!(),
+                });
                 payload["wire_api"] = serde_json::to_value(profile.client.wire_api())?;
             }
             let mut store = lock(&self.shared.store)?;

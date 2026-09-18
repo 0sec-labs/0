@@ -9,6 +9,7 @@ pub enum WireApi {
     #[default]
     Responses,
     ChatCompletions,
+    AnthropicMessages,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema, PartialEq, Eq)]

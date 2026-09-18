@@ -32,6 +32,7 @@ pub enum TransportError {
 pub struct Endpoint {
     url: Url,
     authorization: Option<HeaderValue>,
+    api_key: Option<HeaderValue>,
 }
 impl Endpoint {
     /// Exact provider URL, including its complete gateway prefix. The historical
@@ -64,7 +65,19 @@ impl Endpoint {
                 Ok(value)
             })
             .transpose()?;
-        Ok(Self { url, authorization })
+        let api_key = api_key
+            .map(|key| {
+                let mut value =
+                    HeaderValue::from_str(key).map_err(|_| TransportError::InvalidEndpoint)?;
+                value.set_sensitive(true);
+                Ok(value)
+            })
+            .transpose()?;
+        Ok(Self {
+            url,
+            authorization,
+            api_key,
+        })
     }
 }
 
@@ -101,6 +114,7 @@ impl ProviderClient {
         }
         let client = Client::builder()
             .redirect(reqwest::redirect::Policy::none())
+            .retry(reqwest::retry::never())
             .connect_timeout(Duration::from_secs(15))
             .build()
             .map_err(|_| TransportError::Network)?;
@@ -124,13 +138,16 @@ impl ProviderClient {
                 if request.input.iter().any(|item| {
                     item.get("type")
                         .and_then(serde_json::Value::as_str)
-                        .is_some_and(|kind| kind.starts_with("chat_completion_"))
+                        .is_some_and(|kind| {
+                            kind.starts_with("chat_completion_") || kind.starts_with("anthropic_")
+                        })
                 }) {
                     return Err(TransportError::InvalidRequest);
                 }
                 crate::request_body(request)
             }
             crate::WireApi::ChatCompletions => crate::chat::encode(request),
+            crate::WireApi::AnthropicMessages => crate::anthropic::encode(request),
         }
     }
     /// Compatibility entry point for an explicitly configured Responses route.
@@ -160,7 +177,12 @@ impl ProviderClient {
             .post(self.endpoint.url.clone())
             .json(&body)
             .header("Accept", "text/event-stream");
-        if let Some(auth) = &self.endpoint.authorization {
+        if self.wire == crate::WireApi::AnthropicMessages {
+            post = post.header("anthropic-version", "2023-06-01");
+            if let Some(key) = &self.endpoint.api_key {
+                post = post.header("x-api-key", key.clone());
+            }
+        } else if let Some(auth) = &self.endpoint.authorization {
             post = post.header(AUTHORIZATION, auth.clone());
         }
         let mut response = tokio::select! {
@@ -187,6 +209,9 @@ impl ProviderClient {
         let mut decoder = Decoder::default();
         let mut accumulator = match self.wire {
             crate::WireApi::Responses => StreamAccumulator::Responses(Accumulator::default()),
+            crate::WireApi::AnthropicMessages => StreamAccumulator::Anthropic(
+                crate::anthropic_stream::Accumulator::new(&request.model),
+            ),
             crate::WireApi::ChatCompletions => {
                 StreamAccumulator::Chat(crate::chat::Accumulator::new(&request.model))
             }
@@ -235,18 +260,21 @@ impl ProviderClient {
 enum StreamAccumulator {
     Responses(Accumulator),
     Chat(crate::chat::Accumulator),
+    Anthropic(crate::anthropic_stream::Accumulator),
 }
 impl StreamAccumulator {
     fn event(&mut self, data: &[u8]) -> Result<(), TransportError> {
         match self {
             Self::Responses(a) => a.event(data),
             Self::Chat(a) => a.event(data),
+            Self::Anthropic(a) => a.event(data),
         }
     }
     fn finish(self, interrupted: Option<&str>) -> Completion {
         match self {
             Self::Responses(a) => a.finish(interrupted),
             Self::Chat(a) => a.finish(interrupted),
+            Self::Anthropic(a) => a.finish(interrupted),
         }
     }
 }

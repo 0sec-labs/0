@@ -79,11 +79,15 @@ impl Http {
         }
     }
     fn configure(&self, engine: &Engine) {
+        self.configure_wire(engine, zero_protocol::model::WireApi::Responses);
+    }
+    fn configure_wire(&self, engine: &Engine, wire: zero_protocol::model::WireApi) {
         engine
             .configure_provider(
                 "local",
-                ProviderClient::new(
+                ProviderClient::with_wire(
                     Endpoint::responses(&self.url, None).unwrap(),
+                    wire,
                     Duration::from_secs(10),
                     65536,
                 )
@@ -688,5 +692,170 @@ async fn continuation_rejects_other_session_changed_authority_and_unknown_parent
     ));
     assert_eq!(http.count(), 1);
     assert_eq!(budget(&engine, &s).await.reserved, 5);
+    engine.shutdown().await.unwrap();
+}
+
+fn anthropic_response(tool: bool, cache_write: u64) -> String {
+    let mut events = vec![
+        json!({"type":"message_start","message":{"id":"anthropic-fixture","type":"message","role":"assistant","model":"fixture","content":[],"stop_reason":null,"usage":{"input_tokens":2,"cache_read_input_tokens":3,"cache_creation_input_tokens":cache_write,"output_tokens":0}}}),
+    ];
+    if tool {
+        events.extend([
+            json!({"type":"content_block_start","index":0,"content_block":{"type":"thinking","thinking":"","signature":""}}),
+            json!({"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"fixture reasoning"}}),
+            json!({"type":"content_block_delta","index":0,"delta":{"type":"signature_delta","signature":"opaque-signature"}}),
+            json!({"type":"content_block_stop","index":0}),
+            json!({"type":"content_block_start","index":1,"content_block":{"type":"tool_use","id":"anthropic-tool","name":"execute_snapshot","input":{}}}),
+            json!({"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"{\"argv\":[\"true\"]}"}}),
+            json!({"type":"content_block_stop","index":1}),
+        ]);
+    } else {
+        events.extend([
+            json!({"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}),
+            json!({"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Anthropic fixture answer"}}),
+            json!({"type":"content_block_stop","index":0}),
+        ]);
+    }
+    events.push(json!({"type":"message_delta","delta":{"stop_reason":if tool {"tool_use"} else {"end_turn"},"stop_sequence":null},"usage":{"output_tokens":1}}));
+    events.push(json!({"type":"message_stop"}));
+    events.iter().map(|e| format!("data: {e}\n\n")).collect()
+}
+#[tokio::test]
+async fn anthropic_tool_replay_and_completed_continuation_keep_signed_history_and_usage() {
+    use zero_protocol::model::WireApi;
+    let f = Setup::new("echo");
+    f.request.execution.validate().unwrap();
+    let http = Http::new(
+        vec![
+            anthropic_response(true, 0),
+            anthropic_response(false, 0),
+            anthropic_response(false, 0),
+        ],
+        false,
+    )
+    .await;
+    let engine = f.engine();
+    http.configure_wire(&engine, WireApi::AnthropicMessages);
+    let s = session(&engine, 100).await;
+    let mut request = f.request.clone();
+    request.reservation_per_turn = 10;
+    let command = Command::RunAgent {
+        session_id: s.clone(),
+        command_id: "anthropic-parent".into(),
+        request: request.clone(),
+    };
+    let parent = match call(&engine, command.clone()).await {
+        Reply::Agent {
+            operation,
+            result: Some(result),
+            ..
+        } => {
+            assert_eq!(result.status, AgentStatus::Completed);
+            assert_eq!(result.tool_calls, 1);
+            operation.id
+        }
+        r => panic!("{r:?}"),
+    };
+    assert_eq!(budget(&engine, &s).await.charged, 12);
+    let prior_calls = f.docker_calls();
+    engine.shutdown().await.unwrap();
+    drop(engine);
+    let engine = f.engine();
+    http.configure_wire(&engine, WireApi::AnthropicMessages);
+    request.continuation_of = Some(parent);
+    request.prompt = "follow up".into();
+    assert!(
+        matches!(call(&engine,Command::RunAgent{session_id:s.clone(),command_id:"anthropic-next".into(),request}).await,Reply::Agent{operation,..} if operation.status==OperationStatus::Succeeded)
+    );
+    let requests = http.requests.lock().unwrap().clone();
+    let input = requests[2]["messages"].as_array().unwrap();
+    let assistant = input
+        .iter()
+        .find(|m| m["role"] == "assistant" && m["content"][0]["type"] == "thinking")
+        .unwrap();
+    assert_eq!(assistant["content"][0]["signature"], "opaque-signature");
+    assert!(input.iter().any(|m| m["role"] == "user"
+        && m["content"].as_array().is_some_and(|b| {
+            b.iter()
+                .any(|b| b["type"] == "tool_result" && b["tool_use_id"] == "anthropic-tool")
+        })));
+    assert!(
+        input
+            .to_vec()
+            .iter()
+            .any(|m| m.to_string().contains("Anthropic fixture answer"))
+    );
+    assert_eq!(f.docker_calls(), prior_calls);
+    assert_eq!(budget(&engine, &s).await.charged, 18);
+    assert_eq!(budget(&engine, &s).await.reserved, 0);
+    assert!(matches!(
+        call(&engine, command).await,
+        Reply::Agent {
+            duplicate: true,
+            ..
+        }
+    ));
+    assert_eq!(http.count(), 3);
+    engine.shutdown().await.unwrap();
+}
+#[tokio::test]
+async fn anthropic_unpriced_cache_write_retains_reservation_for_explicit_reconciliation() {
+    use zero_protocol::model::{ResponsesRequest, WireApi};
+    let f = Setup::new("echo");
+    let http = Http::new(vec![anthropic_response(false, 4)], false).await;
+    let engine = f.engine();
+    http.configure_wire(&engine, WireApi::AnthropicMessages);
+    let s = session(&engine, 100).await;
+    let operation = match call(
+        &engine,
+        Command::Infer {
+            session_id: s.clone(),
+            command_id: "unpriced".into(),
+            provider: "local".into(),
+            request: ResponsesRequest {
+                model: "fixture".into(),
+                instructions: "".into(),
+                input: vec![json!({"role":"user","content":"hello"})],
+                tools: vec![],
+                max_output_tokens: 32,
+            },
+            reservation: 20,
+        },
+    )
+    .await
+    {
+        Reply::Inference {
+            operation,
+            completion: Some(completion),
+            ..
+        } => {
+            assert_eq!(operation.payload["kind"], "anthropic_inference");
+            assert!(!completion.usage_is_final);
+            assert_eq!(
+                completion.replay[0]["usage"]["cache_creation_input_tokens"],
+                4
+            );
+            operation.id
+        }
+        r => panic!("{r:?}"),
+    };
+    assert_eq!(budget(&engine, &s).await.reserved, 20);
+    assert_eq!(budget(&engine, &s).await.charged, 0);
+    assert!(matches!(
+        call(
+            &engine,
+            Command::ReconcileUsage {
+                session_id: s.clone(),
+                operation_id: operation,
+                charged: 15,
+                evidence: "fixture invoice confirms cache-write charge".into()
+            }
+        )
+        .await,
+        Reply::SessionBudget { .. }
+    ));
+    assert_eq!(budget(&engine, &s).await.reserved, 0);
+    assert_eq!(budget(&engine, &s).await.charged, 15);
+    assert_eq!(http.count(), 1);
     engine.shutdown().await.unwrap();
 }

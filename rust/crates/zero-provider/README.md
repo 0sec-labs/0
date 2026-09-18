@@ -1,13 +1,14 @@
 # Native provider transport
 
-Implemented wires: explicit Responses and Chat Completions SSE endpoints.
-No implicit provider selection, automatic retries, OAuth refresh, paid test calls,
-Anthropic Messages or cloud broker adapter yet.
+Implemented wires: explicit Responses, Chat Completions and Anthropic Messages
+SSE endpoints. No implicit provider selection, automatic retries, OAuth refresh,
+paid test calls or cloud broker adapter.
 
 The endpoint and credentials are separate from serializable request values.
 HTTPS is required except explicit loopback HTTP test/local endpoints. Redirects
 are rejected. Errors do not print authorization or the URL. Requests retain
-custom gateway paths, explicitly cap output, and set `store:false`.
+custom gateway paths and explicitly cap output. Responses requests set
+`store:false`; each other wire uses its own request fields.
 
 Stream framing tolerates arbitrary network chunks, CRLF and multiline data with
 bounded frames and total bytes. Provisional argument fragments cannot produce
@@ -47,3 +48,52 @@ turn. Ambiguous incremental reasoning-details formats fail explicitly. A usable
 completion requires a consistent finish reason and `[DONE]`; final accounting
 requires the trailing empty-choices usage frame. Stream errors do not expose
 provider error bodies. No retry or provider fallback is automatic.
+
+
+## Explicit Anthropic Messages routes
+
+Select `wire_api: "anthropic_messages"`. The exact endpoint URL is retained;
+API keys use `x-api-key` and `anthropic-version: 2023-06-01`, without a Bearer
+header. System instructions, text messages, function definitions/results and
+output bounds map explicitly to Messages fields. All tool results must match
+outstanding calls once, in the immediate following user turn. Unsupported media,
+server tools, citations, assistant prefilling, foreign-wire replay and mismatched
+model replay are rejected instead of being silently dropped or reinterpreted.
+
+Ordered thinking text, signature fragments, redacted thinking and complete tool
+JSON are retained in a model-bound `anthropic_message` envelope. Replaying it
+sends the entire original assistant content array, without adding cache controls
+or reconstructing it from visible text. Thinking is opaque replay data, not a
+visible answer or permission to run a tool. This adapter does not request a
+thinking mode or infer one from a model name. The common request schema has no
+thinking/beta/cache-control options yet.
+
+A consistent stop reason, closed valid content blocks and `message_stop` are
+required before tool content becomes usable. Missing/truncated terminal events,
+invalid JSON, unsupported deltas or unknown event types fail closed. Stream error
+bodies are not retained because they may contain credentials or gateway details.
+Incomplete replay envelopes preserve diagnostic blocks and argument fragments
+but are rejected for subsequent execution requests. No retry is automatic.
+
+Anthropic's input count excludes cache reads/writes. Normalized input adds these
+counts, and cached input is the cache-read subset. Raw usage remains in replay.
+Only terminal usage with supported billing dimensions is final for the engine:
+nonzero cache-write/server-tool counters, nonstandard tiers/geographies or unknown
+billing dimensions retain the budget reservation for explicit reconciliation.
+Current Rates has no cache-write or server-tool price dimension. Ordinary standard
+tier/global metadata, zero tool/cache-write breakdowns, and thinking-token subsets
+are accepted without inventing additional charges. Missing total counters remain
+unknown. This conservatism is not a claim that a completed model turn was free.
+
+Official references checked 2026-09-18:
+
+- [Messages schema and signed block replay](https://platform.claude.com/docs/en/api/messages/create)
+- [Streaming event sequence and deltas](https://platform.claude.com/docs/en/build-with-claude/streaming)
+- [Cache token accounting](https://platform.claude.com/docs/en/build-with-claude/prompt-caching)
+
+The existing `packages/core/src/runtime/llm-api.ts` positive Anthropic wire branch
+is the migration reference for headers, ordered retained reasoning and tool result
+mapping. Unlike its retry helpers, native transport never retries implicitly.
+Unit and loopback fixtures cover exact paths/auth, fragmented streams, signed
+replay, tool pairing, cancellation, errors, bounds and provisional/final usage.
+No live provider call or broader Anthropic feature parity is claimed.
