@@ -56,6 +56,7 @@ impl Store {
         let mut payload = json!({"kind":"agent_operator_question","parent_operation":actor_id,"root_operation":root_id,"origin_inference_id":origin_id,"origin_payload_sha256":hash(&origin.payload)?,"origin_outcome_sha256":hash(&serde_json::to_value(&origin.outcome)?)?,"call_id":call,"request":request,"session_id":session,"tool_command":command,"schema_version":1});
         payload["request_sha256"] = json!(hash(&payload)?);
         let text = serde_json::to_string(&payload)?;
+        crate::scan::authorize(&tx, session, command, &payload)?;
         crate::campaign::authorize(&tx, session, command, &payload)?;
         let key = uuid::Uuid::new_v4().to_string();
         tx.execute("INSERT INTO operations(id,session_id,command_id,payload,payload_hash,status) VALUES(?1,?2,?3,?4,?5,'admitted')",params![key,session,command,text,format!("{:x}",Sha256::digest(text.as_bytes()))])?;

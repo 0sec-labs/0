@@ -115,7 +115,7 @@ fn schema_thirteen_migration_preserves_existing_campaign_snapshot() {
     drop(store);
     let path = dir.path().join("state.db");
     let sql = rusqlite::Connection::open(&path).unwrap();
-    sql.execute_batch("DROP TABLE strategy_search_selections; DROP TABLE strategy_search_evaluations; DROP TABLE strategy_search_proposals; DROP TABLE strategy_searches; DROP TABLE strategy_sessions; PRAGMA user_version=13;")
+    sql.execute_batch("DROP INDEX scan_command_created; DROP TABLE scans; DROP TABLE strategy_search_selections; DROP TABLE strategy_search_evaluations; DROP TABLE strategy_search_proposals; DROP TABLE strategy_searches; DROP TABLE strategy_sessions; PRAGMA user_version=13;")
         .unwrap();
     drop(sql);
     assert!(matches!(
@@ -209,7 +209,7 @@ fn schema_fourteen_migration_preserves_retained_portable_evidence() {
     drop(store);
     let path = dir.path().join("state.db");
     let sql = rusqlite::Connection::open(&path).unwrap();
-    sql.execute_batch("DROP TABLE strategy_search_selections; DROP TABLE strategy_search_evaluations; DROP TABLE strategy_search_proposals; DROP TABLE strategy_searches; PRAGMA user_version=14;").unwrap();
+    sql.execute_batch("DROP INDEX scan_command_created; DROP TABLE scans; DROP TABLE strategy_search_selections; DROP TABLE strategy_search_evaluations; DROP TABLE strategy_search_proposals; DROP TABLE strategy_searches; PRAGMA user_version=14;").unwrap();
     drop(sql);
     assert!(matches!(
         Store::open_read_only(&path),
@@ -284,7 +284,7 @@ fn schema_fifteen_upgrade_preserves_fixed_pair_portable_identity() {
     drop(store);
     let path = dir.path().join("state.db");
     let sql = rusqlite::Connection::open(&path).unwrap();
-    sql.execute_batch("DROP TABLE strategy_search_selections; PRAGMA user_version=15;")
+    sql.execute_batch("DROP INDEX scan_command_created; DROP TABLE scans; DROP TABLE strategy_search_selections; PRAGMA user_version=15;")
         .unwrap();
     drop(sql);
     assert!(matches!(
@@ -303,5 +303,76 @@ fn schema_fifteen_upgrade_preserves_fixed_pair_portable_identity() {
             .unwrap()
             .digest(),
         before.digest()
+    );
+}
+
+#[test]
+fn schema_sixteen_scan_migration_preserves_fixed_pair_evidence() {
+    let (dir, store, id) = fixture();
+    let before = store.freeze_campaign(&id).unwrap();
+    drop(store);
+    let path = dir.path().join("state.db");
+    let sql = rusqlite::Connection::open(&path).unwrap();
+    sql.execute_batch("DROP INDEX scan_command_created; DROP TABLE scans; PRAGMA user_version=16;")
+        .unwrap();
+    drop(sql);
+    assert!(matches!(
+        Store::open_read_only(&path),
+        Err(zero_store::Error::Schema(16))
+    ));
+    let upgraded = Store::open(&path).unwrap();
+    assert_eq!(
+        upgraded.freeze_campaign(&id).unwrap().manifest_bytes(),
+        before.manifest_bytes()
+    );
+    assert_eq!(
+        Store::hydrate_campaign_snapshot(&before)
+            .unwrap()
+            .freeze_campaign(&id)
+            .unwrap()
+            .digest(),
+        before.digest()
+    );
+}
+#[test]
+fn changed_sixteen_schema_is_rejected_without_partial_scan_migration() {
+    let (dir, store, _id) = fixture();
+    drop(store);
+    let path = dir.path().join("state.db");
+    let sql = rusqlite::Connection::open(&path).unwrap();
+    sql.execute_batch("DROP INDEX scan_command_created; DROP TABLE scans; PRAGMA user_version=16; CREATE INDEX changed_sessions ON sessions(created_at_ms);").unwrap();
+    assert!(matches!(
+        Store::open(&path),
+        Err(zero_store::Error::ForeignDatabase)
+    ));
+    let version: u32 = sql
+        .pragma_query_value(None, "user_version", |r| r.get(0))
+        .unwrap();
+    assert_eq!(version, 16);
+    let scans: u32 = sql
+        .query_row(
+            "SELECT count(*) FROM sqlite_schema WHERE name IN ('scans','scan_command_created')",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(scans, 0);
+}
+#[test]
+fn old_campaign_export_rejects_scan_membership_even_without_projection() {
+    let (_dir, store, id) = fixture();
+    let c = store.campaign(&id).unwrap().campaign;
+    let sql = rusqlite::Connection::open(_dir.path().join("state.db")).unwrap();
+    sql.execute(
+        "INSERT INTO events(session_id,sequence,kind,payload) VALUES(?1,999,'scan_created','{}')",
+        [&c.journal_session_id],
+    )
+    .unwrap();
+    assert!(
+        store
+            .freeze_campaign(&id)
+            .unwrap_err()
+            .to_string()
+            .contains("scan evidence")
     );
 }

@@ -20,6 +20,9 @@ pub struct Args {
     /// Explicit host-owned target HTTP profiles; credentials are named environment references.
     #[arg(long, global = true)]
     pub http_profiles: Option<PathBuf>,
+    /// Explicit public profiles for standalone scoped HTTP scans.
+    #[arg(long, global = true)]
+    pub scan_profiles: Option<PathBuf>,
     /// Provider profiles; secrets are read from explicitly named environment variables.
     #[arg(long, global = true)]
     pub providers: Option<PathBuf>,
@@ -47,6 +50,8 @@ pub struct Args {
 
 #[derive(Debug, Subcommand)]
 pub enum Command {
+    /// Run or inspect a durable standalone HTTP scan; findings remain unverified.
+    Scan(crate::scan::ScanArgs),
     /// Run bounded paired strategy qualification or inspect retained campaign evidence.
     Strategy {
         #[command(subcommand)]

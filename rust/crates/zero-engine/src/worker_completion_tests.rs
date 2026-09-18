@@ -171,3 +171,65 @@ fn final_owner_release_is_not_delayed_by_a_child_waiting_before_exec() {
         reopened.err()
     );
 }
+
+#[test]
+fn dropped_controller_retires_its_actual_actor_without_overwriting_a_settled_actor() {
+    for actor_finished in [false, true] {
+        let dir = tempfile::tempdir().unwrap();
+        let engine = Engine::open(dir.path().join("state.db"), None).unwrap();
+        let (session, operations) = {
+            let mut store = engine.shared.store.lock().unwrap();
+            let session = store.create_session("guard-fixture", 10).unwrap().id;
+            let operations = store
+                .admit_owned_batch(
+                    &session,
+                    &engine.shared.owner,
+                    &[
+                        (
+                            "controller".into(),
+                            serde_json::json!({"kind":"test_controller"}),
+                        ),
+                        ("actor".into(), serde_json::json!({"kind":"test_actor"})),
+                    ],
+                )
+                .unwrap();
+            if actor_finished {
+                store
+                    .settle_operation(
+                        &operations[1].id,
+                        &engine.shared.owner,
+                        OperationStatus::Succeeded,
+                        &serde_json::json!({"completed":true}),
+                    )
+                    .unwrap();
+            }
+            (session, operations)
+        };
+        let cancel = CancellationToken::new();
+        let mut guard = WorkerGuard::new(
+            Arc::clone(&engine.shared),
+            &session,
+            &operations[0].id,
+            cancel.clone(),
+        );
+        guard.track_operation(&operations[1].id);
+        drop(guard); // Models an unwinding controller before its durable settlement.
+        assert!(cancel.is_cancelled());
+        assert!(engine.shared.control.lock().unwrap().closing);
+        let store = engine.shared.store.lock().unwrap();
+        assert_eq!(
+            store.get_operation(&operations[0].id).unwrap().status,
+            OperationStatus::Unknown
+        );
+        assert_eq!(
+            store.get_operation(&operations[1].id).unwrap().status,
+            if actor_finished {
+                OperationStatus::Succeeded
+            } else {
+                OperationStatus::Unknown
+            }
+        );
+        store.validate_session_admission_closure(&session).unwrap();
+        assert_eq!(engine.shared.workers.count.load(Ordering::Acquire), 0);
+    }
+}

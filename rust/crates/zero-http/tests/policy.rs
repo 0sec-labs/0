@@ -125,3 +125,43 @@ fn encoded_path_denials_unicode_and_dot_segments_share_canonical_identity() {
         assert!(normalize_intent(&p, args(path)).is_err(), "{path}");
     }
 }
+
+#[test]
+fn scan_target_normalization_is_method_free_scoped_and_secret_safe() {
+    let mut p = policy("http://localhost".into());
+    p.allowed_methods = vec!["GET".into()];
+    p.denied_path_prefixes = vec!["/admin".into()];
+    let auth = StaticAuth::new(
+        "revision".into(),
+        p.base_url.clone(),
+        BTreeMap::from([("authorization".into(), "Bearer scan-target-secret".into())]),
+    )
+    .unwrap();
+    p.auth = Some(auth.descriptor().clone());
+    let c = client(p.clone(), Some(auth));
+    assert_eq!(
+        c.normalize_target("http://LOCALHOST.:80/api").unwrap(),
+        "http://localhost/api"
+    );
+    assert_eq!(
+        normalize_target(&p, "http://localhost/api").unwrap(),
+        "http://localhost/api"
+    );
+    for target in ["http://outside.test/", "http://localhost/%61dmin"] {
+        assert_eq!(c.normalize_target(target), Err(ErrorCode::Scope));
+    }
+    for target in [
+        "http://user:pass@localhost/",
+        "http://localhost/#fragment",
+        "/relative",
+        "file:///tmp/x",
+    ] {
+        assert_eq!(c.normalize_target(target), Err(ErrorCode::Invalid));
+    }
+    for target in [
+        "http://localhost/?token=scan-target-secret",
+        "http://localhost/?token=scan%2Dtarget%2Dsecret",
+    ] {
+        assert_eq!(c.normalize_target(target), Err(ErrorCode::Secret));
+    }
+}

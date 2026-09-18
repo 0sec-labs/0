@@ -14,6 +14,8 @@ mod http_profiles;
 mod providers;
 mod questions;
 mod report;
+mod scan;
+mod scan_profiles;
 mod server;
 mod source_report;
 mod steering;
@@ -44,9 +46,8 @@ fn main() -> std::process::ExitCode {
         }
     };
     let status = runtime.block_on(async {
-        match run(Args::parse()).await {
-            Ok(true) => std::process::ExitCode::SUCCESS,
-            Ok(false) => std::process::ExitCode::from(1),
+        match dispatch(Args::parse()).await {
+            Ok(code) => std::process::ExitCode::from(code),
             Err(error) => {
                 use tokio::io::AsyncWriteExt;
                 let line = format!(
@@ -68,6 +69,13 @@ fn main() -> std::process::ExitCode {
     // keeps a pipe open. Do not hang process exit waiting for those I/O tasks.
     runtime.shutdown_timeout(std::time::Duration::from_secs(1));
     status
+}
+
+async fn dispatch(args: Args) -> Result<u8, Box<dyn Error>> {
+    if let Command::Scan(options) = &args.command {
+        return scan::run(&args, options).await;
+    }
+    run(args).await.map(|success| u8::from(!success))
 }
 
 async fn run(args: Args) -> Result<bool, Box<dyn Error>> {
@@ -187,11 +195,18 @@ async fn run(args: Args) -> Result<bool, Box<dyn Error>> {
         Some(path) => http_profiles::load(path).await?,
         None => Vec::new(),
     };
+    let scan_profiles = match args.scan_profiles.as_deref() {
+        Some(path) => scan_profiles::load(path).await?,
+        None => Vec::new(),
+    };
     let engine = Arc::new(Engine::open_with_backends(
         &args.state,
         args.docker_bin,
         args.smolvm_bin,
     )?);
+    for (name, profile) in scan_profiles {
+        engine.configure_scan(&name, profile)?;
+    }
     for (name, client) in http_profiles {
         engine.configure_http(&name, client)?;
     }
@@ -462,7 +477,8 @@ async fn run(args: Args) -> Result<bool, Box<dyn Error>> {
         | Command::Hosted { .. }
         | Command::Report { .. }
         | Command::Evaluation { .. }
-        | Command::Artifact { .. } => unreachable!(),
+        | Command::Artifact { .. }
+        | Command::Scan(_) => unreachable!(),
     };
     let strategy_run = matches!(
         &command,

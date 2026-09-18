@@ -25,6 +25,8 @@ mod queue;
 mod repair;
 mod reproduction;
 mod sandbox;
+mod scan;
+pub use scan::{read_scan_report, read_scan_status, read_scans};
 mod source;
 mod source_provenance;
 mod source_report;
@@ -130,6 +132,7 @@ struct Shared {
     providers: Mutex<HashMap<String, inference::Profile>>,
     plugins: Mutex<Option<plugin::Profile>>,
     strategy_runtime: Mutex<Option<zero_harness::Harness>>,
+    scan_profiles: Mutex<std::collections::BTreeMap<String, zero_protocol::scan::ScanProfile>>,
     http: Mutex<HashMap<String, Arc<zero_http::Client>>>,
     plugin_root: PathBuf,
     owner: String,
@@ -162,12 +165,26 @@ impl Drop for WorkerCompletion {
 }
 
 /// Finalizes registration even if the worker panics or settlement fails.
+/// Caller holds control, preserving the admission lock order before Store.
+fn persist_scan_cancellation(shared: &Shared, session: &str) -> Result<bool, EngineError> {
+    let mut store = lock(&shared.store)?;
+    match store.scan_by_session(session)? {
+        Some(scan) => Ok(store.request_scan_stop(
+            &scan.id,
+            &shared.owner,
+            zero_protocol::scan::ScanCloseReason::Cancelled,
+        )?),
+        None => Ok(true),
+    }
+}
+
 struct WorkerGuard {
     // Fields drop in declaration order after Drop: release the worker's sole
     // engine ownership before the completion token can unblock shutdown.
     shared: Arc<Shared>,
     session_id: String,
     operation_id: String,
+    related_operations: Vec<String>,
     cancel: CancellationToken,
     settled: bool,
     _completion: WorkerCompletion,
@@ -188,9 +205,20 @@ impl WorkerGuard {
             shared,
             session_id,
             operation_id,
+            related_operations: Vec::new(),
             cancel,
             settled: false,
             _completion: completion,
+        }
+    }
+}
+impl WorkerGuard {
+    /// Additional real operations owned by this one worker and cancellation tree.
+    fn track_operation(&mut self, operation_id: &str) {
+        if operation_id != self.operation_id
+            && !self.related_operations.iter().any(|id| id == operation_id)
+        {
+            self.related_operations.push(operation_id.into());
         }
     }
 }
@@ -201,18 +229,23 @@ impl Drop for WorkerGuard {
             // Keep the lock ordering used by admission: control, then store.
             if let Ok(mut control) = self.shared.control.lock() {
                 control.closing = true;
-                for active in control.active.values() {
+                for (session, active) in &control.active {
+                    let _ = persist_scan_cancellation(&self.shared, session);
                     active.cancel.cancel();
                 }
                 for campaign in control.strategy_campaigns.values() {
                     campaign.cancel();
                 }
                 if let Ok(mut store) = self.shared.store.lock() {
-                    let _ = store.mark_operation_unknown(
-                        &self.operation_id,
-                        &self.shared.owner,
-                        "worker ended without durable settlement; engine admission closed",
-                    );
+                    for operation in
+                        std::iter::once(&self.operation_id).chain(&self.related_operations)
+                    {
+                        let _ = store.mark_operation_unknown(
+                            operation,
+                            &self.shared.owner,
+                            "worker ended without durable settlement; engine admission closed",
+                        );
+                    }
                 }
             }
         }
@@ -285,6 +318,7 @@ impl Engine {
                 providers: Mutex::new(HashMap::new()),
                 plugins: Mutex::new(None),
                 strategy_runtime: Mutex::new(None),
+                scan_profiles: Mutex::new(std::collections::BTreeMap::new()),
                 http: Mutex::new(HashMap::new()),
                 plugin_root,
                 owner,
@@ -377,6 +411,22 @@ impl Engine {
         progress_tx: Option<mpsc::Sender<ExecutionEvent>>,
     ) -> Result<Reply, EngineError> {
         match command {
+            Command::RunScan {
+                command_id,
+                target,
+                profile,
+            } => {
+                return self
+                    .run_scan(command_id, target, profile, event_tx, progress_tx)
+                    .await;
+            }
+            Command::ScanStatus { scan_id } => return self.scan_status(&scan_id),
+            Command::ScanReport { scan_id } => return self.scan_report(&scan_id),
+            Command::Scans {
+                before_sequence,
+                limit,
+            } => return self.scans(before_sequence, limit),
+            Command::CancelScan { scan_id } => return self.cancel_scan(&scan_id),
             Command::CreateStrategySearch { command_id, plan } => {
                 return self.create_strategy_search(command_id, *plan);
             }
@@ -610,7 +660,7 @@ impl Engine {
         {
             return self.steer_agent(&session_id, &operation_id, &command_id, &prompt);
         }
-        let mut control = lock(&self.shared.control)?;
+        let control = lock(&self.shared.control)?;
         if control.closing {
             return Err(EngineError::State("engine is shutting down".into()));
         }
@@ -1018,14 +1068,19 @@ impl Engine {
                 session_id,
                 execution_id,
             } => {
-                let accepted = control.active.get_mut(&session_id).is_some_and(|active| {
-                    if active.execution_id == execution_id {
-                        active.cancel.cancel();
-                        true
-                    } else {
-                        false
-                    }
-                });
+                let accepted = if let Some(active) = control
+                    .active
+                    .get(&session_id)
+                    .filter(|active| active.execution_id == execution_id)
+                {
+                    let closed = persist_scan_cancellation(&self.shared, &session_id);
+                    // Cancellation still propagates when the ledger cannot record
+                    // intent; in that case return an error, never a false receipt.
+                    active.cancel.cancel();
+                    closed?
+                } else {
+                    false
+                };
                 Ok(Reply::Cancelled {
                     execution_id,
                     accepted,
@@ -1034,7 +1089,12 @@ impl Engine {
             Command::Reconcile(request) => zero_evidence::reconcile(request)
                 .map(Reply::Reconciled)
                 .map_err(|e| EngineError::State(e.to_string())),
-            Command::CreateStrategySearch { .. }
+            Command::RunScan { .. }
+            | Command::ScanStatus { .. }
+            | Command::ScanReport { .. }
+            | Command::Scans { .. }
+            | Command::CancelScan { .. }
+            | Command::CreateStrategySearch { .. }
             | Command::RunStrategySearch { .. }
             | Command::CancelStrategySearch { .. }
             | Command::StrategySearchStatus { .. }
@@ -1146,10 +1206,14 @@ impl Engine {
     /// and release of every worker's engine ownership. Other Engine handles or
     /// callers borrowing this Engine must still be dropped before reopening.
     pub async fn shutdown(&self) -> Result<(), EngineError> {
+        let mut admission_error = None;
         {
             let mut control = lock(&self.shared.control)?;
             control.closing = true;
-            for active in control.active.values() {
+            for (session, active) in &control.active {
+                if let Err(error) = persist_scan_cancellation(&self.shared, session) {
+                    admission_error.get_or_insert(error);
+                }
                 active.cancel.cancel();
             }
             for campaign in control.strategy_campaigns.values() {
@@ -1167,7 +1231,10 @@ impl Engine {
             }
             notified.await;
         }
-        Ok(())
+        match admission_error {
+            Some(error) => Err(error),
+            None => Ok(()),
+        }
     }
 }
 
@@ -1176,7 +1243,8 @@ impl Drop for Engine {
         // Explicit shutdown is needed to await cleanup; Drop still requests it.
         if let Ok(mut control) = self.shared.control.lock() {
             control.closing = true;
-            for active in control.active.values() {
+            for (session, active) in &control.active {
+                let _ = persist_scan_cancellation(&self.shared, session);
                 active.cancel.cancel();
             }
             for campaign in control.strategy_campaigns.values() {

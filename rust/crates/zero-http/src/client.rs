@@ -31,6 +31,16 @@ pub fn profile_sha256(policy: &HttpProfilePolicy) -> Result<String, Error> {
     let bytes = serde_json::to_vec(&value).map_err(|_| ErrorCode::Invalid)?;
     Ok(format!("sha256:{:x}", Sha256::digest(bytes)))
 }
+/// Normalize a target without inventing an HTTP method or performing DNS/network IO.
+pub fn normalize_target(policy: &HttpProfilePolicy, target: &str) -> Result<String, Error> {
+    if target.len() > 8192 {
+        return Err(ErrorCode::Invalid);
+    }
+    let policy = normalize_policy(policy.clone())?;
+    let url = policy::parse(target)?;
+    policy::authorize(&policy, &url)?;
+    Ok(url.to_string())
+}
 pub fn normalize_intent(
     policy: &HttpProfilePolicy,
     args: HttpRequestArguments,
@@ -100,6 +110,49 @@ impl Client {
     }
     pub fn policy_sha256(&self) -> &str {
         &self.inner.hash
+    }
+    /// Apply the captured target policy and private credential reflection checks.
+    pub fn normalize_target(&self, target: &str) -> Result<String, Error> {
+        let normalized = normalize_target(self.policy(), target)?;
+        self.check_public(target.as_bytes())?;
+        self.check_public(normalized.as_bytes())?;
+        // A URL may encode a credential before reflecting it into public intent.
+        let mut decoded = normalized.as_bytes().to_vec();
+        for _ in 0..8 {
+            let mut next = Vec::with_capacity(decoded.len());
+            let mut i = 0;
+            while i < decoded.len() {
+                let pair = if decoded[i] == b'%' && i + 2 < decoded.len() {
+                    (decoded[i + 1] as char)
+                        .to_digit(16)
+                        .zip((decoded[i + 2] as char).to_digit(16))
+                } else {
+                    None
+                };
+                if let Some((a, b)) = pair {
+                    next.push((a * 16 + b) as u8);
+                    i += 3;
+                } else {
+                    next.push(decoded[i]);
+                    i += 1;
+                }
+            }
+            if next == decoded {
+                break;
+            }
+            decoded = next;
+        }
+        self.check_public(&decoded)?;
+        let url = policy::parse(&normalized)?;
+        for (key, value) in url.query_pairs() {
+            self.check_public(key.as_bytes())?;
+            self.check_public(value.as_bytes())?;
+        }
+
+        if auth::value_contains(&serde_json::json!([target, normalized]), self.secrets()) {
+            return Err(ErrorCode::Secret);
+        }
+        Ok(normalized)
     }
     pub fn prepare(&self, args: HttpRequestArguments) -> Result<PreparedRequest, Error> {
         let intent = normalize_intent(self.policy(), args)?;

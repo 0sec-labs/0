@@ -1,7 +1,7 @@
 use crate::{BudgetSnapshot, Error, Result, Store, append, get_session, integer, nonempty};
 use rusqlite::{Connection, OptionalExtension, TransactionBehavior, params};
 use serde_json::json;
-fn snapshot(conn: &Connection, session: &str) -> Result<BudgetSnapshot> {
+pub(crate) fn snapshot(conn: &Connection, session: &str) -> Result<BudgetSnapshot> {
     let limit = get_session(conn, session)?.budget_limit;
     let (reserved,charged)=conn.query_row("SELECT COALESCE(SUM(CASE WHEN charged IS NULL THEN amount ELSE 0 END),0),COALESCE(SUM(charged),0) FROM reservations WHERE session_id=?1",[session],|r|Ok((r.get(0)?,r.get(1)?)))?;
     Ok(BudgetSnapshot {
@@ -40,13 +40,16 @@ impl Store {
             crate::campaign::reserve_model(&tx, session, reservation_id, amount)?;
             return Ok(current);
         }
+        crate::scan::guard_reservation(&tx, session, reservation_id, amount)?;
         crate::campaign::reserve_model(&tx, session, reservation_id, amount)?;
         let total = current
             .charged
             .checked_add(current.reserved)
-            .and_then(|n| n.checked_add(amount))
-            .ok_or(Error::BudgetExceeded)?;
-        if total > current.limit {
+            .and_then(|n| n.checked_add(amount));
+        if total.is_none_or(|n| n > current.limit) {
+            if crate::scan::budget_denied(&tx, session, reservation_id, amount, &current)? {
+                tx.commit()?;
+            }
             return Err(Error::BudgetExceeded);
         }
         tx.execute(
@@ -82,6 +85,7 @@ impl Store {
         evidence: &str,
     ) -> Result<BudgetSnapshot> {
         crate::campaign::forbid_input(&self.conn, session)?;
+        crate::scan::forbid_input(&self.conn, session)?;
         if evidence.trim().is_empty() || evidence.len() > 32768 {
             return Err(Error::Invalid(
                 "reconciliation evidence must be 1..32768 bytes".into(),

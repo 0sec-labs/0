@@ -62,67 +62,80 @@ fn owned(conn: &Connection, session: &str, effect: &str, owner: &str) -> Result<
     Ok(op)
 }
 
+pub(crate) fn ensure_account(
+    tx: &rusqlite::Transaction<'_>,
+    session: &str,
+    context: &Value,
+) -> Result<()> {
+    let encoded = bounded(context, 1024 * 1024)?;
+    if number(context, "schema_version")? != 1 {
+        return Err(invalid());
+    }
+    let account = string(context, "account_id")?;
+    let command = string(context, "original_root_command")?;
+    let profile = context.get("profile").ok_or_else(invalid)?;
+    let policy: HttpProfilePolicy = serde_json::from_value(profile.clone())?;
+    policy.validate().map_err(|_| invalid())?;
+    let digest = hash(profile)?;
+    if string(context, "profile_sha256")? != digest
+        || hash(
+            &json!({"session_id":session,"original_root_command":command,"profile_sha256":digest}),
+        )? != account
+    {
+        return Err(invalid());
+    }
+    let budget: HttpBudget =
+        serde_json::from_value(profile.get("budget").cloned().ok_or_else(invalid)?)?;
+    integer(budget.max_requests)?;
+    integer(budget.max_request_body_bytes)?;
+    integer(budget.max_response_decoded_bytes)?;
+    let root_id: String = tx.query_row(
+        "SELECT id FROM operations WHERE session_id=?1 AND command_id=?2",
+        params![session, command],
+        |r| r.get(0),
+    )?;
+    let root = crate::operations::operation(tx, &root_id)?;
+    if root.payload.get("http_context") != Some(context)
+        || zero_protocol::agent::validate_actor_payload(&root.payload).is_err()
+        || root.payload.pointer("/request/http_profile") != context.get("profile_name")
+    {
+        return Err(conflict());
+    }
+    let existing: Option<(String, String, String)> = tx
+        .query_row(
+            "SELECT session_id,root_operation_id,context FROM http_accounts WHERE id=?1",
+            [account],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+        )
+        .optional()?;
+    if let Some(old) = existing {
+        if old != (session.into(), root_id, encoded) {
+            return Err(conflict());
+        }
+        return Ok(());
+    }
+    tx.execute(
+        "INSERT INTO http_accounts(id,session_id,root_operation_id,context) VALUES (?1,?2,?3,?4)",
+        params![account, session, root_id, encoded],
+    )?;
+    append(
+        tx,
+        session,
+        "http_account_created",
+        &json!({"account_id":account,"root_operation_id":root_id,"profile_sha256":digest}),
+    )?;
+    Ok(())
+}
+
 impl Store {
     /// Lazy creation binds one immutable account to the original root admission.
     /// Continuations and child actors reuse this identity, never reset it.
     pub fn ensure_http_account(&mut self, session: &str, context: &Value) -> Result<()> {
-        let encoded = bounded(context, 1024 * 1024)?;
-        if number(context, "schema_version")? != 1 {
-            return Err(invalid());
-        }
-        let account = string(context, "account_id")?;
-        let command = string(context, "original_root_command")?;
-        let profile = context.get("profile").ok_or_else(invalid)?;
-        let policy: HttpProfilePolicy = serde_json::from_value(profile.clone())?;
-        policy.validate().map_err(|_| invalid())?;
-        let digest = hash(profile)?;
-        if string(context, "profile_sha256")? != digest
-            || hash(
-                &json!({"session_id":session,"original_root_command":command,"profile_sha256":digest}),
-            )? != account
-        {
-            return Err(invalid());
-        }
-        let budget: HttpBudget =
-            serde_json::from_value(profile.get("budget").cloned().ok_or_else(invalid)?)?;
-        integer(budget.max_requests)?;
-        integer(budget.max_request_body_bytes)?;
-        integer(budget.max_response_decoded_bytes)?;
         let tx = self
             .conn
             .transaction_with_behavior(TransactionBehavior::Immediate)?;
-        let root_id: String = tx.query_row(
-            "SELECT id FROM operations WHERE session_id=?1 AND command_id=?2",
-            params![session, command],
-            |r| r.get(0),
-        )?;
-        let root = crate::operations::operation(&tx, &root_id)?;
-        if root.payload.get("http_context") != Some(context)
-            || zero_protocol::agent::validate_actor_payload(&root.payload).is_err()
-            || root.payload.pointer("/request/http_profile") != context.get("profile_name")
-        {
-            return Err(conflict());
-        }
-        let existing: Option<(String, String, String)> = tx
-            .query_row(
-                "SELECT session_id,root_operation_id,context FROM http_accounts WHERE id=?1",
-                [account],
-                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
-            )
-            .optional()?;
-        if let Some(old) = existing {
-            if old != (session.into(), root_id, encoded) {
-                return Err(conflict());
-            }
-            return Ok(());
-        }
-        tx.execute("INSERT INTO http_accounts(id,session_id,root_operation_id,context) VALUES (?1,?2,?3,?4)",params![account,session,root_id,encoded])?;
-        append(
-            &tx,
-            session,
-            "http_account_created",
-            &json!({"account_id":account,"root_operation_id":root_id,"profile_sha256":digest}),
-        )?;
+        crate::scan::hooks_account(&tx, session, context)?;
+        ensure_account(&tx, session, context)?;
         tx.commit()?;
         Ok(())
     }
@@ -161,6 +174,7 @@ impl Store {
             .conn
             .transaction_with_behavior(TransactionBehavior::Immediate)?;
         let op = owned(&tx, session, effect, owner)?;
+        crate::scan::guard_effect(&tx, session, effect, intent)?;
         crate::web_verification::effect(&tx, &op)?;
         let (account_session, context): (String, String) = tx.query_row(
             "SELECT session_id,context FROM http_accounts WHERE id=?1",
@@ -427,6 +441,14 @@ impl Store {
     }
 }
 fn read_dispatches(conn: &Connection, session: &str, effect: &str) -> Result<Vec<Value>> {
+    read_dispatches_inner(conn, session, effect, true)
+}
+fn read_dispatches_inner(
+    conn: &Connection,
+    session: &str,
+    effect: &str,
+    validate_account: bool,
+) -> Result<Vec<Value>> {
     let op = crate::operations::operation(conn, effect)?;
     if op.session_id != session {
         return Err(conflict());
@@ -434,7 +456,9 @@ fn read_dispatches(conn: &Connection, session: &str, effect: &str) -> Result<Vec
     let account = op.payload["http_context"]["account_id"]
         .as_str()
         .ok_or_else(invalid)?;
-    check_account(conn, session, account)?;
+    if validate_account {
+        check_account(conn, session, account)?;
+    }
     let mut stmt = conn.prepare("SELECT id,account_id,hop_index,intent,request_bytes,reserved_bytes,charged_bytes,headers,observation FROM http_dispatches WHERE effect_operation_id=?1 ORDER BY hop_index LIMIT 7")?;
     let rows = stmt.query_map([effect], |r| {
         Ok((
@@ -537,7 +561,7 @@ fn witness(
     kind: &str,
     expected: Option<Value>,
 ) -> Result<()> {
-    let mut stmt=conn.prepare("SELECT CASE WHEN length(CAST(payload AS BLOB))<=131072 THEN payload ELSE NULL END FROM events WHERE session_id=?1 AND kind=?2 AND json_extract(payload,'$.receipt')=?3 LIMIT 2")?;
+    let mut stmt=conn.prepare("SELECT CASE WHEN length(CAST(payload AS BLOB))<=131072 THEN payload ELSE NULL END FROM events WHERE session_id=?1 AND kind IN ('http_dispatch_admitted','http_headers_observed','http_hop_settled') AND kind=?2 AND json_extract(payload,'$.receipt')=?3 LIMIT 2")?;
     let values = stmt
         .query_map(params![session, kind, receipt], |r| {
             r.get::<_, Option<String>>(0)
@@ -565,11 +589,11 @@ fn check_account(conn: &Connection, session: &str, account: &str) -> Result<()> 
         d.request_bytes IS NOT json_extract(d.intent,'$.request_body_bytes') OR
         d.reserved_bytes IS NOT json_extract(d.intent,'$.response_decoded_limit') OR
         d.hop_index IS NOT json_extract(d.intent,'$.index') OR
-        (SELECT COUNT(*) FROM events e WHERE e.session_id=?1 AND e.kind='http_dispatch_admitted' AND json_extract(e.payload,'$.receipt')=d.id AND json_extract(e.payload,'$.account_id')=d.account_id AND json_extract(e.payload,'$.effect_operation_id')=d.effect_operation_id AND json_extract(e.payload,'$.intent')=d.intent)!=1 OR
-        (d.observation IS NULL AND (d.charged_bytes IS NOT NULL OR EXISTS(SELECT 1 FROM events e WHERE e.session_id=?1 AND e.kind='http_hop_settled' AND json_extract(e.payload,'$.receipt')=d.id))) OR
+        (SELECT COUNT(*) FROM events e WHERE e.session_id=?1 AND e.kind IN ('http_dispatch_admitted','http_headers_observed','http_hop_settled') AND e.kind='http_dispatch_admitted' AND json_extract(e.payload,'$.receipt')=d.id AND json_extract(e.payload,'$.account_id')=d.account_id AND json_extract(e.payload,'$.effect_operation_id')=d.effect_operation_id AND json_extract(e.payload,'$.intent')=d.intent)!=1 OR
+        (d.observation IS NULL AND (d.charged_bytes IS NOT NULL OR EXISTS(SELECT 1 FROM events e WHERE e.session_id=?1 AND e.kind IN ('http_dispatch_admitted','http_headers_observed','http_hop_settled') AND e.kind='http_hop_settled' AND json_extract(e.payload,'$.receipt')=d.id))) OR
         (d.observation IS NOT NULL AND (d.charged_bytes IS NOT CASE WHEN json_extract(d.observation,'$.complete')=1 THEN json_extract(d.observation,'$.response_decoded_bytes') ELSE d.reserved_bytes END OR
-            (SELECT COUNT(*) FROM events e WHERE e.session_id=?1 AND e.kind='http_hop_settled' AND json_extract(e.payload,'$.receipt')=d.id AND json_extract(e.payload,'$.effect_operation_id')=d.effect_operation_id AND json_extract(e.payload,'$.charged_response_decoded_bytes')=d.charged_bytes AND json_extract(e.payload,'$.observation')=d.observation)!=1))
-        )) OR EXISTS(SELECT 1 FROM events e WHERE e.session_id=?1 AND e.kind='http_dispatch_admitted' AND json_extract(e.payload,'$.account_id')=?2 AND NOT EXISTS(SELECT 1 FROM http_dispatches d WHERE d.account_id=?2 AND d.id=json_extract(e.payload,'$.receipt') AND d.effect_operation_id=json_extract(e.payload,'$.effect_operation_id') AND d.hop_index=json_extract(e.payload,'$.intent.index')))",params![session,account],|r|r.get(0))?;
+            (SELECT COUNT(*) FROM events e WHERE e.session_id=?1 AND e.kind IN ('http_dispatch_admitted','http_headers_observed','http_hop_settled') AND e.kind='http_hop_settled' AND json_extract(e.payload,'$.receipt')=d.id AND json_extract(e.payload,'$.effect_operation_id')=d.effect_operation_id AND json_extract(e.payload,'$.charged_response_decoded_bytes')=d.charged_bytes AND json_extract(e.payload,'$.observation')=d.observation)!=1))
+        )) OR EXISTS(SELECT 1 FROM events e WHERE e.session_id=?1 AND e.kind IN ('http_dispatch_admitted','http_headers_observed','http_hop_settled') AND e.kind='http_dispatch_admitted' AND json_extract(e.payload,'$.account_id')=?2 AND NOT EXISTS(SELECT 1 FROM http_dispatches d WHERE d.account_id=?2 AND d.id=json_extract(e.payload,'$.receipt') AND d.effect_operation_id=json_extract(e.payload,'$.effect_operation_id') AND d.hop_index=json_extract(e.payload,'$.intent.index')))",params![session,account],|r|r.get(0))?;
     if invalid_rows { Err(invalid()) } else { Ok(()) }
 }
 fn rate_state(
@@ -621,3 +645,82 @@ fn record_rate(
 
 #[cfg(test)]
 mod tests;
+
+/// Complete immutable account ledger, including uncertain response holds.
+pub(crate) fn account_usage(
+    conn: &Connection,
+    session: &str,
+    account: &str,
+    budget: &mut usize,
+) -> Result<zero_protocol::scan::ScanHttpUsage> {
+    let (count,bytes,max_intent,max_headers,max_observation):(u64,u64,u64,u64,u64)=conn.query_row("SELECT count(*),coalesce(sum(length(CAST(intent AS BLOB))+coalesce(length(CAST(headers AS BLOB)),0)+coalesce(length(CAST(observation AS BLOB)),0)),0),coalesce(max(length(CAST(intent AS BLOB))),0),coalesce(max(length(CAST(headers AS BLOB))),0),coalesce(max(length(CAST(observation AS BLOB))),0) FROM http_dispatches WHERE account_id=?1",[account],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?,r.get(4)?)))?;
+    let (event_bytes,max_event):(u64,u64)=conn.query_row("SELECT coalesce(sum(length(CAST(payload AS BLOB))),0),coalesce(max(length(CAST(payload AS BLOB))),0) FROM events WHERE session_id=?1 AND kind IN ('http_dispatch_admitted','http_headers_observed','http_hop_settled')",[session],|r|Ok((r.get(0)?,r.get(1)?)))?;
+    let (operation_bytes,max_operation):(u64,u64)=conn.query_row("SELECT coalesce(sum(length(CAST(payload AS BLOB))+coalesce(length(CAST(outcome AS BLOB)),0)),0),coalesce(max(length(CAST(payload AS BLOB))+coalesce(length(CAST(outcome AS BLOB)),0)),0) FROM operations WHERE id IN (SELECT effect_operation_id FROM http_dispatches WHERE account_id=?1)",[account],|r|Ok((r.get(0)?,r.get(1)?)))?;
+    let bad_scalars:bool=conn.query_row("SELECT EXISTS(SELECT 1 FROM http_dispatches WHERE account_id=?1 AND (length(CAST(id AS BLOB))>256 OR length(CAST(effect_operation_id AS BLOB))>256 OR length(CAST(host AS BLOB))>253)) OR EXISTS(SELECT 1 FROM operations WHERE id IN(SELECT effect_operation_id FROM http_dispatches WHERE account_id=?1) AND (length(CAST(session_id AS BLOB))>256 OR length(CAST(command_id AS BLOB))>4096 OR length(CAST(status AS BLOB))>16 OR length(CAST(owner AS BLOB))>4096))",[account],|r|r.get(0))?;
+    if bad_scalars {
+        return Err(invalid());
+    }
+    let expected: (u64, u64) = conn.query_row(
+        "SELECT count(headers),count(observation) FROM http_dispatches WHERE account_id=?1",
+        [account],
+        |r| Ok((r.get(0)?, r.get(1)?)),
+    )?;
+    let actual:(u64,u64,u64)=conn.query_row("SELECT coalesce(sum(kind='http_dispatch_admitted'),0),coalesce(sum(kind='http_headers_observed'),0),coalesce(sum(kind='http_hop_settled'),0) FROM events WHERE session_id=?1 AND kind IN ('http_dispatch_admitted','http_headers_observed','http_hop_settled')",[session],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?)))?;
+    if actual != (count, expected.0, expected.1) {
+        return Err(invalid());
+    }
+    let charge = bytes
+        .checked_add(event_bytes)
+        .and_then(|n| n.checked_add(operation_bytes))
+        .and_then(|n| usize::try_from(n).ok())
+        .ok_or_else(invalid)?;
+    if count > 100000
+        || max_intent > 65536
+        || max_headers > 1024
+        || max_observation > 65536
+        || max_event > 131072
+        || max_operation > 32 * 1024 * 1024
+        || charge > *budget
+    {
+        return Err(invalid());
+    }
+    *budget -= charge;
+    check_account(conn, session, account)?;
+    let mut stmt=conn.prepare("SELECT DISTINCT CASE WHEN length(CAST(effect_operation_id AS BLOB))<=256 THEN effect_operation_id END FROM http_dispatches WHERE account_id=?1 ORDER BY effect_operation_id")?;
+    let effects = stmt
+        .query_map([account], |r| r.get::<_, String>(0))?
+        .collect::<std::result::Result<Vec<_>, _>>()?;
+    let mut usage = zero_protocol::scan::ScanHttpUsage {
+        requests: 0,
+        request_body_bytes: 0,
+        response_charged_bytes: 0,
+        response_reserved_bytes: 0,
+    };
+    for effect in effects {
+        for row in read_dispatches_inner(conn, session, &effect, false)? {
+            if row["account_id"] != account {
+                return Err(invalid());
+            }
+            usage.requests = usage.requests.checked_add(1).ok_or_else(invalid)?;
+            usage.request_body_bytes = usage
+                .request_body_bytes
+                .checked_add(number(&row, "request_body_bytes")?)
+                .ok_or_else(invalid)?;
+            if row["observation"]["complete"] == true {
+                usage.response_charged_bytes = usage
+                    .response_charged_bytes
+                    .checked_add(number(&row, "charged_response_decoded_bytes")?)
+                    .ok_or_else(invalid)?;
+            } else {
+                usage.response_reserved_bytes = usage
+                    .response_reserved_bytes
+                    .checked_add(number(&row, "reserved_response_decoded_bytes")?)
+                    .ok_or_else(invalid)?;
+            }
+        }
+    }
+    if usage.requests != count {
+        return Err(invalid());
+    }
+    Ok(usage)
+}

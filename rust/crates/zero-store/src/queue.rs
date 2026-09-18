@@ -119,6 +119,7 @@ impl Store {
         request: &AgentRequest,
         after: &Option<String>,
     ) -> Result<(QueuedAgent, bool)> {
+        crate::scan::forbid_input(&self.conn, session)?;
         crate::campaign::forbid_input(&self.conn, session)?;
         crate::strategy_session::forbid_queue(&self.conn, session)?;
         if command.trim().is_empty() || command.len() > 1024 {

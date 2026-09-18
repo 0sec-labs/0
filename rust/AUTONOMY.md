@@ -182,3 +182,13 @@ check both operation projections and immutable admission witnesses. Store schema
 adds the immutable Final selection. Portable layout2 retains all search records,
 proposal sessions, losing candidate advice and accounting in one source snapshot.
 The original fixed-pair layout remains stable and rejects search state explicitly.
+
+## Standalone scan authority
+
+The [native HTTP scan](SCAN-WORKFLOW.md) now connects the bounded investigation
+actor to one durable controller, shared model/HTTP accounts and retained reports.
+The agent chooses hypotheses, permitted experiments, delegation and submission;
+host authorization, limits, cancellation and verification authority remain fixed.
+A completed submission is workflow completion, not independent security success.
+This authority boundary also applies to improved advisory strategies: a candidate
+cannot turn its own assertions into eligibility or verified findings.

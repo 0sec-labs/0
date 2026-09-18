@@ -1135,3 +1135,49 @@ A complete version 2 search uses its own source-verified evidence route:
 Preparation and import independently reassess the complete search history, not a selected pair projected into an older report. The bounded portable closure includes all proposal and evaluation sessions, protected selection/exposure and aggregate accounting; export fails explicitly above its supported 64 MiB expanded bound. Registry inspection can reassess the retained closure after the original source and provider configuration are removed. Exact successful import retry resolves from the registry first; changed intent conflicts. Import preserves the active generation, state and leases. Measured eligibility is not activation, a completed canary, or a general security conclusion. The existing fixed-pair `strategy eligibility` route remains separate.
 
 Status, candidate pages/details and reports work without engine ownership or provider/host configuration. They show aggregate charges and unresolved holds, separately from proposal rationale and measured results. Text output is bounded and terminal-safe. Use the returned page cursor until absent. A retained terminal run can be read or retried without replaying model/target calls; restart does not retry Unknown work. Ctrl-C/SIGTERM during the owning run signals cancellation and waits for owned cleanup, then prints the retained partial result and exits nonzero. An accepted cancel is not proof that billing stopped, and readonly inspection is not second-process cancellation IPC.
+
+### Standalone scoped HTTP scan
+
+`scan` runs one durable HTTP investigation without Node, a shell tool, or a container. Select an explicit public scan profile alongside existing provider and private HTTP configurations:
+
+```sh
+0sec-native --state state.db --scan-profiles scans.json --providers providers.json --http-profiles http.json scan --target https://example.test/app/ --profile review --command-id scan-1 --format json
+0sec-native --state state.db scan show --scan SCAN_ID
+0sec-native --state state.db scan list --limit 20
+0sec-native --state state.db scan report --scan SCAN_ID --format markdown
+```
+
+Example `scans.json` (these rates must be declared in matching provider profiles):
+
+```json
+{
+  "review": {
+    "schema_version": 1,
+    "kind": "scoped_http",
+    "provider": "reviewer",
+    "model": "configured-model",
+    "instructions": "Investigate only the authorized HTTP scope and cite retained evidence.",
+    "http_profile": "target",
+    "budget_limit": 1000000,
+    "currency": "usd",
+    "reservation_per_turn": 100000,
+    "max_turns": 8,
+    "max_hypotheses": 8,
+    "deadline_ms": 600000
+  }
+}
+```
+
+`currency: "usd"` explicitly declares that captured provider rates and budget units are **micro-USD**. `currency: "units"` makes no dollar claim. Charged model usage and unresolved holds remain separate; reservations limit admissions, not a provider's eventual invoice. HTTP request counts, request-body bytes, charged response bytes and held response bytes come from the complete original account ledger, independently of the displayed evidence prefix. Optional `context_policy`, `delegation_policy` and `web_experiment_policy` use their existing strict bounded schemas. Delegates share the original model budget and HTTP account and can only receive HTTP or authorized experiment tools. Profiles contain no credentials. Target authentication stays in the named HTTP client's private environment references and host-managed revision.
+
+The target must already be allowed by the captured HTTP policy. It never changes the base URL, allowed hosts/paths, auth origin, redirects or rate limits. The agent chooses requests, experiments, delegation and stopping within those bounds. This initial route has no target shorthand, browser, MCP, package/source translation, shell/plugin execution, strategy activation or interactive question/approval waiters. Unknown profile keys and unsupported flags fail explicitly.
+
+Fresh admission atomically binds the scan, its session, actual actor/controller and original HTTP account before effects. The deadline is absolute from that admission; cancellation closes new admissions and drains owned work. SIGINT/SIGTERM prints the retained partial result after cleanup and exits 130/143. Holds can remain when actual usage is unknown. An accepted cancellation request is not evidence that all work has stopped. Restart does not resume Unknown work or refill the account.
+
+A real structured submission, including an empty one, is distinct from stopping with prose, reaching a turn/budget/deadline limit, failure or owner loss. Hypotheses remain **Unverified**, severities are **claimed**, and the security conclusion is **not established**. Empty hypotheses do not establish safety. Triage acceptance and matching experiment predictions do not verify a vulnerability. Native exits are 0 for a completed workflow, 1 for completed work with claimed critical/high hypotheses (an unverified CI severity policy), 4 for a causally established budget stop, and 2 for incomplete/error/report-publication outcomes. Successful read-only commands exit 0 regardless of the underlying scan disposition.
+
+Investigation and report publication have separate retained outcomes. Canonical reports are limited to 8 MiB; `report_too_large` preserves the compact outcome and evidence links rather than silently truncating findings or rerunning the actor. Reports identify any truncated observation inventory and its actual next cursor. Use existing `web observations`, `web evidence`, `web range` and findings commands with the retained session/root IDs for bounded follow-up inspection. Report export never dispatches another request.
+
+Exact command retries compare original target/profile identity and return retained work before loading even explicitly supplied deleted configuration files. Changed target/profile conflicts. Active duplicates return a snapshot; no second scan is started. `show`, `list` and `report` work without engine ownership, recovery, migration or current configuration. Follow the actual list cursor even when a bounded page is empty.
+
+Output is terminal text, one native JSON document, Markdown (`md` alias), or inert HTML. These are native scan records, not legacy managed-worker reports. `0SEC_CLOUD_*`, `0SEC_EMIT_RESULT_LINE`, `0SEC_REPORT_PATH` and legacy target-auth environment variables do not automatically enable uploads, result markers, file writes or scope/auth overrides. This command does not claim managed `http_audit` compatibility; that requires a separately qualified controller/consumer adapter.

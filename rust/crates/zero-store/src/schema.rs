@@ -8,7 +8,7 @@ pub fn initialize(conn: &mut Connection) -> Result<()> {
     if application != 0 && application != APPLICATION_ID {
         return Err(Error::ForeignDatabase);
     }
-    if !(0..=16).contains(&version) {
+    if !(0..=17).contains(&version) {
         return Err(Error::Schema(version));
     }
     if application == 0 {
@@ -20,6 +20,9 @@ pub fn initialize(conn: &mut Connection) -> Result<()> {
         if tables != 0 || version != 0 {
             return Err(Error::ForeignDatabase);
         }
+    }
+    if version == 16 {
+        validate_sixteen(&tx)?;
     }
     if version == 0 {
         tx.execute_batch("CREATE TABLE sessions(id TEXT PRIMARY KEY,generation TEXT NOT NULL,created_at_ms INTEGER NOT NULL,budget_limit INTEGER NOT NULL CHECK(budget_limit>=0));
@@ -116,6 +119,11 @@ CREATE TABLE strategy_search_evaluations(id TEXT PRIMARY KEY,campaign_id TEXT NO
         tx.execute_batch("CREATE TABLE strategy_search_selections(campaign_id TEXT PRIMARY KEY REFERENCES campaigns(id),id TEXT NOT NULL UNIQUE,proposal_id TEXT NOT NULL UNIQUE REFERENCES strategy_search_proposals(id),evaluation_id TEXT NOT NULL REFERENCES strategy_search_evaluations(id),exposure_id TEXT NOT NULL UNIQUE REFERENCES campaign_exposures(id),record TEXT NOT NULL CHECK(length(CAST(record AS BLOB))<=65536),sequence INTEGER NOT NULL CHECK(sequence>0));")?;
         tx.pragma_update(None, "user_version", 16)?;
     }
+    if version < 17 {
+        tx.execute_batch("CREATE TABLE scans(sequence INTEGER PRIMARY KEY,id TEXT NOT NULL UNIQUE,command_id TEXT NOT NULL UNIQUE,session_id TEXT NOT NULL UNIQUE REFERENCES sessions(id),controller_operation_id TEXT NOT NULL UNIQUE REFERENCES operations(id),root_operation_id TEXT NOT NULL UNIQUE REFERENCES operations(id),intent_sha256 TEXT NOT NULL REFERENCES artifacts(digest),record TEXT NOT NULL CHECK(length(CAST(record AS BLOB))<=65536),binding_sequence INTEGER NOT NULL CHECK(binding_sequence>0),close_reason TEXT CHECK(close_reason IN ('cancelled','deadline')),close_sequence INTEGER,CHECK((close_reason IS NULL)=(close_sequence IS NULL)));
+CREATE INDEX scan_command_created ON events(json_extract(payload,'$.command_id')) WHERE kind='scan_created';")?;
+        tx.pragma_update(None, "user_version", 17)?;
+    }
     tx.commit()?;
     Ok(())
 }
@@ -129,7 +137,7 @@ pub(super) fn validate_current(conn: &Connection) -> Result<()> {
     if application != APPLICATION_ID {
         return Err(Error::ForeignDatabase);
     }
-    if version != 16 {
+    if version != 17 {
         return Err(Error::Schema(version));
     }
     let observed = crate::readonly::definitions(conn)?;
@@ -138,6 +146,18 @@ pub(super) fn validate_current(conn: &Connection) -> Result<()> {
     let mut reference = Connection::open_in_memory()?;
     initialize(&mut reference)?;
     if observed != crate::readonly::definitions(&reference)? {
+        return Err(Error::ForeignDatabase);
+    }
+    Ok(())
+}
+
+/// Reject a changed prior schema before the additive migration writes anything.
+fn validate_sixteen(conn: &Connection) -> Result<()> {
+    let observed = crate::readonly::definitions_with_count(conn, 45)?;
+    let mut reference = Connection::open_in_memory()?;
+    initialize(&mut reference)?;
+    reference.execute_batch("DROP INDEX scan_command_created; DROP TABLE scans;")?;
+    if observed != crate::readonly::definitions_with_count(&reference, 45)? {
         return Err(Error::ForeignDatabase);
     }
     Ok(())

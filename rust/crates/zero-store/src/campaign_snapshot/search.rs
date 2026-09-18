@@ -132,6 +132,35 @@ mod tests {
         Store::hydrate_campaign_snapshot(&pinned).unwrap();
     }
     #[test]
+    fn schema_sixteen_scan_migration_preserves_search_portable_identity() {
+        let (dir, store, id) = fixture();
+        let data = store.freeze_strategy_search(&id).unwrap();
+        drop(store);
+        let path = dir.path().join("db");
+        let sql = Connection::open(&path).unwrap();
+        sql.execute_batch(
+            "DROP INDEX scan_command_created; DROP TABLE scans; PRAGMA user_version=16;",
+        )
+        .unwrap();
+        drop(sql);
+        let upgraded = Store::open(&path).unwrap();
+        assert_eq!(
+            upgraded
+                .freeze_strategy_search(&id)
+                .unwrap()
+                .manifest_bytes(),
+            data.manifest_bytes()
+        );
+        assert_eq!(
+            Store::hydrate_campaign_snapshot(&data)
+                .unwrap()
+                .freeze_strategy_search(&id)
+                .unwrap()
+                .digest(),
+            data.digest()
+        );
+    }
+    #[test]
     fn proposal_hold_survives_portable_search_reconstruction() {
         let (dir, store, id) = fixture();
         let data = store.freeze_strategy_search(&id).unwrap();

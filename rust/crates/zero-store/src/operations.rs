@@ -103,6 +103,7 @@ impl Store {
             if exists {
                 return Err(Error::Conflict(command.clone()));
             }
+            crate::scan::authorize(&tx, session, command, &serde_json::from_str(&text)?)?;
             crate::campaign::authorize(&tx, session, command, &serde_json::from_str(&text)?)?;
             crate::strategy_session::authorize(
                 &tx,
@@ -233,6 +234,7 @@ impl Store {
                 duplicate: true,
             });
         }
+        crate::scan::authorize(&tx, session, command_id, payload)?;
         crate::campaign::authorize(&tx, session, command_id, payload)?;
         crate::strategy_session::authorize(&tx, session, command_id, payload)?;
         let id = uuid::Uuid::new_v4().to_string();

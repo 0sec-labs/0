@@ -174,6 +174,18 @@ pub(crate) fn workflow_report(
     root: &str,
     verification_ids: &[String],
 ) -> Result<WebWorkflowReport, EngineError> {
+    let report = workflow_report_with_cursor(store, session, root, verification_ids)?.0;
+    if serde_json::to_vec(&report)?.len() > 16 * 1024 * 1024 {
+        return Err(error("Web workflow report exceeds 16 MiB"));
+    }
+    Ok(report)
+}
+pub(crate) fn workflow_report_with_cursor(
+    store: &Store,
+    session: &str,
+    root: &str,
+    verification_ids: &[String],
+) -> Result<(WebWorkflowReport, Option<u64>), EngineError> {
     if verification_ids.len() > 32 {
         return Err(error(
             "Web report permits at most 32 explicit verification links",
@@ -220,6 +232,10 @@ pub(crate) fn workflow_report(
             });
         }
         if page_overflow {
+            after = observations
+                .last()
+                .map(|o| o.operation.sequence)
+                .unwrap_or(after);
             break;
         }
         match page.next_after_sequence {
@@ -249,10 +265,7 @@ pub(crate) fn workflow_report(
         verifications,
         experiments: vec![],
     };
-    if serde_json::to_vec(&report)?.len() > 16 * 1024 * 1024 {
-        return Err(error("Web workflow report exceeds 16 MiB"));
-    }
-    Ok(report)
+    Ok((report, truncated.then_some(after)))
 }
 pub fn read_web_workflow_report(
     path: &Path,

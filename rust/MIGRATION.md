@@ -1255,3 +1255,41 @@ Qualification: all workspace packages passed actual Rust 1.85 regression in two
 sequential frozen-source batches: 964 passed, zero failed, 11 explicit backend or
 platform ignores. Strict workspace production Clippy and formatting passed. Production
 TypeScript and release selection remain unchanged.
+
+### Standalone scoped HTTP scan
+
+Native owners: `zero-protocol::scan`, `zero-store::scan`, `zero-engine::scan` and
+CLI `scan`/scan profiles. This connects the HTTP portion of legacy
+`packages/cli/src/commands/scan.ts` and `run.ts` to an actual root actor and durable
+controller. [The workflow contract](SCAN-WORKFLOW.md) records authority, recovery,
+accounting and report bounds. Source, browser and managed-worker modes remain
+separate; unsupported repository targets reject before fresh admission.
+
+One atomic admission captures intent, roots and the original HTTP account. Root,
+delegates and experiments share model and HTTP limits. Deadline, cancellation,
+generic cancellation and shutdown close admission durably before acknowledging or
+draining work. Owner loss retains uncertainty and holds; exact retries neither
+replay work nor require current configuration. Read-only status/list/report avoid
+engine ownership and recovery. A real structured submission determines workflow
+completion; claimed findings remain unverified and non-reportable. Publication
+limits cannot turn a settled investigation into an Unknown result.
+
+Schema17 adds scan state after exact prior-schema validation. Earlier campaign
+portable layouts preserve identity and reject scan state explicitly. Full scan
+reports use one bounded source read transaction; status avoids copying response
+bodies. Tests cover concurrent source mutation, missing/duplicate admission
+witnesses, oversized source rows and triage-independent canonical reports.
+
+Physical scripted-provider/loopback fixtures cover actual HTTP requests, nested
+root/delegate/experiment accounting, empty submission versus prose, typed budget
+denial, cancellation/deadline, process death and configuration-free retry. These
+are local Rust/Linux tests, not live-provider, cloud or detection-quality proof.
+Keep the experimental native executable until remaining command coverage and
+managed consumer/release contracts pass their respective gates.
+
+Qualification: all workspace packages passed actual Rust 1.85 regression in two
+batches: 1,003 passed, zero failed, and 11 explicit backend/platform ignores.
+The final Store causal-budget witness tightening additionally passed its ten
+focused scan tests. Real engine cancellation/reopen tests and repository-target
+rejection are included in the workspace count.
+Strict workspace production Clippy and final formatting checks passed.

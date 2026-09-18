@@ -4,6 +4,11 @@ Status: proposal. No native managed-scan worker or completion publisher is
 implemented by this document. Existing native commands, hosted authentication,
 read-only cloud metadata, and legacy framing helpers are separate capabilities.
 
+The next matched native HTTP slice is specified in
+[NATIVE-WORKER-CONTRACT.md](NATIVE-WORKER-CONTRACT.md), following the standalone
+scan implementation. That proposal supersedes the initial exporter-first sequence
+below; it remains unimplemented and requires matched consumer qualification.
+
 ## Existing contract, traced from repository sources
 
 The managed worker/controller source is available in the sibling `0cloud`

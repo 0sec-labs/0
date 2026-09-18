@@ -22,6 +22,7 @@ pub mod questions;
 pub mod queue;
 pub mod repair;
 pub mod sandbox;
+pub mod scan;
 pub mod session;
 pub mod source;
 pub mod steering;
@@ -63,6 +64,24 @@ pub struct Request {
     deny_unknown_fields
 )]
 pub enum Command {
+    RunScan {
+        command_id: String,
+        target: String,
+        profile: String,
+    },
+    ScanStatus {
+        scan_id: String,
+    },
+    Scans {
+        before_sequence: Option<u64>,
+        limit: u32,
+    },
+    ScanReport {
+        scan_id: String,
+    },
+    CancelScan {
+        scan_id: String,
+    },
     Initialize,
     CreateStrategySearch {
         command_id: String,
@@ -445,6 +464,23 @@ pub struct ReconcileResult {
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Reply {
+    ScanRun {
+        scan: scan::ScanSnapshot,
+        duplicate: bool,
+    },
+    ScanStatus {
+        scan: scan::ScanSnapshot,
+    },
+    Scans {
+        page: scan::ScanPage,
+    },
+    ScanReport {
+        report: scan::ScanReport,
+    },
+    ScanCancelled {
+        scan_id: String,
+        accepted: bool,
+    },
     StrategySearchCreated {
         snapshot: strategy_search::SearchSnapshot,
         duplicate: bool,

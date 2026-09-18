@@ -4,7 +4,7 @@ use rusqlite::{
     types::{Value, ValueRef},
 };
 pub(super) fn columns(conn: &Connection, table: &str) -> Result<Vec<String>> {
-    if !TABLES.contains(&table) && !SEARCH_TABLES.contains(&table) {
+    if !TABLES.contains(&table) && !SEARCH_TABLES.contains(&table) && table != "scans" {
         return Err(invalid("unsupported table"));
     }
     let mut q = conn.prepare(&format!("PRAGMA table_info({table})"))?;
@@ -13,7 +13,7 @@ pub(super) fn columns(conn: &Connection, table: &str) -> Result<Vec<String>> {
         .collect::<std::result::Result<Vec<_>, _>>()?;
     Ok(rows)
 }
-fn read_rows(
+pub(super) fn read_rows(
     conn: &Connection,
     table: &str,
     filter: &str,
@@ -204,7 +204,10 @@ impl Store {
         }
         sessions.insert(journal);
         let parameters: Vec<Value> = sessions.iter().cloned().map(Value::Text).collect();
-        let placeholders = vec!["?"; sessions.len()].join(",");
+        let placeholders = (1..=sessions.len())
+            .map(|n| format!("?{n}"))
+            .collect::<Vec<_>>()
+            .join(",");
         let session_filter = format!("session_id IN ({placeholders})");
         let operation_filter =
             format!("operation_id IN (SELECT id FROM operations WHERE {session_filter})");
@@ -219,6 +222,7 @@ impl Store {
             "tool_approval_decisions",
             "source_triage_decisions",
             "strategy_sessions",
+            "scans",
         ] {
             let exists: bool = tx.query_row(
                 &format!("SELECT EXISTS(SELECT 1 FROM {table} WHERE {session_filter})"),
@@ -235,9 +239,23 @@ impl Store {
         if forbidden {
             return Err(invalid("unsupported approval consumption"));
         }
+        let scan_witness: bool = tx.query_row(
+            &format!("SELECT EXISTS(SELECT 1 FROM events WHERE {session_filter} AND kind IN ('scan_created','scan_admission_closed','scan_budget_denied')) OR EXISTS(SELECT 1 FROM sessions WHERE id IN (SELECT session_id FROM events WHERE {session_filter}) AND generation LIKE 'native-scan:%')"),
+            rusqlite::params_from_iter(&parameters), |r| r.get(0))?;
+        if scan_witness {
+            return Err(invalid("scan evidence requires its own complete history"));
+        }
         let (operation_bytes,operation_max):(usize,usize)=tx.query_row(&format!("SELECT COALESCE(sum(length(CAST(payload AS BLOB))+COALESCE(length(CAST(outcome AS BLOB)),0)),0),COALESCE(max(length(CAST(payload AS BLOB))+COALESCE(length(CAST(outcome AS BLOB)),0)),0) FROM operations WHERE {session_filter}"),rusqlite::params_from_iter(&parameters),|r|Ok((r.get(0)?,r.get(1)?)))?;
         if operation_bytes > MAX_BYTES || operation_max > 32 * 1024 * 1024 {
             return Err(invalid("operation exceeds source bound"));
+        }
+        let scan_marker: bool = tx.query_row(
+            &format!("SELECT EXISTS(SELECT 1 FROM operations WHERE {session_filter} AND CASE WHEN json_valid(payload) THEN json_type(payload,'$.scan_operation_id') IS NOT NULL OR json_type(payload,'$.scan_context') IS NOT NULL ELSE 0 END)"),
+            rusqlite::params_from_iter(&parameters), |r| r.get(0))?;
+        if scan_marker {
+            return Err(invalid(
+                "scan operation cannot be reduced to campaign evidence",
+            ));
         }
         let controller_kinds = match layout {
             Layout::FixedPair => "'strategy_evaluation'",

@@ -298,63 +298,16 @@ pub(super) async fn run_agent_shared(
         let plugins = agent_plugins::capture(shared, &session, &request.plugin_tools)?;
         agent_approvals::validate_plugins(&request, plugins.as_ref())?;
         let mut store = lock(&shared.store)?;
-        let source = agent_source::capture(&store, &session_id, &request)?;
-        let http = agent_http::capture(shared, &store, &session_id, &command_id, &request)?;
-        // A context lineage keeps its original offered schemas across upgrades.
-        // continuation_input has already validated the ancestor's request and
-        // hash-bound template; only fresh conversations capture current tools.
-        let template = if request.context_policy.is_some() {
-            match &request.continuation_of {
-                Some(parent) => serde_json::from_value::<ResponsesRequest>(
-                    store.get_operation(parent)?.payload["context_template"].clone(),
-                )?,
-                None => model_request(&request, vec![], plugins.as_ref()),
-            }
-        } else {
-            model_request(&request, vec![], plugins.as_ref())
-        };
-        let delegation = agent_delegation::capture(
+        let (mut payload, prepared) = prepare_actor(
             shared,
-            &request,
-            &template,
-            plugins.as_ref(),
-            http.as_ref(),
-        )?;
-        let input = continuation_input(
             &store,
             &session_id,
-            &request,
-            &profile,
-            plugins.as_ref(),
-            delegation.as_ref(),
-            http.as_ref(),
+            &command_id,
+            request,
+            profile,
+            plugins,
+            true,
         )?;
-        let mut projected = template.clone();
-        projected.input = input.projected(request.context_policy.as_ref())?;
-        profile
-            .client
-            .validate(&projected)
-            .map_err(|e| EngineError::State(e.to_string()))?;
-        let mut payload = serde_json::json!({"kind":zero_protocol::agent::actor_kind(&request),"request":request,"endpoint":profile.client.endpoint_identity(),"rates":profile.rates});
-        if profile.client.wire_api() != zero_protocol::model::WireApi::Responses {
-            payload["wire_api"] = serde_json::to_value(profile.client.wire_api())?;
-        }
-        profile.stamp(&mut payload)?;
-        if let Some(context) = &delegation {
-            payload["delegation_context"] = context.identity.clone();
-        }
-        if request.context_policy.is_some() {
-            payload["context_template"] = serde_json::to_value(&template)?;
-        }
-        if let Some(context) = &plugins {
-            payload["plugin_context"] = context.identity.clone();
-        }
-        if let Some(context) = &http {
-            payload["http_context"] = context.identity.clone();
-            if context.output_version == 2 {
-                payload["http_output_version"] = serde_json::json!(2);
-            }
-        }
         if let Some((context, _)) = strategy {
             payload["strategy_context"] = context;
         }
@@ -390,17 +343,7 @@ pub(super) async fn run_agent_shared(
                 &guard.shared,
                 &session_id,
                 &operation.id,
-                PreparedActor {
-                    request,
-                    profile,
-                    history: input,
-                    plugins,
-                    http,
-                    source,
-                    template,
-                    delegation,
-                    checkpoint: true,
-                },
+                prepared,
                 cancel,
                 events,
                 progress_events,
@@ -415,6 +358,87 @@ pub(super) async fn run_agent_shared(
     receiver
         .await
         .map_err(|_| EngineError::State("agent owner stopped before settlement".into()))?
+}
+
+/// Capture an actor without admitting or dispatching it. Trusted controllers may
+/// supply a private future session identity, then atomically admit its exact payload.
+#[allow(clippy::too_many_arguments)]
+pub(super) fn prepare_actor(
+    shared: &Shared,
+    store: &Store,
+    session_id: &str,
+    command_id: &str,
+    request: AgentRequest,
+    profile: inference::Profile,
+    plugins: Option<agent_plugins::Context>,
+    checkpoint: bool,
+) -> Result<(serde_json::Value, PreparedActor), EngineError> {
+    let source = agent_source::capture(store, session_id, &request)?;
+    let http = agent_http::capture(shared, store, session_id, command_id, &request)?;
+    // A context lineage keeps its original offered schemas across upgrades.
+    // continuation_input has already validated the ancestor's request and
+    // hash-bound template; only fresh conversations capture current tools.
+    let template = if request.context_policy.is_some() {
+        match &request.continuation_of {
+            Some(parent) => serde_json::from_value::<ResponsesRequest>(
+                store.get_operation(parent)?.payload["context_template"].clone(),
+            )?,
+            None => model_request(&request, vec![], plugins.as_ref()),
+        }
+    } else {
+        model_request(&request, vec![], plugins.as_ref())
+    };
+    let delegation =
+        agent_delegation::capture(shared, &request, &template, plugins.as_ref(), http.as_ref())?;
+    let input = continuation_input(
+        store,
+        session_id,
+        &request,
+        &profile,
+        plugins.as_ref(),
+        delegation.as_ref(),
+        http.as_ref(),
+    )?;
+    let mut projected = template.clone();
+    projected.input = input.projected(request.context_policy.as_ref())?;
+    profile
+        .client
+        .validate(&projected)
+        .map_err(|e| EngineError::State(e.to_string()))?;
+    let mut payload = serde_json::json!({"kind":zero_protocol::agent::actor_kind(&request),"request":request,"endpoint":profile.client.endpoint_identity(),"rates":profile.rates});
+    if profile.client.wire_api() != zero_protocol::model::WireApi::Responses {
+        payload["wire_api"] = serde_json::to_value(profile.client.wire_api())?;
+    }
+    profile.stamp(&mut payload)?;
+    if let Some(context) = &delegation {
+        payload["delegation_context"] = context.identity.clone();
+    }
+    if request.context_policy.is_some() {
+        payload["context_template"] = serde_json::to_value(&template)?;
+    }
+    if let Some(context) = &plugins {
+        payload["plugin_context"] = context.identity.clone();
+    }
+    if let Some(context) = &http {
+        payload["http_context"] = context.identity.clone();
+        if context.output_version == 2 {
+            payload["http_output_version"] = serde_json::json!(2);
+        }
+    }
+    Ok((
+        payload,
+        PreparedActor {
+            request,
+            profile,
+            history: input,
+            plugins,
+            http,
+            source,
+            template,
+            delegation,
+            checkpoint,
+        },
+    ))
 }
 
 /// Reconstruct a completed turn from immutable journal records. No historical
@@ -767,6 +791,20 @@ async fn run_rounds(
                     OperationStatus::Failed,
                     &serde_json::json!({"error":"budget reservation rejected"}),
                 )?;
+                if matches!(error, zero_store::Error::BudgetExceeded)
+                    && store
+                        .get_operation(parent)?
+                        .payload
+                        .get("scan_operation_id")
+                        .is_some()
+                {
+                    store.append_operation_event(
+                        parent,
+                        &shared.owner,
+                        "scan_terminal_budget_denied",
+                        &serde_json::json!({"operation_id":child.id}),
+                    )?;
+                }
                 output.status = AgentStatus::Failed;
                 output.error = Some(error.to_string());
                 break;
@@ -861,9 +899,21 @@ async fn run_rounds(
                 }
             }
             if calls.is_empty() {
-                output.status = AgentStatus::Failed;
-                output.error =
-                    Some("structured web submission required; final prose is not a review".into());
+                if lock(&shared.store)?
+                    .get_operation(parent)?
+                    .payload
+                    .get("scan_operation_id")
+                    .is_some()
+                {
+                    // Standalone scans retain a model-chosen stop as partial investigation.
+                    // Ordinary terminal web submission contracts remain unchanged.
+                    output.status = AgentStatus::Completed;
+                } else {
+                    output.status = AgentStatus::Failed;
+                    output.error = Some(
+                        "structured web submission required; final prose is not a review".into(),
+                    );
+                }
                 break;
             }
         }
