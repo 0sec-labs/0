@@ -1,5 +1,6 @@
 //! Session-owned native execution. Client disconnect is not a request replay.
 mod agent;
+mod agent_checkpoint;
 mod agent_plugins;
 mod agent_source;
 mod inference;

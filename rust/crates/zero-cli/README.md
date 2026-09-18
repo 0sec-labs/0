@@ -443,3 +443,14 @@ match the agent execution profile. The model then receives `list_source_files`,
 review. Results preserve file hashes and exact line citations; no host file read
 or sandbox launch occurs during these tools. Omit the field to retain the existing
 tool set. See [source tool authority and limits](../zero-engine/SOURCE-TOOLS.md).
+
+### Continuing after a turn limit
+
+An agent that completes its final tool round but reaches `max_turns` can return
+`status: "turn_limit"` with `continuation_artifact`. Submit a new `agent` command
+ID with `continuation_of` set to that operation, a new prompt, and the same
+provider/execution/source/plugin authority. The engine reuses retained history
+without rerunning prior tools. Turn limits still return a nonzero process exit;
+missing checkpoints, cancelled/unknown operations and changed authority are
+rejected. Unpriced usage holds remain reserved. See
+[continuation boundaries](../zero-engine/CONTINUATION.md).

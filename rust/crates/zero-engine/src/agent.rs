@@ -182,7 +182,10 @@ fn continuation_input(
     if let Some(parent_id) = &request.continuation_of {
         let parent = store.get_operation(parent_id)?;
         if parent.session_id != session
-            || parent.status != OperationStatus::Succeeded
+            || !matches!(
+                parent.status,
+                OperationStatus::Succeeded | OperationStatus::Failed
+            )
             || parent.payload["kind"] != "offline_snapshot_agent"
         {
             return Err(EngineError::State(
@@ -216,36 +219,46 @@ fn continuation_input(
         {
             return Err(EngineError::State("continuation must retain its provider, model, instructions, rates and pinned execution profile".into()));
         }
-        if result.status != AgentStatus::Completed || result.turns == 0 {
+        let turn_limit =
+            parent.status == OperationStatus::Failed && result.status == AgentStatus::TurnLimit;
+        if !turn_limit
+            && (parent.status != OperationStatus::Succeeded
+                || result.status != AgentStatus::Completed
+                || result.turns == 0)
+        {
             return Err(EngineError::State(
                 "continuation requires a completed provider turn".into(),
             ));
         }
-        let last = store.get_operation_by_command(
-            session,
-            &format!("{parent_id}:model:{}", result.turns - 1),
-        )?;
-        if last.status != OperationStatus::Succeeded
-            || last.payload["parent_operation"] != *parent_id
-        {
-            return Err(EngineError::State(
-                "continuation provider journal is incomplete".into(),
-            ));
+        if turn_limit {
+            input = agent_checkpoint::load(store, session, parent_id, &result)?;
+        } else {
+            let last = store.get_operation_by_command(
+                session,
+                &format!("{parent_id}:model:{}", result.turns - 1),
+            )?;
+            if last.status != OperationStatus::Succeeded
+                || last.payload["parent_operation"] != *parent_id
+            {
+                return Err(EngineError::State(
+                    "continuation provider journal is incomplete".into(),
+                ));
+            }
+            let model: ResponsesRequest = serde_json::from_value(last.payload["request"].clone())?;
+            let completion: zero_protocol::model::Completion =
+                serde_json::from_value(last.outcome.ok_or_else(|| {
+                    EngineError::State("continuation provider outcome is absent".into())
+                })?)?;
+            if completion.status != zero_protocol::model::CompletionStatus::Completed
+                || completion.replay.is_empty()
+            {
+                return Err(EngineError::State(
+                    "continuation has no complete replay data".into(),
+                ));
+            }
+            input = model.input;
+            input.extend(completion.replay);
         }
-        let model: ResponsesRequest = serde_json::from_value(last.payload["request"].clone())?;
-        let completion: zero_protocol::model::Completion =
-            serde_json::from_value(last.outcome.ok_or_else(|| {
-                EngineError::State("continuation provider outcome is absent".into())
-            })?)?;
-        if completion.status != zero_protocol::model::CompletionStatus::Completed
-            || completion.replay.is_empty()
-        {
-            return Err(EngineError::State(
-                "continuation has no complete replay data".into(),
-            ));
-        }
-        input = model.input;
-        input.extend(completion.replay);
     }
     input.push(serde_json::json!({"role":"user","content":request.prompt}));
     Ok(input)
@@ -302,6 +315,7 @@ async fn run_actor(
         turns: 0,
         tool_calls: 0,
         error: None,
+        continuation_artifact: None,
     };
     'turns: for turn in 0..request.max_turns {
         if cancel.is_cancelled() {
@@ -589,6 +603,26 @@ async fn run_actor(
             // Raw bytes stay in the durable execution result. The model gets a
             // clearly lossy text rendering and must treat tool output as data.
             input.push(serde_json::json!({"type":"function_call_output","call_id":id,"output":serde_json::to_string(&serde_json::json!({"status":result.status,"exit_code":result.exit_code,"stdout_text":String::from_utf8_lossy(&result.stdout),"stderr_text":String::from_utf8_lossy(&result.stderr),"error":result.error}))?}));
+        }
+    }
+    if cancel.is_cancelled() && output.status == AgentStatus::TurnLimit {
+        output.status = AgentStatus::Cancelled;
+    }
+    if output.status == AgentStatus::TurnLimit {
+        let mut store = lock(&shared.store)?;
+        match agent_checkpoint::save(
+            &mut store,
+            &shared.owner,
+            session,
+            parent,
+            output.turns,
+            input,
+        ) {
+            Ok(digest) => output.continuation_artifact = Some(digest),
+            Err(error) => {
+                output.status = AgentStatus::Failed;
+                output.error = Some(format!("could not retain continuation checkpoint: {error}"));
+            }
         }
     }
     let outcome = serde_json::to_value(&output)?;

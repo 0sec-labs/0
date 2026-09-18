@@ -10,7 +10,7 @@ pub struct AgentRequest {
     pub model: String,
     pub instructions: String,
     pub prompt: String,
-    /// Explicitly continue a completed agent operation in this session. Its
+    /// Explicitly continue a completed or checkpointed turn-limit agent operation in this session. Its
     /// persisted final provider request and replay supply immutable history;
     /// previous effects are never executed again. Omission starts fresh.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -51,6 +51,9 @@ pub struct AgentResult {
     pub turns: u32,
     pub tool_calls: u32,
     pub error: Option<String>,
+    /// Complete post-tool replay retained only at a safe turn-limit boundary.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub continuation_artifact: Option<String>,
 }
 
 /// Legacy Docker-shaped requests retain their serialized retry identity. New
