@@ -35,17 +35,21 @@ upgrading scaffolds or model assessments into successful verification.
 | Application engine | `crates/zero-engine`: session queries, idempotent execution, cancellation, engine ownership lock, uncertain-operation recovery, finding reconciliation, durable Responses/Chat/Anthropic inference, bounded offline Docker/smolvm snapshot agent with explicit completed-turn continuation from immutable journal records | Remaining providers, full tools/permissions and agent workflows, queued/steering input, interrupted-turn checkpoints and generation lifecycle |
 | Batch execution | `crates/zero-executor`: validated snapshot pin/copy, local image identity, nonroot Linux offline Docker lifecycle, bounded raw output, cancellation and explicit cleanup outcome | All other execution profiles below; real Docker qualification remains separate from injected CLI fixtures |
 | MicroVM execution | `crates/zero-smolvm` and `zero-sandbox`: explicit pinned archive, qualified runtime version, nonroot offline batch lifecycle, verified snapshot staging and native engine/agent selection; real guest and engine/agent smoke passed | Broader isolation/SIGKILL qualification, live-provider matrix and interactive execution |
-| Provider transport | `crates/zero-provider`: bounded Responses/Chat/Anthropic SSE, explicit routes, final/provisional usage distinction, integer rate accounting and conservative uncertainty | Remaining wire features, OAuth/hosted auth, full routing, live-provider qualification |
+| Source review | `crates/zero-source` and engine `source.rs`: bounded selected source bundle, grounded structured hypotheses, retained request/bundle/completion/submission, same-session provenance and exact retry; `source-review` CLI | Source exploration, automatic investigation and specialist verification; hypotheses remain unverified, including successful model submissions |
+| Frozen reproduction | `crates/zero-verification` and engine `reproduction.rs`: host-owned immutable exact-output plans, repeated attack/control matrix, journaled sandbox children and retained requests/evidence; `source-reproduce` CLI | Broader domain oracles, automated plan proposals and independent detection-quality evaluation; `ObservedForPlan` never means vulnerability reportable |
+| Plan-qualified repair | `crates/zero-repair` plus engine `repair.rs`: host-authorized private single-file candidate, protected paths, baseline evidence revalidation, safe-expectation matrix and fresh reconstruction; `source-repair` CLI | Workspace installation, broader repair generation/verification, specialist safety oracles and full legacy `fix` parity; validation is limited to the frozen plan |
+| Artifact inspection/export | Read-only exact-schema `zero-store` opener and CLI `artifact list/export`: session ownership, bounded hash-checked bytes, private no-clobber export while the engine remains active | Legacy evidence-pack/report integration, disclosure authority and broader storage/platform qualification |
+| Provider transport | `crates/zero-provider`: bounded Responses/Chat/Anthropic SSE, explicit routes, final/provisional usage distinction, integer rate accounting and conservative uncertainty | Remaining wire features, provider OAuth/refresh, hosted inference routing, live-provider qualification |
 | Plugin admission | `crates/zero-plugin`: strict manifests, hashed artifacts, exact dependency graph, host grants and bounded inert RPC framing | Bidirectional broker and persistent workers; admission alone never executes plugin code |
 | Plugin runner | `crates/zero-plugin-runner`: pinned offline single-call RPC through Docker/smolvm, exact response correlation, retained leases on uncertainty; actual Node fixture passed on local Docker | Bidirectional broker, persistent workers, broader backend/platform qualification; engine direct calls now journal preparation and settlement |
 | Generation graph | `crates/zero-harness`: verified complete plugin/artifact/policy graph, activation epoch pins, durable invocation leases and current-state rollback | Measured evaluator promotion and native process replacement; persisted session epochs and direct engine calls are implemented |
 | Generation registry | `crates/zero-evolution`: immutable artifacts/receipts, eligibility, instance-bound preparation, activation CAS, leases and current-state rollback | Runtime graph disposal, measured evidence import/promotion, campaign qualification and native process handoff |
 | Fixture evaluation | `crates/zero-evaluation`: isolated paired baseline/candidate execution, frozen exact JSON oracles, durable attempt budgets, observed outcomes and deterministic receipts; real Docker fixture passed | Portable evidence import, independent corpus governance, production eligibility/canary and autonomous candidate writing; fixture eligibility is not a detection-quality claim |
 | Report rendering | `crates/zero-report`: bounded legacy JSON preservation and SARIF rendering with an actual TypeScript formatter golden fixture | Full workflow integration and report schema qualification; rendering does not verify findings |
-| Hosted metadata | `crates/zero-cloud-client`: explicit authenticated health/catalog/account/usage GETs, bounded transport, typed gateway errors and credit normalization | Credential discovery/device auth, price identity/routing, upload/accounting and managed-worker qualification |
+| Hosted metadata | `crates/zero-cloud-client`: explicit authenticated health/catalog/account/usage GETs, bounded browser-session login polling, typed gateway errors and credit normalization; CLI resolves environment or private legacy `cloud.env` credentials | Live service qualification, provider OAuth/refresh, price identity/inference routing, upload/accounting and managed-worker qualification |
 | Cloud wire adapter | `crates/zero-cloud-compat`: result/event framing, typed outcomes, cost provenance and atomic report writing | Scanner integration, ordered scan-total accounting, uploads and managed deployment qualification |
 | Finding reduction | `crates/zero-evidence`: source IDs/provenance retained through complete reconciliation, explicit disposition accounting | Discovery, independent vulnerability oracles, storage/export and disclosure eligibility; reconciliation is not truth validation |
-| CLI | `crates/zero-cli`: `schema`, `snapshot pin`, `session create/create-pinned/list/show/events/budget/reconcile-usage`, `exec`, `sandbox`, `infer`, `agent`, `plugin-call`, line `console`, `hosted health/models/account/usage`, `doctor`, `app-server`, help/version; separate `.0sec/native/state.db` | All legacy commands below; UX/exit/schema compatibility; installer and platform release qualification |
+| CLI | `crates/zero-cli`: `schema`, `snapshot pin`, `session create/create-pinned/list/show/events/budget/reconcile-usage`, `exec`, `sandbox`, `infer`, `agent`, `plugin-call`, `evaluate run/status`, `source-review`, `source-reproduce`, `source-repair`, `artifact list/export`, line `console`, `hosted login/health/models/account/usage`, `doctor`, `app-server`, help/version; separate `.0sec/native/state.db` | All legacy commands below; UX/exit/schema compatibility; installer and platform release qualification |
 | Stdio lifecycle | Initialize/version gate, correlated replies, bounded NDJSON framing, concurrent execute/cancel, durable-admission notification before cancellation, EOF/SIGINT/SIGTERM cleanup | Durable event streaming/reconnect contract, authenticated remote transports if required |
 
 Current acceptance sources include crate unit and integration tests for CLI
@@ -56,6 +60,75 @@ also passed on this Linux host using prepared local images. They do not qualify
 other environments or full scanner behavior. Inference rates are explicitly
 supplied integer microcurrency rates; they are not organization billing or a
 provider-enforced monetary ceiling.
+
+## Recorded workflow qualification
+
+The following are bounded acceptance results on this nonroot Linux host, using
+prepared local artifacts. No image pull, paid model call or live target was
+required. Loopback model responses exercise transport and ownership; they do not
+measure model judgment.
+
+| Path | Acceptance source and observed scope | What remains unqualified |
+| --- | --- | --- |
+| Offline Docker lifecycle | `crates/zero-executor/tests/docker_smoke.rs`: actual nonroot guest, network disabled, read-only root filesystem, staged build, unchanged source, cancellation and confirmed cleanup | Other host/platform profiles, arbitrary workload escape resistance and controller SIGKILL recovery |
+| Paired fixture evaluator | `crates/zero-evaluation/tests/evaluation.rs`: actual local Node image, baseline/candidate positive, held-out and negative cases with repeats; 12 executions and settled invocation leases | Production receipt import/promotion, independent corpus governance and detector-quality generalization |
+| Source review → reproduction → export on Docker | `crates/zero-cli/tests/reproduction.rs::real_local_docker_source_review_to_observed_plan_and_artifact`: loopback source submission, four attack/control observations, retained artifact export and exact retry | Live-provider source analysis, specialist vulnerability oracle and production report/disclosure |
+| Source review → reproduction on smolvm | `crates/zero-engine/tests/reproduction_real.rs`, commit `46fbe0ca`: actual smolvm 1.14.6, prepared Node archive, four observations with confirmed cleanup, re-assessed retained evidence, unchanged source, settled budget and restart duplicate without backend dispatch | Other VM/runtime versions, source repair qualification and detection quality; this smoke ran against an isolated committed baseline before the concurrent repair integration |
+| Source grounding and negative outcomes | CLI `tests/source.rs`, `tests/reproduction.rs` and engine `tests/source.rs`: malformed/citation-invalid submissions fail, empty hypotheses are not a safety verdict, stable attack mismatch is `NotObserved`, failed legitimate controls are inconclusive, cancellation awaits child cleanup | Host-authored plans remain required; exact output is evidence only for the frozen plan |
+| Active-engine artifact inspection | `crates/zero-store/tests/readonly.rs` and CLI `tests/artifact.rs`: no epoch/recovery claim, no schema migration, foreign/view/old-schema rejection, corrupted bytes rejected, existing destinations preserved | Legacy database import and generic evidence-pack compatibility |
+| Hosted login | `crates/zero-cloud-client/tests/login.rs` and CLI `tests/hosted_login.rs`: bounded pending/ready/expiry/error polling, cancellation/deadline, redirects rejected, environment precedence, private atomic credential publication, symlink/path failures | Real account login and deployed gateway qualification; persistence currently requires Unix permissions; URL is displayed without launching a browser |
+
+The real smolvm reproduction test is opt-in with
+`ZERO_SMOLVM_SMOKE_ARCHIVE`; Docker reproduction uses
+`ZERO_REPRODUCTION_DOCKER_IMAGE`. Both require existing local artifacts and are
+ignored in the ordinary suite. The recorded smolvm archive digest is
+`sha256:2bda0b195b4a451d7e3c516a2c08178024f4407e60e7abfed831eb5f06444c48`.
+These results establish specific execution paths, not full scanner parity.
+
+### Repair integration qualification
+
+Committed `7f092d0c`: engine `repair.rs`, protocol `repair.rs`, and CLI
+`source-repair` connect a private candidate to a retained baseline reproduction.
+The engine reconstructs and re-assesses retained baseline evidence, requires the
+candidate target/preimage to be cited by the original hypothesis, and requires
+attack-case safe expectations frozen in the original host plan. Both the
+candidate and a freshly reconstructed private copy must meet those expectations
+and preserve legitimate controls. Unknown cleanup retains recovery information.
+
+Acceptance includes 20 engine source/reproduction/repair fixtures and five CLI
+reproduction/repair fixtures on Rust 1.85, workspace production Clippy, and the
+342-test workspace run at this checkpoint. The opt-in CLI test
+`tests/reproduction.rs::real_local_docker_candidate_and_fresh_reconstruction`
+also passed on the prepared local Node image: four baseline, four candidate and
+four reconstructed-copy observations. Tests cover exact retry, changed/protected
+preimages, absent/wrong safe expectations, corrupt retained baseline evidence,
+preparation retention failure, cancellation and uncertain cleanup.
+
+`ValidatedCandidateForPlan` means that these exact frozen cases passed in both
+private copies. It does not install the replacement, grant disclosure or mark a
+vulnerability reportable; it is not complete legacy `fix` parity or independent
+proof of repair quality. Real smolvm repair qualification remains open.
+
+### Next concrete parity gap
+
+The next integration is a bounded, read-only source investigation loop over the
+pinned snapshot. A crate-level implementation is in progress separately; it is
+not yet a qualified engine/CLI workflow at this checkpoint. The current review requires the host to select source files up front;
+the generic agent offers `execute_snapshot` and explicitly configured plugin
+tools. It has no dedicated native equivalents of the legacy scoped
+`read_file`, `list_files` and `search_files` tools in
+`packages/core/src/agent/tools.ts` (implementations around lines 7496–7555,
+role selection in `getToolsForRole`).
+
+Expose those operations against the immutable selected snapshot with retained
+file/range identity, strict byte/turn budgets and explicit tool denials. Reuse
+`zero-source` citation validation and existing engine inference/continuation
+accounting. Test traversal/symlink escapes, changed snapshots, output truncation,
+unsupported tool calls, cancellation and restart without duplicate effects.
+This supplies a useful investigation path before porting the much wider legacy
+`apply_patch`/`run_command` surface, network authority or specialist verification.
+Model-proposed reproduction plans can follow, but their oracle and grants still
+require a host-owned approval boundary.
 
 ## Dependency gates
 
@@ -165,7 +238,8 @@ make it an independently registered top-level command.
 - [ ] Preserve `http_audit` target/environment translation (`0SEC_TARGET_*`) in
   `run.ts` only for that explicit mode; do not give ordinary source/evolution
   workers the same network/auth profile.
-- [ ] Preserve hosted API routes `/api/inference/v1/models`,
+- [ ] Finish hosted inference parity: metadata routes and browser-session login
+  are fixture-tested natively; preserve `/api/inference/v1/models`,
   `/api/inference/account`, `/api/inference/usage`, health routing and inference
   transport from `cloud/client.ts` and `runtime/llm-api.ts`. Port nested gateway
   error codes, especially inference disabled and exhausted credit.
