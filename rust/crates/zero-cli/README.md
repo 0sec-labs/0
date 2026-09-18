@@ -277,6 +277,7 @@ No plugin management, generation activation or legacy plugin parity is implied.
 ```sh
 0sec-native report --input report.json --format json
 0sec-native report --input report.json --format sarif
+0sec-native report --input report.json --format markdown
 ```
 
 This renders an existing legacy report without running a scan, validating a
@@ -284,6 +285,12 @@ security finding, uploading results or opening native state. Provider, harness
 and hosted credential configuration is bypassed. JSON preserves original fields;
 SARIF follows the existing report renderer and records the actual native package
 version as exporter version. No producer version is inferred from input data.
+Markdown includes legacy summary, warnings, finding details, remediation and
+reproduction steps. It escapes supplied markup, discloses evidence/step elisions,
+and says “No findings reported” for empty reports without inferring target safety.
+Evidence excerpts use 4,000 Unicode characters and show at most 20 PoC steps;
+JSON/SARIF retain complete evidence. Missing Markdown metadata is marked
+“not supplied.” Rendering does not redact supplied secrets.
 
 Input is capped at 16 MiB and read with a five-second deadline. Stdout writes
 have a five-second deadline and respond to SIGINT/SIGTERM. Success exits 0,

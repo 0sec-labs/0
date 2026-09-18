@@ -81,6 +81,7 @@ fn report_help_and_protocol_schema_bypass_input_and_configuration() {
         .unwrap();
     assert!(help.status.success());
     assert!(String::from_utf8_lossy(&help.stdout).contains("sarif"));
+    assert!(String::from_utf8_lossy(&help.stdout).contains("markdown"));
     let schema = cli(&dir).arg("schema").output().unwrap();
     assert!(schema.status.success());
     let schema: Value = serde_json::from_slice(&schema.stdout).unwrap();
@@ -128,4 +129,44 @@ async fn report_signal_exits_while_stdout_reader_stops_consuming() {
         .unwrap();
     assert_eq!(status.code(), Some(1));
     drop(pipe);
+}
+
+#[test]
+fn report_markdown_matches_legacy_fixture_without_engine_or_credential_access() {
+    let dir = TempDir::new().unwrap();
+    let input = dir.path().join("markdown.json");
+    std::fs::write(
+        &input,
+        include_bytes!("../../zero-report/tests/fixtures/markdown-report.json"),
+    )
+    .unwrap();
+    let output = cli(&dir)
+        .args(["report", "--format", "markdown", "--input"])
+        .arg(&input)
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(
+        String::from_utf8(output.stdout).unwrap(),
+        format!(
+            "{}\n",
+            include_str!("../../zero-report/tests/fixtures/typescript.markdown.md")
+        )
+    );
+    assert!(!dir.path().join("never").exists());
+    let mut report: Value = serde_json::from_slice(SOURCE).unwrap();
+    report["warnings"] = serde_json::json!("fixture-secret");
+    std::fs::write(&input, report.to_string()).unwrap();
+    let output = cli(&dir)
+        .args(["report", "--format", "markdown", "--input"])
+        .arg(&input)
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(2));
+    assert!(output.stdout.is_empty());
+    assert!(!String::from_utf8_lossy(&output.stderr).contains("fixture-secret"));
 }

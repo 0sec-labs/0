@@ -6,3 +6,7 @@ mock.module("@0sec/shared",()=>({VERSION:"fixture-version"}));
 const {formatSarif}=await import("../../../../../packages/cli/src/formatters/sarif.ts");
 const report=JSON.parse(readFileSync(join(import.meta.dir,"report.json"),"utf8"));
 writeFileSync(join(import.meta.dir,"typescript.sarif.json"),formatSarif(report)+"\n");
+
+const {formatMarkdown}=await import("../../../../../packages/cli/src/formatters/markdown.ts");
+const markdownReport=JSON.parse(readFileSync(join(import.meta.dir,"markdown-report.json"),"utf8"));
+writeFileSync(join(import.meta.dir,"typescript.markdown.md"),formatMarkdown(markdownReport));

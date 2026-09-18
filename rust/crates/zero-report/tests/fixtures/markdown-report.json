@@ -1,0 +1,84 @@
+{
+  "id": "scan-fixture",
+  "target": "https://example.com",
+  "startedAt": "2026-09-18T00:00:00.000Z",
+  "completedAt": "2026-09-18T00:01:00.000Z",
+  "executionSuccessful": false,
+  "findings": [
+    {
+      "id": "finding-1",
+      "templateId": "same-rule",
+      "title": "SQL injection in /search",
+      "description": "The q parameter reaches a raw query.",
+      "severity": "high",
+      "category": "injection",
+      "status": "discovered",
+      "evidence": {
+        "request": "GET /search?q=1",
+        "response": "HTTP/1.1 500",
+        "analysis": "Response differed"
+      },
+      "confidence": 0.75,
+      "pocSteps": [
+        {
+          "id": "s1",
+          "kind": "setup",
+          "summary": "Log in as a low-priv user",
+          "action": {
+            "type": "note"
+          }
+        },
+        {
+          "id": "s2",
+          "kind": "exploit",
+          "summary": "POST the crafted payload",
+          "action": {
+            "type": "note"
+          }
+        }
+      ],
+      "cvssScore": 9.8,
+      "cvssVector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
+      "triageNote": "Requires further verification",
+      "remediation": {
+        "summary": "Use a parameterised query.",
+        "steps": [
+          "Replace string concatenation",
+          "Add a regression test"
+        ],
+        "codeExample": {
+          "before": "q + input",
+          "after": "db.query(sql, [input])",
+          "language": "ts"
+        },
+        "references": [
+          "https://owasp.org/sqli"
+        ]
+      }
+    }
+  ],
+  "unknownExtension": {
+    "nested": [
+      1,
+      false,
+      null,
+      "retained"
+    ]
+  },
+  "scanDepth": "deep",
+  "durationMs": 12000,
+  "summary": {
+    "totalAttacks": 3,
+    "totalFindings": 1,
+    "critical": 0,
+    "high": 1,
+    "medium": 0,
+    "low": 0
+  },
+  "warnings": [
+    {
+      "stage": "verify",
+      "message": "A probe timed out"
+    }
+  ]
+}

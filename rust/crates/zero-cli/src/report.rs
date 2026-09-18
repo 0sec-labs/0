@@ -7,6 +7,7 @@ use zero_report::{MAX_REPORT_BYTES, Report};
 pub enum ReportFormat {
     Json,
     Sarif,
+    Markdown,
 }
 
 pub async fn run(path: &Path, format: ReportFormat) -> Result<bool, Box<dyn Error>> {
@@ -26,6 +27,7 @@ pub async fn run(path: &Path, format: ReportFormat) -> Result<bool, Box<dyn Erro
     };
     let report = Report::parse(&bytes)?;
     let mut rendered = match format {
+        ReportFormat::Markdown => report.markdown()?,
         ReportFormat::Json => report.json()?,
         ReportFormat::Sarif => report.sarif(env!("CARGO_PKG_VERSION"))?,
     };
