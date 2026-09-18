@@ -2,6 +2,7 @@ mod args;
 mod console;
 mod doctor;
 mod framing;
+mod harness;
 mod hosted;
 mod providers;
 mod server;
@@ -91,6 +92,9 @@ async fn run(args: Args) -> Result<bool, Box<dyn Error>> {
     if let Some(path) = args.providers {
         providers::configure(&engine, &path).await?;
     }
+    if let Some(path) = args.harness_config {
+        harness::configure(&engine, &path).await?;
+    }
     if matches!(args.command, Command::AppServer) {
         server::serve(
             engine,
@@ -107,6 +111,9 @@ async fn run(args: Args) -> Result<bool, Box<dyn Error>> {
     }
     let command = match args.command {
         Command::Session { command } => match command {
+            SessionCommand::CreatePinned { budget_limit } => {
+                EngineCommand::SessionCreatePinned { budget_limit }
+            }
             SessionCommand::Create {
                 generation,
                 budget_limit,
@@ -167,6 +174,22 @@ async fn run(args: Args) -> Result<bool, Box<dyn Error>> {
                     .map_err(|_| "Invalid sandbox request JSON")?,
             }
         }
+        Command::PluginCall {
+            session,
+            command_id,
+            plugin,
+            tool,
+            input,
+        } => {
+            let bytes = providers::read_bounded(&input).await?;
+            EngineCommand::RunPlugin {
+                session_id: session,
+                command_id,
+                plugin,
+                tool,
+                input: serde_json::from_slice(&bytes).map_err(|_| "Invalid plugin input JSON")?,
+            }
+        }
         Command::Infer {
             session,
             command_id,
@@ -223,7 +246,8 @@ async fn run(args: Args) -> Result<bool, Box<dyn Error>> {
         Reply::Execution { operation, .. }
         | Reply::Inference { operation, .. }
         | Reply::Agent { operation, .. }
-        | Reply::Sandbox { operation, .. } => {
+        | Reply::Sandbox { operation, .. }
+        | Reply::Plugin { operation, .. } => {
             matches!(operation.status, zero_protocol::OperationStatus::Succeeded)
         }
         _ => true,

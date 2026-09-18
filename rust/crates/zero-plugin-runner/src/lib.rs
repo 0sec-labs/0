@@ -24,7 +24,8 @@ pub enum Error {
     Unsettled,
 }
 /// Caller-owned fixed profile; never populated from a guest frame or tool input.
-#[derive(Clone)]
+#[derive(Clone, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Launch {
     pub backend: SandboxBackend,
     pub interpreter: Vec<String>,
@@ -32,6 +33,46 @@ pub struct Launch {
     pub memory_mb: u64,
     pub cpus: f64,
     pub max_output_bytes: usize,
+}
+impl Launch {
+    /// Pure profile validation via the sandbox's authoritative field checks.
+    /// The synthetic index is never returned or dispatched as a snapshot permit.
+    pub fn validate(&self) -> Result<(), Error> {
+        if self.interpreter.is_empty()
+            || self.interpreter.len() > 16
+            || self
+                .interpreter
+                .iter()
+                .any(|a| a.is_empty() || a.len() > 4096 || a.contains('\0'))
+            || !(256..=zero_plugin::MAX_FRAME_BYTES).contains(&self.max_output_bytes)
+        {
+            return Err(Error::Rejected("invalid host launch profile"));
+        }
+        let digest = format!("sha256:{}", "0".repeat(64));
+        SandboxRequest {
+            execution_id: "profile-validation".into(),
+            backend: self.backend.clone(),
+            snapshot: zero_protocol::SnapshotPin {
+                id: "profile-validation".into(),
+                root: "/profile-validation".into(),
+                digest: digest.clone(),
+                files: vec![zero_protocol::SnapshotFile {
+                    path: "entry".into(),
+                    digest,
+                    bytes: 0,
+                }],
+            },
+            argv: self.interpreter.clone(),
+            build_argv: None,
+            stdin: None,
+            timeout_ms: self.timeout_ms,
+            memory_mb: self.memory_mb,
+            cpus: self.cpus,
+            max_output_bytes: self.max_output_bytes,
+        }
+        .validate()
+        .map_err(|e| Error::Snapshot(e.to_string()))
+    }
 }
 #[derive(Debug)]
 pub enum UntrustedReply {
@@ -61,6 +102,8 @@ impl Outcome {
 pub struct RejectedCall {
     pub call: PinnedCall,
     pub error: Error,
+    /// Only set after this preparation successfully created the absent path.
+    pub owned_staging: Option<PathBuf>,
 }
 pub struct RunningCall {
     task: Option<JoinHandle<Outcome>>,
@@ -103,53 +146,123 @@ impl Runner {
         cancel: CancellationToken,
         sink: EventSink,
     ) -> Result<RunningCall, Box<RejectedCall>> {
-        let prepared = match stage::prepare(harness, &call, plugin, &launch) {
-            Ok(v) => v,
-            Err(error) => return Err(Box::new(RejectedCall { call, error })),
-        };
         let directory = match tempfile::Builder::new()
             .prefix(&format!("zero-plugin-{}-", call.lease().id))
             .tempdir()
         {
-            Ok(v) => v.keep(),
+            Ok(dir) => {
+                let path = dir.path().to_owned();
+                drop(dir);
+                path
+            }
             Err(error) => {
                 return Err(Box::new(RejectedCall {
                     call,
                     error: Error::Io(error),
+                    owned_staging: None,
                 }));
             }
         };
-        // Keep first, dispose only after explicit settlement. Panic/unwind cannot
-        // delete a source tree while a sandbox's owned worker still reads it.
+        self.prepare_in(harness, call, plugin, launch, &directory)
+            .map(|p| p.start(cancel, sink))
+    }
+    /// The caller persists this absent, private attempt path BEFORE preparation.
+    /// This method may stage bytes but never dispatches a guest. Existing paths reject.
+    pub fn prepare_in(
+        &self,
+        harness: &Harness,
+        call: PinnedCall,
+        plugin: &str,
+        launch: Launch,
+        directory: &Path,
+    ) -> Result<PreparedRun, Box<RejectedCall>> {
+        let mut owned_staging = None;
+        let prepare = (|| {
+            let prepared = stage::prepare(harness, &call, plugin, &launch)?;
+            if !directory.is_absolute() {
+                return Err(Error::Rejected("staging path must be absolute"));
+            }
+            let parent = directory
+                .parent()
+                .ok_or(Error::Rejected("missing staging parent"))?;
+            if std::fs::symlink_metadata(parent)?.file_type().is_symlink() {
+                return Err(Error::Rejected("staging parent is a symlink"));
+            }
+            let mut builder = std::fs::DirBuilder::new();
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::DirBuilderExt;
+                builder.mode(0o700);
+            }
+            builder.create(directory)?;
+            owned_staging = Some(directory.to_owned());
+            stage::write(&call, prepared, launch, directory)
+        })();
+        match prepare {
+            Ok(request) => Ok(PreparedRun {
+                runner: self.clone(),
+                call,
+                request,
+                directory: directory.to_owned(),
+            }),
+            // The caller owns the recorded attempt path and must reconcile any
+            // partial staging. No backend has been launched on this path.
+            Err(error) => Err(Box::new(RejectedCall {
+                call,
+                error,
+                owned_staging,
+            })),
+        }
+    }
+}
+/// Non-cloneable dispatch permit. Drop retains staging and lease for recovery.
+pub struct PreparedRun {
+    runner: Runner,
+    call: PinnedCall,
+    request: SandboxRequest,
+    directory: PathBuf,
+}
+impl PreparedRun {
+    pub fn call(&self) -> &PinnedCall {
+        &self.call
+    }
+    pub fn staging_path(&self) -> &Path {
+        &self.directory
+    }
+    pub fn execution_id(&self) -> &str {
+        &self.request.execution_id
+    }
+    pub fn request_digest(&self) -> Result<String, Error> {
+        Ok(zero_plugin::sha256(
+            &serde_json::to_vec(&self.request).map_err(|_| Error::Rejected("request encoding"))?,
+        ))
+    }
+    pub fn start(self, cancel: CancellationToken, sink: EventSink) -> RunningCall {
+        let Self {
+            runner,
+            call,
+            request,
+            directory,
+        } = self;
         let staging = directory.clone();
         let token = cancel.child_token();
         let worker_token = token.clone();
-        let sandbox = self.sandbox.clone();
         let task = tokio::spawn(async move {
-            let request = stage::write(&call, prepared, launch, &directory);
-            let (result, reply) = match request {
-                Ok(request) => {
-                    let result = sandbox.execute(request, worker_token, sink).await;
-                    let reply = if result.status == ExecutionStatus::Exited
-                        && result.exit_code == Some(0)
-                        && matches!(
-                            result.cleanup,
-                            SandboxCleanup::Confirmed | SandboxCleanup::NotCreated
-                        ) {
-                        parse_reply(&result.stdout)
-                    } else {
-                        Err(Error::Unsettled)
-                    };
-                    (Some(result), reply)
-                }
-                Err(error) => (None, Err(error)),
-            };
-            let settled = result.as_ref().is_none_or(|r| {
-                matches!(
-                    r.cleanup,
+            let result = runner.sandbox.execute(request, worker_token, sink).await;
+            let reply = if result.status == ExecutionStatus::Exited
+                && result.exit_code == Some(0)
+                && matches!(
+                    result.cleanup,
                     SandboxCleanup::Confirmed | SandboxCleanup::NotCreated
-                )
-            });
+                ) {
+                parse_reply(&result.stdout)
+            } else {
+                Err(Error::Unsettled)
+            };
+            let settled = matches!(
+                result.cleanup,
+                SandboxCleanup::Confirmed | SandboxCleanup::NotCreated
+            );
             let staging_recovery = if settled && std::fs::remove_dir_all(&directory).is_ok() {
                 None
             } else {
@@ -157,16 +270,16 @@ impl Runner {
             };
             Outcome {
                 call,
-                sandbox: result,
+                sandbox: Some(result),
                 reply,
                 staging_recovery,
             }
         });
-        Ok(RunningCall {
+        RunningCall {
             task: Some(task),
             cancel: token,
             staging,
-        })
+        }
     }
 }
 fn parse_reply(bytes: &[u8]) -> Result<UntrustedReply, Error> {

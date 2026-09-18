@@ -186,6 +186,7 @@ where
                 | Command::Infer { .. }
                 | Command::RunAgent { .. }
                 | Command::RunSandbox { .. }
+                | Command::RunPlugin { .. }
         ) {
             if tasks.len() >= MAX_EXECUTIONS {
                 if out

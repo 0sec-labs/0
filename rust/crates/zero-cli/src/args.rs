@@ -20,6 +20,9 @@ pub struct Args {
     /// Provider profiles; secrets are read from explicitly named environment variables.
     #[arg(long, global = true)]
     pub providers: Option<PathBuf>,
+    /// Explicit trusted host harness configuration; never discovered from a project.
+    #[arg(long, global = true)]
+    pub harness_config: Option<PathBuf>,
     #[command(subcommand)]
     pub command: Command,
 }
@@ -70,6 +73,19 @@ pub enum Command {
         #[arg(long)]
         request: PathBuf,
     },
+    /// Invoke one pinned plugin tool using explicit host grants and offline launch policy.
+    PluginCall {
+        #[arg(long)]
+        session: String,
+        #[arg(long)]
+        command_id: String,
+        #[arg(long)]
+        plugin: String,
+        #[arg(long)]
+        tool: String,
+        #[arg(long)]
+        input: PathBuf,
+    },
     /// Run one explicitly configured provider request with durable accounting.
     Infer {
         #[arg(long)]
@@ -105,6 +121,11 @@ pub enum Command {
 
 #[derive(Debug, Subcommand)]
 pub enum SessionCommand {
+    /// Create a session pinned to the currently configured harness generation/epoch.
+    CreatePinned {
+        #[arg(long, default_value_t = 1_000_000)]
+        budget_limit: u64,
+    },
     Create {
         #[arg(long, default_value = "builtin")]
         generation: String,

@@ -48,7 +48,18 @@ no bidirectional dispatch, request multiplexing or provider call path.
 
 ## Ownership and durable lease settlement
 
-`Runner::start` consumes a non-deserializable `PinnedCall`. A rejected start
+`Runner::prepare_in` consumes a non-deserializable `PinnedCall` and an absent,
+controller-owned attempt path. The controller must durably record that path and
+lease owner before preparation creates files. Preparation writes only staging
+and exposes `call`, `staging_path`, `execution_id` and `request_digest` through
+a non-cloneable `PreparedRun`. Persist those bindings before consuming
+`PreparedRun::start`. Dropping an unstarted permit retains staging and lease for
+explicit reconciliation; it never dispatches. A failed preparation returns the
+call and `owned_staging: Some(path)` only when this preparation created the
+directory. A rejected pre-existing path remains untouched and is never claimed
+as owned staging. The controller may dispose only its returned owned staging.
+
+`Runner::start` is a nondurable convenience wrapper around prepare/start. A rejected start
 returns it with the error. A successful start returns `RunningCall`; the owned
 worker retains the call and source staging until backend settlement. Dropping
 the running handle or its wait future requests cancellation but does not abort
@@ -70,9 +81,10 @@ the supervisor must establish fencing/quiescence before explicit recovery.
 
 ## Validation
 
-Five default tests use a fake Docker launcher, not an isolation oracle. They cover
+Seven default tests use a fake Docker launcher, not an isolation oracle. They cover
 fixed request and literal argv, frame rejection, capability/stale-handle denial,
-uncertain cleanup and dropping a waiter during a running subprocess.
+uncertain cleanup, dropping a waiter during a running subprocess, durable
+preparation without dispatch, and preserving pre-existing recovery directories.
 
 The opt-in `real_offline_node_plugin` test ran successfully against the already
 installed `node:24-alpine` image

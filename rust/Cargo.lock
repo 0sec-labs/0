@@ -1741,7 +1741,11 @@ dependencies = [
  "uuid",
  "zero-cloud-client",
  "zero-engine",
+ "zero-evolution",
  "zero-executor",
+ "zero-harness",
+ "zero-plugin",
+ "zero-plugin-runner",
  "zero-protocol",
  "zero-provider",
 ]
@@ -1774,6 +1778,7 @@ version = "0.1.0"
 dependencies = [
  "fs2",
  "libc",
+ "rusqlite",
  "serde_json",
  "tempfile",
  "thiserror",
@@ -1781,7 +1786,11 @@ dependencies = [
  "tokio-util",
  "uuid",
  "zero-evidence",
+ "zero-evolution",
  "zero-executor",
+ "zero-harness",
+ "zero-plugin",
+ "zero-plugin-runner",
  "zero-protocol",
  "zero-provider",
  "zero-sandbox",
@@ -1852,6 +1861,7 @@ dependencies = [
 name = "zero-plugin-runner"
 version = "0.1.0"
 dependencies = [
+ "serde",
  "serde_json",
  "tempfile",
  "thiserror",

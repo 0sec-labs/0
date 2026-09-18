@@ -14,16 +14,7 @@ pub(super) fn prepare(
     harness
         .validate_reply(call, &call.pin())
         .map_err(|_| Error::Rejected("stale invocation"))?;
-    if launch.interpreter.is_empty()
-        || launch.interpreter.len() > 16
-        || launch
-            .interpreter
-            .iter()
-            .any(|a| a.is_empty() || a.len() > 4096 || a.contains('\0'))
-        || !(256..=zero_plugin::MAX_FRAME_BYTES).contains(&launch.max_output_bytes)
-    {
-        return Err(Error::Rejected("invalid host launch profile"));
-    }
+    launch.validate()?;
     let selected = call
         .graph()
         .plugin_manifest(plugin)

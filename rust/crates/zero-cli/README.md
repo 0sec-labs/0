@@ -235,3 +235,36 @@ SIGINT/SIGTERM cancels a live request. Redirects/retries are disabled and HTTPS 
 required except loopback HTTP. This surface only reads health, model catalog,
 credit balance and request usage; it neither starts hosted inference nor uploads
 scans. Account percentages remain service-reported, never reconstructed locally.
+
+## Explicit pinned plugin calls
+
+```sh
+0sec-native --harness-config /trusted/host.json session create-pinned --budget-limit 100
+0sec-native --harness-config /trusted/host.json plugin-call --session SESSION_ID --command-id UNIQUE_ID --plugin fixture --tool inspect --input input.json
+```
+
+The host configuration is selected explicitly, never discovered from a project
+or supplied by plugin RPC. It is bounded JSON with unknown fields rejected:
+
+```json
+{"registry":"/absolute/existing/registry.db","engine_artifact":"sha256:EXPECTED_ENGINE_ARTIFACT_DIGEST","plugins":{"fixture":{"enabled":true,"trusted":false,"grants":["compute"]}},"launch":{"backend":{"type":"docker","image":"local:plugin-runtime"},"interpreter":["node"],"timeout_ms":1000,"memory_mb":128,"cpus":0.5,"max_output_bytes":8192}}
+```
+
+Replace the example digest with the actual pinned artifact identity. The registry
+must already contain a verified active generation; this CLI installs or activates
+none. Expected engine artifact and serialized host policy must match the active
+generation. `trusted` is provenance metadata and does not grant capabilities.
+Launch backend, interpreter and resources are host authority; plugins cannot
+choose them. Backend choice is explicit and has no fallback. The offline runner supports compute, process execution and filesystem operations
+inside the disposable snapshot; grants do not enable network, model calls,
+findings writes or access to host files.
+
+`create-pinned` captures the current generation and epoch. Ordinary legacy
+sessions are not silently upgraded. `plugin-call` returns a JSON plugin outcome
+whose result remains untrusted data, with success exit only for a succeeded
+operation. App-server `run_plugin` is concurrent and cancellable; exact command
+retries return durable outcomes without replaying effects. Stale generations or
+changed host policy fail closed. Unresolved cleanup retains recovery metadata
+and leases rather than pretending settlement. Help/schema/snapshot/hosted and
+native doctor bypass harness loading; doctor does not validate harness state.
+No plugin management, generation activation or legacy plugin parity is implied.

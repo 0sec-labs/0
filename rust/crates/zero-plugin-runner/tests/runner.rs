@@ -364,3 +364,45 @@ async fn real_offline_node_plugin() {
     }
     f.harness.complete_settled(&mut result.call).unwrap();
 }
+
+#[tokio::test]
+async fn preparation_writes_only_owned_snapshot_and_never_dispatches() {
+    let mut f = Fixture::new(Capability::Compute, "echo", REPLY, b"fixture");
+    let call = f.call();
+    let lease = call.lease().clone();
+    let directory = f.dir.path().join("recorded-attempt");
+    // A durable controller records this exact owned path before this method.
+    let prepared = f
+        .runner
+        .prepare_in(&f.harness, call, "fixture", launch(), &directory)
+        .ok()
+        .unwrap();
+    assert!(directory.join("plugins.json").is_file());
+    assert_eq!(prepared.request_digest().unwrap().len(), 64);
+    assert!(prepared.execution_id().contains(&lease.id));
+    assert!(!f.dir.path().join("calls.jsonl").exists());
+    drop(prepared);
+    assert!(directory.exists());
+    assert_eq!(f.harness.unreleased(None, None, 16).unwrap().len(), 1);
+    // This test knows the dispatch permit was dropped without start.
+    fs::remove_dir_all(directory).unwrap();
+    f.harness.release_fenced(&lease.id, &lease.owner).unwrap();
+}
+
+#[tokio::test]
+async fn preparation_never_claims_or_removes_existing_staging() {
+    let mut f = Fixture::new(Capability::Compute, "echo", REPLY, b"fixture");
+    let call = f.call();
+    let directory = f.dir.path().join("previous-attempt");
+    fs::create_dir(&directory).unwrap();
+    fs::write(directory.join("recovery"), b"retain").unwrap();
+    let mut rejected = f
+        .runner
+        .prepare_in(&f.harness, call, "fixture", launch(), &directory)
+        .err()
+        .unwrap();
+    assert!(rejected.owned_staging.is_none());
+    assert_eq!(fs::read(directory.join("recovery")).unwrap(), b"retain");
+    assert!(!f.dir.path().join("calls.jsonl").exists());
+    f.harness.complete_settled(&mut rejected.call).unwrap();
+}

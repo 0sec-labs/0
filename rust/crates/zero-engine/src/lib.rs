@@ -2,6 +2,7 @@
 mod agent;
 mod inference;
 mod lifecycle;
+mod plugin;
 mod sandbox;
 
 use std::{
@@ -50,6 +51,8 @@ struct Shared {
     executor: Arc<DockerExecutor>,
     sandbox: Arc<zero_sandbox::SandboxExecutor>,
     providers: Mutex<HashMap<String, inference::Profile>>,
+    plugins: Mutex<Option<plugin::Profile>>,
+    plugin_root: PathBuf,
     owner: String,
     // Retained by workers even when the client handle is dropped.
     _lock: File,
@@ -147,6 +150,9 @@ impl Engine {
         smolvm_binary: Option<PathBuf>,
     ) -> Result<Self, EngineError> {
         let (store, owner, file) = lifecycle::open_owned_store(path.as_ref())?;
+        let mut plugin_root = path.as_ref().as_os_str().to_os_string();
+        plugin_root.push(".plugin-runs");
+        let plugin_root = std::path::absolute(PathBuf::from(plugin_root))?;
         let executor = docker_binary
             .map(DockerExecutor::with_binary)
             .unwrap_or_default();
@@ -163,6 +169,8 @@ impl Engine {
                 executor: Arc::new(executor),
                 sandbox: Arc::new(sandbox),
                 providers: Mutex::new(HashMap::new()),
+                plugins: Mutex::new(None),
+                plugin_root,
                 owner,
                 _lock: file,
             }),
@@ -182,6 +190,7 @@ impl Engine {
             "chat_completions_inference",
             "anthropic_messages_inference",
             "bounded_offline_snapshot_agent",
+            "generation_pinned_offline_plugins",
         ]
         .map(String::from)
         .to_vec()
@@ -203,6 +212,18 @@ impl Engine {
         command: Command,
         event_tx: mpsc::Sender<ExecutionEvent>,
     ) -> Result<Reply, EngineError> {
+        if let Command::RunPlugin {
+            session_id,
+            command_id,
+            plugin,
+            tool,
+            input,
+        } = command
+        {
+            return self
+                .run_plugin(session_id, command_id, plugin, tool, input, event_tx)
+                .await;
+        }
         if let Command::Execute {
             session_id,
             command_id,
@@ -267,6 +288,9 @@ impl Engine {
             } => Ok(Reply::Session {
                 session: lock(&self.shared.store)?.create_session(&generation, budget_limit)?,
             }),
+            Command::SessionCreatePinned { budget_limit } => {
+                self.create_pinned_session(budget_limit)
+            }
             Command::SessionList => Ok(Reply::Sessions {
                 sessions: lock(&self.shared.store)?.list_sessions()?,
             }),
@@ -338,7 +362,8 @@ impl Engine {
             Command::Execute { .. }
             | Command::Infer { .. }
             | Command::RunAgent { .. }
-            | Command::RunSandbox { .. } => {
+            | Command::RunSandbox { .. }
+            | Command::RunPlugin { .. } => {
                 unreachable!("execution dispatched before acquiring synchronous locks")
             }
         }

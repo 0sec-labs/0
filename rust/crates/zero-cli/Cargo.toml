@@ -22,6 +22,10 @@ zero-engine = { path = "../zero-engine" }
 zero-executor.workspace = true
 zero-provider.workspace = true
 zero-cloud-client = { path = "../zero-cloud-client" }
+zero-harness = { path = "../zero-harness" }
+zero-evolution = { path = "../zero-evolution" }
+zero-plugin = { path = "../zero-plugin" }
+zero-plugin-runner = { path = "../zero-plugin-runner" }
 
 tempfile.workspace = true
 

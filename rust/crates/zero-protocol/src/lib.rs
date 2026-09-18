@@ -10,6 +10,7 @@ mod binary;
 pub mod execution;
 pub mod microvm;
 pub mod model;
+pub mod plugin;
 pub mod sandbox;
 pub mod session;
 pub use execution::*;
@@ -46,6 +47,16 @@ pub enum Command {
     SessionCreate {
         generation: String,
         budget_limit: u64,
+    },
+    SessionCreatePinned {
+        budget_limit: u64,
+    },
+    RunPlugin {
+        session_id: String,
+        command_id: String,
+        plugin: String,
+        tool: String,
+        input: serde_json::Value,
     },
     SessionList,
     SessionGet {
@@ -170,6 +181,11 @@ pub enum Reply {
     Execution {
         operation: Operation,
         result: Option<ExecutionResult>,
+        duplicate: bool,
+    },
+    Plugin {
+        operation: Operation,
+        result: Option<plugin::PluginOutcome>,
         duplicate: bool,
     },
     Sandbox {
