@@ -181,3 +181,24 @@ List/show read existing current-schema native state without migration, engine
 ownership or provider configuration. Mutations use the native engine journal;
 acceptance and suppression never alter source evidence or verification status.
 This does not read legacy finding databases or infer fingerprint families.
+
+The app-server emits optional live `model_progress` events for direct inference,
+agent turns (including queued turns), and dedicated source review. Each event
+identifies the session, paid inference operation, optional parent operation, and
+an operation-local sequence. Payloads contain text, exposed reasoning/refusal, or
+provisional tool metadata/argument fragments. They contain no opaque signatures,
+encrypted replay or raw provider errors; generated text can still contain source
+or user data and is not generally redacted.
+
+Progress is best-effort display data. Sequence gaps indicate dropped deliveries;
+per-inference caps can also suppress later updates. Clients must tolerate missing
+or late progress and discard it after the terminal result for that operation or
+parent. Only final journaled completions authorize tool execution and determine
+usage. Retries return stored results without replaying progress. The app-server
+uses a separate bounded progress queue and prioritizes command replies and
+operational events. Full/closed progress queues never cancel inference; ordinary
+transport-disconnect and output-deadline behavior still applies.
+
+Progress and operational events use independent queues, so progress may precede
+its admission notification. Correlate by session/operation IDs rather than
+assuming admission-first delivery.

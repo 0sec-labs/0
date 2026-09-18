@@ -9,6 +9,7 @@ impl Engine {
         session_id: String,
         input_id: String,
         events: mpsc::Sender<ExecutionEvent>,
+        progress_events: Option<mpsc::Sender<ExecutionEvent>>,
     ) -> Result<Reply, EngineError> {
         let input = {
             let control = lock(&self.shared.control)?;
@@ -51,6 +52,7 @@ impl Engine {
             input.run_command_id,
             request,
             events,
+            progress_events,
             Some(input_id),
         )
         .await

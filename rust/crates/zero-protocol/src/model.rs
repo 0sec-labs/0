@@ -122,3 +122,39 @@ impl Rates {
         u64::try_from(numerator.checked_add(999_999)? / 1_000_000).ok()
     }
 }
+
+/// Maximum total UTF-8 bytes across string fragments in one live progress item.
+/// JSON escaping and the surrounding event envelope add transport overhead.
+pub const MAX_PROGRESS_TEXT_BYTES: usize = 16 * 1024;
+
+/// Advisory, potentially incomplete display data. Never tool authority, usage,
+/// a durable event cursor, or a substitute for the terminal Completion receipt.
+/// Indices identify provider output/block positions within one inference.
+/// Opaque replay, signatures and provider error bodies are intentionally absent.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
+pub enum ProviderProgress {
+    TextDelta {
+        item_index: u32,
+        content_index: u32,
+        text: String,
+    },
+    ReasoningDelta {
+        item_index: u32,
+        content_index: u32,
+        text: String,
+    },
+    RefusalDelta {
+        item_index: u32,
+        content_index: u32,
+        text: String,
+    },
+    /// Each field is a fragment, not a complete authorized call. Arguments may
+    /// be incomplete JSON; consumers must never dispatch from progress events.
+    ToolCallDelta {
+        item_index: u32,
+        id_delta: String,
+        name_delta: String,
+        arguments_delta: String,
+    },
+}

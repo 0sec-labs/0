@@ -52,16 +52,26 @@ impl Engine {
         command_id: String,
         request: AgentRequest,
         events: mpsc::Sender<ExecutionEvent>,
+        progress_events: Option<mpsc::Sender<ExecutionEvent>>,
     ) -> Result<Reply, EngineError> {
-        self.run_agent_input(session_id, command_id, request, events, None)
-            .await
+        self.run_agent_input(
+            session_id,
+            command_id,
+            request,
+            events,
+            progress_events,
+            None,
+        )
+        .await
     }
+    #[allow(clippy::too_many_arguments)]
     pub(super) async fn run_agent_input(
         &self,
         session_id: String,
         command_id: String,
         request: AgentRequest,
         events: mpsc::Sender<ExecutionEvent>,
+        progress_events: Option<mpsc::Sender<ExecutionEvent>>,
         queued_input: Option<String>,
     ) -> Result<Reply, EngineError> {
         let initial = validate_initial(&request)?;
@@ -236,6 +246,7 @@ impl Engine {
                     source,
                     cancel,
                     events,
+                    progress_events,
                 )
                 .await;
                 guard.settled = result.is_ok();
@@ -456,6 +467,7 @@ async fn run_rounds(
     source: Option<Arc<agent_source::Context>>,
     cancel: CancellationToken,
     events: mpsc::Sender<ExecutionEvent>,
+    progress_events: Option<mpsc::Sender<ExecutionEvent>>,
 ) -> Result<(AgentResult, Vec<serde_json::Value>), EngineError> {
     let mut input = history.input;
     let mut context_state = history.state;
@@ -560,6 +572,8 @@ async fn run_rounds(
             profile.clone(),
             model.clone(),
             cancel.clone(),
+            progress_events.clone(),
+            Some(parent),
         )
         .await?;
         let Reply::Inference {
@@ -918,6 +932,7 @@ async fn run_actor(
     mut source: Option<agent_source::Context>,
     cancel: CancellationToken,
     events: mpsc::Sender<ExecutionEvent>,
+    progress_events: Option<mpsc::Sender<ExecutionEvent>>,
 ) -> Result<Reply, EngineError> {
     let empty = |status, error| AgentResult {
         status,
@@ -1002,6 +1017,7 @@ async fn run_actor(
             source.clone(),
             cancel.clone(),
             events,
+            progress_events,
         )
         .await
     };

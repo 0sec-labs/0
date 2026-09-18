@@ -648,3 +648,46 @@ Executable CLI coverage exercises restart decisions after source deletion,
 stale/changed retries, historical receipts with current state, and byte-identical
 read-only inspection while an engine owns the journal. Independent final review
 found no remaining concrete blocker in this checkpoint.
+
+### Live model progress separated from effect control
+
+The provider transport can now expose bounded, typed progress across Responses,
+Chat Completions and Anthropic Messages without changing their authoritative
+completion parsers. It observes only frames accepted by those parsers. Explicit
+text, refusal, exposed reasoning and tool fragments are allowed; encrypted replay,
+signatures, redacted thinking and raw error bodies remain absent. No terminal
+snapshot fallback is emitted, preventing duplicate delta reconstruction.
+
+Each fragment carries at most 16 KiB of UTF-8 string data; each inference emits
+at most 4096 progress items and 4 MiB of such data. These are display limits,
+independent of the existing provider response bounds. Tool fragments can be
+incomplete and are never executable. Final completion content, usage and original
+replay remain authoritative, including when progress was dropped or suppressed.
+This is not generic redaction: model text and argument fragments may contain
+source or user data.
+
+The engine adds session, paid-operation and optional parent identity and a
+sequence advancing even when its nonblocking delivery drops an item. The new
+`handle_with_progress` API requires a distinct channel from operational events;
+the existing `handle` API preserves its prior no-progress behavior. The app-server
+prioritizes replies/operational events over a separate bounded progress queue.
+This prevents advisory updates from consuming capacity whose loss can cancel an
+admission or sandbox operation. Clients ignore late progress after the terminal
+receipt; progress sequence is neither a persisted event cursor nor a complete
+replay stream. Exact retries do not emit it again.
+
+This advances P/A/U streaming requirements and supplies a prerequisite for a
+native interactive frontend. Full-screen rendering, conversation-history
+projection, approval/questions, multi-audit navigation and real PTY frontend
+qualification remain open; line-console output behavior is unchanged.
+
+Qualification passed all 547 workspace tests on Rust 1.85, strict production
+Clippy and formatting. Provider fixtures hold terminal frames until callbacks
+arrive and compare complete results with/without observers across all three
+wires. They cover fragment/aggregate caps, UTF-8 boundaries, interleaved tool
+arguments, opaque-field exclusion and cancellation. Engine fixtures cover all
+four paid dispatch paths, host-assigned correlation, exact retries, dropped
+sequence gaps and progress flooding followed by sandbox execution. Four real
+CLI app-server fixtures prove delivery before terminal completion, unchanged
+accounting and unknown usage holds after cancellation. Independent final review
+found no remaining concrete blocker in this checkpoint.

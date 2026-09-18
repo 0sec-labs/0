@@ -149,6 +149,16 @@ pub enum OutputStream {
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ExecutionEvent {
+    /// Live, untrusted display data; final journaled completion is authoritative.
+    /// Sequence starts at one per inference operation and advances on dropped
+    /// deliveries. It is not a SessionEvents cursor and is not replayed on retry.
+    ModelProgress {
+        session_id: String,
+        operation_id: String,
+        parent_operation_id: Option<String>,
+        sequence: u64,
+        progress: crate::model::ProviderProgress,
+    },
     Admitted {
         session_id: String,
         command_id: String,

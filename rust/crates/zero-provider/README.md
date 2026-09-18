@@ -97,3 +97,41 @@ mapping. Unlike its retry helpers, native transport never retries implicitly.
 Unit and loopback fixtures cover exact paths/auth, fragmented streams, signed
 replay, tool pairing, cancellation, errors, bounds and provisional/final usage.
 No live provider call or broader Anthropic feature parity is claimed.
+
+## Advisory live progress
+
+`complete_with_progress(request, cancel, callback)` adds synchronous normalized
+progress; `complete` retains its previous behavior without an observer. The
+callback accepts `ProviderProgress` and must be nonblocking and nonpanicking;
+a bounded channel's `try_send` is appropriate. Do not perform storage, blocking
+IO, or waits inside the callback, because it runs on the transport task.
+
+The authoritative parser first accepts each complete SSE frame. An independent
+allowlist then emits text, refusal, exposed reasoning/summary text, and provisional
+tool ID/name/argument fragments. Responses positions use output/content indices;
+Chat text uses 0/0 and tools their call index; Anthropic uses content-block indices.
+Repeated invariant Chat tool metadata is emitted once, while argument fragments
+retain interleaving. These fragments may be incomplete JSON and never authorize
+execution. Existing Chat metadata validation remains unchanged.
+
+Encrypted reasoning, Anthropic signatures and redacted blocks, Chat opaque
+`reasoning_details`, raw SSE objects, provider error bodies, credentials and usage
+are not progress fields. They are not inferred or reconstructed from opaque data.
+The existing replay/accounting paths retain their own required evidence. A
+terminal-only response produces no fabricated live deltas, avoiding duplicate
+rendering of the final receipt.
+
+Each event carries at most 16 KiB of raw UTF-8 fragments, split only at character
+boundaries. Per inference, at most 4096 events and 4 MiB of fragment bytes are
+emitted; further progress is suppressed while authoritative parsing continues.
+Progress indices are bounded to 256 positions, and empty fragments are skipped.
+Malformed or unsupported advisory fields are ignored without changing completion
+classification. Progress is best-effort display data: consumer queues may drop
+it, and it is neither a durable cursor nor final usage. Only the returned
+`Completion`, with the existing terminal/status/usage checks, supplies the final
+result and tool authority. There are still no implicit retries.
+
+Loopback tests cover all three wire formats, progress before terminal release,
+interleaved tool arguments, fragmented UTF-8 SSE, opaque-field exclusion,
+cancellation/malformed streams, fragment and aggregate bounds, and exact final
+completion equality with observers enabled or disabled. No paid calls are used.

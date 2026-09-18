@@ -2,6 +2,7 @@
 mod anthropic;
 mod anthropic_stream;
 mod chat;
+mod progress;
 mod responses;
 mod sse;
 mod transport;

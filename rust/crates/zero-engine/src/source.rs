@@ -15,6 +15,7 @@ impl Engine {
         command: String,
         request: SourceReviewRequest,
         events: mpsc::Sender<ExecutionEvent>,
+        progress_events: Option<mpsc::Sender<ExecutionEvent>>,
     ) -> Result<Reply, EngineError> {
         if request.reservation == 0 {
             return Err(state("source review requires nonzero reservation"));
@@ -80,6 +81,7 @@ impl Engine {
                     request,
                     profile,
                     cancel,
+                    progress_events,
                 )
                 .await;
                 guard.settled = result.is_ok();
@@ -131,6 +133,7 @@ async fn run(
     request: SourceReviewRequest,
     profile: inference::Profile,
     cancel: CancellationToken,
+    events: Option<mpsc::Sender<ExecutionEvent>>,
 ) -> Result<Reply, EngineError> {
     let mut outcome = SourceReviewOutcome {
         review: None,
@@ -237,24 +240,36 @@ async fn run(
     let provider_request = prepared.request().clone();
     let client = profile.client.clone();
     let token = cancel.clone();
-    let completion =
-        match tokio::spawn(async move { client.complete(&provider_request, token).await }).await {
-            Ok(Ok(completion)) => completion,
-            error => {
-                outcome.error = Some(match error {
-                    Ok(Err(e)) => e.to_string(),
-                    Err(e) => format!("provider worker failed: {e}"),
-                    _ => unreachable!(),
-                });
-                lock(&shared.store)?.mark_operation_unknown(
-                    &child.id,
-                    &shared.owner,
-                    outcome.error.as_deref().unwrap_or("provider uncertain"),
-                )?;
-                child_guard.settled = true;
-                return settle(shared, parent, outcome, OperationStatus::Unknown);
+    let progress =
+        events.map(|events| model_progress::forwarder(events, session, &child.id, Some(parent)));
+    let completion = match tokio::spawn(async move {
+        match progress {
+            Some(progress) => {
+                client
+                    .complete_with_progress(&provider_request, token, progress)
+                    .await
             }
-        };
+            None => client.complete(&provider_request, token).await,
+        }
+    })
+    .await
+    {
+        Ok(Ok(completion)) => completion,
+        error => {
+            outcome.error = Some(match error {
+                Ok(Err(e)) => e.to_string(),
+                Err(e) => format!("provider worker failed: {e}"),
+                _ => unreachable!(),
+            });
+            lock(&shared.store)?.mark_operation_unknown(
+                &child.id,
+                &shared.owner,
+                outcome.error.as_deref().unwrap_or("provider uncertain"),
+            )?;
+            child_guard.settled = true;
+            return settle(shared, parent, outcome, OperationStatus::Unknown);
+        }
+    };
     if completion.status == CompletionStatus::Completed && completion.usage_is_final {
         if let Some(charge) = completion
             .usage

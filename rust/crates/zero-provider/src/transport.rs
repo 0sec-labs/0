@@ -203,6 +203,27 @@ impl ProviderClient {
         request: &ResponsesRequest,
         cancel: CancellationToken,
     ) -> Result<Completion, TransportError> {
+        self.complete_inner(request, cancel, None).await
+    }
+    /// Live deltas are advisory and may be suppressed after 4096 events/4 MiB.
+    /// The callback runs synchronously and MUST be nonblocking and nonpanicking;
+    /// use bounded try_send. It must not perform storage, IO, or await another task.
+    /// Only the returned terminal Completion supplies usage and tool authority.
+    pub async fn complete_with_progress(
+        &self,
+        request: &ResponsesRequest,
+        cancel: CancellationToken,
+        mut progress: impl FnMut(crate::ProviderProgress) + Send,
+    ) -> Result<Completion, TransportError> {
+        self.complete_inner(request, cancel, Some(&mut progress))
+            .await
+    }
+    async fn complete_inner(
+        &self,
+        request: &ResponsesRequest,
+        cancel: CancellationToken,
+        progress: Option<&mut (dyn FnMut(crate::ProviderProgress) + Send)>,
+    ) -> Result<Completion, TransportError> {
         let body = self.encode(request)?;
         if cancel.is_cancelled() {
             return Err(TransportError::Cancelled);
@@ -252,6 +273,7 @@ impl ProviderClient {
                 StreamAccumulator::Chat(crate::chat::Accumulator::new(&request.model))
             }
         };
+        let mut observer = progress.map(|sink| crate::progress::Observer::new(self.wire, sink));
         let mut received = 0usize;
         loop {
             let chunk = tokio::select! {
@@ -288,6 +310,9 @@ impl ProviderClient {
             for frame in frames {
                 if accumulator.event(&frame).is_err() {
                     return Ok(accumulator.finish(Some("invalid provider stream event")));
+                }
+                if let Some(observer) = &mut observer {
+                    observer.event(&frame);
                 }
             }
         }

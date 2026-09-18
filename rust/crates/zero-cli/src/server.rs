@@ -55,9 +55,25 @@ where
     let disconnected = CancellationToken::new();
     let writer_disconnected = disconnected.clone();
     let (out, mut messages) = mpsc::channel::<ServerMessage>(128);
+    // Lossy model display updates have their own queue. They can never consume
+    // the capacity reserved for admissions, backend events or command replies.
+    let (progress, mut progress_rx) = mpsc::channel::<zero_protocol::ExecutionEvent>(128);
     let writer = tokio::spawn(async move {
         let result: io::Result<()> = async {
-            while let Some(message) = messages.recv().await {
+            let mut messages_open = true;
+            let mut progress_open = true;
+            while messages_open || progress_open {
+                let message = tokio::select! {
+                    biased;
+                    message = messages.recv(), if messages_open => match message {
+                        Some(message) => message,
+                        None => { messages_open = false; continue; }
+                    },
+                    event = progress_rx.recv(), if progress_open => match event {
+                        Some(event) => ServerMessage::Event { protocol_version: PROTOCOL_VERSION, event },
+                        None => { progress_open = false; continue; }
+                    },
+                };
                 let mut bytes = serde_json::to_vec(&message).map_err(io::Error::other)?;
                 bytes.push(b'\n');
                 tokio::time::timeout(Duration::from_secs(5), async {
@@ -209,15 +225,20 @@ where
             active_ids.insert(request.id.clone());
             let engine = engine.clone();
             let events = events.clone();
+            let progress = progress.clone();
             let out = out.clone();
             tasks.spawn(async move {
-                let reply = engine.handle(request.command, events).await;
+                let reply = engine
+                    .handle_with_progress(request.command, events, progress)
+                    .await;
                 let _ = out.send(response(Some(request.id.clone()), reply)).await;
                 request.id
             });
         } else {
             let initialization = matches!(request.command, Command::Initialize);
-            let reply = engine.handle(request.command, events.clone()).await;
+            let reply = engine
+                .handle_with_progress(request.command, events.clone(), progress.clone())
+                .await;
             if initialization && matches!(reply, Reply::Initialized { .. }) {
                 initialized = true;
             }
@@ -229,6 +250,7 @@ where
     let shutdown = engine.shutdown().await.map_err(io::Error::other);
     while tasks.join_next().await.is_some() {}
     drop(events);
+    drop(progress);
     let _ = event_forwarder.await;
     drop(out);
     let written = writer.await.map_err(io::Error::other)?;

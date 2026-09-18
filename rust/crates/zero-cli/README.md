@@ -599,3 +599,24 @@ verification state, original review artifacts, reproduction/repair evidence and
 budget accounting. There is no implicit family update, legacy DB import,
 provider request or publication. Writes use engine ownership; an active app-server
 can accept the corresponding typed `triage_source_finding` command.
+
+
+## App-server model progress
+
+`model_progress` events are advisory display updates for an identified inference
+operation and optional parent. The app-server uses a separate 128-item queue for
+them; replies and operational events take priority. Sequence numbers start at
+one per paid operation and may have gaps. Display caps can suppress the remaining
+updates, and queued progress can arrive after a terminal reply: clients must
+ignore late updates and use the final completion as truth. Tool fragments are
+never executable calls, and progress carries no authoritative usage.
+
+The line console and one-shot commands retain their prior output behavior. A
+full-screen client can consume the existing app-server wire without owning the
+engine or altering its journal. The existing five-second stdout deadline and
+transport-disconnect shutdown still apply; a full or closed progress queue alone
+does not cancel paid work or sandbox tools.
+
+Progress and operational events use independent queues, so progress may precede
+its admission notification. Correlate by session/operation IDs rather than
+assuming admission-first delivery.

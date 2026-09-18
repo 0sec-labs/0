@@ -8,6 +8,7 @@ mod agent_source;
 mod agent_submission;
 mod inference;
 mod lifecycle;
+mod model_progress;
 mod plugin;
 mod queue;
 mod repair;
@@ -239,6 +240,7 @@ impl Engine {
             "execution_cancellation",
             "finding_reconciliation",
             "responses_inference",
+            "provisional_model_progress",
             "chat_completions_inference",
             "anthropic_messages_inference",
             "bounded_offline_snapshot_agent",
@@ -255,7 +257,35 @@ impl Engine {
 
     /// Application requests share one semantics across CLI and stdio clients.
     pub async fn handle(&self, command: Command, event_tx: mpsc::Sender<ExecutionEvent>) -> Reply {
-        match self.dispatch(command, event_tx).await {
+        self.handle_inner(command, event_tx, None).await
+    }
+
+    /// Opt into provisional model telemetry on a separate bounded channel.
+    /// Keeping this channel separate preserves operational event backpressure.
+    pub async fn handle_with_progress(
+        &self,
+        command: Command,
+        event_tx: mpsc::Sender<ExecutionEvent>,
+        progress_tx: mpsc::Sender<ExecutionEvent>,
+    ) -> Reply {
+        if event_tx.same_channel(&progress_tx) {
+            return Reply::Error {
+                code: "invalid_request".into(),
+                message: "model progress requires a separate channel from operational events"
+                    .into(),
+            };
+        }
+        self.handle_inner(command, event_tx, Some(progress_tx))
+            .await
+    }
+
+    async fn handle_inner(
+        &self,
+        command: Command,
+        event_tx: mpsc::Sender<ExecutionEvent>,
+        progress_tx: Option<mpsc::Sender<ExecutionEvent>>,
+    ) -> Reply {
+        match self.dispatch(command, event_tx, progress_tx).await {
             Ok(reply) => reply,
             Err(error) => Reply::Error {
                 code: error_code(&error).into(),
@@ -268,6 +298,7 @@ impl Engine {
         &self,
         command: Command,
         event_tx: mpsc::Sender<ExecutionEvent>,
+        progress_tx: Option<mpsc::Sender<ExecutionEvent>>,
     ) -> Result<Reply, EngineError> {
         if let Command::ValidateSourceRepair {
             session_id,
@@ -296,7 +327,7 @@ impl Engine {
         } = command
         {
             return self
-                .review_source(session_id, command_id, request, event_tx)
+                .review_source(session_id, command_id, request, event_tx, progress_tx)
                 .await;
         }
         if let Command::RunPlugin {
@@ -336,7 +367,9 @@ impl Engine {
             input_id,
         } = command
         {
-            return self.run_queued_agent(session_id, input_id, event_tx).await;
+            return self
+                .run_queued_agent(session_id, input_id, event_tx, progress_tx)
+                .await;
         }
         if let Command::RunAgent {
             session_id,
@@ -345,7 +378,7 @@ impl Engine {
         } = command
         {
             return self
-                .run_agent(session_id, command_id, request, event_tx)
+                .run_agent(session_id, command_id, request, event_tx, progress_tx)
                 .await;
         }
         if let Command::Infer {
@@ -364,6 +397,7 @@ impl Engine {
                     request,
                     reservation,
                     event_tx,
+                    progress_tx,
                 )
                 .await;
         }

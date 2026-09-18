@@ -136,6 +136,7 @@ impl Engine {
         Ok(())
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub(super) async fn infer(
         &self,
         session_id: String,
@@ -144,6 +145,7 @@ impl Engine {
         request: ResponsesRequest,
         reservation: u64,
         events: mpsc::Sender<ExecutionEvent>,
+        progress_events: Option<mpsc::Sender<ExecutionEvent>>,
     ) -> Result<Reply, EngineError> {
         zero_provider::validate_request(&request).map_err(|e| EngineError::State(e.to_string()))?;
         if reservation == 0 {
@@ -233,6 +235,8 @@ impl Engine {
                     profile,
                     request,
                     cancel,
+                    progress_events,
+                    None,
                 )
                 .await;
                 guard.settled = result.is_ok();
@@ -247,6 +251,7 @@ impl Engine {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(super) async fn run_inference(
     shared: &Arc<Shared>,
     session_id: &str,
@@ -254,6 +259,8 @@ pub(super) async fn run_inference(
     profile: Profile,
     request: ResponsesRequest,
     cancel: CancellationToken,
+    events: Option<mpsc::Sender<ExecutionEvent>>,
+    parent_operation: Option<&str>,
 ) -> Result<Reply, EngineError> {
     // A token cancelled before dispatch is positive evidence that this owner
     // never contacted the provider. Cancellation after this boundary remains
@@ -274,7 +281,21 @@ pub(super) async fn run_inference(
         });
     }
     let rates = profile.rates;
-    let result = tokio::spawn(async move { profile.client.complete(&request, cancel).await }).await;
+    let progress = events.map(|events| {
+        model_progress::forwarder(events, session_id, operation_id, parent_operation)
+    });
+    let result = tokio::spawn(async move {
+        match progress {
+            Some(progress) => {
+                profile
+                    .client
+                    .complete_with_progress(&request, cancel, progress)
+                    .await
+            }
+            None => profile.client.complete(&request, cancel).await,
+        }
+    })
+    .await;
     let completion = match result {
         Ok(Ok(completion)) => completion,
         Ok(Err(error)) => {
