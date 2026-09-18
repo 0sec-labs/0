@@ -94,8 +94,9 @@ outside this renderer.
 `render_source_report(&SourceReport, SourceReportFormat::{Json, Markdown, Html})`
 uses the separate `zero_protocol::source::SourceReport` DTO, re-exported by this
 crate. It never converts hypotheses into legacy `Finding`/`ScanReport` values,
-SARIF results, reproduced findings or validated repairs. The DTO contains schema
-version 1, session/operation IDs, snapshot digest, typed `ReviewResult`, and an
+SARIF results, reproduced findings or unrestricted repair claims. Review-only
+exports use schema version 1 with session/operation IDs, snapshot digest, typed
+`ReviewResult`, and an
 ordered artifact-name/digest map. It excludes the local snapshot root, full file
 catalog, source bundle bytes, prompts, raw completions, billing and invented
 scan timestamps.
@@ -120,3 +121,18 @@ still describe unverified claims. The shared output writers cap output at
 64 MiB. There is no file write, guest/provider work, upload or source access in
 these rendering functions. Separate CLI integration owns journal access and
 output lifecycle.
+
+Explicit linked workflow exports use schema version 2. They include re-assessed
+reproduction dispositions, reasons, observed/required attempts, oracle/plan/
+evidence/assessment hashes, child operation IDs and artifact digests. Repair
+records reference an included observed baseline and retain candidate receipt,
+phase assessments and cleanup-recovery count. No private paths, raw command
+output, candidate source bytes or monetary estimates are rendered.
+
+Structural validation checks source/baseline/phase links, unique operation IDs,
+terminal status consistency, bounded counts, frozen identities and false
+reportability flags. It preserves failed, cancelled and unknown outcomes. A
+validated candidate requires two observed phase assessments and no retained
+cleanup recovery. Only the engine's retained-evidence revalidation can establish
+that the supplied records match a journal; rendering alone cannot. A plan-qualified
+observation does not change the source hypothesis's unverified state.

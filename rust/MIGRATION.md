@@ -404,8 +404,9 @@ This is a separate schema for unverified source hypotheses with provenance hashe
 not a legacy scan report. Empty reports establish no target-safety conclusion.
 The export omits private source bytes, snapshot paths and provider transcripts;
 supplied claim text is rendered faithfully with format-appropriate escaping.
-Reproduction/repair linkage, reportability policy, SARIF semantic mapping and
-managed-worker publication remain unfinished.
+Explicit reproduction/repair linkage is added in the subsequent checkpoint
+below. Reportability policy, SARIF semantic mapping and managed-worker
+publication remain unfinished.
 
 The acceptance run exposed an engine ownership race; `fbead76f` makes worker
 reference release precede terminal replies, and makes shutdown await release even
@@ -420,3 +421,48 @@ passed on Rust 1.85 with locked dependencies; formatting and production Clippy
 with warnings denied passed. The earlier failed full run is superseded by this
 run after the ownership fix. Live-provider and real-container qualification were
 not rerun for this checkpoint; existing opt-in tests remain separate gates.
+
+## Linked source workflow reports
+
+`source-report` now accepts repeated `--reproduction` and `--repair` operation
+IDs, bounded to 32 distinct links combined. A repair's baseline must also be
+explicitly selected. Version 1 review-only exports preserve their serialized
+shape; linked exports use version 2. The `zero-engine` read-only workflow
+provenance owner reconstructs exact ordered matrices from hash-checked artifacts,
+correlates child requests and terminal outcomes, and recomputes assessments.
+Candidate receipts and derived plans are checked against the original host
+request without reading mutable source or staging a new candidate. Repair
+admission reuses the same strengthened baseline validation.
+
+The legacy report/evidence workflow dependency R now has native source-review,
+reproduction and private candidate validation in one export. It is not a legacy
+`ScanReport`, an independent security oracle, workspace patch application or a
+publication/disclosure capability. All source hypotheses remain unverified;
+`ObservedForPlan` and `ValidatedCandidateForPlan` retain their limited meaning.
+Cancelled, not-observed, inconclusive and unknown assessments remain visible when
+retained evidence supports them. Unavailable/corrupt evidence fails export instead
+of yielding an invented assessment. Private paths, source/replacement bytes and
+raw process output are omitted from the projection.
+
+Acceptance includes all three formats after source deletion/restart, exact child
+and repair provenance mutation rejection, explicit link/selection bounds,
+cancellation before and during execution, unknown cleanup and unsuccessful
+candidate/control outcomes. Existing source artifacts and journals are reused;
+there is no database migration, provider call, backend dispatch or implicit
+selection of a newest result during export. Managed worker schemas, legacy
+finding conversion, SARIF policy and end-to-end scanner quality remain open.
+
+The full acceptance run also reproduced a lock inherited across fork before
+exec. `9d0dc5fb` explicitly unlocks on final engine-owner destruction after state
+and worker teardown. Its deterministic pre-exec regression failed on the prior
+code and passes with the fix; a live worker still excludes a second engine.
+Successful source/reproduction exports now reject contradictory retained errors.
+Final Rust 1.85 workspace acceptance passed 437 tests; production Clippy passed
+with warnings denied. Real backend qualification is recorded below when complete.
+
+The final source state also passed the real CLI review → baseline reproduction →
+private candidate → fresh reconstruction → linked JSON/Markdown/HTML export
+fixture on both prepared backends: Docker (4.08 s) and smolvm 1.14.6 (55.99 s).
+Each performed 12 observations, then exported after original-source deletion
+without further provider/backend calls. These are local fixture qualifications,
+not independent detection-quality or managed-cloud deployment claims.

@@ -203,3 +203,202 @@ fn reserved_labels_reject_claims_of_verification_or_legacy_scan_semantics() {
         assert!(serde_json::from_value::<SourceReport>(value).is_err());
     }
 }
+
+fn linked_fixture() -> SourceReport {
+    let mut report = fixture();
+    report.schema_version = 2;
+    let assessment = json!({"schema_version":1,"oracle_version":"zero-verification-exact-output-v1","plan_digest":digest('7'),"hypothesis_id":"hypothesis-1","source_bundle_digest":digest('2'),"snapshot_digest":digest('1'),"evidence_digest":digest('8'),"disposition":"observed_for_plan","reasons":["complete_exact_observation"],"observed_attempts":4,"required_attempts":4,"vulnerability_reportable":false,"assessment_digest":digest('9')});
+    report.reproductions.push(serde_json::from_value(json!({"operation_id":"reproduction-1","operation_status":"succeeded","assessment":assessment,"stop_reason":null,"children":["baseline-child-1"],"artifacts":{"reproduction.assessment":digest('9')}})).unwrap());
+    let mut candidate = assessment.clone();
+    candidate["snapshot_digest"] = json!(digest('a'));
+    candidate["plan_digest"] = json!(digest('b'));
+    report.repairs.push(serde_json::from_value(json!({"operation_id":"repair-1","reproduction_operation_id":"reproduction-1","operation_status":"succeeded","status":"validated_candidate_for_plan","original_plan_digest":digest('7'),"candidate_receipt":{"schema_version":1,"baseline_snapshot_sha256":digest('1'),"target":"src/file.rs","preimage_sha256":digest('5'),"replacement_sha256":digest('c'),"replacement_bytes":123,"candidate_snapshot_sha256":digest('a'),"policy_sha256":digest('d')},"phases":[{"name":"candidate","assessment":candidate,"children":["candidate-child-1"],"artifacts":{"candidate.assessment":digest('9')}},{"name":"reconstructed","assessment":candidate,"children":["reconstructed-child-1"],"artifacts":{"reconstructed.assessment":digest('9')}}],"cleanup_recovery_count":0,"artifacts":{"repair.validation_summary":digest('e')}})).unwrap());
+    report
+}
+#[test]
+fn linked_v2_roundtrips_and_renders_plan_scoped_evidence_without_promoting_hypotheses() {
+    let report = linked_fixture();
+    let json = render_source_report(&report, SourceReportFormat::Json).unwrap();
+    let restored: SourceReport = serde_json::from_str(&json).unwrap();
+    assert_eq!(
+        serde_json::to_value(&restored).unwrap(),
+        serde_json::to_value(&report).unwrap()
+    );
+    assert_eq!(
+        restored.verification_state,
+        zero_protocol::source::VerificationState::Unverified
+    );
+    for format in [SourceReportFormat::Markdown, SourceReportFormat::Html] {
+        let out = render_source_report(&report, format).unwrap();
+        for text in [
+            "Frozen reproduction",
+            "Plan-qualified repair",
+            "Repair phase: candidate",
+            "Repair phase: reconstructed",
+            "reproduction-1",
+            "repair-1",
+            "baseline-child-1",
+            "candidate-child-1",
+            "reconstructed-child-1",
+            "zero-verification-exact-output-v1",
+            "complete",
+            "Observed attempts",
+            "Required attempts",
+            "Cleanup recovery count",
+            "Replacement bytes",
+            "123",
+            "src/file.rs",
+        ] {
+            assert!(out.contains(text), "{text}");
+        }
+        // Markdown escapes underscores; both surfaces retain the exact enum value
+        // as plain rendered text, rather than rewriting it to 'verified'/'fixed'.
+        assert!(out.contains("observed_for_plan") || out.contains("observed\\_for\\_plan"));
+        assert!(
+            out.contains("validated_candidate_for_plan")
+                || out.contains("validated\\_candidate\\_for\\_plan")
+        );
+        assert!(out.contains("unverified"));
+        assert!(out.contains("not established"));
+        for c in ['1', '2', '7', '8', '9', 'a', 'b', 'c', 'd', 'e'] {
+            assert!(out.contains(&digest(c)));
+        }
+        assert!(!out.contains("cleanup_recovery_path"));
+    }
+}
+#[test]
+fn v1_omits_empty_link_fields_and_versions_reject_incompatible_links() {
+    let report = fixture();
+    let out = render_source_report(&report, SourceReportFormat::Json).unwrap();
+    assert!(!out.contains("reproductions"));
+    assert!(!out.contains("repairs"));
+    let mut v2 = report.clone();
+    v2.schema_version = 2;
+    assert!(render_source_report(&v2, SourceReportFormat::Json).is_err());
+    let mut v1 = linked_fixture();
+    v1.schema_version = 1;
+    assert!(render_source_report(&v1, SourceReportFormat::Json).is_err());
+}
+#[test]
+fn linked_identity_status_and_reportability_mismatches_fail_closed() {
+    for mutation in 0..20 {
+        let mut r = linked_fixture();
+        match mutation {
+            0 => r.reproductions[0].assessment.source_bundle_digest = digest('0'),
+            1 => r.reproductions[0].assessment.snapshot_digest = digest('0'),
+            2 => r.reproductions[0].assessment.hypothesis_id = "foreign".into(),
+            3 => r.repairs[0].reproduction_operation_id = "foreign".into(),
+            4 => r.repairs[0].original_plan_digest = digest('0'),
+            5 => r.repairs[0].phases[0].assessment.snapshot_digest = digest('0'),
+            6 => r.repairs[0].phases[0].assessment.vulnerability_reportable = true,
+            7 => r.reproductions[0].assessment.vulnerability_reportable = true,
+            8 => r.repairs[0].operation_id = r.operation_id.clone(),
+            9 => r.repairs[0].phases[0].children = r.reproductions[0].children.clone(),
+            10 => r.reproductions[0].operation_status = zero_protocol::OperationStatus::Running,
+            11 => r.repairs[0].operation_status = zero_protocol::OperationStatus::Admitted,
+            12 => r.repairs[0].cleanup_recovery_count = 1,
+            13 => r.repairs[0].phases.pop().map(|_| ()).unwrap(),
+            14 => {
+                r.repairs[0]
+                    .candidate_receipt
+                    .as_mut()
+                    .unwrap()
+                    .preimage_sha256 = digest('0')
+            }
+            15 => r.repairs[0].phases[0].assessment.oracle_version = "different".into(),
+            16 => r.repairs[0].phases.swap(0, 1),
+            17 => {
+                r.reproductions[0].stop_reason =
+                    Some(zero_protocol::verification::ReproductionStop::SetupFailed)
+            }
+            18 => {
+                r.reproductions[0].assessment.disposition =
+                    zero_protocol::verification::Disposition::Unknown
+            }
+            _ => r.reproductions = vec![r.reproductions[0].clone(); 33],
+        }
+        for format in [
+            SourceReportFormat::Json,
+            SourceReportFormat::Markdown,
+            SourceReportFormat::Html,
+        ] {
+            assert!(
+                render_source_report(&r, format).is_err(),
+                "mutation {mutation}"
+            );
+        }
+    }
+}
+#[test]
+fn cancelled_and_unknown_attempts_preserve_dispositions_and_stop_reasons() {
+    use zero_protocol::{
+        OperationStatus,
+        repair::RepairValidationStatus,
+        verification::{Disposition, ReproductionStop},
+    };
+    for (status, disposition, stop) in [
+        (
+            OperationStatus::Cancelled,
+            Disposition::Inconclusive,
+            ReproductionStop::Cancelled,
+        ),
+        (
+            OperationStatus::Cancelled,
+            Disposition::ObservedForPlan,
+            ReproductionStop::Cancelled,
+        ),
+        (
+            OperationStatus::Unknown,
+            Disposition::Unknown,
+            ReproductionStop::SupervisorFailed,
+        ),
+        (
+            OperationStatus::Failed,
+            Disposition::Inconclusive,
+            ReproductionStop::SetupFailed,
+        ),
+    ] {
+        let mut r = linked_fixture();
+        r.repairs.clear();
+        r.reproductions[0].operation_status = status;
+        r.reproductions[0].assessment.disposition = disposition;
+        r.reproductions[0].stop_reason = Some(stop);
+        for format in [
+            SourceReportFormat::Json,
+            SourceReportFormat::Markdown,
+            SourceReportFormat::Html,
+        ] {
+            let out = render_source_report(&r, format).unwrap();
+            assert!(out.contains("unverified"));
+        }
+    }
+    let mut r = linked_fixture();
+    r.repairs[0].status = RepairValidationStatus::Unknown;
+    r.repairs[0].operation_status = OperationStatus::Unknown;
+    r.repairs[0].cleanup_recovery_count = 2;
+    r.repairs[0].phases[1].assessment.disposition = Disposition::Unknown;
+    let json = render_source_report(&r, SourceReportFormat::Json).unwrap();
+    assert!(json.contains("\"cleanup_recovery_count\": 2"));
+    assert!(!json.contains("/tmp"));
+}
+#[test]
+fn hostile_link_identifiers_and_oracle_text_are_escaped_everywhere() {
+    let mut r = linked_fixture();
+    let attack = "<script>x</script>[click](evil)\n# header|";
+    r.reproductions[0].operation_id = attack.into();
+    r.repairs[0].reproduction_operation_id = attack.into();
+    r.reproductions[0].assessment.oracle_version = attack.into();
+    for phase in &mut r.repairs[0].phases {
+        phase.assessment.oracle_version = attack.into();
+    }
+    r.reproductions[0].children[0] = format!("child {attack}");
+    r.reproductions[0]
+        .artifacts
+        .insert(attack.into(), digest('f'));
+    let html = render_source_report(&r, SourceReportFormat::Html).unwrap();
+    assert!(!html.contains("<script>"));
+    assert!(html.contains("&lt;script&gt;x&lt;/script&gt;"));
+    let md = render_source_report(&r, SourceReportFormat::Markdown).unwrap();
+    assert!(!md.contains("<script>"));
+    assert!(md.contains("\\[click\\](evil)<br>\\# header\\|"));
+}

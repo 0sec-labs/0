@@ -3,7 +3,7 @@ use super::*;
 use serde_json::json;
 use zero_protocol::{
     repair::*,
-    verification::{Disposition, Evidence, Mode, ReproductionOutcome, SourceReproductionRequest},
+    verification::{Disposition, Mode, SourceReproductionRequest},
 };
 use zero_verification::FrozenPlan;
 fn state(e: impl std::fmt::Display) -> EngineError {
@@ -105,90 +105,18 @@ fn baseline(
     }
     let original: SourceReproductionRequest =
         serde_json::from_value(op.payload["request"].clone())?;
-    let outcome: ReproductionOutcome = serde_json::from_value(
-        op.outcome
-            .ok_or_else(|| state("reproduction outcome absent"))?,
+    let (report, frozen) = workflow_provenance::reproduction_plan(
+        &store,
+        session,
+        &original.source_operation_id,
+        &op.id,
     )?;
-    let artifacts = store.operation_artifacts(&op.id)?;
-    for name in [
-        "reproduction.plan",
-        "reproduction.assessment",
-        "reproduction.evidence_index",
-    ] {
-        if !artifacts.contains_key(name) || artifacts.get(name) != outcome.artifacts.get(name) {
-            return Err(state("reproduction attachment identity mismatch"));
-        }
-    }
-    let artifact = |name: &str| -> Result<Vec<u8>, EngineError> {
-        Ok(store.artifact(
-            artifacts
-                .get(name)
-                .ok_or_else(|| state("reproduction artifact absent"))?,
-        )?)
-    };
-    let frozen = FrozenPlan::parse(&artifact("reproduction.plan")?).map_err(state)?;
-    if serde_json::to_value(frozen.plan())? != serde_json::to_value(&original.plan)?
+    if report.assessment.disposition != Disposition::ObservedForPlan
         || serde_json::to_value(&request.materialize.baseline)?
-            != serde_json::to_value(&original.plan.snapshot)?
-    {
-        return Err(state("repair baseline snapshot/plan changed"));
-    }
-    let index: Vec<serde_json::Value> =
-        serde_json::from_slice(&artifact("reproduction.evidence_index")?)?;
-    if index.len() != outcome.children.len()
-        || index.len() != original.plan.cases.len() * original.plan.repeats
-    {
-        return Err(state("baseline evidence matrix incomplete"));
-    }
-    let mut evidence = Vec::new();
-    let mut bytes = 0usize;
-    let mut seen = std::collections::BTreeSet::new();
-    for (entry, id) in index.iter().zip(&outcome.children) {
-        if entry["child_operation"] != *id || !seen.insert(id) {
-            return Err(state("baseline child identity mismatch"));
-        }
-        let child = store.get_operation(id)?;
-        if child.session_id != session
-            || child.status != OperationStatus::Succeeded
-            || child.payload["parent_operation"] != op.id
-            || child.payload["plan_digest"] != frozen.digest()
-        {
-            return Err(state("baseline child ownership mismatch"));
-        }
-        let attachments = store.operation_artifacts(id)?;
-        let req = attachments
-            .get("reproduction.request")
-            .ok_or_else(|| state("baseline request absent"))?;
-        let obs = attachments
-            .get("reproduction.evidence")
-            .ok_or_else(|| state("baseline observation absent"))?;
-        if entry["request_artifact"] != *req || entry["evidence_artifact"] != *obs {
-            return Err(state("baseline index artifact mismatch"));
-        }
-        let raw = store.artifact(obs)?;
-        bytes = bytes.saturating_add(raw.len());
-        if bytes > zero_verification::MAX_EVIDENCE_BYTES {
-            return Err(state("baseline evidence byte bound"));
-        }
-        let item: Evidence = serde_json::from_slice(&raw)?;
-        if serde_json::to_vec(&item.request)? != store.artifact(req)?
-            || entry["case_id"] != item.case_id
-            || entry["repeat"] != item.repeat
-            || child.payload["execution_id"] != item.request.execution_id
-        {
-            return Err(state("baseline request attribution mismatch"));
-        }
-        evidence.push(item);
-    }
-    let assessed = zero_verification::assess(&frozen, &evidence).map_err(state)?;
-    if assessed.disposition != Disposition::ObservedForPlan
-        || serde_json::to_value(&assessed)?
-            != serde_json::from_slice::<serde_json::Value>(&artifact("reproduction.assessment")?)?
-        || Some(serde_json::to_value(&assessed)?)
-            != outcome.assessment.map(serde_json::to_value).transpose()?
+            != serde_json::to_value(&frozen.plan().snapshot)?
     {
         return Err(state(
-            "baseline observation not established by retained evidence",
+            "repair requires the exact retained observed baseline",
         ));
     }
     for case in &frozen.plan().cases {
@@ -213,8 +141,6 @@ fn baseline(
             "candidate target/preimage must be cited by the original hypothesis",
         ));
     }
-    drop(store);
-    reproduction::validate_source(shared, session, &original.source_operation_id, &frozen)?;
     Ok(frozen)
 }
 fn retain(

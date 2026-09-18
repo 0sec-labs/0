@@ -508,8 +508,33 @@ The separate native report contains unverified hypotheses, citations and the
 four submission artifact hashes. It does not embed source files, private snapshot
 paths, full provider transcripts, or execution artifacts. Claim text is supplied
 content and may itself contain sensitive information; rendering does not redact
-it. Empty reports establish no safety conclusion. Reproduction/repair assessments,
-legacy findings, SARIF mapping, and managed report publication are not included.
+it. Empty reports establish no safety conclusion. Legacy findings, SARIF mapping, and managed report publication are not included.
+Reproduction and repair assessments require the explicit links described below.
 JSON explicitly records `report_kind: source_hypotheses`, `verification_state:
 unverified` and `security_conclusion: not_established`. Reads and stdout writes
 have five-second deadlines; interrupted writes can leave partial stdout.
+
+To include observations and a candidate validation, explicitly select their
+operation IDs. Each repair also requires its baseline reproduction selection:
+
+```sh
+0sec-native source-report --session SESSION --operation REVIEW_OPERATION \
+  --reproduction REPRODUCTION_OPERATION --repair REPAIR_OPERATION --format html
+```
+
+Repeat `--reproduction` and `--repair` for up to 32 distinct links combined.
+Linked exports use schema version 2; a review-only export preserves version 1.
+The exporter re-assesses retained child observations and checks each operation's
+session, source hypothesis, frozen plan, requests, artifacts and terminal journal
+outcome. Repair phases additionally bind the authorized replacement, candidate
+receipt and derived plans to the original baseline. It performs no new execution.
+
+A report may contain not-observed, inconclusive, cancelled or unknown observations;
+export success means the selected evidence was validated and rendered. It never
+turns those statuses into a successful test or marks a hypothesis verified.
+`observed_for_plan` and `validated_candidate_for_plan` remain limited to the exact
+frozen cases. Missing or inconsistent evidence makes export fail; an early failed
+operation without retained assessment cannot be included as an assessed result.
+Raw command outputs, source/replacement bytes, private paths and recovery paths
+are omitted; recovery is represented by its count. Publication and disclosure
+remain separate capabilities.

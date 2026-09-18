@@ -220,6 +220,68 @@ impl Fixture {
         ]);
         c
     }
+    fn report(&self, reproduction: &Value, repair: Option<&Value>, format: &str) -> Output {
+        let mut command = self.cli();
+        command.args([
+            "--providers",
+            "absent.json",
+            "--harness-config",
+            "absent-harness.json",
+            "source-report",
+            "--session",
+            &self.session,
+            "--operation",
+            &self.request.source_operation_id,
+            "--reproduction",
+            reproduction["operation"]["id"].as_str().unwrap(),
+            "--format",
+            format,
+        ]);
+        if let Some(repair) = repair {
+            command.args(["--repair", repair["operation"]["id"].as_str().unwrap()]);
+        }
+        command.env_remove("REPRO_TEST_KEY").output().unwrap()
+    }
+    fn assert_report(&self, reproduction: &Value, repair: Option<&Value>) {
+        let calls = self.calls();
+        for format in ["json", "markdown", "html"] {
+            let output = self.report(reproduction, repair, format);
+            assert!(
+                output.status.success(),
+                "{}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+            let text = String::from_utf8(output.stdout).unwrap();
+            assert!(!text.contains(self.dir.path().to_str().unwrap()));
+            assert!(!text.contains("fixture-secret"));
+            assert!(!text.contains("SAFE_REPLACEMENT"));
+            assert!(text.contains(reproduction["operation"]["id"].as_str().unwrap()));
+            assert!(text.contains("unverified"));
+            if format == "json" {
+                let report: Value = serde_json::from_str(&text).unwrap();
+                assert_eq!(report["schema_version"], 2);
+                assert_eq!(report["security_conclusion"], "not_established");
+                assert_eq!(
+                    report["reproductions"][0]["assessment"],
+                    reproduction["result"]["assessment"]
+                );
+                assert_eq!(
+                    report["reproductions"][0]["operation_status"],
+                    reproduction["operation"]["status"]
+                );
+                if let Some(repair) = repair {
+                    assert_eq!(report["repairs"][0]["status"], repair["result"]["status"]);
+                    assert_eq!(report["repairs"][0]["phases"].as_array().unwrap().len(), 2);
+                }
+                let _: zero_protocol::source::SourceReport = serde_json::from_str(&text).unwrap();
+            }
+        }
+        assert_eq!(calls, self.calls());
+        assert_eq!(
+            self.listener.accept().unwrap_err().kind(),
+            std::io::ErrorKind::WouldBlock
+        );
+    }
     fn calls(&self) -> Vec<u8> {
         fs::read(self.dir.path().join("calls.jsonl")).unwrap_or_default()
     }
@@ -306,6 +368,7 @@ fn observed(image: Option<String>) {
         assert!(f.calls().is_empty());
     }
     f.retry_without_effects(&result, true);
+    f.assert_report(&result, None);
 }
 #[test]
 fn frozen_observations_and_artifact_export_survive_restart_without_effects() {
@@ -326,6 +389,7 @@ fn stable_attack_mismatch_is_completed_assessment_with_success_exit() {
         false
     );
     f.retry_without_effects(&result, true);
+    f.assert_report(&result, None);
 }
 #[test]
 fn control_mismatch_is_inconclusive_and_nonzero() {
@@ -340,6 +404,7 @@ fn control_mismatch_is_inconclusive_and_nonzero() {
         "inconclusive"
     );
     f.retry_without_effects(&result, false);
+    f.assert_report(&result, None);
 }
 #[test]
 fn signal_waits_for_child_cleanup_and_retry_does_not_restart_matrix() {
@@ -378,6 +443,7 @@ fn signal_waits_for_child_cleanup_and_retry_does_not_restart_matrix() {
     assert_eq!(result["operation"]["status"], "cancelled");
     assert!(!f.dir.path().join("container.json").exists());
     f.retry_without_effects(&result, false);
+    f.assert_report(&result, None);
 }
 #[test]
 #[ignore = "requires preloaded local Node image in ZERO_REPRODUCTION_DOCKER_IMAGE; never pulls"]
@@ -488,6 +554,7 @@ fn validate_candidate(image: Option<String>, microvm: bool) {
     let retry = parsed(&run());
     assert_eq!(retry["duplicate"], true);
     assert_eq!(retry["result"], result["result"]);
+    f.assert_report(&baseline, Some(&result));
     assert_eq!(calls, f.calls());
     assert_eq!(
         f.listener.accept().unwrap_err().kind(),

@@ -164,10 +164,41 @@ fn validate(request: &MaterializeRequest) -> Result<String, Error> {
     Ok(hash(&policy))
 }
 
+/// Recompute the inert expected receipt from host policy and pinned metadata.
+/// This performs no filesystem reads and establishes no materialization or repair.
+pub fn expected_receipt(request: &MaterializeRequest) -> Result<CandidateReceipt, Error> {
+    let policy_sha256 = validate(request)?;
+    if zero_executor::snapshot_digest(&request.baseline.files).map_err(|_| Error::Snapshot)?
+        != request.baseline.digest
+    {
+        return Err(Error::Invalid("baseline manifest identity mismatch"));
+    }
+    let replacement_sha256 = hash(request.replacement.as_bytes());
+    let mut files = request.baseline.files.clone();
+    let file = files
+        .iter_mut()
+        .find(|f| f.path == request.target)
+        .ok_or(Error::Invalid("target absent"))?;
+    file.digest = replacement_sha256.clone();
+    file.bytes = request.replacement.len() as u64;
+    files.sort_by(|a, b| a.path.cmp(&b.path));
+    Ok(CandidateReceipt {
+        schema_version: 1,
+        baseline_snapshot_sha256: request.baseline.digest.clone(),
+        target: request.target.clone(),
+        preimage_sha256: request.expected_preimage_sha256.clone(),
+        replacement_sha256,
+        replacement_bytes: request.replacement.len() as u64,
+        candidate_snapshot_sha256: zero_executor::snapshot_digest(&files)
+            .map_err(|_| Error::Snapshot)?,
+        policy_sha256,
+    })
+}
+
 /// Verify the entire pinned baseline, copy it into a private owned tree, and replace one file.
 /// Call off async runtime workers: snapshot traversal is synchronous and bounded by the manifest.
 pub fn materialize(request: &MaterializeRequest) -> Result<Candidate, Error> {
-    let policy_sha256 = validate(request)?;
+    let expected = expected_receipt(request)?;
     let stage = zero_executor::stage_snapshot(&request.baseline, &|| Ok(()))
         .map_err(|_| Error::Snapshot)?;
     // Establish cleanup ownership immediately so every later error removes the private copy.
@@ -175,16 +206,7 @@ pub fn materialize(request: &MaterializeRequest) -> Result<Candidate, Error> {
         stage: Some(stage),
         snapshot: request.baseline.clone(),
         replacement: request.replacement.clone(),
-        receipt: CandidateReceipt {
-            schema_version: 1,
-            baseline_snapshot_sha256: request.baseline.digest.clone(),
-            target: request.target.clone(),
-            preimage_sha256: request.expected_preimage_sha256.clone(),
-            replacement_sha256: hash(request.replacement.as_bytes()),
-            replacement_bytes: request.replacement.len() as u64,
-            candidate_snapshot_sha256: String::new(),
-            policy_sha256,
-        },
+        receipt: expected,
     };
     let root = candidate.stage.as_ref().ok_or(Error::Io)?.source();
     let target = root.join(Path::new(&request.target));
@@ -232,6 +254,10 @@ pub fn materialize(request: &MaterializeRequest) -> Result<Candidate, Error> {
             "candidate changed more than the authorized file",
         ));
     }
-    candidate.receipt.candidate_snapshot_sha256 = candidate.snapshot.digest.clone();
+    if candidate.receipt.candidate_snapshot_sha256 != candidate.snapshot.digest {
+        return Err(Error::Invalid(
+            "materialized candidate differs from expected receipt",
+        ));
+    }
     Ok(candidate)
 }

@@ -37,6 +37,7 @@ pub(super) fn load(store: &Store, session: &str, id: &str) -> Result<Validated, 
             if !request.source_snapshot_tools
                 || request.source_submission_max_hypotheses.is_none()
                 || result.status != AgentStatus::Completed
+                || result.error.is_some()
                 || result.source_recovery_path.is_some()
             {
                 return Err(error("agent did not finish a structured source review"));
@@ -51,6 +52,9 @@ pub(super) fn load(store: &Store, session: &str, id: &str) -> Result<Validated, 
         }
         _ => return Err(error("operation is not a source review")),
     };
+    if outcome.error.is_some() {
+        return Err(error("successful source review contradicts retained error"));
+    }
     let attachments = store.operation_artifacts(id)?;
     for name in ["source.bundle", "source.review"] {
         if !attachments.contains_key(name) || attachments.get(name) != outcome.artifacts.get(name) {

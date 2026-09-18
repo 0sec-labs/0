@@ -61,10 +61,20 @@ async fn run(args: Args) -> Result<bool, Box<dyn Error>> {
     if let Command::SourceReport {
         session,
         operation,
+        reproductions,
+        repairs,
         format,
     } = &args.command
     {
-        return source_report::run(&args.state, session, operation, *format).await;
+        return source_report::run(
+            &args.state,
+            session,
+            operation,
+            reproductions,
+            repairs,
+            *format,
+        )
+        .await;
     }
     if let Command::Artifact { command } = &args.command {
         return artifact::run(&args.state, command).await;

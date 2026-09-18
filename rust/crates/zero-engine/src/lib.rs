@@ -13,8 +13,9 @@ mod sandbox;
 mod source;
 mod source_provenance;
 mod source_report;
+mod workflow_provenance;
 
-pub use source_report::read_source_report;
+pub use source_report::{read_source_report, read_source_workflow_report};
 
 use std::{
     collections::HashMap,

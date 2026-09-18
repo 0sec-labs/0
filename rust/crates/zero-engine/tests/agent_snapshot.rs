@@ -963,6 +963,35 @@ async fn adaptive_source_pin_revalidates_final_inference_before_reuse() {
         r => panic!("{r:?}"),
     };
     let db = rusqlite::Connection::open(f.dir.path().join("state.db")).unwrap();
+    let original: String = db
+        .query_row(
+            "SELECT outcome FROM operations WHERE id=?1",
+            [&parent],
+            |r| r.get(0),
+        )
+        .unwrap();
+    for nested in [false, true] {
+        let mut corrupted: Value = serde_json::from_str(&original).unwrap();
+        if nested {
+            corrupted["source_review"]["error"] = json!("retained failure");
+        } else {
+            corrupted["error"] = json!("retained failure");
+        }
+        db.execute(
+            "UPDATE operations SET outcome=?1 WHERE id=?2",
+            rusqlite::params![corrupted.to_string(), parent],
+        )
+        .unwrap();
+        assert!(
+            zero_engine::read_source_report(&f.dir.path().join("state.db"), &f.session, &parent)
+                .is_err()
+        );
+    }
+    db.execute(
+        "UPDATE operations SET outcome=?1 WHERE id=?2",
+        rusqlite::params![original, parent],
+    )
+    .unwrap();
     db.execute(
         "UPDATE operations SET outcome='{}' WHERE id=?1",
         [inference],

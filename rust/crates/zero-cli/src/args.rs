@@ -35,6 +35,12 @@ pub enum Command {
         session: String,
         #[arg(long)]
         operation: String,
+        /// Include an explicitly linked reproduction operation (repeatable).
+        #[arg(long = "reproduction")]
+        reproductions: Vec<String>,
+        /// Include a repair; also select its baseline with --reproduction.
+        #[arg(long = "repair")]
+        repairs: Vec<String>,
         #[arg(long, value_enum, default_value = "json")]
         format: crate::source_report::SourceReportFormat,
     },

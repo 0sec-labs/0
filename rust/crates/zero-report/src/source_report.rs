@@ -34,7 +34,7 @@ fn bounded_text(value: &str, limit: usize, field: &'static str) -> Result<()> {
     Ok(())
 }
 fn validate(report: &SourceReport) -> Result<()> {
-    if report.schema_version != 1 || report.review.version != 1 {
+    if !matches!(report.schema_version, 1 | 2) || report.review.version != 1 {
         return Err(Error::Field("source report version"));
     }
     bounded_text(&report.session_id, 512, "session_id")?;
@@ -104,7 +104,7 @@ fn validate(report: &SourceReport) -> Result<()> {
             }
         }
     }
-    Ok(())
+    validate_links(report)
 }
 fn severity(value: &ClaimedSeverity) -> &'static str {
     match value {
@@ -194,6 +194,14 @@ fn markdown(report: &SourceReport) -> Result<String> {
     for (name, digest) in &report.artifacts {
         out.line(&format!("- **{}:** {}", escape(name), escape(digest)))?;
     }
+    for (heading, fields) in workflow_sections(report)? {
+        out.line("")?;
+        out.line(&format!("## {}", escape(&heading)))?;
+        out.line("")?;
+        for (label, value) in fields {
+            out.line(&format!("- **{}:** {}", escape(&label), escape(&value)))?;
+        }
+    }
     Ok(out.0)
 }
 fn html(report: &SourceReport) -> Result<String> {
@@ -251,6 +259,318 @@ fn html(report: &SourceReport) -> Result<String> {
         out.field("<dt>", name, "</dt>")?;
         out.field("<dd>", digest, "</dd>")?;
     }
-    out.raw("</dl></body></html>")?;
+    out.raw("</dl>")?;
+    for (heading, fields) in workflow_sections(report)? {
+        out.field("<section><h2>", &heading, "</h2><dl>")?;
+        for (label, value) in fields {
+            out.field("<dt>", &label, "</dt>")?;
+            out.field("<dd>", &value, "</dd>")?;
+        }
+        out.raw("</dl></section>")?;
+    }
+    out.raw("</body></html>")?;
     Ok(out.0)
+}
+
+fn terminal(status: zero_protocol::OperationStatus) -> bool {
+    use zero_protocol::OperationStatus::*;
+    matches!(status, Succeeded | Failed | Cancelled | Unknown)
+}
+fn artifact_map(artifacts: &std::collections::BTreeMap<String, String>) -> Result<()> {
+    if artifacts.len() > 256 {
+        return Err(Error::Limit);
+    }
+    for (name, digest) in artifacts {
+        bounded_text(name, 256, "artifact name")?;
+        if !is_sha256(digest) {
+            return Err(Error::Field("artifact digest"));
+        }
+    }
+    Ok(())
+}
+fn children(children: &[String], seen: &mut std::collections::HashSet<String>) -> Result<()> {
+    if children.len() > 256 {
+        return Err(Error::Limit);
+    }
+    for child in children {
+        bounded_text(child, 512, "child operation")?;
+        if !seen.insert(child.clone()) {
+            return Err(Error::Field("duplicate operation"));
+        }
+    }
+    Ok(())
+}
+fn assessment(
+    report: &SourceReport,
+    a: &zero_protocol::verification::Assessment,
+    snapshot: &str,
+) -> Result<()> {
+    if a.schema_version != 1
+        || a.vulnerability_reportable
+        || a.source_bundle_digest != report.review.bundle_sha256
+        || a.snapshot_digest != snapshot
+        || !report
+            .review
+            .hypotheses
+            .iter()
+            .any(|h| h.id == a.hypothesis_id)
+    {
+        return Err(Error::Field("assessment source identity/reportability"));
+    }
+    bounded_text(&a.oracle_version, 256, "oracle version")?;
+    if a.reasons.len() > 32
+        || a.required_attempts > 256
+        || a.required_attempts == 0
+        || a.observed_attempts > 256
+    {
+        return Err(Error::Limit);
+    }
+    if [
+        &a.plan_digest,
+        &a.source_bundle_digest,
+        &a.snapshot_digest,
+        &a.evidence_digest,
+        &a.assessment_digest,
+    ]
+    .iter()
+    .any(|d| !is_sha256(d))
+    {
+        return Err(Error::Field("assessment digest"));
+    }
+    Ok(())
+}
+fn validate_links(report: &SourceReport) -> Result<()> {
+    use zero_protocol::{
+        OperationStatus, repair::RepairValidationStatus, verification::Disposition,
+    };
+    let count = report
+        .reproductions
+        .len()
+        .checked_add(report.repairs.len())
+        .ok_or(Error::Limit)?;
+    if count > 32 {
+        return Err(Error::Limit);
+    }
+    if (report.schema_version == 1 && count != 0) || (report.schema_version == 2 && count == 0) {
+        return Err(Error::Field("source report link version"));
+    }
+    let mut seen = std::collections::HashSet::from([report.operation_id.clone()]);
+    // Reserve parent IDs first so no child may alias a later linked parent.
+    for (id, status) in report
+        .reproductions
+        .iter()
+        .map(|r| (&r.operation_id, r.operation_status))
+        .chain(
+            report
+                .repairs
+                .iter()
+                .map(|r| (&r.operation_id, r.operation_status)),
+        )
+    {
+        bounded_text(id, 512, "linked operation")?;
+        if !terminal(status) || !seen.insert(id.clone()) {
+            return Err(Error::Field("linked operation status/identity"));
+        }
+    }
+    for reproduction in &report.reproductions {
+        if reproduction.operation_status == OperationStatus::Succeeded
+            && (!matches!(
+                reproduction.assessment.disposition,
+                Disposition::ObservedForPlan | Disposition::NotObserved
+            ) || reproduction.stop_reason.is_some())
+        {
+            return Err(Error::Field("reproduction success disposition"));
+        }
+        assessment(report, &reproduction.assessment, &report.snapshot_sha256)?;
+        artifact_map(&reproduction.artifacts)?;
+        children(&reproduction.children, &mut seen)?;
+    }
+    for repair in &report.repairs {
+        let baseline = report
+            .reproductions
+            .iter()
+            .find(|r| r.operation_id == repair.reproduction_operation_id)
+            .ok_or(Error::Field("repair baseline operation"))?;
+        if baseline.operation_status != OperationStatus::Succeeded
+            || baseline.assessment.disposition != Disposition::ObservedForPlan
+            || repair.original_plan_digest != baseline.assessment.plan_digest
+            || repair.phases.len() > 2
+            || repair.cleanup_recovery_count > 1024
+        {
+            return Err(Error::Field("repair baseline identity"));
+        }
+        artifact_map(&repair.artifacts)?;
+        if let Some(receipt) = &repair.candidate_receipt {
+            if receipt.schema_version != 1
+                || receipt.baseline_snapshot_sha256 != report.snapshot_sha256
+                || receipt.replacement_bytes > 128 * 1024
+                || [
+                    &receipt.preimage_sha256,
+                    &receipt.replacement_sha256,
+                    &receipt.candidate_snapshot_sha256,
+                    &receipt.policy_sha256,
+                ]
+                .iter()
+                .any(|d| !is_sha256(d))
+            {
+                return Err(Error::Field("candidate receipt"));
+            }
+            bounded_text(&receipt.target, 4096, "candidate target")?;
+            let hypothesis = report
+                .review
+                .hypotheses
+                .iter()
+                .find(|h| h.id == baseline.assessment.hypothesis_id)
+                .ok_or(Error::Field("repair hypothesis"))?;
+            if !hypothesis
+                .claim
+                .citations
+                .iter()
+                .any(|c| c.path == receipt.target && c.sha256 == receipt.preimage_sha256)
+            {
+                return Err(Error::Field("candidate preimage citation"));
+            }
+        } else if !repair.phases.is_empty() {
+            return Err(Error::Field("repair receipt absent"));
+        }
+        for (index, phase) in repair.phases.iter().enumerate() {
+            if phase.name != ["candidate", "reconstructed"][index] {
+                return Err(Error::Field("repair phase order"));
+            }
+            let receipt = repair
+                .candidate_receipt
+                .as_ref()
+                .ok_or(Error::Field("repair receipt absent"))?;
+            assessment(
+                report,
+                &phase.assessment,
+                &receipt.candidate_snapshot_sha256,
+            )?;
+            if phase.assessment.hypothesis_id != baseline.assessment.hypothesis_id
+                || phase.assessment.oracle_version != baseline.assessment.oracle_version
+                || phase.assessment.required_attempts != baseline.assessment.required_attempts
+            {
+                return Err(Error::Field("repair oracle identity"));
+            }
+            children(&phase.children, &mut seen)?;
+            artifact_map(&phase.artifacts)?;
+        }
+        if repair.status == RepairValidationStatus::ValidatedCandidateForPlan
+            && (repair.operation_status != OperationStatus::Succeeded
+                || repair.cleanup_recovery_count != 0
+                || repair.phases.len() != 2
+                || repair
+                    .phases
+                    .iter()
+                    .any(|p| p.assessment.disposition != Disposition::ObservedForPlan))
+        {
+            return Err(Error::Field("repair validation incomplete"));
+        }
+    }
+    Ok(())
+}
+fn wire(value: serde_json::Value) -> Result<String> {
+    value.as_str().map(str::to_owned).ok_or(Error::Json)
+}
+type Fields = Vec<(String, String)>;
+fn assessment_fields(a: &zero_protocol::verification::Assessment) -> Result<Fields> {
+    let mut fields = vec![
+        (
+            "Assessment schema version".into(),
+            a.schema_version.to_string(),
+        ),
+        (
+            "Disposition".into(),
+            wire(serde_json::to_value(a.disposition).map_err(|_| Error::Json)?)?,
+        ),
+        ("Oracle version".into(), a.oracle_version.clone()),
+        ("Plan SHA-256".into(), a.plan_digest.clone()),
+        ("Hypothesis ID".into(), a.hypothesis_id.clone()),
+        (
+            "Source bundle SHA-256".into(),
+            a.source_bundle_digest.clone(),
+        ),
+        ("Snapshot SHA-256".into(), a.snapshot_digest.clone()),
+        ("Evidence SHA-256".into(), a.evidence_digest.clone()),
+        ("Assessment SHA-256".into(), a.assessment_digest.clone()),
+        ("Observed attempts".into(), a.observed_attempts.to_string()),
+        ("Required attempts".into(), a.required_attempts.to_string()),
+        ("Vulnerability reportable".into(), "false".into()),
+    ];
+    for reason in &a.reasons {
+        fields.push((
+            "Reason".into(),
+            wire(serde_json::to_value(reason).map_err(|_| Error::Json)?)?,
+        ));
+    }
+    Ok(fields)
+}
+fn evidence_fields(
+    fields: &mut Fields,
+    children: &[String],
+    artifacts: &std::collections::BTreeMap<String, String>,
+) {
+    for child in children {
+        fields.push(("Child operation".into(), child.clone()));
+    }
+    for (name, digest) in artifacts {
+        fields.push((format!("Artifact {name}"), digest.clone()));
+    }
+}
+fn workflow_sections(report: &SourceReport) -> Result<Vec<(String, Fields)>> {
+    let mut sections = Vec::new();
+    for reproduction in &report.reproductions {
+        let mut fields=vec![("Operation ID".into(),reproduction.operation_id.clone()),("Operation status".into(),wire(serde_json::to_value(reproduction.operation_status).map_err(|_|Error::Json)?)?), ("Scope".into(),"Observed outputs under an explicit frozen plan; no general vulnerability verification.".into())];
+        if let Some(stop) = &reproduction.stop_reason {
+            fields.push((
+                "Stop reason".into(),
+                wire(serde_json::to_value(stop).map_err(|_| Error::Json)?)?,
+            ));
+        }
+        fields.extend(assessment_fields(&reproduction.assessment)?);
+        evidence_fields(&mut fields, &reproduction.children, &reproduction.artifacts);
+        sections.push(("Frozen reproduction".into(), fields));
+    }
+    for repair in &report.repairs {
+        let mut fields=vec![("Operation ID".into(),repair.operation_id.clone()),("Baseline reproduction operation".into(),repair.reproduction_operation_id.clone()),("Operation status".into(),wire(serde_json::to_value(repair.operation_status).map_err(|_|Error::Json)?)?), ("Repair status".into(),wire(serde_json::to_value(&repair.status).map_err(|_|Error::Json)?)?), ("Original plan SHA-256".into(),repair.original_plan_digest.clone()),("Cleanup recovery count".into(),repair.cleanup_recovery_count.to_string()),("Scope".into(),"Candidate validation is limited to the frozen plan. No workspace application or general fixed-security claim.".into())];
+        if let Some(receipt) = &repair.candidate_receipt {
+            fields.extend([
+                (
+                    "Candidate receipt schema version".into(),
+                    receipt.schema_version.to_string(),
+                ),
+                (
+                    "Baseline snapshot SHA-256".into(),
+                    receipt.baseline_snapshot_sha256.clone(),
+                ),
+                ("Candidate target".into(), receipt.target.clone()),
+                ("Preimage SHA-256".into(), receipt.preimage_sha256.clone()),
+                (
+                    "Replacement SHA-256".into(),
+                    receipt.replacement_sha256.clone(),
+                ),
+                (
+                    "Replacement bytes".into(),
+                    receipt.replacement_bytes.to_string(),
+                ),
+                (
+                    "Candidate snapshot SHA-256".into(),
+                    receipt.candidate_snapshot_sha256.clone(),
+                ),
+                (
+                    "Authority policy SHA-256".into(),
+                    receipt.policy_sha256.clone(),
+                ),
+            ]);
+        }
+        evidence_fields(&mut fields, &[], &repair.artifacts);
+        sections.push(("Plan-qualified repair".into(), fields));
+        for phase in &repair.phases {
+            let mut fields = vec![("Repair operation ID".into(), repair.operation_id.clone())];
+            fields.extend(assessment_fields(&phase.assessment)?);
+            evidence_fields(&mut fields, &phase.children, &phase.artifacts);
+            sections.push((format!("Repair phase: {}", phase.name), fields));
+        }
+    }
+    Ok(sections)
 }

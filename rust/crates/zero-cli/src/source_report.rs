@@ -14,11 +14,15 @@ pub async fn run(
     state: &Path,
     session: &str,
     operation: &str,
+    reproductions: &[String],
+    repairs: &[String],
     format: SourceReportFormat,
 ) -> Result<bool, Box<dyn Error>> {
     let state = state.to_owned();
     let session = session.to_owned();
     let operation = operation.to_owned();
+    let reproductions = reproductions.to_owned();
+    let repairs = repairs.to_owned();
     let format = match format {
         SourceReportFormat::Json => zero_report::SourceReportFormat::Json,
         SourceReportFormat::Markdown => zero_report::SourceReportFormat::Markdown,
@@ -27,8 +31,14 @@ pub async fn run(
     let signal = crate::server::shutdown_signal();
     tokio::pin!(signal);
     let inspect = tokio::task::spawn_blocking(move || -> Result<String, String> {
-        let report = zero_engine::read_source_report(&state, &session, &operation)
-            .map_err(|e| e.to_string())?;
+        let report = zero_engine::read_source_workflow_report(
+            &state,
+            &session,
+            &operation,
+            &reproductions,
+            &repairs,
+        )
+        .map_err(|e| e.to_string())?;
         zero_report::render_source_report(&report, format).map_err(|e| e.to_string())
     });
     let mut rendered = tokio::select! {

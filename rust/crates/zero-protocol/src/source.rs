@@ -100,4 +100,43 @@ pub struct SourceReport {
     pub snapshot_sha256: String,
     pub review: ReviewResult,
     pub artifacts: std::collections::BTreeMap<String, String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub reproductions: Vec<ReproductionReport>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub repairs: Vec<RepairReport>,
+}
+
+/// Re-assessed retained observations, limited to an explicit frozen plan.
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ReproductionReport {
+    pub operation_id: String,
+    pub operation_status: crate::OperationStatus,
+    pub assessment: crate::verification::Assessment,
+    pub stop_reason: Option<crate::verification::ReproductionStop>,
+    pub children: Vec<String>,
+    pub artifacts: std::collections::BTreeMap<String, String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct RepairPhaseReport {
+    pub name: String,
+    pub assessment: crate::verification::Assessment,
+    pub children: Vec<String>,
+    pub artifacts: std::collections::BTreeMap<String, String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct RepairReport {
+    pub operation_id: String,
+    pub reproduction_operation_id: String,
+    pub operation_status: crate::OperationStatus,
+    pub status: crate::repair::RepairValidationStatus,
+    pub original_plan_digest: String,
+    pub candidate_receipt: Option<crate::repair::CandidateReceipt>,
+    pub phases: Vec<RepairPhaseReport>,
+    pub cleanup_recovery_count: usize,
+    pub artifacts: std::collections::BTreeMap<String, String>,
 }

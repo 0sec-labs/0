@@ -264,3 +264,12 @@ fn consistent_hashes_do_not_replace_request_completion_or_claim_validation() {
         f.reject();
     }
 }
+
+#[test]
+fn succeeded_source_outcome_cannot_hide_a_retained_error() {
+    let f = Fixture::new();
+    f.mutate(&f.parent, "outcome", |v| {
+        v["error"] = json!("retained failure")
+    });
+    f.reject();
+}

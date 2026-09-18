@@ -218,3 +218,20 @@ fn consuming_cleanup_removes_private_tree_and_preserves_original() {
     assert!(!Path::new(&root).exists());
     unchanged(&request);
 }
+
+#[test]
+fn expected_receipt_is_pure_and_matches_materialized_copy() {
+    let (dir, request) = fixture();
+    let expected = expected_receipt(&request).unwrap();
+    let candidate = materialize(&request).unwrap();
+    assert_eq!(candidate.receipt(), &expected);
+    candidate.cleanup().unwrap();
+    fs::remove_dir_all(dir.path()).unwrap();
+    assert_eq!(expected_receipt(&request).unwrap(), expected);
+    let mut bad = request.clone();
+    bad.baseline.digest = format!("sha256:{}", "0".repeat(64));
+    assert!(expected_receipt(&bad).is_err());
+    let mut bad = request;
+    bad.protected_paths.push(bad.target.clone());
+    assert!(expected_receipt(&bad).is_err());
+}

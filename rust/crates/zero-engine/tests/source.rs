@@ -700,6 +700,24 @@ async fn reproduction_unknown_cleanup_stops_matrix_and_preserves_recovery() {
             ..
         } => {
             assert_eq!(operation.status, OperationStatus::Unknown);
+            let exported = zero_engine::read_source_workflow_report(
+                &f.dir.path().join("state.db"),
+                &f.session,
+                &f.source,
+                &[operation.id.clone()],
+                &[],
+            )
+            .unwrap();
+            assert_eq!(exported.reproductions[0].operation_status, operation.status);
+            assert_eq!(
+                serde_json::to_value(&exported.reproductions[0].assessment).unwrap(),
+                serde_json::to_value(result.assessment.as_ref().unwrap()).unwrap()
+            );
+            assert!(
+                !serde_json::to_string(&exported)
+                    .unwrap()
+                    .contains(f.dir.path().to_str().unwrap())
+            );
             assert_eq!(
                 result.assessment.as_ref().unwrap().disposition,
                 Disposition::Unknown
@@ -751,6 +769,24 @@ async fn reproduction_cancel_before_first_attempt_keeps_empty_matrix_inconclusiv
             ..
         } => {
             assert_eq!(operation.status, OperationStatus::Cancelled);
+            let exported = zero_engine::read_source_workflow_report(
+                &f.dir.path().join("state.db"),
+                &f.session,
+                &f.source,
+                &[operation.id.clone()],
+                &[],
+            )
+            .unwrap();
+            assert_eq!(exported.reproductions[0].operation_status, operation.status);
+            assert_eq!(
+                serde_json::to_value(&exported.reproductions[0].assessment).unwrap(),
+                serde_json::to_value(result.assessment.as_ref().unwrap()).unwrap()
+            );
+            assert!(
+                !serde_json::to_string(&exported)
+                    .unwrap()
+                    .contains(f.dir.path().to_str().unwrap())
+            );
             assert_eq!(
                 result.assessment.unwrap().disposition,
                 Disposition::Inconclusive
@@ -804,6 +840,24 @@ async fn reproduction_cancel_active_child_waits_for_cleanup_and_stops_remaining_
             ..
         } => {
             assert_eq!(operation.status, OperationStatus::Cancelled);
+            let exported = zero_engine::read_source_workflow_report(
+                &f.dir.path().join("state.db"),
+                &f.session,
+                &f.source,
+                &[operation.id.clone()],
+                &[],
+            )
+            .unwrap();
+            assert_eq!(exported.reproductions[0].operation_status, operation.status);
+            assert_eq!(
+                serde_json::to_value(&exported.reproductions[0].assessment).unwrap(),
+                serde_json::to_value(result.assessment.as_ref().unwrap()).unwrap()
+            );
+            assert!(
+                !serde_json::to_string(&exported)
+                    .unwrap()
+                    .contains(f.dir.path().to_str().unwrap())
+            );
             assert_eq!(
                 result.assessment.unwrap().disposition,
                 Disposition::Cancelled
@@ -1042,6 +1096,7 @@ async fn repair_rejects_wrong_expectations_protected_paths_and_preimages() {
 #[tokio::test]
 async fn repair_unknown_cleanup_retains_private_copy_and_stops_reconstruction() {
     let (f, request) = repair_fixture().await;
+    let baseline_id = request.reproduction_operation_id.clone();
     fs::write(f.dir.path().join("scenario.txt"), "cleanup-fail").unwrap();
     match call(&f.engine, repair_command(&f, "unknown", request)).await {
         Reply::SourceRepair {
@@ -1054,6 +1109,21 @@ async fn repair_unknown_cleanup_retains_private_copy_and_stops_reconstruction() 
             assert_eq!(r.phases.len(), 1);
             assert_eq!(r.phases[0].observations.children.len(), 1);
             assert_eq!(r.cleanup_recovery.len(), 1);
+            let exported = zero_engine::read_source_workflow_report(
+                &f.dir.path().join("state.db"),
+                &f.session,
+                &f.source,
+                &[baseline_id],
+                &[operation.id],
+            )
+            .unwrap();
+            assert_eq!(exported.repairs[0].status, RepairValidationStatus::Unknown);
+            assert_eq!(exported.repairs[0].cleanup_recovery_count, 1);
+            assert!(
+                !serde_json::to_string(&exported)
+                    .unwrap()
+                    .contains(f.dir.path().to_str().unwrap())
+            );
             assert!(std::path::Path::new(&r.cleanup_recovery[0]).exists());
             // Only the process fixture is used; test may remove its retained private copy.
             fs::remove_dir_all(&r.cleanup_recovery[0]).unwrap();
@@ -1066,6 +1136,7 @@ async fn repair_unknown_cleanup_retains_private_copy_and_stops_reconstruction() 
 #[tokio::test]
 async fn repair_cancel_before_work_does_not_materialize_or_execute() {
     let (f, request) = repair_fixture().await;
+    let baseline_id = request.reproduction_operation_id.clone();
     let before = f.calls();
     let (tx, rx) = mpsc::channel(1);
     drop(rx);
@@ -1083,6 +1154,16 @@ async fn repair_cancel_before_work_does_not_materialize_or_execute() {
             assert_eq!(result.status, RepairValidationStatus::Cancelled);
             assert!(result.phases.is_empty());
             assert!(result.candidate_receipt.is_none());
+            assert!(
+                zero_engine::read_source_workflow_report(
+                    &f.dir.path().join("state.db"),
+                    &f.session,
+                    &f.source,
+                    &[baseline_id],
+                    &[operation.id]
+                )
+                .is_err()
+            );
         }
         other => panic!("{other:?}"),
     }
@@ -1141,4 +1222,293 @@ async fn repair_rejects_corrupt_retained_baseline_evidence_before_execution() {
     }
     assert_eq!(before, f.calls());
     f.engine.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn linked_reproduction_report_rechecks_child_journal_and_exact_selection() {
+    let f = ReproFixture::new("echo").await;
+    let (id, outcome) = match call(&f.engine, f.command("report-repro")).await {
+        Reply::SourceReproduction {
+            operation,
+            result: Some(outcome),
+            ..
+        } => (operation.id, outcome),
+        other => panic!("{other:?}"),
+    };
+    let state = f.dir.path().join("state.db");
+    let ids = vec![id.clone()];
+    let report =
+        || zero_engine::read_source_workflow_report(&state, &f.session, &f.source, &ids, &[]);
+    let before = f.calls();
+    fs::remove_dir_all(f.dir.path().join("source")).unwrap();
+    assert_eq!(
+        report().unwrap().reproductions[0].assessment.disposition,
+        Disposition::ObservedForPlan
+    );
+    let db = rusqlite::Connection::open(&state).unwrap();
+    let child = &outcome.children[0];
+    for (operation, column, key, replacement) in [
+        (
+            child.as_str(),
+            "payload",
+            "parent_operation",
+            serde_json::json!("wrong"),
+        ),
+        (
+            child.as_str(),
+            "payload",
+            "kind",
+            serde_json::json!("other"),
+        ),
+        (
+            child.as_str(),
+            "payload",
+            "plan_digest",
+            serde_json::json!("wrong"),
+        ),
+        (
+            child.as_str(),
+            "payload",
+            "case_id",
+            serde_json::json!("control"),
+        ),
+        (child.as_str(), "payload", "repeat", serde_json::json!(99)),
+        (
+            child.as_str(),
+            "payload",
+            "execution_id",
+            serde_json::json!("other"),
+        ),
+        (
+            child.as_str(),
+            "outcome",
+            "exit_code",
+            serde_json::json!(99),
+        ),
+        (
+            child.as_str(),
+            "outcome",
+            "request_artifact",
+            serde_json::json!("wrong"),
+        ),
+        (
+            child.as_str(),
+            "outcome",
+            "evidence_artifact",
+            serde_json::json!("wrong"),
+        ),
+        (id.as_str(), "outcome", "children", serde_json::json!([])),
+        (
+            id.as_str(),
+            "outcome",
+            "error",
+            serde_json::json!("retained failure"),
+        ),
+    ] {
+        let raw: String = db
+            .query_row(
+                &format!("SELECT {column} FROM operations WHERE id=?1"),
+                [operation],
+                |r| r.get(0),
+            )
+            .unwrap();
+        let mut modified: serde_json::Value = serde_json::from_str(&raw).unwrap();
+        modified[key] = replacement;
+        db.execute(
+            &format!("UPDATE operations SET {column}=?1 WHERE id=?2"),
+            rusqlite::params![modified.to_string(), operation],
+        )
+        .unwrap();
+        assert!(report().is_err(), "accepted corrupted {column}.{key}");
+        db.execute(
+            &format!("UPDATE operations SET {column}=?1 WHERE id=?2"),
+            rusqlite::params![raw, operation],
+        )
+        .unwrap();
+    }
+    db.execute(
+        "UPDATE operations SET status='running' WHERE id=?1",
+        [child],
+    )
+    .unwrap();
+    assert!(report().is_err());
+    db.execute(
+        "UPDATE operations SET status='succeeded' WHERE id=?1",
+        [child],
+    )
+    .unwrap();
+    assert!(report().is_ok());
+    for selection in [
+        vec![id.clone(), id.clone()],
+        vec![f.source.clone()],
+        vec![id.clone(); 33],
+    ] {
+        assert!(
+            zero_engine::read_source_workflow_report(
+                &state,
+                &f.session,
+                &f.source,
+                &selection,
+                &[]
+            )
+            .is_err()
+        );
+    }
+    assert!(
+        zero_engine::read_source_workflow_report(&state, "other-session", &f.source, &ids, &[])
+            .is_err()
+    );
+    assert_eq!(before, f.calls());
+    f.engine.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn linked_repair_report_rechecks_candidate_evidence_and_requires_explicit_baseline() {
+    let (f, request) = repair_fixture().await;
+    let baseline = request.reproduction_operation_id.clone();
+    let (id, outcome) = match call(&f.engine, repair_command(&f, "report-repair", request)).await {
+        Reply::SourceRepair {
+            operation,
+            result: Some(outcome),
+            ..
+        } => (operation.id, outcome),
+        other => panic!("{other:?}"),
+    };
+    let state = f.dir.path().join("state.db");
+    let report = || {
+        zero_engine::read_source_workflow_report(
+            &state,
+            &f.session,
+            &f.source,
+            &[baseline.clone()],
+            &[id.clone()],
+        )
+    };
+    let before = f.calls();
+    fs::remove_dir_all(f.dir.path().join("source")).unwrap();
+    let exported = report().unwrap();
+    assert_eq!(
+        exported.repairs[0].status,
+        RepairValidationStatus::ValidatedCandidateForPlan
+    );
+    assert_eq!(exported.repairs[0].phases.len(), 2);
+    assert!(
+        zero_engine::read_source_workflow_report(&state, &f.session, &f.source, &[], &[id.clone()])
+            .is_err()
+    );
+    let db = rusqlite::Connection::open(&state).unwrap();
+    for (operation, column, key, replacement) in [
+        (
+            id.as_str(),
+            "payload",
+            "request_digest",
+            serde_json::json!("wrong"),
+        ),
+        (
+            id.as_str(),
+            "payload",
+            "reproduction_operation_id",
+            serde_json::json!("other"),
+        ),
+        (
+            id.as_str(),
+            "outcome",
+            "original_plan_digest",
+            serde_json::json!("wrong"),
+        ),
+        (
+            id.as_str(),
+            "outcome",
+            "vulnerability_reportable",
+            serde_json::json!(true),
+        ),
+        (
+            id.as_str(),
+            "outcome",
+            "cleanup_recovery",
+            serde_json::json!(["/not-cleaned"]),
+        ),
+        (
+            outcome.phases[1].observations.children[0].as_str(),
+            "outcome",
+            "exit_code",
+            serde_json::json!(99),
+        ),
+    ] {
+        let raw: String = db
+            .query_row(
+                &format!("SELECT {column} FROM operations WHERE id=?1"),
+                [operation],
+                |r| r.get(0),
+            )
+            .unwrap();
+        let mut modified: serde_json::Value = serde_json::from_str(&raw).unwrap();
+        modified[key] = replacement;
+        db.execute(
+            &format!("UPDATE operations SET {column}=?1 WHERE id=?2"),
+            rusqlite::params![modified.to_string(), operation],
+        )
+        .unwrap();
+        assert!(report().is_err(), "accepted corrupted {column}.{key}");
+        db.execute(
+            &format!("UPDATE operations SET {column}=?1 WHERE id=?2"),
+            rusqlite::params![raw, operation],
+        )
+        .unwrap();
+    }
+    assert!(report().is_ok());
+    assert_eq!(before, f.calls());
+    f.engine.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn linked_repair_report_preserves_unsuccessful_candidate_and_control_outcomes() {
+    for (replacement, disposition) in [
+        ("// unchanged candidate\n", Disposition::NotObserved),
+        (
+            "// SAFE_REPLACEMENT BAD_CONTROL\n",
+            Disposition::Inconclusive,
+        ),
+    ] {
+        let (f, mut request) = repair_fixture().await;
+        request.materialize.replacement = replacement.into();
+        let baseline = request.reproduction_operation_id.clone();
+        let operation = match call(
+            &f.engine,
+            repair_command(&f, "failed-candidate-report", request),
+        )
+        .await
+        {
+            Reply::SourceRepair {
+                operation,
+                result: Some(result),
+                ..
+            } => {
+                assert_eq!(result.status, RepairValidationStatus::NotValidated);
+                operation
+            }
+            other => panic!("{other:?}"),
+        };
+        let before = f.calls();
+        fs::remove_dir_all(f.dir.path().join("source")).unwrap();
+        let report = zero_engine::read_source_workflow_report(
+            &f.dir.path().join("state.db"),
+            &f.session,
+            &f.source,
+            &[baseline],
+            &[operation.id],
+        )
+        .unwrap();
+        assert_eq!(
+            report.repairs[0].status,
+            RepairValidationStatus::NotValidated
+        );
+        assert_eq!(report.repairs[0].phases.len(), 1);
+        assert_eq!(
+            report.repairs[0].phases[0].assessment.disposition,
+            disposition
+        );
+        assert_eq!(before, f.calls());
+        f.engine.shutdown().await.unwrap();
+    }
 }
