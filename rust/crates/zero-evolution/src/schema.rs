@@ -12,7 +12,7 @@ pub(crate) fn initialize(conn: &mut Connection, schema: &str, state: &str) -> Re
     }
     if app == 0 {
         let count: i64 = tx.query_row(
-            "SELECT count(*) FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'",
+            "SELECT count(*) FROM sqlite_master WHERE name NOT LIKE 'sqlite_%'",
             [],
             |r| r.get(0),
         )?;

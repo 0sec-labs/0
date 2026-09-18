@@ -258,6 +258,40 @@ impl Registry {
         tx.commit()?;
         Ok(lease)
     }
+    /// Discover committed leases even when a crash lost the acquisition reply.
+    /// Filters combine with AND. Cursor is the last returned ID, exclusive.
+    /// Pages are individually consistent, not a snapshot across calls. Fence
+    /// acquisition before recovery; new random IDs may sort before a cursor.
+    /// Listing is not evidence that an owner is dead and never releases a lease.
+    pub fn list_unreleased_leases(
+        &self,
+        owner: Option<&str>,
+        generation: Option<&str>,
+        after_id: Option<&str>,
+        limit: usize,
+    ) -> Result<Vec<GenerationLease>> {
+        if !(1..=MAX_LEASE_PAGE_SIZE).contains(&limit) {
+            return Err(Error::Invalid(format!(
+                "lease page limit must be 1..={MAX_LEASE_PAGE_SIZE}"
+            )));
+        }
+        for value in [owner, generation, after_id].into_iter().flatten() {
+            nonempty(value)?;
+        }
+        let mut statement = self.conn.prepare(
+            "SELECT id,generation,owner,epoch FROM leases WHERE released=0 AND (?1 IS NULL OR owner=?1) AND (?2 IS NULL OR generation=?2) AND (?3 IS NULL OR id>?3) ORDER BY id LIMIT ?4"
+        )?;
+        let rows =
+            statement.query_map(params![owner, generation, after_id, limit as u32], |row| {
+                Ok(GenerationLease {
+                    id: row.get(0)?,
+                    generation: row.get(1)?,
+                    owner: row.get(2)?,
+                    epoch: row.get(3)?,
+                })
+            })?;
+        Ok(rows.collect::<std::result::Result<Vec<_>, _>>()?)
+    }
     /// Explicit release only. Dropping/reopening Registry never releases leases.
     /// A recovered owner must first be fenced/quiescent by the outer supervisor.
     pub fn release(&mut self, lease_id: &str, owner: &str) -> Result<()> {
@@ -277,6 +311,9 @@ impl Registry {
         tx.commit()?;
         Ok(())
     }
+    /// Momentary generation-level status, not exclusive disposal authority.
+    /// Resource owners must serialize disposal/reactivation and distinguish
+    /// activation epochs when a retained generation becomes active again.
     pub fn lifecycle(&self, generation: &str) -> Result<RuntimeLifecycle> {
         let _: Manifest = read_json(&self.conn, "generations", generation)?;
         // Single SQL statement observes active identity and lease count together.

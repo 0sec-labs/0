@@ -252,3 +252,121 @@ fn json_bounds_and_foreign_databases_are_rejected() {
     drop(c);
     assert!(Registry::open(path, "v1", &json!(null)).is_err());
 }
+
+#[test]
+fn view_only_foreign_database_is_preserved() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("foreign.sqlite");
+    let connection = rusqlite::Connection::open(&path).unwrap();
+    connection
+        .execute_batch("CREATE VIEW foreign_view AS SELECT 42 AS value")
+        .unwrap();
+    assert!(Registry::open(&path, "v1", &json!(null)).is_err());
+    let value: i64 = connection
+        .query_row("SELECT value FROM foreign_view", [], |row| row.get(0))
+        .unwrap();
+    assert_eq!(value, 42);
+    for pragma in ["PRAGMA application_id", "PRAGMA user_version"] {
+        assert_eq!(
+            connection
+                .query_row(pragma, [], |row| row.get::<_, i64>(0))
+                .unwrap(),
+            0
+        );
+    }
+    assert_eq!(
+        connection
+            .query_row("SELECT count(*) FROM sqlite_master", [], |row| row
+                .get::<_, i64>(0))
+            .unwrap(),
+        1
+    );
+}
+
+#[test]
+fn lost_acquisition_reply_is_recoverable_by_bounded_filtered_pages() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("registry.sqlite");
+    let mut registry = open(&path);
+    let (base, _) = bootstrap(&mut registry, "base", &[]);
+    for _ in 0..5 {
+        // Deliberately discard the reply, as with a crash after SQLite commit.
+        registry.acquire_active("lost-owner").unwrap();
+    }
+    registry.acquire_active("other-owner").unwrap();
+    let next = generation(&mut registry, "next", "v1", &[]);
+    let eligible = evaluated(&mut registry, &next, &base).0;
+    let preparation = registry
+        .prepare_activation(&next, &eligible, &registry.current().unwrap(), copy_state)
+        .unwrap();
+    registry.commit(&preparation.id).unwrap();
+    registry.acquire_active("lost-owner").unwrap();
+    drop(registry);
+    let mut registry = open(&path);
+    let mut recovered = Vec::new();
+    let mut cursor: Option<String> = None;
+    loop {
+        let page = registry
+            .list_unreleased_leases(Some("lost-owner"), Some(&base), cursor.as_deref(), 2)
+            .unwrap();
+        assert!(page.len() <= 2);
+        if page.is_empty() {
+            break;
+        }
+        assert!(page.iter().all(|lease| lease.owner == "lost-owner"
+            && lease.generation == base
+            && lease.epoch == 1));
+        cursor = page.last().map(|lease| lease.id.clone());
+        recovered.extend(page);
+    }
+    assert_eq!(recovered.len(), 5);
+    assert!(recovered.windows(2).all(|pair| pair[0].id < pair[1].id));
+    assert_eq!(
+        registry
+            .list_unreleased_leases(Some("lost-owner"), None, None, 10)
+            .unwrap()
+            .len(),
+        6
+    );
+    assert_eq!(
+        registry
+            .list_unreleased_leases(None, Some(&base), None, 10)
+            .unwrap()
+            .len(),
+        6
+    );
+    for lease in recovered {
+        assert!(registry.release(&lease.id, "wrong-owner").is_err());
+        registry.release(&lease.id, "lost-owner").unwrap();
+        registry.release(&lease.id, "lost-owner").unwrap();
+    }
+    assert!(
+        registry
+            .list_unreleased_leases(Some("lost-owner"), Some(&base), None, 2)
+            .unwrap()
+            .is_empty()
+    );
+    assert_eq!(
+        registry.lifecycle(&base).unwrap(),
+        RuntimeLifecycle::Draining { leases: 1 }
+    );
+    assert_eq!(
+        registry
+            .list_unreleased_leases(None, None, None, 10)
+            .unwrap()
+            .len(),
+        2
+    );
+    for limit in [0, MAX_LEASE_PAGE_SIZE + 1, usize::MAX] {
+        assert!(
+            registry
+                .list_unreleased_leases(None, None, None, limit)
+                .is_err()
+        );
+    }
+    assert!(
+        registry
+            .list_unreleased_leases(Some(""), None, None, 1)
+            .is_err()
+    );
+}

@@ -69,9 +69,21 @@ Inactive. Replacing a generation does not invalidate already acquired leases.
 
 Leases do not expire, auto-release on Drop, or disappear on restart. An external
 supervisor must fence/quiesce a dead owner before explicitly releasing its
-leases. This crate supplies neither distributed liveness detection nor fencing.
-Draining reports disposal eligibility; actual asynchronous cleanup belongs to
-the resource owner. Active means the selected registry identity, not proof that
+leases. `list_unreleased_leases(owner, generation, after_id, limit)` recovers
+committed lease identities even if a crash lost the acquisition reply. Optional
+owner and generation filters combine with AND; pages contain at most 256 rows,
+ordered by ID with an exclusive last-returned-ID cursor. Release remains manual
+and owner-checked. Listing does not establish owner death or permit disposal.
+
+Pagination is not a snapshot across calls. New random lease IDs can sort before
+a cursor; fence acquisition before recovering an owner's leases, or rescan from
+the beginning once quiescent. Released leases disappear from subsequent pages.
+This crate supplies neither distributed liveness detection nor fencing.
+Lifecycle is a momentary generation-level view, not exclusive disposal authority:
+rollback can reactivate a generation after an Inactive read. The resource owner
+must serialize disposal with reactivation and key actual runtime handles by
+activation epoch, including when the same generation returns after rollback.
+Actual asynchronous cleanup belongs to that resource owner. Active means the selected registry identity, not proof that
 resources are healthy or code was loaded. No cleanup-success receipt is invented.
 
 ## Validation and integration

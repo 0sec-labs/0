@@ -11,6 +11,7 @@ use sha2::{Digest, Sha256};
 use std::{path::Path, time::Duration};
 pub use types::*;
 
+pub const MAX_LEASE_PAGE_SIZE: usize = 256;
 pub const MAX_ARTIFACT_BYTES: usize = 64 * 1024 * 1024;
 pub const MAX_JSON_BYTES: usize = 1024 * 1024;
 #[derive(Debug, thiserror::Error)]
