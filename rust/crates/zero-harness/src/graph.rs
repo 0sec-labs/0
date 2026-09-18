@@ -38,6 +38,9 @@ impl PreparedGraph {
     pub fn generation(&self) -> &str {
         &self.generation
     }
+    pub fn plugin_manifest(&self, id: &str) -> Option<&zero_plugin::Manifest> {
+        self.plugins.get(id).map(|(manifest, _)| manifest)
+    }
     pub fn plugin_digest(&self, id: &str) -> Option<&str> {
         self.plugins
             .get(id)

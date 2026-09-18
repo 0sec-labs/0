@@ -239,15 +239,21 @@ and pass@k separately; include all parallel-agent and evaluation costs.
 ## Current implementation status
 
 The experimental workspace now includes a versioned protocol, durable SQLite
-session and budget state, a native engine and CLI, Docker snapshot execution,
-a separately qualified-profile smolvm batch adapter, Responses inference and
-source-preserving finding reconciliation. Real local Docker and smolvm smoke
-tests have passed. Native inference and restart/accounting behavior are tested
-against local HTTP fixtures; no live provider or cloud release qualification is
-implied. Raw execution bytes use base64 on the JSON wire.
+session and budget state, a native engine and line console, explicit Docker/smolvm
+snapshot execution, Responses/Chat/Anthropic inference and source-preserving
+finding reconciliation. Completed agent conversations continue from immutable
+journal records across restarts. Generation-bound plugin graphs retain durable
+invocation leases; an offline subprocess runner validates one correlated native
+RPC result. This does not implement an evaluator, bidirectional broker or native
+process hot replacement. Read-only cloud metadata has a separate bounded client.
+
+Real local Docker, smolvm engine/agent and fixture-only Node plugin smoke tests
+have passed. Native inference and restart/accounting behavior are tested against
+local HTTP fixtures; no live provider, detection-quality or cloud release
+qualification is implied. Raw execution bytes use base64 on the JSON wire.
 
 The production CLI remains TypeScript. Agent orchestration, full tool/provider
-coverage, generation integration, TUI and command parity remain work. The protocol
+coverage, engine/generation integration, full-screen TUI and command parity remain work. The protocol
 is still experimental. Consult `rust/MIGRATION.md` and individual crate READMEs
 for feature and environment limits rather than treating the foundation as a
 replacement release.

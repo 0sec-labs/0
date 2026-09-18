@@ -1848,6 +1848,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "zero-plugin-runner"
+version = "0.1.0"
+dependencies = [
+ "serde_json",
+ "tempfile",
+ "thiserror",
+ "tokio",
+ "tokio-util",
+ "zero-evolution",
+ "zero-executor",
+ "zero-harness",
+ "zero-plugin",
+ "zero-protocol",
+ "zero-sandbox",
+ "zero-smolvm",
+]
+
+[[package]]
 name = "zero-protocol"
 version = "0.1.0"
 dependencies = [
