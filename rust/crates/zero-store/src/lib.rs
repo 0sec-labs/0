@@ -45,11 +45,34 @@ impl Store {
         Ok(Self { conn })
     }
     pub fn create_session(&mut self, generation: &str, budget_limit: u64) -> Result<Session> {
+        self.create_session_bound(generation, None, budget_limit)
+    }
+    pub fn create_pinned_session(
+        &mut self,
+        generation: &str,
+        epoch: u64,
+        budget_limit: u64,
+    ) -> Result<Session> {
+        if epoch == 0 {
+            return Err(Error::Invalid(
+                "activated generation epoch must be positive".into(),
+            ));
+        }
+        integer(epoch)?;
+        self.create_session_bound(generation, Some(epoch), budget_limit)
+    }
+    fn create_session_bound(
+        &mut self,
+        generation: &str,
+        generation_epoch: Option<u64>,
+        budget_limit: u64,
+    ) -> Result<Session> {
         nonempty(generation)?;
         let limit = integer(budget_limit)?;
         let session = Session {
             id: uuid::Uuid::new_v4().to_string(),
             generation: generation.into(),
+            generation_epoch,
             created_at_ms: SystemTime::now()
                 .duration_since(UNIX_EPOCH)
                 .map_err(|_| Error::Invalid("clock before epoch".into()))?
@@ -62,12 +85,13 @@ impl Store {
             .conn
             .transaction_with_behavior(TransactionBehavior::Immediate)?;
         tx.execute(
-            "INSERT INTO sessions VALUES (?1,?2,?3,?4)",
+            "INSERT INTO sessions(id,generation,created_at_ms,budget_limit,generation_epoch) VALUES (?1,?2,?3,?4,?5)",
             params![
                 session.id,
                 session.generation,
                 integer(session.created_at_ms)?,
-                limit
+                limit,
+                generation_epoch.map(integer).transpose()?,
             ],
         )?;
         append(
@@ -83,7 +107,7 @@ impl Store {
         get_session(&self.conn, id)
     }
     pub fn list_sessions(&self) -> Result<Vec<Session>> {
-        let mut stmt = self.conn.prepare("SELECT id,generation,created_at_ms,budget_limit FROM sessions ORDER BY created_at_ms,id")?;
+        let mut stmt = self.conn.prepare("SELECT id,generation,created_at_ms,budget_limit,generation_epoch FROM sessions ORDER BY created_at_ms,id")?;
         Ok(stmt
             .query_map([], session_row)?
             .collect::<std::result::Result<Vec<_>, _>>()?)
@@ -151,13 +175,14 @@ fn session_row(r: &rusqlite::Row<'_>) -> rusqlite::Result<Session> {
     Ok(Session {
         id: r.get(0)?,
         generation: r.get(1)?,
+        generation_epoch: r.get(4)?,
         created_at_ms: r.get(2)?,
         budget_limit: r.get(3)?,
     })
 }
 fn get_session(conn: &Connection, id: &str) -> Result<Session> {
     conn.query_row(
-        "SELECT id,generation,created_at_ms,budget_limit FROM sessions WHERE id=?1",
+        "SELECT id,generation,created_at_ms,budget_limit,generation_epoch FROM sessions WHERE id=?1",
         [id],
         session_row,
     )

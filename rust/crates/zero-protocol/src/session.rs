@@ -7,6 +7,10 @@ use serde_json::Value;
 pub struct Session {
     pub id: String,
     pub generation: String,
+    /// Absent for legacy/native sessions not bound to an activated graph.
+    /// A digest alone cannot distinguish a later rollback to the same graph.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub generation_epoch: Option<u64>,
     pub created_at_ms: u64,
     pub budget_limit: u64,
 }

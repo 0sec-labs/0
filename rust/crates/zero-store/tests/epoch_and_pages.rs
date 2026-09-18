@@ -55,7 +55,7 @@ fn v1_migration_recovers_all_pre_epoch_owners_and_keeps_data() {
     store.begin_operation(&op.id, "legacy-owner").unwrap();
     drop(store);
     let conn = rusqlite::Connection::open(&path).unwrap();
-    conn.execute_batch("DROP TABLE engine_epoch; PRAGMA user_version=1;")
+    conn.execute_batch("ALTER TABLE sessions DROP COLUMN generation_epoch; DROP TABLE engine_epoch; PRAGMA user_version=1;")
         .unwrap();
     drop(conn);
     let mut store = Store::open(&path).unwrap();

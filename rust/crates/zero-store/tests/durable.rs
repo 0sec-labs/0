@@ -180,9 +180,9 @@ fn foreign_and_future_databases_fail_closed() {
     let path = dir.path().join("future.sqlite");
     drop(Store::open(&path).unwrap());
     let conn = rusqlite::Connection::open(&path).unwrap();
-    conn.pragma_update(None, "user_version", 3).unwrap();
+    conn.pragma_update(None, "user_version", 999).unwrap();
     drop(conn);
-    assert!(matches!(Store::open(path), Err(Error::Schema(3))));
+    assert!(matches!(Store::open(path), Err(Error::Schema(999))));
 }
 #[test]
 fn targeted_unknown_is_owner_checked_and_preserves_siblings() {

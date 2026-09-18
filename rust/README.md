@@ -61,5 +61,7 @@ replay, including previous tool results, before appending the new prompt. It
 requires the same model, provider route/rates, instructions and pinned execution
 profile. Omitting the field starts a fresh history; selecting an earlier completed
 operation explicitly branches. Unknown/interrupted operations cannot be continued
-through this path, and no prior effect is reissued. The journal remains schema v2;
-this reconstructs history from already durable records rather than duplicating it.
+through this path, and no prior effect is reissued. History is reconstructed from already durable records rather than duplicated.
+Journal schema v3 adds optional activation epochs for generation-bound sessions;
+v1/v2 sessions migrate without inventing an activation pin. Host operation details
+retain pre-dispatch recovery identities and post-settlement lease release evidence.

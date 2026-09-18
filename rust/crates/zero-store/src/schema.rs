@@ -8,7 +8,7 @@ pub fn initialize(conn: &mut Connection) -> Result<()> {
     if application != 0 && application != APPLICATION_ID {
         return Err(Error::ForeignDatabase);
     }
-    if !(0..=2).contains(&version) {
+    if !(0..=3).contains(&version) {
         return Err(Error::Schema(version));
     }
     if application == 0 {
@@ -32,6 +32,10 @@ CREATE TABLE reservations(session_id TEXT NOT NULL REFERENCES sessions(id),id TE
     if version < 2 {
         tx.execute_batch("CREATE TABLE engine_epoch(singleton INTEGER PRIMARY KEY CHECK(singleton=1),owner TEXT NOT NULL);")?;
         tx.pragma_update(None, "user_version", 2)?;
+    }
+    if version < 3 {
+        tx.execute_batch("ALTER TABLE sessions ADD COLUMN generation_epoch INTEGER CHECK(generation_epoch IS NULL OR generation_epoch>=1);")?;
+        tx.pragma_update(None, "user_version", 3)?;
     }
     tx.commit()?;
     Ok(())

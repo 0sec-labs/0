@@ -54,6 +54,50 @@ fn operation(conn: &Connection, id: &str) -> Result<Operation> {
     })
 }
 impl Store {
+    /// Durable host detail for an operation owned by this exact controller.
+    /// The fixed outer kind prevents details from impersonating lifecycle events.
+    /// Terminal details allow recording lease release after outcome settlement.
+    pub fn append_operation_event(
+        &mut self,
+        id: &str,
+        owner: &str,
+        kind: &str,
+        details: &Value,
+    ) -> Result<zero_protocol::session::SessionEvent> {
+        if kind.is_empty()
+            || kind.len() > 128
+            || !kind
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b"_.-".contains(&b))
+        {
+            return Err(Error::Invalid("invalid operation detail kind".into()));
+        }
+        let payload = json!({"operation_id":id,"kind":kind,"details":details});
+        if serde_json::to_vec(&payload)?.len() > 1024 * 1024 {
+            return Err(Error::Invalid("operation detail exceeds 1 MiB".into()));
+        }
+        let tx = self
+            .conn
+            .transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let op = operation(&tx, id)?;
+        if op.owner.as_deref() != Some(owner) || op.status == OperationStatus::Admitted {
+            return Err(Error::Conflict("operation detail owner mismatch".into()));
+        }
+        append(&tx, &op.session_id, "operation_detail", &payload)?;
+        let sequence = tx.query_row(
+            "SELECT MAX(sequence) FROM events WHERE session_id=?1",
+            [&op.session_id],
+            |r| r.get(0),
+        )?;
+        let event = zero_protocol::session::SessionEvent {
+            session_id: op.session_id,
+            sequence,
+            kind: "operation_detail".into(),
+            payload,
+        };
+        tx.commit()?;
+        Ok(event)
+    }
     pub fn get_operation(&self, id: &str) -> Result<Operation> {
         operation(&self.conn, id)
     }
