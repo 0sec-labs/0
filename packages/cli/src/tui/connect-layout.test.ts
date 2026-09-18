@@ -17,7 +17,6 @@ import {
   connectFooterHint,
   connectInputMask,
   connectRowForId,
-  connectStatusLine,
   hasAnyConnection,
   isFilterKey,
   isInputKey,
@@ -453,18 +452,23 @@ describe("connected reporting, masks and hints", () => {
     expect(hasAnyConnection({ states: EMPTY, stored: new Set(["kimi"]) })).toBe(true);
   });
 
-  it("summarises how many providers are connected", () => {
-    expect(connectStatusLine(buildConnectRows({ states: EMPTY }))).toContain("no providers connected");
-    const rows = buildConnectRows({ states: LIT });
-    const line = connectStatusLine(rows);
-    expect(line).toMatch(/connected: 1 of \d+ providers/);
-    expect(connectStatusLine([])).toBe("no providers to connect");
-    // The title meta counts the same rows, and cloud is only counted when verified.
-    const counts = connectConnectedCounts(rows);
-    expect(counts.connected).toBe(1);
-    expect(counts.total).toBe(PROVIDERS.length);
-    expect(counts.cloudVerified).toBe(false);
-    expect(connectConnectedCounts([])).toEqual({ connected: 0, total: 0, cloudVerified: false });
+  it("counts Cloud only after verification and removes it on rejection", () => {
+    const rows = buildConnectRows({ states: EMPTY }).filter((row) =>
+      row.kind === "cloud" || (row.kind === "provider" && row.provider.id === "openai"),
+    );
+    expect(connectConnectedCounts(rows, { kind: "pending" })).toEqual({ connected: 0, total: 2 });
+    expect(connectConnectedCounts(rows, { kind: "verified" })).toEqual({ connected: 1, total: 2 });
+    expect(connectConnectedCounts(rows, { kind: "rejected" })).toEqual({ connected: 0, total: 2 });
+  });
+
+  it("does not double-count repeated provider or Cloud rows", () => {
+    const rows = buildConnectRows({ states: LIT }).filter((row) =>
+      row.kind === "cloud" || (row.kind === "provider" && row.provider.connected),
+    );
+    expect(connectConnectedCounts([...rows, ...rows], { kind: "verified" }))
+      .toEqual({ connected: 2, total: 2 });
+    expect(connectConnectedCounts([], { kind: "verified" }))
+      .toEqual({ connected: 0, total: 0 });
   });
 
   it("never echoes the credential and caps the mask length it leaks", () => {

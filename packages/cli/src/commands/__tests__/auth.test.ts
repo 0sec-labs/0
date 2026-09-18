@@ -240,9 +240,14 @@ describe("0sec auth status", () => {
     io.restore();
   });
 
-  it("prints OK with host on 200, exit 0", async () => {
+  it("authenticates against the Cloud account on a custom host", async () => {
     seedHomeWithCreds(home);
-    const fetchImpl = (async () => jsonResponse({ status: "ok" })) as typeof fetch;
+    const fetchImpl = (async (input) => {
+      const path = new URL(String(input)).pathname;
+      return path === "/api/inference/account"
+        ? jsonResponse({ credits: null })
+        : new Response("Not an account endpoint", { status: 404 });
+    }) as typeof fetch;
     await runStatus({ fetchImpl });
     expect(process.exitCode).toBe(0);
     expect(io.stdout.join("\n")).toContain(`OK (host=${HOST})`);
@@ -258,7 +263,10 @@ describe("0sec auth status", () => {
 
   it("exit 2 on 401, stderr does NOT contain token", async () => {
     seedHomeWithCreds(home);
-    const fetchImpl = (async () => new Response("nope", { status: 401 })) as typeof fetch;
+    const fetchImpl = (async (input) =>
+      new URL(String(input)).pathname === "/api/inference/account"
+        ? new Response("nope", { status: 401 })
+        : jsonResponse({ status: "ok" })) as typeof fetch;
     await runStatus({ fetchImpl });
     expect(process.exitCode).toBe(2);
     expect(io.stderr.join("\n")).toContain("FAIL (HTTP 401)");

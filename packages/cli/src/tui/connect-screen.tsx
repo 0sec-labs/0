@@ -910,11 +910,7 @@ export function ConnectScreen({ frame, onBack, onExit, recovery, onConnected, en
   const hint = connectFooterHint(mode, filter.length > 0);
   const counts = connectConnectedCounts(rows, hostedVerification);
   const titleText = `${operatorIcon(SCREEN_KEY, symbols)} ${operatorTitle(SCREEN_KEY)}`;
-  const cloudMeta = counts.cloudVerified ? "cloud" : "";
-  const titleMeta = (cloudMeta && counts.total === 0) ? cloudMeta
-    : cloudMeta ? `${cloudMeta} | ${counts.connected}/${counts.total}`
-    : counts.total === 0 ? ""
-    : `${counts.connected}/${counts.total} connected`;
+  const titleMeta = counts.total === 0 ? "" : `${counts.connected}/${counts.total} connected`;
   const title = computeConnectTitleLayout(contentWidth, titleMeta.length);
 
   const body = (

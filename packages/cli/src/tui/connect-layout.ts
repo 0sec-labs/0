@@ -716,48 +716,42 @@ export function computeConnectTitleLayout(innerWidth: number, metaLength: number
 // ---------------------------------------------------------------------------
 
 export interface ConnectCounts {
-  /** Providers holding a verified credential (env or store). */
+  /** Configured providers plus a remotely verified Cloud connection. */
   readonly connected: number;
-  /** Distinct providers offered, the cloud row excluded. */
+  /** Distinct connections offered by the displayed rows, including Cloud. */
   readonly total: number;
-  /** Cloud sign-in verified against the backend. */
-  readonly cloudVerified: boolean;
 }
 
-/**
- * How many providers actually hold a credential.
- *
- * Counted off the same `provider.connected` the rows carry, so it can never
- * disagree with the dots and checks the list draws, and the cloud row is left
- * out of both numbers: it is a sign-in, not one of the providers.
- * `cloudVerified` is set from the caller-supplied verification status.
- */
+/** Count each provider and the Cloud row once; saved Cloud credentials alone do not count. */
 export function connectConnectedCounts(
   rows: readonly ConnectRow[],
   hostedVerification?: HostedVerificationStatus,
 ): ConnectCounts {
   const seen = new Set<string>();
   let connected = 0;
+  let hasCloud = false;
   for (const row of rows) {
-    if (row.kind === "cloud") continue; // cloud is not a counted provider
+    if (row.kind === "cloud") {
+      hasCloud = true;
+      continue;
+    }
     if (row.kind !== "provider") continue;
     if (seen.has(row.provider.id)) continue;
     seen.add(row.provider.id);
     if (row.provider.connected) connected += 1;
   }
-  return { connected, total: seen.size, cloudVerified: hostedVerification?.kind === "verified" };
+  return {
+    connected: connected + Number(hasCloud && hostedVerification?.kind === "verified"),
+    total: seen.size + Number(hasCloud),
+  };
 }
 
 /** The always-on status line under the list: how many providers and cloud are connected. */
 export function connectStatusLine(rows: readonly ConnectRow[], hostedVerification?: HostedVerificationStatus): string {
-  const { connected, total, cloudVerified } = connectConnectedCounts(rows, hostedVerification);
-  const totalSources = total + (cloudVerified ? 1 : 0);
-  if (totalSources === 0) return "no providers to connect";
-  if (totalSources === 1 && cloudVerified) return "connected to 0cloud";
-  if (connected === 0 && !cloudVerified) return "no providers connected yet - select one to connect";
-  if (cloudVerified && connected === 0) return "connected: 0cloud";
-  if (cloudVerified) return `connected: 0cloud + ${connected} of ${total} provider${total === 1 ? "" : "s"}`;
-  return `connected: ${connected} of ${total} provider${total === 1 ? "" : "s"}`;
+  const { connected, total } = connectConnectedCounts(rows, hostedVerification);
+  if (total === 0) return "no connections to show";
+  if (connected === 0) return "no connections yet - select one to connect";
+  return `connected: ${connected} of ${total}`;
 }
 
 /** The detail pane's stable, left-aligned header label. */
