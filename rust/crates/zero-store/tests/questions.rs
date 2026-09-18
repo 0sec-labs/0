@@ -406,7 +406,7 @@ fn schema_seven_migration_preserves_journal_and_readonly_never_migrates() {
     let original = f.store.get_operation(&f.actor.id).unwrap().payload;
     drop(f.store);
     let conn = rusqlite::Connection::open(&path).unwrap();
-    conn.execute_batch("DROP INDEX web_experiment_quota_events; DROP TABLE web_experiment_admissions; DROP TABLE web_triage_decisions; DROP INDEX http_receipt_events; DROP INDEX http_rate_events; DROP TABLE http_rates; DROP TABLE http_dispatches; DROP TABLE http_accounts; DROP TABLE tool_approval_consumptions; DROP TABLE tool_approval_decisions; DROP TABLE tool_approvals; DROP TABLE operator_question_decisions; DROP TABLE operator_questions; PRAGMA user_version=7;").unwrap();
+    conn.execute_batch("DROP INDEX campaign_root_lifecycle; DROP INDEX campaign_exposure_witness; DROP TABLE campaign_debits; DROP TABLE campaign_exposures; DROP TABLE campaign_runs; DROP TABLE campaigns; DROP INDEX web_experiment_quota_events; DROP TABLE web_experiment_admissions; DROP TABLE web_triage_decisions; DROP INDEX http_receipt_events; DROP INDEX http_rate_events; DROP TABLE http_rates; DROP TABLE http_dispatches; DROP TABLE http_accounts; DROP TABLE tool_approval_consumptions; DROP TABLE tool_approval_decisions; DROP TABLE tool_approvals; DROP TABLE operator_question_decisions; DROP TABLE operator_questions; PRAGMA user_version=7;").unwrap();
     drop(conn);
     assert!(Store::open_read_only(&path).is_err());
     let store = Store::open(&path).unwrap();

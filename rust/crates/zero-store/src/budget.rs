@@ -37,8 +37,10 @@ impl Store {
             if old != amount {
                 return Err(Error::Conflict(reservation_id.into()));
             }
+            crate::campaign::reserve_model(&tx, session, reservation_id, amount)?;
             return Ok(current);
         }
+        crate::campaign::reserve_model(&tx, session, reservation_id, amount)?;
         let total = current
             .charged
             .checked_add(current.reserved)
@@ -79,6 +81,7 @@ impl Store {
         charged: u64,
         evidence: &str,
     ) -> Result<BudgetSnapshot> {
+        crate::campaign::forbid_input(&self.conn, session)?;
         if evidence.trim().is_empty() || evidence.len() > 32768 {
             return Err(Error::Invalid(
                 "reconciliation evidence must be 1..32768 bytes".into(),
@@ -97,6 +100,7 @@ impl Store {
         let tx = self
             .conn
             .transaction_with_behavior(TransactionBehavior::Immediate)?;
+        crate::campaign::settle_model(&tx, session, reservation_id, charged)?;
         let prior: Option<Option<u64>> = tx
             .query_row(
                 "SELECT charged FROM reservations WHERE session_id=?1 AND id=?2",

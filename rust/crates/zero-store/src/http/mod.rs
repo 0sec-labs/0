@@ -275,6 +275,7 @@ impl Store {
         }
         // Bounded host jitter is shared by siblings and persisted on dispatch.
         let id = uuid::Uuid::new_v4().to_string();
+        crate::campaign::admit_http(&tx, session, effect, &id, intent)?;
         let jitter = u64::from(Sha256::digest(id.as_bytes())[0]) * rates.jitter_ms / 255;
         let next = now_ms.checked_add(jitter).ok_or_else(invalid)?;
         integer(next)?;
@@ -383,6 +384,7 @@ impl Store {
         {
             return Err(conflict());
         }
+        crate::campaign::settle_http(&tx, session, receipt, complete, decoded)?;
         if let Some(old) = old {
             if old != text {
                 return Err(conflict());

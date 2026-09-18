@@ -103,6 +103,7 @@ impl Store {
             if exists {
                 return Err(Error::Conflict(command.clone()));
             }
+            crate::campaign::authorize(&tx, session, command, &serde_json::from_str(&text)?)?;
             let id = uuid::Uuid::new_v4().to_string();
             tx.execute("INSERT INTO operations(id,session_id,command_id,payload,payload_hash,status) VALUES (?1,?2,?3,?4,?5,'admitted')",params![id,session,command,text,hash])?;
             let mut op = operation(&tx, &id)?;
@@ -226,6 +227,7 @@ impl Store {
                 duplicate: true,
             });
         }
+        crate::campaign::authorize(&tx, session, command_id, payload)?;
         let id = uuid::Uuid::new_v4().to_string();
         tx.execute("INSERT INTO operations(id,session_id,command_id,payload,payload_hash,status) VALUES (?1,?2,?3,?4,?5,'admitted')",params![id,session,command_id,payload_text,hash])?;
         let operation = operation(&tx, &id)?;
@@ -380,6 +382,7 @@ impl Store {
                 &json!({"operation_id":id,"owner":owner}),
             )?;
         }
+        crate::campaign::recover(&tx, Some(owner))?;
         tx.commit()?;
         Ok(rows.len())
     }

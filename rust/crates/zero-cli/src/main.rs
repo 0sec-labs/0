@@ -17,6 +17,7 @@ mod report;
 mod server;
 mod source_report;
 mod steering;
+mod strategy;
 mod tui;
 mod web;
 
@@ -78,6 +79,14 @@ async fn run(args: Args) -> Result<bool, Box<dyn Error>> {
                 .await??;
         write_json(&Reply::SessionBudget { budget }, false).await?;
         return Ok(true);
+    }
+    let mut strategy_dispatch = None;
+    if let Command::Strategy { command } = &args.command {
+        if command.requires_dispatch() {
+            strategy_dispatch = Some(strategy::command(command).await?);
+        } else {
+            return strategy::readonly(&args.state, command).await;
+        }
     }
     let mut web_dispatch = None;
     if let Command::Web { command } = &args.command {
@@ -216,6 +225,9 @@ async fn run(args: Args) -> Result<bool, Box<dyn Error>> {
         return console::run(engine, session.clone(), profile).await;
     }
     let command = match args.command {
+        Command::Strategy { .. } => strategy_dispatch
+            .take()
+            .ok_or("Strategy dispatch intent unavailable")?,
         Command::Web { .. } => web_dispatch
             .take()
             .ok_or("Web dispatch intent unavailable")?,
@@ -446,6 +458,8 @@ async fn run(args: Args) -> Result<bool, Box<dyn Error>> {
         | Command::Evaluation { .. }
         | Command::Artifact { .. } => unreachable!(),
     };
+    let strategy_run = matches!(&command, EngineCommand::RunStrategyCampaign { .. });
+    let mut interrupted = false;
     let (events, mut event_rx) = mpsc::channel(128);
     // One-shot commands reserve stdout for their final JSON result.
     let drain = tokio::spawn(async move { while event_rx.recv().await.is_some() {} });
@@ -454,6 +468,7 @@ async fn run(args: Args) -> Result<bool, Box<dyn Error>> {
     let reply = tokio::select! {
         reply = &mut operation => reply?,
         _ = server::shutdown_signal() => {
+            interrupted = true;
             engine.shutdown().await?;
             operation.await?
         }
@@ -476,7 +491,7 @@ async fn run(args: Args) -> Result<bool, Box<dyn Error>> {
         _ => true,
     };
     write_json(&reply, false).await?;
-    Ok(success)
+    Ok(success && !(strategy_run && interrupted))
 }
 
 // Owned engine work has settled before one-shot output starts. Slow readers may

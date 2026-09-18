@@ -44,6 +44,11 @@ pub struct Args {
 
 #[derive(Debug, Subcommand)]
 pub enum Command {
+    /// Run bounded paired strategy qualification or inspect retained campaign evidence.
+    Strategy {
+        #[command(subcommand)]
+        command: crate::strategy::StrategyCommand,
+    },
     /// Inspect scoped web hypotheses/evidence or explicitly execute a frozen host verification plan.
     Web {
         #[command(subcommand)]

@@ -8,7 +8,7 @@ pub fn initialize(conn: &mut Connection) -> Result<()> {
     if application != 0 && application != APPLICATION_ID {
         return Err(Error::ForeignDatabase);
     }
-    if !(0..=12).contains(&version) {
+    if !(0..=13).contains(&version) {
         return Err(Error::Schema(version));
     }
     if application == 0 {
@@ -91,6 +91,17 @@ CREATE INDEX web_experiment_account ON web_experiment_admissions(account_id,sequ
 CREATE INDEX web_experiment_quota_events ON events(session_id,json_extract(payload,'$.account_id'),sequence) WHERE kind='web_experiment_admitted';")?;
         tx.pragma_update(None, "user_version", 12)?;
     }
+    if version < 13 {
+        tx.execute_batch("CREATE TABLE campaigns(id TEXT PRIMARY KEY,command_id TEXT NOT NULL UNIQUE,journal_session_id TEXT NOT NULL UNIQUE REFERENCES sessions(id),record TEXT NOT NULL CHECK(length(CAST(record AS BLOB))<=65536),sequence INTEGER NOT NULL,cancel_sequence INTEGER,last_ms INTEGER NOT NULL);
+CREATE TABLE campaign_runs(id TEXT PRIMARY KEY,campaign_id TEXT NOT NULL REFERENCES campaigns(id),command_id TEXT NOT NULL,session_id TEXT NOT NULL UNIQUE REFERENCES sessions(id),schedule_index INTEGER NOT NULL,record TEXT NOT NULL CHECK(length(CAST(record AS BLOB))<=614400),sequence INTEGER NOT NULL,owner TEXT NOT NULL,closed TEXT,close_sequence INTEGER,close_reason TEXT CHECK(length(CAST(close_reason AS BLOB))<=4096),UNIQUE(campaign_id,command_id),UNIQUE(campaign_id,schedule_index));
+CREATE INDEX campaign_run_page ON campaign_runs(campaign_id,sequence);
+CREATE TABLE campaign_exposures(id TEXT PRIMARY KEY,campaign_id TEXT NOT NULL REFERENCES campaigns(id),command_id TEXT NOT NULL,suite_sha256 TEXT NOT NULL UNIQUE,evaluation_pair_sha256 TEXT NOT NULL,record TEXT NOT NULL CHECK(length(CAST(record AS BLOB))<=4096),sequence INTEGER NOT NULL,UNIQUE(campaign_id,command_id));
+CREATE TABLE campaign_debits(id TEXT PRIMARY KEY,campaign_id TEXT NOT NULL REFERENCES campaigns(id),session_id TEXT NOT NULL REFERENCES sessions(id),operation_id TEXT NOT NULL REFERENCES operations(id),kind TEXT NOT NULL,reserved TEXT NOT NULL CHECK(length(CAST(reserved AS BLOB))<=4096),settled TEXT CHECK(length(CAST(settled AS BLOB))<=4096),sequence INTEGER NOT NULL,settlement_sequence INTEGER);
+CREATE INDEX campaign_debit_page ON campaign_debits(campaign_id,sequence);
+CREATE INDEX campaign_exposure_witness ON events(json_extract(payload,'$.suite_sha256')) WHERE kind='campaign_exposed';
+CREATE INDEX campaign_root_lifecycle ON events(session_id,kind,CASE WHEN json_valid(payload) THEN coalesce(json_extract(payload,'$.id'),json_extract(payload,'$.operation_id')) END) WHERE kind IN ('command_admitted','operation_started','operation_settled','operation_unknown','operation_not_started');")?;
+        tx.pragma_update(None, "user_version", 13)?;
+    }
     tx.commit()?;
     Ok(())
 }
@@ -104,7 +115,7 @@ pub(super) fn validate_current(conn: &Connection) -> Result<()> {
     if application != APPLICATION_ID {
         return Err(Error::ForeignDatabase);
     }
-    if version != 12 {
+    if version != 13 {
         return Err(Error::Schema(version));
     }
     let observed = crate::readonly::definitions(conn)?;

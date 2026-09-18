@@ -141,189 +141,132 @@ impl Engine {
         progress_events: Option<mpsc::Sender<ExecutionEvent>>,
         queued_input: Option<String>,
     ) -> Result<Reply, EngineError> {
-        let initial = validate_initial(&request)?;
-        let receiver = {
-            let mut control = lock(&self.shared.control)?;
-            if control.closing {
-                return Err(EngineError::State("engine is shutting down".into()));
-            }
-            if let Some(input_id) = &queued_input {
-                let input = lock(&self.shared.store)?.queued_agent(&session_id, input_id)?;
-                if input.status == zero_protocol::queue::QueuedAgentStatus::Cancelled
-                    || input.run_command_id != command_id
-                    || input
-                        .resolved_request
-                        .as_ref()
-                        .map(serde_json::to_value)
-                        .transpose()?
-                        != Some(serde_json::to_value(&request)?)
-                {
-                    return Err(EngineError::State(
-                        "queued input authority changed before admission".into(),
-                    ));
-                }
-            } else if command_id.starts_with("queued-agent:") {
-                return Err(EngineError::State(
-                    "queued agent command IDs require queue dispatch".into(),
-                ));
-            }
-            if control
-                .active
-                .get(&session_id)
-                .is_some_and(|active| active.command_id != command_id)
+        run_agent_shared(
+            &self.shared,
+            session_id,
+            command_id,
+            request,
+            events,
+            progress_events,
+            queued_input,
+        )
+        .await
+    }
+}
+
+/// Reuse the owned actor from trusted controllers without constructing a temporary
+/// Engine whose Drop would close unrelated engine admission.
+#[allow(clippy::too_many_arguments)]
+pub(super) async fn run_agent_shared(
+    shared: &Arc<Shared>,
+    session_id: String,
+    command_id: String,
+    request: AgentRequest,
+    events: mpsc::Sender<ExecutionEvent>,
+    progress_events: Option<mpsc::Sender<ExecutionEvent>>,
+    queued_input: Option<String>,
+) -> Result<Reply, EngineError> {
+    let initial = validate_initial(&request)?;
+    let receiver = {
+        let mut control = lock(&shared.control)?;
+        if control.closing {
+            return Err(EngineError::State("engine is shutting down".into()));
+        }
+        if let Some(input_id) = &queued_input {
+            let input = lock(&shared.store)?.queued_agent(&session_id, input_id)?;
+            if input.status == zero_protocol::queue::QueuedAgentStatus::Cancelled
+                || input.run_command_id != command_id
+                || input
+                    .resolved_request
+                    .as_ref()
+                    .map(serde_json::to_value)
+                    .transpose()?
+                    != Some(serde_json::to_value(&request)?)
             {
                 return Err(EngineError::State(
-                    "session already has an active operation".into(),
+                    "queued input authority changed before admission".into(),
                 ));
             }
-            if control.active.len() >= 64 && !control.active.contains_key(&session_id) {
-                return Err(EngineError::State(
-                    "engine active operation limit reached".into(),
-                ));
-            }
-            let profile = lock(&self.shared.providers)?
-                .get(&request.provider)
-                .cloned()
-                .ok_or_else(|| EngineError::State("provider profile is not configured".into()))?;
-            profile
-                .client
-                .validate(&initial)
-                .map_err(|e| EngineError::State(e.to_string()))?;
-            // A durable completed/uncertain receipt remains replayable after an
-            // activation. Compare the request/provider and freshly configured
-            // host launch, but never reinterpret its historical plugin graph.
-            let prior =
-                lock(&self.shared.store)?.get_operation_by_command(&session_id, &command_id);
-            match prior {
-                Ok(prior) => {
-                    let mut payload = serde_json::json!({"kind":zero_protocol::agent::actor_kind(&request),"request":request,"endpoint":profile.client.endpoint_identity(),"rates":profile.rates});
-                    if profile.client.wire_api() != zero_protocol::model::WireApi::Responses {
-                        payload["wire_api"] = serde_json::to_value(profile.client.wire_api())?;
-                    }
-                    profile.stamp(&mut payload)?;
-                    if let Some(version) = prior.payload.get("http_output_version") {
-                        payload["http_output_version"] = version.clone();
-                    }
-                    if request.http_profile.is_some() {
-                        payload["http_context"] = agent_http::retry_identity(
-                            &self.shared,
-                            &session_id,
-                            &request,
-                            prior.payload.get("http_context").ok_or_else(|| {
-                                EngineError::State("missing historical HTTP context".into())
-                            })?,
-                        )?;
-                    }
-                    if request.delegation_policy.is_some() {
-                        payload["delegation_context"] = agent_delegation::retry_identity(
-                            &self.shared,
-                            &request,
-                            prior.payload.get("delegation_context").ok_or_else(|| {
-                                EngineError::State("missing historical delegation context".into())
-                            })?,
-                        )?;
-                    }
-                    if request.context_policy.is_some() {
-                        payload["context_template"] = prior
-                            .payload
-                            .get("context_template")
-                            .cloned()
-                            .ok_or_else(|| {
-                                EngineError::State("missing historical context template".into())
-                            })?;
-                    }
-                    if let Some(context) = prior.payload.get("plugin_context") {
-                        let profiles = lock(&self.shared.plugins)?;
-                        let configured = profiles.as_ref().ok_or_else(|| {
-                            EngineError::State("plugins are not configured".into())
-                        })?;
-                        let mut context = context.clone();
-                        context["launch"] = serde_json::to_value(&configured.launch)?;
-                        payload["plugin_context"] = context;
-                    }
-                    let admission = lock(&self.shared.store)?.admit_command(
+        } else if command_id.starts_with("queued-agent:") {
+            return Err(EngineError::State(
+                "queued agent command IDs require queue dispatch".into(),
+            ));
+        }
+        if control
+            .active
+            .get(&session_id)
+            .is_some_and(|active| active.command_id != command_id)
+        {
+            return Err(EngineError::State(
+                "session already has an active operation".into(),
+            ));
+        }
+        if control.active.len() >= 64 && !control.active.contains_key(&session_id) {
+            return Err(EngineError::State(
+                "engine active operation limit reached".into(),
+            ));
+        }
+        let profile = lock(&shared.providers)?
+            .get(&request.provider)
+            .cloned()
+            .ok_or_else(|| EngineError::State("provider profile is not configured".into()))?;
+        profile
+            .client
+            .validate(&initial)
+            .map_err(|e| EngineError::State(e.to_string()))?;
+        // A durable completed/uncertain receipt remains replayable after an
+        // activation. Compare the request/provider and freshly configured
+        // host launch, but never reinterpret its historical plugin graph.
+        let prior = lock(&shared.store)?.get_operation_by_command(&session_id, &command_id);
+        match prior {
+            Ok(prior) => {
+                let mut payload = serde_json::json!({"kind":zero_protocol::agent::actor_kind(&request),"request":request,"endpoint":profile.client.endpoint_identity(),"rates":profile.rates});
+                if profile.client.wire_api() != zero_protocol::model::WireApi::Responses {
+                    payload["wire_api"] = serde_json::to_value(profile.client.wire_api())?;
+                }
+                profile.stamp(&mut payload)?;
+                if let Some(version) = prior.payload.get("http_output_version") {
+                    payload["http_output_version"] = version.clone();
+                }
+                if request.http_profile.is_some() {
+                    payload["http_context"] = agent_http::retry_identity(
+                        shared,
                         &session_id,
-                        &command_id,
-                        &payload,
+                        &request,
+                        prior.payload.get("http_context").ok_or_else(|| {
+                            EngineError::State("missing historical HTTP context".into())
+                        })?,
                     )?;
-                    let result = admission
-                        .operation
-                        .outcome
-                        .clone()
-                        .and_then(|v| serde_json::from_value(v).ok());
-                    return Ok(Reply::Agent {
-                        operation: admission.operation,
-                        result,
-                        duplicate: true,
-                    });
                 }
-                Err(zero_store::Error::NotFound(_)) => {}
-                Err(error) => return Err(error.into()),
-            }
-            let session = lock(&self.shared.store)?.get_session(&session_id)?;
-            let plugins = agent_plugins::capture(&self.shared, &session, &request.plugin_tools)?;
-            agent_approvals::validate_plugins(&request, plugins.as_ref())?;
-            let mut store = lock(&self.shared.store)?;
-            let source = agent_source::capture(&store, &session_id, &request)?;
-            let http =
-                agent_http::capture(&self.shared, &store, &session_id, &command_id, &request)?;
-            // A context lineage keeps its original offered schemas across upgrades.
-            // continuation_input has already validated the ancestor's request and
-            // hash-bound template; only fresh conversations capture current tools.
-            let template = if request.context_policy.is_some() {
-                match &request.continuation_of {
-                    Some(parent) => serde_json::from_value::<ResponsesRequest>(
-                        store.get_operation(parent)?.payload["context_template"].clone(),
-                    )?,
-                    None => model_request(&request, vec![], plugins.as_ref()),
+                if request.delegation_policy.is_some() {
+                    payload["delegation_context"] = agent_delegation::retry_identity(
+                        shared,
+                        &request,
+                        prior.payload.get("delegation_context").ok_or_else(|| {
+                            EngineError::State("missing historical delegation context".into())
+                        })?,
+                    )?;
                 }
-            } else {
-                model_request(&request, vec![], plugins.as_ref())
-            };
-            let delegation = agent_delegation::capture(
-                &self.shared,
-                &request,
-                &template,
-                plugins.as_ref(),
-                http.as_ref(),
-            )?;
-            let input = continuation_input(
-                &store,
-                &session_id,
-                &request,
-                &profile,
-                plugins.as_ref(),
-                delegation.as_ref(),
-                http.as_ref(),
-            )?;
-            let mut projected = template.clone();
-            projected.input = input.projected(request.context_policy.as_ref())?;
-            profile
-                .client
-                .validate(&projected)
-                .map_err(|e| EngineError::State(e.to_string()))?;
-            let mut payload = serde_json::json!({"kind":zero_protocol::agent::actor_kind(&request),"request":request,"endpoint":profile.client.endpoint_identity(),"rates":profile.rates});
-            if profile.client.wire_api() != zero_protocol::model::WireApi::Responses {
-                payload["wire_api"] = serde_json::to_value(profile.client.wire_api())?;
-            }
-            profile.stamp(&mut payload)?;
-            if let Some(context) = &delegation {
-                payload["delegation_context"] = context.identity.clone();
-            }
-            if request.context_policy.is_some() {
-                payload["context_template"] = serde_json::to_value(&template)?;
-            }
-            if let Some(context) = &plugins {
-                payload["plugin_context"] = context.identity.clone();
-            }
-            if let Some(context) = &http {
-                payload["http_context"] = context.identity.clone();
-                if context.output_version == 2 {
-                    payload["http_output_version"] = serde_json::json!(2);
+                if request.context_policy.is_some() {
+                    payload["context_template"] = prior
+                        .payload
+                        .get("context_template")
+                        .cloned()
+                        .ok_or_else(|| {
+                            EngineError::State("missing historical context template".into())
+                        })?;
                 }
-            }
-            let admission = store.admit_command(&session_id, &command_id, &payload)?;
-            if admission.duplicate {
+                if let Some(context) = prior.payload.get("plugin_context") {
+                    let profiles = lock(&shared.plugins)?;
+                    let configured = profiles
+                        .as_ref()
+                        .ok_or_else(|| EngineError::State("plugins are not configured".into()))?;
+                    let mut context = context.clone();
+                    context["launch"] = serde_json::to_value(&configured.launch)?;
+                    payload["plugin_context"] = context;
+                }
+                let admission =
+                    lock(&shared.store)?.admit_command(&session_id, &command_id, &payload)?;
                 let result = admission
                     .operation
                     .outcome
@@ -335,51 +278,127 @@ impl Engine {
                     duplicate: true,
                 });
             }
-            let operation = store.begin_operation(&admission.operation.id, &self.shared.owner)?;
-            let cancel = CancellationToken::new();
-            control.active.insert(
-                session_id.clone(),
-                Active {
-                    command_id: command_id.clone(),
-                    execution_id: command_id,
-                    cancel: cancel.clone(),
-                },
-            );
-            emit_admission(&events, &operation, &operation.command_id, &cancel);
-            let shared = Arc::clone(&self.shared);
-            let (sender, receiver) = oneshot::channel();
-            let mut guard = WorkerGuard::new(shared, &session_id, &operation.id, cancel.clone());
-            tokio::spawn(async move {
-                let result = run_actor(
-                    &guard.shared,
-                    &session_id,
-                    &operation.id,
-                    PreparedActor {
-                        request,
-                        profile,
-                        history: input,
-                        plugins,
-                        http,
-                        source,
-                        template,
-                        delegation,
-                        checkpoint: true,
-                    },
-                    cancel,
-                    events,
-                    progress_events,
-                )
-                .await;
-                guard.settled = result.is_ok();
-                drop(guard);
-                let _ = sender.send(result);
-            });
-            receiver
+            Err(zero_store::Error::NotFound(_)) => {}
+            Err(error) => return Err(error.into()),
+        }
+        let session = lock(&shared.store)?.get_session(&session_id)?;
+        let plugins = agent_plugins::capture(shared, &session, &request.plugin_tools)?;
+        agent_approvals::validate_plugins(&request, plugins.as_ref())?;
+        let mut store = lock(&shared.store)?;
+        let source = agent_source::capture(&store, &session_id, &request)?;
+        let http = agent_http::capture(shared, &store, &session_id, &command_id, &request)?;
+        // A context lineage keeps its original offered schemas across upgrades.
+        // continuation_input has already validated the ancestor's request and
+        // hash-bound template; only fresh conversations capture current tools.
+        let template = if request.context_policy.is_some() {
+            match &request.continuation_of {
+                Some(parent) => serde_json::from_value::<ResponsesRequest>(
+                    store.get_operation(parent)?.payload["context_template"].clone(),
+                )?,
+                None => model_request(&request, vec![], plugins.as_ref()),
+            }
+        } else {
+            model_request(&request, vec![], plugins.as_ref())
         };
+        let delegation = agent_delegation::capture(
+            shared,
+            &request,
+            &template,
+            plugins.as_ref(),
+            http.as_ref(),
+        )?;
+        let input = continuation_input(
+            &store,
+            &session_id,
+            &request,
+            &profile,
+            plugins.as_ref(),
+            delegation.as_ref(),
+            http.as_ref(),
+        )?;
+        let mut projected = template.clone();
+        projected.input = input.projected(request.context_policy.as_ref())?;
+        profile
+            .client
+            .validate(&projected)
+            .map_err(|e| EngineError::State(e.to_string()))?;
+        let mut payload = serde_json::json!({"kind":zero_protocol::agent::actor_kind(&request),"request":request,"endpoint":profile.client.endpoint_identity(),"rates":profile.rates});
+        if profile.client.wire_api() != zero_protocol::model::WireApi::Responses {
+            payload["wire_api"] = serde_json::to_value(profile.client.wire_api())?;
+        }
+        profile.stamp(&mut payload)?;
+        if let Some(context) = &delegation {
+            payload["delegation_context"] = context.identity.clone();
+        }
+        if request.context_policy.is_some() {
+            payload["context_template"] = serde_json::to_value(&template)?;
+        }
+        if let Some(context) = &plugins {
+            payload["plugin_context"] = context.identity.clone();
+        }
+        if let Some(context) = &http {
+            payload["http_context"] = context.identity.clone();
+            if context.output_version == 2 {
+                payload["http_output_version"] = serde_json::json!(2);
+            }
+        }
+        let admission = store.admit_command(&session_id, &command_id, &payload)?;
+        if admission.duplicate {
+            let result = admission
+                .operation
+                .outcome
+                .clone()
+                .and_then(|v| serde_json::from_value(v).ok());
+            return Ok(Reply::Agent {
+                operation: admission.operation,
+                result,
+                duplicate: true,
+            });
+        }
+        let operation = store.begin_operation(&admission.operation.id, &shared.owner)?;
+        let cancel = CancellationToken::new();
+        control.active.insert(
+            session_id.clone(),
+            Active {
+                command_id: command_id.clone(),
+                execution_id: command_id,
+                cancel: cancel.clone(),
+            },
+        );
+        emit_admission(&events, &operation, &operation.command_id, &cancel);
+        let shared = Arc::clone(shared);
+        let (sender, receiver) = oneshot::channel();
+        let mut guard = WorkerGuard::new(shared, &session_id, &operation.id, cancel.clone());
+        tokio::spawn(async move {
+            let result = run_actor(
+                &guard.shared,
+                &session_id,
+                &operation.id,
+                PreparedActor {
+                    request,
+                    profile,
+                    history: input,
+                    plugins,
+                    http,
+                    source,
+                    template,
+                    delegation,
+                    checkpoint: true,
+                },
+                cancel,
+                events,
+                progress_events,
+            )
+            .await;
+            guard.settled = result.is_ok();
+            drop(guard);
+            let _ = sender.send(result);
+        });
         receiver
-            .await
-            .map_err(|_| EngineError::State("agent owner stopped before settlement".into()))?
-    }
+    };
+    receiver
+        .await
+        .map_err(|_| EngineError::State("agent owner stopped before settlement".into()))?
 }
 
 /// Reconstruct a completed turn from immutable journal records. No historical

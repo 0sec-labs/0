@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 pub mod agent;
 pub mod approvals;
 mod binary;
+pub mod campaign;
 pub mod context;
 pub mod delegation;
 pub mod discovery;
@@ -24,6 +25,7 @@ pub mod sandbox;
 pub mod session;
 pub mod source;
 pub mod steering;
+pub mod strategy;
 pub mod triage;
 pub mod verification;
 mod verification_binary;
@@ -60,6 +62,31 @@ pub struct Request {
 )]
 pub enum Command {
     Initialize,
+    CreateStrategyCampaign {
+        command_id: String,
+        plan: Box<strategy::StrategyPlan>,
+    },
+    RunStrategyCampaign {
+        campaign_id: String,
+        lane: campaign::CampaignLane,
+    },
+    CampaignStatus {
+        campaign_id: String,
+    },
+    CampaignRuns {
+        campaign_id: String,
+        after_sequence: u64,
+        limit: u32,
+    },
+    StrategyCampaignReport {
+        campaign_id: String,
+    },
+    StrategyDevelopmentFeedback {
+        campaign_id: String,
+    },
+    CancelStrategyCampaign {
+        campaign_id: String,
+    },
     SessionCreate {
         generation: String,
         budget_limit: u64,
@@ -377,6 +404,25 @@ pub struct ReconcileResult {
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Reply {
+    StrategyCampaignCreated {
+        campaign: campaign::CampaignSnapshot,
+        duplicate: bool,
+    },
+    StrategyCampaignReport {
+        report: strategy::StrategyReport,
+    },
+    StrategyDevelopmentFeedback {
+        feedback: strategy::StrategyDevelopmentFeedback,
+    },
+    StrategyCampaignCancelled {
+        snapshot: campaign::CampaignSnapshot,
+    },
+    CampaignStatus {
+        snapshot: campaign::CampaignSnapshot,
+    },
+    CampaignRuns {
+        page: campaign::CampaignRunPage,
+    },
     Initialized {
         protocol_version: u32,
         capabilities: Vec<String>,

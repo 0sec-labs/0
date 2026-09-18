@@ -41,14 +41,15 @@ without a supported conservative billing bound or provider-enforced cap.
 HTTP children, continuations, adaptive experiments and linked verification share the original root's
 request/byte account, rate limits and cooldown. A new independently authorized
 root creates a new account. Inline experiments inherit the original account;
-a future controller cannot start new roots to replenish it. The model currently
+strategy campaign roots additionally share a durable campaign account and cannot replenish it. The model currently
 has no tool granting session creation, account replacement or reconciliation.
 
 Sandbox limits and evaluator execution slots are separate from model money.
-Before autonomous evolution or multiple experiment roots, add a durable campaign
-identity and aggregate work quotas, binding proposal, candidate, evaluation and
-canary runs. Preserve distinct units, uncertain reservations, deadlines and
-actual usage. Fresh candidates and restarts cannot reset campaign limits.
+Strategy campaigns bind fresh evaluation roots to a durable identity and aggregate
+model, HTTP, experiment and run quotas. Reservations and actual charges remain
+distinct, deadlines constrain admission, and uncertain usage retains its hold.
+Candidate-generation and canary integration must preserve this same account;
+creating a campaign per autonomous proposal would defeat the aggregate limit.
 
 Cancellation means signal, drain owned work, then report its known disposition.
 An accepted cancel signal is not a rollback or proof that billing stopped.
@@ -64,7 +65,7 @@ The generation registry accepts trusted host-authored receipts; hashing a receip
 does not prove an approved evaluator ran. Never expose eligibility/activation
 mutation as a model tool or accept candidate-authored success flags as evidence.
 
-The proposed first strategy campaign changes a bounded advisory strategy artifact
+The first strategy campaign changes a bounded advisory strategy artifact
 while keeping scope, tools, models, snapshots, evaluator, oracle and promotion
 policy fixed. Run actual baseline/candidate agents on host-owned scenarios;
 measure supported observations, controls, stability, retained baseline capability
@@ -95,6 +96,19 @@ failed attempts.
 3. Qualify autonomous candidate generation, separate canary, activation and rollback
    before broadening the writable artifact surface or claiming measured improvement.
 
-The experiment loop implements the first boundary. Campaign evaluation and
-autonomous evolution remain requirements, not completed capabilities. Scanner, browser/auth/session, cloud, arbitrary source
+The experiment loop implements the first boundary. The campaign controller runs
+actual baseline/candidate agents against local HTTP fixtures, with separate
+Development and Final commands, permanent protected-suite exposure, independent
+retained-evidence scoring and read-only reports. Reports are explicitly
+`qualification_only`: `ImprovedForFixtureSuite` does not grant eligibility,
+activation or a general security-quality claim. Private fixture truth stays out
+of agent instructions; feedback exposes Development cases only. Protected suite
+identity is canonical across scenario ordering and independent of candidate and
+Development changes. Host-authored suite contents still need corpus governance. Renderer and oracle
+identities are explicit semantic versions, not binary attestations; changes to
+compiled evaluation semantics require a version change.
+
+This adapter supports snapshot-free HTTP actors and optional HTTP delegates;
+source/sandbox candidates, autonomous proposal generation, independent canaries,
+measured eligibility import and runtime activation remain unfinished. Scanner, browser/auth/session, cloud, arbitrary source
 self-rewriting and production release parity remain in [MIGRATION.md](MIGRATION.md).

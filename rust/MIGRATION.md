@@ -1099,10 +1099,10 @@ checkpoint continuation, cancellation, actual process death, no replay, offline
 reports and terminal restoration. The integrating checkpoint records final test
 counts. No live targets, paid providers or production publication are included.
 
-Remaining autonomy work: durable campaign-wide accounting across independent
-roots, real agent-strategy evaluation, protected scenario-family holdouts and
-exposure history, independently measured eligibility, candidate generation,
-separate canary, activation and rollback. This experiment loop is a prerequisite;
+Remaining autonomy work at that checkpoint included campaign-wide accounting,
+real strategy evaluation and protected exposure; the next section records their
+first implementation. Independently measured eligibility, candidate generation,
+separate canary, activation and rollback remain outstanding. This experiment loop is a prerequisite;
 it is not yet a self-evolving agent or a complete security scanner replacement.
 
 Adaptive checkpoint qualification: the frozen-source actual Rust 1.85 workspace
@@ -1113,3 +1113,47 @@ inference larger than the frozen-effect bound. Independent reviews covered
 Store authority/accounting and frontend completeness; the resulting fixes are
 included in this same qualification. These are local fixture proofs, not a
 production release or a claim of measured improvement by a live model.
+
+
+### Campaign accounting and actual-agent strategy evaluation
+
+Schema 13 binds fresh evaluation sessions to one durable campaign account.
+Model reservations/charges, HTTP request and byte usage, experiment admissions,
+run slots and deadlines are enforced across roots and allowed HTTP delegates.
+Immutable admission and lifecycle witnesses validate mutable projections;
+missing bindings cannot silently turn a campaign session into an ordinary account.
+Public inference, queued input, steering and manual usage reconciliation cannot
+bypass the controller's frozen authority. Provider routes/prices and exact HTTP
+origins are captured before execution. Unknown usage remains reserved after
+cancellation or owner death.
+
+`strategy create/run/status/runs/report/dev-feedback` exposes the first actual
+agent evaluation adapter. A bounded advisory changes investigation choices;
+host scenarios, tools, private fixture truth and scoring remain fixed. Separate
+Development and Final commands prevent development feedback from silently
+consuming a protected holdout. Final requires completed observed Development;
+protected suite exposure is permanent across campaigns and canonical scenario
+ordering. Candidate and Development changes do not replenish that exposure.
+
+Independent reconstruction scores retained HTTP evidence and native terminal
+submissions. Reports are `qualification_only`, with fixture-specific improvement,
+non-improvement or inconclusive decisions; they do not create eligibility or
+activate code. Empty submissions can pass negative fixtures but miss positive
+ones. Repeats measure stability, not additional independent samples. Read-only
+inspection needs no provider credentials or engine ownership.
+
+Current adapter scope is snapshot-free HTTP agents, optionally using experiments
+and joined HTTP roles. Production corpus governance, browser/auth workflows,
+source/sandbox strategy evaluation, autonomous candidate generation, independent
+canaries and measured runtime promotion remain unqualified. Local provider
+fixtures prove the controller and accounting paths, not live-model judgment.
+
+Campaign checkpoint qualification: frozen-source actual Rust 1.85 workspace
+completed with 904 passed, zero failed and 11 explicit backend/platform ignores.
+Strict workspace production Clippy and formatting passed. Physical local tests
+cover paired agents, protected exposure, readonly/offline retries, cancellation,
+actual owner death, exact-port isolation, public-inference rejection and joined
+experiments sharing campaign quotas. Independent reviews produced fixes for
+private-marker leakage, unsupported candidate claims, retired-run witnesses and
+exact delegated authority. No paid provider, live target or production release
+was used to obtain these results.

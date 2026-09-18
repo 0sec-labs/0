@@ -239,6 +239,7 @@ impl Store {
         for value in [session, op, command] {
             id(value)?;
         }
+        crate::campaign::forbid_input(&self.conn, session)?;
         if prompt.trim().is_empty() || prompt.len() > 16384 || prompt.contains('\0') {
             return Err(Error::Invalid(
                 "steering prompt requires 1..16384 UTF-8 bytes without NUL".into(),
@@ -411,6 +412,7 @@ impl Store {
         let tx = self
             .conn
             .transaction_with_behavior(TransactionBehavior::Immediate)?;
+        crate::campaign::authorize(&tx, session, command, payload)?;
         target(&tx, session, op, Some(owner))?;
         if sealed(&tx, op)? {
             return Err(conflict("steering actor is sealed"));

@@ -1038,3 +1038,23 @@ the old values visibly stale. This is session accounting, not a combined campaig
 or HTTP allowance. Cancellation acknowledgments retain their exact target; late
 acknowledgments cannot overwrite the final result or affect a newer turn. A common
 lifecycle strip remains visible over help, question and approval editors.
+
+### Paired strategy qualification
+
+`strategy create --command-id ID --plan host-plan.json` freezes a private host plan and captured provider identities. The version-1 plan selects the `strategy_advisory_v1` renderer and `local_web_marker_v1` fixture oracle, a fixed baseline/candidate pair, distinct development/final scenario families, repetitions, aggregate campaign limits and expiry. Candidate advisory text grants no tools or budget. Do not include private fixture markers in public instructions, tasks or advisory text. Creation validates the plan before engine admission and never prints its private contents.
+
+Run each lane explicitly with the configured provider:
+
+```sh
+0sec-native --state state.db --providers providers.json strategy create --command-id paired-1 --plan host-plan.json
+0sec-native --state state.db --providers providers.json strategy run --campaign CAMPAIGN --lane development
+0sec-native --state state.db strategy dev-feedback --campaign CAMPAIGN --format text
+0sec-native --state state.db --providers providers.json strategy run --campaign CAMPAIGN --lane final
+0sec-native --state state.db strategy report --campaign CAMPAIGN --format text
+```
+
+Final requires completed development for the same frozen pair and consumes a protected exposure before scenario delivery. Development never automatically starts final. This is `qualification_only`: independently measured fixture improvement is neither generic security verification nor permission to promote a strategy. Before final, the combined report remains inconclusive with `protected_final_not_run`. Development feedback excludes protected final rows and verdicts. The first adapter uses local owned fixtures, with real configured model calls charged to the shared campaign; it does not add a mandatory approval step for every case or experiment.
+
+`strategy status --campaign ID` and `strategy runs --campaign ID --after-sequence 0 --limit 50` inspect retained aggregate accounting and bounded run metadata. Status, runs, report and dev-feedback default to JSON; `--format text` provides bounded terminal-safe text. These reads work while an engine owns the database, require no provider/target credentials, and never replay effects. Advance run pages using `next_after_sequence` until absent. Status exposes its journal sequence/time and separately reports actual charges, unresolved holds and active/unknown runs. Report usage is reconstructed from retained accounting without an as-of timestamp; request status for a snapshot with its sequence and time. Reservations constrain admissions, not arbitrary provider invoice overruns.
+
+A completed measurement report, including `not_improved` or development-only `inconclusive`, is successful command delivery. An explicitly signal-interrupted run exits nonzero after emitting its retained result and cleanup. Ctrl-C/SIGTERM during a foreground run closes campaign admissions and waits for owned actor/fixture cleanup through the engine lifecycle. An app-server client can send `CancelStrategyCampaign` on its owning connection. There is no second-process CLI cancellation IPC: readonly inspection does not take ownership or imply that a cancelled campaign has finished cleanup. Interrupted runs are retained without replay, unresolved usage remains held, and a fresh session does not refill campaign allowances. This controller does not implement candidate-pool proposal or production promotion.

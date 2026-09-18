@@ -14,6 +14,7 @@ mod agent_submission;
 mod agent_web;
 mod agent_web_experiment;
 mod budget_read;
+mod campaign_read;
 mod discovery;
 mod history;
 mod inference;
@@ -27,6 +28,7 @@ mod sandbox;
 mod source;
 mod source_provenance;
 mod source_report;
+mod strategy;
 mod triage;
 mod web_experiment;
 mod web_experiment_read;
@@ -40,8 +42,10 @@ pub use agent_http::{read_http_evidence, read_http_operation};
 pub use agent_questions::{read_operator_question, read_operator_questions};
 pub use agent_steering::read_agent_steering;
 pub use budget_read::read_session_budget;
+pub use campaign_read::{read_campaign_runs, read_campaign_status};
 pub use discovery::{read_source_reviews, read_web_runs};
 pub use source_report::{read_source_report, read_source_workflow_report};
+pub use strategy::{read_strategy_development_feedback, read_strategy_report};
 pub use triage::{read_source_finding, read_source_findings};
 pub use web_experiment_read::{
     read_web_experiment, read_web_experiments, read_web_workflow_report_with_experiments,
@@ -93,6 +97,7 @@ struct Active {
 struct Control {
     closing: bool,
     active: HashMap<String, Active>,
+    strategy_campaigns: HashMap<String, CancellationToken>,
     actors: HashMap<String, agent_steering::Target>,
     questions: HashMap<String, agent_questions::Waiter>,
     approvals: HashMap<String, agent_approvals::Waiter>,
@@ -179,6 +184,9 @@ impl Drop for WorkerGuard {
                 control.closing = true;
                 for active in control.active.values() {
                     active.cancel.cancel();
+                }
+                for campaign in control.strategy_campaigns.values() {
+                    campaign.cancel();
                 }
                 if let Ok(mut store) = self.shared.store.lock() {
                     let _ = store.mark_operation_unknown(
@@ -291,6 +299,8 @@ impl Engine {
             "source_hypothesis_triage",
             "bounded_source_review_discovery",
             "host_frozen_source_observation",
+            "durable_strategy_campaign_accounting",
+            "qualification_only_strategy_evaluation",
         ]
         .map(String::from)
         .to_vec()
@@ -341,6 +351,26 @@ impl Engine {
         event_tx: mpsc::Sender<ExecutionEvent>,
         progress_tx: Option<mpsc::Sender<ExecutionEvent>>,
     ) -> Result<Reply, EngineError> {
+        match command {
+            Command::CreateStrategyCampaign { command_id, plan } => {
+                return self.create_strategy_campaign(command_id, *plan);
+            }
+            Command::RunStrategyCampaign { campaign_id, lane } => {
+                return self
+                    .run_strategy_campaign(campaign_id, lane, event_tx, progress_tx)
+                    .await;
+            }
+            Command::StrategyCampaignReport { campaign_id } => {
+                return self.strategy_campaign_report(campaign_id);
+            }
+            Command::StrategyDevelopmentFeedback { campaign_id } => {
+                return self.strategy_development_feedback(campaign_id);
+            }
+            Command::CancelStrategyCampaign { campaign_id } => {
+                return self.cancel_strategy_campaign(campaign_id);
+            }
+            _ => {}
+        }
         if let Command::ValidateSourceRepair {
             session_id,
             command_id,
@@ -844,6 +874,20 @@ impl Engine {
             Command::SessionGet { session_id } => Ok(Reply::Session {
                 session: lock(&self.shared.store)?.get_session(&session_id)?,
             }),
+            Command::CampaignStatus { campaign_id } => Ok(Reply::CampaignStatus {
+                snapshot: lock(&self.shared.store)?.campaign(&campaign_id)?,
+            }),
+            Command::CampaignRuns {
+                campaign_id,
+                after_sequence,
+                limit,
+            } => Ok(Reply::CampaignRuns {
+                page: lock(&self.shared.store)?.campaign_runs(
+                    &campaign_id,
+                    after_sequence,
+                    limit,
+                )?,
+            }),
             Command::SessionBudget { session_id } => Ok(Reply::SessionBudget {
                 budget: lock(&self.shared.store)?.budget(&session_id)?,
             }),
@@ -906,7 +950,12 @@ impl Engine {
             Command::Reconcile(request) => zero_evidence::reconcile(request)
                 .map(Reply::Reconciled)
                 .map_err(|e| EngineError::State(e.to_string())),
-            Command::Execute { .. }
+            Command::CreateStrategyCampaign { .. }
+            | Command::RunStrategyCampaign { .. }
+            | Command::StrategyCampaignReport { .. }
+            | Command::StrategyDevelopmentFeedback { .. }
+            | Command::CancelStrategyCampaign { .. }
+            | Command::Execute { .. }
             | Command::SteerAgent { .. }
             | Command::DecideOperatorQuestion { .. }
             | Command::DecideToolApproval { .. }
@@ -1009,12 +1058,17 @@ impl Engine {
             for active in control.active.values() {
                 active.cancel.cancel();
             }
+            for campaign in control.strategy_campaigns.values() {
+                campaign.cancel();
+            }
         }
         loop {
             let notified = self.shared.workers.changed.notified();
-            if lock(&self.shared.control)?.active.is_empty()
-                && self.shared.workers.count.load(Ordering::Acquire) == 0
-            {
+            let drained = {
+                let control = lock(&self.shared.control)?;
+                control.active.is_empty() && control.strategy_campaigns.is_empty()
+            };
+            if drained && self.shared.workers.count.load(Ordering::Acquire) == 0 {
                 break;
             }
             notified.await;
@@ -1030,6 +1084,9 @@ impl Drop for Engine {
             control.closing = true;
             for active in control.active.values() {
                 active.cancel.cancel();
+            }
+            for campaign in control.strategy_campaigns.values() {
+                campaign.cancel();
             }
         }
     }

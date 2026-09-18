@@ -239,7 +239,11 @@ fn instructions(parent: &AgentRequest, role: &DelegationRole) -> String {
         parent.instructions, role.name, role.instructions
     )
 }
-fn child_request(parent: &AgentRequest, role: &DelegationRole, prompt: &str) -> AgentRequest {
+pub(super) fn child_request(
+    parent: &AgentRequest,
+    role: &DelegationRole,
+    prompt: &str,
+) -> AgentRequest {
     let mut request = parent.clone();
     request.provider = role.provider.clone();
     request.model = role.model.clone();

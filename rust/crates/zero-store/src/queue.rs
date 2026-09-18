@@ -119,6 +119,7 @@ impl Store {
         request: &AgentRequest,
         after: &Option<String>,
     ) -> Result<(QueuedAgent, bool)> {
+        crate::campaign::forbid_input(&self.conn, session)?;
         if command.trim().is_empty() || command.len() > 1024 {
             return Err(Error::Invalid(
                 "queue command identifier must be 1..1024 bytes".into(),

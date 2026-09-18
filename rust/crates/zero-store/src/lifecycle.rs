@@ -69,6 +69,7 @@ impl Store {
                 &json!({"operation_id":id,"status":"failed","outcome":outcome}),
             )?;
         }
+        crate::campaign::recover(&tx, previous.as_deref())?;
         tx.execute("INSERT INTO engine_epoch(singleton,owner) VALUES (1,?1) ON CONFLICT(singleton) DO UPDATE SET owner=excluded.owner",params![owner])?;
         tx.commit()?;
         Ok(rows.len() + admitted.len())

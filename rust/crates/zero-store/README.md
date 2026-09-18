@@ -62,7 +62,7 @@ requires the current exact schema and never performs migration. See
 
 Schema v6 adds immutable source-hypothesis triage decisions. Native v5 migration
 preserves source artifacts, queue entries, reservations and operation ownership.
-`open_read_only` accepts only the exact current v7 schema; it never migrates an
+`open_read_only` accepts only the exact current v13 schema; it never migrates an
 older database, claims an epoch, recovers operations, or creates default records.
 
 A record is identified by session, source operation, hypothesis ID and the
@@ -174,7 +174,7 @@ materialization; a page may stop early at either bound. Continue using the last
 returned message sequence until an empty page. Captured labels and inference
 replay both validate original enqueue and capture events. SQL size checks precede
 witness/prompt decoding; source/provider outcome bodies are not read. Read-only
-opening requires exact schema v9 and performs no migration or ownership recovery.
+opening requires exact schema v13 and performs no migration or ownership recovery.
 
 
 Schema v8 adds informational operator questions and immutable decisions. Creation
@@ -233,3 +233,45 @@ budget. Pages are 1–100 records and at most 1 MiB serialized; continue after t
 last returned wrapper admission sequence. These APIs do not execute, recover,
 claim ownership or mutate approval state. This is offline tool-approval support,
 not engagement scope or complete legacy autonomy-mode parity.
+
+
+## Campaign accounting
+
+Schema 13 adds host-created campaigns, atomically bound run sessions, protected
+suite exposures and witnessed effect debits. Creation retains the exact private
+controller configuration artifact in the same transaction as the campaign. A
+case session cannot escape its account by removing a mutable binding projection:
+an immutable session witness must agree in both directions.
+
+The first adapter permits snapshot-free web agents, their explicitly granted
+joined children, model inference, HTTP and native adaptive experiments. Other
+execution, plugin, source, question, approval, queue and steering entry points
+reject in bound sessions. Root requests and root/role provider route, wire,
+rates and hosted catalog identities are frozen. Each HTTP hop, including a
+redirect, must match the issued fixture's exact scheme/host/port and captured
+HTTP policy. General non-campaign HTTP scoping is unchanged.
+
+Session and campaign model reservations/settlements commit together. Actual
+reported charges may exceed admission estimates and remain visible; uncertain
+usage holds both allowances. Reconciliation is unavailable in bound evaluation
+sessions. HTTP request count and body bytes are consumed per possible-dispatch
+hop; complete responses settle decoded bytes, incomplete responses retain the
+ceiling. Experiment and run counts are permanent, including failed/cancelled
+or recovered work. Protected suite exposure is global to this Store and cannot
+be reset by starting a new campaign. These records do not grant eligibility.
+
+Cancellation closes admission, and the owning controller signals and drains
+active actors. Known pre-root failure/cancellation can retire a run without
+fabricating an effect. Epoch recovery retires an ownerless prepared run as
+Unknown; it never replays it or refunds its count/exposure. Exact retries are
+checked before current owner, cancellation and expiry constraints.
+
+Status and metadata-only run pages use one read transaction. They expose no
+private task, advisory text or provider configuration. Active-slot accounting
+checks immutable root lifecycle witnesses instead of trusting mutable terminal
+status, and does not materialize full root outcomes or every run request into
+Rust. A 64 MiB aggregate lifecycle read bound fails closed; scalar byte limits
+are checked before allocation. Current run authority is validated separately
+at effect admission. Monetary, HTTP, experiment and run dimensions remain
+separate units; an accounting receipt is not proof of agent quality or a hard
+provider invoice cap.

@@ -82,6 +82,7 @@ pub(super) fn admit(
     frozen: &FrozenExperiment,
     reads: &mut Reads,
 ) -> Result<()> {
+    crate::campaign::experiment(tx, op)?;
     let rows = check(tx, &op.session_id, frozen, reads)?;
     if rows.len() >= frozen.policy().max_experiments as usize {
         return Err(Error::BudgetExceeded);
