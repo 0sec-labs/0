@@ -11,6 +11,7 @@ name = "0sec-native"
 path = "src/main.rs"
 
 [dependencies]
+zero-tui = { path = "../zero-tui" }
 nix = { workspace = true, features = ["fs"] }
 clap.workspace = true
 uuid.workspace = true

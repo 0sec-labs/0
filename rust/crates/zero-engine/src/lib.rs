@@ -6,6 +6,7 @@ mod agent_context_history;
 mod agent_plugins;
 mod agent_source;
 mod agent_submission;
+mod history;
 mod inference;
 mod lifecycle;
 mod model_progress;
@@ -507,6 +508,12 @@ impl Engine {
                     &note,
                 )
             }
+            Command::SessionListPage { after, limit } => self.session_list_page(after, limit),
+            Command::SessionHistory {
+                session_id,
+                before_sequence,
+                limit,
+            } => self.session_history(&session_id, before_sequence, limit),
             Command::SessionList => Ok(Reply::Sessions {
                 sessions: lock(&self.shared.store)?.list_sessions()?,
             }),

@@ -202,3 +202,10 @@ transport-disconnect and output-deadline behavior still applies.
 Progress and operational events use independent queues, so progress may precede
 its admission notification. Correlate by session/operation IDs rather than
 assuming admission-first delivery.
+
+The experimental `tui` frontend adds full-screen session selection, conversation
+and durable queue views over an owned app-server connection. It consumes bounded
+display history and live progress without opening the database. Saved pending
+inputs require explicit resumption. See the [CLI guide](crates/zero-cli/README.md#experimental-full-screen-terminal)
+for controls and shutdown behavior. Approval/question dialogs, findings screens
+and full legacy terminal parity remain open.

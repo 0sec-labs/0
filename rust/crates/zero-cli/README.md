@@ -219,6 +219,42 @@ reconciling unknown usage; reconciliation does not make an Unknown operation a
 completed continuation. Queue rejection makes the console's eventual exit
 nonzero, even if previously accepted inputs completed.
 
+## Experimental full-screen terminal
+
+```sh
+0sec-native --providers providers.json tui --session SESSION_ID --request agent-profile.json
+```
+
+`tui` requires a terminal on both stdin and stdout. It launches an owned
+`app-server` subprocess with the explicit state, provider and harness configuration;
+the frontend never opens the state database. Omitting `--session` opens session
+selection. Omitting `--request` allows inspection without a submission profile.
+The profile prompt is never submitted on startup.
+
+Tab switches between sessions, conversation and durable queue. Enter selects a
+session or submits the conversation composer; bracketed paste inserts text,
+including newlines, without submitting. Ctrl-N creates a session with
+`--budget-limit` (default zero). Ctrl-R explicitly runs a selected pending input;
+Ctrl-X cancels active work or the selected pending input. Ctrl-C cancels active
+work, otherwise quits; Ctrl-Q quits. F1 shows help and Ctrl-L requests another
+page; Ctrl-G returns to the newest conversation page. The display marks when
+older pages replace its bounded history window. Opening a session never
+automatically dispatches saved pending prompts.
+
+History is a bounded display projection, with explicit text truncation. It is
+not passed back as model context: continuation uses the engine's retained
+checkpoint and its validation. Live text, exposed reasoning and tool fragments
+are provisional; the journaled final result remains authoritative. The terminal
+client accepts response frames up to 32 MiB; a larger response closes the UI
+with an error. This does not delete the journaled outcome; history reads also
+enforce their own retained-row and display limits.
+
+Quit closes the owned protocol connection and waits for app-server cleanup.
+Pending inputs remain durable. An interrupted inference can retain Unknown
+status and a budget reservation; inspect its journal before retrying. A shutdown
+timeout is reported as an error. Full legacy terminal parity, including approval
+and question dialogs, findings screens and multi-audit navigation, remains open.
+
 ## Durable agent input queue
 
 ```sh
@@ -247,8 +283,8 @@ configuration; run uses the existing succeeded-only operation exit convention.
 Within `app-server`, `queue_agent`, `agent_queue` and `cancel_queued_agent` remain
 available while `run_queued_agent` executes. A separate CLI process cannot access
 the engine through these commands while another process owns its state database;
-use the existing app-server connection or console for live input. This remains a
-line console foundation, without full-screen editing or mid-turn steering.
+use the existing app-server connection, console or TUI for live input. Mid-turn
+steering is not implemented by the durable queue.
 
 ## Read-only hosted metadata
 

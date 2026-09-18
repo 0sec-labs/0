@@ -49,7 +49,7 @@ upgrading scaffolds or model assessments into successful verification.
 | Hosted metadata | `crates/zero-cloud-client`: explicit authenticated health/catalog/account/usage GETs, bounded browser-session login polling, explicit catalog inference routing, typed gateway errors and credit normalization; CLI resolves environment or private legacy `cloud.env` credentials | Live service qualification, provider OAuth/refresh, upload/accounting and managed-worker qualification |
 | Cloud wire adapter | `crates/zero-cloud-compat`: result/event framing, typed outcomes, cost provenance and atomic report writing | Scanner integration, ordered scan-total accounting, uploads and managed deployment qualification |
 | Finding reduction | `crates/zero-evidence`: source IDs/provenance retained through complete reconciliation, explicit disposition accounting | Discovery, independent vulnerability oracles, storage/export and disclosure eligibility; reconciliation is not truth validation |
-| CLI | `crates/zero-cli`: `schema`, `snapshot pin`, `session create/create-pinned/list/show/events/budget/reconcile-usage`, `exec`, `sandbox`, `infer`, `agent`, `plugin-call`, `evaluate run/status`, `source-review`, `source-reproduce`, `source-repair`, `artifact list/export`, durable `queue enqueue/list/run/cancel`, line `console`, `hosted login/health/models/account/usage`, `doctor`, `app-server`, help/version; separate `.0sec/native/state.db` | All legacy commands below; UX/exit/schema compatibility; installer and platform release qualification |
+| CLI | `crates/zero-cli`: `schema`, `snapshot pin`, `session create/create-pinned/list/show/events/budget/reconcile-usage`, `exec`, `sandbox`, `infer`, `agent`, `plugin-call`, `evaluate run/status`, `source-review`, `source-reproduce`, `source-repair`, `artifact list/export`, durable `queue enqueue/list/run/cancel`, line `console`, full-screen `tui`, `hosted login/health/models/account/usage`, `doctor`, `app-server`, help/version; separate `.0sec/native/state.db` | All legacy commands below; UX/exit/schema compatibility; installer and platform release qualification |
 | Stdio lifecycle | Initialize/version gate, correlated replies, bounded NDJSON framing, concurrent execute/cancel, durable-admission notification before cancellation, EOF/SIGINT/SIGTERM cleanup | Durable event streaming/reconnect contract, authenticated remote transports if required |
 
 Current acceptance sources include crate unit and integration tests for CLI
@@ -691,3 +691,34 @@ sequence gaps and progress flooding followed by sandbox execution. Four real
 CLI app-server fixtures prove delivery before terminal completion, unchanged
 accounting and unknown usage holds after cancellation. Independent final review
 found no remaining concrete blocker in this checkpoint.
+
+## Native terminal client checkpoint
+
+`zero-tui` is a separate protocol client with session, conversation and durable
+queue views. The CLI launches an owned app-server with explicit configuration;
+only that subprocess owns the database and execution lifecycle. Bounded session
+listing and newest-first conversation history are read-only engine APIs. Display
+text truncation never changes retained journal values or model context.
+
+The frontend supports Unicode composition, bracketed multiline paste, resize,
+provisional streamed text/reasoning/tool fragments and explicit queue resumption.
+Opening saved pending work does not dispatch it. New followups use durable
+acknowledgments and engine-validated continuation; uncertain or failed work stops
+automatic draining. Terminal exit restores raw-mode/alternate-screen state and
+closes the app-server input before waiting for engine cancellation and cleanup.
+
+This advances U; it does not close the full legacy terminal gate. Approval and
+question dialogs, full findings presentation, multi-audit navigation, mouse/focus
+parity and cross-platform terminal qualification remain open. Production command
+routing and release gates are unchanged.
+
+Qualification: 575 workspace tests passed on actual Rust 1.85 (11 explicit
+environment-dependent ignores). Final state safeguards then passed all 14 TUI
+state/transport tests and all eight real PTY cases again. Strict production
+workspace Clippy and formatting passed. PTY fixtures prove raw/alternate/paste
+restoration, Unicode multiline paste and resize without submission, live text
+before completion, final accounting, Unknown holds after cancellation/quit,
+SIGTERM and child-EOF cleanup, and repeated pending-queue restart without HTTP.
+One earlier existing evaluation recovery test reported an ownership-lock failure;
+it passed isolated, in its full crate suite and in the successful workspace
+rerun. No cause was established and no speculative evaluation change was made.

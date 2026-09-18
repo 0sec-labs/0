@@ -97,3 +97,32 @@ history pruning. The combined record/history API uses one SQLite read snapshot,
 so active-engine inspection cannot mix a newer status with an older history
 snapshot. These read APIs work through `open_read_only` while an engine owns the
 database; SQLite rejects writes on that connection.
+
+The native UI uses two read-only projections without a schema migration.
+`session_list_page(after, limit)` orders sessions by ascending creation time and
+ID; its exact cursor remains stable when timestamps tie. `session_history`
+returns top-level `offline_snapshot_agent` turns newest first, using an exclusive
+optional `before_sequence` cursor over their `command_admitted` events. Each
+entry cross-checks the original admission, current operation/session and stored
+payload digest. Current operation status and optional agent status stay separate:
+recovered `Unknown` and ownerless `not_started` outcomes do not fabricate replies
+or resume effects. Provider configuration is not needed to read either view.
+
+Both APIs use a single SQLite read snapshot, accept limits of 1–100, and keep the
+serialized page at or below 512 KiB. History projects only the prompt, final reply,
+error and tool-call count plus operation identities/status; it excludes host
+instructions, execution profiles, provider replay and source contents. Each
+projected text has an explicit `truncated` flag and retains at most 16 KiB at a
+UTF-8 boundary; terminal escaping remains the UI's responsibility. Identifiers
+are bounded to 4 KiB. SQL size sentinels precede JSON decoding: a retained history
+field exceeding 32 MiB fails explicitly, and the page stops before cumulatively
+reading more than 64 MiB of admission/payload/outcome data. An oversized first
+entry fails without advancing its cursor. Row/byte limits stop on whole entries;
+returned continuation cursors never skip omitted entries. These are display
+projections only: original journal/artifact bytes remain unchanged.
+
+`continuable` is a conservative UI hint: known completed conversational turns,
+or turn-limit outcomes whose checkpoint digest matches the retained attachment,
+with no source-submission terminal result, recovery path or error. It is not a
+validation receipt. The engine still checks the exact profile, lineage, original
+inference evidence and checkpoint contents when a continuation is requested.

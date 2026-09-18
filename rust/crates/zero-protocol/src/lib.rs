@@ -9,6 +9,7 @@ pub mod agent;
 mod binary;
 pub mod context;
 pub mod execution;
+pub mod history;
 pub mod microvm;
 pub mod model;
 pub mod plugin;
@@ -66,6 +67,15 @@ pub enum Command {
         input: serde_json::Value,
     },
     SessionList,
+    SessionListPage {
+        after: Option<history::SessionCursor>,
+        limit: u32,
+    },
+    SessionHistory {
+        session_id: String,
+        before_sequence: Option<u64>,
+        limit: u32,
+    },
     SessionGet {
         session_id: String,
     },
@@ -238,6 +248,12 @@ pub enum Reply {
     },
     Sessions {
         sessions: Vec<Session>,
+    },
+    SessionListPage {
+        page: history::SessionListPage,
+    },
+    SessionHistory {
+        page: history::SessionHistoryPage,
     },
     SessionBudget {
         budget: BudgetSnapshot,

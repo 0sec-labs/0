@@ -189,6 +189,17 @@ pub enum Command {
         #[arg(long)]
         request: PathBuf,
     },
+    /// Interactive native terminal client backed by a separate app-server.
+    Tui {
+        #[arg(long)]
+        session: Option<String>,
+        /// Explicit agent authority profile; opening the UI never submits it.
+        #[arg(long)]
+        request: Option<PathBuf>,
+        /// Budget units for explicitly created sessions; defaults to zero.
+        #[arg(long, default_value_t = 0)]
+        budget_limit: u64,
+    },
     /// Experimental line console; nonblank lines are durably queued for serial agent turns.
     Console {
         #[arg(long)]

@@ -1,6 +1,7 @@
 //! Native-only SQLite journal. Opening a store never recovers somebody else's work.
 mod artifacts;
 mod budget;
+mod history;
 mod lifecycle;
 mod operations;
 mod queue;
