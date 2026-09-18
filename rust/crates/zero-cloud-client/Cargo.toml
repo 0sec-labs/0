@@ -10,7 +10,9 @@ publish.workspace = true
 base64 = "0.22"
 getrandom = "0.4"
 serde.workspace = true
-serde_json.workspace = true
+serde_json = { workspace = true, features = ["raw_value"] }
+sha2.workspace = true
+zero-protocol.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
 tokio-util.workspace = true

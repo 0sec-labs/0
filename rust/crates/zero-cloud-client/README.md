@@ -3,8 +3,9 @@
 `CloudClient::new(host, token, timeout, max_bytes)` accepts an explicit endpoint
 and in-memory bearer token. It implements no `Debug` or `Serialize`, reads no
 credential files, performs no login, and does not configure the inference engine.
-Only four GET methods exist: `ping_health`, `inference_models`,
-`inference_account`, and `inference_usage`; each takes a cancellation token.
+The GET methods are `ping_health`, `inference_models`, `inference_account`, and
+`inference_usage`; each takes a cancellation token. `hosted_route(model, cancel)`
+fetches the catalog once and compiles an explicitly selected model route.
 
 Routes and data contracts follow `packages/core/src/cloud/client.ts`:
 
@@ -12,8 +13,8 @@ Routes and data contracts follow `packages/core/src/cloud/client.ts`:
   other hosts use `/health`. Host path prefixes are preserved.
 - Catalog: `/api/inference/v1/models`. Typed entries validate object markers,
   nonempty identifiers, unique IDs, wire API, positive context/output limits and
-  nonnegative numeric prices. Prices remain `serde_json::Number`; there is no
-  currency-unit conversion, rounding into engine rates or guessed pricing.
+  nonnegative numeric prices. Catalog prices retain bounded JSON number lexemes in `ExactPrice` values.
+  The metadata response does not guess pricing or configure an inference client.
 - Account: `/api/inference/account`. Missing/malformed credits become `None`.
   Percent is accepted only if service-supplied and valid with a positive grant
   and remaining <= granted. Missing percentages stay unavailable, even when
@@ -42,6 +43,38 @@ No uploads, account mutations, live-account requests or paid inference are
 implemented. Tests use localhost listeners for routes/headers, nested errors,
 normalization, actual redirect isolation, no retries, byte limits, cancellation
 and deadlines. Run `cargo test -p zero-cloud-client --locked`.
+
+## Hosted route selection
+
+`hosted_route(model, cancel)` requires the exact hosted catalog ID; there is no
+default model, upstream-model substitution, or automatic inference call.
+`select_hosted_route(catalog, model)` performs the same selection on an already
+fetched catalog without network effects. The compiler checks every catalog row,
+including unselected rows, bounds the catalog to 1,024 entries, and rejects
+duplicate IDs, invalid metadata/limits, or prices that native integer accounting
+cannot represent. The endpoint preserves the configured host's path prefix and
+uses `/api/inference/v1/responses` or `/api/inference/v1/chat/completions` according
+to the selected wire API. Catalog provider/upstream fields are metadata only.
+
+`HostedRoute` contains an endpoint, selected model, wire API, output-token cap,
+integer `Rates`, and a credential-free `HostedCatalogPin`. USD-per-million prices
+are converted to micro-USD-per-million using decimal digits and checked integer
+arithmetic. Local `RawValue` parsing preserves decimal lexemes before conversion;
+fractional micro-USD prices and `u64` overflow are rejected without rounding.
+Equivalent decimal spellings normalize to one selected-model metadata hash.
+Pin metadata stores its three USD prices as canonical decimal **strings**; this
+keeps exact prices through ordinary JSON value/database roundtrips. Shared JSON
+number decoding remains unchanged. Catalog serialization directly to JSON keeps
+prices as numbers; do not roundtrip raw catalog prices through a generic JSON
+value before compiling a route.
+No timestamp enters the pin. Host, model metadata, price, and route changes alter
+its serialized identity; unrelated valid catalog rows do not.
+
+`validate_hosted_pin(pin)` purely recompiles its normalized metadata, route,
+limits, currency, rates, and SHA-256 identity. This checks internal consistency,
+not server authenticity or freshness. The caller must obtain the catalog from
+its explicitly trusted host and bind the pin to its provider client and durable
+request. Neither route nor pin contains the client's authorization header.
 
 ## Hosted browser login transport
 

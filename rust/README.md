@@ -78,3 +78,38 @@ this pin until the minimum-toolchain job demonstrates an upgrade works. Default
 CI uses deterministic subprocess/loopback fixtures; opt-in Docker/smolvm tests
 still require separately prepared local runtimes and images. CI does not publish
 or replace the production TypeScript CLI.
+
+Hosted inference can use the native login credentials and an explicit catalog
+model, without a provider JSON file:
+
+```sh
+0sec-native --hosted-model MODEL_ID infer --session SESSION_ID \
+  --command-id inference-one --provider hosted --reservation 100000 \
+  --request request.json
+```
+
+The request's `model` must equal `MODEL_ID`. `--hosted-host` selects a gateway;
+`--hosted-token-env` selects a credential environment variable. Defaults reuse
+`0SEC_CLOUD_TOKEN` or the private native login file. `--hosted-timeout-ms` sets the
+inference deadline (default 300000 ms). Catalog discovery has a separate 30-second
+limit. The gateway receives its public model ID, never the catalog's upstream
+model name. The catalog selects Responses or Chat Completions transport.
+
+Hosted budgets and charges use integer micro-USD. If you mix hosted and manual
+profiles in a session, supply the manual rates in the same units. Catalog USD-per-million prices
+must convert exactly to integer micro-USD-per-million; fractional micro-USD and
+overflow fail before inference. Each operation retains a credential-free selected
+model quote, normalized digest, route, limits and rates. Captured quote prices use
+canonical decimal strings to survive JSON journals without rounding; catalog
+listing preserves the gateway's numeric decimal lexemes. This is a reproducible
+price identity, not proof of the gateway's final bill. A changed quote conflicts
+with an existing command ID instead of dispatching it again. Exact retries still
+fetch metadata, but do not repeat inference. An incomplete dispatched stream
+remains unknown and holds its reservation pending explicit reconciliation.
+
+The selected model and maximum output are enforced before dispatch. Direct
+`infer` accepts a lower requested maximum; agent and source-review currently
+request 8192 tokens and reject catalog models with a smaller output limit.
+Hosted profiles can coexist with manually configured profiles under other names;
+`hosted` must not also be defined in the provider file. No live hosted request is
+part of the default test suite.

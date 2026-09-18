@@ -85,6 +85,31 @@ pub struct Rates {
     pub cached_input: u64,
     pub output: u64,
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "UPPERCASE")]
+pub enum CatalogCurrency {
+    Usd,
+}
+
+/// Credential-free normalized catalog quote and the route it configures.
+/// The digest identifies supplied catalog data; it is not a billing attestation.
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct HostedCatalogPin {
+    pub schema_version: u32,
+    pub currency: CatalogCurrency,
+    pub host: String,
+    pub endpoint: String,
+    pub model: String,
+    pub wire_api: WireApi,
+    pub max_output_tokens: u32,
+    pub rates: Rates,
+    /// Canonical model metadata; price decimals are strings to preserve exactness
+    /// through journals and generic JSON consumers. Gateway wire prices remain numbers.
+    pub catalog_model: Value,
+    pub catalog_model_sha256: String,
+}
 impl Rates {
     pub fn charge(&self, usage: &Usage) -> Option<u64> {
         let uncached = usage.input_tokens.checked_sub(usage.cached_input_tokens)?;

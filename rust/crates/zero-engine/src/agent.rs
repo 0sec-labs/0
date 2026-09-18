@@ -82,6 +82,7 @@ impl Engine {
                     if profile.client.wire_api() != zero_protocol::model::WireApi::Responses {
                         payload["wire_api"] = serde_json::to_value(profile.client.wire_api())?;
                     }
+                    profile.stamp(&mut payload)?;
                     if let Some(context) = prior.payload.get("plugin_context") {
                         let profiles = lock(&self.shared.plugins)?;
                         let configured = profiles.as_ref().ok_or_else(|| {
@@ -124,6 +125,7 @@ impl Engine {
             if profile.client.wire_api() != zero_protocol::model::WireApi::Responses {
                 payload["wire_api"] = serde_json::to_value(profile.client.wire_api())?;
             }
+            profile.stamp(&mut payload)?;
             if let Some(context) = &plugins {
                 payload["plugin_context"] = context.identity.clone();
             }
@@ -229,6 +231,12 @@ fn continuation_input(
                 != serde_json::to_value(request.execution.sandbox_request())?
             || parent.payload["endpoint"] != profile.client.endpoint_identity()
             || parent.payload["rates"] != serde_json::to_value(profile.rates)?
+            || parent.payload.get("hosted_catalog").cloned()
+                != profile
+                    .client
+                    .hosted_catalog()
+                    .map(serde_json::to_value)
+                    .transpose()?
             || wire != profile.client.wire_api()
         {
             return Err(EngineError::State("continuation must retain its provider, model, instructions, rates and pinned execution profile".into()));
@@ -264,6 +272,7 @@ fn continuation_input(
                 ));
             }
             let model: ResponsesRequest = serde_json::from_value(last.payload["request"].clone())?;
+            inference::validate_hosted_pair(&parent.payload, &last.payload, &model)?;
             let completion: zero_protocol::model::Completion =
                 serde_json::from_value(last.outcome.ok_or_else(|| {
                     EngineError::State("continuation provider outcome is absent".into())
@@ -370,11 +379,13 @@ async fn run_rounds(
             output.error = Some("agent context exceeds provider request bounds".into());
             break;
         }
+        let mut child_payload = serde_json::json!({"parent_operation":parent,"kind":"agent_inference","request":model,"endpoint":profile.client.endpoint_identity(),"rates":profile.rates,"wire_api":profile.client.wire_api()});
+        profile.stamp(&mut child_payload)?;
         let child = child_operation(
             shared,
             session,
             &format!("{parent}:model:{turn}"),
-            &serde_json::json!({"parent_operation":parent,"kind":"agent_inference","request":model,"endpoint":profile.client.endpoint_identity(),"rates":profile.rates,"wire_api":profile.client.wire_api()}),
+            &child_payload,
         )?;
         {
             let mut store = lock(&shared.store)?;

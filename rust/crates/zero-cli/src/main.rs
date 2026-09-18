@@ -6,6 +6,7 @@ mod evaluation;
 mod framing;
 mod harness;
 mod hosted;
+mod hosted_provider;
 mod providers;
 mod report;
 mod server;
@@ -124,6 +125,18 @@ async fn run(args: Args) -> Result<bool, Box<dyn Error>> {
     )?);
     if let Some(path) = args.providers {
         providers::configure(&engine, &path).await?;
+    }
+    if let Some(model) = args.hosted_model {
+        hosted_provider::configure(
+            &engine,
+            &model,
+            args.hosted_host.as_deref(),
+            args.hosted_token_env
+                .as_deref()
+                .unwrap_or("0SEC_CLOUD_TOKEN"),
+            args.hosted_timeout_ms.unwrap_or(300_000),
+        )
+        .await?;
     }
     if let Some(path) = args.harness_config {
         harness::configure(&engine, &path).await?;

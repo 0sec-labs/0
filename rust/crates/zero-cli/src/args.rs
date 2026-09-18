@@ -20,6 +20,18 @@ pub struct Args {
     /// Provider profiles; secrets are read from explicitly named environment variables.
     #[arg(long, global = true)]
     pub providers: Option<PathBuf>,
+    /// Configure the hosted provider from this explicit catalog model ID.
+    #[arg(long, global = true)]
+    pub hosted_model: Option<String>,
+    /// Hosted inference gateway; otherwise use the resolved credential host.
+    #[arg(long, global = true, requires = "hosted_model")]
+    pub hosted_host: Option<String>,
+    /// Hosted token environment variable; defaults to 0SEC_CLOUD_TOKEN with private file fallback.
+    #[arg(long, global = true, requires = "hosted_model")]
+    pub hosted_token_env: Option<String>,
+    /// Hosted inference deadline in milliseconds; defaults to 300000.
+    #[arg(long, global = true, requires = "hosted_model", value_parser = clap::value_parser!(u64).range(1..=3_600_000))]
+    pub hosted_timeout_ms: Option<u64>,
     /// Explicit trusted host harness configuration; never discovered from a project.
     #[arg(long, global = true)]
     pub harness_config: Option<PathBuf>,

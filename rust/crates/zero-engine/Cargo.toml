@@ -30,6 +30,7 @@ fs2.workspace = true
 libc.workspace = true
 
 [dev-dependencies]
+zero-cloud-client = { path = "../zero-cloud-client" }
 rusqlite.workspace = true
 zero-evolution = { path = "../zero-evolution" }
 tempfile.workspace = true

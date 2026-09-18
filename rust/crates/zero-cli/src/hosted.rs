@@ -1,6 +1,6 @@
 //! Read-only hosted metadata with explicit environment/legacy credential resolution.
 #[path = "credentials.rs"]
-mod credentials;
+pub(crate) mod credentials;
 #[path = "hosted_login.rs"]
 mod login;
 use clap::Subcommand;
@@ -49,22 +49,25 @@ pub async fn run(
         match command {
             HostedCommand::Login { .. } => unreachable!(),
             HostedCommand::Health => client.ping_health(cancel.clone()).await.and_then(|v| {
-                serde_json::to_value(v).map_err(|_| zero_cloud_client::CloudError::InvalidResponse)
+                serde_json::to_string(&v)
+                    .map_err(|_| zero_cloud_client::CloudError::InvalidResponse)
             }),
             HostedCommand::Models => client.inference_models(cancel.clone()).await.and_then(|v| {
-                serde_json::to_value(v).map_err(|_| zero_cloud_client::CloudError::InvalidResponse)
+                serde_json::to_string(&v)
+                    .map_err(|_| zero_cloud_client::CloudError::InvalidResponse)
             }),
             HostedCommand::Account => {
                 client
                     .inference_account(cancel.clone())
                     .await
                     .and_then(|v| {
-                        serde_json::to_value(v)
+                        serde_json::to_string(&v)
                             .map_err(|_| zero_cloud_client::CloudError::InvalidResponse)
                     })
             }
             HostedCommand::Usage => client.inference_usage(cancel.clone()).await.and_then(|v| {
-                serde_json::to_value(v).map_err(|_| zero_cloud_client::CloudError::InvalidResponse)
+                serde_json::to_string(&v)
+                    .map_err(|_| zero_cloud_client::CloudError::InvalidResponse)
             }),
         }
     };
@@ -75,7 +78,7 @@ pub async fn run(
     };
     match reply {
         Ok(value) => {
-            let line = format!("{}\n", serde_json::to_string(&value)?);
+            let line = format!("{value}\n");
             let mut stdout = tokio::io::stdout();
             tokio::time::timeout(Duration::from_secs(1), async {
                 stdout.write_all(line.as_bytes()).await?;

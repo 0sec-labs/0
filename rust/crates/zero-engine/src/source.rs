@@ -36,7 +36,12 @@ impl Engine {
                 .get(&request.provider)
                 .cloned()
                 .ok_or_else(|| state("provider profile is not configured"))?;
-            let payload = json!({"kind":"source_hypothesis_review","request":request,"endpoint":profile.client.endpoint_identity(),"wire_api":profile.client.wire_api(),"rates":profile.rates});
+            profile
+                .client
+                .validate_policy(&request.model, 8192)
+                .map_err(state)?;
+            let mut payload = json!({"kind":"source_hypothesis_review","request":request,"endpoint":profile.client.endpoint_identity(),"wire_api":profile.client.wire_api(),"rates":profile.rates});
+            profile.stamp(&mut payload)?;
             let operation = {
                 let mut store = lock(&self.shared.store)?;
                 let admitted = store.admit_command(&session, &command, &payload)?;
@@ -187,7 +192,9 @@ async fn run(
     }
     let child = {
         let mut store = lock(&shared.store)?;
-        let admission=store.admit_command(session,&format!("{parent}:model:0"),&json!({"parent_operation":parent,"kind":"source_review_inference","request_artifact":outcome.artifacts.get("source.request"),"endpoint":profile.client.endpoint_identity(),"wire_api":profile.client.wire_api(),"rates":profile.rates}))?;
+        let mut payload = json!({"parent_operation":parent,"kind":"source_review_inference","request_artifact":outcome.artifacts.get("source.request"),"endpoint":profile.client.endpoint_identity(),"wire_api":profile.client.wire_api(),"rates":profile.rates});
+        profile.stamp(&mut payload)?;
+        let admission = store.admit_command(session, &format!("{parent}:model:0"), &payload)?;
         if admission.duplicate {
             return Err(state(
                 "source provider child already admitted; recovery required",

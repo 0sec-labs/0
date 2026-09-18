@@ -1,4 +1,4 @@
-use crate::CloudError;
+use crate::{CloudError, ExactPrice};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Number, Value};
 
@@ -24,9 +24,9 @@ pub enum ListObject {
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct InferencePricing {
-    pub input_per_million_usd: Number,
-    pub output_per_million_usd: Number,
-    pub cached_input_per_million_usd: Number,
+    pub input_per_million_usd: ExactPrice,
+    pub output_per_million_usd: ExactPrice,
+    pub cached_input_per_million_usd: ExactPrice,
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct InferenceModel {
@@ -70,7 +70,7 @@ impl InferenceModelsResponse {
                     &model.pricing.cached_input_per_million_usd,
                 ]
                 .iter()
-                .any(|n| !nonnegative(n))
+                .any(|n| !n.nonnegative())
             {
                 return Err(CloudError::InvalidResponse);
             }

@@ -7,6 +7,7 @@ mod sse;
 mod transport;
 use serde_json::Value;
 pub use transport::{Endpoint, ProviderClient, TransportError};
+pub use zero_cloud_client::validate_hosted_pin;
 pub use zero_protocol::model::*;
 
 pub fn validate_request(request: &ResponsesRequest) -> Result<(), TransportError> {

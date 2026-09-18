@@ -3,10 +3,15 @@ mod login;
 pub use login::{LoginCredential, LoginError, LoginOptions, LoginSession};
 mod models;
 pub use models::*;
+mod price;
+pub use price::ExactPrice;
+mod route;
+mod route_model;
 use reqwest::{
     Url,
     header::{AUTHORIZATION, HeaderValue},
 };
+pub use route::{HostedRoute, validate_hosted_pin};
 use serde::de::DeserializeOwned;
 use std::time::Duration;
 use tokio_util::sync::CancellationToken;
@@ -52,6 +57,8 @@ pub enum CloudError {
     ResponseLimit,
     #[error("invalid cloud response")]
     InvalidResponse,
+    #[error("explicit model is not available in the hosted catalog")]
+    ModelUnavailable,
 }
 
 /// Intentionally implements neither Debug nor Serialize. Authorization lives in
@@ -70,21 +77,8 @@ impl CloudClient {
         timeout: Duration,
         max_bytes: usize,
     ) -> Result<Self, CloudError> {
-        let url = Url::parse(host).map_err(|_| CloudError::InvalidConfiguration)?;
-        let loopback = url.host_str().is_some_and(|host| {
-            host.eq_ignore_ascii_case("localhost")
-                || host
-                    .trim_matches(['[', ']'])
-                    .parse::<std::net::IpAddr>()
-                    .is_ok_and(|ip| ip.is_loopback())
-        });
-        if url.host_str().is_none()
-            || !(url.scheme() == "https" || (url.scheme() == "http" && loopback))
-            || !url.username().is_empty()
-            || url.password().is_some()
-            || url.query().is_some()
-            || url.fragment().is_some()
-            || token.trim().is_empty()
+        let url = route::host_url(host)?;
+        if token.trim().is_empty()
             || timeout.is_zero()
             || timeout > Duration::from_secs(3600)
             || !(1024..=16 * 1024 * 1024).contains(&max_bytes)

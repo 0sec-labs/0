@@ -466,3 +466,36 @@ fixture on both prepared backends: Docker (4.08 s) and smolvm 1.14.6 (55.99 s).
 Each performed 12 observations, then exported after original-source deletion
 without further provider/backend calls. These are local fixture qualifications,
 not independent detection-quality or managed-cloud deployment claims.
+
+### Hosted catalog-to-inference routing
+
+The native CLI can configure the explicit `hosted` inference profile from existing
+login credentials and `--hosted-model`, with optional host, token-environment and
+timeout overrides. Catalog routing preserves host path prefixes, chooses the
+advertised Responses/Chat wire API, and sends only the selected public model ID.
+Prices convert exactly from decimal USD-per-million to integer micro-USD rates;
+no floating-point rounding or implicit free-price fallback is accepted.
+
+Durable inference, agent and source-review identities retain the selected model's
+normalized catalog quote and digest alongside route and rates. The provider binds
+model/output policy before dispatch, and recorded provenance rechecks the quote.
+A changed quote cannot resume or retry the old command as a new paid effect.
+This pin establishes internal consistency, not catalog authenticity, current
+pricing or an attested bill. Metadata discovery may occur again on retry.
+
+Direct inference supports requested output limits within the catalog bound.
+Agent and source-review retain their current 8192-token request and require that
+capacity. Dynamic output sizing, hosted OAuth, production scanner parity and
+managed worker deployment remain separate migration work. Qualification uses
+loopback gateways and persisted native state; it does not establish live hosted
+service compatibility or authorize paid calls.
+
+Qualification passed the complete Rust 1.85 workspace: 461 tests, with real
+backend tests remaining opt-in. Production workspace Clippy passed with warnings
+denied, and formatting passed. New fixtures cover both hosted wire formats,
+cached usage, no repeated inference on retry or catalog drift, unknown reservation
+holds, exact decimal metadata output, source/continuation pin correlation, and
+IPv6 loopback routing. The first workspace run exposed a global JSON-number
+feature regression in existing agent/console decoding; the final implementation
+uses local raw decimal parsing and canonical strings in retained quotes. Existing
+agent and console executable tests pass in the final workspace run.

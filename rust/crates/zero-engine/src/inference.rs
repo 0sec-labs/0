@@ -1,5 +1,5 @@
 use super::*;
-use zero_protocol::model::{CompletionStatus, Rates, ResponsesRequest};
+use zero_protocol::model::{CompletionStatus, HostedCatalogPin, Rates, ResponsesRequest};
 use zero_provider::ProviderClient;
 
 #[derive(Clone)]
@@ -7,9 +7,100 @@ pub(super) struct Profile {
     pub(super) client: Arc<ProviderClient>,
     pub(super) rates: Rates,
 }
+impl Profile {
+    pub(super) fn stamp(&self, payload: &mut serde_json::Value) -> Result<(), EngineError> {
+        if let Some(pin) = self.client.hosted_catalog() {
+            payload["hosted_catalog"] = serde_json::to_value(pin)?;
+        }
+        Ok(())
+    }
+    pub(super) fn validate(&self, request: &ResponsesRequest) -> Result<(), EngineError> {
+        self.client
+            .validate(request)
+            .map_err(|e| EngineError::State(e.to_string()))
+    }
+}
+/// Validate captured price/route/model authority without loading credentials or
+/// consulting a mutable current catalog. Absence preserves historical BYOK.
+pub(super) fn validate_hosted_payload(
+    payload: &serde_json::Value,
+    model: &str,
+    max_output_tokens: u32,
+) -> Result<(), EngineError> {
+    let Some(value) = payload.get("hosted_catalog") else {
+        return Ok(());
+    };
+    let pin: HostedCatalogPin = serde_json::from_value(value.clone())?;
+    zero_provider::validate_hosted_pin(&pin).map_err(|e| EngineError::State(e.to_string()))?;
+    let wire = payload
+        .get("wire_api")
+        .cloned()
+        .unwrap_or_else(|| serde_json::json!("responses"));
+    if payload["endpoint"] != pin.endpoint
+        || payload["rates"] != serde_json::to_value(pin.rates)?
+        || wire != serde_json::to_value(pin.wire_api)?
+        || model != pin.model
+        || max_output_tokens == 0
+        || max_output_tokens > pin.max_output_tokens
+    {
+        return Err(EngineError::State(
+            "retained hosted catalog binding mismatch".into(),
+        ));
+    }
+    Ok(())
+}
+pub(super) fn validate_hosted_pair(
+    parent: &serde_json::Value,
+    child: &serde_json::Value,
+    request: &ResponsesRequest,
+) -> Result<(), EngineError> {
+    if parent.get("hosted_catalog") != child.get("hosted_catalog") {
+        return Err(EngineError::State(
+            "retained hosted parent/child catalog mismatch".into(),
+        ));
+    }
+    validate_hosted_payload(parent, &request.model, request.max_output_tokens)?;
+    validate_hosted_payload(child, &request.model, request.max_output_tokens)
+}
 impl Engine {
     /// Configure an explicit route before admitting work. Credentials stay in memory.
     pub fn configure_provider(
+        &self,
+        name: &str,
+        client: ProviderClient,
+        rates: Rates,
+    ) -> Result<(), EngineError> {
+        if client.hosted_catalog().is_some() {
+            return Err(EngineError::State(
+                "hosted client requires explicit hosted profile configuration".into(),
+            ));
+        }
+        self.configure_profile(name, client, rates)
+    }
+    pub fn configure_hosted_provider(
+        &self,
+        name: &str,
+        client: ProviderClient,
+        rates: Rates,
+        pin: HostedCatalogPin,
+    ) -> Result<(), EngineError> {
+        zero_provider::validate_hosted_pin(&pin).map_err(|e| EngineError::State(e.to_string()))?;
+        if client.endpoint_identity() != pin.endpoint
+            || client.wire_api() != pin.wire_api
+            || serde_json::to_value(rates)? != serde_json::to_value(pin.rates)?
+            || client
+                .hosted_catalog()
+                .map(serde_json::to_value)
+                .transpose()?
+                != Some(serde_json::to_value(&pin)?)
+        {
+            return Err(EngineError::State(
+                "hosted provider/catalog binding mismatch".into(),
+            ));
+        }
+        self.configure_profile(name, client, rates)
+    }
+    fn configure_profile(
         &self,
         name: &str,
         client: ProviderClient,
@@ -83,10 +174,7 @@ impl Engine {
                 .get(&provider)
                 .cloned()
                 .ok_or_else(|| EngineError::State("provider profile is not configured".into()))?;
-            profile
-                .client
-                .validate(&request)
-                .map_err(|e| EngineError::State(e.to_string()))?;
+            profile.validate(&request)?;
             let mut payload = serde_json::json!({"kind":"responses_inference","provider":provider,"endpoint":profile.client.endpoint_identity(),"rates":profile.rates,"request":request,"reservation":reservation});
             // Existing default-Responses admissions keep their exact retry identity.
             if profile.client.wire_api() != zero_protocol::model::WireApi::Responses {
@@ -97,6 +185,7 @@ impl Engine {
                 });
                 payload["wire_api"] = serde_json::to_value(profile.client.wire_api())?;
             }
+            profile.stamp(&mut payload)?;
             let mut store = lock(&self.shared.store)?;
             let admission = store.admit_command(&session_id, &command_id, &payload)?;
             if admission.duplicate {

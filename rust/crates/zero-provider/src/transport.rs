@@ -42,6 +42,7 @@ impl Endpoint {
         let loopback = url.host_str().is_some_and(|host| {
             host == "localhost"
                 || host
+                    .trim_matches(['[', ']'])
                     .parse::<std::net::IpAddr>()
                     .is_ok_and(|ip| ip.is_loopback())
         });
@@ -87,6 +88,7 @@ pub struct ProviderClient {
     timeout: Duration,
     max_bytes: usize,
     wire: crate::WireApi,
+    hosted_catalog: Option<crate::HostedCatalogPin>,
 }
 impl ProviderClient {
     /// Endpoint identity excludes credentials and query strings.
@@ -124,7 +126,40 @@ impl ProviderClient {
             timeout,
             max_bytes,
             wire,
+            hosted_catalog: None,
         })
+    }
+    /// Bind a validated catalog quote to this exact route. Credentials remain in
+    /// Endpoint; the pin is safe to retain as durable policy/accounting metadata.
+    pub fn bind_hosted(mut self, pin: crate::HostedCatalogPin) -> Result<Self, TransportError> {
+        crate::validate_hosted_pin(&pin).map_err(|_| TransportError::InvalidRequest)?;
+        if self.hosted_catalog.is_some()
+            || self.endpoint_identity() != pin.endpoint
+            || self.wire != pin.wire_api
+        {
+            return Err(TransportError::InvalidRequest);
+        }
+        self.hosted_catalog = Some(pin);
+        Ok(self)
+    }
+    pub fn hosted_catalog(&self) -> Option<&crate::HostedCatalogPin> {
+        self.hosted_catalog.as_ref()
+    }
+    /// Reject mismatched authority rather than rewriting model or output limits.
+    pub fn validate_policy(
+        &self,
+        model: &str,
+        max_output_tokens: u32,
+    ) -> Result<(), TransportError> {
+        if let Some(pin) = &self.hosted_catalog {
+            if model != pin.model
+                || max_output_tokens == 0
+                || max_output_tokens > pin.max_output_tokens
+            {
+                return Err(TransportError::InvalidRequest);
+            }
+        }
+        Ok(())
     }
     pub fn wire_api(&self) -> crate::WireApi {
         self.wire
@@ -133,6 +168,7 @@ impl ProviderClient {
         self.encode(request).map(|_| ())
     }
     fn encode(&self, request: &ResponsesRequest) -> Result<serde_json::Value, TransportError> {
+        self.validate_policy(&request.model, request.max_output_tokens)?;
         match self.wire {
             crate::WireApi::Responses => {
                 if request.input.iter().any(|item| {
@@ -390,5 +426,17 @@ mod tests {
             )
             .is_err()
         );
+    }
+}
+
+#[cfg(test)]
+mod endpoint_tests {
+    use super::Endpoint;
+    #[test]
+    fn http_allows_ipv4_and_ipv6_loopback_but_not_other_literal_addresses() {
+        assert!(Endpoint::responses("http://127.0.0.1:8080/responses", None).is_ok());
+        assert!(Endpoint::responses("http://[::1]:8080/responses", None).is_ok());
+        assert!(Endpoint::responses("http://[::2]:8080/responses", None).is_err());
+        assert!(Endpoint::responses("http://192.0.2.1:8080/responses", None).is_err());
     }
 }

@@ -77,6 +77,7 @@ fn validate(store: &Store, checkpoint: &Checkpoint) -> Result<(), EngineError> {
         return Err(error("checkpoint completion identity mismatch"));
     }
     let model: ResponsesRequest = serde_json::from_value(last.payload["request"].clone())?;
+    inference::validate_hosted_pair(&parent.payload, &last.payload, &model)?;
     let completion: Completion = serde_json::from_value(outcome.clone())?;
     if completion.status != CompletionStatus::Completed || completion.replay.is_empty() {
         return Err(error("checkpoint has incomplete provider replay"));
