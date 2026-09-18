@@ -153,11 +153,10 @@ impl Engine {
             emit_admission(&events, &operation, &operation.command_id, &cancel);
             let shared = Arc::clone(&self.shared);
             let (sender, receiver) = oneshot::channel();
+            let mut guard = WorkerGuard::new(shared, &session_id, &operation.id, cancel.clone());
             tokio::spawn(async move {
-                let mut guard =
-                    WorkerGuard::new(&shared, &session_id, &operation.id, cancel.clone());
                 let result = run_actor(
-                    &shared,
+                    &guard.shared,
                     &session_id,
                     &operation.id,
                     request,

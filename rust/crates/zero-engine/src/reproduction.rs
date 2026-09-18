@@ -62,10 +62,10 @@ impl Engine {
             emit_admission(&events, &operation, &operation.command_id, &cancel);
             let shared = self.shared.clone();
             let (sender, receiver) = oneshot::channel();
+            let mut guard = WorkerGuard::new(shared, &session, &operation.id, cancel.clone());
             tokio::spawn(async move {
-                let mut guard = WorkerGuard::new(&shared, &session, &operation.id, cancel.clone());
                 let result = run(
-                    &shared,
+                    &guard.shared,
                     &session,
                     &operation.id,
                     &request.source_operation_id,

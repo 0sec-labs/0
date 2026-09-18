@@ -17,7 +17,10 @@ use std::{
     collections::HashMap,
     fs::File,
     path::{Path, PathBuf},
-    sync::{Arc, Mutex, MutexGuard},
+    sync::{
+        Arc, Mutex, MutexGuard,
+        atomic::{AtomicUsize, Ordering},
+    },
 };
 use tokio::sync::{Notify, mpsc, oneshot};
 use tokio_util::sync::CancellationToken;
@@ -55,7 +58,7 @@ struct Control {
 struct Shared {
     store: Mutex<Store>,
     control: Mutex<Control>,
-    changed: Notify,
+    workers: Arc<Workers>,
     executor: Arc<DockerExecutor>,
     sandbox: Arc<zero_sandbox::SandboxExecutor>,
     providers: Mutex<HashMap<String, inference::Profile>>,
@@ -66,27 +69,49 @@ struct Shared {
     _lock: File,
 }
 
+#[derive(Default)]
+struct Workers {
+    count: AtomicUsize,
+    changed: Notify,
+}
+struct WorkerCompletion(Arc<Workers>);
+impl Drop for WorkerCompletion {
+    fn drop(&mut self) {
+        self.0.count.fetch_sub(1, Ordering::AcqRel);
+        self.0.changed.notify_waiters();
+    }
+}
+
 /// Finalizes registration even if the worker panics or settlement fails.
 struct WorkerGuard {
+    // Fields drop in declaration order after Drop: release the worker's sole
+    // engine ownership before the completion token can unblock shutdown.
     shared: Arc<Shared>,
     session_id: String,
     operation_id: String,
     cancel: CancellationToken,
     settled: bool,
+    _completion: WorkerCompletion,
 }
 impl WorkerGuard {
     fn new(
-        shared: &Arc<Shared>,
+        shared: Arc<Shared>,
         session_id: &str,
         operation_id: &str,
         cancel: CancellationToken,
     ) -> Self {
+        let session_id = session_id.to_owned();
+        let operation_id = operation_id.to_owned();
+        let completion = WorkerCompletion(Arc::clone(&shared.workers));
+        // Admission holds control until this registration and spawning finish.
+        shared.workers.count.fetch_add(1, Ordering::AcqRel);
         Self {
-            shared: Arc::clone(shared),
-            session_id: session_id.into(),
-            operation_id: operation_id.into(),
+            shared,
+            session_id,
+            operation_id,
             cancel,
             settled: false,
+            _completion: completion,
         }
     }
 }
@@ -112,7 +137,6 @@ impl Drop for WorkerGuard {
         if let Ok(mut control) = self.shared.control.lock() {
             control.active.remove(&self.session_id);
         }
-        self.shared.changed.notify_waiters();
     }
 }
 
@@ -173,7 +197,7 @@ impl Engine {
             shared: Arc::new(Shared {
                 store: Mutex::new(store),
                 control: Mutex::new(Control::default()),
-                changed: Notify::new(),
+                workers: Arc::new(Workers::default()),
                 executor: Arc::new(executor),
                 sandbox: Arc::new(sandbox),
                 providers: Mutex::new(HashMap::new()),
@@ -471,10 +495,10 @@ impl Engine {
             emit_admission(&event_tx, &operation, &request.execution_id, &cancel);
             let (sender, receiver) = oneshot::channel();
             let shared = Arc::clone(&self.shared);
+            let mut guard = WorkerGuard::new(shared, &session_id, &operation.id, cancel.clone());
             tokio::spawn(async move {
-                let mut guard =
-                    WorkerGuard::new(&shared, &session_id, &operation.id, cancel.clone());
-                let result = run_owned(&shared, &operation.id, request, cancel, event_tx).await;
+                let result =
+                    run_owned(&guard.shared, &operation.id, request, cancel, event_tx).await;
                 guard.settled = result.is_ok();
                 drop(guard);
                 let _ = sender.send(result);
@@ -486,7 +510,9 @@ impl Engine {
             .map_err(|_| EngineError::State("execution owner stopped before settlement".into()))?
     }
 
-    /// Close admission before cancelling, and await settlement plus owned cleanup.
+    /// Close admission before cancelling, and await settlement, owned cleanup,
+    /// and release of every worker's engine ownership. Other Engine handles or
+    /// callers borrowing this Engine must still be dropped before reopening.
     pub async fn shutdown(&self) -> Result<(), EngineError> {
         {
             let mut control = lock(&self.shared.control)?;
@@ -496,8 +522,10 @@ impl Engine {
             }
         }
         loop {
-            let notified = self.shared.changed.notified();
-            if lock(&self.shared.control)?.active.is_empty() {
+            let notified = self.shared.workers.changed.notified();
+            if lock(&self.shared.control)?.active.is_empty()
+                && self.shared.workers.count.load(Ordering::Acquire) == 0
+            {
                 break;
             }
             notified.await;
@@ -601,3 +629,5 @@ fn error_code(error: &EngineError) -> &'static str {
 
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod worker_completion_tests;

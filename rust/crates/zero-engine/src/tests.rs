@@ -162,7 +162,12 @@ async fn worker_panic_closes_admission_marks_unknown_and_unblocks_shutdown() {
             cancel: cancel.clone(),
         },
     );
-    let guard = WorkerGuard::new(&engine.shared, &session_id, &operation_id, cancel.clone());
+    let guard = WorkerGuard::new(
+        Arc::clone(&engine.shared),
+        &session_id,
+        &operation_id,
+        cancel.clone(),
+    );
     let worker = tokio::spawn(async move {
         let _guard = guard;
         panic!("fixture worker failure");

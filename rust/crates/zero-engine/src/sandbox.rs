@@ -58,11 +58,11 @@ impl Engine {
             emit_admission(&event_tx, &operation, &request.execution_id, &cancel);
             let shared = Arc::clone(&self.shared);
             let (sender, receiver) = oneshot::channel();
+            let mut guard = WorkerGuard::new(shared, &session_id, &operation.id, cancel.clone());
             tokio::spawn(async move {
-                let mut guard =
-                    WorkerGuard::new(&shared, &session_id, &operation.id, cancel.clone());
                 let result =
-                    run_sandbox_owned(&shared, &operation.id, request, cancel, event_tx).await;
+                    run_sandbox_owned(&guard.shared, &operation.id, request, cancel, event_tx)
+                        .await;
                 guard.settled = result.is_ok();
                 drop(guard);
                 let _ = sender.send(result);
