@@ -1,0 +1,30 @@
+[package]
+name = "zero-evaluation"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+sha2.workspace = true
+uuid.workspace = true
+rusqlite.workspace = true
+fs2.workspace = true
+libc.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
+zero-evolution = { path = "../zero-evolution" }
+zero-harness = { path = "../zero-harness" }
+zero-plugin = { path = "../zero-plugin" }
+zero-plugin-runner = { path = "../zero-plugin-runner" }
+zero-sandbox.workspace = true
+zero-protocol.workspace = true
+[dev-dependencies]
+tempfile.workspace = true
+zero-executor.workspace = true
+zero-smolvm.workspace = true
+[lints]
+workspace = true
