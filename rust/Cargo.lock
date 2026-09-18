@@ -2326,6 +2326,7 @@ dependencies = [
  "tokio-util",
  "uuid",
  "zero-cloud-client",
+ "zero-cloud-compat",
  "zero-engine",
  "zero-evaluation",
  "zero-evolution",
@@ -2365,8 +2366,10 @@ version = "0.1.0"
 dependencies = [
  "serde",
  "serde_json",
+ "sha2",
  "tempfile",
  "thiserror 2.0.20",
+ "zero-protocol",
 ]
 
 [[package]]

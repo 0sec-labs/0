@@ -1293,3 +1293,38 @@ The final Store causal-budget witness tightening additionally passed its ten
 focused scan tests. Real engine cancellation/reopen tests and repository-target
 rejection are included in the workspace count.
 Strict workspace production Clippy and final formatting checks passed.
+
+### Explicit native managed HTTP producer
+
+`RunManagedScan` and `managed-http --grant FILE --report FILE` reuse the actual
+standalone scan controller under a host-captured cloud/organization/dispatch grant.
+Store atomically retains the complete grant in the original intent, crosschecks
+live provider and HTTP pins, and caps the existing deadline by absolute expiry.
+No new funded account, actor loop or Store schema is introduced. Exact retries
+require the same grant and preserve settled state before reading current secrets.
+An exact retry can exclusively recover a dead owner to Unknown without replay;
+a live owner is preserved and read-only inspection never takes ownership.
+
+Protocol and compatibility owners define strict bounded native wire values,
+JavaScript-safe integers, source identity/account crosschecks and explicit
+Unverified/Partial/Unknown dispositions. The native publication digest remains
+separate from managed file availability. Full-report failure preserves validated
+metadata with an Unavailable publication; immutable metadata failure publishes
+nothing. The private grant loader, atomic file writer and dedicated result marker
+are wired to actual invocation and signal/drain handling.
+
+This advances the producer portion of the legacy worker invocation/file boundary
+identified in `CLOUD-CONSUMER-AUDIT.md`. It does not translate native hypotheses
+into legacy verified findings or enter the legacy completion route. The matched
+cloud launch, durable publication outbox, typed receipt/accounting transaction and
+truthful dashboard are still required by `NATIVE-WORKER-CONTRACT.md`. Production
+selection and deployed sandbox/provider qualification remain separate gates.
+
+Qualification: actual Rust 1.85 full-workspace regression passed 1,026 tests,
+zero failures and 11 explicit backend/platform ignores. A final correction to
+preserve opaque, case-sensitive cloud organization IDs then passed 45 protocol/
+compatibility tests and 12 Store/Engine/CLI workflow tests. Final strict workspace
+production Clippy and formatting passed. Physical proof includes authenticated
+loopback HTTP, exact grant conflicts, absolute expiry, SIGTERM cleanup, SIGKILL
+recovery without credentials, no replay/refill, and report failure versus corrupt
+immutable metadata. No paid model, live target, upload or deployment was used.

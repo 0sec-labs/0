@@ -1,6 +1,6 @@
 # Native managed HTTP worker: proposed complete next slice
 
-Read-only design, 2026-09-19. No repository changes, deployments, Cargo changes, network calls or paid effects were performed. This is a proposed next implementation contract, not an assertion that the managed adapter exists.
+Status: 2026-09-19. Matched producer/consumer implementation contract. The native producer now implements explicit grants, atomic scan binding, retained terminal files and a dedicated marker. Cloud dispatch, durable publication and typed consumer ingestion below remain pending. This is not a deployed managed adapter. No deployment or paid-provider qualification is implied.
 
 ## Source pin and actual boundary
 
@@ -25,14 +25,14 @@ The vertical is: controller captures per-dispatch host grant and credential revi
 
 No second scan engine, synthetic inference, extra account, automatic restart/rescan, new finding verifier, or direct native completion HTTP sink. Source/repository acquisition and scanner parity are separate later work.
 
-## Proposed shared DTOs and local API
+## Shared DTOs and local API
 
-Strict unknown-field rejection on both Rust and TypeScript sides, golden canonical fixtures owned jointly. Names below are proposed, not existing APIs.
+Rust wire definitions live in `zero-protocol::managed_scan` and conversion/file helpers in `zero-cloud-compat::managed_scan`. The matched TypeScript contract and golden cross-language fixtures remain to be implemented. Strict unknown-field rejection applies at the producer boundary. The implementation additionally rejects JSON integers outside JavaScript’s exact integer range; the consumer must preserve this constraint.
 
 `ManagedScanGrantV1`:
-- contract_version literal, cloud_scan_id UUID, organization_id UUID, dispatch_id UUID;
-- immutable host grant revision and target auth revision (optional only for unauthenticated target);
-- normalized target, exact ScanProfile, exact normalized HttpProfilePolicy;
+- contract_version literal, cloud_scan_id UUID, dispatch_id UUID; organization_id is the exact opaque 16–64 character URL-safe cloud tenant ID (including better-auth nanoids and legacy UUID seeds), not a UUID conversion;
+- immutable `grant_revision`, absolute `expires_at_ms`, and target auth revision inside the HTTP policy descriptor (absent only for unauthenticated target);
+- normalized target, exact scan profile name and ScanProfile, exact normalized HttpProfilePolicy;
 - bounded provider route/rate/catalog pins for root and each delegated provider;
 - deterministic native command identity `managed-scan:{cloud_scan_id}:{dispatch_id}`;
 - credentials are private handles/environment references, never serialized into this public grant.
@@ -55,7 +55,7 @@ Proposed Rust functions in zero-cloud-compat:
 - managed_terminal(binding, validated ScanSnapshot, optional validated ScanReport) -> ManagedScanTerminalV1.
 - write_managed_terminal(path, terminal) -> {file_sha256,bytes}; bounded writer builds exact immutable UTF-8 bytes, then reuses atomic file replacement semantics.
 
-CLI dedicated `managed-http` entry receives explicit grant and preselected private DB/report paths. It uses existing RunScan/cancel/read APIs; ordinary standalone scan keeps its current rejection of managed environment. No universal approval step.
+CLI dedicated `managed-http --grant FILE --report FILE` receives an explicit private grant and preselected private DB/report paths. It uses existing RunScan/cancel/read APIs; ordinary standalone scan keeps its current rejection of managed environment. No universal approval step.
 
 ## Publication and crash ordering
 
@@ -104,3 +104,74 @@ Root integration owner: matched DTO golden files, lock/dependency changes if lat
 ## Remaining parity gaps (not closed by this adapter)
 
 This enables only current snapshot-free scoped HTTP investigation and its joined actors/experiments. It does not implement repository acquisition, legacy broad tool inventory, browser/session-reset authentication, independent production vulnerability verification, repair/PR flows, complete enforcement metrics, durable arbitrary event replay, distributed global spending accounts, or autonomous production strategy activation. Real deployment/consumer authorization and image/template compatibility remain separate qualification gates.
+
+## Native producer implementation boundary
+
+`RunManagedScan` reuses the standalone controller and actual root actor. Store
+schema17 is unchanged: an optional full managed grant is part of the original
+hash-checked intent. Fresh admission compares the actual configured provider
+pins, normalized HTTP policy, target and scan profile before effects. The
+effective deadline is the earlier of the profile duration and absolute grant
+expiry. Existing standalone intent identity is preserved.
+
+CLI retries compare the captured grant before loading current credentials. An
+expired but identical grant may inspect and republish settled state; it cannot
+start work again. Active duplicates cannot publish a terminal. If retained work
+is still marked Running after its process died, an exact managed invocation may
+claim the existing exclusive engine lock and recover it to Unknown without
+loading current credentials. A live owner keeps the lock and the retry fails
+without cancelling it. Read-only inspection never performs this recovery. Controller,
+target and provider credentials remain distinct; this producer performs no
+cloud upload. Host revision values assert trusted host decisions; they are not
+signatures and cannot detect a host lying about which secret a revision names.
+
+The current terminal type contains the stable native scan record, statuses,
+closure, original model and HTTP account totals, optional actual outcome,
+original `native_publication`, managed `publication`, and explicit unavailable
+enforcement metrics. Missing recovered outcomes stay absent. Failed full-report
+reads preserve validated metadata and original publication separately, publish
+Unavailable and return an error exit. Invalid grant or metadata evidence fails
+closed without a file or marker. Only a committed terminal file permits the
+`0SEC_NATIVE_RESULT` marker, whose hash covers its exact bytes and final newline.
+
+The cloud controller must still authenticate its own captured dispatch/grant,
+validate this versioned envelope and implement the durable outbox/terminal
+transaction described above. Neither a valid JSON hash nor this experimental
+producer establishes consumer integration, billing authority, release-image
+selection, independently verified findings or general scanner parity.
+
+## Consumer source checks before implementation
+
+The current cloud source uses opaque organization IDs accepted by
+`org-context.ts`, not exclusively UUIDs. Preserve their exact case and bytes.
+A new result route needs an explicit controller/operator-only authentication
+branch: the generic scans-route fallback currently requests read scope. Do not
+add native terminal authority to the guest events/findings/artifacts capability.
+
+The existing daily-budget trigger records known terminal cost and maps NULL
+cost to zero; it does not reserve native in-flight allowances. Managed admission
+therefore needs a durable original native allowance hold and headroom checks
+that include those holds. Unknown outcomes or missing guest state retain this
+capacity protection. Account telemetry and reserved allowance are distinct from
+measured billed use. Accepted known cost must not be charged a second time by
+a new route in addition to the existing terminal-cost trigger.
+
+Current worker drain/requeue creates a fresh sandbox. The native branch must
+not repeat an investigation with the same grant in an empty database: a local
+command identity provides idempotence only within the original retained state.
+Capture durable launch identity before dispatch and separate execution from
+delivery retries. Recover the original database, retry staged bytes, or retain
+Unknown/unavailable; do not replace uncertainty with another funded execution.
+
+`target_secret_key_version` identifies encryption format, not credential
+revision. Capture a revision changed by every credential-material update. The
+existing sandbox file reader also needs a physical byte bound before it can
+qualify native terminal recovery. These are implementation requirements, not
+capabilities established by the producer tests.
+
+Wire hashes have three distinct inputs: exact terminal file bytes including the
+newline; retained report bytes in typed Rust serialization order; and normalized
+Rust canonical Value JSON for grant/profile/account identity. JavaScript object
+stringification is not an interchangeable canonicalizer (numeric-looking keys
+and UTF-8 ordering differ). Qualify the consumer against Rust-produced fixtures
+and preserve the raw nested report byte span when validating its artifact hash.

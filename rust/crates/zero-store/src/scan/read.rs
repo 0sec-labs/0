@@ -5,6 +5,7 @@ pub(super) struct Bound {
     pub controller: Operation,
     pub root: Operation,
     pub close: Option<ScanCloseReason>,
+    pub managed_grant: Option<ManagedScanGrant>,
 }
 pub(super) fn operation(conn: &Connection, key: &str, r: &mut Reader) -> Result<Operation> {
     let n:usize=conn.query_row("SELECT CASE WHEN length(CAST(id AS BLOB))<=256 AND length(CAST(session_id AS BLOB))<=256 AND length(CAST(command_id AS BLOB))<=256 AND length(CAST(status AS BLOB))<=16 AND (owner IS NULL OR length(CAST(owner AS BLOB))<=4096) THEN length(CAST(payload AS BLOB))+coalesce(length(CAST(outcome AS BLOB)),0) END FROM operations WHERE id=?1",[key],|r|r.get(0))?;
@@ -121,6 +122,22 @@ pub(super) fn bound(conn: &Connection, key: &str, r: &mut Reader) -> Result<Boun
         serde_json::from_slice(&r.artifact(conn, &v.intent_sha256, MAX_SCAN_INTENT_BYTES)?)?;
     let a: ScanAdmission = serde_json::from_value(intent["admission"].clone())?;
     admission::validate(&a)?;
+    let managed_grant: Option<ManagedScanGrant> = intent
+        .get("managed_grant")
+        .map(|grant| serde_json::from_value(grant.clone()))
+        .transpose()?;
+    let deadline = managed::deadline(&a, &v.command_id, v.created_at_ms, managed_grant.as_ref())?;
+    if intent
+        != managed::intent(
+            &a,
+            &v.command_id,
+            v.created_at_ms,
+            deadline,
+            managed_grant.as_ref(),
+        )?
+    {
+        return Err(bad("unknown or altered scan intent fields"));
+    }
     let bounded: bool = conn.query_row(
         "SELECT length(CAST(generation AS BLOB))<=256 FROM sessions WHERE id=?1",
         [&v.session_id],
@@ -147,7 +164,7 @@ pub(super) fn bound(conn: &Connection, key: &str, r: &mut Reader) -> Result<Boun
         || s.generation_epoch.is_some()
         || s.budget_limit != a.profile.budget_limit
         || s.created_at_ms != v.created_at_ms
-        || v.created_at_ms.checked_add(a.profile.deadline_ms) != Some(v.deadline_at_ms)
+        || deadline != v.deadline_at_ms
         || a.root_payload["http_context"]["account_id"] != v.http_account_id
     {
         return Err(bad("immutable scan intent differs"));
@@ -223,6 +240,7 @@ pub(super) fn bound(conn: &Connection, key: &str, r: &mut Reader) -> Result<Boun
         controller,
         root,
         close,
+        managed_grant,
     })
 }
 fn snapshot(conn: &Connection, b: Bound, r: &mut Reader) -> Result<ScanSnapshot> {

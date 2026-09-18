@@ -11,6 +11,7 @@ mod hosted;
 mod hosted_provider;
 mod http_evidence;
 mod http_profiles;
+mod managed_scan;
 mod providers;
 mod questions;
 mod report;
@@ -72,6 +73,9 @@ fn main() -> std::process::ExitCode {
 }
 
 async fn dispatch(args: Args) -> Result<u8, Box<dyn Error>> {
+    if let Command::ManagedHttp(options) = &args.command {
+        return managed_scan::run(&args, options).await;
+    }
     if let Command::Scan(options) = &args.command {
         return scan::run(&args, options).await;
     }
@@ -478,7 +482,8 @@ async fn run(args: Args) -> Result<bool, Box<dyn Error>> {
         | Command::Report { .. }
         | Command::Evaluation { .. }
         | Command::Artifact { .. }
-        | Command::Scan(_) => unreachable!(),
+        | Command::Scan(_)
+        | Command::ManagedHttp(_) => unreachable!(),
     };
     let strategy_run = matches!(
         &command,

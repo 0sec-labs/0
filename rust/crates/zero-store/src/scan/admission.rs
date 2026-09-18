@@ -140,8 +140,30 @@ impl Store {
         owner: &str,
         a: &ScanAdmission,
     ) -> Result<AdmittedScan> {
+        self.admit_scan_inner(command, owner, a, None)
+    }
+    pub fn admit_managed_scan(
+        &mut self,
+        command: &str,
+        owner: &str,
+        a: &ScanAdmission,
+        grant: &ManagedScanGrant,
+    ) -> Result<AdmittedScan> {
+        self.admit_scan_inner(command, owner, a, Some(grant))
+    }
+    fn admit_scan_inner(
+        &mut self,
+        command: &str,
+        owner: &str,
+        a: &ScanAdmission,
+        grant: Option<&ManagedScanGrant>,
+    ) -> Result<AdmittedScan> {
         id(command)?;
         id(owner)?;
+        if let Some(grant) = grant {
+            // Structural and byte bounds only: an expired exact retry is valid.
+            grant.validate().map_err(bad)?;
+        }
         let tx = self
             .conn
             .transaction_with_behavior(TransactionBehavior::Immediate)?;
@@ -150,6 +172,9 @@ impl Store {
                 return Err(bad("command reused for different target/profile"));
             }
             let bound = read::bound(&tx, &record.id, &mut Reader::new())?;
+            if serde_json::to_value(&bound.managed_grant)? != serde_json::to_value(grant)? {
+                return Err(bad("command reused with different managed grant"));
+            }
             return Ok(AdmittedScan {
                 scan: record,
                 root: bound.root,
@@ -160,11 +185,8 @@ impl Store {
         epoch(&tx, owner)?;
         validate(a)?;
         let created = now()?;
-        let deadline = created
-            .checked_add(a.profile.deadline_ms)
-            .ok_or_else(|| bad("deadline overflow"))?;
-        integer(deadline)?;
-        let intent = json!({"schema_version":1,"kind":"native_scan_intent","admission":a,"command_id":command,"created_at_ms":created,"deadline_at_ms":deadline});
+        let deadline = managed::deadline(a, command, created, grant)?;
+        let intent = managed::intent(a, command, created, deadline, grant)?;
         let bytes = encode(&intent)?.into_bytes();
         if bytes.len() > MAX_SCAN_INTENT_BYTES {
             return Err(bad("intent exceeds bound"));

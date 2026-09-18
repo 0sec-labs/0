@@ -411,6 +411,9 @@ impl Engine {
         progress_tx: Option<mpsc::Sender<ExecutionEvent>>,
     ) -> Result<Reply, EngineError> {
         match command {
+            Command::RunManagedScan { grant } => {
+                return self.run_managed_scan(*grant, event_tx, progress_tx).await;
+            }
             Command::RunScan {
                 command_id,
                 target,
@@ -1089,7 +1092,8 @@ impl Engine {
             Command::Reconcile(request) => zero_evidence::reconcile(request)
                 .map(Reply::Reconciled)
                 .map_err(|e| EngineError::State(e.to_string())),
-            Command::RunScan { .. }
+            Command::RunManagedScan { .. }
+            | Command::RunScan { .. }
             | Command::ScanStatus { .. }
             | Command::ScanReport { .. }
             | Command::Scans { .. }

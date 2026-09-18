@@ -1181,3 +1181,55 @@ Investigation and report publication have separate retained outcomes. Canonical 
 Exact command retries compare original target/profile identity and return retained work before loading even explicitly supplied deleted configuration files. Changed target/profile conflicts. Active duplicates return a snapshot; no second scan is started. `show`, `list` and `report` work without engine ownership, recovery, migration or current configuration. Follow the actual list cursor even when a bounded page is empty.
 
 Output is terminal text, one native JSON document, Markdown (`md` alias), or inert HTML. These are native scan records, not legacy managed-worker reports. `0SEC_CLOUD_*`, `0SEC_EMIT_RESULT_LINE`, `0SEC_REPORT_PATH` and legacy target-auth environment variables do not automatically enable uploads, result markers, file writes or scope/auth overrides. This command does not claim managed `http_audit` compatibility; that requires a separately qualified controller/consumer adapter.
+
+### Explicit managed HTTP invocation
+
+`managed-http` is a separate native worker contract, `0sec-native-http/v1`:
+
+```sh
+0sec-native --state /private/run/state.db \
+  --providers /private/run/providers.json \
+  --http-profiles /private/run/http.json \
+  managed-http --grant /private/run/grant.json --report /private/run/terminal.json
+```
+
+The controller supplies a strict `ManagedScanGrant`: cloud scan, organization and
+unique dispatch UUIDs; grant revision and expiry; normalized target; named scan
+profile and its full public policy; exact normalized HTTP policy/auth revision;
+and public provider endpoint, wire and rate pins. Credential values remain in the
+existing private provider/HTTP loaders. On Unix the grant must be a regular,
+non-symlink file owned by the current user with no group/other permissions (normally
+`0600`). The report parent directory must already exist. Runtime/profile overrides
+outside the grant are rejected; grant/configuration files and native state cannot
+be used as report destinations. Help does not load grants or acquire state.
+
+The command runs the existing scan controller and waits for cancellation cleanup.
+It atomically writes the bounded native terminal file before emitting exactly one
+`0SEC_NATIVE_RESULT={...}` metadata line containing the file's byte count and hash.
+The marker is neither a report nor a clean-completion assertion. Publication errors
+emit no marker and leave the investigation's retained result unchanged. A subsequent
+exact invocation can retry publication without another provider or target request.
+The file preserves partial/Unknown outcomes, cancellation/deadline intent, original
+model and HTTP holds, claimed severity and `Unverified` hypotheses. Unmeasured
+HTTP enforcement statistics are explicitly unavailable, never fabricated zeros.
+If full retained evidence cannot be validated or read within its bounds, the file
+instead records unavailable publication, preserving the separately validated
+outcome and original publication reference; the command exits `2`. Invalid grant
+or accounting metadata still prevents publication entirely.
+
+Retries compare the entire original durable grant before loading current provider
+or HTTP configuration. They work after credentials/configuration are removed and
+after the grant expires; they do not extend its original deadline or allowance.
+An active duplicate does not publish a terminal file or cancel the owner. An exact
+execution retry attempts the existing exclusive owner lock without loading
+credentials: a live owner blocks it; after owner death, epoch recovery retains
+Unknown work and holds without replay, then publishes the available terminal
+metadata. Read-only `scan show/list/report` never perform this recovery. Signals
+use the standalone scan's drain and exit behavior, including `143` for SIGTERM;
+ordinary completed/claimed-high/partial/budget exits remain `0`/`1`/`2`/`4`.
+
+No ambient cloud sink, legacy result/event framing, upload, target authentication
+or report-path environment variable activates behavior here. The managed controller
+remains responsible for reading, validating and publishing this **native** terminal
+contract with a matching consumer. This command is not a replacement for legacy
+`scan --mode http_audit`, a deployed worker image, or a verified security conclusion.

@@ -50,6 +50,8 @@ pub struct Args {
 
 #[derive(Debug, Subcommand)]
 pub enum Command {
+    /// Execute an explicitly granted native managed HTTP investigation.
+    ManagedHttp(crate::managed_scan::ManagedScanArgs),
     /// Run or inspect a durable standalone HTTP scan; findings remain unverified.
     Scan(crate::scan::ScanArgs),
     /// Run bounded paired strategy qualification or inspect retained campaign evidence.

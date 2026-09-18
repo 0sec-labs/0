@@ -15,6 +15,7 @@ pub mod discovery;
 pub mod execution;
 pub mod history;
 pub mod http;
+pub mod managed_scan;
 pub mod microvm;
 pub mod model;
 pub mod plugin;
@@ -64,6 +65,9 @@ pub struct Request {
     deny_unknown_fields
 )]
 pub enum Command {
+    RunManagedScan {
+        grant: Box<managed_scan::ManagedScanGrant>,
+    },
     RunScan {
         command_id: String,
         target: String,

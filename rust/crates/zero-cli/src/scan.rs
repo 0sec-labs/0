@@ -126,7 +126,7 @@ pub async fn run(args: &crate::args::Args, options: &ScanArgs) -> Result<u8, Box
         Some(p) => crate::providers::load(p).await?,
         None => vec![],
     };
-    let mut signals = Signals::new()?;
+    let signals = Signals::new()?;
     let engine = Arc::new(zero_engine::Engine::open(&args.state, None)?);
     for (name, profile) in scans {
         engine.configure_scan(&name, profile)?;
@@ -159,28 +159,16 @@ pub async fn run(args: &crate::args::Args, options: &ScanArgs) -> Result<u8, Box
     )
     .await
     .map_err(|_| "Scan notice deadline exceeded")??;
-    let (events, mut receiver) = tokio::sync::mpsc::channel(128);
-    let drain = tokio::spawn(async move { while receiver.recv().await.is_some() {} });
-    let worker = engine.clone();
-    let mut task = tokio::spawn(async move {
-        worker
-            .handle(
-                Command::RunScan {
-                    command_id,
-                    target,
-                    profile,
-                },
-                events,
-            )
-            .await
-    });
-    let mut interrupted = None;
-    let reply = tokio::select! {
-        result=&mut task=>result?,
-        code=signals.wait()=>{interrupted=Some(code);engine.shutdown().await?;task.await?}
-    };
-    engine.shutdown().await?;
-    drain.await?;
+    let (reply, interrupted) = execute(
+        engine,
+        Command::RunScan {
+            command_id,
+            target,
+            profile,
+        },
+        signals,
+    )
+    .await?;
     let snapshot = match &reply {
         Reply::ScanRun { scan, .. } => scan,
         Reply::Error { .. } => {
@@ -192,6 +180,29 @@ pub async fn run(args: &crate::args::Args, options: &ScanArgs) -> Result<u8, Box
     let code = interrupted.unwrap_or_else(|| exit_code(snapshot));
     output_run(&args.state, &reply, options.format).await?;
     Ok(code)
+}
+/// Shared owned scan lifecycle. Both frontends wait for cleanup before publishing.
+pub(crate) async fn execute(
+    engine: Arc<zero_engine::Engine>,
+    command: Command,
+    mut signals: Signals,
+) -> Result<(Reply, Option<u8>), Box<dyn Error>> {
+    let (events, mut receiver) = tokio::sync::mpsc::channel(128);
+    let drain = tokio::spawn(async move { while receiver.recv().await.is_some() {} });
+    let worker = engine.clone();
+    let mut task = tokio::spawn(async move { worker.handle(command, events).await });
+    let mut interrupted = None;
+    let result = tokio::select! {
+        result=&mut task=>result,
+        code=signals.wait()=>{
+            interrupted=Some(code);
+            engine.shutdown().await?;
+            task.await
+        }
+    };
+    engine.shutdown().await?;
+    drain.await?;
+    Ok((result?, interrupted))
 }
 async fn output_run(path: &Path, reply: &Reply, format: Format) -> Result<(), Box<dyn Error>> {
     let Reply::ScanRun { scan, .. } = reply else {
@@ -266,7 +277,7 @@ async fn readonly(path: &Path, command: &ScanCommand) -> Result<u8, Box<dyn Erro
     }
     Ok(0) // A successful read does not reclassify its investigation.
 }
-fn exit_code(s: &ScanSnapshot) -> u8 {
+pub(crate) fn exit_code(s: &ScanSnapshot) -> u8 {
     let Some(result) = &s.result else { return 2 };
     let o = &result.outcome;
     if !matches!(result.publication, ScanPublication::Retained { .. }) {
@@ -414,14 +425,14 @@ async fn write_output(output: &str) -> Result<(), Box<dyn Error>> {
     }
     Ok(())
 }
-struct Signals {
+pub(crate) struct Signals {
     #[cfg(unix)]
     interrupt: tokio::signal::unix::Signal,
     #[cfg(unix)]
     terminate: tokio::signal::unix::Signal,
 }
 impl Signals {
-    fn new() -> Result<Self, std::io::Error> {
+    pub(crate) fn new() -> Result<Self, std::io::Error> {
         Ok(Self {
             #[cfg(unix)]
             interrupt: tokio::signal::unix::signal(tokio::signal::unix::SignalKind::interrupt())?,

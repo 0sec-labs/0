@@ -2,6 +2,7 @@ use super::*;
 use futures_util::FutureExt;
 use std::panic::AssertUnwindSafe;
 use tokio::sync::oneshot;
+use zero_protocol::managed_scan::ManagedScanGrant;
 fn providers(
     shared: &Shared,
     profile: &ScanProfile,
@@ -38,11 +39,45 @@ impl Engine {
         events: mpsc::Sender<ExecutionEvent>,
         progress: Option<mpsc::Sender<ExecutionEvent>>,
     ) -> Result<Reply, EngineError> {
+        self.run_scan_inner(command, input_target, name, None, events, progress)
+            .await
+    }
+    pub(crate) async fn run_managed_scan(
+        &self,
+        grant: ManagedScanGrant,
+        events: mpsc::Sender<ExecutionEvent>,
+        progress: Option<mpsc::Sender<ExecutionEvent>>,
+    ) -> Result<Reply, EngineError> {
+        self.run_scan_inner(
+            grant.command_id(),
+            grant.target.clone(),
+            grant.scan_profile_name.clone(),
+            Some(grant),
+            events,
+            progress,
+        )
+        .await
+    }
+    async fn run_scan_inner(
+        &self,
+        command: String,
+        input_target: String,
+        name: String,
+        grant: Option<ManagedScanGrant>,
+        events: mpsc::Sender<ExecutionEvent>,
+        progress: Option<mpsc::Sender<ExecutionEvent>>,
+    ) -> Result<Reply, EngineError> {
+        if let Some(grant) = &grant {
+            grant.validate().map_err(error)?;
+        }
         let receiver = {
             let mut control = lock(&self.shared.control)?;
             {
                 let store = lock(&self.shared.store)?;
                 if let Some(scan) = store.scan_by_command(&command)? {
+                    if !same(&store.scan_managed_grant(&scan.id)?, &grant)? {
+                        return Err(error("scan command reused with changed managed authority"));
+                    }
                     if scan.input_target != input_target || scan.profile_name != name {
                         return Err(error("scan command reused with changed target or profile"));
                     }
@@ -50,6 +85,11 @@ impl Engine {
                         scan: provenance::snapshot(&store, &scan.id)?,
                         duplicate: true,
                     });
+                }
+            }
+            if let Some(grant) = &grant {
+                if grant.expires_at_ms <= now() {
+                    return Err(error("managed scan grant has expired"));
                 }
             }
             validate_scan_target(&input_target).map_err(error)?;
@@ -88,22 +128,24 @@ impl Engine {
                 false,
             )?;
             root_payload["scan_template"] = serde_json::to_value(&actor.template)?;
-            let admitted = store.admit_scan(
-                &command,
-                &self.shared.owner,
-                &zero_store::ScanAdmission {
-                    scan_id,
-                    session_id,
-                    controller_operation_id,
-                    root_operation_id,
-                    input_target,
-                    target,
-                    profile_name: name,
-                    profile,
-                    root_payload,
-                    provider_context,
-                },
-            )?;
+            let admission = zero_store::ScanAdmission {
+                scan_id,
+                session_id,
+                controller_operation_id,
+                root_operation_id,
+                input_target,
+                target,
+                profile_name: name,
+                profile,
+                root_payload,
+                provider_context,
+            };
+            let admitted = match &grant {
+                Some(grant) => {
+                    store.admit_managed_scan(&command, &self.shared.owner, &admission, grant)?
+                }
+                None => store.admit_scan(&command, &self.shared.owner, &admission)?,
+            };
             if admitted.duplicate {
                 return Ok(Reply::ScanRun {
                     scan: provenance::snapshot(&store, &admitted.scan.id)?,

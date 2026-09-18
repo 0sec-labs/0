@@ -1,4 +1,6 @@
 //! Native reports and explicit legacy stdout framing. No uploads or scans.
+pub mod managed_scan;
+
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::{io::Write, path::Path};

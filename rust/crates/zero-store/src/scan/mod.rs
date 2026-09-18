@@ -5,9 +5,10 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
-use zero_protocol::{campaign::CampaignProviderContext, scan::*};
+use zero_protocol::{campaign::CampaignProviderContext, managed_scan::ManagedScanGrant, scan::*};
 mod admission;
 mod hooks;
+mod managed;
 mod read;
 pub(crate) use hooks::{authorize, budget_denied, forbid_input, guard_effect, guard_reservation};
 #[derive(Debug, Clone, Serialize, Deserialize)]

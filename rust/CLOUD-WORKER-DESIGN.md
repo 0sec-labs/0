@@ -1,13 +1,15 @@
 # Native managed-worker compatibility design
 
-Status: proposal. No native managed-scan worker or completion publisher is
-implemented by this document. Existing native commands, hosted authentication,
-read-only cloud metadata, and legacy framing helpers are separate capabilities.
+Status: producer implemented; matched cloud consumer pending. The experimental
+`managed-http` producer has explicit grant binding and native terminal files.
+It does not perform completion uploads or replace managed dispatch. Existing
+hosted authentication, cloud metadata and legacy framing remain separate.
 
 The next matched native HTTP slice is specified in
 [NATIVE-WORKER-CONTRACT.md](NATIVE-WORKER-CONTRACT.md), following the standalone
 scan implementation. That proposal supersedes the initial exporter-first sequence
-below; it remains unimplemented and requires matched consumer qualification.
+below; its cloud dispatch and consumer work still requires implementation and
+matched qualification.
 
 ## Existing contract, traced from repository sources
 
