@@ -305,8 +305,8 @@ non-Unix platforms; this is not a claim of Windows ACL validation. File fallback
 requires absolute `HOME` (or `USERPROFILE` on Windows), without querying an OS
 account database if those are absent. Help/schema still bypass all resolution.
 Tests use only temporary home directories and loopback fixtures; no real
-credential files are modified. Device login and credential storage commands
-remain unimplemented.
+credential files are modified. Explicit hosted browser login is described below;
+provider-specific device/OAuth login is not implemented by this command.
 
 ## Measured local fixture evaluation
 
@@ -399,3 +399,37 @@ matrix. Use `artifact list`/`artifact export` to inspect or retain the plan,
 observations, and assessment attached to the resulting operation. This surface
 does not propose probes, repair source, run arbitrary model-granted commands, or
 establish a reportable finding.
+
+
+## Explicit hosted browser login
+
+`hosted login [--host URL] [--credentials /absolute/private/cloud.env]`
+prints a sign-in URL on stderr and polls the existing hosted browser-session
+endpoint. Open the URL yourself; the native CLI does not launch a browser or
+shell. Host selection is the explicit flag, then `0SEC_CLOUD_HOST`, then
+`https://cloud.0.security`; existing credential files/tokens are not used to log in.
+`--timeout-ms` bounds the entire login to at most 300000 ms. Polling waits two
+seconds between pending responses; expiry, rate limits, outages, invalid replies
+and cancellation stop without replacing credentials. No separate OAuth device
+endpoint or provider subscription authentication is implied.
+
+Only after a ready credential arrives does the command save literal
+`0SEC_CLOUD_HOST` and `0SEC_CLOUD_TOKEN` lines. The default destination is absolute
+`HOME/.0sec/cloud.env`; a missing final `.0sec` directory is created mode 0700.
+An explicit `--credentials` parent must already exist. On Unix the final directory
+must be owned by the current user and mode 0700; any existing target must be an
+owned regular file with mode 0600. Every directory is opened without following
+symlinks. The new file is written privately, synced and atomically renamed over
+an eligible existing credential file; no shell expansion or server-supplied file
+path is used. Symlink or public destinations fail without replacing the old file.
+Windows persistence is currently unsupported. This is stricter than legacy login.
+
+Success prints JSON metadata only, never the token. `environment_override: true`
+means a nonempty `0SEC_CLOUD_TOKEN` still takes precedence over the saved file;
+login does not clear that environment variable. Custom `--token-env` is rejected
+for login. Login bypasses engine state, provider profiles and harness configuration.
+Signals before persistence leave credentials untouched; once atomic persistence
+starts, its writer is awaited and an interruption reports that credentials were
+saved. A directory-sync failure after atomic replacement also explicitly reports
+the saved state. This command does not verify account funds or inference access.
+All executable login fixtures use temporary homes and localhost services.

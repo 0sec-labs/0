@@ -1,6 +1,8 @@
 //! Read-only hosted metadata with explicit environment/legacy credential resolution.
 #[path = "credentials.rs"]
 mod credentials;
+#[path = "hosted_login.rs"]
+mod login;
 use clap::Subcommand;
 use std::{error::Error, time::Duration};
 use tokio::io::AsyncWriteExt;
@@ -9,6 +11,14 @@ use zero_cloud_client::CloudClient;
 
 #[derive(Debug, Subcommand)]
 pub enum HostedCommand {
+    /// Display a browser sign-in URL, poll, and save credentials privately after approval.
+    Login {
+        /// Absolute credential file; default HOME/.0sec/cloud.env.
+        #[arg(long)]
+        credentials: Option<std::path::PathBuf>,
+        #[arg(long, default_value_t = 300_000, value_parser = clap::value_parser!(u64).range(1..=300_000))]
+        timeout_ms: u64,
+    },
     Health,
     Models,
     Account,
@@ -20,6 +30,13 @@ pub async fn run(
     token_env: &str,
     command: &HostedCommand,
 ) -> Result<bool, Box<dyn Error>> {
+    if let HostedCommand::Login {
+        credentials,
+        timeout_ms,
+    } = command
+    {
+        return login::run(host, token_env, credentials.as_deref(), *timeout_ms).await;
+    }
     let credentials = credentials::resolve(host, token_env).await?;
     let client = CloudClient::new(
         &credentials.host,
@@ -30,6 +47,7 @@ pub async fn run(
     let cancel = CancellationToken::new();
     let request = async {
         match command {
+            HostedCommand::Login { .. } => unreachable!(),
             HostedCommand::Health => client.ping_health(cancel.clone()).await.and_then(|v| {
                 serde_json::to_value(v).map_err(|_| zero_cloud_client::CloudError::InvalidResponse)
             }),

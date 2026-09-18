@@ -11,6 +11,7 @@ name = "0sec-native"
 path = "src/main.rs"
 
 [dependencies]
+nix = { workspace = true, features = ["fs"] }
 clap.workspace = true
 uuid.workspace = true
 tokio.workspace = true
