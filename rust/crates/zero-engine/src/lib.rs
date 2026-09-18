@@ -12,6 +12,9 @@ mod reproduction;
 mod sandbox;
 mod source;
 mod source_provenance;
+mod source_report;
+
+pub use source_report::read_source_report;
 
 use std::{
     collections::HashMap,

@@ -159,6 +159,66 @@ fn exercise(mode: &str) {
             fs::remove_dir_all(&source).unwrap();
         }
     }
+    // Reports are read-only exports after the original source has disappeared.
+    // Missing provider/harness/backend inputs must never be consulted.
+    for format in ["json", "markdown", "html"] {
+        let output = cli(&dir)
+            .args([
+                "--providers",
+                "/missing/providers.json",
+                "--harness-config",
+                "/missing/harness.json",
+                "--docker-bin",
+                "/missing/docker",
+                "source-report",
+                "--session",
+                session,
+                "--operation",
+                first.as_ref().unwrap().as_str().unwrap(),
+                "--format",
+                format,
+            ])
+            .env_remove("SOURCE_TEST_KEY")
+            .output()
+            .unwrap();
+        let success = mode == "valid" || mode == "empty";
+        assert_eq!(
+            output.status.success(),
+            success,
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let text = String::from_utf8(output.stdout).unwrap();
+        assert!(!text.contains("SOURCE_BYTES_PRIVATE"));
+        assert!(!text.contains("UNSELECTED_BYTES_PRIVATE"));
+        assert!(!text.contains("fixture-secret"));
+        if success {
+            assert!(text.to_lowercase().contains("unverified"));
+            assert!(text.contains(first.as_ref().unwrap().as_str().unwrap()));
+            if format == "json" {
+                let report: Value = serde_json::from_str(&text).unwrap();
+                assert_eq!(report["security_conclusion"], "not_established");
+                assert_eq!(
+                    report["review"]["hypotheses"].as_array().unwrap().len(),
+                    if mode == "empty" { 0 } else { 1 }
+                );
+            }
+        } else {
+            assert!(text.is_empty());
+        }
+    }
+    let denied = cli(&dir)
+        .args([
+            "source-report",
+            "--session",
+            "another-session",
+            "--operation",
+            first.as_ref().unwrap().as_str().unwrap(),
+        ])
+        .output()
+        .unwrap();
+    assert!(!denied.status.success());
+    assert!(denied.stdout.is_empty());
     let listener = server.join().unwrap();
     assert_eq!(
         listener.accept().unwrap_err().kind(),
@@ -203,4 +263,33 @@ fn source_review_metadata_bypasses_provider_harness_and_database() {
         assert!(text.contains("source-review") || text.contains("review_source"));
         assert!(!dir.path().join("state.db").exists());
     }
+}
+
+#[test]
+fn source_report_never_creates_state_and_help_needs_no_configuration() {
+    let dir = tempfile::tempdir().unwrap();
+    let help = cli(&dir)
+        .args([
+            "--providers",
+            "/missing/profiles",
+            "source-report",
+            "--help",
+        ])
+        .output()
+        .unwrap();
+    assert!(help.status.success());
+    assert!(!dir.path().join("state.db").exists());
+    let output = cli(&dir)
+        .args([
+            "source-report",
+            "--session",
+            "missing",
+            "--operation",
+            "missing",
+        ])
+        .output()
+        .unwrap();
+    assert!(!output.status.success());
+    assert!(output.stdout.is_empty());
+    assert!(!dir.path().join("state.db").exists());
 }

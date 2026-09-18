@@ -88,3 +88,35 @@ HTML escapes are written into a buffer capped at 64 MiB, including expansion;
 errors return no partial CLI stdout. JSON, SARIF and Markdown output contracts
 remain unchanged. PDF, browser opening, uploads and scanner orchestration remain
 outside this renderer.
+
+## Native source-hypothesis reports
+
+`render_source_report(&SourceReport, SourceReportFormat::{Json, Markdown, Html})`
+uses the separate `zero_protocol::source::SourceReport` DTO, re-exported by this
+crate. It never converts hypotheses into legacy `Finding`/`ScanReport` values,
+SARIF results, reproduced findings or validated repairs. The DTO contains schema
+version 1, session/operation IDs, snapshot digest, typed `ReviewResult`, and an
+ordered artifact-name/digest map. It excludes the local snapshot root, full file
+catalog, source bundle bytes, prompts, raw completions, billing and invented
+scan timestamps.
+
+JSON rendering preserves the single versioned DTO, including three required typed
+labels: `report_kind: "source_hypotheses"`, `verification_state: "unverified"`,
+and `security_conclusion: "not_established"`. These enum values reject claims of
+verification, safety or legacy scan semantics at deserialization; exported JSON
+round-trips directly into `SourceReport`. Markdown and HTML carry equivalent
+explicit labels, including empty results. They show claimed severity, explanations,
+complete hypothesis IDs, exact path/line/hash citations, model/submission IDs,
+source/request/completion identities and all supplied artifact digests. Supplied
+text is escaped; references and source paths never become active links. No
+hypothesis or citation is silently truncated.
+
+The renderer checks versions, bounded text/counts, well-formed identities and
+citation ranges, and consistency of source bundle/request/completion attachment
+hashes. It does **not** load artifacts or prove the supplied journal provenance;
+callers must use the engine's read-only validated projection before representing
+a report as belonging to a persisted operation. Structurally valid input can
+still describe unverified claims. The shared output writers cap output at
+64 MiB. There is no file write, guest/provider work, upload or source access in
+these rendering functions. Separate CLI integration owns journal access and
+output lifecycle.

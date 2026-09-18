@@ -390,3 +390,33 @@ Combined acceptance for adaptive discovery and HTML: all 410 workspace tests
 passed on Rust 1.85 with the locked dependency graph; production library/binary
 Clippy passed with warnings denied. These local checks do not establish the
 remaining deployment, scanner-quality or full command-parity gates.
+
+## Native source evidence export
+
+`source-report --session ... --operation ... --format json|markdown|html`
+exports succeeded dedicated/adaptive review evidence through a read-only journal
+view. Both paths validate retained request/completion, provider child correlation,
+submission semantics and citations. Provider/harness configuration, engine
+ownership and the original source tree are unnecessary. Corrupt or uncertain
+reviews cannot be exported as successful reports.
+
+This is a separate schema for unverified source hypotheses with provenance hashes,
+not a legacy scan report. Empty reports establish no target-safety conclusion.
+The export omits private source bytes, snapshot paths and provider transcripts;
+supplied claim text is rendered faithfully with format-appropriate escaping.
+Reproduction/repair linkage, reportability policy, SARIF semantic mapping and
+managed-worker publication remain unfinished.
+
+The acceptance run exposed an engine ownership race; `fbead76f` makes worker
+reference release precede terminal replies, and makes shutdown await release even
+when the caller does not await those replies. A separate completion token records
+release after the worker's last engine reference is dropped. Regression checks
+include 64 immediate reopen cycles, shutdown with no active registration but a
+remaining worker reference, and notification after last-reference release.
+Caller-held engine handles must still be dropped before reopening the journal.
+
+Combined source-export and ownership-release acceptance: 426 workspace tests
+passed on Rust 1.85 with locked dependencies; formatting and production Clippy
+with warnings denied passed. The earlier failed full run is superseded by this
+run after the ownership fix. Live-provider and real-container qualification were
+not rerun for this checkpoint; existing opt-in tests remain separate gates.

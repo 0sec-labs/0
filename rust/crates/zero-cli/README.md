@@ -489,3 +489,27 @@ hash/line citations through `submit_source_hypotheses`; prose alone cannot finis
 this mode. `result.source_review` retains unverified hypotheses and artifact
 hashes. Its operation ID can be used as `source_operation_id` for an explicit
 `source-reproduce` request. This does not infer reproduction or a clean verdict.
+
+### Native source hypothesis reports
+
+```sh
+0sec-native --state .0sec/native/state.db source-report --session SESSION --operation REVIEW_OPERATION --format json
+0sec-native --state .0sec/native/state.db source-report --session SESSION --operation REVIEW_OPERATION --format markdown
+0sec-native --state .0sec/native/state.db source-report --session SESSION --operation REVIEW_OPERATION --format html
+```
+
+This read-only export accepts a succeeded dedicated source review or adaptive
+structured submission in the named session. It revalidates retained submission
+and provider evidence without acquiring engine ownership, loading provider or
+harness configuration, or rereading the original project. It works while the
+engine owns the journal and after the original source is removed.
+
+The separate native report contains unverified hypotheses, citations and the
+four submission artifact hashes. It does not embed source files, private snapshot
+paths, full provider transcripts, or execution artifacts. Claim text is supplied
+content and may itself contain sensitive information; rendering does not redact
+it. Empty reports establish no safety conclusion. Reproduction/repair assessments,
+legacy findings, SARIF mapping, and managed report publication are not included.
+JSON explicitly records `report_kind: source_hypotheses`, `verification_state:
+unverified` and `security_conclusion: not_established`. Reads and stdout writes
+have five-second deadlines; interrupted writes can leave partial stdout.

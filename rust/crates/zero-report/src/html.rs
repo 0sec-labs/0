@@ -10,9 +10,9 @@ const COLORS: [(&str, &str, &str); 5] = [
     ("#1d4ed8", "#ffffff", "#60a5fa"),
     ("#4b5563", "#ffffff", "#9ca3af"),
 ];
-struct Html(String);
+pub(super) struct Html(pub(super) String);
 impl Html {
-    fn raw(&mut self, fragment: &str) -> Result<()> {
+    pub(super) fn raw(&mut self, fragment: &str) -> Result<()> {
         if self
             .0
             .len()
@@ -24,7 +24,7 @@ impl Html {
         self.0.push_str(fragment);
         Ok(())
     }
-    fn text(&mut self, text: &str) -> Result<()> {
+    pub(super) fn text(&mut self, text: &str) -> Result<()> {
         for c in text.chars() {
             match c {
                 '&' => self.raw("&amp;")?,
@@ -40,7 +40,7 @@ impl Html {
         }
         Ok(())
     }
-    fn field(&mut self, open: &str, value: &str, close: &str) -> Result<()> {
+    pub(super) fn field(&mut self, open: &str, value: &str, close: &str) -> Result<()> {
         self.raw(open)?;
         self.text(value)?;
         self.raw(close)

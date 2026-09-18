@@ -789,6 +789,16 @@ async fn adaptive_review_retains_actual_provider_evidence_and_supports_reproduct
         r => panic!("{r:?}"),
     };
     fs::remove_dir_all(f.dir.path().join("source")).unwrap();
+    let exported =
+        zero_engine::read_source_report(&f.dir.path().join("state.db"), &f.session, &parent)
+            .unwrap();
+    assert_eq!(exported.operation_id, parent);
+    assert_eq!(exported.review.hypotheses[0].id, review.hypotheses[0].id);
+    assert_eq!(exported.artifacts.len(), 4);
+    assert!(
+        zero_engine::read_source_report(&f.dir.path().join("state.db"), "other-session", &parent)
+            .is_err()
+    );
     match call(&f.engine, command.clone()).await {
         Reply::Agent {
             duplicate: true,
@@ -961,6 +971,10 @@ async fn adaptive_source_pin_revalidates_final_inference_before_reuse() {
     let mut next = f.request.clone();
     next.source_snapshot_tools = false;
     next.source_submission_max_hypotheses = None;
+    assert!(
+        zero_engine::read_source_report(&f.dir.path().join("state.db"), &f.session, &parent)
+            .is_err()
+    );
     next.source_review_operation_id = Some(parent);
     let reply = call(
         &f.engine,
@@ -1055,6 +1069,10 @@ async fn accepted_adaptive_evidence_is_ineligible_when_private_cleanup_fails() {
     let mut next = f.request.clone();
     next.source_snapshot_tools = false;
     next.source_submission_max_hypotheses = None;
+    assert!(
+        zero_engine::read_source_report(&f.dir.path().join("state.db"), &f.session, &parent)
+            .is_err()
+    );
     next.source_review_operation_id = Some(parent);
     assert!(matches!(
         call(

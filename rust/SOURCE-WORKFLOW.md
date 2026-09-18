@@ -51,8 +51,10 @@ outputs under an explicit frozen contract. Top-level reproduction is part of
    reconstruction to satisfy the same frozen plan. Report
    `validated_candidate_for_plan` with that plan's identity; do not generalize it
    to an unrestricted fixed-security claim.
-6. Export provenance into JSON/SARIF. Host application, Git changes and publishing
-   are subsequent explicit workflow capabilities.
+6. Export validated review provenance through `source-report` in native JSON,
+   Markdown or HTML. Hypotheses stay unverified. Linking reproduction/repair
+   assessments and defining legacy finding/SARIF semantics remain separate work.
+   Host application, Git changes and publishing are subsequent capabilities.
 
 The initial oracle can observe command exit/stdout/stderr from existing local
 images. Filesystem-effect proofs require a separate bounded artifact-export API

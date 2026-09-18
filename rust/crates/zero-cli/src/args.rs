@@ -29,6 +29,15 @@ pub struct Args {
 
 #[derive(Debug, Subcommand)]
 pub enum Command {
+    /// Export a completed source review with unverified hypotheses and provenance.
+    SourceReport {
+        #[arg(long)]
+        session: String,
+        #[arg(long)]
+        operation: String,
+        #[arg(long, value_enum, default_value = "json")]
+        format: crate::source_report::SourceReportFormat,
+    },
     /// Inspect or export retained operation bytes without taking engine ownership.
     Artifact {
         #[command(subcommand)]

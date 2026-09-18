@@ -2,9 +2,9 @@
 use crate::{Error, MAX_REPORT_BYTES, Report, Result, text};
 use serde_json::Value;
 const LIMIT: usize = 4 * MAX_REPORT_BYTES;
-struct Lines(String);
+pub(super) struct Lines(pub(super) String);
 impl Lines {
-    fn line(&mut self, line: &str) -> Result<()> {
+    pub(super) fn line(&mut self, line: &str) -> Result<()> {
         if self
             .0
             .len()
@@ -48,7 +48,7 @@ fn controls(raw: &str) -> String {
     output
 }
 
-fn escape(raw: &str) -> String {
+pub(super) fn escape(raw: &str) -> String {
     let mut out = String::new();
     for c in controls(raw).chars() {
         match c {

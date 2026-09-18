@@ -74,3 +74,30 @@ pub struct SourceReviewOutcome {
     pub external_effects_started: bool,
     pub error: Option<String>,
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum SourceReportKind {
+    SourceHypotheses,
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum SecurityConclusion {
+    NotEstablished,
+}
+
+/// Native source-hypothesis report; not a legacy scan/finding report.
+/// Content identities do not confer verification or disclosure authority.
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct SourceReport {
+    pub schema_version: u32,
+    pub report_kind: SourceReportKind,
+    pub verification_state: VerificationState,
+    pub security_conclusion: SecurityConclusion,
+    pub session_id: String,
+    pub operation_id: String,
+    pub snapshot_sha256: String,
+    pub review: ReviewResult,
+    pub artifacts: std::collections::BTreeMap<String, String>,
+}

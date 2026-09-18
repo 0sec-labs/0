@@ -66,6 +66,8 @@ pub(super) fn load(store: &Store, session: &str, id: &str) -> Result<Validated, 
         || bundle.snapshot_digest() != snapshot.digest
         || review.bundle_sha256 != *bundle.digest()
         || review.snapshot_sha256 != bundle.snapshot_digest()
+        || attachments.get("source.request") != Some(&review.request_sha256)
+        || attachments.get("source.completion") != Some(&review.completion_sha256)
         || serde_json::to_value(&review)?
             != serde_json::to_value(
                 outcome
@@ -115,6 +117,70 @@ pub(super) fn load(store: &Store, session: &str, id: &str) -> Result<Validated, 
         {
             return Err(error("adaptive source submission revalidation failed"));
         }
+    } else {
+        for name in ["source.request", "source.completion"] {
+            if !attachments.contains_key(name)
+                || attachments.get(name) != outcome.artifacts.get(name)
+            {
+                return Err(error("dedicated source artifact missing or mismatched"));
+            }
+        }
+        let request: zero_protocol::model::ResponsesRequest =
+            serde_json::from_slice(&store.artifact(&attachments["source.request"])?)?;
+        let completion: zero_protocol::model::Completion =
+            serde_json::from_slice(&store.artifact(&attachments["source.completion"])?)?;
+        let child = store.get_operation(
+            &outcome
+                .inference_operation
+                .ok_or_else(|| error("submission inference absent"))?,
+        )?;
+        let expected_outcome = serde_json::json!({
+            "completion_artifact": attachments["source.completion"],
+            "usage": completion.usage,
+            "usage_is_final": completion.usage_is_final,
+        });
+        if child.session_id != session
+            || child.status != OperationStatus::Succeeded
+            || child.command_id != format!("{id}:model:0")
+            || child.payload["parent_operation"] != id
+            || child.payload["kind"] != "source_review_inference"
+            || child.payload["request_artifact"] != attachments["source.request"]
+            || child.outcome != Some(expected_outcome)
+            || ["endpoint", "wire_api", "rates"]
+                .iter()
+                .any(|key| child.payload[*key] != op.payload[*key])
+        {
+            return Err(error("dedicated source inference correlation mismatch"));
+        }
+        let original: SourceReviewRequest = serde_json::from_value(op.payload["request"].clone())?;
+        let selected: std::collections::BTreeSet<_> = original
+            .source
+            .selected_files
+            .iter()
+            .map(String::as_str)
+            .collect();
+        let retained: std::collections::BTreeSet<_> =
+            bundle.files().iter().map(|file| file.path()).collect();
+        if bundle.question() != original.source.question
+            || bundle.max_hypotheses() != original.source.max_hypotheses
+            || selected.len() != original.source.selected_files.len()
+            || selected != retained
+        {
+            return Err(error("dedicated source authority changed"));
+        }
+        let submission = zero_source::PreparedReview::from_bundle(bundle.clone())
+            .request(&original.model)
+            .map_err(error)?;
+        if serde_json::to_value(submission.request())? != serde_json::to_value(request)? {
+            return Err(error(
+                "dedicated source request differs from retained source",
+            ));
+        }
+        if serde_json::to_value(submission.accept(&completion).map_err(error)?)?
+            != serde_json::to_value(&review)?
+        {
+            return Err(error("dedicated source submission revalidation failed"));
+        }
     }
     Ok(Validated {
         snapshot,
@@ -122,3 +188,7 @@ pub(super) fn load(store: &Store, session: &str, id: &str) -> Result<Validated, 
         review,
     })
 }
+
+#[cfg(test)]
+#[path = "source_provenance_tests.rs"]
+mod tests;

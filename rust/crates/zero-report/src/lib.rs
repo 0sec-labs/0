@@ -1,8 +1,11 @@
 //! Pure legacy report renderers. Rendering never establishes finding validity.
 mod html;
 mod markdown;
+mod source_report;
 use serde_json::{Value, json};
+pub use source_report::{SourceReportFormat, render_source_report};
 use std::collections::HashSet;
+pub use zero_protocol::source::SourceReport;
 pub const MAX_REPORT_BYTES: usize = 16 * 1024 * 1024;
 #[derive(Debug, thiserror::Error)]
 pub enum Error {

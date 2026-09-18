@@ -9,6 +9,7 @@ mod hosted;
 mod providers;
 mod report;
 mod server;
+mod source_report;
 
 use args::{Args, Command, SessionCommand, SnapshotCommand};
 use clap::Parser;
@@ -57,6 +58,14 @@ fn main() -> std::process::ExitCode {
 }
 
 async fn run(args: Args) -> Result<bool, Box<dyn Error>> {
+    if let Command::SourceReport {
+        session,
+        operation,
+        format,
+    } = &args.command
+    {
+        return source_report::run(&args.state, session, operation, *format).await;
+    }
     if let Command::Artifact { command } = &args.command {
         return artifact::run(&args.state, command).await;
     }
@@ -285,7 +294,8 @@ async fn run(args: Args) -> Result<bool, Box<dyn Error>> {
                     .map_err(|_| "Invalid agent request JSON")?,
             }
         }
-        Command::Schema
+        Command::SourceReport { .. }
+        | Command::Schema
         | Command::Snapshot { .. }
         | Command::Doctor { .. }
         | Command::AppServer
