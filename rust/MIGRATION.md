@@ -141,6 +141,9 @@ work, and supports bounded reads/search with explicit excluded files and
 truncation. Cleanup is awaited before success or checkpoint creation. Exact
 retries do not restage; new snapshot continuations require the unchanged original.
 This is distinct from retained-review mode and does not broaden it implicitly.
+Source listings now expose deterministic `after_path` / `next_after_path` pages,
+so the per-call 32-file limit does not hide later files in a large directory.
+Manifest/scope validation and serialized-byte bounds apply to every page.
 Regex search, role-specific tool policy and investigation-driven structured
 submission remain open. The dedicated review still requires host-selected files.
 

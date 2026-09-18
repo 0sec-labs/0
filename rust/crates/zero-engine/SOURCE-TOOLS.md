@@ -66,3 +66,14 @@ Exact command retries do not restage or reread source. A *new* snapshot-mode
 continuation restages the original pin and fails if it changed or disappeared.
 Retained-review continuation remains independent of those live files. Default
 false is omitted from serialization, preserving old command retry identities.
+
+## Listing every authorized file
+
+`list_source_files` accepts optional `after_path`. A truncated listing returns
+`next_after_path`, the last emitted canonical path. Pass that value with the same
+prefix to obtain the next lexicographically ordered page; repeat until the cursor
+is absent and `truncated` is false. The engine still caps each page at 32 entries.
+The cursor must name a file inside the current authorized manifest and prefix;
+missing files, traversal and cursors outside that prefix are rejected. Cursor
+bytes count toward the existing serialized output limit. Identity comes from the
+fixed source authority and response digest, not from the path token alone.

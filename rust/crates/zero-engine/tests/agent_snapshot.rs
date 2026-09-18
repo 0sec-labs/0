@@ -511,3 +511,140 @@ async fn cleanup_failure_overrides_success_or_checkpoint_with_recoverable_unknow
         f.engine.shutdown().await.unwrap();
     }
 }
+
+#[tokio::test]
+async fn listing_pages_make_every_pinned_file_discoverable_without_backend_work() {
+    let mut f = Fixture::new(
+        vec![
+            completed(json!([tool(
+                "page1",
+                "list_source_files",
+                json!({"max_results":32})
+            )])),
+            completed(json!([tool(
+                "page2",
+                "list_source_files",
+                json!({"max_results":32,"after_path":"file-30.txt"})
+            )])),
+            completed(json!([tool(
+                "page3",
+                "list_source_files",
+                json!({"max_results":32,"after_path":"file-62.txt"})
+            )])),
+            answer(),
+        ],
+        false,
+    )
+    .await;
+    for index in 0..65 {
+        fs::write(
+            f.dir.path().join(format!("source/file-{index:02}.txt")),
+            "pinned\n",
+        )
+        .unwrap();
+    }
+    f.request.max_turns = 4;
+    let snapshot = zero_executor::pin_snapshot(&f.dir.path().join("source")).unwrap();
+    let mut request = serde_json::to_value(&f.request).unwrap();
+    request["execution"]["snapshot"] = serde_json::to_value(&snapshot).unwrap();
+    f.request = serde_json::from_value(request).unwrap();
+    successful(call(&f.engine, f.command("paged")).await);
+    let requests = f.http.requests.lock().unwrap().clone();
+    let results: Vec<Value> = requests[3]["input"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|item| item["type"] == "function_call_output")
+        .map(|item| serde_json::from_str(item["output"].as_str().unwrap()).unwrap())
+        .collect();
+    assert_eq!(results.len(), 3);
+    assert_eq!(results[0]["files"].as_array().unwrap().len(), 32);
+    assert_eq!(results[0]["next_after_path"], "file-30.txt");
+    assert_eq!(results[1]["files"][0]["path"], "file-31.txt");
+    assert_eq!(results[1]["files"].as_array().unwrap().len(), 32);
+    assert_eq!(results[1]["next_after_path"], "file-62.txt");
+    let first: std::collections::BTreeSet<_> = results[0]["files"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|f| f["path"].as_str().unwrap())
+        .collect();
+    assert!(
+        results[1]["files"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|f| !first.contains(f["path"].as_str().unwrap()))
+    );
+    assert_eq!(results[0]["snapshot_digest"], snapshot.digest);
+    assert_eq!(results[1]["snapshot_digest"], snapshot.digest);
+    assert_eq!(results[2]["files"].as_array().unwrap().len(), 3);
+    assert_eq!(results[2]["truncated"], false);
+    assert!(results[2].get("next_after_path").is_none());
+    let all: Vec<_> = results
+        .iter()
+        .flat_map(|r| r["files"].as_array().unwrap())
+        .map(|f| f["path"].as_str().unwrap())
+        .collect();
+    let expected: Vec<_> = snapshot.files.iter().map(|f| f.path.as_str()).collect();
+    assert_eq!(all, expected);
+    f.no_backend();
+    f.engine.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn listing_rejects_fabricated_or_noncanonical_cursors_without_expanding_authority() {
+    let f = Fixture::new(
+        vec![
+            completed(json!([
+                tool(
+                    "missing",
+                    "list_source_files",
+                    json!({"max_results":2,"after_path":"absent.txt"})
+                ),
+                tool(
+                    "traversal",
+                    "list_source_files",
+                    json!({"max_results":2,"after_path":"../app.js"})
+                ),
+                tool(
+                    "scope",
+                    "list_source_files",
+                    json!({"prefix":"app.js","max_results":2,"after_path":"other.txt"})
+                ),
+                tool(
+                    "valid",
+                    "list_source_files",
+                    json!({"max_results":2,"after_path":"app.js"})
+                )
+            ])),
+            answer(),
+        ],
+        false,
+    )
+    .await;
+    successful(call(&f.engine, f.command("cursor-denials")).await);
+    let requests = f.http.requests.lock().unwrap().clone();
+    let results: Vec<_> = requests[1]["input"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|v| v["type"] == "function_call_output")
+        .collect();
+    assert_eq!(results.len(), 4);
+    for result in &results[..3] {
+        assert!(
+            result["output"]
+                .as_str()
+                .unwrap()
+                .starts_with("Tool rejected:")
+        );
+    }
+    let valid: Value = serde_json::from_str(results[3]["output"].as_str().unwrap()).unwrap();
+    assert_eq!(valid["files"][0]["path"], "other.txt");
+    assert_eq!(valid["files"].as_array().unwrap().len(), 1);
+    assert_eq!(valid["truncated"], false);
+    assert!(valid.get("next_after_path").is_none());
+    f.no_backend();
+    f.engine.shutdown().await.unwrap();
+}
