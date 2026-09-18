@@ -114,6 +114,26 @@ describe("CloudClient.pingHealth — auth + headers", () => {
   );
 });
 
+describe("CloudClient.deleteJson", () => {
+  it("treats a 204 No Content delete as success without parsing a body", async () => {
+    const fetchImpl = (async () =>
+      new Response(null, { status: 204 })) as typeof fetch;
+
+    const client = new CloudClient({ host: HOST, token: SECRET, fetchImpl });
+    await expect(client.deleteJson("/api/scan-schedules/x")).resolves.toBeUndefined();
+  });
+
+  it("still parses a JSON body when the delete returns one", async () => {
+    const fetchImpl = (async () =>
+      jsonResponse({ deleted: true })) as typeof fetch;
+
+    const client = new CloudClient({ host: HOST, token: SECRET, fetchImpl });
+    await expect(client.deleteJson("/api/scan-schedules/x")).resolves.toEqual({
+      deleted: true,
+    });
+  });
+});
+
 
 describe("CloudClient.pingHealth — error mapping", () => {
   it("throws CloudUnauthorizedError on 401", async () => {

@@ -424,6 +424,38 @@ export class CloudClient {
   }
 
   /**
+   * Generic JSON DELETE helper with the same error mapping as getJson/postJson.
+   * Used by `0sec service disconnect` to remove scan schedules.
+   */
+  async deleteJson<T = unknown>(path: string): Promise<T> {
+    const url = `${this.host}${path}`;
+    let res: Response;
+    try {
+      res = await this.fetchImpl(url, {
+        method: "DELETE",
+        headers: { ...this.headers(), "Content-Type": "application/json" },
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      throw new CloudNetworkError(this.scrub(msg), path);
+    }
+    if (!res.ok) {
+      let code: string | undefined;
+      try {
+        const parsed = (await res.json()) as { error?: { code?: unknown } | string } | null;
+        const raw = typeof parsed?.error === "object" ? parsed.error?.code : undefined;
+        if (typeof raw === "string" && raw.length > 0) code = raw;
+      } catch { /* no / malformed body */ }
+      this.throwForStatus(res.status, path, code);
+    }
+    // 204 No Content is the orchestrator's successful-delete contract
+    // (scan-schedules). res.json() on an empty body throws — treat it as
+    // success with no payload instead of misreporting a completed delete.
+    if (res.status === 204) return undefined as T;
+    return (await res.json()) as T;
+  }
+
+  /**
    * Generic JSON POST helper with the same error mapping as getJson.
    * Used by `0sec connect` to enqueue scans and schedules.
    */
