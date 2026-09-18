@@ -42,15 +42,14 @@
  *
  * Only what the authoritative catalogue reported. Every id on screen comes out
  * of `buildFullModelCatalog` (BYOK) or `buildHostedModelCatalog` (hosted) —
- * there is no hand-written model list anywhere in this file. Price comes from
- * the pricing table or the hosted catalogue's own `pricing` block and reads
- * "not published" / "unknown" when neither carried one. The BYOK context
+ * there is no hand-written model list anywhere in this file. BYOK prices come
+ * from the pricing table. Cloud rows show model identity and capabilities,
+ * without supplier routing or cost metadata. The BYOK context
  * window comes from the synced Models.dev cache (`contextTokens`), keyed on
  * provider AND id together, and the hosted one from the service's own
  * `context_length`; both read "unknown" when absent. Nothing is derived from a
- * sibling model, a vendor default, or the model's name, and there is no "free"
- * or "optimized" claim this file authors: `free` is a catalogue stating both
- * rates are zero.
+ * sibling model, a vendor default, or the model's name. Only BYOK rows can
+ * show `free`, when their catalogue states both rates are zero.
  *
  * The hosted catalogue carries no availability, readiness or entitlement
  * signal — canonical `InferenceModel` has none — so this screen makes no such
@@ -437,26 +436,18 @@ export function ModelScreen({
     () => buildModelRows({ catalog: scopedCatalog, states, filter, activeModel }),
     [scopedCatalog, states, filter, activeModel],
   );
-  // The hosted list has no provider-credential story to group by — the account
-  // holds the keys — so it groups by upstream vendor and filters over the
-  // fields the service actually published. The `prefix` names the group: the
-  // pure hosted lane calls it "Hosted", the BYOK merge calls it "0cloud" so
-  // its routes read as one extra group beside the credential-grouped BYOK rows.
+  // Cloud rows share a customer-facing group and search only public model IDs.
+  // Supplier routing and cost fields remain outside this presentation.
   const hostedItems = (query: string, prefix: string): DialogItem[] => {
     const terms = query.toLowerCase().trim().split(/\s+/).filter(Boolean);
     return hostedCatalog
       .filter((model) =>
-        terms.every((term) =>
-          `${model.id} ${model.provider} ${model.catalog.upstream_model}`
-            .toLowerCase()
-            .includes(term),
-        ),
+        terms.every((term) => model.id.toLowerCase().includes(term)),
       )
       .map((model) => ({
         id: model.id,
         label: model.id,
-        meta: model.price,
-        category: `${prefix} · ${model.provider}`,
+        category: prefix,
         current: model.id === activeModel,
       }));
   };
@@ -731,12 +722,9 @@ export function ModelScreen({
 
     const compact = pane.height < 12;
 
-    // A hosted/cloud row (pure hosted lane, or a "0cloud" row in the merged
-    // BYOK lane) is detailed from the service's OWN catalogue; a BYOK row falls
-    // through to the priced/synced detail below. Dispatching on membership in
-    // the hosted catalogue rather than on `isHosted` is what lets both kinds of
-    // row sit in one list and each keep its authoritative detail.
-    const hosted = hostedById.get(item.id);
+    // Item identity keeps a same-ID BYOK model on its own pricing/detail path.
+    const row = rowByItem.get(item);
+    const hosted = row ? undefined : hostedById.get(item.id);
     if (hosted) {
       // Every string below is the hosted service's own report of this model.
       const details = hostedModelDetails(hosted);
@@ -748,12 +736,7 @@ export function ModelScreen({
           `Enter applies this exact model to ${role}; Ctrl+Backspace restores inheritance.`,
         );
       }
-      // The hosted report is the account's own description of the route, and
-      // all of it was reachable before this dialog existed. Clipping it away
-      // would delete catalogue metadata rather than fit it, so the pane keeps
-      // its scrollbox: the box is still bounded to `pane`, but the overflow
-      // scrolls instead of vanishing. The inner column gives up one cell for
-      // the scrollbar.
+      // Keep customer capabilities and role controls scrollable in a bounded pane.
       const inner = Math.max(1, pane.width - 1);
       const lines = hostedDetailLines(details, inner, compact);
       return (
@@ -784,7 +767,6 @@ export function ModelScreen({
     // The BYOK pane is short and bounded — id, provider, price, context, the
     // credential story — and is clipped with a visible marker rather than
     // scrolled. Nothing that was reachable before is dropped.
-    const row = rowByItem.get(item);
     const contextTokens = row?.kind === "model"
       ? contextWindowFor(contextIndex, row.model.provider, row.model.id)
       : null;

@@ -2680,40 +2680,42 @@ Write a program's structured_scopes to ~/.0sec/scopes/<handle>.json
 
 ### login
 
-Sign in to 0cloud through the browser. This uses the same login flow as `auth login`; your own provider credentials work without a Cloud account.
+Sign in to 0sec Cloud through the browser. This uses the same login flow as `auth login`; your own provider credentials work without a Cloud account.
 
 ```text
 0sec login [options]
 ```
 
-Signing in authenticates the CLI. Hosted inference also requires organization access, an enabled service, and available funds.
+Signing in authenticates the CLI; it does not establish credit eligibility or model access. The development launcher `0dev` defaults to `https://dev.0sec.ai` and keeps its Cloud credentials separate from normal `0sec` credentials.
 
 Guide: [Cloud authentication](/api-keys/).
 
 | Option | Registered default | Description |
 | --- | --- | --- |
-| `--host <url>` | — | Cloud host (default https://cloud.0.security) |
+| `--host <url>` | — | Cloud host (defaults to 0SEC_CLOUD_HOST or production) |
 | `--token <value>` | — | Skip the browser flow and persist this token directly |
 
 ### models
 
-Read the configured Cloud host's inference catalog and base rates. `--json` prints the returned model array.
+Read the configured Cloud host's public model IDs, context windows, and output limits. `--json` prints those same fields, without supplier routing metadata or supplier prices.
 
 ```text
 0sec models [options]
 ```
 
-Requires Cloud credentials. An empty catalog means no models are available to this account. Credit charges also depend on peak multipliers and provider usage receipts.
+Requires Cloud credentials. An empty catalog means the service listed no models for this account. A catalog entry does not establish current access, credit eligibility, or successful inference.
 
 Guide: [Hosted models](/getting-started/#hosted-models-draft).
 
 | Option | Registered default | Description |
 | --- | --- | --- |
-| `--json` | — | Output raw JSON instead of a formatted table |
+| `--json` | — | Output model IDs and capabilities as JSON |
 
 ### balance
 
-Read the service-reported percentage of inference credits remaining. If the service cannot provide a percentage, the command reports it as unavailable. `--json` retains the full account response, including accounting fields.
+Read the service's `credits-v1` credit account. The human view shows free claimable and spendable credits, each subscription window, and prepaid credits separately. One credit is 1,000,000,000 credit nanos; displayed amounts preserve that precision. Overlapping subscription windows are not added together or reduced to a derived balance.
+
+`--json` prints the validated customer account, retaining credit-nano amounts as decimal strings. Unknown, malformed, or legacy responses produce unavailable credit data (`null` in JSON), not an inferred zero or percentage. Authenticated disabled, restricted, and unavailable credit states remain distinct from HTTP authentication failures.
 
 ```text
 0sec balance [options]
@@ -2725,7 +2727,7 @@ Guide: [Cloud authentication](/api-keys/).
 
 | Option | Registered default | Description |
 | --- | --- | --- |
-| `--json` | — | Output raw JSON instead of a formatted line |
+| `--json` | — | Output the validated credit account as JSON |
 
 ### auth
 
@@ -2751,7 +2753,7 @@ Log in through the browser, or supply a credential with `--token`.
 
 | Option | Registered default | Description |
 | --- | --- | --- |
-| `--host <url>` | — | Cloud host (default https://cloud.0.security) |
+| `--host <url>` | — | Cloud host (defaults to 0SEC_CLOUD_HOST or production) |
 | `--token <value>` | — | Skip the browser flow and persist this token directly |
 
 #### auth logout

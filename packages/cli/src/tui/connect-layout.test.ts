@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { CreditAccount } from "@0sec/core";
 
 import {
   RECOMMENDED_IDS,
@@ -27,7 +28,7 @@ import {
 import { PROVIDERS, providerStates } from "./provider-status.js";
 
 /** Minimal CreditAccount fixture for dialog items tests. */
-const cloudAcct = {
+const cloudAcct: CreditAccount = {
   schemaVersion: "credits-v1",
   snapshotAt: "2026-09-18T12:00:00.000Z",
   policyVersion: "credits-v1",
@@ -71,7 +72,7 @@ const cloudAcct = {
     currency: "usd" as const,
   },
   admission: { eligible: true, reason: null },
-} as const;
+};
 
 const isInteger = (value: number): boolean => Number.isInteger(value) && value >= 0;
 
@@ -343,44 +344,28 @@ describe("connectDialogItems — the projection onto the shared picker", () => {
     expect(lit?.meta).toBe("reconnect");
   });
 
-  it("reports the cloud row's own state and never assumes it", () => {
+  it("counts remote authentication independently of credit readiness", () => {
     const rows = buildConnectRows({ states: EMPTY });
-    expect(connectDialogItems({ rows })[0]?.current).toBe(false);
-    expect(connectDialogItems({ rows })[0]?.meta).toBe("sign in");
-    // Credentials stored but not yet verified → "login saved"
-    const signedIn = connectDialogItems({ rows, cloudConnected: true })[0];
-    expect(signedIn?.current).toBe(true);
-    expect(signedIn?.meta).toBe("login saved");
-    // Verified token → "connected"
-    const verified = connectDialogItems({ rows, cloudConnected: true, hostedVerification: { kind: "verified" } })[0];
-    expect(verified?.current).toBe(true);
-    expect(verified?.meta).toBe("connected");
-    // Rejected token → "rejected"
-    const rejected = connectDialogItems({ rows, cloudConnected: true, hostedVerification: { kind: "rejected" } })[0];
-    expect(rejected?.current).toBe(false);
-    expect(rejected?.meta).toBe("rejected");
-    // Server disabled inference (via DTO state) → "not enabled"
-    const disabled = connectDialogItems({
-      rows, cloudConnected: true,
-      hostedVerification: { kind: "verified", account: { ...cloudAcct, state: "disabled", reason: "policy_disabled" } },
-    })[0];
-    expect(disabled?.current).toBe(true);
-    expect(disabled?.meta).toBe("not enabled");
-    // Unavailable → "offline"
-    const unavailable = connectDialogItems({
-      rows, cloudConnected: true,
-      hostedVerification: { kind: "verified", account: { ...cloudAcct, state: "unavailable", reason: "ledger_unavailable" } },
-    })[0];
-    expect(unavailable?.current).toBe(false);
-    expect(unavailable?.meta).toBe("offline");
-    // Unreachable → "offline"
-    const offline = connectDialogItems({ rows, cloudConnected: true, hostedVerification: { kind: "unreachable" } })[0];
-    expect(offline?.current).toBe(false);
-    expect(offline?.meta).toBe("offline");
-    // Recovering should still override
-    const repairing = connectDialogItems({ rows, cloudConnected: true, recoveryProviderId: "hosted", hostedVerification: { kind: "verified" } })[0];
-    expect(repairing?.current).toBe(false);
-    expect(repairing?.meta).toBe("reconnect");
+    expect(connectConnectedCounts(rows).connected).toBe(0);
+    expect(connectConnectedCounts(rows, { kind: "pending" }).connected).toBe(0);
+    for (const account of [
+      null,
+      cloudAcct,
+      ...(["disabled", "unavailable", "restricted"] as const).map((state) => ({ ...cloudAcct, state })),
+    ]) {
+      const verification = { kind: "verified" as const, account };
+      const item = connectDialogItems({ rows, cloudConnected: true, hostedVerification: verification })[0];
+      expect(item?.current).toBe(true);
+      expect(connectConnectedCounts(rows, verification).connected).toBe(1);
+    }
+    for (const kind of ["rejected", "unreachable"] as const) {
+      const verification = { kind };
+      expect(connectDialogItems({ rows, cloudConnected: true, hostedVerification: verification })[0]?.current).toBe(false);
+      expect(connectConnectedCounts(rows, verification).connected).toBe(0);
+    }
+    expect(connectDialogItems({
+      rows, cloudConnected: true, recoveryProviderId: "hosted", hostedVerification: { kind: "verified" },
+    })[0]?.current).toBe(false);
   });
 
   it("carries the two lifecycle colours the list used to draw, and only those", () => {
@@ -586,66 +571,42 @@ describe("connected reporting, masks and hints", () => {
 
 
 describe("cloud verification in the detail pane", () => {
-  const cloudRow = { kind: "cloud" as const };
-  const render = (v?: import("./connect-layout.js").HostedVerificationStatus) =>
-    connectDetailLines({ row: cloudRow, cloudConnected: true, hostedVerification: v }, 60)
-      .map((l) => `${l.tone}:${l.text}`)
-      .join("\n");
+  const row = { kind: "cloud" as const };
 
-  it("shows a pending line while verifying", () => {
-    expect(render({ kind: "pending" })).toContain("Verifying your 0cloud");
-    expect(render(undefined)).toContain("Verifying your 0cloud");
+  it("retains authenticated presentation when credit data is unavailable", () => {
+    for (const account of [
+      null,
+      ...(["disabled", "unavailable", "restricted"] as const).map((state) => ({
+        ...cloudAcct, state, reason: "fixture-credit-reason",
+      })),
+    ]) {
+      const lines = connectDetailLines({
+        row, cloudConnected: true, hostedVerification: { kind: "verified", account },
+      }, 80);
+      expect(lines.some((line) => line.tone === "ok")).toBe(true);
+      expect(lines.some((line) => line.tone === "warn")).toBe(false);
+      if (account) expect(lines.map((line) => line.text).join("\n")).toContain(account.reason);
+    }
   });
-  it("shows connected when verified with a ready account", () => {
-    const out = render({ kind: "verified", account: cloudAcct as import("./hosted-balance.js").CreditAccount });
-    expect(out).toContain("Connected to 0cloud");
-    expect(out).toContain("ok:");
+
+  it("does not present pending or rejected credentials as authenticated", () => {
+    for (const kind of ["pending", "rejected", "unreachable"] as const) {
+      const lines = connectDetailLines({ row, cloudConnected: true, hostedVerification: { kind } }, 80);
+      expect(lines.some((line) => line.tone === "ok")).toBe(false);
+      expect(lines.some((line) => line.tone === "warn")).toBe(kind === "rejected");
+    }
   });
-  it("shows connected when verified with null account (unsupported schema)", () => {
-    const out = render({ kind: "verified" });
-    expect(out).toContain("Connected to 0cloud");
-    expect(out).toContain("ok:");
-  });
-  it("shows disabled state from DTO, not as separate status", () => {
-    const out = render({
-      kind: "verified",
-      account: { ...cloudAcct, state: "disabled", reason: "policy_disabled" } as import("./hosted-balance.js").CreditAccount,
-    });
-    expect(out).toContain("Signed in to 0cloud");
-    expect(out).toContain("enabled");
-    expect(out).toContain("ok:");
-    expect(out).not.toContain("rejected");
-  });
-  it("shows unavailable state with reason from DTO", () => {
-    const out = render({
-      kind: "verified",
-      account: { ...cloudAcct, state: "unavailable", reason: "ledger_unavailable" } as import("./hosted-balance.js").CreditAccount,
-    });
-    expect(out).toContain("Signed in to 0cloud");
-    expect(out).toContain("unavailable");
-    expect(out).toContain("ledger_unavailable");
-  });
-  it("shows restricted state with reason from DTO", () => {
-    const out = render({
-      kind: "verified",
-      account: { ...cloudAcct, state: "restricted", reason: "debt" } as import("./hosted-balance.js").CreditAccount,
-    });
-    expect(out).toContain("Signed in to 0cloud");
-    expect(out).toContain("restricted");
-    expect(out).toContain("debt");
-  });
-  it("tells the operator to sign in again when the token is rejected", () => {
-    const out = render({ kind: "rejected" });
-    expect(out).toContain("rejected the token");
-    expect(out).toContain("warn:");
-  });
-  it("distinguishes an unreachable backend from a bad token", () => {
-    expect(render({ kind: "unreachable" })).toContain("couldn");
-    expect(render({ kind: "unreachable" })).not.toContain("rejected");
-  });
-  it("never claims verification for a not-connected cloud row", () => {
-    const out = connectDetailLines({ row: cloudRow, cloudConnected: false }, 60).map((l) => l.text).join("\n");
-    expect(out).toContain("not configured");
-    expect(out).not.toContain("Connected to 0cloud");
+
+  it("keeps exact customer amounts in the connection detail", () => {
+    const account: CreditAccount = {
+      ...cloudAcct,
+      prepaid: { ...cloudAcct.prepaid, spendableCreditNanos: "123456789012345678" },
+    };
+    const lines = connectDetailLines({
+      row, cloudConnected: true, hostedVerification: { kind: "verified", account },
+    }, 100);
+    const text = lines.map((line) => line.text).join("\n");
+    expect(text).toContain("123456789.012345678 credits");
+    expect(text).toContain("Spendable: 90 credits");
   });
 });

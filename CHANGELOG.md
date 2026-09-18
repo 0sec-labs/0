@@ -12,6 +12,16 @@ on the published npm package and the GitHub Release tag.
 
 ## [Unreleased]
 
+### Changed
+
+- Cloud balance and connection views consume the versioned credit account with
+  exact credit amounts, separate free/subscription/prepaid states, and no inferred
+  totals or zero balances for unavailable data. Cloud model views expose public
+  IDs and capabilities without supplier prices or routing metadata; BYOK pricing
+  remains unchanged.
+- `0dev` defaults to the development Cloud host and stores Cloud credentials
+  separately, without changing normal `0sec` credentials or BYOK configuration.
+
 ## [0.19.0] - 2026-09-18
 
 ### Added

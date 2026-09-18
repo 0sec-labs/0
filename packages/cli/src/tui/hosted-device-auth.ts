@@ -1,7 +1,6 @@
 import { loadCloudCredentials, CloudClient, CloudUnauthorizedError, CloudForbiddenError } from "@0sec/core";
 import type { HostedVerificationStatus } from "./connect-layout.js";
 import { hostedBrowserLoginFlow, type HostedBrowserLoginOptions, type HostedLoginPhase, type LoginResult } from "../commands/auth.js";
-import type { CreditAccount } from "./hosted-balance.js";
 
 export interface HostedDeviceAuthUpdate {
   phase: HostedLoginPhase | "failed";
@@ -69,7 +68,7 @@ export async function verifyHostedConnection(opts: {
   const client = new CloudClient({ host: creds.host, token: creds.token, fetchImpl: opts.fetchImpl });
   try {
     const account = await client.getInferenceAccount();
-    return { kind: "verified", account: (account as CreditAccount | undefined) ?? undefined };
+    return { kind: "verified", account };
   } catch (error) {
     if (error instanceof CloudUnauthorizedError || error instanceof CloudForbiddenError) return { kind: "rejected" };
     return { kind: "unreachable" };

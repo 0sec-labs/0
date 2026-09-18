@@ -185,19 +185,6 @@ describe("CloudClient — token never leaks", () => {
 });
 
 describe("CloudClient.getInferenceAccount — CreditAccount v1 DTO", () => {
-  it("returns the CreditAccount for a valid full response", async () => {
-    const fixture = validCreditAccount();
-    const client = new CloudClient({
-      host: HOST, token: SECRET,
-      fetchImpl: async () => jsonResponse(fixture),
-    });
-    const result = await client.getInferenceAccount();
-    expect(result).not.toBeNull();
-    expect(result!.schemaVersion).toBe("credits-v1");
-    expect(result!.state).toBe("ready");
-    expect(result!.scope.orgId).toBe("org_test123");
-  });
-
   it("preserves exact credit nano strings (large decimal integers)", async () => {
     const fixture = validCreditAccount({
       free: {
@@ -327,9 +314,11 @@ describe("CloudClient.getInferenceAccount — CreditAccount v1 DTO", () => {
       fetchImpl: async () => jsonResponse(fixture),
     });
     const result = await client.getInferenceAccount();
-    expect(result?.subscription.windows).toHaveLength(2);
-    expect(result?.subscription.windows[0].kind).toBe("monthly");
-    expect(result?.subscription.windows[1].kind).toBe("weekly");
+    expect(result?.subscription.windows.map((window) => [window.kind, window.availableCreditNanos]))
+      .toEqual([
+        ["monthly", "20000000000000000000000"],
+        ["weekly", "7000000000000000000000"],
+      ]);
   });
 
   it("preserves nullable nanos in free and prepaid sections", async () => {
@@ -374,6 +363,42 @@ describe("CloudClient.getInferenceAccount — CreditAccount v1 DTO", () => {
       fetchImpl: async () => jsonResponse(jsonNumberPayload),
     });
     expect(await client.getInferenceAccount()).toBeNull();
+  });
+
+  it("rejects out-of-contract money and reset values without an auth error", async () => {
+    const account = validCreditAccount();
+    const malformed = [
+      { ...account, free: { ...account.free, spendableCreditNanos: "1".repeat(31) } },
+      { ...account, purchase: { ...account.purchase, presets: [{ principalCents: 1000, creditNanos: "1e9" }] } },
+      { ...account, purchase: { ...account.purchase, presets: [{ principalCents: Number.MAX_SAFE_INTEGER + 1, creditNanos: "1" }] } },
+      { ...account, subscription: { ...account.subscription, priceCents: 1501 } },
+      { ...account, purchase: { ...account.purchase, currency: "eur" } },
+      { ...account, purchase: { ...account.purchase, stepCents: 50 } },
+      { ...account, free: { ...account.free, resetAt: "not-a-date" } },
+    ];
+    for (const payload of malformed) {
+      const client = new CloudClient({
+        host: HOST, token: SECRET,
+        fetchImpl: async () => jsonResponse(payload),
+      });
+      expect(await client.getInferenceAccount()).toBeNull();
+    }
+  });
+
+  it("keeps private accounting extensions out of the customer DTO at every depth", async () => {
+    const privateValue = "PRIVATE-SUPPLIER-ACCOUNTING";
+    const payload = JSON.parse(JSON.stringify(validCreditAccount()), (_key, value) =>
+      value && typeof value === "object" && !Array.isArray(value)
+        ? { ...value, supplierInternal: privateValue }
+        : value,
+    );
+    const client = new CloudClient({
+      host: HOST, token: SECRET,
+      fetchImpl: async () => jsonResponse(payload),
+    });
+    const account = await client.getInferenceAccount();
+    expect(account?.schemaVersion).toBe("credits-v1");
+    expect(JSON.stringify(account)).not.toContain(privateValue);
   });
 });
 

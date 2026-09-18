@@ -55,7 +55,8 @@
 import { PROVIDER_DEVICE_AUTH } from "./device-auth.js";
 import { PROVIDERS, providerStates, type ProviderState } from "./provider-status.js";
 import type { DialogItem } from "./dialog-select-layout.js";
-import { formatCreditNanos, type CreditAccount } from "./hosted-balance.js";
+import type { CreditAccount } from "@0sec/core";
+import { formatBalanceDetail } from "./hosted-balance.js";
 import {
   DIALOG_HOST_FOOTER_ROWS,
   computeDialogScreenLayout,
@@ -399,27 +400,12 @@ export function connectDialogItems({
       } else {
         switch (hostedVerification.kind) {
           case "verified": {
-            // Account state from DTO determines the short label; the
-            // HTTP 200 itself means the token is valid.
-            const acct = hostedVerification.account;
-            if (!acct || acct.state === "ready") {
-              meta = "connected";
-              current = true;
-              tone = tones?.connected;
-            } else if (acct.state === "disabled") {
-              meta = "not enabled";
-              current = true;
-              tone = tones?.connected;
-            } else if (acct.state === "unavailable") {
-              meta = "offline";
-              current = false;
-              tone = undefined;
-            } else {
-              // restricted
-              meta = "restricted";
-              current = true;
-              tone = undefined;
-            }
+            const account = hostedVerification.account;
+            meta = account && account.state !== "ready"
+              ? `connected · credits ${account.state}`
+              : "connected";
+            current = true;
+            tone = tones?.connected;
             break;
           }
           case "rejected":
@@ -535,7 +521,7 @@ export interface ConnectDetailLine {
  */
 export type HostedVerificationStatus =
   | { readonly kind: "pending" }
-  | { readonly kind: "verified"; readonly account?: CreditAccount }
+  | { readonly kind: "verified"; readonly account?: CreditAccount | null }
   | { readonly kind: "rejected" }
   | { readonly kind: "unreachable" };
 
@@ -585,38 +571,9 @@ export function connectDetailLines(
       if (!v || v.kind === "pending") {
         push("Verifying your 0cloud sign-in\u2026", "muted");
       } else if (v.kind === "verified") {
-        const acct = v.account;
-        if (!acct) {
-          push("Connected to 0cloud.", "ok");
-        } else if (acct.state === "ready") {
-          // Show primary available credit in detail pane
-          const free = acct.free;
-          if (free.state === "active" && free.spendableCreditNanos !== null && free.spendableCreditNanos !== "0") {
-            push("Connected to 0cloud.", "ok");
-            const nanos = formatCreditNanos(free.spendableCreditNanos);
-            if (nanos) push(`Free credits: ${nanos} nanos`, "text");
-          } else {
-            push("Connected to 0cloud.", "ok");
-          }
-          if (acct.subscription.state === "active" && acct.subscription.windows.length > 0) {
-            push("Subscription active", "text");
-          }
-          const prepaid = acct.prepaid;
-          if (prepaid.spendableCreditNanos !== null && prepaid.spendableCreditNanos !== "0") {
-            const nanos = formatCreditNanos(prepaid.spendableCreditNanos);
-            if (nanos) push(`Prepaid: ${nanos} nanos`, "text");
-          }
-        } else if (acct.state === "disabled") {
-          push("Signed in to 0cloud.", "ok");
-          push("Hosted inference isn\u2019t enabled yet. Use your own provider key for now.", "muted");
-        } else if (acct.state === "unavailable") {
-          push("Signed in to 0cloud.", "ok");
-          push("Credit data unavailable right now.", "muted");
-          if (acct.reason) push(`Reason: ${acct.reason}`, "muted");
-        } else if (acct.state === "restricted") {
-          push("Signed in to 0cloud.", "ok");
-          push("Account restricted.", "warn");
-          if (acct.reason) push(`Reason: ${acct.reason}`, "warn");
+        push("Connected to 0cloud.", "ok");
+        for (const line of formatBalanceDetail(v.account ?? null).trimEnd().split("\n")) {
+          push(line.trimStart(), "text");
         }
       } else if (v.kind === "rejected") {
         push("Sign-in saved, but 0cloud rejected the token \u2014 press Enter to sign in again.", "warn");

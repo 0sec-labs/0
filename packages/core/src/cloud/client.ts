@@ -174,8 +174,8 @@ export interface CreditAccountPurchase {
   presets: CreditAccountPurchasePreset[];
   customMinCents: number;
   customMaxCents: number;
-  stepCents: number;
-  currency: string;
+  stepCents: 100;
+  currency: "usd";
 }
 
 export interface CreditAccountAdmission {
@@ -199,7 +199,7 @@ function isCreditAccount(raw: unknown): raw is CreditAccount {
   if (obj.schemaVersion !== "credits-v1") return false;
 
   // ── Required top-level fields ──
-  if (typeof obj.snapshotAt !== "string") return false;
+  if (!isUtcDate(obj.snapshotAt)) return false;
   if (typeof obj.policyVersion !== "string") return false;
 
   // ── Scope ──
@@ -235,14 +235,14 @@ function isCreditAccount(raw: unknown): raw is CreditAccount {
   if (!isNanoStringOrNull(free.claimableCreditNanos)) return false;
   if (!isNanoStringOrNull(free.spendableCreditNanos)) return false;
   if (!isNanoStringOrNull(free.heldCreditNanos)) return false;
-  if (free.resetAt !== null && typeof free.resetAt !== "string") return false;
+  if (free.resetAt !== null && !isUtcDate(free.resetAt)) return false;
 
   // ── subscription ──
   if (typeof sub.state !== "string") return false;
   if (!["none", "active", "inactive_verified", "expired", "revoked", "unresolved"].includes(sub.state as string)) return false;
-  if (typeof sub.priceCents !== "number" || !Number.isFinite(sub.priceCents)) return false;
-  if (sub.periodStart !== null && typeof sub.periodStart !== "string") return false;
-  if (sub.periodEnd !== null && typeof sub.periodEnd !== "string") return false;
+  if (sub.priceCents !== 1500) return false;
+  if (sub.periodStart !== null && !isUtcDate(sub.periodStart)) return false;
+  if (sub.periodEnd !== null && !isUtcDate(sub.periodEnd)) return false;
   if (!Array.isArray(sub.windows)) return false;
   for (const w of sub.windows as unknown[]) {
     if (!w || typeof w !== "object") return false;
@@ -253,7 +253,7 @@ function isCreditAccount(raw: unknown): raw is CreditAccount {
     if (!isNanoStringOrNull(win.settledCreditNanos)) return false;
     if (!isNanoStringOrNull(win.heldCreditNanos)) return false;
     if (!isNanoStringOrNull(win.availableCreditNanos)) return false;
-    if (typeof win.resetsAt !== "string") return false;
+    if (!isUtcDate(win.resetsAt)) return false;
   }
 
   // ── prepaid ──
@@ -265,16 +265,16 @@ function isCreditAccount(raw: unknown): raw is CreditAccount {
 
   // ── purchase ──
   if (typeof purchase.enabled !== "boolean") return false;
-  if (typeof purchase.customMinCents !== "number" || !Number.isFinite(purchase.customMinCents)) return false;
-  if (typeof purchase.customMaxCents !== "number" || !Number.isFinite(purchase.customMaxCents)) return false;
-  if (typeof purchase.stepCents !== "number" || !Number.isFinite(purchase.stepCents)) return false;
-  if (typeof purchase.currency !== "string") return false;
+  if (!isOfferCents(purchase.customMinCents)) return false;
+  if (!isOfferCents(purchase.customMaxCents)) return false;
+  if (purchase.stepCents !== 100) return false;
+  if (purchase.currency !== "usd") return false;
   if (!Array.isArray(purchase.presets)) return false;
   for (const p of purchase.presets as unknown[]) {
     if (!p || typeof p !== "object") return false;
     const preset = p as Record<string, unknown>;
-    if (typeof preset.principalCents !== "number" || !Number.isFinite(preset.principalCents)) return false;
-    if (typeof preset.creditNanos !== "string") return false;
+    if (!isOfferCents(preset.principalCents)) return false;
+    if (typeof preset.creditNanos !== "string" || !isNanoStringOrNull(preset.creditNanos)) return false;
   }
 
   // ── admission ──
@@ -285,11 +285,21 @@ function isCreditAccount(raw: unknown): raw is CreditAccount {
   return true;
 }
 
-/** True when `v` is a string of decimal digits (minimum "0") or null. */
+/** Canonical unsigned numeric(30,0) text, without Number coercion. */
 function isNanoStringOrNull(v: unknown): v is string | null {
   if (v === null) return true;
   if (typeof v !== "string") return false;
-  return /^(0|[1-9]\d*)$/.test(v);
+  return /^(0|[1-9]\d{0,29})$/.test(v);
+}
+
+function isOfferCents(value: unknown): value is number {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
+}
+
+function isUtcDate(value: unknown): value is string {
+  return typeof value === "string"
+    && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$/.test(value)
+    && Number.isFinite(Date.parse(value));
 }
 
 function healthPath(host: string): string {
@@ -335,7 +345,7 @@ export class CloudClient {
   }
 
   /**
-   * Fetch the organization's credit account — inferred credit balances,
+   * Fetch the organization's credit account — reported credit balances,
    * subscription windows, prepaid spends, and purchase presets.
    *
    * Returns `null` when the response is a recognised HTTP 200 (customer is
@@ -350,7 +360,58 @@ export class CloudClient {
    */
   async getInferenceAccount(): Promise<CreditAccount | null> {
     const raw = await this.getJson<unknown>("/api/inference/account");
-    return isCreditAccount(raw) ? raw : null;
+    if (!isCreditAccount(raw)) return null;
+    // Return only the customer contract, including inside arrays. A valid v1
+    // payload must not smuggle private accounting metadata into CLI JSON.
+    const { free, subscription, prepaid, purchase, admission } = raw;
+    return {
+      schemaVersion: raw.schemaVersion,
+      snapshotAt: raw.snapshotAt,
+      policyVersion: raw.policyVersion,
+      scope: { orgId: raw.scope.orgId },
+      state: raw.state,
+      reason: raw.reason,
+      free: {
+        state: free.state,
+        claimableCreditNanos: free.claimableCreditNanos,
+        spendableCreditNanos: free.spendableCreditNanos,
+        heldCreditNanos: free.heldCreditNanos,
+        resetAt: free.resetAt,
+      },
+      subscription: {
+        state: subscription.state,
+        priceCents: subscription.priceCents,
+        periodStart: subscription.periodStart,
+        periodEnd: subscription.periodEnd,
+        windows: subscription.windows.map((window) => ({
+          kind: window.kind,
+          limitCreditNanos: window.limitCreditNanos,
+          settledCreditNanos: window.settledCreditNanos,
+          heldCreditNanos: window.heldCreditNanos,
+          availableCreditNanos: window.availableCreditNanos,
+          resetsAt: window.resetsAt,
+        })),
+      },
+      prepaid: {
+        spendableCreditNanos: prepaid.spendableCreditNanos,
+        heldCreditNanos: prepaid.heldCreditNanos,
+        settledDeficitCreditNanos: prepaid.settledDeficitCreditNanos,
+        holdShortfallCreditNanos: prepaid.holdShortfallCreditNanos,
+        consentEnabled: prepaid.consentEnabled,
+      },
+      purchase: {
+        enabled: purchase.enabled,
+        presets: purchase.presets.map((preset) => ({
+          principalCents: preset.principalCents,
+          creditNanos: preset.creditNanos,
+        })),
+        customMinCents: purchase.customMinCents,
+        customMaxCents: purchase.customMaxCents,
+        stepCents: purchase.stepCents,
+        currency: purchase.currency,
+      },
+      admission: { eligible: admission.eligible, reason: admission.reason },
+    };
   }
 
   /**

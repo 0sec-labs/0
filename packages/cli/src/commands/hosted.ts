@@ -23,10 +23,9 @@ import {
   CloudForbiddenError,
   CloudNetworkError,
   CloudError,
-  DEFAULT_CLOUD_HOST,
 } from "@0sec/core";
 import { runLogin } from "./auth.js";
-import { formatBalanceDetail, formatCreditNanos, type CreditAccount } from "../tui/hosted-balance.js";
+import { formatBalanceDetail } from "../tui/hosted-balance.js";
 
 const EXIT_OK = 0;
 const EXIT_USER_ERROR = 1;
@@ -48,7 +47,7 @@ export function registerHostedCommand(program: Command): void {
   program
     .command("models")
     .description("List 0sec Cloud models and capabilities")
-    .option("--json", "Output raw JSON instead of a formatted table")
+    .option("--json", "Output model IDs and capabilities as JSON")
     .action(async (opts: { json?: boolean }) => {
       await runModels(opts);
     });
@@ -57,7 +56,7 @@ export function registerHostedCommand(program: Command): void {
   program
     .command("balance")
     .description("Show 0sec Cloud credit account balance")
-    .option("--json", "Output raw JSON instead of a formatted line")
+    .option("--json", "Output the validated credit account as JSON")
     .action(async (opts: { json?: boolean }) => {
       await runBalance(opts);
     });
@@ -155,7 +154,7 @@ async function runModels(opts: { json?: boolean }): Promise<void> {
     }
 
     if (models.length === 0) {
-      consolePresentationOutput.stdout("No models available.", "hosted.models-empty");
+      consolePresentationOutput.stdout("No models listed for this account.", "hosted.models-empty");
       process.exitCode = EXIT_OK;
       return;
     }
@@ -197,7 +196,7 @@ async function runBalance(opts: { json?: boolean }): Promise<void> {
   }
 
   try {
-    const acct = (await client.getInferenceAccount()) as CreditAccount | null;
+    const acct = await client.getInferenceAccount();
     if (opts.json) {
       consolePresentationOutput.stdout(JSON.stringify(acct, null, 2), "hosted.balance-json");
     } else {

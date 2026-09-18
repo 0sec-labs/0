@@ -2,7 +2,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { readHostedConnection, startHostedDeviceAuth, type HostedDeviceAuthUpdate } from "./hosted-device-auth.js";
+import { readHostedConnection, startHostedDeviceAuth, verifyHostedConnection, type HostedDeviceAuthUpdate } from "./hosted-device-auth.js";
 
 const homes: string[] = [];
 function home() { const value = mkdtempSync(join(tmpdir(), "cloud-connect-")); homes.push(value); return value; }
@@ -52,4 +52,22 @@ it("reads only the supplied credential environment and returns no secret metadat
   const result = readHostedConnection({ "0SEC_CLOUD_TOKEN": "explicit-fixture-token", "0SEC_CLOUD_HOST": "http://localhost:41000" }, homeDir);
   expect(result).toMatchObject({ configured: true, host: "http://localhost:41000" });
   expect(JSON.stringify(result)).not.toContain("token");
+});
+
+it("keeps legacy credit data authenticated but rejects actual HTTP auth failures", async () => {
+  const options = {
+    homeDir: home(),
+    env: { "0SEC_CLOUD_TOKEN": "fixture-token", "0SEC_CLOUD_HOST": "http://localhost:41000" },
+  };
+  const legacy = await verifyHostedConnection({
+    ...options,
+    fetchImpl: async () => Response.json({ credits: { remainingPercent: 70 }, remainingUsd: 10 }),
+  });
+  expect(legacy).toEqual({ kind: "verified", account: null });
+  for (const status of [401, 403]) {
+    const rejected = await verifyHostedConnection({
+      ...options, fetchImpl: async () => Response.json({ error: "invalid_token" }, { status }),
+    });
+    expect(rejected.kind).toBe("rejected");
+  }
 });
