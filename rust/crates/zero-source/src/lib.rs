@@ -1,6 +1,8 @@
 //! Bounded source discovery. Valid submissions are unverified hypotheses only.
 mod bundle;
 pub mod investigation;
+pub mod snapshot_investigation;
+pub use snapshot_investigation::SnapshotInvestigation;
 mod submission;
 pub use bundle::{PreparedReview, SourceBundle, SourceFile, prepare};
 use serde::Serialize;

@@ -125,3 +125,49 @@ case-insensitive matching and clips previews to 500 characters.
 The native API operates on explicitly retained files only, fails invalid ranges
 and output limits, preserves exact bytes and returns explicit citations. It does
 not yet reproduce legacy live-tree breadth, case-folding, or window pagination.
+
+## Entire pinned snapshot investigation
+
+`SnapshotInvestigation::prepare(&SnapshotPin)` stages and verifies the complete
+host-authorized manifest, up to 4,096 files and 64 MiB. Unlike
+`SourceInvestigation`, this API does not require a paid review or a selected
+32-file retained bundle. It is a library foundation; agent tool integration is
+separate. `prepare_checked(pin, check)` accepts a synchronous cancellation check
+throughout the anchored staging pass. Run blocking preparation and reads outside
+async runtime worker threads.
+
+The owner is neither deserializable nor cloneable. `list_files(scope, limit)`
+returns sorted pinned metadata (up to 200 entries); `read_file(path, start, end)`
+returns exact inclusive line ranges with a whole-file SHA-256 citation;
+`search_files(query, scope, limit)` performs literal, case-sensitive matching,
+returning one complete line per match. Root scope is `None` or `"."`; a single
+leading `./` and a directory trailing slash are accepted. Absolute paths,
+traversal, repeated separators, backslashes, and unpinned reads are rejected.
+Listing describes the pinned manifest, not a fresh filesystem scan.
+
+All content reads use anchored, no-follow directory descriptors into the private
+copy and recheck the exact pinned file size and hash. They never reopen the
+original source. Regular files only are allowed. A changed private file causes
+an error, rather than a citation to different bytes. Files larger than 128 KiB
+are not read; binary UTF-8 failures and NUL-containing text are also excluded.
+Search returns these exclusions as `skipped` with reasons, including when there
+are no matches. `scanned_files` counts visited files, including exclusions; it
+does not assert they were text-searched. `truncated: false` means traversal was
+exhausted, not that every file was searchable. `truncated: true` means a match,
+exclusion, or output limit prevented exhaustive traversal. Skipped entries are
+capped at 200 independently from the match limit. Serialized tool results are
+bounded to 64 KiB, inclusive reads to 200 lines, and queries to 256 UTF-8 bytes.
+A matching line too large for the output is omitted with truncation; it is never
+silently shortened into an exact citation. Read outputs that do not fit fail.
+
+`snapshot_digest()` identifies the canonical full manifest; `catalog_bytes()`
+returns exactly the bytes hashed by that digest, independent of temporary paths.
+Catalog bytes are a host artifact, outside the 64 KiB tool-output contract.
+These hashes identify content and do not grant source access or establish a
+security finding. `root()` is host recovery metadata and must not enter model
+responses. Call consuming `cleanup()` explicitly to remove the private tree;
+failure returns `SnapshotError::Cleanup { path }`. Drop cleanup is best effort.
+Initial executor staging failures before an owner is returned use the executor's
+existing temporary-directory cleanup and do not provide a recovery receipt.
+No source modifications, shell commands, arbitrary host reads, or legacy
+unrestricted filesystem-tool parity are provided.
