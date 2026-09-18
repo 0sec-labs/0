@@ -6,6 +6,7 @@ mod operations;
 mod queue;
 mod readonly;
 mod schema;
+mod triage;
 use rusqlite::{Connection, OptionalExtension, Transaction, TransactionBehavior, params};
 use serde_json::Value;
 use std::{

@@ -59,3 +59,41 @@ there is no independently settled queue worker. Native v4 migration preserves
 all previous artifacts, reservations and ownership records. Read-only access
 requires the current exact schema and never performs migration. See
 [queue lifecycle](../zero-engine/QUEUE.md) for dispatch and recovery semantics.
+
+Schema v6 adds immutable source-hypothesis triage decisions. Native v5 migration
+preserves source artifacts, queue entries, reservations and operation ownership.
+`open_read_only` accepts only the exact current v6 schema; it never migrates an
+older database, claims an epoch, recovers operations, or creates default records.
+
+A record is identified by session, source operation, hypothesis ID and the
+hash-checked `source.review` attachment. Hypothesis IDs can legitimately repeat
+across separate reviews, so the source operation is part of every lookup.
+The store checks succeeded source-operation identity, outcome/attachment equality,
+review content integrity and hypothesis membership; the engine additionally
+validates the complete provider/source provenance before exposing this API.
+Reviews are bounded to 4 MiB and source outcomes to 8 MiB before materialization.
+Absent decisions read as `New`, revision zero. `Accepted`, `Suppressed` and
+reopening to `New` are host triage dispositions only: neither source hypotheses,
+verification status, operation outcomes, nor budget reservations change.
+
+`triage_source_finding` uses an immediate transaction to check the original
+command identity, compare `expected_revision`, append a decision, and append its
+session event. Every new decision—including the same status with a new note—
+increments the revision. Notes are bounded to 4 KiB of UTF-8 bytes; command IDs
+are 1–1024 bytes. Triage command IDs form a separate session namespace from
+execution and queue commands. Exact retries are checked before the revision
+comparison and return the original immutable decision alongside the *current*
+record. They never reinstate a superseded status. Conflicting retries and stale
+revisions change nothing. Persisted decisions prevent rebinding to a replacement
+review digest, even if replacement bytes and outcome are mutually consistent.
+
+Finding lists use `offset` (the number already read) and a 1–32 row limit over
+immutable review order. Continue from `offset + returned_count`; an empty page
+is exhausted. History uses exclusive `after_revision` and a 1–100 decision
+limit. Both stop at a serialized byte budget below 1 MiB, with space reserved for
+the response envelope. A single oversized record fails explicitly. Mutation
+responses are bounded before commit. There is no lifetime decision cap or silent
+history pruning. The combined record/history API uses one SQLite read snapshot,
+so active-engine inspection cannot mix a newer status with an older history
+snapshot. These read APIs work through `open_read_only` while an engine owns the
+database; SQLite rejects writes on that connection.

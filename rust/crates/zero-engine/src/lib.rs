@@ -16,9 +16,11 @@ mod sandbox;
 mod source;
 mod source_provenance;
 mod source_report;
+mod triage;
 mod workflow_provenance;
 
 pub use source_report::{read_source_report, read_source_workflow_report};
+pub use triage::{read_source_finding, read_source_findings};
 
 use std::{
     collections::HashMap,
@@ -244,6 +246,7 @@ impl Engine {
             "explicit_context_projection",
             "generation_pinned_offline_plugins",
             "unverified_source_review",
+            "source_hypothesis_triage",
             "host_frozen_source_observation",
         ]
         .map(String::from)
@@ -414,6 +417,62 @@ impl Engine {
             } => Ok(Reply::AgentInput {
                 input: lock(&self.shared.store)?.cancel_queued_agent(&session_id, &input_id)?,
             }),
+            Command::SourceFindings {
+                session_id,
+                source_operation_id,
+                offset,
+                limit,
+            } => {
+                let store = lock(&self.shared.store)?;
+                Ok(Reply::SourceFindings {
+                    findings: triage::findings(
+                        &store,
+                        &session_id,
+                        &source_operation_id,
+                        offset,
+                        limit,
+                    )?,
+                })
+            }
+            Command::SourceFinding {
+                session_id,
+                source_operation_id,
+                hypothesis_id,
+                after_revision,
+                limit,
+            } => {
+                let store = lock(&self.shared.store)?;
+                let (finding, history) = triage::finding(
+                    &store,
+                    &session_id,
+                    &source_operation_id,
+                    &hypothesis_id,
+                    after_revision,
+                    limit,
+                )?;
+                Ok(Reply::SourceFinding { finding, history })
+            }
+            Command::TriageSourceFinding {
+                session_id,
+                command_id,
+                source_operation_id,
+                hypothesis_id,
+                status,
+                expected_revision,
+                note,
+            } => {
+                let mut store = lock(&self.shared.store)?;
+                triage::decide(
+                    &mut store,
+                    &session_id,
+                    &command_id,
+                    &source_operation_id,
+                    &hypothesis_id,
+                    status,
+                    expected_revision,
+                    &note,
+                )
+            }
             Command::SessionList => Ok(Reply::Sessions {
                 sessions: lock(&self.shared.store)?.list_sessions()?,
             }),

@@ -41,6 +41,11 @@ pub struct Args {
 
 #[derive(Debug, Subcommand)]
 pub enum Command {
+    /// Inspect retained source hypotheses and record operator triage.
+    Findings {
+        #[command(subcommand)]
+        command: crate::findings::FindingsCommand,
+    },
     /// Export a completed source review with unverified hypotheses and provenance.
     SourceReport {
         #[arg(long)]

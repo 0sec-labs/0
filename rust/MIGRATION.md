@@ -31,7 +31,7 @@ upgrading scaffolds or model assessments into successful verification.
 | Surface | Native owner and current behavior | Remaining acceptance gate |
 | --- | --- | --- |
 | Wire schema | `crates/zero-protocol`: strict versioned requests, replies, execution/session values, JSON Schema | Stable compatibility policy, generated external clients, negotiated additions and schema migration tests |
-| Native state | `crates/zero-store`: SQLite sessions, command admission, owner-bound operation settlement, ordered events, budget reservation/settlement, transactional epoch recovery and schema v1/v2/v3/v4→v5 migration, optional activation epoch pins and immutable operation artifacts | Full UI message projection, semantic compaction and retained-history retrieval; further schema upgrades; explicit legacy import; durable multi-process campaign accounting |
+| Native state | `crates/zero-store`: SQLite sessions, command admission, owner-bound operation settlement, ordered events, budget reservation/settlement, transactional epoch recovery and schema v1/v2/v3/v4/v5→v6 migration, optional activation epoch pins and immutable operation artifacts | Full UI message projection, semantic compaction and retained-history retrieval; further schema upgrades; explicit legacy import; durable multi-process campaign accounting |
 | Application engine | `crates/zero-engine`: session queries, idempotent execution, cancellation, engine ownership lock, uncertain-operation recovery, finding reconciliation, durable Responses/Chat/Anthropic inference, bounded offline Docker/smolvm snapshot agent with explicit completed-turn continuation durable FIFO inputs and explicit byte-bounded context projection from immutable journal records | Remaining providers, full tools/permissions and agent workflows, mid-turn steering input, interrupted-turn checkpoints and generation lifecycle |
 | Batch execution | `crates/zero-executor`: validated snapshot pin/copy, local image identity, nonroot Linux offline Docker lifecycle, bounded raw output, cancellation and explicit cleanup outcome | All other execution profiles below; real Docker qualification remains separate from injected CLI fixtures |
 | MicroVM execution | `crates/zero-smolvm` and `zero-sandbox`: explicit pinned archive, qualified runtime version, nonroot offline batch lifecycle, verified snapshot staging and native engine/agent selection; real guest and engine/agent smoke passed | Broader isolation/SIGKILL qualification, live-provider matrix and interactive execution |
@@ -610,3 +610,41 @@ and an executable CLI fixture checking exact CRLF/LF citations and restart retry
 after source deletion without additional HTTP. Completed and turn-limit context
 chains each survive two restarted continuations with their historical templates.
 Independent review found no remaining concrete blocker in this checkpoint.
+
+### Source-hypothesis operator triage
+
+Native `findings list/show/accept/suppress/reopen` now connects the existing
+validated dedicated and adaptive source-review records to durable operator
+triage. Commands name an exact session, source operation and hypothesis ID;
+source-review artifact identity is validated and bound to each decision.
+`new`, `accepted` and `suppressed` are operator states only. The original
+hypothesis remains unverified, and reproductions, repairs and reportability
+retain their existing evidence requirements.
+
+Schema 6 adds an append-only decision ledger. Expected revisions prevent lost
+updates; exact command retries return the original decision without undoing
+later triage. A successful fresh decision, including a repeated status with a
+new note, advances the revision. Notes are bounded to 4 KiB. Read paths expose
+pages of one immutable review (up to 32 hypotheses) and cursor-paged history
+(up to 100 decisions), each bounded to 1 MiB, without a lifetime decision cap. The decision and its session event are
+committed atomically. Triage command IDs have a separate session namespace from
+execution operations.
+
+The CLI read paths use read-only current-schema inspection while an engine can
+remain active. No provider or execution backend is consulted. This advances
+D/U/R workflow requirements, but does not claim legacy `findings` parity:
+legacy database import, all-scan queries/filters, fingerprint-family updates,
+verification handoff and complete TUI presentation remain open. Unlike the legacy
+workflow-status coupling, reopening operator triage does not rewrite evidence
+or independently managed work state.
+
+Qualification passed all 532 workspace tests on Rust 1.85, strict production
+Clippy and formatting. Ten store fixtures cover concurrent revision checks,
+transaction rollback, source bindings, schema migration, byte-bounded pages and
+oversized replies rejected before commit. Six engine fixtures cover dedicated
+and adaptive review provenance, cross-operation identity isolation, corruption,
+unchanged reports and budgets, and empty reviews without a safety verdict.
+Executable CLI coverage exercises restart decisions after source deletion,
+stale/changed retries, historical receipts with current state, and byte-identical
+read-only inspection while an engine owns the journal. Independent final review
+found no remaining concrete blocker in this checkpoint.

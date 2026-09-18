@@ -214,8 +214,10 @@ fn v4_migration_preserves_artifacts_and_readonly_never_migrates() {
         .unwrap();
     drop(s);
     let conn = rusqlite::Connection::open(&path).unwrap();
-    conn.execute_batch("DROP TABLE agent_inputs; PRAGMA user_version=4;")
-        .unwrap();
+    conn.execute_batch(
+        "DROP TABLE source_triage_decisions; DROP TABLE agent_inputs; PRAGMA user_version=4;",
+    )
+    .unwrap();
     drop(conn);
     let before = std::fs::read(&path).unwrap();
     assert!(Store::open_read_only(&path).is_err());

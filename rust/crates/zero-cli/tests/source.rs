@@ -159,6 +159,9 @@ fn exercise(mode: &str) {
             fs::remove_dir_all(&source).unwrap();
         }
     }
+    if mode == "valid" {
+        triage_roundtrip(&dir, session, first.as_ref().unwrap().as_str().unwrap());
+    }
     // Reports are read-only exports after the original source has disappeared.
     // Missing provider/harness/backend inputs must never be consulted.
     for format in ["json", "markdown", "html"] {
@@ -292,4 +295,140 @@ fn source_report_never_creates_state_and_help_needs_no_configuration() {
     assert!(!output.status.success());
     assert!(output.stdout.is_empty());
     assert!(!dir.path().join("state.db").exists());
+}
+
+fn triage_roundtrip(dir: &TempDir, session: &str, operation: &str) {
+    let command = |action: &str| {
+        let mut c = cli(dir);
+        c.args([
+            "--providers",
+            "/missing/triage-provider",
+            "--harness-config",
+            "/missing/triage-harness",
+            "findings",
+            action,
+            "--session",
+            session,
+            "--operation",
+            operation,
+        ]);
+        c
+    };
+    let parse = |output: std::process::Output| {
+        assert!(
+            output.status.success(),
+            "{} {}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        serde_json::from_slice::<Value>(&output.stdout).unwrap()
+    };
+    let list = parse(command("list").output().unwrap());
+    assert_eq!(list["findings"].as_array().unwrap().len(), 1);
+    let exhausted = parse(
+        command("list")
+            .args(["--offset", "1", "--limit", "1"])
+            .output()
+            .unwrap(),
+    );
+    assert_eq!(exhausted["findings"], json!([]));
+    let finding = &list["findings"][0];
+    assert_eq!(finding["status"], "new");
+    assert_eq!(finding["revision"], 0);
+    assert_eq!(finding["hypothesis"]["state"], "unverified");
+    let hypothesis = finding["hypothesis"]["id"].as_str().unwrap();
+    let digest = finding["source_review_sha256"].clone();
+    let mutate = |action: &str, id: &str, revision: &str, note: &str| {
+        command(action)
+            .args([
+                "--hypothesis",
+                hypothesis,
+                "--command-id",
+                id,
+                "--expected-revision",
+                revision,
+                "--note",
+                note,
+            ])
+            .output()
+            .unwrap()
+    };
+    let accepted = parse(mutate(
+        "accept",
+        "triage-accept",
+        "0",
+        "Operator follow-up, not a proof",
+    ));
+    assert_eq!(accepted["duplicate"], false);
+    assert_eq!(accepted["finding"]["status"], "accepted");
+    assert_eq!(accepted["finding"]["revision"], 1);
+    assert_eq!(accepted["finding"]["hypothesis"]["state"], "unverified");
+    assert!(
+        !mutate("suppress", "stale", "0", "stale write")
+            .status
+            .success()
+    );
+    assert!(
+        !mutate("accept", "triage-accept", "0", "changed command")
+            .status
+            .success()
+    );
+    let suppressed = parse(mutate("suppress", "triage-suppress", "1", "Deprioritized"));
+    assert_eq!(suppressed["finding"]["status"], "suppressed");
+    assert_eq!(suppressed["finding"]["revision"], 2);
+    let duplicate = parse(mutate(
+        "accept",
+        "triage-accept",
+        "0",
+        "Operator follow-up, not a proof",
+    ));
+    assert_eq!(duplicate["duplicate"], true);
+    assert_eq!(duplicate["decision"], accepted["decision"]);
+    assert_eq!(duplicate["finding"]["status"], "suppressed");
+    assert_eq!(duplicate["finding"]["revision"], 2);
+    let reopened = parse(mutate("reopen", "triage-reopen", "2", "Reconsider"));
+    assert_eq!(reopened["finding"]["status"], "new");
+    assert_eq!(reopened["finding"]["revision"], 3);
+    assert_eq!(reopened["finding"]["source_review_sha256"], digest);
+    assert_eq!(reopened["finding"]["hypothesis"], finding["hypothesis"]);
+    // Read paths work while another engine owns the database and do not mutate it.
+    let state = dir.path().join("state.db");
+    let owner = zero_engine::Engine::open(&state, None).unwrap();
+    let before = fs::read(&state).unwrap();
+    let shown = parse(
+        command("show")
+            .args(["--hypothesis", hypothesis, "--limit", "2"])
+            .output()
+            .unwrap(),
+    );
+    assert_eq!(shown["finding"]["revision"], 3);
+    assert_eq!(shown["history"].as_array().unwrap().len(), 2);
+    assert_eq!(shown["history"][0]["revision"], 1);
+    assert_eq!(shown["history"][1]["revision"], 2);
+    let last = parse(
+        command("show")
+            .args([
+                "--hypothesis",
+                hypothesis,
+                "--after-revision",
+                "2",
+                "--limit",
+                "2",
+            ])
+            .output()
+            .unwrap(),
+    );
+    assert_eq!(last["history"].as_array().unwrap().len(), 1);
+    assert_eq!(last["history"][0]["revision"], 3);
+    assert_eq!(fs::read(&state).unwrap(), before);
+    assert!(
+        !command("show")
+            .args(["--hypothesis", "missing"])
+            .output()
+            .unwrap()
+            .status
+            .success()
+    );
+    assert_eq!(fs::read(&state).unwrap(), before);
+    drop(owner);
 }

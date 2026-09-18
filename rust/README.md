@@ -159,3 +159,25 @@ The default remains case-sensitive literal search. Results preserve exact source
 lines and hash citations, including their original line endings. See the
 [source library documentation](crates/zero-source/README.md) for pattern syntax,
 resource bounds and truncation semantics.
+
+Native source hypotheses support operator triage, independently of verification:
+
+```sh
+0sec-native findings list --session SESSION --operation SOURCE_OPERATION
+0sec-native findings show --session SESSION --operation SOURCE_OPERATION --hypothesis HYPOTHESIS
+0sec-native findings accept --session SESSION --operation SOURCE_OPERATION --hypothesis HYPOTHESIS --command-id DECISION_ID --expected-revision 0 --note 'Investigate further'
+```
+
+Use `suppress` or `reopen` with the same target flags and the current revision to
+change operator triage. Each successful new decision advances the revision and
+retains its note. `show --after-revision N --limit 50` pages immutable history.
+`list --offset N --limit 32` pages the immutable review order; advance the offset
+by the number returned until an empty page. Pages are also byte-bounded.
+Reuse the same command ID and arguments after uncertain delivery: the reply
+contains the original decision, current finding state and `duplicate: true`.
+Decision command IDs are unique within the session's triage namespace, separate
+from execution command IDs. A changed retry or stale revision fails explicitly.
+List/show read existing current-schema native state without migration, engine
+ownership or provider configuration. Mutations use the native engine journal;
+acceptance and suppression never alter source evidence or verification status.
+This does not read legacy finding databases or infer fingerprint families.

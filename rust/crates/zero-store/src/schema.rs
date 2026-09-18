@@ -8,7 +8,7 @@ pub fn initialize(conn: &mut Connection) -> Result<()> {
     if application != 0 && application != APPLICATION_ID {
         return Err(Error::ForeignDatabase);
     }
-    if !(0..=5).contains(&version) {
+    if !(0..=6).contains(&version) {
         return Err(Error::Schema(version));
     }
     if application == 0 {
@@ -46,6 +46,10 @@ CREATE TABLE operation_artifacts(operation_id TEXT NOT NULL REFERENCES operation
         tx.execute_batch("CREATE TABLE agent_inputs(id TEXT PRIMARY KEY,session_id TEXT NOT NULL REFERENCES sessions(id),sequence INTEGER NOT NULL CHECK(sequence>0),command_id TEXT NOT NULL,request TEXT NOT NULL,after_input TEXT REFERENCES agent_inputs(id),run_command_id TEXT NOT NULL,resolved_request TEXT,cancelled INTEGER NOT NULL DEFAULT 0 CHECK(cancelled IN (0,1)),UNIQUE(session_id,command_id),UNIQUE(session_id,sequence),UNIQUE(session_id,run_command_id));")?;
         tx.pragma_update(None, "user_version", 5)?;
     }
+    if version < 6 {
+        tx.execute_batch("CREATE TABLE source_triage_decisions(id TEXT PRIMARY KEY,session_id TEXT NOT NULL REFERENCES sessions(id),source_operation_id TEXT NOT NULL REFERENCES operations(id),hypothesis_id TEXT NOT NULL,source_review_sha256 TEXT NOT NULL REFERENCES artifacts(digest),revision INTEGER NOT NULL CHECK(revision>0),command_id TEXT NOT NULL,status TEXT NOT NULL CHECK(status IN ('new','accepted','suppressed')),note TEXT NOT NULL CHECK(length(CAST(note AS BLOB))<=4096),created_at_ms INTEGER NOT NULL CHECK(created_at_ms>=0),UNIQUE(session_id,command_id),UNIQUE(source_operation_id,hypothesis_id,revision));")?;
+        tx.pragma_update(None, "user_version", 6)?;
+    }
     tx.commit()?;
     Ok(())
 }
@@ -59,7 +63,7 @@ pub(super) fn validate_current(conn: &Connection) -> Result<()> {
     if application != APPLICATION_ID {
         return Err(Error::ForeignDatabase);
     }
-    if version != 5 {
+    if version != 6 {
         return Err(Error::Schema(version));
     }
     let observed = crate::readonly::definitions(conn)?;

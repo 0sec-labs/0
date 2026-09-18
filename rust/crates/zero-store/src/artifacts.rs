@@ -8,7 +8,7 @@ const MAX_OPERATION_BYTES: usize = 32 * 1024 * 1024;
 fn digest(bytes: &[u8]) -> String {
     format!("sha256:{:x}", Sha256::digest(bytes))
 }
-fn read(conn: &Connection, id: &str) -> Result<Vec<u8>> {
+pub(super) fn read(conn: &Connection, id: &str) -> Result<Vec<u8>> {
     if !zero_protocol::is_sha256(id) {
         return Err(Error::Invalid("invalid artifact digest".into()));
     }

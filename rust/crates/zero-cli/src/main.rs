@@ -3,6 +3,7 @@ mod artifact;
 mod console;
 mod doctor;
 mod evaluation;
+mod findings;
 mod framing;
 mod harness;
 mod hosted;
@@ -59,6 +60,9 @@ fn main() -> std::process::ExitCode {
 }
 
 async fn run(args: Args) -> Result<bool, Box<dyn Error>> {
+    if let Command::Findings { command } = args.command {
+        return findings::run(&args.state, command).await;
+    }
     if let Command::SourceReport {
         session,
         operation,
@@ -354,7 +358,8 @@ async fn run(args: Args) -> Result<bool, Box<dyn Error>> {
                     .map_err(|_| "Invalid agent request JSON")?,
             }
         }
-        Command::SourceReport { .. }
+        Command::Findings { .. }
+        | Command::SourceReport { .. }
         | Command::Schema
         | Command::Snapshot { .. }
         | Command::Doctor { .. }

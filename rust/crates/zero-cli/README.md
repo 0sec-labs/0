@@ -575,3 +575,27 @@ operation without retained assessment cannot be included as an assessed result.
 Raw command outputs, source/replacement bytes, private paths and recovery paths
 are omitted; recovery is represented by its count. Publication and disclosure
 remain separate capabilities.
+
+## Operator triage of source hypotheses
+
+`findings list --session SESSION --operation SOURCE_OPERATION` returns a bounded
+page of validated native hypotheses with their independent operator status.
+`--offset N --limit 32` pages the immutable review order; advance by the number
+returned until empty. `findings show` adds `--hypothesis ID` and accepts
+`--after-revision N --limit 50` for immutable decision history. Read commands
+bypass provider/harness configuration and engine ownership; missing or old-schema
+state is rejected without initialization or migration.
+
+`findings accept`, `suppress` and `reopen` require the same exact target plus
+`--command-id ID --expected-revision N`, with optional `--note TEXT` (4 KiB).
+Revision zero represents a hypothesis with no decisions. Every fresh decision
+advances it; stale writes fail. Retrying identical arguments under the same
+triage command ID returns the original decision and current finding, marked
+`duplicate: true`, without undoing later decisions. This command namespace is
+separate from execution operations.
+
+These changes record operator disposition only. They preserve hypothesis
+verification state, original review artifacts, reproduction/repair evidence and
+budget accounting. There is no implicit family update, legacy DB import,
+provider request or publication. Writes use engine ownership; an active app-server
+can accept the corresponding typed `triage_source_finding` command.

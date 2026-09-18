@@ -17,6 +17,7 @@ pub mod repair;
 pub mod sandbox;
 pub mod session;
 pub mod source;
+pub mod triage;
 pub mod verification;
 mod verification_binary;
 pub use execution::*;
@@ -101,6 +102,32 @@ pub enum Command {
         session_id: String,
         command_id: String,
         request: verification::SourceReproductionRequest,
+    },
+    SourceFindings {
+        session_id: String,
+        source_operation_id: String,
+        #[serde(default)]
+        offset: u32,
+        #[serde(default = "triage::finding_limit")]
+        limit: u32,
+    },
+    SourceFinding {
+        session_id: String,
+        source_operation_id: String,
+        hypothesis_id: String,
+        #[serde(default)]
+        after_revision: u64,
+        #[serde(default = "triage::history_limit")]
+        limit: u32,
+    },
+    TriageSourceFinding {
+        session_id: String,
+        command_id: String,
+        source_operation_id: String,
+        hypothesis_id: String,
+        status: triage::SourceFindingStatus,
+        expected_revision: u64,
+        note: String,
     },
     ReviewSource {
         session_id: String,
@@ -241,6 +268,18 @@ pub enum Reply {
     SourceReproduction {
         operation: Operation,
         result: Option<verification::ReproductionOutcome>,
+        duplicate: bool,
+    },
+    SourceFindings {
+        findings: Vec<triage::SourceFindingRecord>,
+    },
+    SourceFinding {
+        finding: triage::SourceFindingRecord,
+        history: Vec<triage::TriageDecision>,
+    },
+    SourceFindingTriaged {
+        finding: triage::SourceFindingRecord,
+        decision: triage::TriageDecision,
         duplicate: bool,
     },
     SourceReview {
