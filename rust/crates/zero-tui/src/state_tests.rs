@@ -986,7 +986,7 @@ fn web_view_does_not_hide_cancel_rejection_or_worker_error() {
         &cancel[0],
         json!({"type":"error","code":"state","message":"Cancellation command rejected"}),
     );
-    assert_eq!(ui.web.status, "Cancellation command rejected");
+    assert!(ui.web.status.contains("Cancellation command rejected"));
     response(
         &mut ui,
         &run[0],
@@ -995,4 +995,226 @@ fn web_view_does_not_hide_cancel_rejection_or_worker_error() {
     assert!(ui.web.status.contains("Worker settlement unavailable"));
     assert!(ui.halted);
     assert!(ui.active.is_none());
+}
+fn terminal_reply(command: &str) -> Value {
+    json!({"type":"agent","operation":{"id":"settled-root","session_id":"session","command_id":command,"payload":{},"status":"succeeded","owner":null,"outcome":null},"result":{"status":"completed","text":"finished","turns":1,"tool_calls":0,"error":null},"duplicate":false})
+}
+#[test]
+fn budget_reads_coalesce_without_invalidating_history_and_error_keeps_old_snapshot() {
+    let mut ui = state();
+    ready(&mut ui);
+    ui.start(queued("active", 1, QueuedAgentStatus::Pending));
+    let now = Instant::now();
+    let epoch = ui.epoch;
+    let first = ui.tick(now);
+    assert_eq!(first.len(), 1);
+    for _ in 0..100 {
+        assert!(ui.tick(now + Duration::from_secs(3)).is_empty());
+    }
+    assert!(ui.history_loaded && ui.queue_loaded);
+    assert_eq!(ui.epoch, epoch);
+    assert!(ui.refresh_budget().is_empty());
+    let next = response(
+        &mut ui,
+        &first[0],
+        json!({"type":"session_budget","budget":{"limit":100,"charged":0,"reserved":10}}),
+    );
+    assert_eq!(
+        next.len(),
+        1,
+        "one followup for dirty transition while previous read pending"
+    );
+    assert!(ui.budget_label(Instant::now()).contains("10 reserved"));
+    response(
+        &mut ui,
+        &next[0],
+        json!({"type":"error","code":"state","message":"read unavailable"}),
+    );
+    let label = ui.budget_label(Instant::now() + Duration::from_secs(4));
+    assert!(
+        label.contains("4s ago")
+            && label.contains("refresh failed")
+            && label.contains("previous snapshot")
+            && label.contains("10 reserved")
+    );
+    assert!(ui.active.is_some());
+    assert!(!ui.halted);
+    assert!(ui.history_loaded && ui.queue_loaded);
+    let manual = ui.key(key(KeyCode::F(2)));
+    assert_eq!(manual.len(), 1);
+    response(
+        &mut ui,
+        &manual[0],
+        json!({"type":"session_budget","budget":{"limit":100,"charged":120,"reserved":0}}),
+    );
+    let label = ui.budget_label(Instant::now());
+    assert!(label.contains("120 charged") && label.contains("allowance exhausted"));
+    assert!(!label.contains("failed"));
+}
+#[test]
+fn late_cancel_ack_never_replaces_terminal_status_or_labels_a_new_run_cancelled() {
+    for accepted in [false, true] {
+        let mut ui = state();
+        ready(&mut ui);
+        let run = ui.start(queued("first", 1, QueuedAgentStatus::Pending));
+        let cancel = ui.cancel();
+        response(&mut ui, &run[0], terminal_reply("queued:first"));
+        let terminal = ui.status.clone();
+        let notice = ui.lifecycle_label().unwrap().to_owned();
+        assert!(ui.halted);
+        response(
+            &mut ui,
+            &cancel[0],
+            json!({"type":"cancelled","execution_id":"queued:first","accepted":accepted}),
+        );
+        assert_eq!(ui.status, terminal);
+        assert_eq!(ui.lifecycle_label(), Some(notice.as_str()));
+        let run = ui.start(queued("second", 2, QueuedAgentStatus::Pending));
+        let cancel = ui.cancel();
+        response(&mut ui, &run[0], terminal_reply("queued:second"));
+        ui.start(queued("third", 3, QueuedAgentStatus::Pending));
+        let active = ui.status.clone();
+        response(
+            &mut ui,
+            &cancel[0],
+            json!({"type":"cancelled","execution_id":"queued:second","accepted":accepted}),
+        );
+        assert_eq!(ui.status, active);
+        assert!(!ui.active.as_ref().unwrap().cancel_requested);
+        assert!(ui.lifecycle_label().unwrap().contains("queued:third"));
+    }
+}
+#[test]
+fn cancellation_replies_require_exact_target_and_queue_cancel_reports_queue_status() {
+    let mut ui = state();
+    ui.start(queued("active", 1, QueuedAgentStatus::Pending));
+    let cancel = ui.cancel();
+    let wrong: Reply = serde_json::from_value(
+        json!({"type":"cancelled","execution_id":"foreign","accepted":true}),
+    )
+    .unwrap();
+    assert!(
+        ui.message(ServerMessage::Response {
+            protocol_version: PROTOCOL_VERSION,
+            id: Some(cancel[0].id.clone()),
+            reply: Box::new(wrong)
+        })
+        .is_err()
+    );
+    let mut ui = state();
+    ui.view = View::Queue;
+    ui.queue
+        .push(queued("pending", 1, QueuedAgentStatus::Pending));
+    let cancel = ui.cancel();
+    response(
+        &mut ui,
+        &cancel[0],
+        json!({"type":"agent_input","input":queued("pending",1,QueuedAgentStatus::Cancelled)}),
+    );
+    assert!(ui.status.contains("Queued input pending: Cancelled"));
+    assert!(!ui.status.contains("waiting"));
+    assert_eq!(ui.queue[0].status, QueuedAgentStatus::Cancelled);
+}
+#[test]
+fn cancellation_lifecycle_remains_visible_over_help_questions_and_approvals() {
+    for overlay in 0..3 {
+        let mut ui = state();
+        ui.composer = "preserved draft λ".into();
+        let run = ui.start(queued("active", 1, QueuedAgentStatus::Pending));
+        match overlay {
+            0 => ui.help = true,
+            1 => ui.questions.open = true,
+            _ => ui.approvals.open = true,
+        }
+        let cancel = ui.key(KeyEvent::new(KeyCode::Char('x'), KeyModifiers::CONTROL));
+        response(
+            &mut ui,
+            &cancel[0],
+            json!({"type":"cancelled","execution_id":"queued:active","accepted":true}),
+        );
+        let mut terminal =
+            ratatui::Terminal::new(ratatui::backend::TestBackend::new(140, 38)).unwrap();
+        terminal.draw(|f| crate::render::draw(f, &ui)).unwrap();
+        let text = terminal
+            .backend()
+            .buffer()
+            .content
+            .iter()
+            .map(|c| c.symbol())
+            .collect::<String>();
+        assert!(text.contains("Cancellation accepted") && text.contains("queued:active"));
+        response(&mut ui, &run[0], terminal_reply("queued:active"));
+        terminal.draw(|f| crate::render::draw(f, &ui)).unwrap();
+        let text = terminal
+            .backend()
+            .buffer()
+            .content
+            .iter()
+            .map(|c| c.symbol())
+            .collect::<String>();
+        assert!(text.contains("Succeeded") && !text.contains("waiting for retained result"));
+        assert_eq!(ui.composer, "preserved draft λ");
+        assert!(match overlay {
+            0 => ui.help,
+            1 => ui.questions.open,
+            _ => ui.approvals.open,
+        });
+    }
+}
+#[test]
+fn snapshot_freshness_and_failure_are_visible_on_an_eighty_column_terminal() {
+    let mut ui = state();
+    let request = ui.refresh_budget();
+    response(
+        &mut ui,
+        &request[0],
+        json!({"type":"session_budget","budget":{"limit":1000000,"charged":12345,"reserved":20000}}),
+    );
+    let mut terminal = ratatui::Terminal::new(ratatui::backend::TestBackend::new(80, 24)).unwrap();
+    terminal.draw(|f| crate::render::draw(f, &ui)).unwrap();
+    let text = terminal
+        .backend()
+        .buffer()
+        .content
+        .iter()
+        .map(|c| c.symbol())
+        .collect::<String>();
+    assert!(text.contains("received 0s ago"));
+    let request = ui.refresh_budget();
+    response(
+        &mut ui,
+        &request[0],
+        json!({"type":"error","code":"state","message":"temporarily unavailable"}),
+    );
+    terminal.draw(|f| crate::render::draw(f, &ui)).unwrap();
+    let text = terminal
+        .backend()
+        .buffer()
+        .content
+        .iter()
+        .map(|c| c.symbol())
+        .collect::<String>();
+    assert!(text.contains("received 0s ago") && text.contains("refresh failed"));
+}
+#[test]
+fn older_rejected_cancel_ack_cannot_downgrade_an_accepted_cancellation() {
+    let mut ui = state();
+    ui.start(queued("active", 1, QueuedAgentStatus::Pending));
+    let old = ui.cancel();
+    let newer = ui.cancel();
+    response(
+        &mut ui,
+        &newer[0],
+        json!({"type":"cancelled","execution_id":"queued:active","accepted":true}),
+    );
+    let accepted = ui.status.clone();
+    response(
+        &mut ui,
+        &old[0],
+        json!({"type":"cancelled","execution_id":"queued:active","accepted":false}),
+    );
+    assert_eq!(ui.status, accepted);
+    assert!(ui.status.contains("Cancellation accepted"));
+    assert!(ui.cancel().is_empty());
+    assert!(ui.active.as_ref().unwrap().cancel_requested && ui.halted);
 }

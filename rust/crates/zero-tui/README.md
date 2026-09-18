@@ -184,3 +184,26 @@ with its expected digest. Enter, pasted text, and Ctrl-S cannot launch an
 experiment or grant permission here. Existing question/approval overlays and
 active cancellation shortcuts keep their meanings. Experiment success never
 changes a hypothesis to verified or permits evolution promotion.
+
+## Budget freshness and cancellation receipts
+
+The header shows a session budget **snapshot**, including how long ago this
+client received it. This is not a server ledger timestamp. During an active turn,
+at most one snapshot read is in flight and periodic reads are coalesced to about
+one per second. Admission, cancellation replies, and final results request a
+fresh snapshot; F2 refreshes manually from any view without resetting conversation
+or queue readiness. Failed reads retain the last numbers with an explicit failure
+and age label. These reads do not cancel or retry model work.
+
+Charges, reservations and limits retain their original integer units; actual
+charges are never capped to make them fit the allowance. Exhaustion blocks new
+admission in the engine, not through the displayed snapshot. These session
+numbers are not aggregate campaign costs, HTTP request limits, or measured
+sandbox CPU/RAM bills.
+
+Cancellation acknowledgments are bound to the original run command or pending
+queue input. An acknowledgment cannot replace an already retained terminal result
+or label a newer turn as cancelled. Pending-input cancellation reports that
+input's status; an accepted running-turn cancellation still waits for its retained
+result and cleanup. Question, approval and help overlays keep an owning-turn
+status strip visible without discarding drafts or sending an answer/permission.

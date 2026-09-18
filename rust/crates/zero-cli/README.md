@@ -27,7 +27,7 @@ images or provision Docker.
 field and does not create a database. It records current file identities;
 execution rejects subsequently changed source. Write the manifest outside the
 source directory so the manifest itself does not change the indexed tree.
-`session budget` reads persisted integer microcurrency units for inference reservations and charges.
+`session budget` reads persisted integer microcurrency units for inference reservations and charges. It opens existing state read-only, works while another engine owns the database, and bypasses provider/HTTP/harness configuration. It does not migrate state, recover work, release uncertain holds, or create a missing database.
 
 App-server uses one JSON request per line and reserves stdout for JSON responses
 and execution events. Initialize each connection first:
@@ -1031,3 +1031,10 @@ In the TUI's Web view, select a run and press `x` for its experiments, then Ente
 for detail. Up/Down selects a measured attempt and `e` opens its retained evidence;
 `p` follows the retained prior-revision link. Ctrl-L pages and Ctrl-G refreshes.
 These controls inspect records and never start an experiment.
+
+The TUI labels budget snapshots with their local receive age, refreshes periodically
+during active work, and supports F2 for an independent refresh. A failed read keeps
+the old values visibly stale. This is session accounting, not a combined campaign
+or HTTP allowance. Cancellation acknowledgments retain their exact target; late
+acknowledgments cannot overwrite the final result or affect a newer turn. A common
+lifecycle strip remains visible over help, question and approval editors.

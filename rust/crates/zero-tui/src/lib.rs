@@ -83,7 +83,7 @@ where
                 _=async {#[cfg(unix)] {terminate.recv().await;} #[cfg(not(unix))] {std::future::pending::<()>().await;}}=>break,
                 key=keys.next()=>match key {Some(Ok(Event::Key(key)))=>state.key(key),Some(Ok(Event::Paste(text)))=>{state.paste(&text);vec![]},Some(Ok(Event::Resize(..)))=>vec![],Some(Ok(_))=>vec![],Some(Err(e))=>return Err(e.into()),None=>break},
                 message=client.messages.recv()=>match message {Some(Ok(message))=>state.message(message)?,Some(Err(error))=>return Err(error),None=>return Err(Error::Protocol("app-server reader ended".into()))},
-                _=tick.tick()=>{terminal.draw(|frame|render::draw(frame,&state))?;vec![]},
+                _=tick.tick()=>{let requests=state.tick(std::time::Instant::now());terminal.draw(|frame|render::draw(frame,&state))?;requests},
                 update=client.progress.recv(), if progress_open=>match update {Some(message)=>state.message(message)?,None=>{progress_open=false;vec![]}},
             };
             for request in requests {client.send(&request).await?;}

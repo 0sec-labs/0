@@ -1,7 +1,10 @@
 use crate::{Error, Options, Result};
 use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use serde_json::Value;
-use std::collections::{BTreeMap, BTreeSet};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    time::{Duration, Instant},
+};
 use zero_protocol::{
     Command, ExecutionEvent, PROTOCOL_VERSION, Reply, Request, RequestId, ServerMessage,
     model::ProviderProgress,
@@ -44,7 +47,23 @@ enum Pending {
         prompt: String,
     },
     Run,
-    Cancel,
+    Cancel {
+        session: String,
+        target: CancelTarget,
+    },
+}
+#[derive(Clone, PartialEq, Eq)]
+enum CancelTarget {
+    Root(String),
+    Queue(String),
+}
+#[derive(Clone)]
+struct Lifecycle {
+    session: String,
+    target: CancelTarget,
+    terminal: bool,
+    cancel_accepted: bool,
+    text: String,
 }
 #[derive(Clone)]
 pub struct Active {
@@ -73,6 +92,11 @@ pub struct State {
     pub history_windowed: bool,
     pub queue: Vec<QueuedAgent>,
     pub budget: Option<Value>,
+    budget_received: Option<Instant>,
+    budget_requested: Option<Instant>,
+    budget_error: Option<String>,
+    budget_dirty: bool,
+    lifecycle: Option<Lifecycle>,
     pub composer: String,
     pub cursor: usize,
     pub status: String,
@@ -125,6 +149,11 @@ impl State {
             history_windowed: false,
             queue: vec![],
             budget: None,
+            budget_received: None,
+            budget_requested: None,
+            budget_error: None,
+            budget_dirty: false,
+            lifecycle: None,
             composer: String::new(),
             cursor: 0,
             status: "Connecting to app-server…".into(),
@@ -230,6 +259,112 @@ impl State {
             Pending::Sessions,
         )
     }
+    /// Independent observational reads never reset conversation/queue readiness.
+    pub fn tick(&mut self, now: Instant) -> Vec<Request> {
+        let due = self.active.is_some()
+            && self
+                .budget_requested
+                .is_none_or(|last| now.saturating_duration_since(last) >= Duration::from_secs(1));
+        if (!self.budget_dirty && !due)
+            || self
+                .pending
+                .values()
+                .any(|p| matches!(p, Pending::Budget { .. }))
+        {
+            return vec![];
+        }
+        let Some(session) = self.session.clone() else {
+            return vec![];
+        };
+        self.budget_dirty = false;
+        self.budget_requested = Some(now);
+        vec![self.request(
+            Command::SessionBudget {
+                session_id: session.clone(),
+            },
+            Pending::Budget {
+                session,
+                epoch: self.epoch,
+            },
+        )]
+    }
+    fn refresh_budget(&mut self) -> Vec<Request> {
+        self.budget_dirty = true;
+        self.tick(Instant::now())
+    }
+    pub fn budget_label(&self, now: Instant) -> String {
+        let numbers = self
+            .budget
+            .as_ref()
+            .map(|b| {
+                format!(
+                    "{} charged / {} reserved / {} limit",
+                    b["charged"], b["reserved"], b["limit"]
+                )
+            })
+            .unwrap_or_else(|| "unavailable".into());
+        let age = self
+            .budget_received
+            .map(|time| {
+                format!(
+                    "received {}s ago",
+                    now.saturating_duration_since(time).as_secs()
+                )
+            })
+            .unwrap_or_else(|| "not yet received".into());
+        let pending = self
+            .pending
+            .values()
+            .any(|p| matches!(p, Pending::Budget { .. }));
+        let note = if let Some(error) = &self.budget_error {
+            format!(" · refresh failed: {} · previous snapshot", safe(error))
+        } else if pending {
+            " · refresh pending".into()
+        } else {
+            String::new()
+        };
+        let exhausted = self.budget.as_ref().is_some_and(|b| {
+            b["charged"]
+                .as_u64()
+                .unwrap_or(0)
+                .saturating_add(b["reserved"].as_u64().unwrap_or(0))
+                >= b["limit"].as_u64().unwrap_or(u64::MAX)
+        });
+        format!(
+            "Session budget snapshot · {age}{note} · {numbers}{}",
+            if exhausted {
+                " · admission allowance exhausted"
+            } else {
+                ""
+            }
+        )
+    }
+    pub fn lifecycle_label(&self) -> Option<&str> {
+        self.lifecycle
+            .as_ref()
+            .filter(|l| Some(&l.session) == self.session.as_ref())
+            .map(|l| l.text.as_str())
+    }
+    fn announce(&mut self, text: String) {
+        self.status = text;
+        if self.view == View::Web {
+            self.web.status = self.status.clone();
+        } else if self.view == View::Findings {
+            self.findings.status = self.status.clone();
+        }
+    }
+    fn finish_lifecycle(&mut self, command: &str, text: String) {
+        if let Some(session) = self.session.clone() {
+            self.lifecycle = Some(Lifecycle {
+                session,
+                target: CancelTarget::Root(command.into()),
+                terminal: true,
+                cancel_accepted: false,
+                text: text.clone(),
+            });
+        }
+        self.announce(text);
+    }
     fn refresh(&mut self) -> Vec<Request> {
         self.epoch = self.epoch.saturating_add(1);
         self.history_loaded = false;
@@ -237,7 +372,7 @@ impl State {
         let Some(session) = self.session.clone() else {
             return vec![];
         };
-        vec![
+        let mut requests = vec![
             self.request(
                 Command::SessionHistory {
                     session_id: session.clone(),
@@ -261,17 +396,11 @@ impl State {
                     epoch: self.epoch,
                 },
             ),
-            self.request(
-                Command::SessionBudget {
-                    session_id: session.clone(),
-                },
-                Pending::Budget {
-                    session,
-                    epoch: self.epoch,
-                },
-            ),
-        ]
+        ];
+        requests.extend(self.refresh_budget());
+        requests
     }
+
     fn open(&mut self, session: String) -> Vec<Request> {
         if self.active.is_some() || self.mutation_pending() {
             self.status = "Cancel or finish the active turn before switching sessions".into();
@@ -293,6 +422,10 @@ impl State {
         self.history_cursor = None;
         self.queue_cursor = None;
         self.budget = None;
+        self.budget_received = None;
+        self.budget_requested = None;
+        self.budget_error = None;
+        self.lifecycle = None;
         self.selected = 0;
         self.view = View::Conversation;
         self.status = "Loading saved session…".into();
@@ -346,6 +479,9 @@ impl State {
     pub fn key(&mut self, key: KeyEvent) -> Vec<Request> {
         if key.kind == KeyEventKind::Release {
             return vec![];
+        }
+        if key.code == KeyCode::F(2) {
+            return self.refresh_budget();
         }
         let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
         let global = ctrl && matches!(key.code, KeyCode::Char('q' | 'c' | 'x' | 'n'));
@@ -552,7 +688,10 @@ impl State {
             || self.pending.values().any(|p| {
                 matches!(
                     p,
-                    Pending::Enqueue { .. } | Pending::Create | Pending::Cancel | Pending::Run
+                    Pending::Enqueue { .. }
+                        | Pending::Create
+                        | Pending::Cancel { .. }
+                        | Pending::Run
                 )
             })
     }
@@ -723,6 +862,13 @@ impl State {
             cancel_requested: false,
         });
         self.status = format!("Running input {}", input.id);
+        self.lifecycle = Some(Lifecycle {
+            session: input.session_id.clone(),
+            target: CancelTarget::Root(input.run_command_id.clone()),
+            terminal: false,
+            cancel_accepted: false,
+            text: format!("Command {} running", input.run_command_id),
+        });
         vec![self.request(
             Command::RunQueuedAgent {
                 session_id: input.session_id,
@@ -769,6 +915,13 @@ impl State {
             return vec![];
         };
         if let Some(active) = &mut self.active {
+            if self.lifecycle.as_ref().is_some_and(|l| {
+                l.session == session
+                    && l.target == CancelTarget::Root(active.command.clone())
+                    && l.cancel_accepted
+            }) {
+                return vec![];
+            }
             active.cancel_requested = true;
             let command = active.command.clone();
             self.halted = true;
@@ -782,23 +935,48 @@ impl State {
                     "Cancellation requested for active conversation; awaiting acknowledgment"
                         .into();
             }
+            let text =
+                format!("Command {command}: cancellation requested; awaiting acknowledgment");
+            self.lifecycle = Some(Lifecycle {
+                session: session.clone(),
+                target: CancelTarget::Root(command.clone()),
+                terminal: false,
+                cancel_accepted: false,
+                text: text.clone(),
+            });
+            self.announce(text);
             return vec![self.request(
                 Command::Cancel {
-                    session_id: session,
-                    execution_id: command,
+                    session_id: session.clone(),
+                    execution_id: command.clone(),
                 },
-                Pending::Cancel,
+                Pending::Cancel {
+                    session,
+                    target: CancelTarget::Root(command),
+                },
             )];
         }
         if self.view == View::Queue {
-            if let Some(input) = self.queue.get(self.selected) {
+            if let Some(input) = self.queue.get(self.selected).cloned() {
                 if input.status == QueuedAgentStatus::Pending {
+                    let text = format!("Queued input {}: cancellation requested", input.id);
+                    self.lifecycle = Some(Lifecycle {
+                        session: session.clone(),
+                        target: CancelTarget::Queue(input.id.clone()),
+                        terminal: false,
+                        cancel_accepted: false,
+                        text: text.clone(),
+                    });
+                    self.announce(text);
                     return vec![self.request(
                         Command::CancelQueuedAgent {
-                            session_id: session,
+                            session_id: session.clone(),
                             input_id: input.id.clone(),
                         },
-                        Pending::Cancel,
+                        Pending::Cancel {
+                            session,
+                            target: CancelTarget::Queue(input.id.clone()),
+                        },
                     )];
                 }
             }
@@ -842,10 +1020,14 @@ impl State {
                 }
                 let retry_cancel = matches!(&event,ExecutionEvent::Admitted{session_id,command_id,..} if Some(session_id)==self.session.as_ref() && self.active.as_ref().is_some_and(|a|a.cancel_requested&&a.command==*command_id));
                 let refresh_steering = matches!(&event,ExecutionEvent::ModelProgress{session_id,operation_id,parent_operation_id,..} if Some(session_id)==self.session.as_ref() && self.active.as_ref().is_some_and(|a|a.operation.is_some() && a.operation==*parent_operation_id && a.operation==self.steering.target && a.sequences.len()<64 && !a.sequences.contains_key(operation_id)));
+                let refresh_budget = matches!(&event,ExecutionEvent::Admitted{session_id,command_id,..} if Some(session_id)==self.session.as_ref() && self.active.as_ref().is_some_and(|a|a.command==*command_id));
                 self.event(event);
                 let mut actions = if retry_cancel { self.cancel() } else { vec![] };
                 if refresh_steering {
                     actions.extend(self.refresh_steering());
+                }
+                if refresh_budget {
+                    actions.extend(self.refresh_budget());
                 }
                 Ok(actions)
             }
@@ -856,6 +1038,84 @@ impl State {
                 let Some(pending) = self.pending.remove(&id) else {
                     return Err(Error::Protocol("unknown app-server response ID".into()));
                 };
+                if let Pending::Budget { session, epoch } = &pending {
+                    if Some(session) == self.session.as_ref() && *epoch == self.epoch {
+                        match reply.as_ref() {
+                            Reply::SessionBudget { budget } => {
+                                self.budget = Some(serde_json::to_value(budget)?);
+                                self.budget_received = Some(Instant::now());
+                                self.budget_error = None;
+                            }
+                            Reply::Error { message, .. } => {
+                                let mut error = String::new();
+                                bounded_append(&mut error, message);
+                                let mut n = error.len().min(512);
+                                while !error.is_char_boundary(n) {
+                                    n -= 1;
+                                }
+                                error.truncate(n);
+                                self.budget_error = Some(error);
+                            }
+                            _ => return Err(Error::Protocol("unexpected budget response".into())),
+                        }
+                    } else {
+                        self.budget_dirty = true;
+                    }
+                    return Ok(self.tick(Instant::now()));
+                }
+                if let Pending::Cancel { session, target } = &pending {
+                    let text = match (target, reply.as_ref()) {
+                        (
+                            CancelTarget::Root(command),
+                            Reply::Cancelled {
+                                execution_id,
+                                accepted,
+                            },
+                        ) if command == execution_id => format!(
+                            "Command {command}: {}",
+                            if *accepted {
+                                "Cancellation accepted; waiting for retained result and cleanup"
+                            } else {
+                                "Cancellation not accepted yet; saved intent will retry on admission"
+                            }
+                        ),
+                        (CancelTarget::Queue(id), Reply::AgentInput { input })
+                            if input.id == *id && input.session_id == *session =>
+                        {
+                            if Some(session) == self.session.as_ref() {
+                                self.merge_queue(input.clone());
+                            }
+                            format!("Queued input {id}: {:?}", input.status)
+                        }
+                        (_, Reply::Error { message, .. }) => {
+                            format!("Cancellation request failed: {}", safe(message))
+                        }
+                        _ => {
+                            return Err(Error::Protocol(
+                                "cancellation reply target or type differs".into(),
+                            ));
+                        }
+                    };
+                    if Some(session) == self.session.as_ref()
+                        && self.lifecycle.as_ref().is_some_and(|l| {
+                            l.session == *session
+                                && l.target == *target
+                                && !l.terminal
+                                && !l.cancel_accepted
+                        })
+                    {
+                        if let Some(l) = &mut self.lifecycle {
+                            l.text = text.clone();
+                            l.cancel_accepted =
+                                matches!(reply.as_ref(), Reply::Cancelled { accepted: true, .. });
+                            if matches!(target, CancelTarget::Queue(_)) {
+                                l.terminal = true;
+                            }
+                        }
+                        self.announce(text);
+                    }
+                    return Ok(self.refresh_budget());
+                }
                 if let Pending::Approvals(tag) = pending {
                     let actions = self.approvals.reply(tag, *reply)?;
                     return Ok(self.approval_actions(actions));
@@ -881,9 +1141,8 @@ impl State {
                     let actions = self.findings.reply(tag, *reply)?;
                     return Ok(self.finding_actions(actions));
                 }
-                if let Pending::History { session, epoch, .. }
-                | Pending::Queue { session, epoch }
-                | Pending::Budget { session, epoch } = &pending
+                if let Pending::History { session, epoch, .. } | Pending::Queue { session, epoch } =
+                    &pending
                 {
                     if Some(session) != self.session.as_ref() || *epoch != self.epoch {
                         return Ok(vec![]);
@@ -891,7 +1150,7 @@ impl State {
                 }
                 if let Reply::Error { message, .. } = reply.as_ref() {
                     self.status = safe(message);
-                    if matches!(pending, Pending::Run | Pending::Cancel) {
+                    if matches!(pending, Pending::Run) {
                         if self.view == View::Web {
                             self.web.status = self.status.clone();
                         } else if self.view == View::Findings {
@@ -902,7 +1161,15 @@ impl State {
                         return Err(Error::Protocol(self.status.clone()));
                     }
                     if matches!(pending, Pending::Run) {
-                        self.active = None;
+                        if let Some(active) = self.active.take() {
+                            self.finish_lifecycle(
+                                &active.command,
+                                format!(
+                                    "Command {}: run request error: {}",
+                                    active.command, self.status
+                                ),
+                            );
+                        }
                         self.halted = true;
                         let mut actions = self.refresh();
                         actions.extend(self.refresh_steering());
@@ -1085,9 +1352,8 @@ impl State {
                         self.ready();
                         Ok(self.auto())
                     }
-                    Pending::Budget { .. } => {
-                        self.budget = Some(value["budget"].clone());
-                        Ok(vec![])
+                    Pending::Budget { .. } | Pending::Cancel { .. } => {
+                        unreachable!("scoped reply handled above")
                     }
                     Pending::Enqueue { command, prompt } => {
                         let input: QueuedAgent = serde_json::from_value(value["input"].clone())?;
@@ -1161,29 +1427,13 @@ impl State {
                         } else if self.view == View::Web {
                             self.web.status = self.status.clone();
                         }
+                        self.finish_lifecycle(&active.command, self.status.clone());
                         let mut out = self.refresh();
                         out.extend(self.refresh_steering());
                         out.extend(self.refresh_questions());
                         out.extend(self.refresh_approvals());
                         out.extend(self.auto());
                         Ok(out)
-                    }
-                    Pending::Cancel => {
-                        if let Some(input) = value.get("input") {
-                            self.merge_queue(serde_json::from_value(input.clone())?);
-                        }
-                        self.status = if value.get("accepted") == Some(&Value::Bool(false)) {
-                            "Cancellation not accepted yet; saved intent will retry on admission"
-                        } else {
-                            "Cancellation accepted; waiting for retained result and cleanup"
-                        }
-                        .into();
-                        if self.view == View::Findings {
-                            self.findings.status = self.status.clone();
-                        } else if self.view == View::Web {
-                            self.web.status = self.status.clone();
-                        }
-                        Ok(vec![])
                     }
                 }
             }

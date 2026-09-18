@@ -67,6 +67,18 @@ fn main() -> std::process::ExitCode {
 }
 
 async fn run(args: Args) -> Result<bool, Box<dyn Error>> {
+    if let Command::Session {
+        command: SessionCommand::Budget { id },
+    } = &args.command
+    {
+        let path = args.state.clone();
+        let session = id.clone();
+        let budget =
+            tokio::task::spawn_blocking(move || zero_engine::read_session_budget(&path, &session))
+                .await??;
+        write_json(&Reply::SessionBudget { budget }, false).await?;
+        return Ok(true);
+    }
     let mut web_dispatch = None;
     if let Command::Web { command } = &args.command {
         if command.requires_dispatch() {

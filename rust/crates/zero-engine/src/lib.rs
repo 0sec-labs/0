@@ -13,6 +13,7 @@ mod agent_steering;
 mod agent_submission;
 mod agent_web;
 mod agent_web_experiment;
+mod budget_read;
 mod discovery;
 mod history;
 mod inference;
@@ -38,6 +39,7 @@ pub use agent_approvals::{read_tool_approval, read_tool_approval_intent, read_to
 pub use agent_http::{read_http_evidence, read_http_operation};
 pub use agent_questions::{read_operator_question, read_operator_questions};
 pub use agent_steering::read_agent_steering;
+pub use budget_read::read_session_budget;
 pub use discovery::{read_source_reviews, read_web_runs};
 pub use source_report::{read_source_report, read_source_workflow_report};
 pub use triage::{read_source_finding, read_source_findings};

@@ -5,6 +5,7 @@ import http.server
 import json
 import os
 import pty
+import re
 import select
 import signal
 import socketserver
@@ -106,6 +107,46 @@ def send(text):
     os.write(master, text.encode())
 
 
+def terminal_text():
+    cells = [[" "] * 110 for _ in range(28)]
+    row = column = 0
+    for token in re.findall(r"\x1b\[[0-?]*[ -/]*[@-~]|[^\x1b]+", screen.decode("utf-8", "ignore")):
+        if token.startswith("\x1b["):
+            body, code = token[2:-1], token[-1]
+            if body.startswith("?") or code == "m":
+                continue
+            values = [int(v) if v else 0 for v in body.split(";")]
+            n = values[0] or 1
+            if code in ("H", "f"):
+                row = max(0, values[0] - 1)
+                column = max(0, (values[1] if len(values) > 1 else 1) - 1)
+            elif code == "J" and values[0] in (2, 3):
+                cells = [[" "] * 110 for _ in range(28)]
+            elif code == "K" and row < 28:
+                start, end = (0, 110) if values[0] == 2 else ((0, column + 1) if values[0] == 1 else (column, 110))
+                for col in range(start, min(end, 110)):
+                    cells[row][col] = " "
+            elif code == "A":
+                row = max(0, row - n)
+            elif code == "B":
+                row += n
+            elif code == "C":
+                column += n
+            elif code == "D":
+                column = max(0, column - n)
+            continue
+        for char in token:
+            if char == "\r":
+                column = 0
+            elif char == "\n":
+                row += 1
+            elif char >= " ":
+                if row < 28 and column < 110:
+                    cells[row][column] = char
+                column += 1
+    return "\n".join("".join(line) for line in cells)
+
+
 try:
     proc = subprocess.Popen(config["argv"], stdin=slave, stdout=slave, stderr=slave,
                             env=env, start_new_session=True)
@@ -118,11 +159,12 @@ try:
     assert children, "TUI did not launch its external app-server"
     child_handles = [os.pidfd_open(child) for child in children]
     mode = config["mode"]
-    if mode in ("paste", "stream", "cancel", "quit_active"):
+    if mode in ("paste", "stream", "cancel", "quit_active", "budget", "budget_cancel"):
         # Bracketed paste containing a newline must remain composer data.
         send("\x1b[200~héllo λ\nsecond line\x1b[201~")
-        fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack("HHHH", 19, 72, 0, 0))
-        os.kill(proc.pid, signal.SIGWINCH)
+        if mode not in ("budget","budget_cancel"):
+            fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack("HHHH", 19, 72, 0, 0))
+            os.kill(proc.pid, signal.SIGWINCH)
         for _ in range(20):
             pump()
         assert not requests, "paste or resize dispatched a provider request"
@@ -133,6 +175,25 @@ try:
             until(lambda: b"stream-visible" in screen, "live progress before terminal")
             assert query("SELECT count(*) FROM operations WHERE status='running'")[0][0] > 0
             assert query("SELECT count(*) FROM operations WHERE json_extract(outcome,'$.status')='completed'")[0][0] == 0
+            if mode in ("budget","budget_cancel"):
+                until(lambda: "10 reserved" in terminal_text(), "live budget reservation before final provider usage")
+                assert "snapshot" in terminal_text() and "received " in terminal_text()
+                session=query("SELECT id FROM sessions")[0][0]
+                before=query("SELECT session_id,sequence,kind,payload FROM events ORDER BY session_id,sequence")
+                output=subprocess.run([config['argv'][0],'--state',config['state'],'--providers','/missing/budget-provider','--http-profiles','/missing/budget-http','--harness-config','/missing/budget-harness','session','budget',session],capture_output=True,timeout=5)
+                assert output.returncode==0,(output.returncode,output.stderr)
+                assert json.loads(output.stdout)=={'type':'session_budget','budget':{'limit':100,'charged':0,'reserved':10}},output.stdout
+                assert query("SELECT session_id,sequence,kind,payload FROM events ORDER BY session_id,sequence")==before
+                if mode=="budget":
+                    release.set()
+                    until(lambda: "3 charged / 0 reserved" in terminal_text(), "final charged snapshot")
+                else:
+                    send("\x1bOP") # F1 keeps a full-screen overlay open while cancel is routed.
+                    until(lambda: "Native protocol terminal" in terminal_text(),"help overlay")
+                    send("\x18")
+                    until(lambda: "Unknown" in terminal_text(),"retained Unknown visible above overlay")
+                    assert "Owned turn" in terminal_text() and "Native protocol terminal" in terminal_text()
+                    assert query("SELECT sum(amount) FROM reservations WHERE charged IS NULL")[0][0]==10
             if mode == "stream":
                 release.set()
                 until(lambda: query("SELECT count(*) FROM operations WHERE json_extract(payload,'$.kind')='offline_snapshot_agent' AND status='succeeded'")[0][0] == 1,

@@ -211,3 +211,24 @@ async fn preexisting_pending_queue_survives_repeated_ui_restarts_without_dispatc
         assert!(restored.operation_id.is_none());
     }
 }
+
+#[tokio::test]
+async fn live_budget_snapshot_and_separate_readonly_command_work_while_owner_is_active() {
+    let f = Fixture::new();
+    let result = f.drive("budget").await;
+    assert_eq!(result["exit_code"], 0);
+    assert_eq!(result["requests"].as_array().unwrap().len(), 1);
+    let budget = f.store().budget(&f.session).unwrap();
+    assert_eq!(budget.charged, 3);
+    assert_eq!(budget.reserved, 0);
+}
+#[tokio::test]
+async fn cancellation_under_fullscreen_help_keeps_unknown_lifecycle_and_usage_hold_visible() {
+    let f = Fixture::new();
+    let result = f.drive("budget_cancel").await;
+    assert_eq!(result["exit_code"], 0);
+    assert_eq!(result["requests"].as_array().unwrap().len(), 1);
+    let budget = f.store().budget(&f.session).unwrap();
+    assert_eq!(budget.charged, 0);
+    assert_eq!(budget.reserved, 10);
+}
