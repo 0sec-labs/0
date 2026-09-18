@@ -31,7 +31,8 @@ async fn receive(stdout: &mut BufReader<ChildStdout>) -> Value {
 
 // This fixture tests CLI cancellation orchestration, not real Docker isolation.
 enum Stop {
-    Admission,
+    BeforeCreate,
+    DuringCreate,
     Request,
     Eof,
     Signal,
@@ -45,19 +46,27 @@ async fn exercise(stop: Stop) {
     }
     let dir = TempDir::new().unwrap();
     let docker = dir.path().join("fake-docker");
+    let image = if matches!(stop, Stop::BeforeCreate) {
+        "echo $$ > \"$(dirname \"$0\")/phase-pid\"; touch \"$(dirname \"$0\")/image-entered\"; exec sleep 30".to_owned()
+    } else {
+        format!("printf '%s\\n' 'sha256:{}'", "a".repeat(64))
+    };
+    let create = if matches!(stop, Stop::DuringCreate) {
+        "echo $$ > \"$(dirname \"$0\")/phase-pid\"; touch \"$(dirname \"$0\")/create-entered\"; exec sleep 30".to_owned()
+    } else {
+        format!("printf '%s\\n' '{}'", "b".repeat(64))
+    };
     let script = format!(
         r#"#!/bin/sh
 case "$1" in
-  image) printf '%s\n' 'sha256:{}' ;;
-  create) printf '%s\n' '{}' ;;
-  start) exec sleep 30 ;;
+  image) {image} ;;
+  create) {create} ;;
+  start) touch "$(dirname "$0")/guest-started"; exec sleep 30 ;;
   rm) touch "$(dirname "$0")/removed"; printf '%s\n' "$3" ;;
   container) exit 0 ;;
   *) exit 2 ;;
 esac
-"#,
-        "a".repeat(64),
-        "b".repeat(64)
+"#
     );
     std::fs::write(&docker, script).unwrap();
     std::fs::set_permissions(&docker, std::fs::Permissions::from_mode(0o700)).unwrap();
@@ -120,11 +129,28 @@ esac
             .unwrap()
             .is_empty()
     );
-    if !matches!(stop, Stop::Admission) {
+    if matches!(stop, Stop::BeforeCreate | Stop::DuringCreate) {
+        let marker = if matches!(stop, Stop::BeforeCreate) {
+            "image-entered"
+        } else {
+            "create-entered"
+        };
+        tokio::time::timeout(Duration::from_secs(5), async {
+            while !dir.path().join(marker).exists() {
+                tokio::time::sleep(Duration::from_millis(5)).await;
+            }
+        })
+        .await
+        .unwrap();
+    } else {
         let started = receive(&mut output).await;
         assert_eq!(started["event"]["type"], "started", "{started}");
     }
-    if matches!(stop, Stop::Request | Stop::Admission) {
+    let mut recovery_dir = None;
+    if matches!(
+        stop,
+        Stop::Request | Stop::BeforeCreate | Stop::DuringCreate
+    ) {
         send(
             &mut input,
             4,
@@ -150,10 +176,27 @@ esac
                 let cleanup = message["reply"]["result"]["cleanup"]["status"]
                     .as_str()
                     .unwrap();
-                if matches!(stop, Stop::Admission) {
-                    assert!(matches!(cleanup, "not_created" | "confirmed"));
-                } else {
-                    assert_eq!(cleanup, "confirmed");
+                match stop {
+                    Stop::BeforeCreate => {
+                        assert_eq!(cleanup, "not_created");
+                        assert!(message["reply"]["result"]["recovery_dir"].is_null());
+                    }
+                    Stop::DuringCreate => {
+                        assert_eq!(cleanup, "unconfirmed");
+                        assert!(
+                            !message["reply"]["result"]["cleanup"]["container_name"]
+                                .as_str()
+                                .unwrap()
+                                .is_empty()
+                        );
+                        let path = message["reply"]["result"]["recovery_dir"]
+                            .as_str()
+                            .unwrap()
+                            .to_owned();
+                        assert!(std::path::Path::new(&path).is_dir());
+                        recovery_dir = Some(path);
+                    }
+                    _ => assert_eq!(cleanup, "confirmed"),
                 }
                 finished = true;
             }
@@ -192,8 +235,17 @@ esac
         .unwrap()
         .unwrap();
     assert!(status.success());
-    if !matches!(stop, Stop::Admission) {
-        assert!(dir.path().join("removed").exists());
+    assert_eq!(
+        dir.path().join("removed").exists(),
+        !matches!(stop, Stop::BeforeCreate)
+    );
+    if matches!(stop, Stop::BeforeCreate | Stop::DuringCreate) {
+        assert!(!dir.path().join("guest-started").exists());
+        let pid = std::fs::read_to_string(dir.path().join("phase-pid")).unwrap();
+        assert!(
+            !std::path::Path::new(&format!("/proc/{}", pid.trim())).exists(),
+            "cancelled control process must be reaped"
+        );
     }
     // Transport reconnection must not replay the cancelled external effect.
     let retry = Command::new(env!("CARGO_BIN_EXE_0sec-native"))
@@ -217,6 +269,14 @@ esac
     let retried: Value = serde_json::from_slice(&retry.stdout).unwrap();
     assert_eq!(retried["duplicate"], true);
     assert_eq!(retried["operation"]["status"], "cancelled");
+    if let Some(path) = recovery_dir {
+        assert_eq!(retried["result"]["cleanup"]["status"], "unconfirmed");
+        assert_eq!(retried["result"]["recovery_dir"], path);
+        assert!(std::path::Path::new(&path).exists());
+        // This fixture never contacted a daemon and its fake create was reaped;
+        // remove the intentionally retained private recovery copy after assertions.
+        std::fs::remove_dir_all(path).unwrap();
+    }
 }
 
 #[tokio::test]
@@ -235,6 +295,11 @@ async fn sigterm_cancels_execution_before_exiting() {
 }
 
 #[tokio::test]
-async fn cancellation_after_durable_admission_is_accepted_and_settled() {
-    exercise(Stop::Admission).await;
+async fn cancellation_before_create_is_accepted_and_settles_without_container_cleanup() {
+    exercise(Stop::BeforeCreate).await;
+}
+
+#[tokio::test]
+async fn cancellation_during_create_retains_uncertainty_and_recovery_across_retry() {
+    exercise(Stop::DuringCreate).await;
 }
