@@ -4,6 +4,7 @@ mod agent_plugins;
 mod inference;
 mod lifecycle;
 mod plugin;
+mod repair;
 mod reproduction;
 mod sandbox;
 mod source;
@@ -217,6 +218,16 @@ impl Engine {
         command: Command,
         event_tx: mpsc::Sender<ExecutionEvent>,
     ) -> Result<Reply, EngineError> {
+        if let Command::ValidateSourceRepair {
+            session_id,
+            command_id,
+            request,
+        } = command
+        {
+            return self
+                .validate_repair(session_id, command_id, request, event_tx)
+                .await;
+        }
         if let Command::ReproduceSource {
             session_id,
             command_id,
@@ -387,6 +398,7 @@ impl Engine {
             Command::Execute { .. }
             | Command::Infer { .. }
             | Command::ReproduceSource { .. }
+            | Command::ValidateSourceRepair { .. }
             | Command::ReviewSource { .. }
             | Command::RunAgent { .. }
             | Command::RunSandbox { .. }

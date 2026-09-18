@@ -86,7 +86,7 @@ impl Engine {
             .map_err(|_| state("reproduction owner stopped before settlement"))?
     }
 }
-fn validate_source(
+pub(super) fn validate_source(
     shared: &Shared,
     session: &str,
     source_id: &str,
@@ -192,27 +192,55 @@ async fn run(
     cancel: CancellationToken,
     events: mpsc::Sender<ExecutionEvent>,
 ) -> Result<Reply, EngineError> {
-    let mut outcome = ReproductionOutcome {
+    if let Err(error) = validate_source(shared, session, source, &frozen) {
+        let mut outcome = empty_outcome();
+        outcome.error = Some(error.to_string());
+        return settle(shared, parent, outcome, OperationStatus::Failed);
+    }
+    let (outcome, status) = matrix(
+        shared,
+        session,
+        parent,
+        &frozen,
+        cancel,
+        events,
+        "reproduction",
+    )
+    .await?;
+    settle(shared, parent, outcome, status)
+}
+pub(super) fn empty_outcome() -> ReproductionOutcome {
+    ReproductionOutcome {
         assessment: None,
         artifacts: Default::default(),
         children: vec![],
         external_effects_started: false,
         stop_reason: None,
         error: None,
-    };
-    let preflight = (|| {
-        validate_source(shared, session, source, &frozen)?;
-        retain(
-            shared,
-            parent,
-            &mut outcome,
-            "reproduction.plan",
-            &serde_json::to_vec(frozen.plan())?,
-        )
-    })();
-    if let Err(error) = preflight {
+    }
+}
+/// The parent already owns session admission. Each phase has distinct durable
+/// child identities, while using the same request/evidence settlement contract.
+#[allow(clippy::too_many_arguments)]
+pub(super) async fn matrix(
+    shared: &Arc<Shared>,
+    session: &str,
+    parent: &str,
+    frozen: &FrozenPlan,
+    cancel: CancellationToken,
+    events: mpsc::Sender<ExecutionEvent>,
+    phase: &str,
+) -> Result<(ReproductionOutcome, OperationStatus), EngineError> {
+    let mut outcome = empty_outcome();
+    if let Err(error) = retain(
+        shared,
+        parent,
+        &mut outcome,
+        &format!("{phase}.plan"),
+        &serde_json::to_vec(frozen.plan())?,
+    ) {
         outcome.error = Some(error.to_string());
-        return settle(shared, parent, outcome, OperationStatus::Failed);
+        return Ok((outcome, OperationStatus::Failed));
     }
     let mut evidence = vec![];
     let mut index = vec![];
@@ -228,12 +256,12 @@ async fn run(
                 .request(
                     &case.id,
                     repeat,
-                    &format!("repro-{parent}-{case_index}-{repeat}"),
+                    &format!("{phase}-{parent}-{case_index}-{repeat}"),
                 )
                 .map_err(state)?;
             let child = {
                 let mut store = lock(&shared.store)?;
-                let admission=store.admit_command(session,&format!("{parent}:case:{case_index}:{repeat}"),&json!({"parent_operation":parent,"kind":"reproduction_case","plan_digest":frozen.digest(),"case_id":case.id,"repeat":repeat,"execution_id":request.execution_id}))?;
+                let admission=store.admit_command(session,&format!("{parent}:{phase}:case:{case_index}:{repeat}"),&json!({"parent_operation":parent,"kind":"reproduction_case","plan_digest":frozen.digest(),"case_id":case.id,"repeat":repeat,"execution_id":request.execution_id}))?;
                 if admission.duplicate {
                     return Err(state(
                         "reproduction child already admitted; recovery required",
@@ -374,7 +402,7 @@ async fn run(
             }
         }
     }
-    let assessment = zero_verification::assess(&frozen, &evidence).map_err(state)?;
+    let assessment = zero_verification::assess(frozen, &evidence).map_err(state)?;
     let status = forced.unwrap_or(match assessment.disposition {
         Disposition::ObservedForPlan | Disposition::NotObserved => OperationStatus::Succeeded,
         Disposition::Inconclusive => OperationStatus::Failed,
@@ -385,18 +413,18 @@ async fn run(
         shared,
         parent,
         &mut outcome,
-        "reproduction.evidence_index",
+        &format!("{phase}.evidence_index"),
         &serde_json::to_vec(&index)?,
     )?;
     retain(
         shared,
         parent,
         &mut outcome,
-        "reproduction.assessment",
+        &format!("{phase}.assessment"),
         &serde_json::to_vec(&assessment)?,
     )?;
     outcome.assessment = Some(assessment);
-    settle(shared, parent, outcome, status)
+    Ok((outcome, status))
 }
 async fn execute(
     shared: &Arc<Shared>,

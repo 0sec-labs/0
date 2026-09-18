@@ -1,5 +1,4 @@
 //! Host-authorized single-file candidate copies. No behavioral validation or host apply.
-use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::{collections::BTreeSet, path::Path};
 use zero_executor::StagedSnapshot;
@@ -9,32 +8,7 @@ pub const MAX_REPLACEMENT_BYTES: usize = 128 * 1024;
 pub const MAX_SNAPSHOT_BYTES: u64 = 64 * 1024 * 1024;
 pub const MAX_SNAPSHOT_FILES: usize = 4096;
 
-/// These fields are supplied/approved by the host, not authority carried by a model reply.
-#[derive(Clone, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct MaterializeRequest {
-    pub baseline: SnapshotPin,
-    pub target: String,
-    pub allowed_paths: Vec<String>,
-    /// Exact files or directory prefixes, using normal relative paths without trailing slash.
-    pub protected_paths: Vec<String>,
-    pub expected_preimage_sha256: String,
-    pub replacement: String,
-}
-
-/// Inert content identity. Deserializing this record grants no authority and verifies no repair.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct CandidateReceipt {
-    pub schema_version: u32,
-    pub baseline_snapshot_sha256: String,
-    pub target: String,
-    pub preimage_sha256: String,
-    pub replacement_sha256: String,
-    pub replacement_bytes: u64,
-    pub candidate_snapshot_sha256: String,
-    pub policy_sha256: String,
-}
+pub use zero_protocol::repair::{CandidateReceipt, MaterializeRequest};
 
 /// Owns an unpublished private copy. Never mount it directly: executors must stage its pin.
 /// Drop attempts best-effort cleanup; `cleanup` reports failures and a recovery path.
@@ -55,6 +29,11 @@ impl Candidate {
     /// Exact proposed bytes for immutable artifact retention and fresh reconstruction.
     pub fn replacement_bytes(&self) -> &[u8] {
         self.replacement.as_bytes()
+    }
+    /// Keep this private copy for an uncertain caller and return its recovery root.
+    /// This does not assert anything about guest teardown.
+    pub fn retain_for_recovery(mut self) -> Option<std::path::PathBuf> {
+        self.stage.take().map(|stage| stage.root().to_path_buf())
     }
     /// Remove the private copy explicitly, retaining its recovery path on failure.
     /// There are no running effects owned by this materialization handle.

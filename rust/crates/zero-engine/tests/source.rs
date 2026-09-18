@@ -843,3 +843,302 @@ async fn reproduction_rejects_source_outcome_artifact_substitution() {
     assert_eq!(f.calls(), 0);
     f.engine.shutdown().await.unwrap();
 }
+
+use zero_protocol::repair::{MaterializeRequest, RepairValidationRequest, RepairValidationStatus};
+async fn repair_fixture() -> (ReproFixture, RepairValidationRequest) {
+    let mut f = ReproFixture::new("echo").await;
+    f.plan.cases[0].safe_expected = Some(ExactOutput {
+        exit_code: 0,
+        stdout: b"safe-output\n".to_vec(),
+        stderr: b"fixture diagnostic\n".to_vec(),
+    });
+    let path = f.dir.path().join("docker");
+    let fake=fs::read_to_string(&path).unwrap()
+        .replace("state.write_text(json.dumps({\"name\": name, \"id\": container_id}))","state.write_text(json.dumps({\"name\": name, \"id\": container_id}))\n    mount = args[args.index('--mount')+1]\n    source = pathlib.Path(mount.split('src=')[1].split(',')[0])\n    (root / 'candidate-source.txt').write_text((source / 'app.js').read_text())")
+        .replace("sys.stdout.buffer.write(sys.stdin.buffer.read())","data = sys.stdin.buffer.read()\n        code = (root / 'candidate-source.txt').read_text()\n        if b'attack-output' in data and 'SAFE_REPLACEMENT' in code: data = b'safe-output\\n'\n        if b'legitimate-output' in data and 'BAD_CONTROL' in code: data = b'wrong-control\\n'\n        sys.stdout.buffer.write(data)");
+    fs::write(&path, fake).unwrap();
+    let repro = match call(&f.engine, f.command("baseline")).await {
+        Reply::SourceReproduction {
+            operation,
+            result: Some(r),
+            ..
+        } => {
+            assert_eq!(
+                r.assessment.unwrap().disposition,
+                Disposition::ObservedForPlan
+            );
+            operation.id
+        }
+        r => panic!("{r:?}"),
+    };
+    let request = RepairValidationRequest {
+        reproduction_operation_id: repro,
+        materialize: MaterializeRequest {
+            baseline: f.plan.snapshot.clone(),
+            target: "app.js".into(),
+            allowed_paths: vec!["app.js".into()],
+            protected_paths: vec!["tests".into()],
+            expected_preimage_sha256: f.plan.snapshot.files[0].digest.clone(),
+            replacement: "// SAFE_REPLACEMENT\n".into(),
+        },
+    };
+    (f, request)
+}
+fn repair_command(f: &ReproFixture, id: &str, request: RepairValidationRequest) -> Command {
+    Command::ValidateSourceRepair {
+        session_id: f.session.clone(),
+        command_id: id.into(),
+        request,
+    }
+}
+#[tokio::test]
+async fn repair_validates_two_fresh_copies_and_retry_never_reapplies_or_runs() {
+    let (f, request) = repair_fixture().await;
+    let original = fs::read(f.dir.path().join("source/app.js")).unwrap();
+    let command = repair_command(&f, "repair", request.clone());
+    let result = match call(&f.engine, command).await {
+        Reply::SourceRepair {
+            operation,
+            result: Some(r),
+            duplicate: false,
+        } => {
+            assert_eq!(operation.status, OperationStatus::Succeeded, "{r:?}");
+            r
+        }
+        r => panic!("{r:?}"),
+    };
+    assert_eq!(
+        result.status,
+        RepairValidationStatus::ValidatedCandidateForPlan
+    );
+    assert!(!result.vulnerability_reportable);
+    assert_eq!(result.phases.len(), 2);
+    assert!(result.cleanup_recovery.is_empty());
+    assert_ne!(
+        result.phases[0].derived_plan_digest,
+        result.phases[1].derived_plan_digest
+    );
+    let store = zero_store::Store::open(f.dir.path().join("state.db")).unwrap();
+    for phase in &result.phases {
+        assert_eq!(phase.observations.children.len(), 4);
+        assert_eq!(
+            phase.observations.assessment.as_ref().unwrap().disposition,
+            Disposition::ObservedForPlan
+        );
+        let plan: Plan = serde_json::from_slice(
+            &store
+                .artifact(&phase.observations.artifacts[&format!("{}.plan", phase.name)])
+                .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            plan.snapshot.digest,
+            result
+                .candidate_receipt
+                .as_ref()
+                .unwrap()
+                .candidate_snapshot_sha256
+        );
+        assert!(!std::path::Path::new(&plan.snapshot.root).exists());
+        assert_eq!(
+            plan.cases[0].expected,
+            f.plan.cases[0].safe_expected.clone().unwrap()
+        );
+        assert_eq!(plan.cases[1].expected, f.plan.cases[1].expected);
+    }
+    assert_eq!(
+        fs::read(f.dir.path().join("source/app.js")).unwrap(),
+        original
+    );
+    assert_eq!(budget(&f.engine, &f.session).await, (2, 0));
+    let calls = f.calls();
+    let session = f.session.clone();
+    let dir = f.dir;
+    f.engine.shutdown().await.unwrap();
+    drop(f.engine);
+    fs::remove_dir_all(dir.path().join("source")).unwrap();
+    let engine =
+        Engine::open(dir.path().join("state.db"), Some(dir.path().join("docker"))).unwrap();
+    match call(
+        &engine,
+        Command::ValidateSourceRepair {
+            session_id: session,
+            command_id: "repair".into(),
+            request,
+        },
+    )
+    .await
+    {
+        Reply::SourceRepair {
+            duplicate: true,
+            result: Some(r),
+            ..
+        } => assert_eq!(r.status, RepairValidationStatus::ValidatedCandidateForPlan),
+        r => panic!("{r:?}"),
+    }
+    assert_eq!(
+        fs::read_to_string(dir.path().join("calls.jsonl"))
+            .unwrap()
+            .lines()
+            .count(),
+        calls
+    );
+    engine.shutdown().await.unwrap();
+}
+#[tokio::test]
+async fn repair_rejects_wrong_expectations_protected_paths_and_preimages() {
+    let (f, request) = repair_fixture().await;
+    for kind in ["protected", "preimage", "baseline"] {
+        let mut bad = request.clone();
+        match kind {
+            "protected" => bad.materialize.protected_paths.push("app.js".into()),
+            "preimage" => {
+                bad.materialize.expected_preimage_sha256 = format!("sha256:{}", "b".repeat(64))
+            }
+            _ => bad.materialize.baseline.root = "/another/root".into(),
+        };
+        let before = f.calls();
+        let reply = call(
+            &f.engine,
+            repair_command(&f, &format!("repair-{kind}"), bad),
+        )
+        .await;
+        assert!(
+            matches!(
+                reply,
+                Reply::SourceRepair {
+                    operation: zero_protocol::Operation {
+                        status: OperationStatus::Failed,
+                        ..
+                    },
+                    ..
+                }
+            ),
+            "{kind}: {reply:?}"
+        );
+        assert_eq!(f.calls(), before);
+    }
+    for (id, replacement) in [
+        ("no-change", "// unchanged\n"),
+        ("control", "// SAFE_REPLACEMENT BAD_CONTROL\n"),
+    ] {
+        let mut bad = request.clone();
+        bad.materialize.replacement = replacement.into();
+        match call(&f.engine, repair_command(&f, id, bad)).await {
+            Reply::SourceRepair {
+                operation,
+                result: Some(r),
+                ..
+            } => {
+                assert_eq!(operation.status, OperationStatus::Failed);
+                assert_eq!(r.status, RepairValidationStatus::NotValidated);
+                assert_eq!(r.phases.len(), 1);
+            }
+            r => panic!("{r:?}"),
+        }
+    }
+    f.engine.shutdown().await.unwrap();
+}
+#[tokio::test]
+async fn repair_unknown_cleanup_retains_private_copy_and_stops_reconstruction() {
+    let (f, request) = repair_fixture().await;
+    fs::write(f.dir.path().join("scenario.txt"), "cleanup-fail").unwrap();
+    match call(&f.engine, repair_command(&f, "unknown", request)).await {
+        Reply::SourceRepair {
+            operation,
+            result: Some(r),
+            ..
+        } => {
+            assert_eq!(operation.status, OperationStatus::Unknown);
+            assert_eq!(r.status, RepairValidationStatus::Unknown);
+            assert_eq!(r.phases.len(), 1);
+            assert_eq!(r.phases[0].observations.children.len(), 1);
+            assert_eq!(r.cleanup_recovery.len(), 1);
+            assert!(std::path::Path::new(&r.cleanup_recovery[0]).exists());
+            // Only the process fixture is used; test may remove its retained private copy.
+            fs::remove_dir_all(&r.cleanup_recovery[0]).unwrap();
+        }
+        r => panic!("{r:?}"),
+    }
+    f.engine.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn repair_cancel_before_work_does_not_materialize_or_execute() {
+    let (f, request) = repair_fixture().await;
+    let before = f.calls();
+    let (tx, rx) = mpsc::channel(1);
+    drop(rx);
+    match f
+        .engine
+        .handle(repair_command(&f, "cancel-repair", request), tx)
+        .await
+    {
+        Reply::SourceRepair {
+            operation,
+            result: Some(result),
+            ..
+        } => {
+            assert_eq!(operation.status, OperationStatus::Cancelled);
+            assert_eq!(result.status, RepairValidationStatus::Cancelled);
+            assert!(result.phases.is_empty());
+            assert!(result.candidate_receipt.is_none());
+        }
+        other => panic!("{other:?}"),
+    }
+    assert_eq!(before, f.calls());
+    f.engine.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn repair_receipt_retention_failure_prevents_execution() {
+    let (f, request) = repair_fixture().await;
+    let before = f.calls();
+    let db = rusqlite::Connection::open(f.dir.path().join("state.db")).unwrap();
+    db.execute_batch("CREATE TRIGGER reject_repair BEFORE INSERT ON operation_artifacts WHEN NEW.name='repair.candidate.receipt' BEGIN SELECT RAISE(ABORT,'injected retention failure'); END;").unwrap();
+    match call(&f.engine, repair_command(&f, "receipt-failure", request)).await {
+        Reply::SourceRepair {
+            operation,
+            result: Some(result),
+            ..
+        } => {
+            assert_eq!(operation.status, OperationStatus::Failed);
+            assert!(result.phases.is_empty());
+            assert!(result.cleanup_recovery.is_empty());
+            assert!(result.error.is_some());
+        }
+        other => panic!("{other:?}"),
+    }
+    assert_eq!(before, f.calls());
+    f.engine.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn repair_rejects_corrupt_retained_baseline_evidence_before_execution() {
+    let (f, request) = repair_fixture().await;
+    let before = f.calls();
+    let store = zero_store::Store::open(f.dir.path().join("state.db")).unwrap();
+    let artifacts = store
+        .operation_artifacts(&request.reproduction_operation_id)
+        .unwrap();
+    let db = rusqlite::Connection::open(f.dir.path().join("state.db")).unwrap();
+    db.execute(
+        "UPDATE artifacts SET bytes=?1 WHERE digest=?2",
+        rusqlite::params![b"{}".as_slice(), artifacts["reproduction.evidence_index"]],
+    )
+    .unwrap();
+    match call(&f.engine, repair_command(&f, "corrupt-baseline", request)).await {
+        Reply::SourceRepair {
+            operation,
+            result: Some(result),
+            ..
+        } => {
+            assert_eq!(operation.status, OperationStatus::Failed);
+            assert!(result.phases.is_empty());
+            assert!(result.candidate_receipt.is_none());
+        }
+        other => panic!("{other:?}"),
+    }
+    assert_eq!(before, f.calls());
+    f.engine.shutdown().await.unwrap();
+}

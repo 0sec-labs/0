@@ -11,6 +11,7 @@ pub mod execution;
 pub mod microvm;
 pub mod model;
 pub mod plugin;
+pub mod repair;
 pub mod sandbox;
 pub mod session;
 pub mod source;
@@ -88,6 +89,11 @@ pub enum Command {
         session_id: String,
         command_id: String,
         request: sandbox::SandboxRequest,
+    },
+    ValidateSourceRepair {
+        session_id: String,
+        command_id: String,
+        request: repair::RepairValidationRequest,
     },
     ReproduceSource {
         session_id: String,
@@ -204,6 +210,11 @@ pub enum Reply {
     Sandbox {
         operation: Operation,
         result: Option<sandbox::SandboxResult>,
+        duplicate: bool,
+    },
+    SourceRepair {
+        operation: session::Operation,
+        result: Option<repair::RepairValidationOutcome>,
         duplicate: bool,
     },
     SourceReproduction {

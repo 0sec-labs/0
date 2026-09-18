@@ -1755,6 +1755,7 @@ name = "zero-cli"
 version = "0.1.0"
 dependencies = [
  "clap",
+ "nix",
  "serde",
  "serde_json",
  "tempfile",
@@ -1781,6 +1782,8 @@ dependencies = [
 name = "zero-cloud-client"
 version = "0.1.0"
 dependencies = [
+ "base64",
+ "getrandom 0.4.3",
  "reqwest",
  "serde",
  "serde_json",
@@ -1820,6 +1823,7 @@ dependencies = [
  "zero-plugin-runner",
  "zero-protocol",
  "zero-provider",
+ "zero-repair",
  "zero-sandbox",
  "zero-smolvm",
  "zero-source",

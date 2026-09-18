@@ -221,6 +221,23 @@ async fn run(args: Args) -> Result<bool, Box<dyn Error>> {
                     .map_err(|_| "Invalid inference request JSON")?,
             }
         }
+        Command::SourceRepair {
+            session,
+            command_id,
+            request,
+        } => {
+            let bytes = tokio::select! {
+                result = tokio::time::timeout(std::time::Duration::from_secs(5), providers::read_bounded(&request)) =>
+                    result.map_err(|_| "Source repair input deadline exceeded")??,
+                _ = server::shutdown_signal() => return Err("Source repair input interrupted".into()),
+            };
+            EngineCommand::ValidateSourceRepair {
+                session_id: session,
+                command_id,
+                request: serde_json::from_slice(&bytes)
+                    .map_err(|_| "Invalid source repair request JSON")?,
+            }
+        }
         Command::SourceReproduce {
             session,
             command_id,
@@ -299,6 +316,7 @@ async fn run(args: Args) -> Result<bool, Box<dyn Error>> {
         | Reply::Agent { operation, .. }
         | Reply::Sandbox { operation, .. }
         | Reply::SourceReproduction { operation, .. }
+        | Reply::SourceRepair { operation, .. }
         | Reply::SourceReview { operation, .. }
         | Reply::Plugin { operation, .. } => {
             matches!(operation.status, zero_protocol::OperationStatus::Succeeded)

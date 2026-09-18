@@ -186,6 +186,7 @@ where
                 | Command::Infer { .. }
                 | Command::ReviewSource { .. }
                 | Command::ReproduceSource { .. }
+                | Command::ValidateSourceRepair { .. }
                 | Command::RunAgent { .. }
                 | Command::RunSandbox { .. }
                 | Command::RunPlugin { .. }

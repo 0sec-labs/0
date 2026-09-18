@@ -379,3 +379,97 @@ fn real_local_docker_source_review_to_observed_plan_and_artifact() {
     assert!(image.starts_with("sha256:") && image.len() == 71);
     observed(Some(image));
 }
+
+fn validate_candidate(image: Option<String>) {
+    let mut f = Fixture::new(image);
+    f.request.plan.cases[0].safe_expected = Some(ExactOutput {
+        exit_code: 0,
+        stdout: b"safe\n".to_vec(),
+        stderr: if f.real {
+            vec![]
+        } else {
+            b"fixture diagnostic\n".to_vec()
+        },
+    });
+    if !f.real {
+        let path = f.dir.path().join("docker");
+        let fake = fs::read_to_string(&path).unwrap()
+            .replace("state.write_text(json.dumps({\"name\": name, \"id\": container_id}))", "state.write_text(json.dumps({\"name\": name, \"id\": container_id}))\n    mount = args[args.index('--mount')+1]\n    source = pathlib.Path(mount.split('src=')[1].split(',')[0])\n    (root / 'candidate-source.txt').write_text((source / 'app.js').read_text())")
+            .replace("sys.stdout.buffer.write(sys.stdin.buffer.read())", "data = sys.stdin.buffer.read()\n        code = (root / 'candidate-source.txt').read_text()\n        if data == b'attack\\n' and 'SAFE_REPLACEMENT' in code: data = b'safe\\n'\n        sys.stdout.buffer.write(data)");
+        fs::write(path, fake).unwrap();
+    }
+    f.save();
+    let baseline = parsed(&f.command().output().unwrap());
+    let replacement = "// SAFE_REPLACEMENT\nconst s = require('fs').readFileSync(0, 'utf8'); process.stdout.write(s === 'attack\\n' ? 'safe\\n' : s);\n";
+    let request = zero_protocol::repair::RepairValidationRequest {
+        reproduction_operation_id: baseline["operation"]["id"].as_str().unwrap().into(),
+        materialize: zero_protocol::repair::MaterializeRequest {
+            baseline: f.request.plan.snapshot.clone(),
+            target: "app.js".into(),
+            allowed_paths: vec!["app.js".into()],
+            protected_paths: vec!["tests".into()],
+            expected_preimage_sha256: f.request.plan.snapshot.files[0].digest.clone(),
+            replacement: replacement.into(),
+        },
+    };
+    fs::write(
+        f.dir.path().join("repair.json"),
+        serde_json::to_vec(&request).unwrap(),
+    )
+    .unwrap();
+    let run = || {
+        f.cli()
+            .args([
+                "source-repair",
+                "--session",
+                &f.session,
+                "--command-id",
+                "repair",
+                "--request",
+                "repair.json",
+            ])
+            .output()
+            .unwrap()
+    };
+    let original = fs::read(f.dir.path().join("source/app.js")).unwrap();
+    let result = parsed(&run());
+    assert_eq!(result["result"]["status"], "validated_candidate_for_plan");
+    assert_eq!(result["result"]["vulnerability_reportable"], false);
+    let phases = result["result"]["phases"].as_array().unwrap();
+    assert_eq!(phases.len(), 2);
+    for phase in phases {
+        assert_eq!(
+            phase["observations"]["children"].as_array().unwrap().len(),
+            4
+        );
+        assert_eq!(
+            phase["observations"]["assessment"]["disposition"],
+            "observed_for_plan"
+        );
+    }
+    assert_eq!(
+        original,
+        fs::read(f.dir.path().join("source/app.js")).unwrap()
+    );
+    let calls = f.calls();
+    fs::remove_dir_all(f.dir.path().join("source")).unwrap();
+    let retry = parsed(&run());
+    assert_eq!(retry["duplicate"], true);
+    assert_eq!(retry["result"], result["result"]);
+    assert_eq!(calls, f.calls());
+    assert_eq!(
+        f.listener.accept().unwrap_err().kind(),
+        std::io::ErrorKind::WouldBlock
+    );
+}
+#[test]
+fn source_repair_validates_private_candidate_and_reconstruction() {
+    validate_candidate(None);
+}
+#[test]
+#[ignore = "requires preloaded local Node image in ZERO_REPRODUCTION_DOCKER_IMAGE; never pulls"]
+fn real_local_docker_candidate_and_fresh_reconstruction() {
+    validate_candidate(Some(
+        std::env::var("ZERO_REPRODUCTION_DOCKER_IMAGE").unwrap(),
+    ));
+}
