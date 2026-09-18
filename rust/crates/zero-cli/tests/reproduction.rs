@@ -198,6 +198,13 @@ impl Fixture {
         if !self.real {
             c.args(["--docker-bin", "./docker"]);
         }
+        if matches!(
+            self.request.plan.backend,
+            zero_protocol::sandbox::SandboxBackend::Smolvm { .. }
+        ) {
+            c.arg("--smolvm-bin")
+                .arg(std::env::var("ZERO_REPRODUCTION_SMOLVM_BIN").unwrap());
+        }
         c
     }
     fn command(&self) -> Command {
@@ -380,8 +387,18 @@ fn real_local_docker_source_review_to_observed_plan_and_artifact() {
     observed(Some(image));
 }
 
-fn validate_candidate(image: Option<String>) {
+fn validate_candidate(image: Option<String>, microvm: bool) {
     let mut f = Fixture::new(image);
+    if microvm {
+        f.request.plan.backend = zero_protocol::sandbox::SandboxBackend::Smolvm {
+            image_archive: std::env::var("ZERO_SMOLVM_SMOKE_ARCHIVE").unwrap().into(),
+            archive_digest:
+                "sha256:2bda0b195b4a451d7e3c516a2c08178024f4407e60e7abfed831eb5f06444c48".into(),
+            storage_gb: 4,
+        };
+        f.request.plan.limits.memory_mb = 2048;
+        f.request.plan.limits.cpus = 2.0;
+    }
     f.request.plan.cases[0].safe_expected = Some(ExactOutput {
         exit_code: 0,
         stdout: b"safe\n".to_vec(),
@@ -399,7 +416,22 @@ fn validate_candidate(image: Option<String>) {
         fs::write(path, fake).unwrap();
     }
     f.save();
-    let baseline = parsed(&f.command().output().unwrap());
+    let baseline_output = f.command().output().unwrap();
+    if !baseline_output.status.success() {
+        let failed: Value = serde_json::from_slice(&baseline_output.stdout).unwrap();
+        let store = zero_store::Store::open_read_only(f.dir.path().join("state.db")).unwrap();
+        if let Some(children) = failed["result"]["children"].as_array() {
+            for child in children {
+                let artifacts = store.operation_artifacts(child.as_str().unwrap()).unwrap();
+                let evidence: Value = serde_json::from_slice(
+                    &store.artifact(&artifacts["reproduction.evidence"]).unwrap(),
+                )
+                .unwrap();
+                eprintln!("baseline observation: {}", evidence["result"]);
+            }
+        }
+    }
+    let baseline = parsed(&baseline_output);
     let replacement = "// SAFE_REPLACEMENT\nconst s = require('fs').readFileSync(0, 'utf8'); process.stdout.write(s === 'attack\\n' ? 'safe\\n' : s);\n";
     let request = zero_protocol::repair::RepairValidationRequest {
         reproduction_operation_id: baseline["operation"]["id"].as_str().unwrap().into(),
@@ -464,12 +496,19 @@ fn validate_candidate(image: Option<String>) {
 }
 #[test]
 fn source_repair_validates_private_candidate_and_reconstruction() {
-    validate_candidate(None);
+    validate_candidate(None, false);
 }
 #[test]
 #[ignore = "requires preloaded local Node image in ZERO_REPRODUCTION_DOCKER_IMAGE; never pulls"]
 fn real_local_docker_candidate_and_fresh_reconstruction() {
-    validate_candidate(Some(
-        std::env::var("ZERO_REPRODUCTION_DOCKER_IMAGE").unwrap(),
-    ));
+    validate_candidate(
+        Some(std::env::var("ZERO_REPRODUCTION_DOCKER_IMAGE").unwrap()),
+        false,
+    );
+}
+
+#[test]
+#[ignore = "real nonroot KVM/smolvm1.14.6; requires local ZERO_SMOLVM_SMOKE_ARCHIVE and ZERO_REPRODUCTION_SMOLVM_BIN; no pulls"]
+fn real_microvm_candidate_and_fresh_reconstruction() {
+    validate_candidate(Some(format!("sha256:{}", "a".repeat(64))), true);
 }

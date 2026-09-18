@@ -44,3 +44,11 @@ Node image (12 executions: four baseline, four candidate, four reconstructed).
 It checks exact observations, controls, unchanged original bytes and restart
 retry without source/provider access. This qualifies that fixture and backend,
 not real vulnerability detection or other platforms.
+
+The same 12-observation CLI workflow also passed on actual smolvm 1.14.6 with
+nonroot KVM access and the prepared local Node archive, including stdin/EOF,
+original-source preservation and restart retry (50.26 s on this host). The opt-in
+test pins that archive and requires an explicit runtime binary. An initial test
+launch supplied an incorrect agent-rootfs override and failed its control; rerun
+using the installed wrapper's normal configuration passed. This is fixture
+qualification, not a general isolation or vulnerability-quality guarantee.
