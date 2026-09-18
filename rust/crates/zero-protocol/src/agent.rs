@@ -18,6 +18,9 @@ pub struct AgentRequest {
     /// Opt into read-only tools over this same-session review's retained bundle.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub source_review_operation_id: Option<String>,
+    /// Explicit read-only tools over a newly verified private copy of the full snapshot.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub source_snapshot_tools: bool,
     /// execute_snapshot uses this pinned offline execution profile. The model
     /// supplies argv only; it cannot choose mounts, image, network or limits.
     /// Explicit plugin tools use the separately configured host launch profile.
@@ -54,6 +57,8 @@ pub struct AgentResult {
     /// Complete post-tool replay retained only at a safe turn-limit boundary.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub continuation_artifact: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_recovery_path: Option<String>,
 }
 
 /// Legacy Docker-shaped requests retain their serialized retry identity. New
@@ -87,4 +92,8 @@ impl From<crate::sandbox::SandboxRequest> for AgentExecution {
     fn from(request: crate::sandbox::SandboxRequest) -> Self {
         Self::Sandbox(request)
     }
+}
+
+fn is_false(value: &bool) -> bool {
+    !*value
 }

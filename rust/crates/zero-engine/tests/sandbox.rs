@@ -384,6 +384,7 @@ async fn real_microvm_engine_and_agent_ownership_accounting_and_durable_retry() 
         plugin_tools: vec![],
         continuation_of: None,
         source_review_operation_id: None,
+        source_snapshot_tools: false,
         provider: "fixture".into(),
         model: "loopback".into(),
         instructions: "Only execute the offered snapshot tool".into(),

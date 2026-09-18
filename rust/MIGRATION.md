@@ -135,10 +135,14 @@ or live provider is needed for these tests. See
 [the source tool contract](crates/zero-engine/SOURCE-TOOLS.md).
 
 This implements a subset of legacy `read_file`, `list_files` and `search_files`
-(`packages/core/src/agent/tools.ts`). Whole-repository selection/ingestion, regex
-search, role-specific tool policy and investigation-driven structured submission
-remain open. The review still requires host-selected files; retained-source tools
-do not silently broaden the selected set.
+(`packages/core/src/agent/tools.ts`). An explicit `source_snapshot_tools` mode now verifies and privately copies the
+whole execution snapshot (4,096 files / 64 MiB), retains its catalog before provider
+work, and supports bounded reads/search with explicit excluded files and
+truncation. Cleanup is awaited before success or checkpoint creation. Exact
+retries do not restage; new snapshot continuations require the unchanged original.
+This is distinct from retained-review mode and does not broaden it implicitly.
+Regex search, role-specific tool policy and investigation-driven structured
+submission remain open. The dedicated review still requires host-selected files.
 
 ## Dependency gates
 

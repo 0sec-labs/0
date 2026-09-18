@@ -703,6 +703,7 @@ fn agent_request(f: &Fixture) -> AgentRequest {
         prompt: "Inspect".into(),
         continuation_of: None,
         source_review_operation_id: None,
+        source_snapshot_tools: false,
         execution: zero_protocol::ExecutionRequest {
             execution_id: "profile".into(),
             image: "local:test".into(),

@@ -181,6 +181,7 @@ impl Setup {
                 plugin_tools: vec![],
                 continuation_of: None,
                 source_review_operation_id: None,
+                source_snapshot_tools: false,
                 provider: "local".into(),
                 model: "fixture".into(),
                 instructions: "Use only offered tools".into(),

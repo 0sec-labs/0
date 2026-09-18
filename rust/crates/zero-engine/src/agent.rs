@@ -205,7 +205,8 @@ fn continuation_input(
                 .cloned()
                 .unwrap_or_else(|| serde_json::json!("responses")),
         )?;
-        if prior.source_review_operation_id != request.source_review_operation_id
+        if prior.source_snapshot_tools != request.source_snapshot_tools
+            || prior.source_review_operation_id != request.source_review_operation_id
             || prior.plugin_tools != request.plugin_tools
             || parent.payload.get("plugin_context") != plugins.map(|p| &p.identity)
             || prior.provider != request.provider
@@ -272,7 +273,7 @@ fn model_request(
     let mut model = ResponsesRequest{model:request.model.clone(),instructions:request.instructions.clone(),input,max_output_tokens:8192,
         tools:vec![ToolDefinition{name:"execute_snapshot".into(),description:"Run an argv vector in the explicitly pinned offline snapshot sandbox. This cannot change the image, mounts, networking, limits or host files. The working copy is disposable for each call.".into(),
             parameters:serde_json::json!({"type":"object","properties":{"argv":{"type":"array","items":{"type":"string"},"minItems":1,"maxItems":128}},"required":["argv"],"additionalProperties":false})}]};
-    if request.source_review_operation_id.is_some() {
+    if request.source_snapshot_tools || request.source_review_operation_id.is_some() {
         model.tools.extend(agent_source::definitions());
     }
     if let Some(plugins) = plugins {
@@ -297,7 +298,7 @@ fn child_operation(
 }
 
 #[allow(clippy::too_many_arguments)]
-async fn run_actor(
+async fn run_rounds(
     shared: &Arc<Shared>,
     session: &str,
     parent: &str,
@@ -305,10 +306,10 @@ async fn run_actor(
     profile: inference::Profile,
     mut input: Vec<serde_json::Value>,
     plugins: Option<agent_plugins::Context>,
-    source: Option<zero_source::SourceBundle>,
+    source: Option<Arc<agent_source::Context>>,
     cancel: CancellationToken,
     events: mpsc::Sender<ExecutionEvent>,
-) -> Result<Reply, EngineError> {
+) -> Result<(AgentResult, Vec<serde_json::Value>), EngineError> {
     let mut output = AgentResult {
         status: AgentStatus::TurnLimit,
         text: String::new(),
@@ -316,6 +317,7 @@ async fn run_actor(
         tool_calls: 0,
         error: None,
         continuation_artifact: None,
+        source_recovery_path: None,
     };
     'turns: for turn in 0..request.max_turns {
         if cancel.is_cancelled() {
@@ -436,7 +438,20 @@ async fn run_actor(
                 break 'turns;
             }
             if let Some(bundle) = source.as_ref().filter(|_| agent_source::is_tool(&name)) {
-                let result = agent_source::invoke(bundle, &name, arguments.clone());
+                let context = Arc::clone(bundle);
+                let tool = name.clone();
+                let args = arguments.clone();
+                // The read owns its context until completion; cancellation must
+                // await it before cleanup, without blocking runtime threads.
+                let result = tokio::task::spawn_blocking(move || {
+                    agent_source::invoke(&context, &tool, args)
+                })
+                .await
+                .map_err(|e| EngineError::State(e.to_string()))?;
+                if cancel.is_cancelled() {
+                    output.status = AgentStatus::Cancelled;
+                    break 'turns;
+                }
                 match result {
                     Err(error) => {
                         input.push(serde_json::json!({"type":"function_call_output","call_id":id,"output":format!("Tool rejected: {error}")}));
@@ -446,7 +461,7 @@ async fn run_actor(
                             shared,
                             session,
                             &format!("{parent}:tool:{turn}:{index}"),
-                            &serde_json::json!({"parent_operation":parent,"kind":"agent_source_tool","call_id":id,"name":name,"arguments":arguments,"source_operation":request.source_review_operation_id,"bundle_sha256":bundle.digest()}),
+                            &serde_json::json!({"parent_operation":parent,"kind":"agent_source_tool","call_id":id,"name":name,"arguments":arguments,"source_operation":request.source_review_operation_id,"bundle_sha256":bundle.bundle_digest(),"source_identity":bundle.identity()}),
                         )?;
                         let bytes = serde_json::to_vec(&value)?;
                         let mut store = lock(&shared.store)?;
@@ -458,7 +473,7 @@ async fn run_actor(
                                 &bytes,
                             )?;
                             store.settle_operation(&child.id, &shared.owner, OperationStatus::Succeeded,
-                                &serde_json::json!({"result_artifact":digest,"bundle_sha256":bundle.digest()}))?;
+                                &serde_json::json!({"result_artifact":digest,"bundle_sha256":bundle.bundle_digest(),"source_identity":bundle.identity()}))?;
                             Ok::<_, zero_store::Error>(())
                         })();
                         if let Err(error) = persisted {
@@ -605,6 +620,169 @@ async fn run_actor(
             input.push(serde_json::json!({"type":"function_call_output","call_id":id,"output":serde_json::to_string(&serde_json::json!({"status":result.status,"exit_code":result.exit_code,"stdout_text":String::from_utf8_lossy(&result.stdout),"stderr_text":String::from_utf8_lossy(&result.stderr),"error":result.error}))?}));
         }
     }
+    Ok((output, input))
+}
+
+fn settle_agent(shared: &Shared, parent: &str, output: AgentResult) -> Result<Reply, EngineError> {
+    let outcome = serde_json::to_value(&output)?;
+    let mut store = lock(&shared.store)?;
+    let operation = if output.status == AgentStatus::Unknown {
+        store.mark_operation_unknown_with_outcome(parent, &shared.owner, &outcome)?
+    } else {
+        let status = match output.status {
+            AgentStatus::Completed => OperationStatus::Succeeded,
+            AgentStatus::Cancelled => OperationStatus::Cancelled,
+            _ => OperationStatus::Failed,
+        };
+        store.settle_operation(parent, &shared.owner, status, &outcome)?
+    };
+    Ok(Reply::Agent {
+        operation,
+        result: Some(output),
+        duplicate: false,
+    })
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn run_actor(
+    shared: &Arc<Shared>,
+    session: &str,
+    parent: &str,
+    request: AgentRequest,
+    profile: inference::Profile,
+    input: Vec<serde_json::Value>,
+    plugins: Option<agent_plugins::Context>,
+    mut source: Option<agent_source::Context>,
+    cancel: CancellationToken,
+    events: mpsc::Sender<ExecutionEvent>,
+) -> Result<Reply, EngineError> {
+    let empty = |status, error| AgentResult {
+        status,
+        text: String::new(),
+        turns: 0,
+        tool_calls: 0,
+        error,
+        continuation_artifact: None,
+        source_recovery_path: None,
+    };
+    let mut preparation_error = None;
+    if request.source_snapshot_tools {
+        let pin = request.execution.sandbox_request().snapshot;
+        let cancellation = cancel.clone();
+        // Never detach a blocking copy when cancelled: the owner must receive
+        // its handle and finish cleanup before settling the operation.
+        let prepared = tokio::task::spawn_blocking(move || {
+            zero_source::SnapshotInvestigation::prepare_checked(&pin, &|| {
+                if cancellation.is_cancelled() {
+                    Err("source preparation cancelled".into())
+                } else {
+                    Ok(())
+                }
+            })
+        })
+        .await;
+        match prepared {
+            Ok(Ok(snapshot)) => {
+                let retained = (|| {
+                    let bytes = snapshot
+                        .catalog_bytes()
+                        .map_err(|e| EngineError::State(e.to_string()))?;
+                    let mut store = lock(&shared.store)?;
+                    let digest = store.retain_operation_artifact(
+                        parent,
+                        &shared.owner,
+                        "source.snapshot_catalog",
+                        &bytes,
+                    )?;
+                    store.append_operation_event(parent,&shared.owner,"source.snapshot_prepared",
+                        &serde_json::json!({"path":snapshot.root(),"snapshot_digest":snapshot.snapshot_digest(),"catalog_artifact":digest}))?;
+                    Ok::<_, EngineError>(())
+                })();
+                source = Some(agent_source::Context::Snapshot(snapshot));
+                if let Err(error) = retained {
+                    preparation_error = Some(error.to_string());
+                }
+            }
+            Ok(Err(error)) => preparation_error = Some(error.to_string()),
+            Err(error) => preparation_error = Some(error.to_string()),
+        }
+    }
+    let source = source.map(Arc::new);
+    let prepared_path = source.as_ref().and_then(|context| match context.as_ref() {
+        agent_source::Context::Snapshot(snapshot) => {
+            Some(snapshot.root().to_string_lossy().into_owned())
+        }
+        agent_source::Context::Retained(_) => None,
+    });
+    let work = if let Some(error) = preparation_error {
+        Ok((
+            empty(
+                if cancel.is_cancelled() {
+                    AgentStatus::Cancelled
+                } else {
+                    AgentStatus::Failed
+                },
+                Some(error),
+            ),
+            input,
+        ))
+    } else {
+        run_rounds(
+            shared,
+            session,
+            parent,
+            request,
+            profile,
+            input,
+            plugins,
+            source.clone(),
+            cancel.clone(),
+            events,
+        )
+        .await
+    };
+    let cleanup = match source {
+        Some(context) => {
+            tokio::task::spawn_blocking(move || match Arc::try_unwrap(context) {
+                Ok(context) => context.cleanup(),
+                Err(_) => Err(zero_source::snapshot_investigation::SnapshotError::Invalid(
+                    "source reader still owns private copy",
+                )),
+            })
+            .await
+        }
+        None => Ok(Ok(())),
+    };
+    let mut recovery = prepared_path;
+    let cleanup_error = match cleanup {
+        Ok(Ok(())) => None,
+        Ok(Err(error)) => {
+            if let zero_source::snapshot_investigation::SnapshotError::Cleanup { path } = &error {
+                recovery = Some(path.to_string_lossy().into_owned());
+            }
+            Some(error.to_string())
+        }
+        Err(error) => Some(error.to_string()),
+    };
+    let (mut output, input) = match work {
+        Ok(value) => value,
+        Err(error) => {
+            if let Some(cleanup_error) = cleanup_error {
+                let mut output = empty(
+                    AgentStatus::Unknown,
+                    Some(format!("{error}; {cleanup_error}")),
+                );
+                output.source_recovery_path = recovery;
+                let _ = settle_agent(shared, parent, output);
+            }
+            return Err(error);
+        }
+    };
+    if let Some(error) = cleanup_error {
+        output.status = AgentStatus::Unknown;
+        output.error = Some(error);
+        output.source_recovery_path = recovery;
+    }
     if cancel.is_cancelled() && output.status == AgentStatus::TurnLimit {
         output.status = AgentStatus::Cancelled;
     }
@@ -625,21 +803,5 @@ async fn run_actor(
             }
         }
     }
-    let outcome = serde_json::to_value(&output)?;
-    let mut store = lock(&shared.store)?;
-    let operation = if output.status == AgentStatus::Unknown {
-        store.mark_operation_unknown_with_outcome(parent, &shared.owner, &outcome)?
-    } else {
-        let status = match output.status {
-            AgentStatus::Completed => OperationStatus::Succeeded,
-            AgentStatus::Cancelled => OperationStatus::Cancelled,
-            _ => OperationStatus::Failed,
-        };
-        store.settle_operation(parent, &shared.owner, status, &outcome)?
-    };
-    Ok(Reply::Agent {
-        operation,
-        result: Some(output),
-        duplicate: false,
-    })
+    settle_agent(shared, parent, output)
 }

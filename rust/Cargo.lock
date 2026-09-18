@@ -2013,6 +2013,7 @@ dependencies = [
 name = "zero-source"
 version = "0.1.0"
 dependencies = [
+ "nix",
  "serde",
  "serde_json",
  "sha2",

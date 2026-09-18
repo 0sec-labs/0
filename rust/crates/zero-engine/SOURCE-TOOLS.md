@@ -33,3 +33,36 @@ This is a narrow implementation of legacy read/list/search behavior. It does not
 yet select or ingest an entire repository, search unretained files, provide regex
 search, or replace source-review discovery and verification workflows. Integration
 tests use loopback provider fixtures; they do not assert model detection quality.
+
+## Whole pinned snapshot mode
+
+`AgentRequest.source_snapshot_tools: true` enables the same tools without a prior
+source review. It is mutually exclusive with `source_review_operation_id`. The
+entire execution snapshot remains explicit host authority, with at most 4,096
+files and 64 MiB. Preparation verifies and privately copies that snapshot after
+durable admission. The engine retains `source.snapshot_catalog` and journals the
+private recovery path before any provider request. No paid review is required to
+begin investigation in this mode.
+
+The model can list the manifest and read/search its private copy; changes to the
+original source after preparation cannot change observations. Reads anchor every
+path component without following links and recheck the exact file hash. Oversized,
+non-UTF-8 and NUL-containing files are explicit search exclusions, and truncated
+results never claim a complete search. Individual reads remain limited to 128 KiB
+files, 200 lines and 64 KiB serialized output. Agent listing retains the 32-result
+bound; searches permit at most 200 results. Results use `snapshot_digest`, not a
+mislabelled retained-bundle hash.
+
+Blocking preparation, reads and cleanup run off async runtime threads, and their
+owners are awaited through cancellation. Before parent settlement or checkpoint
+creation, the private copy is explicitly cleaned up. Cleanup failure overrides
+success/turn-limit with `Unknown`, a `source_recovery_path`, and no continuation
+checkpoint. Ordinary errors also pass through this cleanup path. Panic/SIGKILL
+still rely on best-effort destructors and recorded recovery paths; creation before
+the prepared event has the existing temporary-directory crash window. Filesystem
+stalls do not have a guaranteed hard interruption deadline.
+
+Exact command retries do not restage or reread source. A *new* snapshot-mode
+continuation restages the original pin and fails if it changed or disappeared.
+Retained-review continuation remains independent of those live files. Default
+false is omitted from serialization, preserving old command retry identities.

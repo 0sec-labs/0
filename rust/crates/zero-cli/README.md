@@ -454,3 +454,16 @@ without rerunning prior tools. Turn limits still return a nonzero process exit;
 missing checkpoints, cancelled/unknown operations and changed authority are
 rejected. Unpriced usage holds remain reserved. See
 [continuation boundaries](../zero-engine/CONTINUATION.md).
+
+### Investigating an entire pinned source snapshot
+
+Set `source_snapshot_tools: true` in an agent request to enable read-only source
+tools over its explicit execution snapshot, without a previous source review.
+Do not also set `source_review_operation_id`. The engine verifies a private copy,
+retains its catalog, and removes it before reporting success. Reads return exact
+hash citations; search reports files it could not inspect and result truncation.
+Original-file changes after preparation do not affect observations. New
+continuations require the original pin to remain available; exact retries do not.
+A cleanup failure returns `Unknown` with a recovery path and cannot advertise a
+continuation checkpoint. Full filesystem and cancellation limits are documented
+in [the source tool contract](../zero-engine/SOURCE-TOOLS.md).
