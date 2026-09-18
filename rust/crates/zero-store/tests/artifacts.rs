@@ -94,7 +94,7 @@ fn artifact_event_failure_rolls_back_bytes_and_attachment_and_v3_migrates() {
     drop(store);
     let conn = rusqlite::Connection::open(&path).unwrap();
     conn.execute_batch(
-        "DROP TABLE operator_question_decisions; DROP TABLE operator_questions; DROP TABLE agent_steering; DROP TABLE agent_steering_windows; DROP TABLE source_triage_decisions; DROP TABLE agent_inputs; DROP TABLE operation_artifacts; DROP TABLE artifacts; PRAGMA user_version=3;",
+        "DROP TABLE tool_approval_consumptions; DROP TABLE tool_approval_decisions; DROP TABLE tool_approvals; DROP TABLE operator_question_decisions; DROP TABLE operator_questions; DROP TABLE agent_steering; DROP TABLE agent_steering_windows; DROP TABLE source_triage_decisions; DROP TABLE agent_inputs; DROP TABLE operation_artifacts; DROP TABLE artifacts; PRAGMA user_version=3;",
     )
     .unwrap();
     let mut store = Store::open(&path).unwrap();

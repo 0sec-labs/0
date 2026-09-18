@@ -1,4 +1,5 @@
 //! Native-only SQLite journal. Opening a store never recovers somebody else's work.
+mod approvals;
 mod artifacts;
 mod budget;
 mod discovery;

@@ -773,3 +773,50 @@ and fresh `queue run` reject question-enabled work before operation admission;
 use app-server, console or TUI for an answer channel. Already dispatched exact
 cached receipts can be returned without creating a waiter. Existing database
 migration remains available for ordinary queue commands.
+
+Opt in to **one-invocation tool approval** with an explicit agent profile field:
+
+```json
+"tool_approval_policy": {"require_approval": ["execute_snapshot"]}
+```
+
+Only offered offline snapshot/plugin aliases are supported. Gated Docker profiles
+must already use `sha256:<64 lowercase hex>` or `name@sha256:<64 lowercase hex>`;
+resolve and select an immutable local image before starting. Mutable image tags
+are rejected before provider admission. Existing profiles without this policy
+retain their prior behavior; this policy does not implement legacy autonomy modes
+or grant network, host filesystem, or additional tool authority.
+
+The console prints the approval ID, exact intent hash, backend/tool preview and
+an explicit `preview_truncated` flag. Inspect the complete retained intent using
+`approvals show --session ID --approval ID --full-intent` (with the same global
+`--state`). `approvals list --session ID [--root ID] [--after-sequence N] [--limit N]`
+and `approvals show` are read-only and work while the engine owns its database;
+they bypass provider/harness configuration. Lists are bounded; advance by the
+last returned sequence until an empty page.
+
+Decide in the owning console with `/approve APPROVAL_ID sha256:HEX` or
+`/deny APPROVAL_ID sha256:HEX`. Both the explicit ID and complete displayed digest
+are required. Identical repeated commands reuse their decision identity (up to
+128 retained console intents); changed decisions never reuse an approval grant.
+`//approve` and `//deny` insert literal follow-up text. Invalid control commands,
+informational `/answer`, ordinary text, and steering cannot authorize execution.
+EOF with a pending approval cancels owned work, including approvals first
+reported after EOF; it never synthesizes approval or denial.
+
+In the TUI, **Ctrl-P** opens a separate permission inbox without clearing question,
+findings, or conversation drafts. Enter selects an approval for inspection only.
+**Ctrl-A** approves that exact invocation; **Ctrl-D** denies it. Paste, Enter,
+Space, and the question submission key Ctrl-S never decide permission. Esc closes
+and retains an uncertain decision for exact retry; Ctrl-U explicitly discards
+only the local intent. Ctrl-X still cancels active work. Preview text is untrusted,
+may be truncated, and is not the hashed authority; use the full-intent command to
+inspect all retained fields before deciding.
+
+`Approved` means a permission receipt exists. `Consumed` means that permission was
+bound to an admitted effect, not that the tool ran or succeeded; inspect the effect
+status and receipt. Reopening the UI never resumes an interrupted approval.
+Plain `agent` and fresh `queue run` reject approval-enabled profiles because they
+have no decision channel. Cached already-admitted exact retries remain readable;
+app-server, console and TUI support live decisions. These controls authorize one
+invocation, not an alias, future argv prefix, sibling actor, or source directory.

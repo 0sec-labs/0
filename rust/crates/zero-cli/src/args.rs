@@ -41,6 +41,11 @@ pub struct Args {
 
 #[derive(Debug, Subcommand)]
 pub enum Command {
+    /// Inspect exact-invocation permissions without dispatching any tools.
+    Approvals {
+        #[command(subcommand)]
+        command: crate::approvals::ApprovalsCommand,
+    },
     /// Inspect durable operator questions without changing execution authority.
     Questions {
         #[command(subcommand)]

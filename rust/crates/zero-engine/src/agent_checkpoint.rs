@@ -137,6 +137,25 @@ fn validate(store: &Store, checkpoint: &Checkpoint) -> Result<(), EngineError> {
                 {
                     return Err(error("checkpoint includes unsettled tool effects"));
                 }
+                let approval_required =
+                    parent.payload["request"]["tool_approval_policy"]["require_approval"]
+                        .as_array()
+                        .is_some_and(|aliases| {
+                            aliases
+                                .iter()
+                                .any(|alias| alias.as_str() == Some(name.as_str()))
+                        });
+                if approval_required || child.payload["kind"] == "agent_approved_tool" {
+                    if !approval_required || child.payload["kind"] != "agent_approved_tool" {
+                        return Err(error("checkpoint tool approval identity mismatch"));
+                    }
+                    let output = agent_approvals::validate_receipt(store, &child)?;
+                    if item["output"].as_str() != Some(output.as_str()) {
+                        return Err(error(
+                            "checkpoint approved tool output differs from receipt",
+                        ));
+                    }
+                }
                 if (name.as_str() == "ask_operator"
                     && parent.payload["request"]["operator_questions"] == true)
                     || child.payload["kind"] == "agent_operator_question"
@@ -153,7 +172,9 @@ fn validate(store: &Store, checkpoint: &Checkpoint) -> Result<(), EngineError> {
                         ));
                     }
                 }
-                if name.as_str() == "delegate_tasks" || child.payload["kind"] == "agent_delegation"
+                if (name.as_str() == "delegate_tasks"
+                    && parent.payload["request"]["delegation_policy"].is_object())
+                    || child.payload["kind"] == "agent_delegation"
                 {
                     if name.as_str() != "delegate_tasks"
                         || child.payload["kind"] != "agent_delegation"

@@ -6,6 +6,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 pub mod agent;
+pub mod approvals;
 mod binary;
 pub mod context;
 pub mod delegation;
@@ -152,6 +153,23 @@ pub enum Command {
         session_id: String,
         command_id: String,
         request: source::SourceReviewRequest,
+    },
+    ToolApprovals {
+        session_id: String,
+        root_operation_id: Option<String>,
+        after_sequence: u64,
+        limit: u32,
+    },
+    ToolApproval {
+        session_id: String,
+        approval_operation_id: String,
+    },
+    DecideToolApproval {
+        session_id: String,
+        command_id: String,
+        approval_operation_id: String,
+        expected_intent_sha256: String,
+        decision: approvals::ToolApprovalDecision,
     },
     OperatorQuestions {
         session_id: String,
@@ -342,6 +360,17 @@ pub enum Reply {
     SourceReview {
         operation: Operation,
         result: Option<source::SourceReviewOutcome>,
+        duplicate: bool,
+    },
+    ToolApprovals {
+        approvals: Vec<approvals::ToolApprovalRecord>,
+    },
+    ToolApproval {
+        approval: approvals::ToolApprovalRecord,
+    },
+    ToolApprovalDecided {
+        approval: approvals::ToolApprovalRecord,
+        decision: approvals::ToolApprovalDecisionReceipt,
         duplicate: bool,
     },
     OperatorQuestions {

@@ -1,5 +1,6 @@
 //! Session-owned native execution. Client disconnect is not a request replay.
 mod agent;
+mod agent_approvals;
 mod agent_checkpoint;
 mod agent_context;
 mod agent_context_history;
@@ -25,6 +26,7 @@ mod source_report;
 mod triage;
 mod workflow_provenance;
 
+pub use agent_approvals::{read_tool_approval, read_tool_approval_intent, read_tool_approvals};
 pub use agent_questions::{read_operator_question, read_operator_questions};
 pub use agent_steering::read_agent_steering;
 pub use discovery::read_source_reviews;
@@ -73,6 +75,7 @@ struct Control {
     active: HashMap<String, Active>,
     actors: HashMap<String, agent_steering::Target>,
     questions: HashMap<String, agent_questions::Waiter>,
+    approvals: HashMap<String, agent_approvals::Waiter>,
 }
 
 struct Shared {
@@ -257,6 +260,7 @@ impl Engine {
             "bounded_joined_subagents",
             "durable_boundary_steering",
             "durable_operator_questions",
+            "exact_invocation_tool_approvals",
             "durable_agent_input_queue",
             "explicit_context_projection",
             "generation_pinned_offline_plugins",
@@ -415,6 +419,22 @@ impl Engine {
                 )
                 .await;
         }
+        if let Command::DecideToolApproval {
+            session_id,
+            command_id,
+            approval_operation_id,
+            expected_intent_sha256,
+            decision,
+        } = command
+        {
+            return self.decide_tool_approval(
+                &session_id,
+                &command_id,
+                &approval_operation_id,
+                &expected_intent_sha256,
+                &decision,
+            );
+        }
         if let Command::DecideOperatorQuestion {
             session_id,
             command_id,
@@ -489,6 +509,26 @@ impl Engine {
                 input_id,
             } => Ok(Reply::AgentInput {
                 input: lock(&self.shared.store)?.cancel_queued_agent(&session_id, &input_id)?,
+            }),
+            Command::ToolApprovals {
+                session_id,
+                root_operation_id,
+                after_sequence,
+                limit,
+            } => Ok(Reply::ToolApprovals {
+                approvals: lock(&self.shared.store)?.tool_approvals(
+                    &session_id,
+                    root_operation_id.as_deref(),
+                    after_sequence,
+                    limit,
+                )?,
+            }),
+            Command::ToolApproval {
+                session_id,
+                approval_operation_id,
+            } => Ok(Reply::ToolApproval {
+                approval: lock(&self.shared.store)?
+                    .get_tool_approval(&session_id, &approval_operation_id)?,
             }),
             Command::OperatorQuestions {
                 session_id,
@@ -667,6 +707,7 @@ impl Engine {
             Command::Execute { .. }
             | Command::SteerAgent { .. }
             | Command::DecideOperatorQuestion { .. }
+            | Command::DecideToolApproval { .. }
             | Command::Infer { .. }
             | Command::ReproduceSource { .. }
             | Command::ValidateSourceRepair { .. }

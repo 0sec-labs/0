@@ -53,8 +53,10 @@ pub async fn preflight(path: &Path, command: &crate::args::Command) -> Result<()
         let bytes = crate::providers::read_bounded(request).await?;
         let request: zero_protocol::agent::AgentRequest =
             serde_json::from_slice(&bytes).map_err(|_| "Invalid agent request JSON")?;
-        if request.operator_questions && !cached_agent(path, command, &request) {
-            return Err("operator_questions requires app-server, console or tui; batch agent cannot receive answers".into());
+        if (request.operator_questions || request.tool_approval_policy.is_some())
+            && !cached_agent(path, command, &request)
+        {
+            return Err("operator_questions/tool_approval_policy requires app-server, console or tui; batch agent cannot receive answers or tool approvals".into());
         }
     }
     Ok(())
@@ -121,12 +123,13 @@ pub fn unattended_queue(path: &Path, session: &str, input: &str) -> Result<(), B
     let row = zero_store::Store::open_read_only(path)?.queued_agent(session, input)?;
     if row.operation_id.is_none()
         && (row.request.operator_questions
+            || row.request.tool_approval_policy.is_some()
             || row
                 .resolved_request
                 .as_ref()
-                .is_some_and(|r| r.operator_questions))
+                .is_some_and(|r| r.operator_questions || r.tool_approval_policy.is_some()))
     {
-        return Err("question-enabled pending input requires app-server, console or tui; batch queue run cannot receive answers".into());
+        return Err("interactive-policy pending input requires app-server, console or tui; batch queue run cannot receive answers or tool approvals".into());
     }
     Ok(())
 }

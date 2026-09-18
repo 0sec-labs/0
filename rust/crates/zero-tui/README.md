@@ -113,3 +113,27 @@ and labels are inert terminal content. Answered means a saved receipt, not proof
 of model consumption. Reopening shows retained receipts; lost workers are not
 implicitly resumed. Tool approval and permission-grant widgets remain separate,
 unimplemented workflows.
+
+Exact-invocation permissions use a separate **Ctrl-P** approval inbox. Notifications
+never steal focus or erase question/composer/findings drafts. Enter loads a typed,
+identity-checked detail; only **Ctrl-A** approves that invocation and **Ctrl-D**
+denies it. Enter, paste, ordinary keys and Ctrl-S do nothing in permission detail.
+Esc retains a frozen decision retry; Ctrl-U discards local intent only. Global
+cancel/quit remain active. Both approval and denial bind session, approval ID,
+exact intent SHA-256 and a stable caller UUID; ambiguous acknowledgments preserve
+that exact intent, including after terminal settlement.
+
+The preview names the tool/actor/root and prints resolved intent fields, with an
+explicit truncation flag. Model-provided text is inert. Full retained intent is
+available with `approvals show --session ID --approval ID --full-intent` using the
+same global state path. Approved does not mean executed; consumed identifies an
+admitted effect and its separate status. The UI never broadens captured policy or
+restarts interrupted permission waits. Host profiles must explicitly opt in with
+`tool_approval_policy`; gated Docker references must be immutable image digests.
+This is not a legacy autonomy-mode or engagement-scope implementation.
+
+Approval metadata uses 20-row/1 MiB pages plus at most 20 retained unsettled
+identities; Ctrl-L advances and Ctrl-G refreshes. Each record is bounded to 96 KiB,
+with an 8 KiB preview. Session/read epochs and immutable intent/decision checks
+prevent stale pages or hints from retargeting a decision. The original question
+inbox remains information-only and cannot supply permission grants.

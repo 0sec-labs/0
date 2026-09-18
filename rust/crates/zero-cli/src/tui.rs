@@ -1,7 +1,10 @@
 //! The terminal frontend is a protocol client; only the child app-server owns state.
 use crate::args::Args;
 use std::{error::Error, io::IsTerminal, path::Path, process::Stdio, time::Duration};
-use tokio::{io::AsyncReadExt, process::Command};
+use tokio::{
+    io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt},
+    process::Command,
+};
 
 pub async fn run(
     args: &Args,
@@ -87,23 +90,36 @@ pub async fn run(
         }
         Ok::<_, std::io::Error>(retained)
     });
+    // Keep ownership of the actual child stdout until process cleanup finishes.
+    // Closing the UI must not turn queued final replies into a server BrokenPipe.
+    let (ui_reader, ui_writer) = tokio::io::duplex(64 * 1024);
+    let mut relay = OutputRelay(tokio::spawn(relay_output(reader, ui_writer)));
     let rendered = tokio::select! {
         biased;
         _ = shutdown => Ok(()),
-        result = zero_tui::run(reader, writer, zero_tui::Options {
+        result = zero_tui::run(ui_reader, writer, zero_tui::Options {
             session, profile, budget_limit,
         }) => result,
     };
     // The UI restores terminal state and closes stdin before returning. EOF
     // invokes the existing engine cancellation/cleanup path in the server.
-    let status = match tokio::time::timeout(Duration::from_secs(30), child.wait()).await {
-        Ok(result) => result,
+    let cleanup_deadline = tokio::time::Instant::now() + Duration::from_secs(30);
+    let status = match tokio::time::timeout_at(cleanup_deadline, child.wait()).await {
+        Ok(Ok(status)) => status,
+        Ok(Err(error)) => {
+            let _ = child.kill().await;
+            relay.abort().await;
+            diagnostics.abort();
+            return Err(error.into());
+        }
         Err(_) => {
             let _ = child.kill().await;
+            relay.abort().await;
             diagnostics.abort();
             return Err("App-server shutdown exceeded 30 seconds and was stopped; inspect operation recovery before retrying work".into());
         }
-    }?;
+    };
+    let relayed = relay.finish(cleanup_deadline).await;
     let diagnostic = match tokio::time::timeout(Duration::from_secs(1), &mut diagnostics).await {
         Ok(Ok(Ok(bytes))) => String::from_utf8_lossy(&bytes).into_owned(),
         _ => {
@@ -114,6 +130,7 @@ pub async fn run(
     if !status.success() {
         return Err(format!("App-server stopped with {status}: {}", diagnostic.trim()).into());
     }
+    relayed?;
     rendered.map_err(|error| -> Box<dyn Error> { error.to_string().into() })?;
     Ok(true)
 }
@@ -149,5 +166,101 @@ fn shutdown_signal()
             std::io::ErrorKind::Unsupported,
             "native terminal shutdown signals are unsupported on this platform",
         ))
+    }
+}
+
+// This task owns a fixed-size forwarding buffer. Once the UI closes, output is
+// discarded while the actual child still gets to flush its final journal replies.
+async fn relay_output<R: AsyncRead + Unpin, W: AsyncWrite + Unpin>(
+    mut reader: R,
+    mut writer: W,
+) -> std::io::Result<()> {
+    let mut buffer = [0; 8192];
+    let mut forwarding = true;
+    loop {
+        let n = reader.read(&mut buffer).await?;
+        if n == 0 {
+            return Ok(());
+        }
+        if forwarding {
+            if let Err(error) = writer.write_all(&buffer[..n]).await {
+                if error.kind() != std::io::ErrorKind::BrokenPipe {
+                    return Err(error);
+                }
+                forwarding = false;
+            }
+        }
+    }
+}
+struct OutputRelay(tokio::task::JoinHandle<std::io::Result<()>>);
+impl OutputRelay {
+    async fn abort(&mut self) {
+        self.0.abort();
+        let _ = (&mut self.0).await;
+    }
+    async fn finish(&mut self, deadline: tokio::time::Instant) -> std::io::Result<()> {
+        let deadline = deadline.min(tokio::time::Instant::now() + Duration::from_secs(1));
+        match tokio::time::timeout_at(deadline, &mut self.0).await {
+            Ok(result) => result.map_err(std::io::Error::other)?,
+            Err(_) => {
+                self.abort().await;
+                Err(std::io::Error::new(
+                    std::io::ErrorKind::TimedOut,
+                    "App-server output drain did not close",
+                ))
+            }
+        }
+    }
+}
+impl Drop for OutputRelay {
+    fn drop(&mut self) {
+        self.0.abort();
+    }
+}
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[tokio::test]
+    async fn final_frames_are_drained_after_ui_drop_without_broken_pipe() {
+        let (mut server, reader) = tokio::io::duplex(32);
+        let (mut ui, writer) = tokio::io::duplex(32);
+        let mut relay = OutputRelay(tokio::spawn(relay_output(reader, writer)));
+        let producer = tokio::spawn(async move {
+            server.write_all(b"visible").await?;
+            // Far larger than both bounded pipes: final writes cannot all complete
+            // before the UI drops its reader, even under a favorable schedule.
+            server.write_all(&vec![b'!'; 256 * 1024]).await?;
+            server.shutdown().await
+        });
+        let mut visible = [0; 7];
+        assert!(ui.read_exact(&mut visible).await.is_ok());
+        assert_eq!(&visible, b"visible");
+        drop(ui);
+        let written = tokio::time::timeout(Duration::from_secs(2), producer).await;
+        assert!(matches!(written, Ok(Ok(Ok(())))));
+        assert!(
+            relay
+                .finish(tokio::time::Instant::now() + Duration::from_secs(1))
+                .await
+                .is_ok()
+        );
+    }
+    #[tokio::test]
+    async fn relay_preserves_input_errors_instead_of_treating_them_as_ui_close() {
+        struct FailedRead;
+        impl AsyncRead for FailedRead {
+            fn poll_read(
+                self: std::pin::Pin<&mut Self>,
+                _: &mut std::task::Context<'_>,
+                _: &mut tokio::io::ReadBuf<'_>,
+            ) -> std::task::Poll<std::io::Result<()>> {
+                std::task::Poll::Ready(Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    "fixture",
+                )))
+            }
+        }
+        let result = relay_output(FailedRead, tokio::io::sink()).await;
+        assert!(result.is_err_and(|e| e.kind() == std::io::ErrorKind::InvalidData));
     }
 }

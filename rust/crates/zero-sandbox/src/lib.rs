@@ -75,7 +75,8 @@ impl SandboxExecutor {
                     // Engine/provider events are never emitted by the Docker primitive.
                     ExecutionEvent::Admitted { .. }
                     | ExecutionEvent::ModelProgress { .. }
-                    | ExecutionEvent::OperatorQuestionRequested { .. } => {}
+                    | ExecutionEvent::OperatorQuestionRequested { .. }
+                    | ExecutionEvent::ToolApprovalRequested { .. } => {}
                     ExecutionEvent::Sandbox { event } => sink(event),
                     ExecutionEvent::Started {
                         execution_id,

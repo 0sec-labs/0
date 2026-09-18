@@ -187,6 +187,7 @@ impl Setup {
                 context_policy: None,
                 delegation_policy: None,
                 operator_questions: false,
+                tool_approval_policy: None,
                 model: "fixture".into(),
                 instructions: "Use only offered tools".into(),
                 prompt: "Inspect the authorized snapshot".into(),

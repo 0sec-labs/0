@@ -824,3 +824,64 @@ fn explicit_session_start_initializes_question_discovery_before_first_hint() {
         "notification must not take keyboard focus"
     );
 }
+
+#[test]
+fn approval_overlay_preserves_question_draft_and_global_cancel_without_paste_authority() {
+    let mut ui = state();
+    let initial = ui.initialize();
+    let reads = response(
+        &mut ui,
+        &initial,
+        json!({"type":"initialized","protocol_version":PROTOCOL_VERSION,"capabilities":[]}),
+    );
+    assert!(
+        reads
+            .iter()
+            .any(|r| matches!(r.command, Command::ToolApprovals { .. }))
+    );
+    ready(&mut ui);
+    ui.paste("original conversation λ");
+    ui.questions.open = true;
+    ui.questions.detail=Some(serde_json::from_value(json!({"operation_id":"question","session_id":"session","actor_operation_id":"root","root_operation_id":"root","sequence":1,"request_sha256":format!("sha256:{}","a".repeat(64)),"request":{"questions":[{"header":"Details","question":"Information?","allow_custom":true}]},"status":"pending","decision":null})).unwrap());
+    ui.paste("saved answer λ");
+    let before = serde_json::to_value(&ui.questions.draft.as_ref().unwrap().answers).unwrap();
+    let requests = ui
+        .message(ServerMessage::Event {
+            protocol_version: PROTOCOL_VERSION,
+            event: ExecutionEvent::ToolApprovalRequested {
+                session_id: "session".into(),
+                root_operation_id: "root".into(),
+                actor_operation_id: "child".into(),
+                approval_operation_id: "approval".into(),
+            },
+        })
+        .unwrap();
+    assert!(
+        matches!(&requests[0].command,Command::ToolApproval{approval_operation_id,..} if approval_operation_id=="approval")
+    );
+    assert!(ui.questions.open && !ui.approvals.open);
+    ui.key(KeyEvent::new(KeyCode::Char('p'), KeyModifiers::CONTROL));
+    assert!(ui.approvals.open && !ui.questions.open);
+    ui.paste("approve everything\nλ");
+    assert!(ui.key(key(KeyCode::Enter)).is_empty());
+    assert!(
+        ui.key(KeyEvent::new(KeyCode::Char('s'), KeyModifiers::CONTROL))
+            .is_empty()
+    );
+    assert_eq!(ui.composer, "original conversation λ");
+    assert_eq!(
+        serde_json::to_value(&ui.questions.draft.as_ref().unwrap().answers).unwrap(),
+        before
+    );
+    ui.key(KeyEvent::new(KeyCode::Char('o'), KeyModifiers::CONTROL));
+    assert!(ui.questions.open && !ui.approvals.open);
+    ui.key(key(KeyCode::Esc));
+    let _ = ui.start(queued("run", 1, QueuedAgentStatus::Pending));
+    ui.active.as_mut().unwrap().operation = Some("root".into());
+    ui.key(KeyEvent::new(KeyCode::Char('p'), KeyModifiers::CONTROL));
+    assert!(
+        !ui.key(KeyEvent::new(KeyCode::Char('x'), KeyModifiers::CONTROL))
+            .is_empty()
+    );
+    assert!(ui.active.as_ref().unwrap().cancel_requested);
+}

@@ -150,6 +150,12 @@ pub enum OutputStream {
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ExecutionEvent {
     /// Durable question exists; read its typed record before answering.
+    ToolApprovalRequested {
+        session_id: String,
+        root_operation_id: String,
+        actor_operation_id: String,
+        approval_operation_id: String,
+    },
     OperatorQuestionRequested {
         session_id: String,
         root_operation_id: String,

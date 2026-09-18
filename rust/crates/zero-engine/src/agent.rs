@@ -18,6 +18,7 @@ pub(super) struct PreparedActor {
 }
 
 pub(super) fn validate_initial(request: &AgentRequest) -> Result<ResponsesRequest, EngineError> {
+    agent_approvals::validate_policy(request)?;
     if request.operator_questions
         && request
             .plugin_tools
@@ -218,6 +219,7 @@ impl Engine {
             }
             let session = lock(&self.shared.store)?.get_session(&session_id)?;
             let plugins = agent_plugins::capture(&self.shared, &session, &request.plugin_tools)?;
+            agent_approvals::validate_plugins(&request, plugins.as_ref())?;
             let mut store = lock(&self.shared.store)?;
             let source = agent_source::capture(&store, &session_id, &request)?;
             // A context lineage keeps its original offered schemas across upgrades.
@@ -362,7 +364,8 @@ fn continuation_input(
                 .cloned()
                 .unwrap_or_else(|| serde_json::json!("responses")),
         )?;
-        if prior.operator_questions != request.operator_questions
+        if prior.tool_approval_policy != request.tool_approval_policy
+            || prior.operator_questions != request.operator_questions
             || prior.context_policy != request.context_policy
             || prior.delegation_policy != request.delegation_policy
             || parent.payload.get("delegation_context") != delegation.map(|d| &d.identity)
@@ -970,6 +973,33 @@ async fn run_rounds(
                     input.push(serde_json::json!({"type":"function_call_output","call_id":id,"output":format!("Tool rejected: {error}")}));
                     continue;
                 }
+                if agent_approvals::required(&request, &name) {
+                    let result = agent_approvals::run(
+                        shared,
+                        session,
+                        parent,
+                        &format!("{parent}:tool:{turn}:{index}"),
+                        &child,
+                        &id,
+                        &name,
+                        agent_approvals::Effect::Plugin {
+                            context: context.clone(),
+                            binding: binding.clone(),
+                            input: arguments.clone(),
+                        },
+                        &cancel,
+                        &events,
+                    )
+                    .await?;
+                    output.tool_calls += 1;
+                    match result {
+                        agent_approvals::ResultKind::Output(value)=>input.push(serde_json::json!({"type":"function_call_output","call_id":id,"output":value})),
+                        agent_approvals::ResultKind::Cancelled=>{output.status=AgentStatus::Cancelled;break 'turns;},
+                        agent_approvals::ResultKind::Unknown(reason)=>{output.status=AgentStatus::Unknown;output.error=Some(reason);break 'turns;},
+                        agent_approvals::ResultKind::Failed(reason)=>{output.status=AgentStatus::Failed;output.error=Some(reason);break 'turns;},
+                    }
+                    continue;
+                }
                 let reply = agent_plugins::execute(
                     shared,
                     session,
@@ -1026,6 +1056,29 @@ async fn run_rounds(
             execution.argv = argv;
             if execution.validate().is_err() {
                 input.push(serde_json::json!({"type":"function_call_output","call_id":id,"output":"Tool rejected: argv violates the execution bounds."}));
+                continue;
+            }
+            if agent_approvals::required(&request, &name) {
+                let result = agent_approvals::run(
+                    shared,
+                    session,
+                    parent,
+                    &format!("{parent}:tool:{turn}:{index}"),
+                    &child,
+                    &id,
+                    &name,
+                    agent_approvals::Effect::Snapshot(execution),
+                    &cancel,
+                    &events,
+                )
+                .await?;
+                output.tool_calls += 1;
+                match result {
+                    agent_approvals::ResultKind::Output(value)=>input.push(serde_json::json!({"type":"function_call_output","call_id":id,"output":value})),
+                    agent_approvals::ResultKind::Cancelled=>{output.status=AgentStatus::Cancelled;break 'turns;},
+                    agent_approvals::ResultKind::Unknown(reason)=>{output.status=AgentStatus::Unknown;output.error=Some(reason);break 'turns;},
+                    agent_approvals::ResultKind::Failed(reason)=>{output.status=AgentStatus::Failed;output.error=Some(reason);break 'turns;},
+                }
                 continue;
             }
             let child = child_operation(

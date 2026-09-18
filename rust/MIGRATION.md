@@ -31,8 +31,8 @@ upgrading scaffolds or model assessments into successful verification.
 | Surface | Native owner and current behavior | Remaining acceptance gate |
 | --- | --- | --- |
 | Wire schema | `crates/zero-protocol`: strict versioned requests, replies, execution/session values, JSON Schema | Stable compatibility policy, generated external clients, negotiated additions and schema migration tests |
-| Native state | `crates/zero-store`: SQLite sessions, command admission, owner-bound operation settlement, ordered events, budget reservation/settlement, transactional epoch recovery and schema v1/v2/v3/v4/v5/v6/v7→v8 migration, optional activation epoch pins and immutable operation artifacts | Full UI message projection, semantic compaction and retained-history retrieval; further schema upgrades; explicit legacy import; durable multi-process campaign accounting |
-| Application engine | `crates/zero-engine`: session queries, idempotent execution, cancellation, engine ownership lock, uncertain-operation recovery, finding reconciliation, durable Responses/Chat/Anthropic inference, bounded offline Docker/smolvm snapshot agent with explicit completed-turn continuation, durable FIFO inputs, active-agent steering, bounded joined subagents and explicit byte-bounded context projection from immutable journal records | Remaining providers, full tools/permissions and agent workflows, interrupted-turn checkpoints and generation lifecycle |
+| Native state | `crates/zero-store`: SQLite sessions, command admission, owner-bound operation settlement, ordered events, budget reservation/settlement, transactional epoch recovery and schema v1/v2/v3/v4/v5/v6/v7/v8→v9 migration, optional activation epoch pins and immutable operation artifacts | Full UI message projection, semantic compaction and retained-history retrieval; further schema upgrades; explicit legacy import; durable multi-process campaign accounting |
+| Application engine | `crates/zero-engine`: session queries, idempotent execution, cancellation, engine ownership lock, uncertain-operation recovery, finding reconciliation, durable Responses/Chat/Anthropic inference, bounded offline Docker/smolvm snapshot agent with explicit completed-turn continuation, durable FIFO inputs, active-agent steering, durable operator questions, exact-invocation tool approvals, bounded joined subagents and explicit byte-bounded context projection from immutable journal records | Remaining providers, full tools/permissions and agent workflows, interrupted-turn checkpoints and generation lifecycle |
 | Batch execution | `crates/zero-executor`: validated snapshot pin/copy, local image identity, nonroot Linux offline Docker lifecycle, bounded raw output, cancellation and explicit cleanup outcome | All other execution profiles below; real Docker qualification remains separate from injected CLI fixtures |
 | MicroVM execution | `crates/zero-smolvm` and `zero-sandbox`: explicit pinned archive, qualified runtime version, nonroot offline batch lifecycle, verified snapshot staging and native engine/agent selection; real guest and engine/agent smoke passed | Broader isolation/SIGKILL qualification, live-provider matrix and interactive execution |
 | Source review | `crates/zero-source` and engine `source.rs`: bounded selected source bundle, grounded structured hypotheses, retained request/bundle/completion/submission, same-session provenance and exact retry; `source-review` CLI | Source exploration, automatic investigation and specialist verification; hypotheses remain unverified, including successful model submissions |
@@ -49,7 +49,7 @@ upgrading scaffolds or model assessments into successful verification.
 | Hosted metadata | `crates/zero-cloud-client`: explicit authenticated health/catalog/account/usage GETs, bounded browser-session login polling, explicit catalog inference routing, typed gateway errors and credit normalization; CLI resolves environment or private legacy `cloud.env` credentials | Live service qualification, provider OAuth/refresh, upload/accounting and managed-worker qualification |
 | Cloud wire adapter | `crates/zero-cloud-compat`: result/event framing, typed outcomes, cost provenance and atomic report writing | Scanner integration, ordered scan-total accounting, uploads and managed deployment qualification |
 | Finding reduction | `crates/zero-evidence`: source IDs/provenance retained through complete reconciliation, explicit disposition accounting | Discovery, independent vulnerability oracles, storage/export and disclosure eligibility; reconciliation is not truth validation |
-| CLI | `crates/zero-cli`: `schema`, `snapshot pin`, `session create/create-pinned/list/show/events/budget/reconcile-usage`, `exec`, `sandbox`, `infer`, `agent`, `plugin-call`, `evaluate run/status`, `source-review`, `source-reproduce`, `source-repair`, `artifact list/export`, durable `queue enqueue/list/run/cancel`, read-only `steer list` and `questions list/show`, line `console`, full-screen `tui`, `hosted login/health/models/account/usage`, `doctor`, `app-server`, help/version; separate `.0sec/native/state.db` | All legacy commands below; UX/exit/schema compatibility; installer and platform release qualification |
+| CLI | `crates/zero-cli`: `schema`, `snapshot pin`, `session create/create-pinned/list/show/events/budget/reconcile-usage`, `exec`, `sandbox`, `infer`, `agent`, `plugin-call`, `evaluate run/status`, `source-review`, `source-reproduce`, `source-repair`, `artifact list/export`, durable `queue enqueue/list/run/cancel`, read-only `steer list`, `questions list/show` and `approvals list/show`, line `console`, full-screen `tui`, `hosted login/health/models/account/usage`, `doctor`, `app-server`, help/version; separate `.0sec/native/state.db` | All legacy commands below; UX/exit/schema compatibility; installer and platform release qualification |
 | Stdio lifecycle | Initialize/version gate, correlated replies, bounded NDJSON framing, concurrent execute/cancel, durable-admission notification before cancellation, EOF/SIGINT/SIGTERM cleanup | Durable event streaming/reconnect contract, authenticated remote transports if required |
 
 Current acceptance sources include crate unit and integration tests for CLI
@@ -880,3 +880,58 @@ Unicode paste and explicit submission, console answer/dismiss, EOF before and
 after question notification, read-only inspection and unattended batch guards.
 These fixtures use local provider/backend doubles and do not add a claim of
 new real Docker, VM, managed-cloud or production-release qualification.
+
+### Exact-invocation tool approvals
+
+`AgentRequest.tool_approval_policy` adds an explicit host-selected permission
+gate for `execute_snapshot` and offered offline plugin aliases. Its
+`require_approval` list is validated before the parent is admitted. Omitting the
+policy preserves the existing request identity and automatic execution. This
+policy does not implement the legacy standard/copilot/recon/YOLO modes, engagement
+scope expansion, network authorization or local filesystem grants.
+
+An approval binds the original model call and offered definition, actor authority,
+policy, arguments and complete concrete effect payload. The retained intent is a
+hash-checked artifact bounded to 8 MiB; metadata carries an 8 KiB preview with an
+explicit truncation flag. The complete intent is inspectable through
+`approvals show --session ID --approval ID --full-intent`. New gated Docker
+profiles require a content-addressed image ID or digest reference; mutable tag
+resolution remains a separate workflow requirement. VM archive pins remain part
+of the captured execution profile. Permission never bypasses snapshot, artifact,
+plugin-generation, resource or cleanup checks.
+
+Schema 9 keeps the decision and its consumption distinct. Approval itself does
+not start or settle execution: the live owner atomically consumes that receipt
+and admits its exact effect child before invoking a backend or preparing a
+plugin lease. Denial returns a retained tool rejection without effects. Neither
+model text, an informational answer, paste nor a timeout supplies approval.
+A decision cannot authorize another call, role, sibling, future turn or modified
+payload. Child roles inherit the parent's applicable gates; retained delegation
+receipts bind both the root policy and the effective child policy.
+
+Cancellation and owner loss never restart an approved invocation. An approval
+marked Consumed proves effect admission, while the effect's actual status records
+execution and cleanup; an uncertain effect remains uncertain. Exact decision
+retries return saved evidence without dispatch. Checkpoint, projected-context and
+ordinary-history validation derive replay from the immutable permission,
+consumption witness and exact effect outcome. Approval policy cannot disappear
+when continuing a conversation.
+
+This advances permission interaction in gates A/T/U. It does not close target
+scope, host-shell/patch authority, full autonomy-mode compatibility, detached
+worker reconnection, managed deployment or production-release qualification.
+
+Approval qualification: the final actual Rust 1.85 workspace passed 724 tests
+with 11 explicit backend/platform ignores. Strict production workspace Clippy,
+targeted continuation-test Clippy and formatting checks passed. Local fixtures
+cover snapshot and plugin dispatch, sibling gates, answer/consume/cancel races,
+restart retries, corrupted intent/effect evidence, scope-preserving continuation,
+large bounded pages, explicit console decisions and real terminal approve/deny/
+cancel paths. Existing informational-question behavior remains covered.
+
+The combined PTY run exposed a real shutdown race: dropping the UI reader could
+close app-server stdout before its queued final frames were flushed. The CLI
+launcher now owns a bounded output relay through the existing child cleanup
+deadline, drains after UI closure and preserves other transport errors. A
+256 KiB queued-tail regression, read-error regression and the real terminal
+fixtures verify the fix; completed-exit assertions remain strict.

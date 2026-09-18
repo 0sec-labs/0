@@ -389,7 +389,7 @@ fn schema_seven_migration_preserves_journal_and_readonly_never_migrates() {
     let original = f.store.get_operation(&f.actor.id).unwrap().payload;
     drop(f.store);
     let conn = rusqlite::Connection::open(&path).unwrap();
-    conn.execute_batch("DROP TABLE operator_question_decisions; DROP TABLE operator_questions; PRAGMA user_version=7;").unwrap();
+    conn.execute_batch("DROP TABLE tool_approval_consumptions; DROP TABLE tool_approval_decisions; DROP TABLE tool_approvals; DROP TABLE operator_question_decisions; DROP TABLE operator_questions; PRAGMA user_version=7;").unwrap();
     drop(conn);
     assert!(Store::open_read_only(&path).is_err());
     let store = Store::open(&path).unwrap();

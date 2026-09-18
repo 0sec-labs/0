@@ -21,6 +21,7 @@ enum Pending {
     Findings(crate::findings::Pending),
     Steering(crate::steering::Pending),
     Questions(crate::questions::Pending),
+    Approvals(crate::approvals::Pending),
     Sessions,
     Create,
     History {
@@ -60,6 +61,7 @@ pub struct State {
     pub findings: crate::findings::Findings,
     pub steering: crate::steering::Steering,
     pub questions: crate::questions::Questions,
+    pub approvals: crate::approvals::Approvals,
     pub view: View,
     pub session: Option<String>,
     pub sessions: Vec<Value>,
@@ -112,6 +114,7 @@ impl State {
             findings: crate::findings::Findings::default(),
             steering: crate::steering::Steering::default(),
             questions: crate::questions::Questions::default(),
+            approvals: crate::approvals::Approvals::default(),
             sessions: vec![],
             selected: 0,
             history: vec![],
@@ -151,6 +154,16 @@ impl State {
             .into_iter()
             .map(|a| self.request(a.command, Pending::Findings(a.pending)))
             .collect()
+    }
+    fn approval_actions(&mut self, actions: Vec<crate::approvals::Action>) -> Vec<Request> {
+        actions
+            .into_iter()
+            .map(|a| self.request(a.command, Pending::Approvals(a.pending)))
+            .collect()
+    }
+    fn refresh_approvals(&mut self) -> Vec<Request> {
+        let actions = self.approvals.refresh();
+        self.approval_actions(actions)
     }
     fn question_actions(&mut self, actions: Vec<crate::questions::Action>) -> Vec<Request> {
         actions
@@ -257,6 +270,7 @@ impl State {
         self.findings.reset();
         self.steering.reset();
         self.questions.reset();
+        self.approvals.reset();
         self.session = Some(session);
         self.history.clear();
         self.latest = None;
@@ -276,10 +290,17 @@ impl State {
             .questions
             .initialize(self.session.as_deref().unwrap_or(""));
         requests.extend(self.question_actions(actions));
+        let actions = self
+            .approvals
+            .initialize(self.session.as_deref().unwrap_or(""));
+        requests.extend(self.approval_actions(actions));
         requests
     }
     pub fn paste(&mut self, text: &str) {
         if self.help {
+            return;
+        }
+        if self.approvals.open {
             return;
         }
         if self.questions.open {
@@ -317,7 +338,21 @@ impl State {
         if self.help && !help_lifecycle && !matches!(key.code, KeyCode::F(1) | KeyCode::Esc) {
             return vec![];
         }
+        if ctrl && key.code == KeyCode::Char('p') && !self.help {
+            self.questions.open = false;
+            let actions = self.approvals.toggle(self.session.as_deref());
+            return self.approval_actions(actions);
+        }
+        if self.approvals.open
+            && !self.help
+            && !(ctrl && matches!(key.code, KeyCode::Char('q' | 'c' | 'x' | 'o')))
+            && key.code != KeyCode::F(1)
+        {
+            let actions = self.approvals.key(key);
+            return self.approval_actions(actions);
+        }
         if ctrl && key.code == KeyCode::Char('o') && !self.help {
+            self.approvals.open = false;
             let actions = self.questions.toggle(self.session.as_deref());
             return self.question_actions(actions);
         }
@@ -476,7 +511,8 @@ impl State {
         vec![]
     }
     fn mutation_pending(&self) -> bool {
-        self.questions.blocks_navigation()
+        self.approvals.blocks_navigation()
+            || self.questions.blocks_navigation()
             || self.steering.sending
             || self.findings.blocks_navigation()
             || self.pending.values().any(|p| {
@@ -747,6 +783,15 @@ impl State {
     pub fn message(&mut self, message: ServerMessage) -> Result<Vec<Request>> {
         match message {
             ServerMessage::Event { event, .. } => {
+                if let ExecutionEvent::ToolApprovalRequested {
+                    session_id,
+                    approval_operation_id,
+                    ..
+                } = &event
+                {
+                    let actions = self.approvals.notified(session_id, approval_operation_id);
+                    return Ok(self.approval_actions(actions));
+                }
                 if let ExecutionEvent::OperatorQuestionRequested {
                     session_id,
                     question_operation_id,
@@ -772,6 +817,10 @@ impl State {
                 let Some(pending) = self.pending.remove(&id) else {
                     return Err(Error::Protocol("unknown app-server response ID".into()));
                 };
+                if let Pending::Approvals(tag) = pending {
+                    let actions = self.approvals.reply(tag, *reply)?;
+                    return Ok(self.approval_actions(actions));
+                }
                 if let Pending::Questions(tag) = pending {
                     let actions = self.questions.reply(tag, *reply)?;
                     return Ok(self.question_actions(actions));
@@ -808,6 +857,7 @@ impl State {
                         let mut actions = self.refresh();
                         actions.extend(self.refresh_steering());
                         actions.extend(self.refresh_questions());
+                        actions.extend(self.refresh_approvals());
                         return Ok(actions);
                     }
                     if let Pending::Enqueue { prompt, .. } = pending {
@@ -820,7 +870,10 @@ impl State {
                 }
                 let value = serde_json::to_value(reply.as_ref())?;
                 match pending {
-                    Pending::Findings(_) | Pending::Steering(_) | Pending::Questions(_) => {
+                    Pending::Findings(_)
+                    | Pending::Steering(_)
+                    | Pending::Questions(_)
+                    | Pending::Approvals(_) => {
                         unreachable!("scoped responses handled above")
                     }
                     Pending::Init => {
@@ -837,6 +890,10 @@ impl State {
                             let mut requests = self.refresh();
                             let actions = self.questions.initialize(&session);
                             requests.extend(self.question_actions(actions));
+                            let actions = self
+                                .approvals
+                                .initialize(self.session.as_deref().unwrap_or(""));
+                            requests.extend(self.approval_actions(actions));
                             Ok(requests)
                         } else {
                             Ok(vec![self.sessions_page()])
@@ -1053,6 +1110,7 @@ impl State {
                         let mut out = self.refresh();
                         out.extend(self.refresh_steering());
                         out.extend(self.refresh_questions());
+                        out.extend(self.refresh_approvals());
                         out.extend(self.auto());
                         Ok(out)
                     }

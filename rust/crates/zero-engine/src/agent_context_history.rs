@@ -112,7 +112,8 @@ pub(super) fn validate(
         if req.context_policy.as_ref() != Some(policy) || count > 32 {
             return Err(error("context lineage policy/round mismatch"));
         }
-        if req.operator_questions != request.operator_questions
+        if req.tool_approval_policy != request.tool_approval_policy
+            || req.operator_questions != request.operator_questions
             || req.provider != request.provider
             || req.delegation_policy != request.delegation_policy
             || req.model != request.model
@@ -234,7 +235,11 @@ pub(super) fn validate(
                 .enumerate()
             {
                 let question = call.1 == "ask_operator" && request.operator_questions;
-                if call.1 != "delegate_tasks" && !question {
+                let approved = request.tool_approval_policy.as_ref().is_some_and(|policy| {
+                    policy.require_approval.iter().any(|alias| alias == call.1)
+                });
+                let delegation = call.1 == "delegate_tasks" && request.delegation_policy.is_some();
+                if !delegation && !question && !approved {
                     continue;
                 }
                 let output = witness
@@ -249,7 +254,9 @@ pub(super) fn validate(
                     &format!("{}:tool:{index}:{call_index}", ancestor.id),
                 )? {
                     Some(group) => {
-                        let expected_kind = if question {
+                        let expected_kind = if approved {
+                            "agent_approved_tool"
+                        } else if question {
                             "agent_operator_question"
                         } else {
                             "agent_delegation"
@@ -260,7 +267,9 @@ pub(super) fn validate(
                         {
                             return Err(error("context receipted tool identity mismatch"));
                         }
-                        let derived = if question {
+                        let derived = if approved {
+                            agent_approvals::validate_receipt(store, &group)?
+                        } else if question {
                             agent_questions::validate_receipt(store, &group)?
                         } else {
                             agent_delegation::validate_receipt(store, &group)?

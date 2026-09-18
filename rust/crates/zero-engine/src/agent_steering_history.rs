@@ -55,6 +55,7 @@ fn authority(request: &AgentRequest) -> Result<Value, EngineError> {
         "source_submission_max_hypotheses":request.source_submission_max_hypotheses,
         "plugin_tools":request.plugin_tools,"delegation_policy":request.delegation_policy,
         "operator_questions":request.operator_questions,
+        "tool_approval_policy":request.tool_approval_policy,
         "context_policy":request.context_policy}),
     )
 }
@@ -288,20 +289,32 @@ pub(super) fn validate(
                     {
                         return Err(error("steering predecessor tool result differs"));
                     }
-                    if name == "ask_operator" && req.operator_questions {
+                    let approved = req.tool_approval_policy.as_ref().is_some_and(|policy| {
+                        policy.require_approval.iter().any(|alias| alias == name)
+                    });
+                    if approved || (name == "ask_operator" && req.operator_questions) {
                         match store.get_operation_by_command(
                             &ancestor.session_id,
                             &format!("{}:tool:{index}:{call_index}", ancestor.id),
                         ) {
                             Ok(question) => {
-                                if question.payload["kind"] != "agent_operator_question"
+                                let kind = if approved {
+                                    "agent_approved_tool"
+                                } else {
+                                    "agent_operator_question"
+                                };
+                                let derived = if approved {
+                                    agent_approvals::validate_receipt(store, &question)?
+                                } else {
+                                    agent_questions::validate_receipt(store, &question)?
+                                };
+                                if question.payload["kind"] != kind
                                     || question.payload["parent_operation"] != ancestor.id
                                     || question.payload["call_id"] != *call
-                                    || output["output"]
-                                        != agent_questions::validate_receipt(store, &question)?
+                                    || output["output"] != derived
                                 {
                                     return Err(error(
-                                        "operator answer history differs from durable decision",
+                                        "operator-controlled tool history differs from durable receipt",
                                     ));
                                 }
                             }

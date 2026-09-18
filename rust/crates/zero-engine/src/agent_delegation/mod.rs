@@ -120,6 +120,9 @@ pub(super) fn capture(
         let mut identity = profile_identity(&profile)?;
         identity["name"] = json!(role.name);
         identity["template"] = serde_json::to_value(&model)?;
+        if let Some(policy) = agent_approvals::inherited(request, &role.tools) {
+            identity["tool_approval_policy"] = serde_json::to_value(policy)?;
+        }
         let plugins = plugins.cloned().and_then(|mut context| {
             context.tools.retain(|tool| role.tools.contains(&tool.name));
             if context.tools.is_empty() {
@@ -145,8 +148,12 @@ pub(super) fn capture(
             plugins,
         });
     }
+    let mut identity = json!({"version":1,"policy":policy,"roles":identities});
+    if let Some(policy) = &request.tool_approval_policy {
+        identity["tool_approval_policy"] = serde_json::to_value(policy)?;
+    }
     Ok(Some(Context {
-        identity: json!({"version":1,"policy":policy,"roles":identities}),
+        identity,
         policy: policy.clone(),
         roles,
     }))
@@ -184,6 +191,9 @@ pub(super) fn retry_identity(
         let mut identity = profile_identity(profile)?;
         identity["name"] = json!(role.name);
         identity["template"] = entry["template"].clone();
+        if let Some(policy) = entry.get("tool_approval_policy") {
+            identity["tool_approval_policy"] = policy.clone();
+        }
         if let Some(plugins) = entry.get("plugin_context") {
             identity["plugin_context"] = plugins.clone();
         }
@@ -209,6 +219,7 @@ fn child_request(parent: &AgentRequest, role: &DelegationRole, prompt: &str) -> 
     request.continuation_of = None;
     request.source_submission_max_hypotheses = None;
     request.context_policy = None;
+    request.tool_approval_policy = agent_approvals::inherited(parent, &role.tools);
     request.operator_questions =
         parent.operator_questions && role.tools.iter().any(|tool| tool == "ask_operator");
     request
@@ -264,6 +275,9 @@ impl Context {
             let history = agent_context::History::new(model.input, None)?;
             let mut payload = json!({"kind":"offline_snapshot_agent","request":request,"endpoint":role.profile.client.endpoint_identity(),"rates":role.profile.rates,"wire_api":role.profile.client.wire_api(),"delegation_role":task.role,"delegation_template":role.template});
             role.profile.stamp(&mut payload)?;
+            if let Some(policy) = &parent.tool_approval_policy {
+                payload["delegation_root_approval_policy"] = serde_json::to_value(policy)?;
+            }
             if let Some(plugins) = &role.plugins {
                 payload["plugin_context"] = plugins.identity.clone();
             }

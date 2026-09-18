@@ -17,6 +17,9 @@ pub struct AgentRequest {
     /// Explicitly offer informational operator questions; answers grant no authority.
     #[serde(default, skip_serializing_if = "is_false")]
     pub operator_questions: bool,
+    /// Explicit one-invocation approval for selected existing executable tools.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tool_approval_policy: Option<crate::approvals::ToolApprovalPolicy>,
     /// Host-authored roles for bounded joined tasks; omitted requests retain their identity.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub delegation_policy: Option<crate::delegation::DelegationPolicy>,

@@ -134,6 +134,30 @@ pub(super) async fn execute(
         }
         store.begin_operation(&admission.operation.id, &shared.owner)?
     };
+    execute_admitted(shared, operation, context, binding, input, cancel, events).await
+}
+
+/// Execute an already admitted effect, including one atomically linked to an approval.
+pub(super) async fn execute_admitted(
+    shared: &Arc<Shared>,
+    operation: zero_protocol::Operation,
+    context: &Context,
+    binding: &PluginToolBinding,
+    input: Value,
+    cancel: CancellationToken,
+    events: mpsc::Sender<ExecutionEvent>,
+) -> Result<Reply, EngineError> {
+    if operation.status != OperationStatus::Running
+        || operation.owner.as_deref() != Some(&shared.owner)
+        || operation.payload["kind"] != "agent_plugin"
+        || operation.payload["plugin_context"] != context.identity
+        || operation.payload["binding"] != serde_json::to_value(binding)?
+        || operation.payload["input"] != input
+    {
+        return Err(error(
+            "admitted plugin effect differs from captured invocation",
+        ));
+    }
     let mut guard = ChildGuard {
         shared,
         operation: operation.id.clone(),

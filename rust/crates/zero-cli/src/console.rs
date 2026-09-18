@@ -4,7 +4,7 @@ use crate::{
     server,
 };
 use std::{
-    collections::{BTreeSet, VecDeque},
+    collections::{BTreeMap, BTreeSet, VecDeque},
     error::Error,
     future::Future,
     pin::Pin,
@@ -28,6 +28,10 @@ impl Drop for Reader {
         self.0.abort();
     }
 }
+enum Notice {
+    Question(String),
+    Approval(String),
+}
 type Active = (String, Pin<Box<dyn Future<Output = Reply> + Send>>);
 
 pub async fn run(
@@ -39,7 +43,7 @@ pub async fn run(
     let diagnostic_engine = engine.clone();
     let (admitted_tx, admitted_rx) = watch::channel(None::<(String, String)>);
     let (active_tx, active_rx) = watch::channel(None::<String>);
-    let (question_tx, question_rx) = mpsc::channel::<String>(32);
+    let (question_tx, question_rx) = mpsc::channel::<Notice>(32);
     let drain = tokio::spawn(async move {
         while let Some(event) = event_rx.recv().await {
             match event {
@@ -64,7 +68,23 @@ pub async fn run(
                     question_operation_id,
                     ..
                 } => {
-                    if question_tx.send(question_operation_id).await.is_err() {
+                    if question_tx
+                        .send(Notice::Question(question_operation_id))
+                        .await
+                        .is_err()
+                    {
+                        break;
+                    }
+                }
+                ExecutionEvent::ToolApprovalRequested {
+                    approval_operation_id,
+                    ..
+                } => {
+                    if question_tx
+                        .send(Notice::Approval(approval_operation_id))
+                        .await
+                        .is_err()
+                    {
                         break;
                     }
                 }
@@ -98,7 +118,7 @@ async fn conversation(
     events: mpsc::Sender<ExecutionEvent>,
     admitted: watch::Receiver<Option<(String, String)>>,
     active_command: watch::Sender<Option<String>>,
-    mut questions: mpsc::Receiver<String>,
+    mut questions: mpsc::Receiver<Notice>,
 ) -> Result<bool, Box<dyn Error>> {
     // A single reader owns read_frame across awaits. Cancelling/recreating that
     // future for every completed turn would lose a partially consumed line.
@@ -122,6 +142,8 @@ async fn conversation(
     let mut eof = false;
     let mut rejected = false;
     let mut awaiting_questions = BTreeSet::new();
+    let mut awaiting_approvals = BTreeSet::new();
+    let mut approval_commands = BTreeMap::<(String, String, String), String>::new();
     loop {
         tokio::select! {
             biased;
@@ -137,6 +159,7 @@ async fn conversation(
                 let (command, _) = active.take().ok_or("Missing completed console turn")?;
                 active_command.send_replace(None);
                 awaiting_questions.clear();
+                awaiting_approvals.clear();
                 let completed = tokio::select! {
                     biased;
                     _ = &mut signal => return Ok(false),
@@ -157,7 +180,24 @@ async fn conversation(
                     owner.handle(Command::RunQueuedAgent { session_id, input_id:input }, events).await
                 })));
             }
-            Some(id)=questions.recv()=>{
+            Some(notice)=questions.recv()=>{
+                let id=match notice {
+                    Notice::Question(id)=>id,
+                    Notice::Approval(id)=>{
+                        match engine.handle(Command::ToolApproval{session_id:session.clone(),approval_operation_id:id.clone()},events.clone()).await {
+                            Reply::ToolApproval{approval}=>{
+                                if approval.status==zero_protocol::approvals::ToolApprovalStatus::Pending {
+                                    if eof {return stop_unanswered(&engine,&mut active).await;}
+                                    awaiting_approvals.insert(id);
+                                    diagnostic(&format!("tool approval {} actor {} root {} — ONE exact invocation, not a tool-wide grant\nintent SHA256 {} preview_truncated={}\n{}\nFull intent: approvals show --session {} --approval {} --full-intent\nUse /approve APPROVAL_ID INTENT_SHA256 or /deny APPROVAL_ID INTENT_SHA256",approval.operation_id,approval.actor_operation_id,approval.root_operation_id,approval.intent_sha256,approval.preview_truncated,serde_json::to_string(&approval.preview)?,session,approval.operation_id)).await?;
+                                } else {awaiting_approvals.remove(&id);}
+                            }
+                            _=>return Err("Could not load durable tool approval notification".into()),
+                        }
+                        continue;
+                    }
+                };
+
                 let reply=engine.handle(Command::OperatorQuestion{session_id:session.clone(),question_operation_id:id.clone()},events.clone()).await;
                 if let Reply::OperatorQuestion{question}=reply {
                     if question.status==zero_protocol::questions::OperatorQuestionStatus::Pending {
@@ -168,13 +208,31 @@ async fn conversation(
                 } else {return Err("Could not load durable operator question notification".into());}
             }
             frame = input_rx.recv(), if !eof => {
-                let Some(frame) = frame else { eof=true;if !awaiting_questions.is_empty(){return stop_unanswered(&engine,&mut active).await;} continue; };
-                let Some(frame) = frame? else { eof=true;if !awaiting_questions.is_empty(){return stop_unanswered(&engine,&mut active).await;} continue; };
+                let Some(frame) = frame else { eof=true;if !awaiting_questions.is_empty() || !awaiting_approvals.is_empty(){return stop_unanswered(&engine,&mut active).await;} continue; };
+                let Some(frame) = frame? else { eof=true;if !awaiting_questions.is_empty() || !awaiting_approvals.is_empty(){return stop_unanswered(&engine,&mut active).await;} continue; };
                 let Frame::Data(bytes) = frame else { return Err("Console prompt exceeds frame byte limit".into()); };
                 let prompt=String::from_utf8(bytes).map_err(|_| "Console prompt must be UTF-8")?;
                 if prompt.trim().is_empty() { continue; }
                 let prompt=match console_line(prompt) {
                     ConsoleLine::Followup(prompt)=>prompt,
+                    ConsoleLine::Approval(line)=>{
+                        let (id,digest,decision)=match crate::approvals::console_decision(&line){Ok(value)=>value,Err(error)=>{rejected=true;diagnostic(&format!("Approval decision not sent: {error}. Nothing was queued.")).await?;continue;}};
+                        let approval=match engine.handle(Command::ToolApproval{session_id:session.clone(),approval_operation_id:id.clone()},events.clone()).await {
+                            Reply::ToolApproval{approval}=>approval,
+                            Reply::Error{message,..}=>{rejected=true;diagnostic(&format!("Approval decision not sent: {message}. Nothing was queued.")).await?;continue;},
+                            _=>return Err("Unexpected approval detail response".into()),
+                        };
+                        if approval.intent_sha256!=digest {rejected=true;diagnostic("Approval decision not sent: supplied intent hash does not match retained invocation. Nothing was queued.").await?;continue;}
+                        let key=(id.clone(),digest.clone(),serde_json::to_string(&decision)?);
+                        if approval_commands.len()>=128 && !approval_commands.contains_key(&key){rejected=true;diagnostic("Approval decision cache full; no new decision sent").await?;continue;}
+                        let command_id=approval_commands.entry(key).or_insert_with(||format!("console-approval-{}",uuid::Uuid::new_v4())).clone();
+                        match engine.handle(Command::DecideToolApproval{session_id:session.clone(),command_id,approval_operation_id:id.clone(),expected_intent_sha256:digest,decision},events.clone()).await {
+                            Reply::ToolApprovalDecided{approval,..}=>{awaiting_approvals.remove(&id);diagnostic(&format!("tool approval decision {} {:?} — exact invocation only; permission receipt is not proof of execution",approval.operation_id,approval.status)).await?;},
+                            Reply::Error{message,..}=>{rejected=true;diagnostic(&format!("Approval decision not acknowledged: {message}. Repeat the identical explicit command to retry; nothing was queued.")).await?;},
+                            _=>return Err("Unexpected approval decision response".into()),
+                        }
+                        continue;
+                    }
                     ConsoleLine::Question(line)=>{
                         let (id,decision)=match crate::questions::console_decision(&line){Ok(value)=>value,Err(error)=>{rejected=true;diagnostic(&format!("Answer not sent: {error}. Nothing was queued.")).await?;continue;}};
                         let question=match engine.handle(Command::OperatorQuestion{session_id:session.clone(),question_operation_id:id.clone()},events.clone()).await {
@@ -229,7 +287,7 @@ async fn stop_unanswered(
     engine: &Arc<Engine>,
     active: &mut Option<Active>,
 ) -> Result<bool, Box<dyn Error>> {
-    diagnostic("Input ended while an operator answer was required; cancelling owned work. No answer or dismissal was fabricated.").await?;
+    diagnostic("Input ended while an operator answer or tool approval was required; cancelling owned work. No answer, approval, denial or dismissal was fabricated.").await?;
     engine.shutdown().await?;
     if let Some((command, work)) = active.take() {
         let _ = finish(work.await, &command, true).await?;
@@ -238,11 +296,24 @@ async fn stop_unanswered(
 }
 
 enum ConsoleLine {
+    Approval(String),
     Question(String),
     Followup(String),
     Steer(String),
 }
 fn console_line(prompt: String) -> ConsoleLine {
+    for prefix in ["/approve", "/deny"] {
+        if let Some(rest) = prompt.strip_prefix(&format!("/{prefix}")) {
+            if rest.is_empty() || rest.starts_with(char::is_whitespace) {
+                return ConsoleLine::Followup(prompt[1..].into());
+            }
+        }
+        if let Some(rest) = prompt.strip_prefix(prefix) {
+            if rest.is_empty() || rest.starts_with(char::is_whitespace) {
+                return ConsoleLine::Approval(prompt);
+            }
+        }
+    }
     for prefix in ["/answer", "/dismiss"] {
         if let Some(rest) = prompt.strip_prefix(&format!("/{prefix}")) {
             if rest.is_empty() || rest.starts_with(char::is_whitespace) {
@@ -337,6 +408,32 @@ mod tests {
         ] {
             assert!(matches!(console_line(input.into()),ConsoleLine::Followup(s) if s==input));
         }
+    }
+
+    #[test]
+    fn approval_controls_never_fall_through_and_literal_escape_is_explicit() {
+        use super::{ConsoleLine, console_line};
+        for prefix in ["/approve", "/deny"] {
+            assert!(matches!(
+                console_line(prefix.into()),
+                ConsoleLine::Approval(_)
+            ));
+            assert!(matches!(
+                console_line(format!("{prefix} missing-digest")),
+                ConsoleLine::Approval(_)
+            ));
+            assert!(
+                matches!(console_line(format!("/{prefix} λ")),ConsoleLine::Followup(s) if s==format!("{prefix} λ"))
+            );
+        }
+        assert!(matches!(
+            console_line("/answer approval {}".into()),
+            ConsoleLine::Question(_)
+        ));
+        assert!(matches!(
+            console_line("/approver literal".into()),
+            ConsoleLine::Followup(_)
+        ));
     }
 
     #[test]

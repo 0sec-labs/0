@@ -219,10 +219,12 @@ mod compatibility {
         let request: AgentRequest = serde_json::from_value(original.clone()).unwrap();
         assert!(request.delegation_policy.is_none());
         assert!(!request.operator_questions);
+        assert!(request.tool_approval_policy.is_none());
         // Defaults on the legacy execution profile are independent of this new field.
         let canonical = serde_json::to_value(&request).unwrap();
         assert!(canonical.get("delegation_policy").is_none());
         assert!(canonical.get("operator_questions").is_none());
+        assert!(canonical.get("tool_approval_policy").is_none());
         let mut explicit_false = canonical.clone();
         explicit_false["operator_questions"] = json!(false);
         let decoded: crate::agent::AgentRequest = serde_json::from_value(explicit_false).unwrap();
@@ -230,6 +232,7 @@ mod compatibility {
         let old_canonical = serde_json::to_vec(&canonical).unwrap();
         let mut explicit_null = canonical.clone();
         explicit_null["delegation_policy"] = serde_json::Value::Null;
+        explicit_null["tool_approval_policy"] = serde_json::Value::Null;
         let null_request: AgentRequest = serde_json::from_value(explicit_null).unwrap();
         assert_eq!(
             serde_json::to_vec(&serde_json::to_value(null_request).unwrap()).unwrap(),

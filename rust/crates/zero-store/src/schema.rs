@@ -8,7 +8,7 @@ pub fn initialize(conn: &mut Connection) -> Result<()> {
     if application != 0 && application != APPLICATION_ID {
         return Err(Error::ForeignDatabase);
     }
-    if !(0..=8).contains(&version) {
+    if !(0..=9).contains(&version) {
         return Err(Error::Schema(version));
     }
     if application == 0 {
@@ -64,6 +64,14 @@ CREATE INDEX operator_questions_actor ON operator_questions(actor_operation_id);
 CREATE TABLE operator_question_decisions(id TEXT PRIMARY KEY,session_id TEXT NOT NULL REFERENCES sessions(id),command_id TEXT NOT NULL,question_operation_id TEXT NOT NULL UNIQUE REFERENCES operator_questions(operation_id),request_sha256 TEXT NOT NULL,decision TEXT NOT NULL CHECK(length(CAST(decision AS BLOB))<=65536),sequence INTEGER NOT NULL CHECK(sequence>0),UNIQUE(session_id,command_id),UNIQUE(session_id,sequence));")?;
         tx.pragma_update(None, "user_version", 8)?;
     }
+    if version < 9 {
+        tx.execute_batch("CREATE TABLE tool_approvals(operation_id TEXT PRIMARY KEY REFERENCES operations(id),session_id TEXT NOT NULL REFERENCES sessions(id),actor_operation_id TEXT NOT NULL REFERENCES operations(id),root_operation_id TEXT NOT NULL REFERENCES operations(id),sequence INTEGER NOT NULL CHECK(sequence>0),intent_sha256 TEXT NOT NULL REFERENCES artifacts(digest),UNIQUE(session_id,sequence));
+CREATE INDEX tool_approvals_root ON tool_approvals(session_id,root_operation_id,sequence);
+CREATE INDEX tool_approvals_actor ON tool_approvals(actor_operation_id);
+CREATE TABLE tool_approval_decisions(id TEXT PRIMARY KEY,session_id TEXT NOT NULL REFERENCES sessions(id),command_id TEXT NOT NULL,approval_operation_id TEXT NOT NULL UNIQUE REFERENCES tool_approvals(operation_id),intent_sha256 TEXT NOT NULL,decision TEXT NOT NULL CHECK(decision IN ('approve','deny')),sequence INTEGER NOT NULL CHECK(sequence>0),UNIQUE(session_id,command_id),UNIQUE(session_id,sequence));
+CREATE TABLE tool_approval_consumptions(approval_operation_id TEXT PRIMARY KEY REFERENCES tool_approvals(operation_id),effect_operation_id TEXT NOT NULL UNIQUE REFERENCES operations(id),effect_command_id TEXT NOT NULL,effect_payload_sha256 TEXT NOT NULL,sequence INTEGER NOT NULL CHECK(sequence>0));")?;
+        tx.pragma_update(None, "user_version", 9)?;
+    }
     tx.commit()?;
     Ok(())
 }
@@ -77,7 +85,7 @@ pub(super) fn validate_current(conn: &Connection) -> Result<()> {
     if application != APPLICATION_ID {
         return Err(Error::ForeignDatabase);
     }
-    if version != 8 {
+    if version != 9 {
         return Err(Error::Schema(version));
     }
     let observed = crate::readonly::definitions(conn)?;

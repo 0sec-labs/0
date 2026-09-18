@@ -14,13 +14,13 @@ mod write;
 fn bad(message: &str) -> Error {
     Error::Conflict(message.into())
 }
-fn hash(value: &Value) -> Result<String> {
+pub(super) fn hash(value: &Value) -> Result<String> {
     Ok(format!(
         "sha256:{:x}",
         Sha256::digest(serde_json::to_vec(value)?)
     ))
 }
-fn next(conn: &Connection, session: &str) -> Result<u64> {
+pub(super) fn next(conn: &Connection, session: &str) -> Result<u64> {
     Ok(conn.query_row(
         "SELECT coalesce(max(sequence),0)+1 FROM events WHERE session_id=?1",
         [session],
@@ -35,7 +35,7 @@ fn outcome(op: &str, digest: &str, decision: Option<&Decision>) -> Value {
     };
     json!({"schema_version":1,"question_operation_id":op,"request_sha256":digest,"status":status,"decision":decision,"authorizes_nothing":true})
 }
-fn full(conn: &Connection, key: &str) -> Result<Operation> {
+pub(super) fn full(conn: &Connection, key: &str) -> Result<Operation> {
     let mut op = operation(conn, key)?;
     let (text,present):(Option<String>,bool)=conn.query_row("SELECT CASE WHEN length(CAST(outcome AS BLOB))<=?2 THEN outcome END,outcome IS NOT NULL FROM operations WHERE id=?1",params![key,32*1024*1024],|r|Ok((r.get(0)?,r.get(1)?)))?;
     if present && text.is_none() {
@@ -44,7 +44,7 @@ fn full(conn: &Connection, key: &str) -> Result<Operation> {
     op.outcome = text.map(|v| serde_json::from_str(&v)).transpose()?;
     Ok(op)
 }
-fn owner(op: &Operation, session: &str, who: &str) -> Result<()> {
+pub(super) fn owner(op: &Operation, session: &str, who: &str) -> Result<()> {
     if op.session_id != session
         || op.status != OperationStatus::Running
         || op.owner.as_deref() != Some(who)
@@ -53,7 +53,7 @@ fn owner(op: &Operation, session: &str, who: &str) -> Result<()> {
     }
     Ok(())
 }
-fn settlement(
+pub(super) fn settlement(
     tx: &Transaction<'_>,
     op: &mut Operation,
     status: OperationStatus,
@@ -80,12 +80,16 @@ fn settlement(
 }
 
 #[derive(Default)]
-struct Reads {
-    witnesses: Witnesses,
+pub(super) struct Reads {
+    pub(super) witnesses: Witnesses,
     operations: std::collections::BTreeMap<String, std::rc::Rc<Operation>>,
 }
 impl Reads {
-    fn operation(&mut self, conn: &Connection, key: &str) -> Result<std::rc::Rc<Operation>> {
+    pub(super) fn operation(
+        &mut self,
+        conn: &Connection,
+        key: &str,
+    ) -> Result<std::rc::Rc<Operation>> {
         id(key)?;
         if let Some(op) = self.operations.get(key) {
             return Ok(op.clone());

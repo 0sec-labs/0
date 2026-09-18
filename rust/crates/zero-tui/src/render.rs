@@ -240,18 +240,21 @@ pub fn draw(frame: &mut Frame, state: &State) {
                 &state.status
             })),
             Line::from(vec![Span::styled(
-                format!("{} loaded pending questions · Ctrl-O questions · Ctrl-X cancel · Ctrl-Q quit · F1 help",state.questions.records.iter().filter(|q|q.status==zero_protocol::questions::OperatorQuestionStatus::Pending).count()),
+                format!("{} loaded pending questions · {} pending approvals · Ctrl-O questions · Ctrl-P approvals · Ctrl-X cancel · Ctrl-Q quit · F1 help",state.questions.records.iter().filter(|q|q.status==zero_protocol::questions::OperatorQuestionStatus::Pending).count(),state.approvals.records.iter().filter(|a|a.status==zero_protocol::approvals::ToolApprovalStatus::Pending).count()),
                 Style::default().fg(Color::DarkGray),
             )]),
         ]),
         areas[3],
     );
+    if state.approvals.open {
+        crate::approvals::render::draw(frame, &state.approvals);
+    }
     if state.questions.open {
         crate::questions::render::draw(frame, &state.questions);
     }
     if state.help {
         let area = frame.area();
         frame.render_widget(Clear, area);
-        frame.render_widget(Paragraph::new("Native protocol terminal — experimental\n\nTab: sessions / conversation / queue / findings\nCtrl-O: operator questions inbox; answers grant no permissions\nQuestion arrows/Space: choices; Enter/paste: text only\nQuestion Ctrl-S: submit; Ctrl-D: dismiss; Esc: close/keep draft\nQuestion Ctrl-U: discard local draft/back; Ctrl-L: next page\nFindings: Enter selects; a/s/r opens operator decision note\nCtrl-S submits note; Esc discards; Ctrl-B rebases after conflict\nFindings Ctrl-L next page / Ctrl-G refresh; evidence stays Unverified\nEnter: select session, or durably queue composer\nCtrl-T: steer admitted active conversation; Enter remains queue\nPending/Captured/Undelivered notes retain their operation identity\nShift-Enter: newline; bracketed paste only inserts\nCtrl-R: explicitly run selected pending queue input\nCtrl-X: cancel active turn or selected pending input\nCtrl-C: cancel active turn, otherwise quit\nCtrl-N / n in session list: create session with explicit launch budget\nCtrl-L: next session/queue page or older history\nPageUp / PageDown: conversation scroll\nCtrl-U: clear composer; arrows/Home/End edit Unicode text\nCtrl-Q: quit; app-server owns cancellation and cleanup\nF1: close help\n\nSaved pending work never starts merely by opening a session.\nLive deltas and tool drafts are provisional; final replies are authoritative.\nUnknown or failed work keeps its journal and stops automatic draining.").block(Block::default().borders(Borders::ALL).title("Help")).wrap(Wrap{trim:false}),area);
+        frame.render_widget(Paragraph::new("Native protocol terminal — experimental\n\nTab: sessions / conversation / queue / findings\nCtrl-P: exact invocation approvals; Ctrl-A approve / Ctrl-D deny after inspection\nEnter/paste never approve; Esc retains permission draft\nCtrl-O: operator questions inbox; answers grant no permissions\nQuestion arrows/Space: choices; Enter/paste: text only\nQuestion Ctrl-S: submit; Ctrl-D: dismiss; Esc: close/keep draft\nQuestion Ctrl-U: discard local draft/back; Ctrl-L: next page\nFindings: Enter selects; a/s/r opens operator decision note\nCtrl-S submits note; Esc discards; Ctrl-B rebases after conflict\nFindings Ctrl-L next page / Ctrl-G refresh; evidence stays Unverified\nEnter: select session, or durably queue composer\nCtrl-T: steer admitted active conversation; Enter remains queue\nPending/Captured/Undelivered notes retain their operation identity\nShift-Enter: newline; bracketed paste only inserts\nCtrl-R: explicitly run selected pending queue input\nCtrl-X: cancel active turn or selected pending input\nCtrl-C: cancel active turn, otherwise quit\nCtrl-N / n in session list: create session with explicit launch budget\nCtrl-L: next session/queue page or older history\nPageUp / PageDown: conversation scroll\nCtrl-U: clear composer; arrows/Home/End edit Unicode text\nCtrl-Q: quit; app-server owns cancellation and cleanup\nF1: close help\n\nSaved pending work never starts merely by opening a session.\nLive deltas and tool drafts are provisional; final replies are authoritative.\nUnknown or failed work keeps its journal and stops automatic draining.").block(Block::default().borders(Borders::ALL).title("Help")).wrap(Wrap{trim:false}),area);
     }
 }

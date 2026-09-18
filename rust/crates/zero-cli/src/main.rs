@@ -1,3 +1,4 @@
+mod approvals;
 mod args;
 mod artifact;
 mod console;
@@ -70,6 +71,9 @@ async fn run(args: Args) -> Result<bool, Box<dyn Error>> {
     } = &args.command
     {
         return tui::run(&args, session.clone(), request.as_deref(), *budget_limit).await;
+    }
+    if let Command::Approvals { command } = args.command {
+        return approvals::run(&args.state, command).await;
     }
     if let Command::Questions { command } = args.command {
         return questions::run(&args.state, command).await;
@@ -374,11 +378,11 @@ async fn run(args: Args) -> Result<bool, Box<dyn Error>> {
             let bytes = providers::read_bounded(&request).await?;
             let request: zero_protocol::agent::AgentRequest =
                 serde_json::from_slice(&bytes).map_err(|_| "Invalid agent request JSON")?;
-            if request.operator_questions
+            if (request.operator_questions || request.tool_approval_policy.is_some())
                 && !questions::cached_agent_request(&args.state, &session, &command_id, &request)
             {
                 return Err(
-                    "question-enabled agent requires an answer-capable app-server, console or tui"
+                    "interactive-policy agent requires app-server, console or tui for answers or tool approval"
                         .into(),
                 );
             }
@@ -388,7 +392,8 @@ async fn run(args: Args) -> Result<bool, Box<dyn Error>> {
                 request,
             }
         }
-        Command::Questions { .. }
+        Command::Approvals { .. }
+        | Command::Questions { .. }
         | Command::Steer { .. }
         | Command::Findings { .. }
         | Command::SourceReport { .. }

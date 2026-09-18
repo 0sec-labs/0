@@ -1,4 +1,5 @@
 //! Experimental fullscreen protocol client. It never owns the engine or database.
+pub mod approvals;
 mod client;
 pub mod findings;
 pub mod questions;

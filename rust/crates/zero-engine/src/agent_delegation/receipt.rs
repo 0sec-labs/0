@@ -44,6 +44,16 @@ fn derive_bounded(
         return Err(error("delegation root identity mismatch"));
     }
     let parent: AgentRequest = serde_json::from_value(root.payload["request"].clone())?;
+    let root_approval_policy = parent
+        .tool_approval_policy
+        .as_ref()
+        .map(serde_json::to_value)
+        .transpose()?;
+    if root.payload["delegation_context"].get("tool_approval_policy")
+        != root_approval_policy.as_ref()
+    {
+        return Err(error("delegation root approval policy changed"));
+    }
     let policy = parent
         .delegation_policy
         .as_ref()
@@ -140,7 +150,10 @@ fn derive_bounded(
             .as_array()
             .and_then(|roles| roles.iter().find(|entry| entry["name"] == task.role))
             .ok_or_else(|| error("delegation role receipt absent"))?;
-        if child.payload["delegation_template"] != identity["template"]
+        if child.payload.get("delegation_root_approval_policy") != root_approval_policy.as_ref()
+            || identity.get("tool_approval_policy")
+                != child.payload["request"].get("tool_approval_policy")
+            || child.payload["delegation_template"] != identity["template"]
             || [
                 "endpoint",
                 "rates",

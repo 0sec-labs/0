@@ -174,7 +174,7 @@ materialization; a page may stop early at either bound. Continue using the last
 returned message sequence until an empty page. Captured labels and inference
 replay both validate original enqueue and capture events. SQL size checks precede
 witness/prompt decoding; source/provider outcome bodies are not read. Read-only
-opening requires exact schema v8 and performs no migration or ownership recovery.
+opening requires exact schema v9 and performs no migration or ownership recovery.
 
 
 Schema v8 adds informational operator questions and immutable decisions. Creation
@@ -201,3 +201,35 @@ continue after the last returned admission sequence until an empty page. A first
 oversized witness fails explicitly; later quota exhaustion returns a prefix.
 Reads revalidate original admission, original provider call, and immutable decision
 receipts, with no provider access, ownership claim, or recovery mutation.
+
+
+Schema v9 adds per-invocation approval wrappers, immutable decisions and single-use
+consumption witnesses. The opt-in host policy selects only existing snapshot or
+offline plugin tools; omission preserves automatic execution. Approval grants no
+new filesystem, network, role, provider, plugin or resource authority. Gated
+Docker profiles require immutable image identities; microVM archives remain pinned.
+
+Each `approval.intent` artifact (at most 8 MiB) binds the original actor/inference,
+provider call, exact offered schema, host policy and full resolved effect payload.
+Creation verifies the original successful model call and captured authority before
+atomically retaining the artifact and owned wrapper. The 8 KiB UTF-8 preview is
+explicitly marked when truncated and is never the approved identity. Each actor
+can create at most 128 approval wrappers.
+
+Decision command IDs occupy their own session namespace. Exact retries compare
+original intent and decision before liveness checks. Approve keeps the wrapper
+running: it means permission, not execution. Consume atomically compares the
+frozen effect, admits/starts one child and retains a consume witness; it is never
+replayed. Denial settles a canonical no-effect receipt. Cancellation expires
+pending or approved-unconsumed permission; consumed children remain owned by the
+execution lifecycle. Epoch recovery interrupts unconsumed waiters and leaves
+uncertain effects Unknown without automatic resumption.
+
+Read records separate permission status, wrapper status and actual effect status.
+Readers verify intent bytes/admission, original provider call and authority,
+immutable decision/consume witnesses and exact effect-child admission. They share
+cached operation, event and artifact reads under a 64 MiB pre-materialization
+budget. Pages are 1–100 records and at most 1 MiB serialized; continue after the
+last returned wrapper admission sequence. These APIs do not execute, recover,
+claim ownership or mutate approval state. This is offline tool-approval support,
+not engagement scope or complete legacy autonomy-mode parity.

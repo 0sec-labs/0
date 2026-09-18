@@ -247,3 +247,12 @@ an execution. Only explicitly selected delegated roles receive this tool.
 A cancelled or interrupted question remains inspectable and never automatically
 restarts its actor. See the [migration record](MIGRATION.md#durable-operator-questions)
 for receipt and continuation guarantees.
+
+The optional `tool_approval_policy: {"require_approval":["execute_snapshot"]}`
+requires an explicit operator decision for each matching invocation. Gated Docker
+profiles use immutable image references. Approval is separate from informational
+questions and from actual execution status. The CLI exposes read-only
+`approvals list/show`; `show --full-intent` includes the complete retained intent.
+Console/TUI permission controls address a specific invocation and digest; they
+cannot widen the captured profile. See `MIGRATION.md` for remaining scope and
+autonomy-mode parity requirements.
