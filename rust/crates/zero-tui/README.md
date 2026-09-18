@@ -11,7 +11,7 @@ budget_limit })`. A profile is an explicit `AgentRequest`; its initial prompt
 is never submitted automatically. Without a profile the UI supports browsing
 and explicit session creation, but cannot enqueue a new prompt.
 
-- Tab switches sessions, conversation and queue. Enter selects a session.
+- Tab switches sessions, conversation, queue and Findings. Enter selects a session.
 - `n` in session selection, or Ctrl-N, creates a session with the launch budget
   (default zero). No provider, price, model, image or plugin generation is inferred.
 - Enter durably queues the composer; Shift-Enter inserts a newline. Unicode
@@ -43,8 +43,37 @@ limited to 200 rows / 8 MiB, evicting old terminal rows first; oversized unfinis
 queues fail explicitly and can be managed through the queue CLI. Queue reads
 continue until an empty page, including byte-capped pages shorter than requested.
 
-This implements a fullscreen conversation/queue foundation, not legacy TUI parity:
-there are no source/findings editors, approval widgets, search, terminal panes,
+The Findings view works without a provider profile. Enter selects a retained review
+candidate, then a hypothesis. Review discovery displays metadata only: failed or
+partial candidates stay visible, and selecting one runs full provenance validation.
+An empty discovery scan window can still have another page; Ctrl-L continues.
+Empty hypotheses never mean that the source is safe.
+
+On hypothesis detail, `a` / `s` / `r` opens an Accept / Suppress / Reopen note.
+These are operator dispositions; every hypothesis remains **Unverified**, severity
+remains a model claim, and the security conclusion remains unestablished. Unicode
+paste and Enter only insert note text. Ctrl-S explicitly submits; Esc discards the
+form. Notes are limited to 4096 UTF-8 bytes. Session/view navigation is held while
+a draft is open or a decision acknowledgment is pending; global active-turn
+cancellation and quitting remain available.
+
+Each submitted note binds the selected source identity and displayed revision.
+Errors retain the draft and command ID for exact retry; editing a submitted draft
+is held. A revision conflict refreshes the current record while preserving the
+original note/revision. Ctrl-B explicitly rebases it onto the displayed current
+revision and creates a new command ID; Ctrl-S then submits that new decision.
+Exact retries display their original decision receipt separately from the latest
+current record. They never silently overwrite a newer operator decision.
+
+Findings lists and decision history show one bounded page at a time (20 records,
+2 MiB maximum response retained by this UI). Ctrl-L advances, including after a
+short byte-limited page; Ctrl-G returns to the first page. Each new page replaces
+the prior window. Esc moves back; PageUp/PageDown scroll detail. Read responses
+are scoped to session, selection, and refresh generation. Source hashes and
+citations remain visible; no arbitrary local source reads or model tools are added.
+
+This implements fullscreen conversation, queue, and native source-triage workflows,
+not legacy TUI parity. There are no source editors, approval widgets, search, terminal panes,
 credential management, profile editing, plugin activation or visual scan workflows.
 Tool drafts are inert text and never initiate execution. Terminal sanitization
 removes control bytes from displayed server content. The actual sandbox, provider,

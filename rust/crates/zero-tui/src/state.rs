@@ -13,10 +13,12 @@ pub enum View {
     Sessions,
     Conversation,
     Queue,
+    Findings,
 }
 #[derive(Clone)]
 enum Pending {
     Init,
+    Findings(crate::findings::Pending),
     Sessions,
     Create,
     History {
@@ -53,6 +55,7 @@ pub struct Active {
 }
 pub struct State {
     pub options: Options,
+    pub findings: crate::findings::Findings,
     pub view: View,
     pub session: Option<String>,
     pub sessions: Vec<Value>,
@@ -102,6 +105,7 @@ impl State {
             },
             session,
             options,
+            findings: crate::findings::Findings::default(),
             sessions: vec![],
             selected: 0,
             history: vec![],
@@ -135,6 +139,12 @@ impl State {
             id: RequestId::Text(id),
             command,
         }
+    }
+    fn finding_actions(&mut self, actions: Vec<crate::findings::Action>) -> Vec<Request> {
+        actions
+            .into_iter()
+            .map(|a| self.request(a.command, Pending::Findings(a.pending)))
+            .collect()
     }
     pub fn initialize(&mut self) -> Request {
         self.request(Command::Initialize, Pending::Init)
@@ -195,6 +205,7 @@ impl State {
             self.status = "Cancel or finish the active turn before switching sessions".into();
             return vec![];
         }
+        self.findings.reset();
         self.session = Some(session);
         self.history.clear();
         self.latest = None;
@@ -212,6 +223,10 @@ impl State {
         self.refresh()
     }
     pub fn paste(&mut self, text: &str) {
+        if self.view == View::Findings {
+            self.findings.paste(text);
+            return;
+        }
         if self.view != View::Conversation
             || self
                 .pending
@@ -233,6 +248,19 @@ impl State {
             return vec![];
         }
         let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
+        let global = ctrl && matches!(key.code, KeyCode::Char('q' | 'c' | 'x' | 'n'));
+        let help_lifecycle = ctrl && matches!(key.code, KeyCode::Char('q' | 'c' | 'x'));
+        if self.help && !help_lifecycle && !matches!(key.code, KeyCode::F(1) | KeyCode::Esc) {
+            return vec![];
+        }
+        if self.view == View::Findings
+            && !self.help
+            && !global
+            && !matches!(key.code, KeyCode::Tab | KeyCode::F(1))
+        {
+            let actions = self.findings.key(key);
+            return self.finding_actions(actions);
+        }
         if ctrl {
             match key.code {
                 KeyCode::Char('q') => {
@@ -286,12 +314,22 @@ impl State {
             KeyCode::F(1) => self.help = !self.help,
             KeyCode::Esc if self.help => self.help = false,
             KeyCode::Tab => {
+                if self.findings.blocks_navigation() {
+                    self.findings.status =
+                        "Finish or discard the decision draft before switching views".into();
+                    return vec![];
+                }
                 self.view = match self.view {
                     View::Sessions => View::Conversation,
                     View::Conversation => View::Queue,
-                    View::Queue => View::Sessions,
+                    View::Queue => View::Findings,
+                    View::Findings => View::Sessions,
                 };
                 self.selected = 0;
+                if self.view == View::Findings {
+                    let actions = self.findings.enter(self.session.as_deref());
+                    return self.finding_actions(actions);
+                }
                 if self.view == View::Sessions && self.sessions.is_empty() {
                     return vec![self.sessions_page()];
                 }
@@ -359,12 +397,13 @@ impl State {
         vec![]
     }
     fn mutation_pending(&self) -> bool {
-        self.pending.values().any(|p| {
-            matches!(
-                p,
-                Pending::Enqueue { .. } | Pending::Create | Pending::Cancel | Pending::Run
-            )
-        })
+        self.findings.blocks_navigation()
+            || self.pending.values().any(|p| {
+                matches!(
+                    p,
+                    Pending::Enqueue { .. } | Pending::Create | Pending::Cancel | Pending::Run
+                )
+            })
     }
     fn new_session(&mut self) -> Vec<Request> {
         if self.active.is_some() || self.mutation_pending() {
@@ -386,6 +425,7 @@ impl State {
             return vec![self.sessions_page()];
         };
         match self.view {
+            View::Findings => vec![],
             View::Sessions => {
                 if self.session_cursor.is_some() {
                     vec![self.sessions_page()]
@@ -576,6 +616,11 @@ impl State {
             active.cancel_requested = true;
             let command = active.command.clone();
             self.halted = true;
+            if self.view == View::Findings {
+                self.findings.status =
+                    "Cancellation requested for active conversation; awaiting acknowledgment"
+                        .into();
+            }
             return vec![self.request(
                 Command::Cancel {
                     session_id: session,
@@ -627,6 +672,10 @@ impl State {
                 let Some(pending) = self.pending.remove(&id) else {
                     return Err(Error::Protocol("unknown app-server response ID".into()));
                 };
+                if let Pending::Findings(tag) = pending {
+                    let actions = self.findings.reply(tag, *reply)?;
+                    return Ok(self.finding_actions(actions));
+                }
                 if let Pending::History { session, epoch, .. }
                 | Pending::Queue { session, epoch }
                 | Pending::Budget { session, epoch } = &pending
@@ -655,6 +704,7 @@ impl State {
                 }
                 let value = serde_json::to_value(reply.as_ref())?;
                 match pending {
+                    Pending::Findings(_) => unreachable!("findings responses handled above"),
                     Pending::Init => {
                         if !matches!(
                             reply.as_ref(),
@@ -865,6 +915,9 @@ impl State {
                                 ""
                             }
                         );
+                        if self.view == View::Findings {
+                            self.findings.status = self.status.clone();
+                        }
                         let mut out = self.refresh();
                         out.extend(self.auto());
                         Ok(out)
@@ -879,6 +932,9 @@ impl State {
                             "Cancellation accepted; waiting for retained result and cleanup"
                         }
                         .into();
+                        if self.view == View::Findings {
+                            self.findings.status = self.status.clone();
+                        }
                         Ok(vec![])
                     }
                 }

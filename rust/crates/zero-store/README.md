@@ -126,3 +126,28 @@ or turn-limit outcomes whose checkpoint digest matches the retained attachment,
 with no source-submission terminal result, recovery path or error. It is not a
 validation receipt. The engine still checks the exact profile, lineage, original
 inference evidence and checkpoint contents when a continuation is requested.
+
+`source_reviews(session, before_sequence, limit)` is a metadata-only attachment
+catalog, available through the current read-only store without migration. It
+returns admission sequence, operation/command IDs, current operation status and
+the digest named by a `source.review` attachment. Every operation status can
+appear. A candidate is **not** a validated review, finding, or inspection receipt:
+existing finding detail APIs still validate source/provider provenance and
+artifact integrity. Corrupted artifact contents remain discoverable and are
+rejected on inspection; discovery never reads those bytes or the operation's
+current request/outcome.
+
+Each page scans at most 128 journal rows newest first **before** filtering by
+admission kind or attachment, with indexed session/sequence bounds. Its exclusive
+continuation cursor is the last consumed journal row, not necessarily a returned
+review. An empty `reviews` array with a non-null cursor is not exhausted. Limits
+are 1–32 candidates and 512 KiB of serialized output including JSON escaping.
+Admission payloads are capped at 32 MiB each. A two-phase read checks their lengths
+and a conservative 64 MiB aggregate budget before fetching and decoding payloads;
+IDs are bounded to 4 KiB. Admissions must match the requested session and current
+operation/command identity; status and attachment-digest shapes are checked.
+Malformed metadata fails explicitly. Byte limits stop before consuming the next
+row, and an oversized first admission fails without advancing the cursor. Each
+page uses one SQLite read snapshot; refresh from the head to discover attachments
+created after an earlier page was read. None of these reads claims engine
+ownership, recovers operations, reserves budget, or accesses a provider.

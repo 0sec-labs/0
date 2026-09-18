@@ -722,3 +722,37 @@ SIGTERM and child-EOF cleanup, and repeated pending-queue restart without HTTP.
 One earlier existing evaluation recovery test reported an ownership-lock failure;
 it passed isolated, in its full crate suite and in the successful workspace
 rerun. No cause was established and no speculative evaluation change was made.
+
+## Native findings discovery and operator interface
+
+`source_reviews` and `findings reviews` list bounded metadata references to
+retained `source.review` attachments, including partial operations. A page scans
+at most 128 journal rows before filtering and can be empty with a continuation
+cursor. Per-row and cumulative admission-read limits precede JSON decoding;
+source/evidence bytes and operation request/outcome bodies are not loaded by
+discovery. These references carry no finding validation or security conclusion.
+Selecting a review still uses the existing full source-provenance checks.
+
+The terminal findings view supports review and hypothesis selection, cited
+detail, paginated decision history and explicit accept/suppress/reopen notes.
+Paste and Enter do not submit a note; Ctrl-S records the exact revision-bound
+intent. Conflict handling retains the original draft and requires explicit
+rebasing rather than automatically overwriting a newer decision. Retry receipts
+remain separate from current finding status. All hypotheses remain Unverified.
+
+This advances native source triage presentation. Legacy fingerprint families,
+behavioral verification workflows, approval/question dialogs and multi-audit
+terminal parity remain open. No production routing or publication gate changes.
+
+Qualification passed all 602 workspace tests on actual Rust 1.85, with the same
+11 explicit environment-dependent ignores, strict production Clippy and
+formatting. Seven discovery fixtures exercise sparse journal windows, restart
+cursors, metadata corruption, read quotas and exact escaped output bounds. Four
+engine integration cases cover both review origins, deleted sources, retained
+partial reviews and catalog visibility despite invalid evidence that detail
+validation rejects. CLI checks prove discovery remains read-only under an active
+engine owner and ignores unrelated provider/harness configuration. The 26 TUI
+tests cover continuation, stale responses, notes, explicit conflicts/rebase,
+retry receipt/current-state separation and navigation guards. A real PTY fixture
+proves offline selection and explicit triage persistence, inert pasted note text,
+unchanged Unverified evidence/accounting and terminal restoration/child cleanup.

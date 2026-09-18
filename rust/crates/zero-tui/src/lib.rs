@@ -1,5 +1,6 @@
 //! Experimental fullscreen protocol client. It never owns the engine or database.
 mod client;
+pub mod findings;
 pub mod render;
 pub mod state;
 use crossterm::{

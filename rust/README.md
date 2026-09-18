@@ -163,6 +163,7 @@ resource bounds and truncation semantics.
 Native source hypotheses support operator triage, independently of verification:
 
 ```sh
+0sec-native findings reviews --session SESSION
 0sec-native findings list --session SESSION --operation SOURCE_OPERATION
 0sec-native findings show --session SESSION --operation SOURCE_OPERATION --hypothesis HYPOTHESIS
 0sec-native findings accept --session SESSION --operation SOURCE_OPERATION --hypothesis HYPOTHESIS --command-id DECISION_ID --expected-revision 0 --note 'Investigate further'
@@ -207,5 +208,6 @@ The experimental `tui` frontend adds full-screen session selection, conversation
 and durable queue views over an owned app-server connection. It consumes bounded
 display history and live progress without opening the database. Saved pending
 inputs require explicit resumption. See the [CLI guide](crates/zero-cli/README.md#experimental-full-screen-terminal)
-for controls and shutdown behavior. Approval/question dialogs, findings screens
-and full legacy terminal parity remain open.
+for controls and shutdown behavior. Its findings view adds native source-review
+discovery and explicit operator triage; acceptance leaves hypotheses unverified.
+Approval/question dialogs, legacy finding families and full terminal parity remain open.

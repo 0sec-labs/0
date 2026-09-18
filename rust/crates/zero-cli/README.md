@@ -235,7 +235,7 @@ dispatched, that input retains its parent for exact retry; subsequent prompts
 follow the pending queue or current retained conversation instead of repeatedly
 forking from the initial parent. Unknown or ineligible outcomes require recovery.
 
-Tab switches between sessions, conversation and durable queue. Enter selects a
+Tab switches between sessions, conversation, durable queue and findings. Enter selects a
 session or submits the conversation composer; bracketed paste inserts text,
 including newlines, without submitting. Ctrl-N creates a session with
 `--budget-limit` (default zero). Ctrl-R explicitly runs a selected pending input;
@@ -244,6 +244,16 @@ work, otherwise quits; Ctrl-Q quits. F1 shows help and Ctrl-L requests another
 page; Ctrl-G returns to the newest conversation page. The display marks when
 older pages replace its bounded history window. Opening a session never
 automatically dispatches saved pending prompts.
+
+The findings view discovers review references, then validates a selected review
+before showing its unverified hypotheses. Enter opens a review or hypothesis;
+Esc goes back. In hypothesis detail, `a`, `s` or `r` opens an accept, suppress or
+reopen note. Enter and pasted newlines only edit the note; Ctrl-S explicitly
+submits the decision. A revision conflict preserves the note and refreshes the
+record; Ctrl-B explicitly rebases before another submission. Exact retries use
+the same decision ID and distinguish the original receipt from current status.
+Operator acceptance does not verify a security claim. No agent profile or model
+call is needed for these operator actions.
 
 History is a bounded display projection, with explicit text truncation. It is
 not passed back as model context: continuation uses the engine's retained
@@ -257,7 +267,7 @@ Quit closes the owned protocol connection and waits for app-server cleanup.
 Pending inputs remain durable. An interrupted inference can retain Unknown
 status and a budget reservation; inspect its journal before retrying. A shutdown
 timeout is reported as an error. Full legacy terminal parity, including approval
-and question dialogs, findings screens and multi-audit navigation, remains open.
+and question dialogs, legacy finding families and multi-audit navigation, remains open.
 
 ## Durable agent input queue
 
@@ -618,8 +628,22 @@ remain separate capabilities.
 
 ## Operator triage of source hypotheses
 
+`findings reviews --session SESSION` discovers retained `source.review`
+references without loading source or evidence bytes. Use `--before-sequence N`
+with the returned `next_before_sequence` to continue; `--limit` accepts 1..32.
+Each call scans at most 128 journal rows, so an empty page can still have a
+continuation cursor. Refresh from the beginning to discover new attachments.
+
+Discovery includes partial and failed operations with retained review attachments.
+A reference is not a validated finding or a security verdict. Selecting it with
+`findings list/show` performs the existing provenance checks and can fail if the
+operation or its retained evidence is incomplete or inconsistent. Discovery is
+read-only and works while an engine owns the database, without provider or
+harness configuration.
+
 `findings list --session SESSION --operation SOURCE_OPERATION` returns a bounded
-page of validated native hypotheses with their independent operator status.
+page of hypotheses from provenance-checked native reviews, with their independent
+operator status. The hypotheses remain unverified.
 `--offset N --limit 32` pages the immutable review order; advance by the number
 returned until empty. `findings show` adds `--hypothesis ID` and accepts
 `--after-revision N --limit 50` for immutable decision history. Read commands

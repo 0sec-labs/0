@@ -30,6 +30,16 @@ pub struct Decision {
 }
 #[derive(Debug, Subcommand)]
 pub enum FindingsCommand {
+    /// Discover saved review references; selecting one still validates its evidence.
+    Reviews {
+        #[arg(long)]
+        session: String,
+        /// Resume before the returned journal cursor, including after an empty page.
+        #[arg(long)]
+        before_sequence: Option<u64>,
+        #[arg(long, default_value_t = 20, value_parser = clap::value_parser!(u32).range(1..=32))]
+        limit: u32,
+    },
     /// List hypotheses and operator triage from one retained source review.
     List {
         #[command(flatten)]
@@ -62,6 +72,18 @@ pub enum FindingsCommand {
 
 pub async fn run(state: &Path, command: FindingsCommand) -> Result<bool, Box<dyn Error>> {
     let reply = match command {
+        FindingsCommand::Reviews {
+            session,
+            before_sequence,
+            limit,
+        } => {
+            let path = state.to_owned();
+            let page = inspect(move || {
+                zero_engine::read_source_reviews(&path, &session, before_sequence, limit)
+            })
+            .await?;
+            Reply::SourceReviews { page }
+        }
         FindingsCommand::List {
             target,
             offset,

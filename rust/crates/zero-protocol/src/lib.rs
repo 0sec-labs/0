@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 pub mod agent;
 mod binary;
 pub mod context;
+pub mod discovery;
 pub mod execution;
 pub mod history;
 pub mod microvm;
@@ -112,6 +113,11 @@ pub enum Command {
         session_id: String,
         command_id: String,
         request: verification::SourceReproductionRequest,
+    },
+    SourceReviews {
+        session_id: String,
+        before_sequence: Option<u64>,
+        limit: u32,
     },
     SourceFindings {
         session_id: String,
@@ -285,6 +291,9 @@ pub enum Reply {
         operation: Operation,
         result: Option<verification::ReproductionOutcome>,
         duplicate: bool,
+    },
+    SourceReviews {
+        page: discovery::SourceReviewPage,
     },
     SourceFindings {
         findings: Vec<triage::SourceFindingRecord>,

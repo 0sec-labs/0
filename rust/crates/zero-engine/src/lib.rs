@@ -6,6 +6,7 @@ mod agent_context_history;
 mod agent_plugins;
 mod agent_source;
 mod agent_submission;
+mod discovery;
 mod history;
 mod inference;
 mod lifecycle;
@@ -21,6 +22,7 @@ mod source_report;
 mod triage;
 mod workflow_provenance;
 
+pub use discovery::read_source_reviews;
 pub use source_report::{read_source_report, read_source_workflow_report};
 pub use triage::{read_source_finding, read_source_findings};
 
@@ -250,6 +252,7 @@ impl Engine {
             "generation_pinned_offline_plugins",
             "unverified_source_review",
             "source_hypothesis_triage",
+            "bounded_source_review_discovery",
             "host_frozen_source_observation",
         ]
         .map(String::from)
@@ -451,6 +454,17 @@ impl Engine {
                 input_id,
             } => Ok(Reply::AgentInput {
                 input: lock(&self.shared.store)?.cancel_queued_agent(&session_id, &input_id)?,
+            }),
+            Command::SourceReviews {
+                session_id,
+                before_sequence,
+                limit,
+            } => Ok(Reply::SourceReviews {
+                page: lock(&self.shared.store)?.source_reviews(
+                    &session_id,
+                    before_sequence,
+                    limit,
+                )?,
             }),
             Command::SourceFindings {
                 session_id,
