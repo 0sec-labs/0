@@ -151,3 +151,11 @@ Restoration checks original journals with a 64 MiB cumulative validation budget.
 Omitting the field keeps existing full-context behavior and serialized identities.
 Separately accounted summaries, journal retrieval and tokenizer-aware scheduling
 remain migration work.
+
+Source-enabled agent requests offer `search_source_text` over the explicitly
+pinned source. Its optional `mode: "regex"` enables bounded per-line regex search;
+`case_sensitive: false` enables Unicode case-insensitive matching in either mode.
+The default remains case-sensitive literal search. Results preserve exact source
+lines and hash citations, including their original line endings. See the
+[source library documentation](crates/zero-source/README.md) for pattern syntax,
+resource bounds and truncation semantics.

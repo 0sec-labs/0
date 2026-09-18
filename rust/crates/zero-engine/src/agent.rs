@@ -167,13 +167,24 @@ impl Engine {
             let source = agent_source::capture(&store, &session_id, &request)?;
             let input =
                 continuation_input(&store, &session_id, &request, &profile, plugins.as_ref())?;
+            // A context lineage keeps its original offered schemas across upgrades.
+            // continuation_input has already validated the ancestor's request and
+            // hash-bound template; only fresh conversations capture current tools.
+            let template = if request.context_policy.is_some() {
+                match &request.continuation_of {
+                    Some(parent) => serde_json::from_value::<ResponsesRequest>(
+                        store.get_operation(parent)?.payload["context_template"].clone(),
+                    )?,
+                    None => model_request(&request, vec![], plugins.as_ref()),
+                }
+            } else {
+                model_request(&request, vec![], plugins.as_ref())
+            };
+            let mut projected = template.clone();
+            projected.input = input.projected(request.context_policy.as_ref())?;
             profile
                 .client
-                .validate(&model_request(
-                    &request,
-                    input.projected(request.context_policy.as_ref())?,
-                    plugins.as_ref(),
-                ))
+                .validate(&projected)
                 .map_err(|e| EngineError::State(e.to_string()))?;
             let mut payload = serde_json::json!({"kind":"offline_snapshot_agent","request":request,"endpoint":profile.client.endpoint_identity(),"rates":profile.rates});
             if profile.client.wire_api() != zero_protocol::model::WireApi::Responses {
@@ -181,8 +192,7 @@ impl Engine {
             }
             profile.stamp(&mut payload)?;
             if request.context_policy.is_some() {
-                payload["context_template"] =
-                    serde_json::to_value(model_request(&request, vec![], plugins.as_ref()))?;
+                payload["context_template"] = serde_json::to_value(template)?;
             }
             if let Some(context) = &plugins {
                 payload["plugin_context"] = context.identity.clone();
@@ -449,6 +459,13 @@ async fn run_rounds(
 ) -> Result<(AgentResult, Vec<serde_json::Value>), EngineError> {
     let mut input = history.input;
     let mut context_state = history.state;
+    let template = if request.context_policy.is_some() {
+        serde_json::from_value::<ResponsesRequest>(
+            lock(&shared.store)?.get_operation(parent)?.payload["context_template"].clone(),
+        )?
+    } else {
+        model_request(&request, vec![], plugins.as_ref())
+    };
     let mut output = AgentResult {
         status: AgentStatus::TurnLimit,
         text: String::new(),
@@ -483,7 +500,8 @@ async fn run_rounds(
                 break;
             }
         };
-        let model = model_request(&request, projected, plugins.as_ref());
+        let mut model = template.clone();
+        model.input = projected;
         // Adaptive evidence must be retainable before another provider charge.
         if request.source_submission_max_hypotheses.is_some()
             && serde_json::to_vec(&model)?.len() > zero_source::MAX_ARTIFACT_BYTES
@@ -672,10 +690,15 @@ async fn run_rounds(
                 let context = Arc::clone(bundle);
                 let tool = name.clone();
                 let args = arguments.clone();
+                let offered = model
+                    .tools
+                    .iter()
+                    .find(|definition| definition.name == name)
+                    .cloned();
                 // The read owns its context until completion; cancellation must
                 // await it before cleanup, without blocking runtime threads.
                 let result = tokio::task::spawn_blocking(move || {
-                    agent_source::invoke(&context, &tool, args)
+                    agent_source::invoke(&context, &tool, args, offered.as_ref())
                 })
                 .await
                 .map_err(|e| EngineError::State(e.to_string()))?;

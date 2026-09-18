@@ -3,6 +3,8 @@ mod bundle;
 pub mod investigation;
 pub mod snapshot_investigation;
 pub use snapshot_investigation::SnapshotInvestigation;
+mod search;
+pub use search::{MAX_REGEX_COMPILED_BYTES, MAX_REGEX_DFA_BYTES, MAX_REGEX_NESTING, SearchMode};
 mod submission;
 pub use bundle::{PreparedReview, SourceBundle, SourceFile, prepare};
 use serde::Serialize;

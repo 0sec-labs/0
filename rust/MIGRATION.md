@@ -144,7 +144,8 @@ This is distinct from retained-review mode and does not broaden it implicitly.
 Source listings now expose deterministic `after_path` / `next_after_path` pages,
 so the per-call 32-file limit does not hide later files in a large directory.
 Manifest/scope validation and serialized-byte bounds apply to every page.
-Regex search and role-specific tool policy remain open. Optional structured
+Explicit regex and case-insensitive search are available (see the search
+checkpoint below); role-specific tool policy remains open. Optional structured
 submission now connects adaptive snapshot investigation to retained unverified
 hypotheses; the dedicated one-shot review still requires host-selected files.
 
@@ -575,3 +576,37 @@ of omitted history even after hashes are recomputed. An additional regression
 requires the exact latest-round suffix when repeated replay could otherwise
 witness an earlier tool result. Provider fixtures use loopback HTTP without paid
 calls. Independent final review found no remaining concrete blocker.
+
+### Bounded source search and historical tool schemas
+
+`search_source_text` now accepts optional `mode` (`literal` or `regex`) and
+`case_sensitive` arguments. Omitting them preserves native literal,
+case-sensitive behavior. Explicit case-insensitive literal search supplies the
+legacy scoped-search capability; regex replaces a subset of searches previously
+performed through scoped `rg`. This does not add arbitrary shell execution or
+change source authority. Retained bundles and entire pinned snapshots use the
+same matcher and return exact original lines with their pinned hash citations.
+
+Regex patterns are restricted to 256 UTF-8 bytes, nesting depth 32, an approximate
+256 KiB compiled program and 256 KiB DFA cache. Matching is per logical line
+(with CRLF/LF terminators removed for matching only), using the Rust regex engine;
+look-around and backreferences are rejected. Existing file, aggregate source,
+200-result and 64 KiB output limits still apply. Invalid patterns return a tool
+error; they never broaden scope or fall back to a shell. Unicode case-insensitive
+matching uses regex simple case folding, not locale-dependent matching or a
+promise of identical JavaScript lowercasing for every Unicode string.
+
+Context-policy continuation chains retain their original validated request
+and tool template across implementation upgrades. New conversations capture the
+new tool definitions; historical conversations keep their recorded definitions
+on every subsequent provider turn. Source dispatch rejects arguments absent from
+that offered schema. Historical journal/receipt comparisons remain strict, and
+exact retries do not reinterpret old source calls or reread deleted source.
+
+Qualification passed all 515 workspace tests on Rust 1.85, strict production
+Clippy and formatting. New coverage includes six pure source-search fixtures,
+three engine fixtures covering both source authorities and historical schemas,
+and an executable CLI fixture checking exact CRLF/LF citations and restart retry
+after source deletion without additional HTTP. Completed and turn-limit context
+chains each survive two restarted continuations with their historical templates.
+Independent review found no remaining concrete blocker in this checkpoint.

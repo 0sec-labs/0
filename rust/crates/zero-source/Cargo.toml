@@ -11,6 +11,7 @@ zero-executor.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
+regex = "1.12.3"
 thiserror.workspace = true
 nix = { workspace = true, features = ["fs"] }
 [dev-dependencies]

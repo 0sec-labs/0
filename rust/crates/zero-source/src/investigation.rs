@@ -204,14 +204,20 @@ impl<'a> SourceInvestigation<'a> {
         path: Option<&str>,
         limit: usize,
     ) -> Result<SourceSearch> {
-        if query.is_empty()
-            || query.len() > MAX_SEARCH_QUERY_BYTES
-            || query.contains(['\r', '\n', '\0'])
-        {
-            return Err(invalid(
-                "search requires 1..256 UTF-8 bytes without line breaks or NUL",
-            ));
-        }
+        self.search_files_with_options(query, path, limit, crate::SearchMode::Literal, true)
+    }
+    /// Explicit literal/regex mode with Unicode case folding when requested.
+    /// Regex anchors match logical lines without their LF/CRLF terminator;
+    /// returned text and citations retain the exact original bytes.
+    pub fn search_files_with_options(
+        &self,
+        query: &str,
+        path: Option<&str>,
+        limit: usize,
+        mode: crate::SearchMode,
+        case_sensitive: bool,
+    ) -> Result<SourceSearch> {
+        let matcher = crate::search::Matcher::new(query, mode, case_sensitive).map_err(invalid)?;
         if !(1..=MAX_SEARCH_RESULTS).contains(&limit) {
             return Err(invalid("search result limit must be 1..200"));
         }
@@ -223,7 +229,7 @@ impl<'a> SourceInvestigation<'a> {
         };
         'files: for file in self.bundle.files().iter().filter(|f| included(f, prefix)) {
             for (index, line) in file.text().split_inclusive('\n').enumerate() {
-                if !line.contains(query) {
+                if !matcher.matches(line) {
                     continue;
                 }
                 if result.matches.len() == limit {

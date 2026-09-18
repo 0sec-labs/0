@@ -98,8 +98,10 @@ Original files can change or disappear after retention without changing answers.
 - `search_files(query, path, limit)` searches literal case-sensitive substrings,
   returning one complete line per match with exact hash/line citation. Query size
   is 1–256 UTF-8 bytes, without CR/LF/NUL; result limits are 1–200. No regex or
-  locale-sensitive case folding occurs. A query can match multiple times in a
-  line but yields one result for that line.
+  locale-sensitive case folding occurs in this compatibility method. A query
+  can match multiple times in a line but yields one result for that line.
+  `search_files_with_options` adds explicit regex and Unicode case-folding
+  options as described below.
 
 Optional listing/search scope is a retained file or directory prefix; `None` or
 `.` means the retained root. One leading `./` and a directory scope's single
@@ -124,22 +126,24 @@ case-insensitive matching and clips previews to 500 characters.
 `read-file-window.ts` defaults to 500-line windows and appends pagination notes.
 The native API operates on explicitly retained files only, fails invalid ranges
 and output limits, preserves exact bytes and returns explicit citations. It does
-not yet reproduce legacy live-tree breadth, case-folding, or window pagination.
+not yet reproduce legacy live-tree breadth or read-window pagination. Explicit
+case-insensitive matching is available; the default remains native case-sensitive
+matching to preserve existing calls.
 
 ## Entire pinned snapshot investigation
 
 `SnapshotInvestigation::prepare(&SnapshotPin)` stages and verifies the complete
 host-authorized manifest, up to 4,096 files and 64 MiB. Unlike
 `SourceInvestigation`, this API does not require a paid review or a selected
-32-file retained bundle. It is a library foundation; agent tool integration is
-separate. `prepare_checked(pin, check)` accepts a synchronous cancellation check
+32-file retained bundle. The engine exposes this library through explicitly
+enabled `source_snapshot_tools` in an agent request. `prepare_checked(pin, check)` accepts a synchronous cancellation check
 throughout the anchored staging pass. Run blocking preparation and reads outside
 async runtime worker threads.
 
 The owner is neither deserializable nor cloneable. `list_files(scope, limit)`
 returns sorted pinned metadata (up to 200 entries); `read_file(path, start, end)`
 returns exact inclusive line ranges with a whole-file SHA-256 citation;
-`search_files(query, scope, limit)` performs literal, case-sensitive matching,
+`search_files(query, scope, limit)` retains literal, case-sensitive matching,
 returning one complete line per match. Root scope is `None` or `"."`; a single
 leading `./` and a directory trailing slash are accepted. Absolute paths,
 traversal, repeated separators, backslashes, and unpinned reads are rejected.
@@ -171,3 +175,37 @@ Initial executor staging failures before an owner is returned use the executor's
 existing temporary-directory cleanup and do not provide a recovery receipt.
 No source modifications, shell commands, arbitrary host reads, or legacy
 unrestricted filesystem-tool parity are provided.
+
+
+## Explicit search modes
+
+Both investigation APIs expose
+`search_files_with_options(query, scope, limit, SearchMode, case_sensitive)`.
+`SearchMode::Literal` treats regex punctuation as text; `SearchMode::Regex`
+uses Rust's finite-automata regex engine, without backtracking, look-around, or
+backreferences. `case_sensitive: false` enables Unicode case folding in either
+mode. Regex inline flags can refine matching within the pattern. Existing
+`search_files` calls delegate to literal, case-sensitive mode and retain their
+serialized result shape and original semantics.
+
+Regex matching is per logical line: an LF or CRLF terminator is removed only
+from the matching view, so `^`/`$` refer to that line's boundaries. Returned text
+and hash-bound citations preserve the exact original bytes. Matches never span
+lines, and each matching line contributes at most one result, including
+zero-width patterns. Empty files have no lines. Literal queries remain bounded
+to one line as before.
+
+Queries/patterns are limited to 256 UTF-8 bytes and reject actual CR, LF, or NUL.
+Compilation limits are 32 levels of nesting, 256 KiB compiled-program size and
+256 KiB DFA cache; invalid or oversized expressions return a clear error before
+reading snapshot files. Search work is additionally bounded by the existing
+128-KiB file, 512-KiB retained-bundle or 64-MiB snapshot bounds. Results remain
+limited to 200 lines and 64 KiB of serialized output. These are resource limits,
+not a wall-clock deadline. Source authority, skipped-file reporting, immutable
+private reads and citation checks are unchanged.
+
+Legacy `search_files` itself is literal and defaults to case-insensitive
+matching; regex was available through scoped `rg`/`grep` execution. Native regex
+search provides this capability without starting a command. Existing file-list
+pagination can select paths to search; search results have truncation reporting,
+not a new pagination cursor.

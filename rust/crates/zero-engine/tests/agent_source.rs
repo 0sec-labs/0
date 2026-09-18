@@ -608,3 +608,366 @@ async fn tool_result_retention_failure_stops_before_next_provider_turn_and_never
     f.no_backend();
     f.engine.shutdown().await.unwrap();
 }
+
+#[tokio::test]
+async fn explicit_search_modes_preserve_citations_authority_and_default_literal_behavior() {
+    for snapshot in [false, true] {
+        let mut f = Fixture::new(vec![
+            complete(json!([
+                tool("default-case", "search_source_text", json!({"query":"GREETING","max_results":10})),
+                tool("default-literal", "search_source_text", json!({"query":"greet.*","max_results":10})),
+                tool("regex", "search_source_text", json!({"query":"^const greet[a-z]+ = 'retained';$","mode":"regex","prefix":"app.js","max_results":10})),
+                tool("folded-literal", "search_source_text", json!({"query":"GREETING","case_sensitive":false,"max_results":10})),
+                tool("folded-regex", "search_source_text", json!({"query":"^CONSOLE\\.LOG\\(GREETING\\);$","mode":"regex","case_sensitive":false,"max_results":10})),
+                tool("bounded", "search_source_text", json!({"query":"greeting","mode":"regex","max_results":1})),
+                tool("cross-line", "search_source_text", json!({"query":"retained.*console","mode":"regex","max_results":10}))
+            ])),
+            answer(),
+        ])
+        .await;
+        if snapshot {
+            f.request.source_review_operation_id = None;
+            f.request.source_snapshot_tools = true;
+        } else {
+            // Retained bundle remains the sole authority even after original deletion.
+            fs::remove_dir_all(f.dir.path().join("source")).unwrap();
+        }
+        let operation = completed(call(&f.engine, f.command("search-modes")).await);
+        let outputs = f.replay_outputs();
+        assert_eq!(outputs.len(), 7);
+        assert_eq!(outputs[0]["matches"], json!([]));
+        assert_eq!(outputs[1]["matches"], json!([]));
+        assert_eq!(outputs[2]["matches"].as_array().unwrap().len(), 1);
+        assert_eq!(outputs[3]["matches"].as_array().unwrap().len(), 2);
+        assert_eq!(outputs[4]["matches"].as_array().unwrap().len(), 1);
+        assert_eq!(outputs[5]["matches"].as_array().unwrap().len(), 1);
+        assert_eq!(outputs[5]["truncated"], true);
+        assert_eq!(outputs[6]["matches"], json!([]));
+        let pin = f.request.execution.sandbox_request().snapshot;
+        let digest = &pin
+            .files
+            .iter()
+            .find(|file| file.path == "app.js")
+            .unwrap()
+            .digest;
+        for (index, line, text) in [
+            (2, 1, "const greeting = 'retained';\n"),
+            (4, 2, "console.log(greeting);\n"),
+        ] {
+            assert_eq!(outputs[index]["matches"][0]["text"], text);
+            assert_eq!(
+                outputs[index]["matches"][0]["citation"],
+                json!({"path":"app.js","sha256":digest,"start_line":line,"end_line":line})
+            );
+        }
+        for output in &outputs {
+            assert!(serde_json::to_vec(output).unwrap().len() <= 65536);
+            if snapshot {
+                assert_eq!(output["snapshot_digest"], pin.digest);
+            } else {
+                assert_eq!(output["bundle_sha256"], f.bundle);
+            }
+        }
+        let request = f.http.requests.lock().unwrap()[1].clone();
+        let definition = request["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|v| v["name"] == "search_source_text")
+            .unwrap();
+        assert_eq!(
+            definition["parameters"]["properties"]["mode"]["enum"],
+            json!(["literal", "regex"])
+        );
+        assert_eq!(
+            definition["parameters"]["properties"]["case_sensitive"]["type"],
+            "boolean"
+        );
+        let store = zero_store::Store::open_read_only(f.dir.path().join("state.db")).unwrap();
+        let db = rusqlite::Connection::open_with_flags(
+            f.dir.path().join("state.db"),
+            rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
+        )
+        .unwrap();
+        let mut statement = db.prepare("SELECT id FROM operations WHERE json_extract(payload,'$.kind')='agent_source_tool' ORDER BY command_id").unwrap();
+        let ids: Vec<String> = statement
+            .query_map([], |row| row.get(0))
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap();
+        assert_eq!(ids.len(), 7);
+        for (id, expected) in ids.iter().zip(&outputs) {
+            let child = store.get_operation(id).unwrap();
+            assert_eq!(child.status, OperationStatus::Succeeded);
+            let artifacts = store.operation_artifacts(id).unwrap();
+            let bytes = store.artifact(&artifacts["source.tool_result"]).unwrap();
+            assert_eq!(serde_json::from_slice::<Value>(&bytes).unwrap(), *expected);
+        }
+        drop(statement);
+        drop(db);
+        drop(store);
+        f.no_backend();
+        let retry = f.command("search-modes");
+        f.engine.shutdown().await.unwrap();
+        drop(f.engine);
+        let engine = Engine::open(
+            f.dir.path().join("state.db"),
+            Some(f.dir.path().join("forbidden-backend")),
+        )
+        .unwrap();
+        f.http.configure(&engine);
+        assert!(
+            matches!(call(&engine, retry).await, Reply::Agent {operation:op,duplicate:true,..} if op.id == operation)
+        );
+        assert_eq!(f.http.count(), 3);
+        engine.shutdown().await.unwrap();
+    }
+}
+
+#[tokio::test]
+async fn malformed_and_out_of_bounds_search_options_are_replayed_without_source_children() {
+    for snapshot in [false, true] {
+        let invalid = [
+            json!({"query":"[","mode":"regex","max_results":10}),
+            json!({"query":"(?=greeting)","mode":"regex","max_results":10}),
+            json!({"query":"(greeting)\\1","mode":"regex","max_results":10}),
+            json!({"query":"x".repeat(257),"mode":"regex","max_results":10}),
+            json!({"query":"greeting","mode":"shell","max_results":10}),
+            json!({"query":"greeting","mode":"regex","case_sensitive":"false","max_results":10}),
+            json!({"query":"greeting","mode":"regex","prefix":"../","max_results":10}),
+            json!({"query":"greeting","mode":"regex","max_results":201}),
+        ];
+        let calls: Vec<Value> = invalid
+            .into_iter()
+            .enumerate()
+            .map(|(i, args)| tool(&format!("invalid-{i}"), "search_source_text", args))
+            .collect();
+        let mut f = Fixture::new(vec![complete(json!(calls)), answer()]).await;
+        if snapshot {
+            f.request.source_review_operation_id = None;
+            f.request.source_snapshot_tools = true;
+        }
+        completed(call(&f.engine, f.command("invalid-search")).await);
+        let outputs = f.replay_outputs();
+        assert_eq!(outputs.len(), 8);
+        for output in &outputs {
+            assert!(!output["error"].is_null(), "{output:?}");
+            assert!(!output.to_string().contains("NEVER_OFFERED_SECRET"));
+            assert!(!output.to_string().contains("const greeting"));
+        }
+        let db = rusqlite::Connection::open_with_flags(
+            f.dir.path().join("state.db"),
+            rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
+        )
+        .unwrap();
+        let children: u32 = db.query_row("SELECT COUNT(*) FROM operations WHERE json_extract(payload,'$.kind')='agent_source_tool'", [], |row|row.get(0)).unwrap();
+        assert_eq!(children, 0);
+        f.no_backend();
+        f.engine.shutdown().await.unwrap();
+    }
+}
+
+// Synthesize an intact one-round journal from the prior tool schema, including
+// its receipt hashes, so this tests upgrade compatibility rather than corruption.
+fn historical_search_schema(path: &std::path::Path, session: &str, parent_id: &str) -> Value {
+    fn hash(bytes: &[u8]) -> String {
+        format!("sha256:{}", zero_plugin::sha256(bytes))
+    }
+    let store = zero_store::Store::open_read_only(path).unwrap();
+    let mut parent = store.get_operation(parent_id).unwrap();
+    let mut child = store
+        .get_operation_by_command(session, &format!("{parent_id}:model:0"))
+        .unwrap();
+    let attached = store.operation_artifacts(parent_id).unwrap();
+    let mut receipt: Value =
+        serde_json::from_slice(&store.artifact(&attached["context.receipt.0"]).unwrap()).unwrap();
+    let checkpoint = attached
+        .get("agent.continuation")
+        .map(|digest| serde_json::from_slice::<Value>(&store.artifact(digest).unwrap()).unwrap());
+    drop(store);
+    let definitions = parent.payload["context_template"]["tools"]
+        .as_array_mut()
+        .unwrap();
+    let search = definitions
+        .iter_mut()
+        .find(|tool| tool["name"] == "search_source_text")
+        .unwrap();
+    search["description"] = json!(
+        "Find a bounded literal case-sensitive single-line string in authorized source files, returning exact cited lines and explicit skipped-file/truncation metadata when present. This is not regex search."
+    );
+    let properties = search["parameters"]["properties"].as_object_mut().unwrap();
+    properties.remove("mode");
+    properties.remove("case_sensitive");
+    let template = parent.payload["context_template"].clone();
+    child.payload["request"]["tools"] = template["tools"].clone();
+    let model: zero_protocol::model::ResponsesRequest =
+        serde_json::from_value(child.payload["request"].clone()).unwrap();
+    receipt["request_sha256"] = json!(hash(&serde_json::to_vec(&model).unwrap()));
+    receipt["parent_payload_sha256"] = json!(hash(&serde_json::to_vec(&parent.payload).unwrap()));
+    let receipt_bytes = serde_json::to_vec(&receipt).unwrap();
+    child.payload["context"]["receipt_sha256"] = json!(hash(&receipt_bytes));
+    let db = rusqlite::Connection::open(path).unwrap();
+    for (name, bytes) in
+        std::iter::once(("context.receipt.0", receipt_bytes)).chain(checkpoint.map(|mut value| {
+            value["parent_payload_sha256"] = receipt["parent_payload_sha256"].clone();
+            ("agent.continuation", serde_json::to_vec(&value).unwrap())
+        }))
+    {
+        let digest = hash(&bytes);
+        db.execute(
+            "INSERT INTO artifacts(digest,bytes) VALUES(?1,?2)",
+            rusqlite::params![digest, bytes],
+        )
+        .unwrap();
+        db.execute(
+            "UPDATE operation_artifacts SET digest=?1 WHERE operation_id=?2 AND name=?3",
+            rusqlite::params![digest, parent_id, name],
+        )
+        .unwrap();
+        if name == "agent.continuation" {
+            parent.outcome.as_mut().unwrap()["continuation_artifact"] = json!(digest);
+        }
+    }
+    db.execute(
+        "UPDATE operations SET payload=?1,outcome=?2 WHERE id=?3",
+        rusqlite::params![
+            parent.payload.to_string(),
+            parent.outcome.unwrap().to_string(),
+            parent_id
+        ],
+    )
+    .unwrap();
+    db.execute(
+        "UPDATE operations SET payload=?1 WHERE id=?2",
+        rusqlite::params![child.payload.to_string(), child.id],
+    )
+    .unwrap();
+    template
+}
+
+#[tokio::test]
+async fn historical_source_schema_survives_two_context_continuations_and_restarts() {
+    for checkpoint in [false, true] {
+        let first = if checkpoint {
+            complete(json!([tool(
+                "old-first",
+                "search_source_text",
+                json!({"query":"greeting","max_results":1})
+            )]))
+        } else {
+            answer()
+        };
+        let mut f = Fixture::new(vec![
+            first,
+            complete(json!([
+                tool(
+                    "not-offered-mode",
+                    "search_source_text",
+                    json!({"query":"greet.*","mode":"regex","max_results":10})
+                ),
+                tool(
+                    "not-offered-case",
+                    "search_source_text",
+                    json!({"query":"GREETING","case_sensitive":false,"max_results":10})
+                ),
+                tool(
+                    "old-literal",
+                    "search_source_text",
+                    json!({"query":"greet.*","max_results":10})
+                )
+            ])),
+            answer(),
+            answer(),
+        ])
+        .await;
+        f.request.context_policy = Some(zero_protocol::context::ContextPolicy {
+            schema_version: 1,
+            max_input_bytes: 8192,
+            keep_recent_rounds: 1,
+        });
+        if checkpoint {
+            f.request.max_turns = 1;
+        }
+        let original = match call(&f.engine, f.command("historical")).await {
+            Reply::Agent {
+                operation,
+                result: Some(result),
+                ..
+            } => {
+                assert_eq!(
+                    result.status,
+                    if checkpoint {
+                        AgentStatus::TurnLimit
+                    } else {
+                        AgentStatus::Completed
+                    }
+                );
+                operation.id
+            }
+            other => panic!("{other:?}"),
+        };
+        f.engine.shutdown().await.unwrap();
+        drop(f.engine);
+        let path = f.dir.path().join("state.db");
+        let old_template = historical_search_schema(&path, &f.session, &original);
+        fs::remove_dir_all(f.dir.path().join("source")).unwrap();
+        let mut parent = original;
+        for turn in 0..2 {
+            let engine = Engine::open(&path, Some(f.dir.path().join("forbidden-backend"))).unwrap();
+            f.http.configure(&engine);
+            let mut request = f.request.clone();
+            request.max_turns = 3;
+            request.continuation_of = Some(parent);
+            request.prompt = format!("follow-up {turn}");
+            let command = Command::RunAgent {
+                session_id: f.session.clone(),
+                command_id: format!("continuation-{turn}"),
+                request,
+            };
+            parent = completed(call(&engine, command.clone()).await);
+            let requests = f.http.requests.lock().unwrap().clone();
+            let mut expected_wire_tools = old_template["tools"].clone();
+            for definition in expected_wire_tools.as_array_mut().unwrap() {
+                definition["type"] = json!("function");
+                definition["strict"] = json!(false);
+            }
+            for captured in &requests[2..] {
+                assert_eq!(captured["tools"], expected_wire_tools);
+            }
+            if turn == 0 {
+                let outputs: Vec<Value> = requests.last().unwrap()["input"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .filter(|v| v["type"] == "function_call_output")
+                    .map(|v| {
+                        serde_json::from_str(v["output"].as_str().unwrap())
+                            .unwrap_or_else(|_| json!({"error":v["output"]}))
+                    })
+                    .collect();
+                let tail = &outputs[outputs.len() - 3..];
+                assert!(!tail[0]["error"].is_null());
+                assert!(!tail[1]["error"].is_null());
+                assert_eq!(tail[2]["matches"], json!([]));
+            }
+            let store = zero_store::Store::open_read_only(&path).unwrap();
+            assert_eq!(
+                store.get_operation(&parent).unwrap().payload["context_template"],
+                old_template
+            );
+            drop(store);
+            let before = f.http.count();
+            assert!(matches!(
+                call(&engine, command).await,
+                Reply::Agent {
+                    duplicate: true,
+                    ..
+                }
+            ));
+            assert_eq!(f.http.count(), before);
+            assert!(!f.dir.path().join("backend-called").exists());
+            engine.shutdown().await.unwrap();
+        }
+        assert_eq!(f.http.count(), 5);
+    }
+}

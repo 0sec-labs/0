@@ -1,7 +1,6 @@
 //! Host-owned read-only investigation of an entire verified private snapshot.
 use crate::investigation::{
-    MAX_INVESTIGATION_OUTPUT_BYTES, MAX_READ_LINES, MAX_SEARCH_QUERY_BYTES, MAX_SEARCH_RESULTS,
-    SearchHit,
+    MAX_INVESTIGATION_OUTPUT_BYTES, MAX_READ_LINES, MAX_SEARCH_RESULTS, SearchHit,
 };
 use crate::{Citation, hash, path_valid};
 use serde::Serialize;
@@ -374,14 +373,20 @@ impl SnapshotInvestigation {
         path: Option<&str>,
         limit: usize,
     ) -> Result<SnapshotSearch> {
-        if query.is_empty()
-            || query.len() > MAX_SEARCH_QUERY_BYTES
-            || query.contains(['\r', '\n', '\0'])
-        {
-            return Err(SnapshotError::Invalid(
-                "search requires 1..256 UTF-8 bytes without line breaks or NUL",
-            ));
-        }
+        self.search_files_with_options(query, path, limit, crate::SearchMode::Literal, true)
+    }
+    /// Match only hash-verified private files with explicit bounded regex/literal
+    /// semantics. Regex strips LF/CRLF for matching but returns exact cited text.
+    pub fn search_files_with_options(
+        &self,
+        query: &str,
+        path: Option<&str>,
+        limit: usize,
+        mode: crate::SearchMode,
+        case_sensitive: bool,
+    ) -> Result<SnapshotSearch> {
+        let matcher = crate::search::Matcher::new(query, mode, case_sensitive)
+            .map_err(SnapshotError::Invalid)?;
         if !(1..=MAX_SEARCH_RESULTS).contains(&limit) {
             return Err(SnapshotError::Invalid("search result limit must be 1..200"));
         }
@@ -414,7 +419,7 @@ impl SnapshotInvestigation {
                 }
             };
             for (index, line) in text.split_inclusive('\n').enumerate() {
-                if !line.contains(query) {
+                if !matcher.matches(line) {
                     continue;
                 }
                 if result.matches.len() == limit {
