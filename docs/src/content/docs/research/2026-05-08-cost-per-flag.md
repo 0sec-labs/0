@@ -3,15 +3,16 @@ title: "2026-05-08 Cost per Flag: A Missing Axis in Autonomous-Pentest Reporting
 description: "Historical XBOW cost accounting: $0.48 per recorded run and $5.20 per verified flag in the gpt-5.4 cohort."
 ---
 
-> **Historical research log (2026-05-08).** Dated figures reflect the benchmark ledger at the time; see the [Benchmarks](/benchmark/) page for current numbers.
+> **Historical research log (2026-05-08).** Dated figures reflect the benchmark ledger at the time; the 93/95 figure is a historical challenge union, not a qualified black-box or single-shot rate. See [Benchmarks](/benchmark/) for the qualification limits.
 
 *Published 2026-05-08. Numbers come from the canonical [benchmark ledger](https://github.com/0sec-labs/0sec/blob/main/packages/benchmark/results/benchmark-ledger.json) and are recomputed on every CI consolidation run.*
 
 <span id="lead"></span>
 ## Measurement
 
-This record reports XBOW solve counts and estimated token costs from the same
-retained-artifact cohort.
+This record preserves historical XBOW solve counts and estimated token costs.
+The consolidation did not qualify a common mode/configuration/attempt cohort;
+the figures must not be treated as one controlled run.
 
 ## The cost-axis design space
 
@@ -30,11 +31,11 @@ Report the number of configurations and attempts in best-of-N comparisons.
 
 The recorded Azure gpt-5.4 cohort used up to three retries per challenge and a $5.00 ceiling:
 
-> **gpt-5.4 model-specific cohort: 93 / 95 = 97.9% — $0.48 / run, $5.20 / flag.**
+> **Historical gpt-5.4 challenge union: 93 / 95 = 97.9% — ~$0.48 / positive-cost result, $5.20 / union-solved challenge.**
 >
-> Total spend across the 95 attempted challenges in the consolidation window: **$483.75**.
+> Recorded positive cost across retained results covering 95 distinct challenges: **$483.75**. Missing/zero-cost records are excluded from the average; complete spend is not established.
 
-Computed from the canonical [`packages/benchmark/results/benchmark-ledger.json`](https://github.com/0sec-labs/0sec/blob/main/packages/benchmark/results/benchmark-ledger.json), specifically the `xbow.retainedArtifactBacked.perModel` section:
+Historical excerpt (the original "stable cohort" label is unqualified), from the [`packages/benchmark/results/benchmark-ledger.json`](https://github.com/0sec-labs/0sec/blob/main/packages/benchmark/results/benchmark-ledger.json), specifically the `xbow.retainedArtifactBacked.perModel` section:
 
 ```json
 "gpt-5.4": {
@@ -48,7 +49,7 @@ Computed from the canonical [`packages/benchmark/results/benchmark-ledger.json`]
 }
 ```
 
-Every scan run logs token counts (input, output, cached-input separately) into its result JSON. `packages/core/src/agent/cost.ts` applies provider-specific per-1M-token rates from a hard-coded pricing table (gpt-5.4 input $2.50/1M, output $10.00/1M; with comparable rows for Anthropic, Google, DeepSeek, Meta, Mistral, and Z.AI models). `packages/benchmark/src/scripts/consolidate-xbow.ts` walks every retained `xbow-results-*` GitHub Actions artifact, groups results by model, and the ledger aggregates total spend, divides by attempt count for `$/run`, and divides by solve count for `$/flag`.
+Every scan run logs token counts (input, output, cached-input separately) into its result JSON. `packages/core/src/agent/cost.ts` applies provider-specific per-1M-token rates from a hard-coded pricing table (gpt-5.4 input $2.50/1M, output $10.00/1M; with comparable rows for Anthropic, Google, DeepSeek, Meta, Mistral, and Z.AI models). `packages/benchmark/src/scripts/consolidate-xbow.ts` walks every retained `xbow-results-*` GitHub Actions artifact, groups results by model, and aggregates positive recorded cost. It divides by positive-cost result count for `$/run` and distinct union-solved challenges for `$/flag`. It does not partition the per-model tally by mode or configuration. Repeated-run `meanCostUsd` can also enter as one cost without multiplying by attempt count. These figures therefore establish neither complete total spend nor single-shot cost.
 
 The consolidate script's per-model summary line:
 
@@ -60,9 +61,9 @@ Recomputed on every CI sweep that lands artifacts in the 200-run lookback window
 
 ## What "cost-aware" means in practice
 
-Use the recorded $483.75 for this 95-challenge cohort when planning comparable
-experiments. Repository scans and disclosure workflows need their own cost
-measurements.
+The recorded $483.75 is historical retained cost, not a complete budget estimate
+for a new 95-challenge run. Comparable experiments, repository scans and
+disclosure workflows need complete attempt-level cost measurements.
 
 <span id="why-most-agents-do-not-publish"></span>
 ## Reporting gaps
@@ -80,7 +81,7 @@ identify contractual or self-hosted pricing assumptions.
 
 ## What is still missing
 
-The $5.20/flag figure applies to this gpt-5.4 cohort. Equivalent cross-model
+The historical $5.20/flag divides recorded cost by the gpt-5.4 solved union, with incomplete cost coverage. Equivalent cross-model
 sweeps and real-repository costs were unmeasured. Cost per rejected finding
 (`$/wrong-flag`) was also unpublished.
 

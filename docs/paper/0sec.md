@@ -8,7 +8,7 @@
 
 Autonomous pentesting agents are usually communicated through single benchmark percentages. In practice, those percentages are unstable without explicit disclosure of retry protocol, benchmark substrate, model/runtime, turn budget, and evidence policy. We present 0sec, an open-source agentic pentesting framework that combines shell-first exploitation, blind verification, and a layered triage stack, and we frame it as both a systems artifact and a methodology artifact.
 
-0sec reports benchmark evidence in three explicit lines: a model-specific cohort (per-model single-shot solve rate), retained artifact-backed totals (machine-reconstructible union over retained CI artifacts of any model), and historical mixed local+CI publication totals. As of the current public ledger (2026-05-06), the retained artifact-backed XBOW aggregate is 103/104 (99.0%) with 102/104 white-box solves; only XBEN-030 remains unsolved in any mode within the live retention window. The load-bearing black-box claim is the gpt-5.4 model-specific cohort at 93/95 (97.9%) — the retained-aggregate black-box count is rotation-volatile because GitHub Actions retains a 90-day window of run artifacts and older "unknown"-model proofs age out as new model-specific sweeps occupy the window. A first scored full Cybench run (2026-05-06) lands at 36/40 (90.0%) single-config single-shot. A 21-run triage ablation (2026-04-11) shows no static policy dominates across slices: in XBOW white-box, full-moat triage is a precision/recall-cost tradeoff; in XBOW black-box, moat is Pareto-superior to no-triage baselines on findings efficiency and dollars per solved challenge; in npm-bench, moat is close to a no-op over default scaffolding.
+0sec reports benchmark evidence in three explicit lines: a historical model-specific union (not a single-shot solve rate), retained artifact-backed totals (machine-reconstructible union over retained CI artifacts of any model), and historical mixed local+CI publication totals. As of the current public ledger (2026-05-06), the retained artifact-backed XBOW aggregate is 103/104 (99.0%) with 102/104 white-box solves; only XBEN-030 remains unsolved in any mode within the live retention window. The historical gpt-5.4 tally of 93/95 (97.9%) unions solved challenge IDs across retained results without partitioning by mode or configuration; it does not establish a black-box single-shot rate. Both per-model and wider aggregates depend on retained artifacts. A first scored full Cybench run (2026-05-06) lands at 36/40 (90.0%) under the reported configuration with retries. A 21-run triage ablation (2026-04-11) shows no static policy dominates across slices: in XBOW white-box, full-moat triage is a precision/recall-cost tradeoff; in XBOW black-box, moat is Pareto-superior to no-triage baselines on findings efficiency and dollars per solved challenge; in npm-bench, moat is close to a no-op over default scaffolding.
 
 The key result is methodological: for non-deterministic autonomous security agents, protocol disclosure and retained-evidence lineage are not reporting accessories; they are part of the core technical contribution.
 
@@ -135,18 +135,18 @@ The dynamic-routing direction is documented in `docs/src/content/docs/research/d
 
 From `packages/benchmark/results/benchmark-ledger.json`:
 
-- gpt-5.4 model-specific cohort (load-bearing black-box claim): **93/95 = 97.9%** — stable, defensible per-model single-shot solve rate at $0.48/run and $5.20/flag,
+- historical gpt-5.4 challenge-level union: **93/95 = 97.9%** — retained results without mode/configuration partitioning, not a qualified black-box single-shot rate; no corrected rate is inferred,
 - retained artifact-backed aggregate (any model): **103/104 = 99.0%** — only XBEN-030 unsolved in any mode within the live retention window,
-- retained white-box (any model): **102/104 = 98.1%** — field-leading,
-- retained-aggregate black-box (any model): **rotation-volatile (currently 81/104)** — the 90-day GitHub Actions artifact retention window rotates older "unknown"-model proofs out as new gpt-5.4 sweeps occupy the window; the model-specific cohort above is the stable surface for like-for-like comparison,
+- retained white-box (any model): **102/104 = 98.1%** — historical retained union; no matched-conditions superiority claim,
+- retained-aggregate black-box (any model): **rotation-volatile (currently 81/104)** — the 90-day GitHub Actions artifact retention window rotates older "unknown"-model proofs out as new gpt-5.4 sweeps occupy the window; the per-model union is also retention-dependent and requires qualification before comparison,
 - historical mixed publication: **95/104 aggregate**, **90/104 black-box** — preserved for continuity.
 
 ### 5.2 Cybench benchmark posture (first scored full 40-challenge run, 2026-05-06)
 
 From `packages/benchmark/results/benchmark-ledger.json`:
 
-- 0sec: **36/40 = 90.0%** — single-config (Azure gpt-5.4), single-shot, 3 retries per challenge, 358 attack turns, ~$14.89 estimated cost across the run. 40/40 challenges started successfully (zero startup failures).
-- Reference: BoxPwnr's published 40/40 = 100% is best-of-N across ~10 model+solver configs; the comparable single-model number from BoxPwnr is not directly published. 0sec's 36/40 is the closest single-config single-shot result currently in the open literature.
+- 0sec: **36/40 = 90.0%** — reported Azure gpt-5.4 configuration, up to 3 retries per challenge, 358 attack turns, ~$14.89 estimated cost across the run. 40/40 challenges started successfully (zero startup failures).
+- Reference: BoxPwnr's published 40/40 = 100% is best-of-N across ~10 model+solver configs; the comparable single-model number from BoxPwnr is not directly published. No single-shot or superiority conclusion follows from this comparison.
 
 ### 5.3 Triage ablation posture (21-run matrix, 2026-04-11)
 

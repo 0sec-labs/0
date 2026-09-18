@@ -17,13 +17,14 @@ protocol-sensitive and should not be read as a matched-conditions ranking.
 | [Cyber-AutoAgent](https://github.com/westonbrown/Cyber-AutoAgent) | 84.62% (88/104) | Not disclosed | Single meta-agent, self-rewriting prompts | Unknown |
 | [deadend-cli](https://github.com/xoxruns/deadend-cli) | 77.55% (~76/98) | Kimi K2.5 | Single-agent CLI (tested 98/104) | $122 / 104 |
 | [MAPTA](https://arxiv.org/abs/2508.20816) | 76.9% (80/104) | GPT-5 | 3-role multi-agent | $21.38 total |
-| **0sec** | **93/95 = 97.9%** black-box | Azure gpt-5.4 | Shell-first, single-model single-shot cohort | ~$0.48/run, **$5.20/flag** |
+| **0sec** | **93/95 = 97.9%** historical union | Azure gpt-5.4 | Retained challenge union; mode/configuration not partitioned | Historical estimates; incomplete cost coverage |
 
 Two distinctions:
 
 - **Best-of-N ≠ single-config.** BoxPwnr's 97.1% is a union over ~10 model+solver
-  configs (~5 attempts/challenge); its best *single* model scores 81.7%. 0sec's
-  headline is a single-model single-shot solve rate. See [Methodology](/methodology/).
+  configs (~5 attempts/challenge); its reported best *single* model scores 81.7%.
+  0sec's historical per-model tally is also a union over retained results; these
+  numbers do not establish a single-shot advantage. See [Methodology](/methodology/).
 - **White-box ≠ black-box.** Shannon reads source, which lifts the
   ceiling on challenges with no web-facing vector. Not directly comparable to black-box-only runs.
 
@@ -36,7 +37,7 @@ Two distinctions:
   assess whether a sink is callable.
 - **Scanner agreement:** the optional [foxguard](https://github.com/0sec-labs/foxguard)
   check compares the same tree (`packages/core/src/triage/multi-modal.ts`).
-- **Reported cost:** the gpt-5.4 XBOW cohort costs $5.20 per flag at $0.48 per run.
+- **Reported cost:** historical gpt-5.4 estimates divide retained recorded cost by union-solved challenges ($5.20) or positive-cost results (~$0.48); missing cost coverage prevents a complete efficiency comparison.
 
 <span id="the-one-durable-finding"></span>
 ## Architecture comparison

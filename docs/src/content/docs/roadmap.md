@@ -34,9 +34,10 @@ documented flags.
 
 Priorities: reliable execution, usable evidence, and orchestration.
 
-Retained artifact-backed XBOW aggregate: 103/104 = 99.0% (only XBEN-030
-unsolved in any mode). Load-bearing gpt-5.4 black-box cohort: 93/95 = 97.9%.
-First scored full Cybench run: 36/40 = 90.0% single-config, single-shot. (The
+Historical XBOW ledger (2026-05-06): 103/104 aggregate union; gpt-5.4
+93/95 = 97.9% per-model union without mode/configuration partitioning, not a
+qualified black-box single-shot rate. Historical Cybench: 36/40 = 90.0%
+with retries. (The
 older mixed local+CI publication line is documented separately.) Next-quarter
 work targets making that capability routine: for one developer, for a CI
 pipeline gating PRs, and for a security team running a continuous campaign.
@@ -130,11 +131,11 @@ See [TypeScript/Rust Boundary](/research/typescript-rust-boundary/).
 ## Recently shipped (April 2026)
 
 - **Retained artifact-backed XBOW aggregate at 103/104.** Only XBEN-030 remains
-  unsolved in any mode. The load-bearing black-box claim is the gpt-5.4 cohort at
-  93/95 = 97.9%; the retained-aggregate black-box count is rotation-volatile
-  because GitHub Actions keeps a 90-day artifact window.
+  unsolved in the 2026-05-06 retained snapshot. The gpt-5.4 93/95 = 97.9%
+  count is a historical union, not a qualified black-box single-shot rate.
+  Both per-model and wider counts depend on retained artifacts.
 - **First scored full Cybench run at 36/40 = 90.0%.** Single-config (Azure
-  gpt-5.4), single-shot, 3 retries per challenge, 358 attack turns, ~$14.89.
+  gpt-5.4), up to 3 retries per challenge, 358 attack turns, ~$14.89.
   Supersedes the older 8/10 subset.
 - **Historical public XBOW line tracked separately** — 90/104 black-box, 95/104
   aggregate after purging unsupported claim residue.

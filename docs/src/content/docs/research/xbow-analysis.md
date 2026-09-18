@@ -7,19 +7,21 @@ XBOW is a web-CTF substrate. A benchmark score is not the product — real discl
 
 ## How 0sec scores on XBOW, and the caveats
 
-**93 / 95 = 97.9% black-box on the gpt-5.4 model-specific cohort.**
-Across the 95 XBOW challenges where 0sec has a retained gpt-5.4 attempt within the
-live CI window, 93 are solved, at ~$0.48/run and $5.20/flag. The per-model number is
-the headline because it is a stable single-model solve rate, not a best-of-N union
-over an aging artifact window.
+**Historical gpt-5.4 union: 93 / 95 = 97.9% (ledger dated 2026-05-06).**
+The consolidator unions solved challenge IDs across retained results for a model.
+It does not partition this tally by black-box/white-box mode, configuration, or
+independent attempt. It therefore does not establish a black-box single-shot
+success rate. A replacement qualified score requires attempt-level receipts.
 
 Caveats:
 
-- **Single model, single-shot.** The cohort is one model (Azure gpt-5.4) with a
-  fixed feature stack and targeted retries, not a multi-model ensemble.
-- **Retained-artifact aggregate is rotation-volatile.** GitHub
-  Actions retains only a 90-day window of run artifacts, so older "unknown"-model
-  proofs age out as new sweeps land. The per-model cohort is the defensible surface.
+- **Single model is not single-shot.** Repeated results and retries can contribute
+  to the same model's solved set; the denominator counts distinct challenges.
+- **Both aggregates depend on retention.** Per-model and cross-model sets are
+  affected by available artifacts and the run lookback window.
+- **Costs are historical estimates with coverage limits.** The consolidator's
+  ~$0.48 average includes only positive-cost results, while $5.20 divides retained
+  recorded cost by union-solved challenges. Neither is a complete single-run cost.
 - **CTF ≠ real repo.** XBOW challenges are small, single-vuln web apps with a
   planted flag. Solving them says nothing about
   finding a novel bug in a million-line kernel tree.

@@ -40,12 +40,12 @@ For runs across multiple models, solvers, or prompts:
 - **Single-config** reports one setup, once per challenge.
 - **Aggregate** counts a challenge as solved if any configuration succeeds and sums their costs.
 
-Compare results using the same aggregation method. 0sec's headline is the **per-model gpt-5.4 cohort (93/95 = 97.9%)**, a single-config, single-shot rate. The wider retained-artifact aggregate is reported separately in [Benchmark](/benchmark/).
+Compare results using the same aggregation method. The historical **gpt-5.4 93/95 (97.9%)** is a challenge-level union across retained results, not a single-shot rate. The per-model consolidator does not partition by mode or configuration; a black-box-only claim needs separate qualified receipts. See [Benchmark](/benchmark/). No replacement rate is inferred from the union.
 
 <span id="flag-is-a-first-class-axis"></span>
 ## Cost per flag
 
-Report `$/flag` alongside solve rate. The gpt-5.4 XBOW cohort costs $5.20 per flag at $0.48 per run. Aggregate comparisons must include the cost of every configuration.
+Report `$/flag` alongside solve rate. Historical gpt-5.4 estimates ($5.20 per union-solved challenge and ~$0.48 per positive-cost result) use the retained consolidator, which excludes zero/missing-cost results from its cost-average denominator. Repeated-run mean costs were not necessarily expanded to all attempts, either. These figures do not establish complete spend or single-attempt efficiency. Aggregate comparisons must include every configuration and disclose missing cost coverage.
 
 ## What 0sec publishes with every number
 
