@@ -40,3 +40,14 @@ its sequence; it is never silently skipped. The SQL query checks oversized
 payload lengths before materializing them. Session listing is not yet paginated.
 No retention/pruning is implemented. Event payloads are generic JSON, not proof
 that a model turn or security scan was executed.
+
+Schema v4 adds immutable artifact bytes and named operation attachments. A running
+operation's exact owner can retain up to 64 named artifacts, each at most 8 MiB
+and at most 32 MiB in total per operation. Bytes, the attachment, and its journal
+event commit in one transaction. Events contain only the hash/name/size; source
+bytes are not copied into ordinary event streams. An attachment name cannot be
+repointed. Exact retries remain inert after settlement, but new post-settlement
+attachments are rejected. Reads validate SHA-256 content identity and bound the
+SQL blob before materializing it. These are retained evidence bytes, not executed
+code or an authorization to label a finding reproduced. Existing v1/v2/v3 stores
+migrate without changing operation ownership, results, or session activation pins.

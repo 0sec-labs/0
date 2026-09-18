@@ -65,3 +65,7 @@ through this path, and no prior effect is reissued. History is reconstructed fro
 Journal schema v3 adds optional activation epochs for generation-bound sessions;
 v1/v2 sessions migrate without inventing an activation pin. Host operation details
 retain pre-dispatch recovery identities and post-settlement lease release evidence.
+
+Journal schema v4 retains immutable source/plan/evidence artifacts with owner-bound
+operation attachments. Attachment bytes and the hash-only event commit atomically;
+ordinary event streams do not expose source bytes. Reads recheck content identity.

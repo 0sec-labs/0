@@ -1,4 +1,5 @@
 //! Native-only SQLite journal. Opening a store never recovers somebody else's work.
+mod artifacts;
 mod budget;
 mod lifecycle;
 mod operations;
@@ -31,6 +32,7 @@ pub enum Error {
     #[error("budget exceeded")]
     BudgetExceeded,
 }
+pub use artifacts::MAX_ARTIFACT_BYTES;
 pub type Result<T> = std::result::Result<T, Error>;
 pub struct Store {
     conn: Connection,

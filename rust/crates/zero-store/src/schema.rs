@@ -8,7 +8,7 @@ pub fn initialize(conn: &mut Connection) -> Result<()> {
     if application != 0 && application != APPLICATION_ID {
         return Err(Error::ForeignDatabase);
     }
-    if !(0..=3).contains(&version) {
+    if !(0..=4).contains(&version) {
         return Err(Error::Schema(version));
     }
     if application == 0 {
@@ -36,6 +36,11 @@ CREATE TABLE reservations(session_id TEXT NOT NULL REFERENCES sessions(id),id TE
     if version < 3 {
         tx.execute_batch("ALTER TABLE sessions ADD COLUMN generation_epoch INTEGER CHECK(generation_epoch IS NULL OR generation_epoch>=1);")?;
         tx.pragma_update(None, "user_version", 3)?;
+    }
+    if version < 4 {
+        tx.execute_batch("CREATE TABLE artifacts(digest TEXT PRIMARY KEY,bytes BLOB NOT NULL CHECK(length(bytes)<=8388608));
+CREATE TABLE operation_artifacts(operation_id TEXT NOT NULL REFERENCES operations(id),name TEXT NOT NULL,digest TEXT NOT NULL REFERENCES artifacts(digest),PRIMARY KEY(operation_id,name));")?;
+        tx.pragma_update(None, "user_version", 4)?;
     }
     tx.commit()?;
     Ok(())
