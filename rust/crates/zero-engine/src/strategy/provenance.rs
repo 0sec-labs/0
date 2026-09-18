@@ -59,7 +59,7 @@ pub(super) fn profile_name(id: &str, index: u32) -> String {
 pub(super) fn expected_payload(snapshot: &CampaignSnapshot, lane: CampaignLane) -> Value {
     json!({"kind":"strategy_evaluation","campaign_id":snapshot.campaign.id,"controller_plan_sha256":snapshot.campaign.plan.controller_plan_sha256,"lane":lane})
 }
-fn events(
+pub(super) fn events(
     store: &Store,
     session: &str,
     budget: &mut usize,
@@ -81,7 +81,7 @@ fn events(
     }
     Ok(all)
 }
-fn witness(op: &Operation, events: &[SessionEvent]) -> Result<(), EngineError> {
+pub(super) fn witness(op: &Operation, events: &[SessionEvent]) -> Result<(), EngineError> {
     let admissions: Vec<_> = events
         .iter()
         .filter(|e| e.kind == "command_admitted" && e.payload["id"] == op.id)
@@ -195,140 +195,18 @@ pub(super) fn rows(
         {
             return Err(error("strategy scheduled run authority differs"));
         }
-        let money = store.budget(&run.session_id)?;
-        let mut row = StrategyCaseResult {
-            schedule_index: entry.index,
-            run_id: run.id.clone(),
-            session_id: run.session_id.clone(),
-            operation_id: run.operation_id.clone(),
-            scenario_id: scenario.id.clone(),
-            family: scenario.family.clone(),
-            lane: scenario.lane,
-            variant: entry.variant,
-            repeat_index: entry.repeat,
-            disposition: StrategyCaseDisposition::Incomplete,
-            matched: false,
-            supported_findings: 0,
-            unsupported_claims: 0,
-            observations: vec![],
-            model_charged_micro_usd: money.charged,
-            model_reserved_micro_usd: money.reserved,
-            error: None,
-        };
         let phase = phases
             .get(lane_name(scenario.lane))
             .ok_or_else(|| error("strategy run has no controller phase"))?;
-        let clean: Vec<_> = journal
-            .iter()
-            .filter(|e| {
-                e.payload["operation_id"] == phase.id
-                    && e.payload["kind"] == "strategy_fixture_closed"
-                    && e.payload["details"]["run_id"] == run.id
-            })
-            .collect();
-        if clean.len() > 1 {
-            return Err(error("duplicate fixture cleanup witness"));
-        }
-        if let Some(id) = &run.operation_id {
-            let operation = store.get_operation_bounded(id, &mut budget)?;
-            let history = events(store, &run.session_id, &mut budget)?;
-            witness(&operation, &history)?;
-            if operation.command_id != run.run_command_id
-                || operation.payload["request"] != serde_json::to_value(&request)?
-            {
-                return Err(error("strategy actor request differs"));
-            }
-            let mut uncertain = false;
-            for event in &history {
-                if matches!(
-                    event.kind.as_str(),
-                    "agent_steering_enqueued" | "agent_input_queued" | "budget_reconciled"
-                ) {
-                    return Err(error(
-                        "strategy run contains external input or reconciliation",
-                    ));
-                }
-                if event.kind == "command_admitted" {
-                    let child: Operation = serde_json::from_value(event.payload.clone())?;
-                    let current = store.get_operation_bounded(&child.id, &mut budget)?;
-                    witness(&current, &history)?;
-                    uncertain |= matches!(
-                        current.status,
-                        OperationStatus::Unknown
-                            | OperationStatus::Running
-                            | OperationStatus::Admitted
-                    );
-                    if current.payload["kind"] == "agent_http"
-                        && current.status == OperationStatus::Succeeded
-                    {
-                        let (_, outcome, body) = agent_http::checked_evidence(store, &current)?;
-                        budget = budget
-                            .checked_sub(body.len())
-                            .ok_or_else(|| error("strategy HTTP evidence exceeds read bound"))?;
-                        if let Some(response) = outcome.response {
-                            let url = current.payload["request"]["url"]
-                                .as_str()
-                                .ok_or_else(|| error("strategy HTTP URL absent"))?;
-                            let path = url
-                                .strip_prefix(&spec.fixture_origin)
-                                .filter(|p| p.starts_with('/'))
-                                .ok_or_else(|| error("strategy HTTP origin differs"))?;
-                            let expected = oracle::response(scenario, path);
-                            if response.status != expected.0 || body != expected.1 {
-                                return Err(error("strategy fixture evidence differs"));
-                            }
-                        }
-                    }
-                }
-            }
-            row.disposition = match operation.status {
-                OperationStatus::Unknown => StrategyCaseDisposition::Unknown,
-                OperationStatus::Cancelled => StrategyCaseDisposition::Cancelled,
-                _ => StrategyCaseDisposition::Incomplete,
-            };
-            if uncertain {
-                row.disposition = StrategyCaseDisposition::Unknown;
-            } else if operation.status == OperationStatus::Succeeded
-                && clean
-                    .first()
-                    .is_some_and(|e| e.payload["details"]["confirmed"] == true)
-            {
-                let result: AgentResult = serde_json::from_value(
-                    operation
-                        .outcome
-                        .clone()
-                        .ok_or_else(|| error("strategy actor outcome absent"))?,
-                )?;
-                if result.status == AgentStatus::Completed && result.web_review.is_some() {
-                    let review = agent_web::load(store, &run.session_id, id)?;
-                    let (supported, unsupported, observations) = oracle::finding_score(
-                        store,
-                        &run.session_id,
-                        id,
-                        scenario,
-                        &spec.fixture_origin,
-                        &review.review,
-                    )?;
-                    row.supported_findings = supported;
-                    row.unsupported_claims = unsupported;
-                    row.observations = observations;
-                    row.matched = if scenario.positive {
-                        supported == 1 && unsupported == 0
-                    } else {
-                        supported == 0 && unsupported == 0
-                    };
-                    row.disposition = StrategyCaseDisposition::Observed;
-                }
-            }
-        } else if run.status == CampaignRunStatus::Unknown {
-            row.disposition = StrategyCaseDisposition::Unknown;
-        } else if run.status == CampaignRunStatus::Cancelled {
-            row.disposition = StrategyCaseDisposition::Cancelled;
-        }
-        if row.disposition != StrategyCaseDisposition::Observed {
-            row.error = Some("run_or_fixture_not_fully_observed".into());
-        }
-        result.push(row);
+        result.push(measure_run(
+            store,
+            &run,
+            scenario,
+            &request,
+            phase,
+            &journal,
+            &mut budget,
+        )?);
     }
     result.sort_by_key(|r| r.schedule_index);
     for lane in &completed {
@@ -354,6 +232,149 @@ pub(super) fn rows(
         }
     }
     Ok((result, completed))
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(super) fn measure_run(
+    store: &Store,
+    run: &CampaignRun,
+    scenario: &StrategyScenario,
+    request: &AgentRequest,
+    phase: &Operation,
+    journal: &[SessionEvent],
+    budget: &mut usize,
+) -> Result<StrategyCaseResult, EngineError> {
+    let spec = &run.spec;
+    let money = store.budget(&run.session_id)?;
+    let mut row = StrategyCaseResult {
+        schedule_index: spec.schedule_index,
+        run_id: run.id.clone(),
+        session_id: run.session_id.clone(),
+        operation_id: run.operation_id.clone(),
+        scenario_id: scenario.id.clone(),
+        family: scenario.family.clone(),
+        lane: scenario.lane,
+        variant: spec.variant,
+        repeat_index: spec.repeat_index,
+        disposition: StrategyCaseDisposition::Incomplete,
+        matched: false,
+        supported_findings: 0,
+        unsupported_claims: 0,
+        observations: vec![],
+        model_charged_micro_usd: money.charged,
+        model_reserved_micro_usd: money.reserved,
+        error: None,
+    };
+    let clean: Vec<_> = journal
+        .iter()
+        .filter(|e| {
+            e.kind == "operation_detail"
+                && e.payload["operation_id"] == phase.id
+                && e.payload["kind"] == "strategy_fixture_closed"
+                && e.payload["details"]["run_id"] == run.id
+        })
+        .collect();
+    if clean.len() > 1 {
+        return Err(error("duplicate fixture cleanup witness"));
+    }
+    if let Some(id) = &run.operation_id {
+        let operation = store.get_operation_bounded(id, budget)?;
+        let history = events(store, &run.session_id, budget)?;
+        witness(&operation, &history)?;
+        if operation.command_id != run.run_command_id
+            || operation.payload["request"] != serde_json::to_value(request)?
+        {
+            return Err(error("strategy actor request differs"));
+        }
+        let mut uncertain = false;
+        for event in &history {
+            if matches!(
+                event.kind.as_str(),
+                "agent_steering_enqueued" | "agent_input_queued" | "budget_reconciled"
+            ) {
+                return Err(error(
+                    "strategy run contains external input or reconciliation",
+                ));
+            }
+            if event.kind == "command_admitted" {
+                let child: Operation = serde_json::from_value(event.payload.clone())?;
+                let current = store.get_operation_bounded(&child.id, budget)?;
+                witness(&current, &history)?;
+                uncertain |= matches!(
+                    current.status,
+                    OperationStatus::Unknown | OperationStatus::Running | OperationStatus::Admitted
+                );
+                if current.payload["kind"] == "agent_http"
+                    && current.status == OperationStatus::Succeeded
+                {
+                    let (_, outcome, body) = agent_http::checked_evidence(store, &current)?;
+                    *budget = budget
+                        .checked_sub(body.len())
+                        .ok_or_else(|| error("strategy HTTP evidence exceeds read bound"))?;
+                    if let Some(response) = outcome.response {
+                        let url = current.payload["request"]["url"]
+                            .as_str()
+                            .ok_or_else(|| error("strategy HTTP URL absent"))?;
+                        let path = url
+                            .strip_prefix(&spec.fixture_origin)
+                            .filter(|p| p.starts_with('/'))
+                            .ok_or_else(|| error("strategy HTTP origin differs"))?;
+                        let expected = oracle::response(scenario, path);
+                        if response.status != expected.0 || body != expected.1 {
+                            return Err(error("strategy fixture evidence differs"));
+                        }
+                    }
+                }
+            }
+        }
+        row.disposition = match operation.status {
+            OperationStatus::Unknown => StrategyCaseDisposition::Unknown,
+            OperationStatus::Cancelled => StrategyCaseDisposition::Cancelled,
+            _ => StrategyCaseDisposition::Incomplete,
+        };
+        if uncertain {
+            row.disposition = StrategyCaseDisposition::Unknown;
+        } else if operation.status == OperationStatus::Succeeded
+            && clean
+                .first()
+                .is_some_and(|e| e.payload["details"]["confirmed"] == true)
+        {
+            let result: AgentResult = serde_json::from_value(
+                operation
+                    .outcome
+                    .clone()
+                    .ok_or_else(|| error("strategy actor outcome absent"))?,
+            )?;
+            if result.status == AgentStatus::Completed && result.web_review.is_some() {
+                let review = agent_web::load(store, &run.session_id, id)?;
+                let (supported, unsupported, observations) = oracle::finding_score(
+                    store,
+                    &run.session_id,
+                    id,
+                    scenario,
+                    &spec.fixture_origin,
+                    &review.review,
+                )?;
+                row.supported_findings = supported;
+                row.unsupported_claims = unsupported;
+                row.observations = observations;
+                row.matched = if scenario.positive {
+                    supported == 1 && unsupported == 0
+                } else {
+                    supported == 0 && unsupported == 0
+                };
+                row.disposition = StrategyCaseDisposition::Observed;
+            }
+        }
+    } else if run.status == CampaignRunStatus::Unknown {
+        row.disposition = StrategyCaseDisposition::Unknown;
+    } else if run.status == CampaignRunStatus::Cancelled {
+        row.disposition = StrategyCaseDisposition::Cancelled;
+    }
+    if row.disposition != StrategyCaseDisposition::Observed {
+        row.error = Some("run_or_fixture_not_fully_observed".into());
+    }
+    Ok(row)
 }
 pub(super) fn report(store: &Store, id: &str) -> Result<StrategyReport, EngineError> {
     let (snapshot, config) = configuration(store, id)?;

@@ -248,9 +248,9 @@ impl Engine {
         result
     }
 }
-struct Waiter {
-    cancel: CancellationToken,
-    finished: bool,
+pub(super) struct Waiter {
+    pub(super) cancel: CancellationToken,
+    pub(super) finished: bool,
 }
 impl Drop for Waiter {
     fn drop(&mut self) {
@@ -259,16 +259,16 @@ impl Drop for Waiter {
         }
     }
 }
-struct Guard {
+pub(super) struct Guard {
     shared: Arc<Shared>,
     campaign: String,
     operation: String,
-    cancel: CancellationToken,
-    settled: bool,
+    pub(super) cancel: CancellationToken,
+    pub(super) settled: bool,
     _completion: WorkerCompletion,
 }
 impl Guard {
-    fn new(
+    pub(super) fn new(
         shared: Arc<Shared>,
         campaign: String,
         operation: String,
@@ -305,12 +305,12 @@ impl Drop for Guard {
     }
 }
 #[derive(Default)]
-struct Active {
-    fixture: Option<fixture::Fixture>,
-    session: Option<String>,
-    profile: Option<String>,
+pub(super) struct Active {
+    pub(super) fixture: Option<fixture::Fixture>,
+    pub(super) session: Option<String>,
+    pub(super) profile: Option<String>,
 }
-async fn cleanup(shared: &Arc<Shared>, active: &mut Active) -> Result<(), EngineError> {
+pub(super) async fn cleanup(shared: &Arc<Shared>, active: &mut Active) -> Result<(), EngineError> {
     if let Some(session) = active.session.take() {
         loop {
             let notified = shared.workers.changed.notified();

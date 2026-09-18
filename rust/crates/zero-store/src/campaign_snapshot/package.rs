@@ -53,7 +53,7 @@ impl CampaignSnapshotData {
         }
         let parsed: Manifest = serde_json::from_slice(manifest)?;
         if parsed.schema_version != 1
-            || parsed.store_schema != 14
+            || parsed.store_schema != SNAPSHOT_STORE_LAYOUT
             || parsed.campaign_id.is_empty()
             || parsed.campaign_id.len() > 256
             || parsed.sessions.is_empty()

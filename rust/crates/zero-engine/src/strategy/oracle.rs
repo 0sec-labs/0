@@ -109,19 +109,60 @@ pub(super) fn score(
     rows: &[StrategyCaseResult],
     completed: &[CampaignLane],
 ) -> (StrategyDecision, Vec<String>) {
+    score_cases(
+        &plan.scenarios,
+        plan.repeats,
+        rows,
+        &[CampaignLane::Development, CampaignLane::Final],
+        completed,
+        [plan.minimum_development_gain, plan.minimum_final_gain],
+    )
+}
+pub(super) fn score_development(
+    scenarios: &[StrategyScenario],
+    repeats: u32,
+    minimum: u32,
+    rows: &[StrategyCaseResult],
+    complete: bool,
+) -> (bool, Vec<String>) {
+    let completed = if complete {
+        vec![CampaignLane::Development]
+    } else {
+        vec![]
+    };
+    let (decision, reasons) = score_cases(
+        scenarios,
+        repeats,
+        rows,
+        &[CampaignLane::Development],
+        &completed,
+        [minimum, 0],
+    );
+    (
+        decision == StrategyDecision::ImprovedForFixtureSuite,
+        reasons,
+    )
+}
+fn score_cases(
+    scenarios: &[StrategyScenario],
+    repeats: u32,
+    rows: &[StrategyCaseResult],
+    required: &[CampaignLane],
+    completed: &[CampaignLane],
+    minimum: [u32; 2],
+) -> (StrategyDecision, Vec<String>) {
     let mut reasons = vec![];
-    let expected = plan.scenarios.len() * plan.repeats as usize * 2;
-    let mut complete = rows.len() == expected
-        && completed.contains(&CampaignLane::Development)
-        && completed.contains(&CampaignLane::Final);
-    if !completed.contains(&CampaignLane::Final) {
+    let expected = scenarios.len() * repeats as usize * 2;
+    let mut complete =
+        rows.len() == expected && required.iter().all(|lane| completed.contains(lane));
+    if required.contains(&CampaignLane::Final) && !completed.contains(&CampaignLane::Final) {
         reasons.push("protected_final_not_run".into());
     }
     let mut stable = true;
     let mut regression = false;
     let mut negative = true;
     let mut gain = [0i32; 2];
-    for scenario in &plan.scenarios {
+    for scenario in scenarios {
         let mut solved = [false; 2];
         for (v, variant) in [CampaignVariant::Baseline, CampaignVariant::Candidate]
             .iter()
@@ -131,8 +172,8 @@ pub(super) fn score(
                 .iter()
                 .filter(|r| r.scenario_id == scenario.id && r.variant == *variant)
                 .collect();
-            if attempts.len() != plan.repeats as usize
-                || (0..plan.repeats)
+            if attempts.len() != repeats as usize
+                || (0..repeats)
                     .any(|repeat| attempts.iter().filter(|r| r.repeat_index == repeat).count() != 1)
             {
                 complete = false;
@@ -182,7 +223,10 @@ pub(super) fn score(
     {
         reasons.push("candidate_unsupported_claim".into());
     }
-    if gain[0] < plan.minimum_development_gain as i32 || gain[1] < plan.minimum_final_gain as i32 {
+    if required.iter().any(|lane| {
+        let i = usize::from(*lane == CampaignLane::Final);
+        gain[i] < minimum[i] as i32
+    }) {
         reasons.push("insufficient_distinct_case_gain".into());
     }
     let decision = if !complete || !stable {

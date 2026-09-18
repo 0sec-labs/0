@@ -8,6 +8,7 @@ pub(crate) mod delegation;
 mod hooks;
 mod lifecycle;
 mod read;
+mod search;
 mod write;
 pub(super) use hooks::{
     admit_http, authorize, experiment, forbid_input, recover, reserve_model, settle_http,

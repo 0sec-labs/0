@@ -20,6 +20,7 @@ mod steering;
 mod strategy;
 mod strategy_host;
 mod strategy_registry;
+mod strategy_search;
 mod tui;
 mod web;
 
@@ -463,7 +464,10 @@ async fn run(args: Args) -> Result<bool, Box<dyn Error>> {
         | Command::Evaluation { .. }
         | Command::Artifact { .. } => unreachable!(),
     };
-    let strategy_run = matches!(&command, EngineCommand::RunStrategyCampaign { .. });
+    let strategy_run = matches!(
+        &command,
+        EngineCommand::RunStrategyCampaign { .. } | EngineCommand::RunStrategySearch { .. }
+    );
     let mut interrupted = false;
     let (events, mut event_rx) = mpsc::channel(128);
     // One-shot commands reserve stdout for their final JSON result.

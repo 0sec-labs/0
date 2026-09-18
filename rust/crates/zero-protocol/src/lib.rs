@@ -27,6 +27,7 @@ pub mod source;
 pub mod steering;
 pub mod strategy;
 pub mod strategy_registry;
+pub mod strategy_search;
 pub mod triage;
 pub mod verification;
 mod verification_binary;
@@ -63,6 +64,31 @@ pub struct Request {
 )]
 pub enum Command {
     Initialize,
+    CreateStrategySearch {
+        command_id: String,
+        plan: Box<strategy_search::StrategySearchPlan>,
+    },
+    RunStrategySearch {
+        campaign_id: String,
+    },
+    CancelStrategySearch {
+        campaign_id: String,
+    },
+    StrategySearchStatus {
+        campaign_id: String,
+    },
+    StrategySearchReport {
+        campaign_id: String,
+    },
+    StrategySearchCandidates {
+        campaign_id: String,
+        after_sequence: u64,
+        limit: u32,
+    },
+    StrategySearchCandidate {
+        campaign_id: String,
+        candidate_id: String,
+    },
     CreateStrategySession {
         budget_limit: u64,
     },
@@ -419,6 +445,25 @@ pub struct ReconcileResult {
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Reply {
+    StrategySearchCreated {
+        snapshot: strategy_search::SearchSnapshot,
+        duplicate: bool,
+    },
+    StrategySearchStatus {
+        snapshot: strategy_search::SearchSnapshot,
+    },
+    StrategySearchCancelled {
+        snapshot: strategy_search::SearchSnapshot,
+    },
+    StrategySearchCandidates {
+        page: strategy_search::SearchCandidatePage,
+    },
+    StrategySearchCandidate {
+        candidate: strategy_search::SearchEvaluationReport,
+    },
+    StrategySearchReport {
+        report: strategy_search::StrategySearchReport,
+    },
     StrategyCampaignCreated {
         campaign: campaign::CampaignSnapshot,
         duplicate: bool,

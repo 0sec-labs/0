@@ -49,11 +49,17 @@ pub(crate) fn authorize(
     command: &str,
     payload: &Value,
 ) -> Result<()> {
+    if search::authorize_proposal_session(conn, session, command, payload)? {
+        return Ok(());
+    }
     let Some(r) = binding(conn, session)? else {
         let controller:Option<String>=conn.query_row("SELECT CASE WHEN length(CAST(id AS BLOB))<=256 THEN id END FROM campaigns WHERE journal_session_id=?1",[session],|q|q.get(0)).optional()?;
         if controller.is_none() && conn.query_row("SELECT EXISTS(SELECT 1 FROM events WHERE session_id=?1 AND kind='campaign_created')",[session],|q|q.get::<_,bool>(0))? {return Err(bad("campaign controller projection missing"))}
         if let Some(key) = controller {
             let c = open(conn, &key)?;
+            if search::authorize_controller(conn, &c, command, payload)? {
+                return Ok(());
+            }
             let lane = payload["lane"]
                 .as_str()
                 .filter(|s| matches!(*s, "development" | "final"))
@@ -178,7 +184,7 @@ pub(crate) fn authorize(
     Ok(())
 }
 pub(crate) fn forbid_input(conn: &Connection, session: &str) -> Result<()> {
-    if binding(conn, session)?.is_some()
+    if search::proposal_binding(conn,session)?.is_some() || binding(conn, session)?.is_some()
         || conn.query_row(
             "SELECT EXISTS(SELECT 1 FROM campaigns WHERE journal_session_id=?1) OR EXISTS(SELECT 1 FROM events WHERE session_id=?1 AND kind='campaign_created')",
             [session],
@@ -285,9 +291,25 @@ pub(super) fn sum(conn: &Connection, c: &Campaign, u: &mut CampaignUsage) -> Res
     }
     Ok(())
 }
-fn reserve(
+pub(super) struct DebitWorker {
+    pub campaign_id: String,
+    pub session_id: String,
+    pub owner: String,
+    pub status: CampaignRunStatus,
+}
+impl From<&CampaignRun> for DebitWorker {
+    fn from(r: &CampaignRun) -> Self {
+        Self {
+            campaign_id: r.campaign_id.clone(),
+            session_id: r.session_id.clone(),
+            owner: r.owner.clone(),
+            status: r.status,
+        }
+    }
+}
+pub(super) fn reserve(
     conn: &Transaction<'_>,
-    r: &CampaignRun,
+    r: &DebitWorker,
     key: &str,
     op: &str,
     kind: &str,
@@ -366,7 +388,12 @@ fn reserve(
     )?;
     Ok(())
 }
-fn settle(conn: &Transaction<'_>, r: &CampaignRun, key: &str, value: &Value) -> Result<()> {
+pub(super) fn settle(
+    conn: &Transaction<'_>,
+    r: &DebitWorker,
+    key: &str,
+    value: &Value,
+) -> Result<()> {
     let c = original(conn, &r.campaign_id)?;
     sum(conn, &c, &mut CampaignUsage::default())?;
     let prior: Option<String> = conn.query_row(
@@ -400,6 +427,9 @@ pub(crate) fn reserve_model(
     op: &str,
     amount: u64,
 ) -> Result<()> {
+    if search::reserve_model(conn, session, op, amount)? {
+        return Ok(());
+    }
     let Some(r) = binding(conn, session)? else {
         return Ok(());
     };
@@ -421,7 +451,7 @@ pub(crate) fn reserve_model(
     provider(&inference.payload, &request, &r)?;
     reserve(
         conn,
-        &r,
+        &DebitWorker::from(&r),
         &format!("model:{op}"),
         op,
         "model",
@@ -434,10 +464,13 @@ pub(crate) fn settle_model(
     op: &str,
     amount: u64,
 ) -> Result<()> {
+    if search::settle_model(conn, session, op, amount)? {
+        return Ok(());
+    }
     if let Some(r) = binding(conn, session)? {
         settle(
             conn,
-            &r,
+            &DebitWorker::from(&r),
             &format!("model:{op}"),
             &json!({"micro_usd":amount}),
         )?
@@ -462,7 +495,7 @@ pub(crate) fn admit_http(
     }
     reserve(
         conn,
-        &r,
+        &DebitWorker::from(&r),
         &format!("http:{receipt}"),
         op,
         "http",
@@ -479,7 +512,7 @@ pub(crate) fn settle_http(
     if let Some(r) = binding(conn, session)? {
         settle(
             conn,
-            &r,
+            &DebitWorker::from(&r),
             &format!("http:{receipt}"),
             &json!({"complete":complete,"decoded_bytes":decoded}),
         )?
@@ -490,7 +523,7 @@ pub(crate) fn experiment(conn: &Transaction<'_>, op: &Operation) -> Result<()> {
     if let Some(r) = binding(conn, &op.session_id)? {
         reserve(
             conn,
-            &r,
+            &DebitWorker::from(&r),
             &format!("experiment:{}", op.id),
             &op.id,
             "experiment",

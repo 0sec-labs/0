@@ -27,6 +27,11 @@ pub enum Format {
 }
 #[derive(Debug, Subcommand)]
 pub enum StrategyCommand {
+    /// Bounded autonomous advisory proposals and Development evaluation under one account.
+    Search {
+        #[command(subcommand)]
+        command: crate::strategy_search::SearchCommand,
+    },
     /// Bootstrap or inspect a real host-owned advisory registry.
     Registry {
         #[command(subcommand)]
@@ -105,6 +110,9 @@ pub enum StrategyCommand {
 }
 impl StrategyCommand {
     pub fn requires_dispatch(&self) -> bool {
+        if let Self::Search { command } = self {
+            return command.requires_dispatch();
+        }
         matches!(
             self,
             Self::Create { .. } | Self::Run { .. } | Self::Session { .. } | Self::Agent { .. }
@@ -113,6 +121,9 @@ impl StrategyCommand {
 }
 pub async fn command(command: &StrategyCommand) -> Result<Command, Box<dyn Error>> {
     Ok(match command {
+        StrategyCommand::Search { command } => {
+            return crate::strategy_search::command(command).await;
+        }
         StrategyCommand::Create {
             command_id,
             plan,
@@ -161,6 +172,9 @@ pub async fn command(command: &StrategyCommand) -> Result<Command, Box<dyn Error
 }
 pub async fn readonly(path: &Path, command: &StrategyCommand) -> Result<bool, Box<dyn Error>> {
     match command {
+        StrategyCommand::Search { command } => {
+            return crate::strategy_search::readonly(path, command).await;
+        }
         StrategyCommand::Registry { command } => {
             return crate::strategy_registry::run_registry(command).await;
         }
@@ -216,7 +230,7 @@ pub async fn readonly(path: &Path, command: &StrategyCommand) -> Result<bool, Bo
     }
     Ok(true)
 }
-async fn write_text(text: &str) -> Result<(), Box<dyn Error>> {
+pub(crate) async fn write_text(text: &str) -> Result<(), Box<dyn Error>> {
     use tokio::io::AsyncWriteExt;
     let mut out = tokio::io::stdout();
     tokio::select! {
@@ -228,7 +242,7 @@ async fn write_text(text: &str) -> Result<(), Box<dyn Error>> {
 fn safe(s: &str) -> String {
     crate::console::terminal_text(s)
 }
-fn usage(out: &mut String, u: &CampaignUsage) {
+pub(crate) fn usage(out: &mut String, u: &CampaignUsage) {
     let _ = writeln!(
         out,
         "Model micro-USD: {} charged, {} held; {} calls",
@@ -249,7 +263,7 @@ fn usage(out: &mut String, u: &CampaignUsage) {
     );
     out.push_str("Holds remain reserved. Actual charges may exceed estimates; admission limits are not an invoice guarantee.\n");
 }
-fn cases(out: &mut String, rows: &[StrategyCaseResult]) {
+pub(crate) fn cases(out: &mut String, rows: &[StrategyCaseResult]) {
     for row in rows {
         let _ = writeln!(
             out,
@@ -269,7 +283,7 @@ fn cases(out: &mut String, rows: &[StrategyCaseResult]) {
         }
     }
 }
-fn render(reply: &Reply) -> Result<String, Box<dyn Error>> {
+pub(crate) fn render(reply: &Reply) -> Result<String, Box<dyn Error>> {
     // Retained inputs are bounded by the controller; independently bound this display surface.
     if serde_json::to_vec(reply)?.len() > 2 * 1024 * 1024 {
         return Err("Strategy inspection exceeds display bound".into());

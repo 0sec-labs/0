@@ -5,6 +5,9 @@ use crate::{Error, Result, Store};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
+// Portable layout version, independent of the live SQLite schema. Additive
+// Store migrations must preserve retained campaign evidence identities.
+const SNAPSHOT_STORE_LAYOUT: u32 = 14;
 const MAX_BYTES: usize = 64 * 1024 * 1024;
 const MAX_RECORDS: usize = 65_536;
 const MAX_CHUNK: usize = 4 * 1024 * 1024;

@@ -79,6 +79,7 @@ impl Store {
             "campaign_created",
             &serde_json::to_value(&c)?,
         )?;
+        search::created(&tx, &c, bytes)?;
         tx.commit()?;
         Ok((c, false))
     }
@@ -117,6 +118,7 @@ impl Store {
             return Ok((e, true));
         }
         let c = open(&tx, campaign)?;
+        search::forbid_exposure(&tx, &c)?;
         if tx.query_row("SELECT EXISTS(SELECT 1 FROM campaign_exposures WHERE suite_sha256=?1) OR EXISTS(SELECT 1 FROM events WHERE kind='campaign_exposed' AND json_extract(payload,'$.suite_sha256')=?1)",[suite],|r|r.get::<_,bool>(0))?{return Err(bad("protected suite has already been exposed"))}
         let sequence = next(&tx, &c.journal_session_id)?;
         let e = CampaignExposure {
@@ -179,6 +181,7 @@ impl Store {
         }
         require_epoch(&tx, owner)?;
         let c = open(&tx, campaign)?;
+        search::validate_run(&tx, &c, spec)?;
         let used = read::usage(&tx, &c)?;
         if used.runs >= u64::from(c.plan.limits.runs)
             || used.active_runs >= u64::from(c.plan.limits.max_parallel_runs)

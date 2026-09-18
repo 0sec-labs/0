@@ -1100,3 +1100,24 @@ Preparation returns `evidence_sha256` and the exact descriptor; it creates no gr
 Historical unbound campaigns remain `qualification_only`; binding cannot be retrofitted. Only complete independently improved, correctly bound Development/Final evidence with settled accounting and cleanup can grant the narrow measured scope. Registry identity, baseline epoch/state, whole generation diff, host policy and exposure are revalidated atomically. Exact successful import retry resolves from the registry before requiring the source or current provider configuration, and returns the original receipt with current usability. Changed intent conflicts. A stale receipt remains historical evidence; it is not fresh permission.
 
 Status, preparation and receipt inspection run without engine ownership or unrelated provider/HTTP/harness loading. Mutable registry status is labelled with observation time; a receipt's measurement and current usability are distinct. Measured eligibility is not runtime activation, generic security truth, or proof that a required canary ran. Import preserves the current generation/state/leases. No candidate `activate`, proposal search or canary success stub is exposed in this CLI.
+
+### Autonomous Development search
+
+`strategy search` asks a configured proposal model for bounded advisory candidates, measures each against the captured baseline on Development fixtures, and feeds back independently reconstructed Development results. A proposal can stop the loop before its limit. It changes only advisory text; the host template, provider routes/rates, tool authority, private fixtures and scoring remain frozen.
+
+```sh
+0sec-native --state state.db --providers providers.json --strategy-host host.json strategy search create --command-id search-1 --plan private-search.json
+0sec-native --state state.db --providers providers.json --strategy-host host.json strategy search run --campaign CAMPAIGN
+0sec-native --state state.db strategy search status --campaign CAMPAIGN --format text
+0sec-native --state state.db strategy search candidates --campaign CAMPAIGN --after-sequence 0 --limit 50
+0sec-native --state state.db strategy search candidate --campaign CAMPAIGN --candidate CANDIDATE --format text
+0sec-native --state state.db strategy search report --campaign CAMPAIGN --format text
+```
+
+The strict private search plan contains `schema_version`, a public `objective`, a `proposer` (`provider`, `model`, `instructions`, `reservation_micro_usd`, `max_output_tokens`), Development-only `scenarios`, `repeats`, `max_proposals`, `max_candidates`, aggregate `limits`, `expires_at_ms` and `minimum_development_gain`. Baseline and evaluation host authority come from the actual configured strategy capture. There is no caller candidate or mutable host-policy field. Do not place private fixture answers in the public objective or proposer instructions. Invalid plans fail before engine admission and their contents are not echoed in parser diagnostics.
+
+Create freezes the plan and account without calling a model. Run explicitly starts that bounded loop; it does not request approval for each candidate. One durable campaign account covers proposal inferences and every candidate's baseline/evaluation actors, delegates, HTTP and experiments. New actor sessions do not refill it. Failed proposals consume admitted attempts and actual known usage; uncertain usage retains its reservation. Actual provider charges can exceed an estimate, so reservations are admission limits rather than an invoice guarantee. Unspent allowances do not require the model to keep searching.
+
+These commands implement **Development search only**. Final, canary, automatic promotion and activation options are unsupported and rejected. A useful Development candidate is not measured eligibility or an active strategy. The existing fixed-pair `strategy create/run` workflow remains separate; a search report must not be passed off as its protected Final evidence.
+
+Status, candidate pages/details and reports work without engine ownership or provider/host configuration. They show aggregate charges and unresolved holds, separately from proposal rationale and measured results. Text output is bounded and terminal-safe. Use the returned page cursor until absent. A retained terminal run can be read or retried without replaying model/target calls; restart does not retry Unknown work. Ctrl-C/SIGTERM during the owning run signals cancellation and waits for owned cleanup, then prints the retained partial result and exits nonzero. An accepted cancel is not proof that billing stopped, and readonly inspection is not second-process cancellation IPC.

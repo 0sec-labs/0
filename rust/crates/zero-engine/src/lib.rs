@@ -53,6 +53,10 @@ pub use campaign_read::{read_campaign_runs, read_campaign_status};
 pub use discovery::{read_source_reviews, read_web_runs};
 pub use source_report::{read_source_report, read_source_workflow_report};
 pub use strategy::{read_strategy_development_feedback, read_strategy_report};
+pub use strategy::{
+    read_strategy_search_candidate, read_strategy_search_candidates, read_strategy_search_report,
+    read_strategy_search_status,
+};
 pub use triage::{read_source_finding, read_source_findings};
 pub use web_experiment_read::{
     read_web_experiment, read_web_experiments, read_web_workflow_report_with_experiments,
@@ -313,6 +317,8 @@ impl Engine {
             "captured_advisory_strategy_sessions",
             "registry_bound_strategy_campaigns",
             "source_verified_strategy_eligibility",
+            "autonomous_development_strategy_search",
+            "shared_proposal_evaluation_accounting",
         ]
         .map(String::from)
         .to_vec()
@@ -364,6 +370,32 @@ impl Engine {
         progress_tx: Option<mpsc::Sender<ExecutionEvent>>,
     ) -> Result<Reply, EngineError> {
         match command {
+            Command::CreateStrategySearch { command_id, plan } => {
+                return self.create_strategy_search(command_id, *plan);
+            }
+            Command::RunStrategySearch { campaign_id } => {
+                return self
+                    .run_strategy_search(campaign_id, event_tx, progress_tx)
+                    .await;
+            }
+            Command::CancelStrategySearch { campaign_id } => {
+                return self.cancel_strategy_search(campaign_id);
+            }
+            Command::StrategySearchStatus { campaign_id } => {
+                return self.strategy_search_status(campaign_id);
+            }
+            Command::StrategySearchReport { campaign_id } => {
+                return self.strategy_search_report(campaign_id);
+            }
+            Command::StrategySearchCandidates {
+                campaign_id,
+                after_sequence,
+                limit,
+            } => return self.strategy_search_candidates(campaign_id, after_sequence, limit),
+            Command::StrategySearchCandidate {
+                campaign_id,
+                candidate_id,
+            } => return self.strategy_search_candidate(campaign_id, candidate_id),
             Command::CreateStrategySession { budget_limit } => {
                 return Ok(Reply::Session {
                     session: self.create_strategy_session(budget_limit)?,
@@ -995,7 +1027,14 @@ impl Engine {
             Command::Reconcile(request) => zero_evidence::reconcile(request)
                 .map(Reply::Reconciled)
                 .map_err(|e| EngineError::State(e.to_string())),
-            Command::CreateStrategySession { .. }
+            Command::CreateStrategySearch { .. }
+            | Command::RunStrategySearch { .. }
+            | Command::CancelStrategySearch { .. }
+            | Command::StrategySearchStatus { .. }
+            | Command::StrategySearchReport { .. }
+            | Command::StrategySearchCandidates { .. }
+            | Command::StrategySearchCandidate { .. }
+            | Command::CreateStrategySession { .. }
             | Command::RunStrategyAgent { .. }
             | Command::CreateBoundStrategyCampaign { .. }
             | Command::CreateStrategyCampaign { .. }

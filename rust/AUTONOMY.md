@@ -109,7 +109,7 @@ identities are explicit semantic versions, not binary attestations; changes to
 compiled evaluation semantics require a version change.
 
 This adapter supports snapshot-free HTTP actors and optional HTTP delegates;
-source/sandbox candidates, autonomous proposal generation, independent canaries,
+source/sandbox candidates, protected search Final evaluation, independent canaries,
 autonomous activation orchestration remain unfinished. Scanner, browser/auth/session, cloud, arbitrary source
 self-rewriting and production release parity remain in [MIGRATION.md](MIGRATION.md).
 
@@ -139,6 +139,37 @@ administered source databases; corpus governance remains host-owned.
 Import does not activate a candidate. The host Harness can activate measured
 eligibility under its frozen policy, and this path is tested with real paired
 fixture evidence and an actor running across the switch. A policy requiring canary
-evidence remains blocked until separately qualified evidence exists. Autonomous
-proposal generation, canary orchestration and the candidate activation CLI remain
+evidence remains blocked until separately qualified evidence exists. Protected search Final evaluation,
+canary orchestration and the candidate activation CLI remain
 unfinished. Writable artifacts remain bounded advisory text, not host policy or code.
+
+## Autonomous advisory search
+
+The native Development search uses one durable campaign account for proposal
+inferences and every baseline/candidate evaluation, including delegated actors,
+HTTP requests and adaptive experiments. A new proposal session does not create a
+new aggregate allowance. Atomic proposal admission retains its attempt, session,
+operation, exact request and shared reservation before contacting the provider.
+Invalid output and a model decision to stop still consume the paid attempt.
+Unknown usage retains its hold and prevents another proposal.
+
+The proposer may submit bounded advisory text or stop. It receives the captured
+baseline, public objective and independently reconstructed Development feedback.
+Host authority, provider identities/prices, tools, oracle and limits remain frozen.
+A candidate registration is inert; the active generation does not change. The
+controller runs actual paired agents and scores retained observations, controls,
+stability and cost with the shared evaluator. Feedback excludes raw model prose
+and private fixture bytes, and is rechecked against the preceding measurements.
+
+Reports are explicitly `development_only`. An improved Development pair does not
+grant eligibility, protected Final qualification, canary success or activation.
+This search interface rejects unsupported Final/canary controls. Those stages must
+extend the same account and retain the complete proposal/evaluation history; an
+export that drops proposal costs is not admissible measured evidence. The existing
+fixed-pair workflow and its measured eligibility path remain distinct.
+
+Search cancellation closes admission and drains owned work. Completed retries use
+retained outcomes without fresh provider configuration or replay. Offline reports
+check both operation projections and immutable admission witnesses. Store schema15
+adds typed search records while preserving the original portable fixed-pair layout;
+that older exporter explicitly rejects search state instead of silently omitting it.

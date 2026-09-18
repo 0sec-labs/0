@@ -115,7 +115,7 @@ fn schema_thirteen_migration_preserves_existing_campaign_snapshot() {
     drop(store);
     let path = dir.path().join("state.db");
     let sql = rusqlite::Connection::open(&path).unwrap();
-    sql.execute_batch("DROP TABLE strategy_sessions; PRAGMA user_version=13;")
+    sql.execute_batch("DROP TABLE strategy_search_evaluations; DROP TABLE strategy_search_proposals; DROP TABLE strategy_searches; DROP TABLE strategy_sessions; PRAGMA user_version=13;")
         .unwrap();
     drop(sql);
     assert!(matches!(
@@ -168,6 +168,9 @@ fn unknown_operation_without_admission_and_changed_controller_admission_reject()
         .unwrap()
         .operation;
     store.freeze_campaign(&id).unwrap();
+    store
+        .validate_session_admission_closure(&c.journal_session_id)
+        .unwrap();
     let sql = rusqlite::Connection::open(dir.path().join("state.db")).unwrap();
     sql.execute("INSERT INTO operations(id,session_id,command_id,payload,payload_hash,status,owner,outcome) VALUES('orphan',?1,'orphan',?2,'unused','unknown','lost-owner',NULL)",rusqlite::params![c.journal_session_id,json!({"kind":"agent_inference","parent_operation":controller.id}).to_string()]).unwrap();
     assert!(
@@ -177,14 +180,99 @@ fn unknown_operation_without_admission_and_changed_controller_admission_reject()
             .to_string()
             .contains("admission witnesses")
     );
+    assert!(
+        store
+            .validate_session_admission_closure(&c.journal_session_id)
+            .is_err()
+    );
     sql.execute("DELETE FROM operations WHERE id='orphan'", [])
         .unwrap();
     sql.execute("UPDATE events SET payload=json_set(payload,'$.command_id','altered') WHERE session_id=?1 AND kind='command_admitted'",[&c.journal_session_id]).unwrap();
+    assert!(
+        store
+            .validate_session_admission_closure(&c.journal_session_id)
+            .is_err()
+    );
     assert!(
         store
             .freeze_campaign(&id)
             .unwrap_err()
             .to_string()
             .contains("admission witnesses")
+    );
+}
+
+#[test]
+fn schema_fourteen_migration_preserves_retained_portable_evidence() {
+    let (dir, store, id) = fixture();
+    let evidence = store.freeze_campaign(&id).unwrap();
+    drop(store);
+    let path = dir.path().join("state.db");
+    let sql = rusqlite::Connection::open(&path).unwrap();
+    sql.execute_batch("DROP TABLE strategy_search_evaluations; DROP TABLE strategy_search_proposals; DROP TABLE strategy_searches; PRAGMA user_version=14;").unwrap();
+    drop(sql);
+    assert!(matches!(
+        Store::open_read_only(&path),
+        Err(zero_store::Error::Schema(14))
+    ));
+    let upgraded = Store::open(&path).unwrap();
+    assert_eq!(
+        upgraded.freeze_campaign(&id).unwrap().digest(),
+        evidence.digest()
+    );
+    let retained = Store::hydrate_campaign_snapshot(&evidence).unwrap();
+    assert_eq!(
+        retained.freeze_campaign(&id).unwrap().manifest_bytes(),
+        evidence.manifest_bytes()
+    );
+    drop(upgraded);
+    assert!(Store::open_read_only(&path).is_ok());
+}
+
+#[test]
+fn legacy_portable_evidence_never_omits_search_account_state() {
+    let (dir, store, id) = fixture();
+    let campaign = store.campaign(&id).unwrap().campaign;
+    let sql = rusqlite::Connection::open(dir.path().join("state.db")).unwrap();
+    sql.execute(
+        "INSERT INTO strategy_searches(campaign_id,config_sha256,sequence) VALUES(?1,?2,2)",
+        rusqlite::params![id, campaign.plan.controller_plan_sha256],
+    )
+    .unwrap();
+    assert!(
+        store
+            .freeze_campaign(&id)
+            .unwrap_err()
+            .to_string()
+            .contains("search evidence")
+    );
+    sql.execute("DELETE FROM strategy_searches WHERE campaign_id=?1", [&id])
+        .unwrap();
+    sql.execute("INSERT INTO events(session_id,sequence,kind,payload) VALUES(?1,999,'strategy_search_created','{}')", [&campaign.journal_session_id]).unwrap();
+    assert!(
+        store
+            .freeze_campaign(&id)
+            .unwrap_err()
+            .to_string()
+            .contains("search evidence")
+    );
+}
+
+#[test]
+fn additive_search_schema_preserves_opaque_nonsearch_campaign_artifacts() {
+    use sha2::{Digest, Sha256};
+    let (_dir, mut store, id) = fixture();
+    let mut plan = store.campaign(&id).unwrap().campaign.plan;
+    let bytes = b"opaque host controller artifact\0\xff";
+    plan.controller_plan_sha256 = format!("sha256:{:x}", Sha256::digest(bytes));
+    let campaign = store
+        .create_campaign_with_artifact("opaque", &plan, bytes)
+        .unwrap()
+        .0;
+    let evidence = store.freeze_campaign(&campaign.id).unwrap();
+    let hydrated = Store::hydrate_campaign_snapshot(&evidence).unwrap();
+    assert_eq!(
+        hydrated.freeze_campaign(&campaign.id).unwrap().digest(),
+        evidence.digest()
     );
 }

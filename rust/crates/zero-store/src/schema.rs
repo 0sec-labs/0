@@ -8,7 +8,7 @@ pub fn initialize(conn: &mut Connection) -> Result<()> {
     if application != 0 && application != APPLICATION_ID {
         return Err(Error::ForeignDatabase);
     }
-    if !(0..=14).contains(&version) {
+    if !(0..=15).contains(&version) {
         return Err(Error::Schema(version));
     }
     if application == 0 {
@@ -106,6 +106,12 @@ CREATE INDEX campaign_root_lifecycle ON events(session_id,kind,CASE WHEN json_va
         tx.execute_batch("CREATE TABLE strategy_sessions(session_id TEXT PRIMARY KEY REFERENCES sessions(id),capture TEXT NOT NULL CHECK(length(CAST(capture AS BLOB))<=524288),sequence INTEGER NOT NULL CHECK(sequence>0));")?;
         tx.pragma_update(None, "user_version", 14)?;
     }
+    if version < 15 {
+        tx.execute_batch("CREATE TABLE strategy_searches(campaign_id TEXT PRIMARY KEY REFERENCES campaigns(id),config_sha256 TEXT NOT NULL REFERENCES artifacts(digest),sequence INTEGER NOT NULL CHECK(sequence>0));
+CREATE TABLE strategy_search_proposals(id TEXT PRIMARY KEY,campaign_id TEXT NOT NULL REFERENCES campaigns(id),command_id TEXT NOT NULL,session_id TEXT NOT NULL UNIQUE REFERENCES sessions(id),operation_id TEXT NOT NULL UNIQUE REFERENCES operations(id),attempt_index INTEGER NOT NULL CHECK(attempt_index BETWEEN 0 AND 15),record TEXT NOT NULL CHECK(length(CAST(record AS BLOB))<=1048576),sequence INTEGER NOT NULL CHECK(sequence>0),UNIQUE(campaign_id,command_id),UNIQUE(campaign_id,attempt_index));
+CREATE TABLE strategy_search_evaluations(id TEXT PRIMARY KEY,campaign_id TEXT NOT NULL REFERENCES campaigns(id),command_id TEXT NOT NULL,proposal_id TEXT NOT NULL UNIQUE REFERENCES strategy_search_proposals(id),candidate_generation TEXT NOT NULL,schedule_start INTEGER NOT NULL CHECK(schedule_start BETWEEN 0 AND 127),run_count INTEGER NOT NULL CHECK(run_count BETWEEN 1 AND 128),record TEXT NOT NULL CHECK(length(CAST(record AS BLOB))<=1048576),sequence INTEGER NOT NULL CHECK(sequence>0),CHECK(schedule_start+run_count<=128),UNIQUE(campaign_id,command_id),UNIQUE(campaign_id,candidate_generation));")?;
+        tx.pragma_update(None, "user_version", 15)?;
+    }
     tx.commit()?;
     Ok(())
 }
@@ -119,7 +125,7 @@ pub(super) fn validate_current(conn: &Connection) -> Result<()> {
     if application != APPLICATION_ID {
         return Err(Error::ForeignDatabase);
     }
-    if version != 14 {
+    if version != 15 {
         return Err(Error::Schema(version));
     }
     let observed = crate::readonly::definitions(conn)?;

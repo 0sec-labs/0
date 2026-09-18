@@ -62,7 +62,7 @@ requires the current exact schema and never performs migration. See
 
 Schema v6 adds immutable source-hypothesis triage decisions. Native v5 migration
 preserves source artifacts, queue entries, reservations and operation ownership.
-`open_read_only` accepts only the exact current v13 schema; it never migrates an
+`open_read_only` accepts only the exact current v15 schema; it never migrates an
 older database, claims an epoch, recovers operations, or creates default records.
 
 A record is identified by session, source operation, hypothesis ID and the
@@ -174,7 +174,7 @@ materialization; a page may stop early at either bound. Continue using the last
 returned message sequence until an empty page. Captured labels and inference
 replay both validate original enqueue and capture events. SQL size checks precede
 witness/prompt decoding; source/provider outcome bodies are not read. Read-only
-opening requires exact schema v13 and performs no migration or ownership recovery.
+opening requires exact schema v15 and performs no migration or ownership recovery.
 
 
 Schema v8 adds informational operator questions and immutable decisions. Creation
@@ -275,3 +275,29 @@ are checked before allocation. Current run authority is validated separately
 at effect admission. Monetary, HTTP, experiment and run dimensions remain
 separate units; an accounting receipt is not proof of agent quality or a hard
 provider invoice cap.
+
+
+## Shared advisory-search account (schema 15)
+
+A typed search uses one existing campaign account for proposer inference and all
+candidate Development evaluations. Proposal admission atomically binds a private
+session, immutable native request and attempt slot, starts its owned operation,
+and reserves both session and campaign money. Provider settlement uses the same
+existing debit journal as evaluation actors; a different candidate or session
+cannot obtain a new allowance. Invalid proposals still consume their paid attempt.
+
+Immutable evaluation records bind the original native proposal, captured baseline,
+candidate advisory and generation, controller configuration and a contiguous range
+of the account's global 128-run schedule. Only the exact Development fixture,
+request and provider authority may enter that range. The next proposal waits for
+the prior evaluation schedule and all known work; unresolved holds and Unknown
+workers stop admissions. A durable stop decision prevents another proposal.
+
+Projection deletion cannot turn a proposal session or search controller into an
+ordinary unrestricted session. Metadata is checked against creation, admission,
+start, settlement/recovery and binding witnesses. Read-only metadata and candidate
+pages are bounded; proposal reassessment preflights a 64 MiB read budget.
+Existing fixed-pair campaigns and opaque controller artifacts retain their prior
+behavior. Historical portable schema-14 evidence rejects search state rather than
+silently omitting it. Search currently supports Development only and never issues
+eligibility, protected Final exposure, canary completion or activation.

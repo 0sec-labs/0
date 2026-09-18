@@ -110,6 +110,17 @@ impl Store {
         }
         let tx = self.conn.unchecked_transaction()?;
         crate::schema::validate_current(&tx)?;
+        // The original portable layout covers fixed-pair evaluation only.
+        // Search adds proposal spending and multiple pairs; omitting either
+        // would allow a partial history to masquerade as measured eligibility.
+        let search: bool = tx.query_row(
+            "SELECT EXISTS(SELECT 1 FROM strategy_searches WHERE campaign_id=?1) OR EXISTS(SELECT 1 FROM strategy_search_proposals WHERE campaign_id=?1) OR EXISTS(SELECT 1 FROM strategy_search_evaluations WHERE campaign_id=?1)",
+            [campaign], |r| r.get(0))?;
+        if search {
+            return Err(invalid(
+                "search evidence requires its own complete portable layout",
+            ));
+        }
         let campaign_parameter = vec![Value::Text(campaign.into())];
         let (journal,record):(String,String)=tx.query_row("SELECT CASE WHEN length(CAST(journal_session_id AS BLOB))<=256 THEN journal_session_id END,CASE WHEN length(CAST(record AS BLOB))<=65536 THEN record END FROM campaigns WHERE id=?1",[campaign],|r|Ok((r.get(0)?,r.get(1)?))).optional()?.ok_or_else(||Error::NotFound(campaign.into()))?;
         // The source snapshot is already pinned before a concurrent writer may commit.
@@ -117,6 +128,21 @@ impl Store {
         let c: zero_protocol::campaign::Campaign = serde_json::from_str(&record)?;
         if c.id != campaign || c.journal_session_id != journal {
             return Err(invalid("campaign identity differs"));
+        }
+        let search_witness: bool = tx.query_row(
+            "SELECT EXISTS(SELECT 1 FROM events WHERE session_id=?1 AND kind IN ('strategy_search_created','strategy_search_proposal_admitted','strategy_search_evaluation_registered'))",
+            [&journal], |r| r.get(0))?;
+        let config = crate::artifacts::read(&tx, &c.plan.controller_plan_sha256)?;
+        if search_witness
+            || serde_json::from_slice::<serde_json::Value>(&config)
+                .ok()
+                .as_ref()
+                .and_then(|v| v.get("kind"))
+                .is_some_and(|v| v == "strategy_search")
+        {
+            return Err(invalid(
+                "search evidence requires its own complete portable layout",
+            ));
         }
         let oversized:bool=tx.query_row("SELECT EXISTS(SELECT 1 FROM events WHERE kind IN ('campaign_session_bound','campaign_exposed') AND length(CAST(payload AS BLOB))>1048576)",[],|r|r.get(0))?;
         if oversized {
@@ -238,7 +264,7 @@ impl Store {
             |r| r.get(0),
         )?;
         let mismatch: bool = tx.query_row(
-            &format!("SELECT EXISTS(SELECT 1 FROM operations o WHERE o.{session_filter} AND (SELECT count(*) FROM events e WHERE e.session_id=o.session_id AND e.kind='command_admitted' AND CASE WHEN json_valid(e.payload) THEN json(e.payload)=json(json_object('command_id',o.command_id,'id',o.id,'outcome',NULL,'owner',NULL,'payload',json(o.payload),'session_id',o.session_id,'status','admitted')) ELSE 0 END)!=1)"),
+            &format!("SELECT EXISTS(SELECT 1 FROM operations o WHERE o.{session_filter} AND (SELECT count(*) FROM events e INDEXED BY campaign_root_lifecycle WHERE e.session_id=o.session_id AND e.kind IN ('command_admitted','operation_started','operation_settled','operation_unknown','operation_not_started') AND e.kind='command_admitted' AND CASE WHEN json_valid(e.payload) THEN coalesce(json_extract(e.payload,'$.id'),json_extract(e.payload,'$.operation_id')) END=+o.id AND CASE WHEN json_valid(e.payload) THEN json(e.payload)=json(json_object('command_id',o.command_id,'id',o.id,'outcome',NULL,'owner',NULL,'payload',json(o.payload),'session_id',o.session_id,'status','admitted')) ELSE 0 END)!=1)"),
             rusqlite::params_from_iter(&parameters), |r| r.get(0))?;
         if operation_count != admission_count || mismatch {
             return Err(invalid(
@@ -289,7 +315,7 @@ impl Store {
         }
         let manifest = Manifest {
             schema_version: 1,
-            store_schema: 14,
+            store_schema: SNAPSHOT_STORE_LAYOUT,
             campaign_id: campaign.into(),
             sessions: sessions.into_iter().collect(),
             tables: vec![],

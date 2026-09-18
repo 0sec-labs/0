@@ -73,3 +73,9 @@ pub fn read_strategy_development_feedback(
 ) -> Result<StrategyDevelopmentFeedback, EngineError> {
     feedback(&Store::open_read_only(path)?, campaign)
 }
+
+mod search;
+pub use search::{
+    read_strategy_search_candidate, read_strategy_search_candidates, read_strategy_search_report,
+    read_strategy_search_status,
+};

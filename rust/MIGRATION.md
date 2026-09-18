@@ -1190,3 +1190,31 @@ hardening then passed all six snapshot integration tests, bounded-encoding unit,
 workspace Clippy and final affected-crate Clippy passed; formatting passed.
 Independent review closed escaped-row allocation and unwitnessed-operation gaps.
 These checks qualify the bounded native fixture behavior described above.
+
+### Autonomous advisory Development search
+
+Source owners are `zero-protocol::strategy_search`, Store campaign search modules,
+Engine strategy search controller/provenance, and CLI `strategy search`. Store
+schema15 adds typed search, proposal and evaluation records, preserving earlier
+fixed-pair artifact identities and schema14 portable evidence. Legacy migration
+fixtures and retained-evidence hydration cover the additive upgrade.
+
+This advances legacy `evolve run/status` intent through actual bounded advisory
+proposals and paired Development evaluation. It does not claim legacy source-edit,
+Final/canary, activation, rollback-command or production scanner parity. New
+`create/run/status/candidates/candidate/report` paths share a durable aggregate
+account. The proposer chooses advisory text or stop, while the host freezes scope,
+prices, oracle and limits. Reports are `development_only`; candidate registration
+is inert. No TypeScript fallback is used.
+
+Qualification: actual Rust1.85 workspace regression passed 947 tests, zero
+failures and 11 explicit backend/platform ignores. The final Unknown-controller
+witness fix then passed all four affected engine search tests. Strict production
+workspace Clippy, final affected-engine Clippy and formatting passed. Physical
+proof includes two candidates and a model-chosen stop, shared proposal/evaluation
+budget exhaustion, no-effect authority rejection, joined cancellation with retained
+holds, configuration-free exact retries, independently reconstructed feedback,
+projection/recovery-witness corruption and prior fixed-pair measurement/import.
+No paid provider or live target is part of this fixture qualification. Remove the
+adapter only after full evolution workflow, independent corpus and production
+release parity are established.
