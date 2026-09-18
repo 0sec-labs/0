@@ -109,26 +109,23 @@ private copies. It does not install the replacement, grant disclosure or mark a
 vulnerability reportable; it is not complete legacy `fix` parity or independent
 proof of repair quality. Real smolvm repair qualification remains open.
 
-### Next concrete parity gap
+### Retained source investigation
 
-The next integration is a bounded, read-only source investigation loop over the
-pinned snapshot. A crate-level implementation is in progress separately; it is
-not yet a qualified engine/CLI workflow at this checkpoint. The current review requires the host to select source files up front;
-the generic agent offers `execute_snapshot` and explicitly configured plugin
-tools. It has no dedicated native equivalents of the legacy scoped
-`read_file`, `list_files` and `search_files` tools in
-`packages/core/src/agent/tools.ts` (implementations around lines 7496–7555,
-role selection in `getToolsForRole`).
+`6304d963` adds bounded file listing, exact line reads and literal search over a
+verified retained source bundle. The agent integration explicitly opts in through
+`source_review_operation_id`; it validates same-session completion, exact snapshot
+authority and artifact provenance before new provider work. Accepted results have
+immutable child artifacts and exact citations. Seven integration fixtures cover
+read/list/search, accounting, denied paths/unselected files, unoffered tools,
+corrupt evidence, persistence failure, retry and continuation authority. No Docker
+or live provider is needed for these tests. See
+[the source tool contract](crates/zero-engine/SOURCE-TOOLS.md).
 
-Expose those operations against the immutable selected snapshot with retained
-file/range identity, strict byte/turn budgets and explicit tool denials. Reuse
-`zero-source` citation validation and existing engine inference/continuation
-accounting. Test traversal/symlink escapes, changed snapshots, output truncation,
-unsupported tool calls, cancellation and restart without duplicate effects.
-This supplies a useful investigation path before porting the much wider legacy
-`apply_patch`/`run_command` surface, network authority or specialist verification.
-Model-proposed reproduction plans can follow, but their oracle and grants still
-require a host-owned approval boundary.
+This implements a subset of legacy `read_file`, `list_files` and `search_files`
+(`packages/core/src/agent/tools.ts`). Whole-repository selection/ingestion, regex
+search, role-specific tool policy and investigation-driven structured submission
+remain open. The review still requires host-selected files; retained-source tools
+do not silently broaden the selected set.
 
 ## Dependency gates
 

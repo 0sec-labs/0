@@ -1809,6 +1809,7 @@ dependencies = [
  "fs2",
  "libc",
  "rusqlite",
+ "serde",
  "serde_json",
  "tempfile",
  "thiserror",

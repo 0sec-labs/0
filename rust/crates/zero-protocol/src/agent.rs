@@ -15,6 +15,9 @@ pub struct AgentRequest {
     /// previous effects are never executed again. Omission starts fresh.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub continuation_of: Option<String>,
+    /// Opt into read-only tools over this same-session review's retained bundle.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_review_operation_id: Option<String>,
     /// execute_snapshot uses this pinned offline execution profile. The model
     /// supplies argv only; it cannot choose mounts, image, network or limits.
     /// Explicit plugin tools use the separately configured host launch profile.

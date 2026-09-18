@@ -180,6 +180,7 @@ impl Setup {
             request: AgentRequest {
                 plugin_tools: vec![],
                 continuation_of: None,
+                source_review_operation_id: None,
                 provider: "local".into(),
                 model: "fixture".into(),
                 instructions: "Use only offered tools".into(),

@@ -433,3 +433,13 @@ starts, its writer is awaited and an interruption reports that credentials were
 saved. A directory-sync failure after atomic replacement also explicitly reports
 the saved state. This command does not verify account funds or inference access.
 All executable login fixtures use temporary homes and localhost services.
+
+### Explicit retained source investigation
+
+An `agent --request` JSON file may set `source_review_operation_id` to a succeeded
+`source-review` operation in the same session. Its exact source snapshot must
+match the agent execution profile. The model then receives `list_source_files`,
+`read_source_lines`, and `search_source_text`, bounded to files retained by that
+review. Results preserve file hashes and exact line citations; no host file read
+or sandbox launch occurs during these tools. Omit the field to retain the existing
+tool set. See [source tool authority and limits](../zero-engine/SOURCE-TOOLS.md).

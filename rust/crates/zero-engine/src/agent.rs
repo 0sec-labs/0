@@ -100,6 +100,7 @@ impl Engine {
             let session = lock(&self.shared.store)?.get_session(&session_id)?;
             let plugins = agent_plugins::capture(&self.shared, &session, &request.plugin_tools)?;
             let mut store = lock(&self.shared.store)?;
+            let source = agent_source::capture(&store, &session_id, &request)?;
             let input =
                 continuation_input(&store, &session_id, &request, &profile, plugins.as_ref())?;
             profile
@@ -150,6 +151,7 @@ impl Engine {
                     profile,
                     input,
                     plugins,
+                    source,
                     cancel,
                     events,
                 )
@@ -200,7 +202,8 @@ fn continuation_input(
                 .cloned()
                 .unwrap_or_else(|| serde_json::json!("responses")),
         )?;
-        if prior.plugin_tools != request.plugin_tools
+        if prior.source_review_operation_id != request.source_review_operation_id
+            || prior.plugin_tools != request.plugin_tools
             || parent.payload.get("plugin_context") != plugins.map(|p| &p.identity)
             || prior.provider != request.provider
             || prior.model != request.model
@@ -256,6 +259,9 @@ fn model_request(
     let mut model = ResponsesRequest{model:request.model.clone(),instructions:request.instructions.clone(),input,max_output_tokens:8192,
         tools:vec![ToolDefinition{name:"execute_snapshot".into(),description:"Run an argv vector in the explicitly pinned offline snapshot sandbox. This cannot change the image, mounts, networking, limits or host files. The working copy is disposable for each call.".into(),
             parameters:serde_json::json!({"type":"object","properties":{"argv":{"type":"array","items":{"type":"string"},"minItems":1,"maxItems":128}},"required":["argv"],"additionalProperties":false})}]};
+    if request.source_review_operation_id.is_some() {
+        model.tools.extend(agent_source::definitions());
+    }
     if let Some(plugins) = plugins {
         model.tools.extend(plugins.tools.clone());
     }
@@ -286,6 +292,7 @@ async fn run_actor(
     profile: inference::Profile,
     mut input: Vec<serde_json::Value>,
     plugins: Option<agent_plugins::Context>,
+    source: Option<zero_source::SourceBundle>,
     cancel: CancellationToken,
     events: mpsc::Sender<ExecutionEvent>,
 ) -> Result<Reply, EngineError> {
@@ -413,6 +420,64 @@ async fn run_actor(
             if cancel.is_cancelled() {
                 output.status = AgentStatus::Cancelled;
                 break 'turns;
+            }
+            if let Some(bundle) = source.as_ref().filter(|_| agent_source::is_tool(&name)) {
+                let result = agent_source::invoke(bundle, &name, arguments.clone());
+                match result {
+                    Err(error) => {
+                        input.push(serde_json::json!({"type":"function_call_output","call_id":id,"output":format!("Tool rejected: {error}")}));
+                    }
+                    Ok(value) => {
+                        let child = child_operation(
+                            shared,
+                            session,
+                            &format!("{parent}:tool:{turn}:{index}"),
+                            &serde_json::json!({"parent_operation":parent,"kind":"agent_source_tool","call_id":id,"name":name,"arguments":arguments,"source_operation":request.source_review_operation_id,"bundle_sha256":bundle.digest()}),
+                        )?;
+                        let bytes = serde_json::to_vec(&value)?;
+                        let mut store = lock(&shared.store)?;
+                        let persisted = (|| {
+                            let digest = store.retain_operation_artifact(
+                                &child.id,
+                                &shared.owner,
+                                "source.tool_result",
+                                &bytes,
+                            )?;
+                            store.settle_operation(&child.id, &shared.owner, OperationStatus::Succeeded,
+                                &serde_json::json!({"result_artifact":digest,"bundle_sha256":bundle.digest()}))?;
+                            Ok::<_, zero_store::Error>(())
+                        })();
+                        if let Err(error) = persisted {
+                            let failure = serde_json::json!({"error":"source tool result persistence failed","external_effects_started":false});
+                            if store
+                                .settle_operation(
+                                    &child.id,
+                                    &shared.owner,
+                                    OperationStatus::Failed,
+                                    &failure,
+                                )
+                                .is_err()
+                            {
+                                let _ = store.mark_operation_unknown_with_outcome(
+                                    &child.id,
+                                    &shared.owner,
+                                    &failure,
+                                );
+                                return Err(error.into());
+                            }
+                            output.status = AgentStatus::Failed;
+                            output.error = Some("source tool result persistence failed".into());
+                            break 'turns;
+                        }
+                        output.tool_calls += 1;
+                        input.push(serde_json::json!({"type":"function_call_output","call_id":id,"output":serde_json::to_string(&value)?}));
+                    }
+                }
+                if cancel.is_cancelled() {
+                    output.status = AgentStatus::Cancelled;
+                    break 'turns;
+                }
+                continue;
             }
             if let Some(binding) = request.plugin_tools.iter().find(|b| b.alias == name) {
                 let context = plugins
