@@ -1,6 +1,8 @@
 //! Session-owned native execution. Client disconnect is not a request replay.
 mod agent;
 mod agent_checkpoint;
+mod agent_context;
+mod agent_context_history;
 mod agent_plugins;
 mod agent_source;
 mod agent_submission;
@@ -239,6 +241,7 @@ impl Engine {
             "anthropic_messages_inference",
             "bounded_offline_snapshot_agent",
             "durable_agent_input_queue",
+            "explicit_context_projection",
             "generation_pinned_offline_plugins",
             "unverified_source_review",
             "host_frozen_source_observation",

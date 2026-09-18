@@ -124,3 +124,30 @@ with `queue list --session SESSION_ID`, then use `queue run --session SESSION_ID
 agent.json [--after-input INPUT_ID]` accepts a request without starting it. Use the
 existing app-server connection for enqueueing while another engine owns the
 state file. See [durable input semantics](crates/zero-engine/QUEUE.md).
+
+Agent requests can opt into an explicit context projection policy:
+
+```json
+"context_policy": {
+  "schema_version": 1,
+  "max_input_bytes": 32768,
+  "keep_recent_rounds": 2
+}
+```
+
+The engine preserves instructions, tool definitions, every user prompt, and the
+newest complete assistant/tool rounds. It may omit older complete rounds from a
+provider request to meet the configured serialized-input byte bound. Full inputs
+and a deterministic receipt remain retained; old operation records are untouched.
+Opaque reasoning and signed thinking stay paired with their complete tool rounds.
+The same policy must remain in place across continuation and queued follow-ups.
+If required context cannot fit, the engine stops before another provider call.
+
+This is an explicit lossy projection, not a semantic summary or a tokenizer.
+`max_input_bytes` does not include instructions/tool schemas/wire overhead and is
+not a model token-window guarantee. Full retained context is separately bounded
+at 8 MiB and 10,000 items; existing per-operation artifact quotas still apply.
+Restoration checks original journals with a 64 MiB cumulative validation budget.
+Omitting the field keeps existing full-context behavior and serialized identities.
+Separately accounted summaries, journal retrieval and tokenizer-aware scheduling
+remain migration work.

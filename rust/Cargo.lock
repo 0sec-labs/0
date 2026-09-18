@@ -1805,6 +1805,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "zero-context"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "sha2",
+ "thiserror",
+ "zero-protocol",
+]
+
+[[package]]
 name = "zero-engine"
 version = "0.1.0"
 dependencies = [
@@ -1819,6 +1830,7 @@ dependencies = [
  "tokio-util",
  "uuid",
  "zero-cloud-client",
+ "zero-context",
  "zero-evidence",
  "zero-evolution",
  "zero-executor",

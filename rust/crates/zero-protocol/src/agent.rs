@@ -10,6 +10,10 @@ pub struct AgentRequest {
     pub model: String,
     pub instructions: String,
     pub prompt: String,
+    /// Opt-in, receipted omission of older complete assistant/tool rounds.
+    /// User prompts and protected legacy context remain verbatim.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub context_policy: Option<crate::context::ContextPolicy>,
     /// Explicitly continue a completed or checkpointed turn-limit agent operation in this session. Its
     /// persisted final provider request and replay supply immutable history;
     /// previous effects are never executed again. Omission starts fresh.

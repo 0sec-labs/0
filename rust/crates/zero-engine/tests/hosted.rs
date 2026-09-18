@@ -210,6 +210,7 @@ fn agent(dir: &std::path::Path) -> zero_protocol::agent::AgentRequest {
     };
     zero_protocol::agent::AgentRequest {
         provider: "hosted".into(),
+        context_policy: None,
         model: "fixture".into(),
         instructions: "fixture".into(),
         prompt: "hello".into(),

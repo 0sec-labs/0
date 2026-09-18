@@ -31,6 +31,11 @@ pub(super) fn validate_initial(request: &AgentRequest) -> Result<ResponsesReques
             return Err(EngineError::State("structured submission requires snapshot tools, bounded question and 1..32 hypotheses; plugin alias cannot shadow submission".into()));
         }
     }
+    if let Some(policy) = &request.context_policy {
+        policy
+            .validate()
+            .map_err(|e| EngineError::State(e.to_string()))?;
+    }
     let initial = model_request(
         request,
         vec![serde_json::json!({"role":"user","content":request.prompt})],
@@ -119,6 +124,15 @@ impl Engine {
                         payload["wire_api"] = serde_json::to_value(profile.client.wire_api())?;
                     }
                     profile.stamp(&mut payload)?;
+                    if request.context_policy.is_some() {
+                        payload["context_template"] = prior
+                            .payload
+                            .get("context_template")
+                            .cloned()
+                            .ok_or_else(|| {
+                                EngineError::State("missing historical context template".into())
+                            })?;
+                    }
                     if let Some(context) = prior.payload.get("plugin_context") {
                         let profiles = lock(&self.shared.plugins)?;
                         let configured = profiles.as_ref().ok_or_else(|| {
@@ -155,13 +169,21 @@ impl Engine {
                 continuation_input(&store, &session_id, &request, &profile, plugins.as_ref())?;
             profile
                 .client
-                .validate(&model_request(&request, input.clone(), plugins.as_ref()))
+                .validate(&model_request(
+                    &request,
+                    input.projected(request.context_policy.as_ref())?,
+                    plugins.as_ref(),
+                ))
                 .map_err(|e| EngineError::State(e.to_string()))?;
             let mut payload = serde_json::json!({"kind":"offline_snapshot_agent","request":request,"endpoint":profile.client.endpoint_identity(),"rates":profile.rates});
             if profile.client.wire_api() != zero_protocol::model::WireApi::Responses {
                 payload["wire_api"] = serde_json::to_value(profile.client.wire_api())?;
             }
             profile.stamp(&mut payload)?;
+            if request.context_policy.is_some() {
+                payload["context_template"] =
+                    serde_json::to_value(model_request(&request, vec![], plugins.as_ref()))?;
+            }
             if let Some(context) = &plugins {
                 payload["plugin_context"] = context.identity.clone();
             }
@@ -227,8 +249,8 @@ fn continuation_input(
     request: &AgentRequest,
     profile: &inference::Profile,
     plugins: Option<&agent_plugins::Context>,
-) -> Result<Vec<serde_json::Value>, EngineError> {
-    let mut input = Vec::new();
+) -> Result<agent_context::History, EngineError> {
+    let mut history = agent_context::History::new(Vec::new(), request.context_policy.as_ref())?;
     if let Some(parent_id) = &request.continuation_of {
         let parent = store.get_operation(parent_id)?;
         if parent.session_id != session
@@ -246,6 +268,7 @@ fn continuation_input(
         let result: AgentResult = serde_json::from_value(
             parent
                 .outcome
+                .clone()
                 .ok_or_else(|| EngineError::State("continuation has no outcome".into()))?,
         )?;
         let wire: zero_protocol::model::WireApi = serde_json::from_value(
@@ -255,7 +278,8 @@ fn continuation_input(
                 .cloned()
                 .unwrap_or_else(|| serde_json::json!("responses")),
         )?;
-        if prior.source_submission_max_hypotheses != request.source_submission_max_hypotheses
+        if prior.context_policy != request.context_policy
+            || prior.source_submission_max_hypotheses != request.source_submission_max_hypotheses
             || prior.source_snapshot_tools != request.source_snapshot_tools
             || prior.source_review_operation_id != request.source_review_operation_id
             || prior.plugin_tools != request.plugin_tools
@@ -294,7 +318,41 @@ fn continuation_input(
             ));
         }
         if turn_limit {
-            input = agent_checkpoint::load(store, session, parent_id, &result)?;
+            let input = agent_checkpoint::load(store, session, parent_id, &result)?;
+            let last = store.get_operation_by_command(
+                session,
+                &format!("{parent_id}:model:{}", result.turns - 1),
+            )?;
+            let model: ResponsesRequest = serde_json::from_value(last.payload["request"].clone())?;
+            let state = agent_context::load(store, &parent, &last, &model)?;
+            if let Some(mut state) = state {
+                let completion: zero_protocol::model::Completion =
+                    serde_json::from_value(last.outcome.clone().ok_or_else(|| {
+                        EngineError::State("missing checkpoint completion".into())
+                    })?)?;
+                let offset = state.input().len() + completion.replay.len();
+                state
+                    .append_round(
+                        &last.id,
+                        &completion,
+                        input
+                            .get(offset..)
+                            .ok_or_else(|| {
+                                EngineError::State("checkpoint output boundary mismatch".into())
+                            })?
+                            .to_vec(),
+                    )
+                    .map_err(|e| EngineError::State(e.to_string()))?;
+                if state.input() != input {
+                    return Err(EngineError::State("checkpoint full state mismatch".into()));
+                }
+                history = agent_context::History {
+                    input,
+                    state: Some(state),
+                };
+            } else {
+                history = agent_context::History::new(input, request.context_policy.as_ref())?;
+            }
         } else {
             let last = store.get_operation_by_command(
                 session,
@@ -310,7 +368,7 @@ fn continuation_input(
             let model: ResponsesRequest = serde_json::from_value(last.payload["request"].clone())?;
             inference::validate_hosted_pair(&parent.payload, &last.payload, &model)?;
             let completion: zero_protocol::model::Completion =
-                serde_json::from_value(last.outcome.ok_or_else(|| {
+                serde_json::from_value(last.outcome.clone().ok_or_else(|| {
                     EngineError::State("continuation provider outcome is absent".into())
                 })?)?;
             if completion.status != zero_protocol::model::CompletionStatus::Completed
@@ -320,12 +378,23 @@ fn continuation_input(
                     "continuation has no complete replay data".into(),
                 ));
             }
-            input = model.input;
-            input.extend(completion.replay);
+            if let Some(mut state) = agent_context::load(store, &parent, &last, &model)? {
+                state
+                    .append_round(&last.id, &completion, vec![])
+                    .map_err(|e| EngineError::State(e.to_string()))?;
+                history = agent_context::History {
+                    input: state.input(),
+                    state: Some(state),
+                };
+            } else {
+                let mut input = model.input;
+                input.extend(completion.replay);
+                history = agent_context::History::new(input, request.context_policy.as_ref())?;
+            }
         }
     }
-    input.push(serde_json::json!({"role":"user","content":request.prompt}));
-    Ok(input)
+    history.append_user(&request.prompt)?;
+    Ok(history)
 }
 
 fn model_request(
@@ -372,12 +441,14 @@ async fn run_rounds(
     parent: &str,
     request: AgentRequest,
     profile: inference::Profile,
-    mut input: Vec<serde_json::Value>,
+    history: agent_context::History,
     plugins: Option<agent_plugins::Context>,
     source: Option<Arc<agent_source::Context>>,
     cancel: CancellationToken,
     events: mpsc::Sender<ExecutionEvent>,
 ) -> Result<(AgentResult, Vec<serde_json::Value>), EngineError> {
+    let mut input = history.input;
+    let mut context_state = history.state;
     let mut output = AgentResult {
         status: AgentStatus::TurnLimit,
         text: String::new(),
@@ -400,7 +471,19 @@ async fn run_rounds(
                 break;
             }
         }
-        let model = model_request(&request, input.clone(), plugins.as_ref());
+        let projected = match agent_context::project_input(
+            &input,
+            context_state.as_ref(),
+            request.context_policy.as_ref(),
+        ) {
+            Ok(input) => input,
+            Err(error) => {
+                output.status = AgentStatus::Failed;
+                output.error = Some(error.to_string());
+                break;
+            }
+        };
+        let model = model_request(&request, projected, plugins.as_ref());
         // Adaptive evidence must be retainable before another provider charge.
         if request.source_submission_max_hypotheses.is_some()
             && serde_json::to_vec(&model)?.len() > zero_source::MAX_ARTIFACT_BYTES
@@ -417,6 +500,18 @@ async fn run_rounds(
         }
         let mut child_payload = serde_json::json!({"parent_operation":parent,"kind":"agent_inference","request":model,"endpoint":profile.client.endpoint_identity(),"rates":profile.rates,"wire_api":profile.client.wire_api()});
         profile.stamp(&mut child_payload)?;
+        if let (Some(state), Some(policy)) =
+            (context_state.as_ref(), request.context_policy.as_ref())
+        {
+            match agent_context::retain(shared, parent, turn, state, policy, &model) {
+                Ok(binding) => child_payload["context"] = binding,
+                Err(error) => {
+                    output.status = AgentStatus::Failed;
+                    output.error = Some(error.to_string());
+                    break;
+                }
+            }
+        }
         let child = child_operation(
             shared,
             session,
@@ -536,6 +631,14 @@ async fn run_rounds(
             }
         }
         if calls.is_empty() {
+            if let Some(state) = &mut context_state {
+                if let Err(error) = state.append_round(&child.id, &completion, vec![]) {
+                    output.status = AgentStatus::Failed;
+                    output.error = Some(error.to_string());
+                    break;
+                }
+                input.extend(completion.replay.clone());
+            }
             output.status = AgentStatus::Completed;
             output.text = completion
                 .content
@@ -558,7 +661,8 @@ async fn run_rounds(
             output.error = Some("provider requested too many tools in one turn".into());
             break;
         }
-        input.extend(completion.replay);
+        input.extend(completion.replay.clone());
+        let outputs_start = input.len();
         for (index, (id, name, arguments)) in calls.into_iter().enumerate() {
             if cancel.is_cancelled() {
                 output.status = AgentStatus::Cancelled;
@@ -746,6 +850,15 @@ async fn run_rounds(
             // clearly lossy text rendering and must treat tool output as data.
             input.push(serde_json::json!({"type":"function_call_output","call_id":id,"output":serde_json::to_string(&serde_json::json!({"status":result.status,"exit_code":result.exit_code,"stdout_text":String::from_utf8_lossy(&result.stdout),"stderr_text":String::from_utf8_lossy(&result.stderr),"error":result.error}))?}));
         }
+        if let Some(state) = &mut context_state {
+            if let Err(error) =
+                state.append_round(&child.id, &completion, input[outputs_start..].to_vec())
+            {
+                output.status = AgentStatus::Failed;
+                output.error = Some(error.to_string());
+                break;
+            }
+        }
     }
     Ok((output, input))
 }
@@ -777,7 +890,7 @@ async fn run_actor(
     parent: &str,
     request: AgentRequest,
     profile: inference::Profile,
-    input: Vec<serde_json::Value>,
+    input: agent_context::History,
     plugins: Option<agent_plugins::Context>,
     mut source: Option<agent_source::Context>,
     cancel: CancellationToken,
@@ -852,7 +965,7 @@ async fn run_actor(
                 },
                 Some(error),
             ),
-            input,
+            input.input,
         ))
     } else {
         run_rounds(

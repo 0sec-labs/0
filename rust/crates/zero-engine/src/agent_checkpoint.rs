@@ -100,7 +100,8 @@ fn validate(store: &Store, checkpoint: &Checkpoint) -> Result<(), EngineError> {
     {
         return Err(error("checkpoint requires a bounded tool round"));
     }
-    let mut prefix = model.input;
+    let restored = agent_context::load(store, &parent, &last, &model)?;
+    let mut prefix = restored.map(|s| s.input()).unwrap_or(model.input);
     prefix.extend(completion.replay);
     if checkpoint.input.len() != prefix.len() + calls.len()
         || checkpoint.input[..prefix.len()] != prefix

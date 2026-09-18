@@ -31,8 +31,8 @@ upgrading scaffolds or model assessments into successful verification.
 | Surface | Native owner and current behavior | Remaining acceptance gate |
 | --- | --- | --- |
 | Wire schema | `crates/zero-protocol`: strict versioned requests, replies, execution/session values, JSON Schema | Stable compatibility policy, generated external clients, negotiated additions and schema migration tests |
-| Native state | `crates/zero-store`: SQLite sessions, command admission, owner-bound operation settlement, ordered events, budget reservation/settlement, transactional epoch recovery and schema v1/v2/v3/v4→v5 migration, optional activation epoch pins and immutable operation artifacts | Full message/context projection; further schema upgrades; explicit legacy import; durable multi-process campaign accounting |
-| Application engine | `crates/zero-engine`: session queries, idempotent execution, cancellation, engine ownership lock, uncertain-operation recovery, finding reconciliation, durable Responses/Chat/Anthropic inference, bounded offline Docker/smolvm snapshot agent with explicit completed-turn continuation and durable FIFO inputs from immutable journal records | Remaining providers, full tools/permissions and agent workflows, mid-turn steering input, interrupted-turn checkpoints and generation lifecycle |
+| Native state | `crates/zero-store`: SQLite sessions, command admission, owner-bound operation settlement, ordered events, budget reservation/settlement, transactional epoch recovery and schema v1/v2/v3/v4→v5 migration, optional activation epoch pins and immutable operation artifacts | Full UI message projection, semantic compaction and retained-history retrieval; further schema upgrades; explicit legacy import; durable multi-process campaign accounting |
+| Application engine | `crates/zero-engine`: session queries, idempotent execution, cancellation, engine ownership lock, uncertain-operation recovery, finding reconciliation, durable Responses/Chat/Anthropic inference, bounded offline Docker/smolvm snapshot agent with explicit completed-turn continuation durable FIFO inputs and explicit byte-bounded context projection from immutable journal records | Remaining providers, full tools/permissions and agent workflows, mid-turn steering input, interrupted-turn checkpoints and generation lifecycle |
 | Batch execution | `crates/zero-executor`: validated snapshot pin/copy, local image identity, nonroot Linux offline Docker lifecycle, bounded raw output, cancellation and explicit cleanup outcome | All other execution profiles below; real Docker qualification remains separate from injected CLI fixtures |
 | MicroVM execution | `crates/zero-smolvm` and `zero-sandbox`: explicit pinned archive, qualified runtime version, nonroot offline batch lifecycle, verified snapshot staging and native engine/agent selection; real guest and engine/agent smoke passed | Broader isolation/SIGKILL qualification, live-provider matrix and interactive execution |
 | Source review | `crates/zero-source` and engine `source.rs`: bounded selected source bundle, grounded structured hypotheses, retained request/bundle/completion/submission, same-session provenance and exact retry; `source-review` CLI | Source exploration, automatic investigation and specialist verification; hypotheses remain unverified, including successful model submissions |
@@ -533,3 +533,45 @@ recovery receipts, Unknown usage holds, altered persisted authority, partial std
 across turn completion, app-server enqueue during work, EOF drain and signal
 shutdown with acknowledged pending inputs. Backends and providers use the existing
 qualified paths; these new queue fixtures use loopback inference, not paid calls.
+
+### Explicit context projection over retained history
+
+`zero-context` owns pure bounded projection over explicit completed-round spans.
+The optional `AgentRequest.context_policy` preserves absent-field serialization
+for historical requests and is pinned across continuation. The engine captures
+an immutable request template, retains full input state and deterministic receipt
+before the inference child or budget reservation, and records their digests in
+the child. Actual provider requests remain journal truth. Continuation and
+turn-limit checkpoints restore full retained input before adding the next prompt;
+adaptive source evidence also checks the context binding during read-only export.
+
+This advances the context-projection requirement in gates A/U without copying the
+legacy lossy summarizer in `agent/native-loop.ts` or its context-error retry loop.
+Every user prompt, instruction and tool schema survives; only older complete
+assistant/tool-result rounds can be omitted, while recent rounds and opaque
+provider replay metadata remain intact. A required span that exceeds the explicit
+byte policy stops dispatch. Context reduction adds no hidden inference charge or
+retry, and does not rewrite older operations, checkpoints or evidence.
+
+This checkpoint is deterministic omission, not semantic compaction. Summaries
+with bounded complete coverage and their own usage receipts, retrieval of retained
+history, real provider token-window accounting and full long-session quality
+qualification remain open. The full retained state has an 8 MiB/10,000-item bound;
+retaining per-turn snapshots also consumes the existing 32 MiB parent artifact
+quota. Policy bytes measure serialized input only, not a tokenizer or complete
+provider body size. Production release routing and database schema are unchanged.
+
+Restoration also checks exact ancestor prompts, operation/turn chronology, original
+completion replay and ordered tool outputs against the next request or terminal
+checkpoint. Receipt hashes alone are not proof that omitted data matches its
+original journals. This validation uses bounded nonrecursive journal lookups,
+cycle checks and a cumulative 64 MiB read budget; exceeding it fails explicitly.
+
+Qualification passed all 505 workspace tests on Rust 1.85, strict production
+Clippy and formatting. Ten pure projection fixtures, seven engine scenarios and
+three executable CLI scenarios cover Responses, Chat and Anthropic replay, queued
+continuation, restart, exact retry, quota failures before dispatch, and corruption
+of omitted history even after hashes are recomputed. An additional regression
+requires the exact latest-round suffix when repeated replay could otherwise
+witness an earlier tool result. Provider fixtures use loopback HTTP without paid
+calls. Independent final review found no remaining concrete blocker.

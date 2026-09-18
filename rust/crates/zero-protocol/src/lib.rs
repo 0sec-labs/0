@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 
 pub mod agent;
 mod binary;
+pub mod context;
 pub mod execution;
 pub mod microvm;
 pub mod model;

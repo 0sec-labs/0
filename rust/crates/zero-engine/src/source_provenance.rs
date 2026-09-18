@@ -108,6 +108,7 @@ pub(super) fn load(store: &Store, session: &str, id: &str) -> Result<Validated, 
             return Err(error("adaptive source inference correlation mismatch"));
         }
         inference::validate_hosted_pair(&op.payload, &child.payload, &request)?;
+        agent_context::load(store, &op, &child, &request)?;
         let original: AgentRequest = serde_json::from_value(op.payload["request"].clone())?;
         if bundle.question() != original.prompt
             || Some(bundle.max_hypotheses()) != original.source_submission_max_hypotheses
