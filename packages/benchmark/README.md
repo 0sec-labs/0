@@ -620,3 +620,42 @@ policy, Wilson-CI reporting) lives in the
 issue [#1029]. The fairness fix itself is already in the engine
 (`0sec/packages/core/src/stages/craft-scan.ts`, commit 704b84b5) —
 not a flag.
+
+### Retained XBOW artifacts are not a single-run score
+
+`consolidate-xbow` and `scripts/build-public-bundle.mjs` emit schema version 2.
+Top-level `counts`/`solved` are explicitly a **historical retained-artifact
+union**, including an `unknownMode` bucket. They are not a per-attempt rate.
+Missing `whiteBox` metadata no longer counts as black-box.
+
+The previous `perModel` field combined successes across runs, black-box and
+white-box modes, retries, and repeated attempts. It also attributed ensemble
+winners to the winning model. That aggregation cannot substantiate the published
+93/95 claim as a single-shot black-box cohort. No replacement score is asserted
+by this change; retained artifacts must be reprocessed and provenance checked.
+
+`cohorts` now separates each source report (run/artifact/report digest), configured
+and selected model, mode, runtime, retry limit, requested repeat count, observed
+attempt count and cost ceiling. Different runs are never silently merged, even
+when visible settings match. Duplicate challenge rows are surfaced explicitly.
+`singleAttemptPolicy` reports only the visible policy; `singleRunClaimVerified`
+is always false because these legacy reports do not establish full substrate,
+turn-limit, independence and hidden-retry provenance. Report-scoped rates still
+use any-success semantics when the source repeats or retries.
+
+Repeated-attempt costs use `perRun` cost totals or mean cost times actual attempts.
+Zero cost is distinct from missing cost. `knownCostUsd` is reported cost coverage;
+`totalCostUsd` is null when rows lack cost or the retry/ensemble selection may
+have omitted losing attempts. Neither is a measured production price.
+
+Consumers of schema 1 must migrate from `perModel` to explicit cohort selection;
+there is deliberately no compatibility alias that could preserve the misleading
+score. To combine shards, first establish an explicit experiment identity and
+prove disjoint challenges plus matching substrate/configuration/attempt policy.
+The aggregator does not infer those facts from file names.
+
+Offline fixture checks (no GitHub, Docker, provider or benchmark calls):
+
+```sh
+pnpm --filter @0sec/benchmark test:xbow-cohorts
+```

@@ -6,6 +6,8 @@ import { join, dirname, basename } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 
+import { aggregateXbowReports, type XbowReport, type ReportSource } from "../../scripts/xbow-cohorts.mjs";
+
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const args = process.argv.slice(2);
 
@@ -23,38 +25,6 @@ interface RunSummary {
   createdAt: string;
   updatedAt: string;
   url: string;
-}
-
-interface XbowResult {
-  id: string;
-  flagFound?: boolean;
-  error?: string;
-  model?: string;
-  estimatedCostUsd?: number;
-  meanCostUsd?: number;
-}
-
-interface XbowReport {
-  timestamp?: string;
-  runtime?: string;
-  model?: string;
-  whiteBox?: boolean;
-  retries?: number;
-  challenges?: number;
-  flags?: number;
-  totalEstimatedCostUsd?: number;
-  results?: XbowResult[];
-}
-
-interface SolvedSource {
-  runId: number;
-  url: string;
-  createdAt: string;
-  artifact: string;
-  whiteBox: boolean;
-  retries: number | null;
-  runtime: string | null;
-  model: string | null;
 }
 
 interface ArtifactSummary {
@@ -151,21 +121,6 @@ function downloadArtifact(repoName: string, artifact: ArtifactSummary, outputDir
   return walk(extractDir).filter((file) => basename(file) === "xbow-latest.json");
 }
 
-function uniqueSorted(values: Iterable<string>): string[] {
-  return [...new Set(values)].sort();
-}
-
-function sortedEntries(map: Map<string, SolvedSource[]>): Record<string, SolvedSource[]> {
-  return Object.fromEntries(
-    [...map.entries()]
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([k, v]) => [
-        k,
-        v.sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.runId - b.runId),
-      ]),
-  );
-}
-
 const runs = ghJson<RunSummary[]>([
   "run",
   "list",
@@ -178,7 +133,6 @@ const runs = ghJson<RunSummary[]>([
   "--json",
   "databaseId,status,conclusion,createdAt,updatedAt,url",
 ]).filter((run) => run.status === "completed");
-const runsById = new Map(runs.map((run) => [run.databaseId, run] as const));
 const xbowArtifacts = runs.length > 0
   ? fetchXbowArtifacts(
       repo,
@@ -195,144 +149,49 @@ for (const artifact of xbowArtifacts) {
   artifactsByRunId.set(runId, list);
 }
 
-const blackBoxSolved = new Map<string, SolvedSource[]>();
-const whiteBoxSolved = new Map<string, SolvedSource[]>();
+const reports: Array<{ report: XbowReport; source: ReportSource }> = [];
 const skippedRuns: Array<{ runId: number; reason: string }> = [];
-
-// Per-model tracking: for each model, track which challenge IDs were
-// attempted and which were solved (flag found). A challenge counts as
-// "attempted by model X" if any run ever produced a result for it with
-// that model. It counts as "solved" if any such result had flagFound.
-interface PerModelStats {
-  attempted: Set<string>;
-  solved: Set<string>;
-  costSumUsd: number;
-  resultCount: number;
-}
-const perModelStats = new Map<string, PerModelStats>();
-
-function trackModelResult(
-  model: string,
-  challengeId: string,
-  flagFound: boolean,
-  costUsd: number,
-): void {
-  let stats = perModelStats.get(model);
-  if (!stats) {
-    stats = { attempted: new Set(), solved: new Set(), costSumUsd: 0, resultCount: 0 };
-    perModelStats.set(model, stats);
-  }
-  stats.attempted.add(challengeId);
-  if (flagFound) stats.solved.add(challengeId);
-  if (costUsd > 0) {
-    stats.costSumUsd += costUsd;
-    stats.resultCount += 1;
-  }
-}
 
 for (const run of runs) {
   const downloadDir = mkdtempSync(join(tmpdir(), "0sec-xbow-consolidate-"));
-  const artifacts = artifactsByRunId.get(run.databaseId) ?? [];
-  if (artifacts.length === 0) {
-    skippedRuns.push({ runId: run.databaseId, reason: "no xbow-results artifact found" });
-    continue;
-  }
-
-  let reportFiles: string[] = [];
   try {
-    for (const artifact of artifacts) {
-      reportFiles = reportFiles.concat(downloadArtifact(repo, artifact, downloadDir));
+    const artifacts = artifactsByRunId.get(run.databaseId) ?? [];
+    if (artifacts.length === 0) {
+      skippedRuns.push({ runId: run.databaseId, reason: "no xbow-results artifact found" });
+      continue;
     }
-  } catch (err) {
-    skippedRuns.push({
-      runId: run.databaseId,
-      reason: err instanceof Error ? err.message : String(err),
-    });
-    continue;
-  }
 
-  if (reportFiles.length === 0) {
-    skippedRuns.push({ runId: run.databaseId, reason: "no xbow-latest.json artifact found" });
-    continue;
-  }
-
-  for (const file of reportFiles) {
-    const report = JSON.parse(readFileSync(file, "utf8")) as XbowReport;
-    const solvedMap = report.whiteBox ? whiteBoxSolved : blackBoxSolved;
-    const artifact = basename(dirname(file));
-
-    for (const result of report.results ?? []) {
-      // Track per-model stats for every result, not just solved ones.
-      const resultModel = result.model ?? report.model ?? "unknown";
-      const resultCost = result.meanCostUsd ?? result.estimatedCostUsd ?? 0;
-      trackModelResult(resultModel, result.id, !!result.flagFound, resultCost);
-
-      if (!result.flagFound) continue;
-      const sources = solvedMap.get(result.id) ?? [];
-      sources.push({
+    let reportFiles: string[] = [];
+    try {
+      for (const artifact of artifacts) {
+        reportFiles = reportFiles.concat(downloadArtifact(repo, artifact, downloadDir));
+      }
+    } catch (err) {
+      skippedRuns.push({
         runId: run.databaseId,
-        url: run.url,
-        createdAt: run.createdAt,
-        artifact,
-        whiteBox: !!report.whiteBox,
-        retries: report.retries ?? null,
-        runtime: report.runtime ?? null,
-        model: result.model ?? report.model ?? null,
+        reason: err instanceof Error ? err.message : String(err),
       });
-      solvedMap.set(result.id, sources);
+      continue;
     }
+
+    if (reportFiles.length === 0) {
+      skippedRuns.push({ runId: run.databaseId, reason: "no xbow-latest.json artifact found" });
+      continue;
+    }
+
+    for (const file of reportFiles) {
+      const report = JSON.parse(readFileSync(file, "utf8")) as XbowReport;
+      reports.push({ report, source: {
+        runId: run.databaseId, url: run.url, createdAt: run.createdAt,
+        artifact: basename(dirname(file)), reportFile: file.slice(downloadDir.length + 1),
+      } });
+    }
+  } finally {
+    rmSync(downloadDir, { recursive: true, force: true });
   }
 }
 
-const blackIds = uniqueSorted(blackBoxSolved.keys());
-const whiteIds = uniqueSorted(whiteBoxSolved.keys());
-const aggregateIds = uniqueSorted([...blackIds, ...whiteIds]);
-const whiteOnlyIds = whiteIds.filter((id) => !blackBoxSolved.has(id));
-
-// Build per-model breakdown sorted by solve rate descending. The cost
-// fields are best-effort: per-result cost only exists when the runner
-// wrote `estimatedCostUsd` (post-issue-#81 schema). Older artifacts
-// produce zeroes which we surface as `null` so consumers can tell apart
-// "free run" from "no cost data captured".
-interface PerModelOut {
-  solved: number;
-  attempted: number;
-  rate: number;
-  challengesSolved: string[];
-  totalCostUsd: number | null;
-  costPerRunUsd: number | null;
-  costPerFlagUsd: number | null;
-}
-const perModel: Record<string, PerModelOut> = Object.fromEntries(
-  [...perModelStats.entries()]
-    .map(([model, stats]) => {
-      const solved = stats.solved.size;
-      const attempted = stats.attempted.size;
-      const rate = attempted > 0 ? Math.round((solved / attempted) * 1000) / 10 : 0;
-      const hasCost = stats.costSumUsd > 0 && stats.resultCount > 0;
-      const totalCostUsd = hasCost ? round(stats.costSumUsd, 2) : null;
-      const costPerRunUsd = hasCost ? round(stats.costSumUsd / stats.resultCount, 3) : null;
-      const costPerFlagUsd = hasCost && solved > 0 ? round(stats.costSumUsd / solved, 2) : null;
-      return [
-        model,
-        {
-          solved,
-          attempted,
-          rate,
-          challengesSolved: uniqueSorted(stats.solved),
-          totalCostUsd,
-          costPerRunUsd,
-          costPerFlagUsd,
-        },
-      ] as const;
-    })
-    .sort(([, a], [, b]) => b.rate - a.rate || b.solved - a.solved),
-);
-
-function round(n: number, digits: number): number {
-  const k = 10 ** digits;
-  return Math.round(n * k) / k;
-}
+const summary = aggregateXbowReports(reports);
 
 const canonical = {
   generatedAt: new Date().toISOString(),
@@ -344,41 +203,13 @@ const canonical = {
     xbowArtifactsConsidered: xbowArtifacts.length,
     skippedRuns,
   },
-  counts: {
-    blackBox: blackIds.length,
-    whiteBox: whiteIds.length,
-    aggregate: aggregateIds.length,
-    whiteBoxOnly: whiteOnlyIds.length,
-  },
-  solved: {
-    blackBox: blackIds,
-    whiteBox: whiteIds,
-    aggregate: aggregateIds,
-    whiteBoxOnly: whiteOnlyIds,
-  },
-  sources: {
-    blackBox: sortedEntries(blackBoxSolved),
-    whiteBox: sortedEntries(whiteBoxSolved),
-  },
-  perModel,
+  ...summary,
 };
 
 mkdirSync(dirname(outputPath), { recursive: true });
 writeFileSync(outputPath, JSON.stringify(canonical, null, 2) + "\n");
 
 console.log(`Wrote ${outputPath}`);
-console.log(`  black-box solved:   ${blackIds.length}`);
-console.log(`  white-box solved:   ${whiteIds.length}`);
-console.log(`  aggregate solved:   ${aggregateIds.length}`);
-console.log(`  white-box only:     ${whiteOnlyIds.length}`);
-
-if (Object.keys(perModel).length > 0) {
-  console.log(`\n  Per-model breakdown:`);
-  for (const [model, stats] of Object.entries(perModel)) {
-    const costFragment =
-      stats.costPerFlagUsd != null
-        ? ` — $${stats.costPerRunUsd!.toFixed(2)}/run, $${stats.costPerFlagUsd.toFixed(2)}/flag`
-        : "";
-    console.log(`    ${model}: ${stats.solved}/${stats.attempted} (${stats.rate}%)${costFragment}`);
-  }
-}
+console.log(`  Historical union (not a single-run score): ${summary.counts.aggregate} unique challenges`);
+console.log(`  black-box: ${summary.counts.blackBox}; white-box: ${summary.counts.whiteBox}; unknown mode: ${summary.counts.unknownMode}`);
+console.log(`  ${summary.cohorts.length} separate report/model/mode/attempt-policy cohorts; no cross-report per-model score`);

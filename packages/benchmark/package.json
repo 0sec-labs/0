@@ -119,6 +119,7 @@
     "test:windows-research": "vitest run src/windows-lpe-corpus.test.ts src/windows-lpe-paired-corpus.test.ts src/windows-lpe-opaque-projection.test.ts src/windows-ioctl-benchmark-observation.test.ts src/windows-ioctl-foxguard-baseline.test.ts src/msrc-windows-lpe-inventory.test.ts src/msrc-windows-lpe-capability-promotion.test.ts src/windows-research-collector.test.ts",
     "npm-bench": "tsx src/npm-bench.ts",
     "npm-bench:json": "tsx src/npm-bench.ts --json",
+    "test:xbow-cohorts": "node --test scripts/xbow-cohorts.test.mjs",
     "consolidate-xbow": "tsx src/scripts/consolidate-xbow.ts",
     "compare:xbow": "tsx src/compare-xbow.ts",
     "report": "tsx src/report.ts",

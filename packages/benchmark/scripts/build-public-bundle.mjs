@@ -22,6 +22,7 @@
 
 import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync, copyFileSync, statSync } from "node:fs";
 import { join, basename } from "node:path";
+import { aggregateXbowReports } from "./xbow-cohorts.mjs";
 
 function arg(name, def = "") {
   const i = process.argv.indexOf(`--${name}`);
@@ -55,18 +56,18 @@ for (const p of resultsPath.split(",").map((s) => s.trim()).filter(Boolean)) {
 }
 let report = {};
 // Union across passes/shards: a challenge counts as SOLVED if ANY pass solved it
-// (best-of-N semantics, matching consolidate-xbow.ts and the XBOW protocol). For
+// (historical best-of-N union, never a single-run score). For
 // a given id we keep the solved result if one exists, else the most-attempted one.
 const byId = new Map();
-// rawResults keeps EVERY result instance across all files — needed to count
-// bb-vs-wb and per-model correctly (a challenge solved in both modes must count
-// in both). byId picks ONE result per challenge for the published receipt.
-const rawResults = [];
+// Keep each report separate for cohort accounting. byId picks ONE result per
+// challenge only for the explicitly historical receipt collection.
+const reportInputs = [];
 for (const f of resultFiles) {
   const rep = JSON.parse(readFileSync(f, "utf8"));
   if (!report.timestamp) report = rep; // keep first report's top-level fields
-  for (const r of rep.results ?? []) {
-    rawResults.push({ ...r, _reportWhiteBox: rep.whiteBox, _reportModel: rep.model });
+  reportInputs.push({ report: rep, source: { reportFile: f } });
+  for (const original of rep.results ?? []) {
+    const r = { ...original, _reportWhiteBox: rep.whiteBox, _reportModel: rep.model, _reportTimestamp: rep.timestamp, _reportFile: f };
     const prev = byId.get(r.id);
     if (!prev) { byId.set(r.id, r); continue; }
     // prefer a solved result; otherwise prefer the one with more attempts/turns
@@ -81,32 +82,10 @@ console.log(`Merged ${results.length} unique challenges from ${resultFiles.lengt
 const receiptsDir = join(outDir, "receipts");
 mkdirSync(receiptsDir, { recursive: true });
 
-// Per-model + per-mode tallies, mirroring consolidate-xbow.ts semantics.
-const blackBox = new Set();
-const whiteBox = new Set();
-const perModel = new Map(); // model -> {attempted:Set, solved:Set, cost:number, n:number}
-
-function track(model, id, solved, cost) {
-  let s = perModel.get(model);
-  if (!s) { s = { attempted: new Set(), solved: new Set(), cost: 0, n: 0 }; perModel.set(model, s); }
-  s.attempted.add(id);
-  if (solved) s.solved.add(id);
-  if (cost > 0) { s.cost += cost; s.n += 1; }
-}
-
 function extractFlag(traceObj) {
   const txt = JSON.stringify(traceObj);
   const m = txt.match(/FLAG\{[^}]*\}/);
   return m ? m[0] : "";
-}
-
-// Count bb/wb/per-model from ALL raw results (union across every pass/mode).
-for (const r of rawResults) {
-  const model = r.model ?? r._reportModel ?? "unknown";
-  const cost = r.meanCostUsd ?? r.estimatedCostUsd ?? 0;
-  track(model, r.id, !!r.flagFound, cost);
-  const isWb = (r.whiteBox ?? r._reportWhiteBox) === true;
-  if (r.flagFound) (isWb ? whiteBox : blackBox).add(r.id);
 }
 
 // Public tier: if no explicit --sample, auto-pick one solved challenge per distinct
@@ -126,7 +105,7 @@ let written = 0, fullTraces = 0;
 for (const r of results) {
   if (!r.flagFound) continue; // only solved challenges get a published receipt
 
-  const model = r.model ?? report.model ?? "unknown";
+  const model = r.model ?? r._reportModel ?? "unknown";
   const includeFull = !publicTier || sampleIds.has(r.id); // full trace only in audit set or sample
   const cdir = join(receiptsDir, r.id);
   mkdirSync(cdir, { recursive: true });
@@ -140,10 +119,10 @@ for (const r of results) {
   // meta.json — moat-safe summary (always written): outcome + class, no methodology.
   writeFileSync(join(cdir, "meta.json"), JSON.stringify({
     id: r.id, name: r.name, tags: r.tags ?? [], level: r.level ?? null,
-    model, mode: (r.whiteBox ?? report.whiteBox) ? "white-box" : "black-box",
+    model, mode: (r.whiteBox ?? r._reportWhiteBox) === true ? "white-box" : (r.whiteBox ?? r._reportWhiteBox) === false ? "black-box" : "unknown",
     flagFound: !!r.flagFound, flag, attackTurns: r.attackTurns ?? null,
     findingsCount: r.findingsCount ?? null,
-    estimatedCostUsd: r.estimatedCostUsd ?? null, runTimestamp: report.timestamp ?? null,
+    estimatedCostUsd: r.estimatedCostUsd ?? null, runTimestamp: r._reportTimestamp ?? null, reportFile: r._reportFile,
     substrateRepo, substrateSha,
     fullTrace: includeFull ? "trace.json" : "available under NDA (audit room)",
   }, null, 2) + "\n");
@@ -156,38 +135,17 @@ for (const r of results) {
   written++;
 }
 
-const round = (n, d) => Math.round(n * 10 ** d) / 10 ** d;
-const sortIds = (it) => [...new Set(it)].sort();
-const aggregate = sortIds([...blackBox, ...whiteBox]);
-
 const ledger = {
-  generatedFrom: basename(resultsPath),
-  runTimestamp: report.timestamp ?? null,
+  generatedFrom: resultFiles,
   substrate: { repo: substrateRepo, sha: substrateSha, challengeCount: 104 },
-  counts: {
-    blackBox: blackBox.size,
-    whiteBox: whiteBox.size,
-    aggregate: aggregate.length,
-    whiteBoxOnly: [...whiteBox].filter((id) => !blackBox.has(id)).length,
-  },
-  solved: { blackBox: sortIds(blackBox), whiteBox: sortIds(whiteBox), aggregate },
-  perModel: Object.fromEntries([...perModel.entries()].map(([model, s]) => {
-    const solved = s.solved.size, attempted = s.attempted.size;
-    const hasCost = s.cost > 0 && s.n > 0;
-    return [model, {
-      solved, attempted, ratePct: attempted ? round((solved / attempted) * 100, 1) : 0,
-      challengesSolved: sortIds(s.solved),
-      totalCostUsd: hasCost ? round(s.cost, 2) : null,
-      costPerFlagUsd: hasCost && solved ? round(s.cost / solved, 2) : null,
-    }];
-  })),
+  ...aggregateXbowReports(reportInputs),
 };
 
 writeFileSync(join(outDir, "ledger.json"), JSON.stringify(ledger, null, 2) + "\n");
 writeFileSync(join(outDir, "substrate.sha"), `${substrateRepo}@${substrateSha}\n`);
 
 const bb = ledger.counts.blackBox, agg = ledger.counts.aggregate;
-const headModel = Object.keys(ledger.perModel)[0] ?? "unknown";
+
 
 writeFileSync(join(outDir, "README.md"), `# 0sec — XBOW benchmark receipts
 
@@ -196,9 +154,9 @@ Auditable per-challenge receipts for [0sec](https://0sec.ai)'s runs against the
 commit so the substrate is fixed and publicly clonable.
 
 - **Substrate:** \`${substrateRepo}\` @ \`${substrateSha}\` (104 challenges)
-- **Headline model:** ${headModel}
-- **Black-box solved:** ${bb}/104 — **aggregate (any mode):** ${agg}/104
-- Full counts + per-model breakdown: [\`ledger.json\`](./ledger.json)
+- **Historical black-box union:** ${bb}/104 — **historical union (including unknown mode):** ${agg}/104
+- These are retained-report unions, not single-run or single-shot scores.
+- Full counts + separate report/model/mode/attempt-policy cohorts: [\`ledger.json\`](./ledger.json)
 
 Every solved challenge has a folder under [\`receipts/\`](./receipts) with a metadata pin
 (\`meta.json\`: vuln class, mode, model, turns, cost, captured flag) and the \`flag.txt\` it
