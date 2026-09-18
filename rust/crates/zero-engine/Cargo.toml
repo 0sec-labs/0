@@ -7,6 +7,7 @@ license.workspace = true
 publish.workspace = true
 
 [dependencies]
+zero-plugin = { path = "../zero-plugin" }
 zero-harness = { path = "../zero-harness" }
 zero-plugin-runner = { path = "../zero-plugin-runner" }
 zero-protocol.workspace = true
@@ -27,7 +28,6 @@ libc.workspace = true
 [dev-dependencies]
 rusqlite.workspace = true
 zero-evolution = { path = "../zero-evolution" }
-zero-plugin = { path = "../zero-plugin" }
 tempfile.workspace = true
 
 [lints]

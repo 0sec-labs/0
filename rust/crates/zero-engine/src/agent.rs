@@ -28,6 +28,7 @@ impl Engine {
         let initial = model_request(
             &request,
             vec![serde_json::json!({"role":"user","content":request.prompt})],
+            None,
         );
         zero_provider::validate_request(&initial).map_err(|e| EngineError::State(e.to_string()))?;
         let receiver = {
@@ -57,15 +58,60 @@ impl Engine {
                 .client
                 .validate(&initial)
                 .map_err(|e| EngineError::State(e.to_string()))?;
+            // A durable completed/uncertain receipt remains replayable after an
+            // activation. Compare the request/provider and freshly configured
+            // host launch, but never reinterpret its historical plugin graph.
+            let prior =
+                lock(&self.shared.store)?.get_operation_by_command(&session_id, &command_id);
+            match prior {
+                Ok(prior) => {
+                    let mut payload = serde_json::json!({"kind":"offline_snapshot_agent","request":request,"endpoint":profile.client.endpoint_identity(),"rates":profile.rates});
+                    if profile.client.wire_api() != zero_protocol::model::WireApi::Responses {
+                        payload["wire_api"] = serde_json::to_value(profile.client.wire_api())?;
+                    }
+                    if let Some(context) = prior.payload.get("plugin_context") {
+                        let profiles = lock(&self.shared.plugins)?;
+                        let configured = profiles.as_ref().ok_or_else(|| {
+                            EngineError::State("plugins are not configured".into())
+                        })?;
+                        let mut context = context.clone();
+                        context["launch"] = serde_json::to_value(&configured.launch)?;
+                        payload["plugin_context"] = context;
+                    }
+                    let admission = lock(&self.shared.store)?.admit_command(
+                        &session_id,
+                        &command_id,
+                        &payload,
+                    )?;
+                    let result = admission
+                        .operation
+                        .outcome
+                        .clone()
+                        .and_then(|v| serde_json::from_value(v).ok());
+                    return Ok(Reply::Agent {
+                        operation: admission.operation,
+                        result,
+                        duplicate: true,
+                    });
+                }
+                Err(zero_store::Error::NotFound(_)) => {}
+                Err(error) => return Err(error.into()),
+            }
+            let session = lock(&self.shared.store)?.get_session(&session_id)?;
+            let plugins = agent_plugins::capture(&self.shared, &session, &request.plugin_tools)?;
             let mut store = lock(&self.shared.store)?;
-            let input = continuation_input(&store, &session_id, &request, &profile)?;
+            let input =
+                continuation_input(&store, &session_id, &request, &profile, plugins.as_ref())?;
             profile
                 .client
-                .validate(&model_request(&request, input.clone()))
+                .validate(&model_request(&request, input.clone(), plugins.as_ref()))
                 .map_err(|e| EngineError::State(e.to_string()))?;
             let mut payload = serde_json::json!({"kind":"offline_snapshot_agent","request":request,"endpoint":profile.client.endpoint_identity(),"rates":profile.rates});
             if profile.client.wire_api() != zero_protocol::model::WireApi::Responses {
                 payload["wire_api"] = serde_json::to_value(profile.client.wire_api())?;
+            }
+            if let Some(context) = &plugins {
+                payload["plugin_context"] = context.identity.clone();
             }
             let admission = store.admit_command(&session_id, &command_id, &payload)?;
             if admission.duplicate {
@@ -103,6 +149,7 @@ impl Engine {
                     request,
                     profile,
                     input,
+                    plugins,
                     cancel,
                     events,
                 )
@@ -127,6 +174,7 @@ fn continuation_input(
     session: &str,
     request: &AgentRequest,
     profile: &inference::Profile,
+    plugins: Option<&agent_plugins::Context>,
 ) -> Result<Vec<serde_json::Value>, EngineError> {
     let mut input = Vec::new();
     if let Some(parent_id) = &request.continuation_of {
@@ -152,7 +200,9 @@ fn continuation_input(
                 .cloned()
                 .unwrap_or_else(|| serde_json::json!("responses")),
         )?;
-        if prior.provider != request.provider
+        if prior.plugin_tools != request.plugin_tools
+            || parent.payload.get("plugin_context") != plugins.map(|p| &p.identity)
+            || prior.provider != request.provider
             || prior.model != request.model
             || prior.instructions != request.instructions
             || serde_json::to_value(prior.execution.sandbox_request())?
@@ -198,10 +248,18 @@ fn continuation_input(
     Ok(input)
 }
 
-fn model_request(request: &AgentRequest, input: Vec<serde_json::Value>) -> ResponsesRequest {
-    ResponsesRequest{model:request.model.clone(),instructions:request.instructions.clone(),input,max_output_tokens:8192,
+fn model_request(
+    request: &AgentRequest,
+    input: Vec<serde_json::Value>,
+    plugins: Option<&agent_plugins::Context>,
+) -> ResponsesRequest {
+    let mut model = ResponsesRequest{model:request.model.clone(),instructions:request.instructions.clone(),input,max_output_tokens:8192,
         tools:vec![ToolDefinition{name:"execute_snapshot".into(),description:"Run an argv vector in the explicitly pinned offline snapshot sandbox. This cannot change the image, mounts, networking, limits or host files. The working copy is disposable for each call.".into(),
-            parameters:serde_json::json!({"type":"object","properties":{"argv":{"type":"array","items":{"type":"string"},"minItems":1,"maxItems":128}},"required":["argv"],"additionalProperties":false})}]}
+            parameters:serde_json::json!({"type":"object","properties":{"argv":{"type":"array","items":{"type":"string"},"minItems":1,"maxItems":128}},"required":["argv"],"additionalProperties":false})}]};
+    if let Some(plugins) = plugins {
+        model.tools.extend(plugins.tools.clone());
+    }
+    model
 }
 fn child_operation(
     shared: &Shared,
@@ -227,6 +285,7 @@ async fn run_actor(
     request: AgentRequest,
     profile: inference::Profile,
     mut input: Vec<serde_json::Value>,
+    plugins: Option<agent_plugins::Context>,
     cancel: CancellationToken,
     events: mpsc::Sender<ExecutionEvent>,
 ) -> Result<Reply, EngineError> {
@@ -242,7 +301,14 @@ async fn run_actor(
             output.status = AgentStatus::Cancelled;
             break;
         }
-        let model = model_request(&request, input.clone());
+        if let Some(context) = &plugins {
+            if let Err(error) = agent_plugins::current(shared, context) {
+                output.status = AgentStatus::Failed;
+                output.error = Some(error.to_string());
+                break;
+            }
+        }
+        let model = model_request(&request, input.clone(), plugins.as_ref());
         // Validate accumulated context before reserving/spending or admitting an effect.
         if profile.client.validate(&model).is_err() {
             output.status = AgentStatus::Failed;
@@ -348,6 +414,53 @@ async fn run_actor(
                 output.status = AgentStatus::Cancelled;
                 break 'turns;
             }
+            if let Some(binding) = request.plugin_tools.iter().find(|b| b.alias == name) {
+                let context = plugins
+                    .as_ref()
+                    .ok_or_else(|| EngineError::State("missing captured plugin context".into()))?;
+                if let Err(error) =
+                    agent_plugins::validate(shared, context, binding, arguments.clone())
+                {
+                    input.push(serde_json::json!({"type":"function_call_output","call_id":id,"output":format!("Tool rejected: {error}")}));
+                    continue;
+                }
+                let reply = agent_plugins::execute(
+                    shared,
+                    session,
+                    parent,
+                    &format!("{parent}:tool:{turn}:{index}"),
+                    &id,
+                    context,
+                    binding,
+                    arguments,
+                    cancel.clone(),
+                    events.clone(),
+                )
+                .await?;
+                output.tool_calls += 1;
+                let Reply::Plugin {
+                    operation,
+                    result: Some(result),
+                    ..
+                } = reply
+                else {
+                    output.status = AgentStatus::Unknown;
+                    output.error = Some("plugin outcome is uncertain".into());
+                    break 'turns;
+                };
+                if operation.status == OperationStatus::Unknown {
+                    output.status = AgentStatus::Unknown;
+                    output.error =
+                        Some("plugin cleanup or completion is uncertain; lease retained".into());
+                    break 'turns;
+                }
+                if cancel.is_cancelled() {
+                    output.status = AgentStatus::Cancelled;
+                    break 'turns;
+                }
+                input.push(serde_json::json!({"type":"function_call_output","call_id":id,"output":serde_json::to_string(&serde_json::json!({"untrusted_plugin_data":result.untrusted_reply,"error":result.error,"status":operation.status}))?}));
+                continue;
+            }
             let mut execution = request.execution.sandbox_request();
             execution.execution_id = format!("agent-{parent}-{turn}-{index}");
             let permitted = if name == "execute_snapshot" {
@@ -361,7 +474,7 @@ async fn run_actor(
                 None
             };
             let Some(argv) = permitted else {
-                input.push(serde_json::json!({"type":"function_call_output","call_id":id,"output":"Tool rejected: only execute_snapshot with an argv array is authorized."}));
+                input.push(serde_json::json!({"type":"function_call_output","call_id":id,"output":"Tool rejected: unknown/unoffered tool or invalid execute_snapshot arguments."}));
                 continue;
             };
             execution.argv = argv;

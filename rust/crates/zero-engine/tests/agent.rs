@@ -178,6 +178,7 @@ impl Setup {
         Self {
             dir,
             request: AgentRequest {
+                plugin_tools: vec![],
                 continuation_of: None,
                 provider: "local".into(),
                 model: "fixture".into(),

@@ -4,8 +4,8 @@ use zero_harness::{GenerationPin, Harness, PinnedCall};
 use zero_plugin_runner::{Launch, Runner, UntrustedReply};
 use zero_protocol::plugin::{PluginOutcome, PluginPin, UntrustedPluginReply};
 pub(super) struct Profile {
-    harness: Harness,
-    launch: Launch,
+    pub(super) harness: Harness,
+    pub(super) launch: Launch,
 }
 fn state(error: impl std::fmt::Display) -> EngineError {
     EngineError::State(error.to_string())
@@ -171,7 +171,7 @@ impl Engine {
     }
 }
 #[allow(clippy::too_many_arguments)]
-async fn run(
+pub(super) async fn run(
     shared: &Arc<Shared>,
     operation: &str,
     expected: GenerationPin,

@@ -50,3 +50,39 @@ launcher start, stale rollback epochs, legacy-session rejection, unknown cleanup
 with outstanding lease, cancellation with confirmed cleanup, rejected offline
 capabilities and invalid launch configuration. Fixtures execute no real targets
 or paid model calls.
+
+## Explicit model-facing selection
+
+`AgentRequest.plugin_tools` optionally supplies up to 32 bindings such as
+`{"alias":"inspect_plugin","plugin":"fixture","tool":"inspect"}`. Omission
+preserves existing snapshot-only agent requests and retry identities. Aliases
+must be unique provider-compatible names and cannot shadow `execute_snapshot`.
+Only these selected tools are offered. Their descriptions and parameter schemas
+come from the verified graph; neither a model nor the request supplies grants.
+Privileged capabilities anywhere in the selected plugin's dependency closure
+reject before contacting a provider.
+
+The parent admission binds generation, activation epoch, selected manifest
+hashes, aliases and the fixed host launch profile. A continuation must preserve
+that context along with the existing provider and snapshot authority. Plugin
+agents require a current pinned session before admission and recheck it before
+each provider turn. Exact admitted retries return historical receipts after
+activation without reinterpreting the old graph; a changed request, provider or
+configured host launch still conflicts.
+The external registry check is not an atomic fence spanning a remote provider
+request. Plugin effect admission separately acquires a checked generation lease.
+
+Each accepted model plugin call creates a durable child operation with its own
+preparation journal and operation-correlated lease, while sharing the parent's
+session ownership and cancellation token. Invalid arguments or unoffered names
+produce rejection data without creating a child effect. A settled response is
+passed back as explicitly untrusted plugin data. Uncertain cleanup stops the
+parent as `Unknown` and retains the child lease; a model cannot request a retry
+that bypasses these records. Offline plugin calls do not consume model budget;
+every actual provider turn retains ordinary durable reservation and settlement.
+
+Loopback provider/fake-backend tests cover tool schema selection, result replay,
+restart/continuation and exact retry, per-turn budget limits, stale host profiles
+and epochs, rejected aliases/schema/capabilities, cancellation and uncertain
+cleanup. These establish orchestration behavior, not a security assessment or a
+claim that model output is correct.

@@ -381,6 +381,7 @@ async fn real_microvm_engine_and_agent_ownership_accounting_and_durable_retry() 
     let (url, http) = model_fixture().await;
     configure(&engine, &url);
     let request = AgentRequest {
+        plugin_tools: vec![],
         continuation_of: None,
         provider: "fixture".into(),
         model: "loopback".into(),

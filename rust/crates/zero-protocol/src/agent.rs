@@ -15,11 +15,22 @@ pub struct AgentRequest {
     /// previous effects are never executed again. Omission starts fresh.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub continuation_of: Option<String>,
-    /// Every tool call uses this pinned offline execution profile. The model
+    /// execute_snapshot uses this pinned offline execution profile. The model
     /// supplies argv only; it cannot choose mounts, image, network or limits.
+    /// Explicit plugin tools use the separately configured host launch profile.
     pub execution: AgentExecution,
+    /// Explicit aliases for a curated subset of host-authorized pinned plugins.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub plugin_tools: Vec<PluginToolBinding>,
     pub max_turns: u32,
     pub reservation_per_turn: u64,
+}
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct PluginToolBinding {
+    pub alias: String,
+    pub plugin: String,
+    pub tool: String,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
