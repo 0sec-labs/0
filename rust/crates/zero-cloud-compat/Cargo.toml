@@ -1,5 +1,5 @@
 [package]
-name = "zero-protocol"
+name = "zero-cloud-compat"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -9,9 +9,8 @@ publish.workspace = true
 [dependencies]
 serde.workspace = true
 serde_json.workspace = true
-schemars.workspace = true
 thiserror.workspace = true
-base64 = "0.22"
+tempfile.workspace = true
 
 [lints]
 workspace = true

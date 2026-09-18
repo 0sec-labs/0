@@ -5,6 +5,13 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
+mod binary;
+pub mod execution;
+pub mod model;
+pub mod session;
+pub use execution::*;
+pub use session::*;
+
 pub const PROTOCOL_VERSION: u32 = 1;
 pub const MAX_FRAME_BYTES: usize = 1024 * 1024;
 
@@ -33,125 +40,39 @@ pub struct Request {
 )]
 pub enum Command {
     Initialize,
-    Execute(ExecutionRequest),
-    Cancel { execution_id: String },
+    SessionCreate {
+        generation: String,
+        budget_limit: u64,
+    },
+    SessionList,
+    SessionGet {
+        session_id: String,
+    },
+    SessionBudget {
+        session_id: String,
+    },
+    SessionEvents {
+        session_id: String,
+        after_sequence: u64,
+        limit: u32,
+    },
+    Execute {
+        session_id: String,
+        command_id: String,
+        request: ExecutionRequest,
+    },
+    Infer {
+        session_id: String,
+        command_id: String,
+        provider: String,
+        request: model::ResponsesRequest,
+        reservation: u64,
+    },
+    Cancel {
+        session_id: String,
+        execution_id: String,
+    },
     Reconcile(ReconcileRequest),
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
-pub struct ExecutionRequest {
-    pub execution_id: String,
-    /// Docker must resolve this locally to an immutable image ID; never pull.
-    pub image: String,
-    pub argv: Vec<String>,
-    #[serde(default)]
-    pub stdin: Option<String>,
-    pub timeout_ms: u64,
-    pub memory_mb: u64,
-    pub cpus: u16,
-    pub max_output_bytes: usize,
-}
-
-impl ExecutionRequest {
-    pub fn validate(&self) -> Result<(), ValidationError> {
-        if self.execution_id.is_empty()
-            || self.execution_id.len() > 128
-            || !self
-                .execution_id
-                .bytes()
-                .all(|b| b.is_ascii_alphanumeric() || b"-_.".contains(&b))
-        {
-            return Err(ValidationError(
-                "execution_id must contain 1..128 ASCII letters, digits, '-', '_' or '.'".into(),
-            ));
-        }
-        if self.image.is_empty()
-            || self.image.len() > 512
-            || self.image.starts_with('-')
-            || self
-                .image
-                .bytes()
-                .any(|b| b.is_ascii_whitespace() || b == 0)
-        {
-            return Err(ValidationError(
-                "image must be a nonempty local Docker image reference".into(),
-            ));
-        }
-        if self.argv.is_empty()
-            || self.argv[0].is_empty()
-            || self.argv.len() > 1024
-            || self
-                .argv
-                .iter()
-                .any(|arg| arg.contains('\0') || arg.len() > 128 * 1024)
-        {
-            return Err(ValidationError(
-                "argv must be nonempty, bounded, and contain no NUL bytes".into(),
-            ));
-        }
-        if !(100..=600_000).contains(&self.timeout_ms)
-            || !(32..=16_384).contains(&self.memory_mb)
-            || !(1..=16).contains(&self.cpus)
-            || !(256..=16 * 1024 * 1024).contains(&self.max_output_bytes)
-            || self
-                .stdin
-                .as_ref()
-                .is_some_and(|s| s.len() > MAX_FRAME_BYTES / 2)
-        {
-            return Err(ValidationError(
-                "execution limits are outside the supported range".into(),
-            ));
-        }
-        Ok(())
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-#[serde(rename_all = "snake_case")]
-pub enum OutputStream {
-    Stdout,
-    Stderr,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
-#[serde(tag = "type", rename_all = "snake_case")]
-pub enum ExecutionEvent {
-    Started {
-        execution_id: String,
-        image_id: String,
-        container_id: String,
-    },
-    /// Text is presentation only; chunks must preserve split UTF-8 sequences.
-    Output {
-        execution_id: String,
-        sequence: u64,
-        stream: OutputStream,
-        text: String,
-    },
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-#[serde(rename_all = "snake_case")]
-pub enum ExecutionStatus {
-    Exited,
-    Cancelled,
-    TimedOut,
-    OutputLimit,
-    Failed,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
-pub struct ExecutionResult {
-    pub execution_id: String,
-    pub status: ExecutionStatus,
-    pub exit_code: Option<i32>,
-    pub stdout: String,
-    pub stderr: String,
-    pub duration_ms: u64,
-    /// True only after the executor observes removal of its owned container.
-    pub cleanup_confirmed: bool,
-    pub error: Option<String>,
 }
 
 /// This records an assessment. It never turns a model claim into an oracle proof.
@@ -215,7 +136,28 @@ pub enum Reply {
         protocol_version: u32,
         capabilities: Vec<String>,
     },
-    Execution(ExecutionResult),
+    Session {
+        session: Session,
+    },
+    Sessions {
+        sessions: Vec<Session>,
+    },
+    SessionBudget {
+        budget: BudgetSnapshot,
+    },
+    SessionEvents {
+        events: Vec<SessionEvent>,
+    },
+    Execution {
+        operation: Operation,
+        result: Option<ExecutionResult>,
+        duplicate: bool,
+    },
+    Inference {
+        operation: Operation,
+        completion: Option<model::Completion>,
+        duplicate: bool,
+    },
     Cancelled {
         execution_id: String,
         accepted: bool,
@@ -233,7 +175,7 @@ pub enum ServerMessage {
     Response {
         protocol_version: u32,
         id: Option<RequestId>,
-        reply: Reply,
+        reply: Box<Reply>,
     },
     Event {
         protocol_version: u32,
@@ -259,28 +201,40 @@ mod tests {
     use super::*;
 
     #[test]
-    fn rejects_invalid_execution_before_side_effects() {
-        let mut request = ExecutionRequest {
-            execution_id: "run-1".into(),
-            image: "toolbox:local".into(),
-            argv: vec!["true".into()],
-            stdin: None,
-            timeout_ms: 1000,
-            memory_mb: 128,
-            cpus: 1,
-            max_output_bytes: 1024,
+    fn preserves_caller_identity_and_typed_command_across_round_trip() {
+        let request = Request {
+            protocol_version: PROTOCOL_VERSION,
+            id: RequestId::Text("request-1".into()),
+            command: Command::SessionCreate {
+                generation: "baseline".into(),
+                budget_limit: 100,
+            },
         };
-        assert!(request.validate().is_ok());
-        request.image = "--privileged".into();
-        assert!(request.validate().is_err());
-        request.image = "toolbox:local".into();
-        request.argv = vec!["bad\0arg".into()];
-        assert!(request.validate().is_err());
+        let wire = serde_json::to_vec(&request).unwrap();
+        let decoded: Request = serde_json::from_slice(&wire).unwrap();
+        assert_eq!(decoded.id, request.id);
+        assert!(matches!(
+            decoded.command,
+            Command::SessionCreate {
+                budget_limit: 100,
+                ..
+            }
+        ));
     }
 
     #[test]
     fn wire_rejects_unrecognized_execution_fields() {
-        let frame = r#"{"protocol_version":1,"id":1,"command":{"method":"execute","params":{"execution_id":"a","image":"local","argv":["true"],"timeout_ms":1000,"memory_mb":128,"cpus":1,"max_output_bytes":1024,"privileged":true}}}"#;
-        assert!(serde_json::from_str::<Request>(frame).is_err());
+        let mut frame = serde_json::json!({
+            "protocol_version":1,"id":1,"command":{"method":"execute","params":{
+                "session_id":"session-1","command_id":"command-1","request":{
+                    "execution_id":"a","image":"local","argv":["true"],
+                    "snapshot":{"id":"snapshot-1","root":"/tmp/source","digest":"sha256:abc","files":[]},
+                    "timeout_ms":1000,"memory_mb":128,"cpus":1,"max_output_bytes":1024
+                }
+            }}
+        });
+        assert!(serde_json::from_value::<Request>(frame.clone()).is_ok());
+        frame["command"]["params"]["request"]["privileged"] = serde_json::json!(true);
+        assert!(serde_json::from_value::<Request>(frame).is_err());
     }
 }

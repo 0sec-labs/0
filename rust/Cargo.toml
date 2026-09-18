@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/zero-protocol"]
+members = ["crates/*"]
 resolver = "3"
 
 [workspace.package]
@@ -21,7 +21,15 @@ sha2 = "0.10"
 uuid = { version = "1", features = ["v4", "serde"] }
 tempfile = "3"
 libc = "0.2"
+rusqlite = { version = "0.37", features = ["bundled"] }
+fs2 = "0.4"
+nix = { version = "0.30", features = ["signal", "process", "user"] }
 zero-protocol = { path = "crates/zero-protocol" }
+zero-store = { path = "crates/zero-store" }
+zero-executor = { path = "crates/zero-executor" }
+zero-evidence = { path = "crates/zero-evidence" }
+zero-engine = { path = "crates/zero-engine" }
+zero-provider = { path = "crates/zero-provider" }
 
 [workspace.lints.rust]
 unsafe_code = "deny"

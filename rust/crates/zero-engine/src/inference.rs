@@ -1,0 +1,215 @@
+use super::*;
+use zero_protocol::model::{CompletionStatus, Rates, ResponsesRequest};
+use zero_provider::ProviderClient;
+
+#[derive(Clone)]
+pub(super) struct Profile {
+    pub(super) client: Arc<ProviderClient>,
+    pub(super) rates: Rates,
+}
+impl Engine {
+    /// Configure an explicit route before admitting work. Credentials stay in memory.
+    pub fn configure_provider(
+        &self,
+        name: &str,
+        client: ProviderClient,
+        rates: Rates,
+    ) -> Result<(), EngineError> {
+        if name.is_empty()
+            || name.len() > 128
+            || !name
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-')
+        {
+            return Err(EngineError::State("invalid provider profile name".into()));
+        }
+        let control = lock(&self.shared.control)?;
+        if control.closing || !control.active.is_empty() {
+            return Err(EngineError::State(
+                "provider configuration requires an idle engine".into(),
+            ));
+        }
+        let mut profiles = lock(&self.shared.providers)?;
+        if profiles.contains_key(name) {
+            return Err(EngineError::State(
+                "provider profile already configured".into(),
+            ));
+        }
+        profiles.insert(
+            name.into(),
+            Profile {
+                client: Arc::new(client),
+                rates,
+            },
+        );
+        Ok(())
+    }
+
+    pub(super) async fn infer(
+        &self,
+        session_id: String,
+        command_id: String,
+        provider: String,
+        request: ResponsesRequest,
+        reservation: u64,
+    ) -> Result<Reply, EngineError> {
+        zero_provider::validate_request(&request).map_err(|e| EngineError::State(e.to_string()))?;
+        if reservation == 0 {
+            return Err(EngineError::State(
+                "inference requires a nonzero budget reservation".into(),
+            ));
+        }
+        let receiver = {
+            let mut control = lock(&self.shared.control)?;
+            if control.closing {
+                return Err(EngineError::State("engine is shutting down".into()));
+            }
+            if control
+                .active
+                .get(&session_id)
+                .is_some_and(|active| active.command_id != command_id)
+            {
+                return Err(EngineError::State(
+                    "session already has an active operation".into(),
+                ));
+            }
+            if control.active.len() >= 64 && !control.active.contains_key(&session_id) {
+                return Err(EngineError::State(
+                    "engine active operation limit reached".into(),
+                ));
+            }
+            let profile = lock(&self.shared.providers)?
+                .get(&provider)
+                .cloned()
+                .ok_or_else(|| EngineError::State("provider profile is not configured".into()))?;
+            let payload = serde_json::json!({"kind":"responses_inference","provider":provider,"endpoint":profile.client.endpoint_identity(),"rates":profile.rates,"request":request,"reservation":reservation});
+            let mut store = lock(&self.shared.store)?;
+            let admission = store.admit_command(&session_id, &command_id, &payload)?;
+            if admission.duplicate {
+                let completion = admission
+                    .operation
+                    .outcome
+                    .clone()
+                    .and_then(|value| serde_json::from_value(value).ok());
+                return Ok(Reply::Inference {
+                    operation: admission.operation,
+                    completion,
+                    duplicate: true,
+                });
+            }
+            // All accounting records are durable before a request can leave this
+            // process. A crash in this sequence is conservative: never replay it.
+            let operation = store.begin_operation(&admission.operation.id, &self.shared.owner)?;
+            if let Err(error) = store.reserve_budget(&session_id, &operation.id, reservation) {
+                store.settle_operation(
+                    &operation.id,
+                    &self.shared.owner,
+                    OperationStatus::Failed,
+                    &serde_json::json!({"error":"budget reservation rejected"}),
+                )?;
+                return Err(error.into());
+            }
+            let cancel = CancellationToken::new();
+            control.active.insert(
+                session_id.clone(),
+                Active {
+                    command_id: command_id.clone(),
+                    execution_id: command_id,
+                    cancel: cancel.clone(),
+                },
+            );
+            let shared = Arc::clone(&self.shared);
+            let (sender, receiver) = oneshot::channel();
+            tokio::spawn(async move {
+                let mut guard =
+                    WorkerGuard::new(&shared, &session_id, &operation.id, cancel.clone());
+                let result = run_inference(
+                    &shared,
+                    &session_id,
+                    &operation.id,
+                    profile,
+                    request,
+                    cancel,
+                )
+                .await;
+                guard.settled = result.is_ok();
+                drop(guard);
+                let _ = sender.send(result);
+            });
+            receiver
+        };
+        receiver
+            .await
+            .map_err(|_| EngineError::State("inference owner stopped before settlement".into()))?
+    }
+}
+
+pub(super) async fn run_inference(
+    shared: &Arc<Shared>,
+    session_id: &str,
+    operation_id: &str,
+    profile: Profile,
+    request: ResponsesRequest,
+    cancel: CancellationToken,
+) -> Result<Reply, EngineError> {
+    let rates = profile.rates;
+    let result =
+        tokio::spawn(async move { profile.client.responses(&request, cancel).await }).await;
+    let completion = match result {
+        Ok(Ok(completion)) => completion,
+        Ok(Err(error)) => {
+            // Even HTTP/transport errors need explicit reconciliation before
+            // releasing their reservation; do not assume remote billing is zero.
+            let operation = lock(&shared.store)?.mark_operation_unknown(
+                operation_id,
+                &shared.owner,
+                &error.to_string(),
+            )?;
+            return Ok(Reply::Inference {
+                operation,
+                completion: None,
+                duplicate: false,
+            });
+        }
+        Err(_) => {
+            let operation = lock(&shared.store)?.mark_operation_unknown(
+                operation_id,
+                &shared.owner,
+                "inference worker stopped before settlement",
+            )?;
+            return Ok(Reply::Inference {
+                operation,
+                completion: None,
+                duplicate: false,
+            });
+        }
+    };
+    let mut store = lock(&shared.store)?;
+    // Only final reported usage closes a reservation. Intermediate usage may
+    // omit additional billed tokens, so incomplete streams retain the hold.
+    if completion.status == CompletionStatus::Completed && completion.usage_is_final {
+        if let Some(charge) = completion
+            .usage
+            .as_ref()
+            .and_then(|usage| rates.charge(usage))
+        {
+            store.settle_budget(session_id, operation_id, charge)?;
+        }
+    }
+    let status = match completion.status {
+        CompletionStatus::Completed => OperationStatus::Succeeded,
+        CompletionStatus::Failed => OperationStatus::Failed,
+        CompletionStatus::Incomplete => OperationStatus::Unknown,
+    };
+    let outcome = serde_json::to_value(&completion)?;
+    let operation = if status == OperationStatus::Unknown {
+        store.mark_operation_unknown_with_outcome(operation_id, &shared.owner, &outcome)?
+    } else {
+        store.settle_operation(operation_id, &shared.owner, status, &outcome)?
+    };
+    Ok(Reply::Inference {
+        operation,
+        completion: Some(completion),
+        duplicate: false,
+    })
+}
