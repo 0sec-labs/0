@@ -43,6 +43,9 @@ pub struct SnapshotListing {
     pub snapshot_digest: String,
     pub files: Vec<SnapshotFileSummary>,
     pub truncated: bool,
+    /// Last emitted canonical path when another page remains; scoped to this manifest.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub next_after_path: Option<String>,
 }
 #[derive(Debug, Clone, Serialize)]
 pub struct SnapshotRead {
@@ -190,17 +193,46 @@ impl SnapshotInvestigation {
         files
     }
     pub fn list_files(&self, path: Option<&str>, limit: usize) -> Result<SnapshotListing> {
+        self.list_files_page(path, limit, None)
+    }
+    /// Deterministic exclusive cursor over the immutable authorized manifest.
+    /// Cursors must be canonical existing files inside the requested scope.
+    pub fn list_files_page(
+        &self,
+        path: Option<&str>,
+        limit: usize,
+        after_path: Option<&str>,
+    ) -> Result<SnapshotListing> {
         if !(1..=MAX_LIST_RESULTS).contains(&limit) {
             return Err(SnapshotError::Invalid("list limit must be 1..200"));
         }
+        let files = self.scoped(scope(path)?);
+        let start = match after_path {
+            None => 0,
+            Some(after) => {
+                if !path_valid(after) {
+                    return Err(SnapshotError::Invalid(
+                        "list cursor must be canonical and relative",
+                    ));
+                }
+                files
+                    .iter()
+                    .position(|file| file.path.as_str() == after)
+                    .ok_or(SnapshotError::Invalid(
+                        "list cursor is outside authorized scope or manifest",
+                    ))?
+                    + 1
+            }
+        };
+        let remaining = &files[start..];
         let mut result = SnapshotListing {
             snapshot_digest: self.digest.clone(),
             files: vec![],
             truncated: false,
+            next_after_path: None,
         };
-        for file in self.scoped(scope(path)?) {
+        for (index, file) in remaining.iter().enumerate() {
             if result.files.len() == limit {
-                result.truncated = true;
                 break;
             }
             result.files.push(SnapshotFileSummary {
@@ -208,9 +240,20 @@ impl SnapshotInvestigation {
                 sha256: file.digest.clone(),
                 bytes: file.bytes,
             });
+            result.truncated = index + 1 < remaining.len();
+            result.next_after_path = result.truncated.then(|| file.path.as_str().to_owned());
+            // Include the cursor and the true truncation flag in the byte bound.
             if !fits(&result)? {
                 result.files.pop();
                 result.truncated = true;
+                result.next_after_path = Some(
+                    result
+                        .files
+                        .last()
+                        .ok_or(SnapshotError::Invalid("listing entry exceeds output limit"))?
+                        .path
+                        .clone(),
+                );
                 break;
             }
         }

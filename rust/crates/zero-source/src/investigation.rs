@@ -23,6 +23,9 @@ pub struct FileListing {
     pub bundle_sha256: String,
     pub files: Vec<FileSummary>,
     pub truncated: bool,
+    /// Last emitted canonical path when another page remains; scoped to this manifest.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub next_after_path: Option<String>,
 }
 #[derive(Debug, Clone, Serialize)]
 pub struct SourceRead {
@@ -95,18 +98,49 @@ impl<'a> SourceInvestigation<'a> {
     }
     /// List retained selected files only, sorted by path. None or '.' means the retained root.
     pub fn list_files(&self, path: Option<&str>, limit: usize) -> Result<FileListing> {
+        self.list_files_page(path, limit, None)
+    }
+    /// Deterministic exclusive cursor over the immutable authorized manifest.
+    /// Cursors must be canonical existing files inside the requested scope.
+    pub fn list_files_page(
+        &self,
+        path: Option<&str>,
+        limit: usize,
+        after_path: Option<&str>,
+    ) -> Result<FileListing> {
         if !(1..=32).contains(&limit) {
             return Err(invalid("list limit must be 1..32"));
         }
         let prefix = scope(path)?;
+        let mut files: Vec<_> = self
+            .bundle
+            .files()
+            .iter()
+            .filter(|f| included(f, prefix))
+            .collect();
+        files.sort_by(|a, b| a.path().cmp(b.path()));
+        let start = match after_path {
+            None => 0,
+            Some(after) => {
+                if !path_valid(after) {
+                    return Err(invalid("list cursor must be canonical and relative"));
+                }
+                files
+                    .iter()
+                    .position(|file| file.path() == after)
+                    .ok_or_else(|| invalid("list cursor is outside authorized scope or manifest"))?
+                    + 1
+            }
+        };
+        let remaining = &files[start..];
         let mut result = FileListing {
             bundle_sha256: self.bundle.digest().into(),
             files: vec![],
             truncated: false,
+            next_after_path: None,
         };
-        for file in self.bundle.files().iter().filter(|f| included(f, prefix)) {
+        for (index, file) in remaining.iter().enumerate() {
             if result.files.len() == limit {
-                result.truncated = true;
                 break;
             }
             result.files.push(FileSummary {
@@ -115,9 +149,20 @@ impl<'a> SourceInvestigation<'a> {
                 bytes: file.text().len(),
                 lines: file.line_count(),
             });
+            result.truncated = index + 1 < remaining.len();
+            result.next_after_path = result.truncated.then(|| file.path().to_owned());
+            // Include the cursor and the true truncation flag in the byte bound.
             if !fits(&result)? {
                 result.files.pop();
                 result.truncated = true;
+                result.next_after_path = Some(
+                    result
+                        .files
+                        .last()
+                        .ok_or_else(|| invalid("listing entry exceeds output limit"))?
+                        .path
+                        .clone(),
+                );
                 break;
             }
         }
