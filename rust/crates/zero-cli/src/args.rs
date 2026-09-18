@@ -83,6 +83,13 @@ pub enum Command {
         #[arg(long)]
         request: PathBuf,
     },
+    /// Experimental line console; each nonblank stdin line starts one agent turn.
+    Console {
+        #[arg(long)]
+        session: String,
+        #[arg(long)]
+        request: PathBuf,
+    },
     /// Serve versioned NDJSON on stdin/stdout; initialize before other requests.
     AppServer,
 }

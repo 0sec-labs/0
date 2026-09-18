@@ -191,3 +191,24 @@ parents are rejected. Omitting the field starts fresh; reusing a command ID with
 an identical request returns its recorded outcome rather than adding a turn.
 This is continuation of completed conversations, not automatic recovery of
 interrupted operations.
+
+## Experimental line console
+
+```sh
+0sec-native --providers providers.json console --session SESSION_ID --request agent-profile.json
+```
+
+The profile is an explicit `AgentRequest`. Its `prompt` field is overridden by
+each nonblank UTF-8 stdin line; the profile prompt is never submitted on startup.
+Each line is one serial turn with a fresh command ID. All provider, instruction
+and sandbox authority remains fixed. Optional `continuation_of` selects the
+initial completed checkpoint; subsequent successful turns continue from their
+returned operation IDs. Prompts are bounded by the protocol frame byte limit.
+
+Stdout contains answer text only. Stderr contains command IDs, durable admission
+IDs and completed checkpoint IDs. EOF between turns exits successfully; a final
+line without newline is accepted. Ctrl-C/SIGTERM during work waits for engine
+cancellation/cleanup and exits nonzero. Failed, cancelled or Unknown turns stop
+without submitting queued prompts; inspect the printed operation ID in session
+events/budget and reconcile unknown usage explicitly. This is a scripted line
+console foundation, not full-screen TUI parity or recovery of interrupted work.

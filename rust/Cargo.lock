@@ -1738,10 +1738,23 @@ dependencies = [
  "tempfile",
  "tokio",
  "tokio-util",
+ "uuid",
  "zero-engine",
  "zero-executor",
  "zero-protocol",
  "zero-provider",
+]
+
+[[package]]
+name = "zero-cloud-client"
+version = "0.1.0"
+dependencies = [
+ "reqwest",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tokio",
+ "tokio-util",
 ]
 
 [[package]]
@@ -1809,6 +1822,19 @@ dependencies = [
  "tokio-util",
  "uuid",
  "zero-protocol",
+]
+
+[[package]]
+name = "zero-harness"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror",
+ "uuid",
+ "zero-evolution",
+ "zero-plugin",
 ]
 
 [[package]]

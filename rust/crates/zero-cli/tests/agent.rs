@@ -23,7 +23,7 @@ async fn line(reader: &mut BufReader<tokio::process::ChildStdout>) -> Value {
     serde_json::from_str(&text).unwrap()
 }
 
-async fn exercise(cancel: bool) {
+async fn exercise(cancel: bool, console: bool) {
     let dir = TempDir::new().unwrap();
     let source = dir.path().join("source");
     std::fs::create_dir(&source).unwrap();
@@ -79,7 +79,56 @@ async fn exercise(cancel: bool) {
     let created: Value = serde_json::from_slice(&created.stdout).unwrap();
     let session = created["session"]["id"].as_str().unwrap();
     let request = json!({"provider":"fixture","model":"fixture","instructions":"fixture","prompt":"Give an assessment without tool calls","max_turns":2,"reservation_per_turn":10,"execution":{"execution_id":"agent-profile","image":"fixture:local","snapshot":snapshot,"argv":["true"],"timeout_ms":1000,"memory_mb":128,"cpus":0.5,"max_output_bytes":1024}});
-    if cancel {
+    if console {
+        let path = dir.path().join("request.json");
+        std::fs::write(&path, request.to_string()).unwrap();
+        let mut child = cli(&dir)
+            .arg("--providers")
+            .arg(&config)
+            .args(["console", "--session", session, "--request"])
+            .arg(path)
+            .env("AGENT_FIXTURE_KEY", "fixture-secret")
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .kill_on_drop(true)
+            .spawn()
+            .unwrap();
+        let mut input = child.stdin.take().unwrap();
+        input
+            .write_all(b"cancel this turn\nnever submit this queued turn\n")
+            .await
+            .unwrap();
+        tokio::time::timeout(Duration::from_secs(3), ready)
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(
+            Command::new("kill")
+                .args(["-TERM", &child.id().unwrap().to_string()])
+                .status()
+                .await
+                .unwrap()
+                .success()
+        );
+        let output = tokio::time::timeout(Duration::from_secs(3), child.wait_with_output())
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(output.status.code(), Some(1));
+        assert!(output.stdout.is_empty());
+        let diagnostics = String::from_utf8(output.stderr).unwrap();
+        assert!(diagnostics.contains("Stopped at operation"));
+        assert!(diagnostics.contains("Unknown"));
+        assert_eq!(
+            diagnostics
+                .lines()
+                .filter(|line| line.starts_with("command "))
+                .count(),
+            1
+        );
+        drop(input);
+    } else if cancel {
         let mut child = cli(&dir)
             .arg("--providers")
             .arg(&config)
@@ -184,15 +233,14 @@ async fn exercise(cancel: bool) {
 }
 #[tokio::test]
 async fn agent_no_tool_turn_completes_in_executable() {
-    exercise(false).await;
+    exercise(false, false).await;
 }
 #[tokio::test]
 async fn app_server_agent_accepts_cancel_during_provider_stream() {
-    exercise(true).await;
+    exercise(true, false).await;
 }
 
-#[tokio::test]
-async fn completed_agent_continuation_replays_history_across_processes_without_reissuing() {
+async fn exercise_continuation(console: bool) {
     let dir = TempDir::new().unwrap();
     let source = dir.path().join("source");
     std::fs::create_dir(&source).unwrap();
@@ -268,50 +316,95 @@ async fn completed_agent_continuation_replays_history_across_processes_without_r
     let session = created["session"]["id"].as_str().unwrap();
     let mut request = json!({"provider":"fixture","model":"fixture","instructions":"fixture","prompt":"first prompt","max_turns":2,"reservation_per_turn":10,"execution":{"execution_id":"continuation-profile","image":"fixture:local","snapshot":snapshot,"argv":["true"],"timeout_ms":1000,"memory_mb":128,"cpus":0.5,"max_output_bytes":1024}});
     let path = dir.path().join("request.json");
-    for (index, command_id) in ["first", "follow-up", "follow-up"].into_iter().enumerate() {
+    if console {
+        request["prompt"] = json!("profile placeholder must never be sent");
         std::fs::write(&path, request.to_string()).unwrap();
-        // Each invocation opens the persisted database in a fresh executable.
-        let output = tokio::time::timeout(
-            Duration::from_secs(3),
-            cli(&dir)
-                .arg("--providers")
-                .arg(&config)
-                .args([
-                    "agent",
-                    "--session",
-                    session,
-                    "--command-id",
-                    command_id,
-                    "--request",
-                ])
-                .arg(&path)
-                .env("AGENT_FIXTURE_KEY", "fixture-secret")
-                .kill_on_drop(true)
-                .output(),
-        )
-        .await
-        .unwrap()
-        .unwrap();
+        let mut child = cli(&dir)
+            .arg("--providers")
+            .arg(&config)
+            .args(["console", "--session", session, "--request"])
+            .arg(&path)
+            .env("AGENT_FIXTURE_KEY", "fixture-secret")
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .kill_on_drop(true)
+            .spawn()
+            .unwrap();
+        child
+            .stdin
+            .take()
+            .unwrap()
+            .write_all(b"first prompt\n\nfollow-up prompt")
+            .await
+            .unwrap();
+        let output = tokio::time::timeout(Duration::from_secs(5), child.wait_with_output())
+            .await
+            .unwrap()
+            .unwrap();
         assert!(
             output.status.success(),
-            "{} {}",
-            String::from_utf8_lossy(&output.stdout),
+            "{}",
             String::from_utf8_lossy(&output.stderr)
         );
-        let reply: Value = serde_json::from_slice(&output.stdout).unwrap();
-        assert_eq!(reply["duplicate"], index == 2);
-        assert_eq!(reply["operation"]["status"], "succeeded");
         assert_eq!(
-            reply["result"]["text"],
-            if index == 0 {
-                "first final answer"
-            } else {
-                "second final answer"
-            }
+            String::from_utf8(output.stdout).unwrap(),
+            "first final answer\nsecond final answer\n"
         );
-        if index == 0 {
-            request["continuation_of"] = reply["operation"]["id"].clone();
-            request["prompt"] = json!("follow-up prompt");
+        let diagnostics = String::from_utf8(output.stderr).unwrap();
+        assert_eq!(
+            diagnostics
+                .lines()
+                .filter(|l| l.starts_with("checkpoint operation "))
+                .count(),
+            2
+        );
+    } else {
+        for (index, command_id) in ["first", "follow-up", "follow-up"].into_iter().enumerate() {
+            std::fs::write(&path, request.to_string()).unwrap();
+            // Each invocation opens the persisted database in a fresh executable.
+            let output = tokio::time::timeout(
+                Duration::from_secs(3),
+                cli(&dir)
+                    .arg("--providers")
+                    .arg(&config)
+                    .args([
+                        "agent",
+                        "--session",
+                        session,
+                        "--command-id",
+                        command_id,
+                        "--request",
+                    ])
+                    .arg(&path)
+                    .env("AGENT_FIXTURE_KEY", "fixture-secret")
+                    .kill_on_drop(true)
+                    .output(),
+            )
+            .await
+            .unwrap()
+            .unwrap();
+            assert!(
+                output.status.success(),
+                "{} {}",
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr)
+            );
+            let reply: Value = serde_json::from_slice(&output.stdout).unwrap();
+            assert_eq!(reply["duplicate"], index == 2);
+            assert_eq!(reply["operation"]["status"], "succeeded");
+            assert_eq!(
+                reply["result"]["text"],
+                if index == 0 {
+                    "first final answer"
+                } else {
+                    "second final answer"
+                }
+            );
+            if index == 0 {
+                request["continuation_of"] = reply["operation"]["id"].clone();
+                request["prompt"] = json!("follow-up prompt");
+            }
         }
     }
     let listener = server.await.unwrap();
@@ -329,4 +422,17 @@ async fn completed_agent_continuation_replays_history_across_processes_without_r
     let budget: Value = serde_json::from_slice(&budget.stdout).unwrap();
     assert_eq!(budget["budget"]["charged"], 6);
     assert_eq!(budget["budget"]["reserved"], 0);
+}
+
+#[tokio::test]
+async fn completed_agent_continuation_replays_history_across_processes_without_reissuing() {
+    exercise_continuation(false).await;
+}
+#[tokio::test]
+async fn console_two_lines_retain_history_and_eof_is_graceful() {
+    exercise_continuation(true).await;
+}
+#[tokio::test]
+async fn console_sigterm_stops_active_turn_and_does_not_submit_queued_prompt() {
+    exercise(true, true).await;
 }

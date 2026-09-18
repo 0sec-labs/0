@@ -1,4 +1,5 @@
 mod args;
+mod console;
 mod doctor;
 mod framing;
 mod providers;
@@ -12,16 +13,42 @@ use tokio::sync::mpsc;
 use zero_engine::Engine;
 use zero_protocol::{Command as EngineCommand, MAX_FRAME_BYTES, Reply};
 
-#[tokio::main]
-async fn main() -> std::process::ExitCode {
-    match run(Args::parse()).await {
-        Ok(true) => std::process::ExitCode::SUCCESS,
-        Ok(false) => std::process::ExitCode::from(1),
-        Err(error) => {
-            eprintln!("0sec-native: {error}");
-            std::process::ExitCode::from(2)
+fn main() -> std::process::ExitCode {
+    let runtime = match tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+    {
+        Ok(runtime) => runtime,
+        Err(_) => {
+            eprintln!("0sec-native: cannot initialize async runtime");
+            return std::process::ExitCode::from(2);
         }
-    }
+    };
+    let status = runtime.block_on(async {
+        match run(Args::parse()).await {
+            Ok(true) => std::process::ExitCode::SUCCESS,
+            Ok(false) => std::process::ExitCode::from(1),
+            Err(error) => {
+                use tokio::io::AsyncWriteExt;
+                let line = format!(
+                    "0sec-native: {}\n",
+                    console::terminal_text(&error.to_string())
+                );
+                let mut stderr = tokio::io::stderr();
+                let _ = tokio::time::timeout(std::time::Duration::from_secs(1), async {
+                    stderr.write_all(line.as_bytes()).await?;
+                    stderr.flush().await
+                })
+                .await;
+                std::process::ExitCode::from(2)
+            }
+        }
+    });
+    // Engine-owned effects have already settled or completed explicit shutdown.
+    // Tokio's blocking stdio reads/writes cannot be interrupted when a parent
+    // keeps a pipe open. Do not hang process exit waiting for those I/O tasks.
+    runtime.shutdown_timeout(std::time::Duration::from_secs(1));
+    status
 }
 
 async fn run(args: Args) -> Result<bool, Box<dyn Error>> {
@@ -63,6 +90,11 @@ async fn run(args: Args) -> Result<bool, Box<dyn Error>> {
         )
         .await?;
         return Ok(true);
+    }
+    if let Command::Console { session, request } = &args.command {
+        let bytes = providers::read_bounded(request).await?;
+        let profile = serde_json::from_slice(&bytes).map_err(|_| "Invalid console profile JSON")?;
+        return console::run(engine, session.clone(), profile).await;
     }
     let command = match args.command {
         Command::Session { command } => match command {
@@ -159,7 +191,8 @@ async fn run(args: Args) -> Result<bool, Box<dyn Error>> {
         Command::Schema
         | Command::Snapshot { .. }
         | Command::Doctor { .. }
-        | Command::AppServer => unreachable!(),
+        | Command::AppServer
+        | Command::Console { .. } => unreachable!(),
     };
     let (events, mut event_rx) = mpsc::channel(128);
     // One-shot commands reserve stdout for their final JSON result.
