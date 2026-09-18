@@ -5,6 +5,7 @@ mod framing;
 mod harness;
 mod hosted;
 mod providers;
+mod report;
 mod server;
 
 use args::{Args, Command, SessionCommand, SnapshotCommand};
@@ -60,6 +61,9 @@ async fn run(args: Args) -> Result<bool, Box<dyn Error>> {
             serde_json::to_string_pretty(&zero_protocol::schema())?
         );
         return Ok(true);
+    }
+    if let Command::Report { input, format } = &args.command {
+        return report::run(input, *format).await;
     }
     if let Command::Snapshot {
         command: SnapshotCommand::Pin { root },
@@ -225,7 +229,8 @@ async fn run(args: Args) -> Result<bool, Box<dyn Error>> {
         | Command::Doctor { .. }
         | Command::AppServer
         | Command::Console { .. }
-        | Command::Hosted { .. } => unreachable!(),
+        | Command::Hosted { .. }
+        | Command::Report { .. } => unreachable!(),
     };
     let (events, mut event_rx) = mpsc::channel(128);
     // One-shot commands reserve stdout for their final JSON result.

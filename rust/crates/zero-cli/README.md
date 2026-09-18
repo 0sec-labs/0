@@ -268,3 +268,24 @@ changed host policy fail closed. Unresolved cleanup retains recovery metadata
 and leases rather than pretending settlement. Help/schema/snapshot/hosted and
 native doctor bypass harness loading; doctor does not validate harness state.
 No plugin management, generation activation or legacy plugin parity is implied.
+
+## Local report rendering
+
+```sh
+0sec-native report --input report.json --format json
+0sec-native report --input report.json --format sarif
+```
+
+This renders an existing legacy report without running a scan, validating a
+security finding, uploading results or opening native state. Provider, harness
+and hosted credential configuration is bypassed. JSON preserves original fields;
+SARIF follows the existing report renderer and records the actual native package
+version as exporter version. No producer version is inferred from input data.
+
+Input is capped at 16 MiB and read with a five-second deadline. Stdout writes
+have a five-second deadline and respond to SIGINT/SIGTERM. Success exits 0,
+signal cancellation exits 1, and malformed input, limits or I/O failures exit 2.
+No output file is created implicitly; use shell redirection if desired. Failed
+input validation emits no partial report, though interrupted output writes can
+leave a partial stdout stream. This exporter does not establish source-review
+or scanner parity.

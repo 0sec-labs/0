@@ -1748,6 +1748,7 @@ dependencies = [
  "zero-plugin-runner",
  "zero-protocol",
  "zero-provider",
+ "zero-report",
 ]
 
 [[package]]
@@ -1796,6 +1797,31 @@ dependencies = [
  "zero-sandbox",
  "zero-smolvm",
  "zero-store",
+]
+
+[[package]]
+name = "zero-evaluation"
+version = "0.1.0"
+dependencies = [
+ "fs2",
+ "libc",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tempfile",
+ "thiserror",
+ "tokio",
+ "tokio-util",
+ "uuid",
+ "zero-evolution",
+ "zero-executor",
+ "zero-harness",
+ "zero-plugin",
+ "zero-plugin-runner",
+ "zero-protocol",
+ "zero-sandbox",
+ "zero-smolvm",
 ]
 
 [[package]]
