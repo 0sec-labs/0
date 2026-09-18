@@ -200,18 +200,55 @@ interrupted operations.
 
 The profile is an explicit `AgentRequest`. Its `prompt` field is overridden by
 each nonblank UTF-8 stdin line; the profile prompt is never submitted on startup.
-Each line is one serial turn with a fresh command ID. All provider, instruction
-and sandbox authority remains fixed. Optional `continuation_of` selects the
-initial completed checkpoint; subsequent successful turns continue from their
-returned operation IDs. Prompts are bounded by the protocol frame byte limit.
+The console reads follow-ups while a turn runs and acknowledges each durable
+acceptance on stderr as `queued input INPUT_ID`. An acknowledgment confirms
+persistence; if output was interrupted, inspect the queue before resubmitting an
+unacknowledged line. Each accepted line gets a stable command ID; pending and
+running inputs together are bounded to 50 and the newest input is rejected when full. No older input is
+silently evicted. Provider, instruction and sandbox authority remain fixed.
+Optional `continuation_of` selects the initial completed checkpoint; later inputs
+link to the preceding queued input and continue only after it completes.
 
-Stdout contains answer text only. Stderr contains command IDs, durable admission
-IDs and completed checkpoint IDs. EOF between turns exits successfully; a final
-line without newline is accepted. Ctrl-C/SIGTERM during work waits for engine
-cancellation/cleanup and exits nonzero. Failed, cancelled or Unknown turns stop
-without submitting queued prompts; inspect the printed operation ID in session
-events/budget and reconcile unknown usage explicitly. This is a scripted line
-console foundation, not full-screen TUI parity or recovery of interrupted work.
+Stdout contains answer text only. Stderr contains queued input IDs, executing
+command IDs, durable operation admissions and completed checkpoint IDs. EOF
+drains accepted pending inputs; a final line without newline is accepted.
+Ctrl-C/SIGTERM waits for active cancellation/cleanup, exits nonzero and leaves
+pending inputs in the journal. Failed, cancelled or Unknown turns also stop
+without dispatching the next input. Inspect the operation and budget before
+reconciling unknown usage; reconciliation does not make an Unknown operation a
+completed continuation. Queue rejection makes the console's eventual exit
+nonzero, even if previously accepted inputs completed.
+
+## Durable agent input queue
+
+```sh
+0sec-native --providers providers.json queue enqueue --session SESSION_ID \
+  --command-id FOLLOWUP_ID --request agent-request.json
+0sec-native queue list --session SESSION_ID --after 0 --limit 50
+0sec-native --providers providers.json queue run --session SESSION_ID --input INPUT_ID
+0sec-native queue cancel --session SESSION_ID --input INPUT_ID
+```
+
+Enqueue records an explicit `AgentRequest` without a provider call. Use
+`--after-input PREDECESSOR_INPUT_ID` to continue from another queued input; leave
+`continuation_of` absent in that request. Enqueue retries with the same command ID
+and payload return the existing input; changing that payload is rejected. Run
+requires an explicit input ID, respects pending FIFO order and returns an existing
+operation receipt on exact retry. It never silently reruns uncertain work.
+Cancelling a pending input does not interrupt a running operation. A cancelled
+predecessor does not satisfy a follow-up's completion requirement.
+
+The console automatically runs only inputs it accepted in this invocation.
+After restart, inspect the queue and explicitly run the intended input ID with
+the matching provider and execution configuration. Opening the engine never
+automatically dispatches stored prompts. Queue list/cancel need no provider
+configuration; run uses the existing succeeded-only operation exit convention.
+
+Within `app-server`, `queue_agent`, `agent_queue` and `cancel_queued_agent` remain
+available while `run_queued_agent` executes. A separate CLI process cannot access
+the engine through these commands while another process owns its state database;
+use the existing app-server connection or console for live input. This remains a
+line console foundation, without full-screen editing or mid-turn steering.
 
 ## Read-only hosted metadata
 

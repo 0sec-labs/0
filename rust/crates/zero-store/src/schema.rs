@@ -8,7 +8,7 @@ pub fn initialize(conn: &mut Connection) -> Result<()> {
     if application != 0 && application != APPLICATION_ID {
         return Err(Error::ForeignDatabase);
     }
-    if !(0..=4).contains(&version) {
+    if !(0..=5).contains(&version) {
         return Err(Error::Schema(version));
     }
     if application == 0 {
@@ -42,6 +42,10 @@ CREATE TABLE reservations(session_id TEXT NOT NULL REFERENCES sessions(id),id TE
 CREATE TABLE operation_artifacts(operation_id TEXT NOT NULL REFERENCES operations(id),name TEXT NOT NULL,digest TEXT NOT NULL REFERENCES artifacts(digest),PRIMARY KEY(operation_id,name));")?;
         tx.pragma_update(None, "user_version", 4)?;
     }
+    if version < 5 {
+        tx.execute_batch("CREATE TABLE agent_inputs(id TEXT PRIMARY KEY,session_id TEXT NOT NULL REFERENCES sessions(id),sequence INTEGER NOT NULL CHECK(sequence>0),command_id TEXT NOT NULL,request TEXT NOT NULL,after_input TEXT REFERENCES agent_inputs(id),run_command_id TEXT NOT NULL,resolved_request TEXT,cancelled INTEGER NOT NULL DEFAULT 0 CHECK(cancelled IN (0,1)),UNIQUE(session_id,command_id),UNIQUE(session_id,sequence),UNIQUE(session_id,run_command_id));")?;
+        tx.pragma_update(None, "user_version", 5)?;
+    }
     tx.commit()?;
     Ok(())
 }
@@ -55,7 +59,7 @@ pub(super) fn validate_current(conn: &Connection) -> Result<()> {
     if application != APPLICATION_ID {
         return Err(Error::ForeignDatabase);
     }
-    if version != 4 {
+    if version != 5 {
         return Err(Error::Schema(version));
     }
     let observed = crate::readonly::definitions(conn)?;

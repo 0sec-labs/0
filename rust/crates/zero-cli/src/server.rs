@@ -188,6 +188,7 @@ where
                 | Command::ReproduceSource { .. }
                 | Command::ValidateSourceRepair { .. }
                 | Command::RunAgent { .. }
+                | Command::RunQueuedAgent { .. }
                 | Command::RunSandbox { .. }
                 | Command::RunPlugin { .. }
         ) {

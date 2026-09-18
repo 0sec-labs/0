@@ -11,6 +11,7 @@ pub mod execution;
 pub mod microvm;
 pub mod model;
 pub mod plugin;
+pub mod queue;
 pub mod repair;
 pub mod sandbox;
 pub mod session;
@@ -104,6 +105,25 @@ pub enum Command {
         session_id: String,
         command_id: String,
         request: source::SourceReviewRequest,
+    },
+    QueueAgent {
+        session_id: String,
+        command_id: String,
+        request: agent::AgentRequest,
+        after_input: Option<String>,
+    },
+    AgentQueue {
+        session_id: String,
+        after_sequence: u64,
+        limit: u32,
+    },
+    CancelQueuedAgent {
+        session_id: String,
+        input_id: String,
+    },
+    RunQueuedAgent {
+        session_id: String,
+        input_id: String,
     },
     RunAgent {
         session_id: String,
@@ -226,6 +246,16 @@ pub enum Reply {
         operation: Operation,
         result: Option<source::SourceReviewOutcome>,
         duplicate: bool,
+    },
+    AgentQueued {
+        input: queue::QueuedAgent,
+        duplicate: bool,
+    },
+    AgentQueue {
+        inputs: Vec<queue::QueuedAgent>,
+    },
+    AgentInput {
+        input: queue::QueuedAgent,
     },
     Agent {
         operation: Operation,

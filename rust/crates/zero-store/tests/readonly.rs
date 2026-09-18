@@ -98,7 +98,7 @@ fn rejected_foreign_wal_database_is_unchanged() {
 }
 #[test]
 fn older_or_future_schema_is_never_migrated() {
-    for version in [3, 5] {
+    for version in [3, 4, 6] {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("state.db");
         drop(Store::open(&path).unwrap());

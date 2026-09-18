@@ -12,7 +12,7 @@ mod report;
 mod server;
 mod source_report;
 
-use args::{Args, Command, SessionCommand, SnapshotCommand};
+use args::{Args, Command, QueueCommand, SessionCommand, SnapshotCommand};
 use clap::Parser;
 use std::{error::Error, sync::Arc};
 use tokio::io::{AsyncReadExt, BufReader};
@@ -156,6 +156,43 @@ async fn run(args: Args) -> Result<bool, Box<dyn Error>> {
         return console::run(engine, session.clone(), profile).await;
     }
     let command = match args.command {
+        Command::Queue { command } => match command {
+            QueueCommand::Enqueue {
+                session,
+                command_id,
+                request,
+                after_input,
+            } => {
+                let bytes = tokio::select! {
+                    result = tokio::time::timeout(std::time::Duration::from_secs(5), providers::read_bounded(&request)) => result.map_err(|_| "Queue input deadline exceeded")??,
+                    _ = server::shutdown_signal() => return Err("Queue input interrupted".into()),
+                };
+                EngineCommand::QueueAgent {
+                    session_id: session,
+                    command_id,
+                    request: serde_json::from_slice(&bytes)
+                        .map_err(|_| "Invalid queued agent request JSON")?,
+                    after_input,
+                }
+            }
+            QueueCommand::List {
+                session,
+                after,
+                limit,
+            } => EngineCommand::AgentQueue {
+                session_id: session,
+                after_sequence: after,
+                limit,
+            },
+            QueueCommand::Cancel { session, input } => EngineCommand::CancelQueuedAgent {
+                session_id: session,
+                input_id: input,
+            },
+            QueueCommand::Run { session, input } => EngineCommand::RunQueuedAgent {
+                session_id: session,
+                input_id: input,
+            },
+        },
         Command::Session { command } => match command {
             SessionCommand::CreatePinned { budget_limit } => {
                 EngineCommand::SessionCreatePinned { budget_limit }

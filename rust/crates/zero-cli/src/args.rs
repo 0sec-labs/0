@@ -94,6 +94,11 @@ pub enum Command {
         #[command(subcommand)]
         command: SnapshotCommand,
     },
+    /// Persist, inspect, cancel or explicitly run agent follow-ups.
+    Queue {
+        #[command(subcommand)]
+        command: QueueCommand,
+    },
     /// Manage persisted native sessions.
     Session {
         #[command(subcommand)]
@@ -179,7 +184,7 @@ pub enum Command {
         #[arg(long)]
         request: PathBuf,
     },
-    /// Experimental line console; each nonblank stdin line starts one agent turn.
+    /// Experimental line console; nonblank lines are durably queued for serial agent turns.
     Console {
         #[arg(long)]
         session: String,
@@ -233,4 +238,42 @@ pub enum SessionCommand {
 pub enum SnapshotCommand {
     /// Inspect a source directory and print its immutable content pin as JSON.
     Pin { root: PathBuf },
+}
+
+#[derive(Debug, Subcommand)]
+pub enum QueueCommand {
+    /// Durably accept a follow-up without running it; configure its provider explicitly.
+    Enqueue {
+        #[arg(long)]
+        session: String,
+        #[arg(long)]
+        command_id: String,
+        #[arg(long)]
+        request: PathBuf,
+        #[arg(long)]
+        after_input: Option<String>,
+    },
+    /// List queued input records in sequence order.
+    List {
+        #[arg(long)]
+        session: String,
+        #[arg(long, default_value_t = 0)]
+        after: u64,
+        #[arg(long, default_value_t = 50)]
+        limit: u32,
+    },
+    /// Cancel a pending input; this does not interrupt a running operation.
+    Cancel {
+        #[arg(long)]
+        session: String,
+        #[arg(long)]
+        input: String,
+    },
+    /// Run an explicit queued input, or return its existing durable outcome.
+    Run {
+        #[arg(long)]
+        session: String,
+        #[arg(long)]
+        input: String,
+    },
 }

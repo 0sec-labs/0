@@ -7,6 +7,7 @@ mod agent_submission;
 mod inference;
 mod lifecycle;
 mod plugin;
+mod queue;
 mod repair;
 mod reproduction;
 mod sandbox;
@@ -237,6 +238,7 @@ impl Engine {
             "chat_completions_inference",
             "anthropic_messages_inference",
             "bounded_offline_snapshot_agent",
+            "durable_agent_input_queue",
             "generation_pinned_offline_plugins",
             "unverified_source_review",
             "host_frozen_source_observation",
@@ -323,6 +325,13 @@ impl Engine {
                 .run_sandbox(session_id, command_id, request, event_tx)
                 .await;
         }
+        if let Command::RunQueuedAgent {
+            session_id,
+            input_id,
+        } = command
+        {
+            return self.run_queued_agent(session_id, input_id, event_tx).await;
+        }
         if let Command::RunAgent {
             session_id,
             command_id,
@@ -370,6 +379,38 @@ impl Engine {
             Command::SessionCreatePinned { budget_limit } => {
                 self.create_pinned_session(budget_limit)
             }
+            Command::QueueAgent {
+                session_id,
+                command_id,
+                request,
+                after_input,
+            } => {
+                agent::validate_initial(&request)?;
+                let (input, duplicate) = lock(&self.shared.store)?.enqueue_agent(
+                    &session_id,
+                    &command_id,
+                    &request,
+                    &after_input,
+                )?;
+                Ok(Reply::AgentQueued { input, duplicate })
+            }
+            Command::AgentQueue {
+                session_id,
+                after_sequence,
+                limit,
+            } => Ok(Reply::AgentQueue {
+                inputs: lock(&self.shared.store)?.queued_agents(
+                    &session_id,
+                    after_sequence,
+                    limit,
+                )?,
+            }),
+            Command::CancelQueuedAgent {
+                session_id,
+                input_id,
+            } => Ok(Reply::AgentInput {
+                input: lock(&self.shared.store)?.cancel_queued_agent(&session_id, &input_id)?,
+            }),
             Command::SessionList => Ok(Reply::Sessions {
                 sessions: lock(&self.shared.store)?.list_sessions()?,
             }),
@@ -444,6 +485,7 @@ impl Engine {
             | Command::ValidateSourceRepair { .. }
             | Command::ReviewSource { .. }
             | Command::RunAgent { .. }
+            | Command::RunQueuedAgent { .. }
             | Command::RunSandbox { .. }
             | Command::RunPlugin { .. } => {
                 unreachable!("execution dispatched before acquiring synchronous locks")

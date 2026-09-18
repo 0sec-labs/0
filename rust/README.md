@@ -113,3 +113,14 @@ request 8192 tokens and reject catalog models with a smaller output limit.
 Hosted profiles can coexist with manually configured profiles under other names;
 `hosted` must not also be defined in the provider file. No live hosted request is
 part of the default test suite.
+
+
+The line console durably acknowledges accepted follow-up prompts while a turn is
+running. Successful turns drain those inputs in FIFO order; interruption or an
+uncertain outcome leaves pending inputs for explicit resumption. Inspect them
+with `queue list --session SESSION_ID`, then use `queue run --session SESSION_ID
+--input INPUT_ID` or `queue cancel --session SESSION_ID --input INPUT_ID`.
+`queue enqueue --session SESSION_ID --command-id INPUT_COMMAND --request
+agent.json [--after-input INPUT_ID]` accepts a request without starting it. Use the
+existing app-server connection for enqueueing while another engine owns the
+state file. See [durable input semantics](crates/zero-engine/QUEUE.md).

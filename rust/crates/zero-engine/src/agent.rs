@@ -5,6 +5,41 @@ use zero_protocol::{
     model::{Content, ResponsesRequest, ToolDefinition},
 };
 
+pub(super) fn validate_initial(request: &AgentRequest) -> Result<ResponsesRequest, EngineError> {
+    request
+        .execution
+        .validate()
+        .map_err(|e| EngineError::State(e.to_string()))?;
+    if !(1..=32).contains(&request.max_turns)
+        || request.reservation_per_turn == 0
+        || request.prompt.trim().is_empty()
+    {
+        return Err(EngineError::State(
+            "agent requires a prompt, 1..32 turns and nonzero per-turn reservation".into(),
+        ));
+    }
+    if let Some(max) = request.source_submission_max_hypotheses {
+        if !request.source_snapshot_tools
+            || !(1..=32).contains(&max)
+            || request.prompt.len() > 16384
+            || request.prompt.contains('\0')
+            || request
+                .plugin_tools
+                .iter()
+                .any(|p| p.alias == "submit_source_hypotheses")
+        {
+            return Err(EngineError::State("structured submission requires snapshot tools, bounded question and 1..32 hypotheses; plugin alias cannot shadow submission".into()));
+        }
+    }
+    let initial = model_request(
+        request,
+        vec![serde_json::json!({"role":"user","content":request.prompt})],
+        None,
+    );
+    zero_provider::validate_request(&initial).map_err(|e| EngineError::State(e.to_string()))?;
+    Ok(initial)
+}
+
 impl Engine {
     pub(super) async fn run_agent(
         &self,
@@ -13,41 +48,42 @@ impl Engine {
         request: AgentRequest,
         events: mpsc::Sender<ExecutionEvent>,
     ) -> Result<Reply, EngineError> {
-        request
-            .execution
-            .validate()
-            .map_err(|e| EngineError::State(e.to_string()))?;
-        if !(1..=32).contains(&request.max_turns)
-            || request.reservation_per_turn == 0
-            || request.prompt.trim().is_empty()
-        {
-            return Err(EngineError::State(
-                "agent requires a prompt, 1..32 turns and nonzero per-turn reservation".into(),
-            ));
-        }
-        if let Some(max) = request.source_submission_max_hypotheses {
-            if !request.source_snapshot_tools
-                || !(1..=32).contains(&max)
-                || request.prompt.len() > 16384
-                || request.prompt.contains('\0')
-                || request
-                    .plugin_tools
-                    .iter()
-                    .any(|p| p.alias == "submit_source_hypotheses")
-            {
-                return Err(EngineError::State("structured submission requires snapshot tools, bounded question and 1..32 hypotheses; plugin alias cannot shadow submission".into()));
-            }
-        }
-        let initial = model_request(
-            &request,
-            vec![serde_json::json!({"role":"user","content":request.prompt})],
-            None,
-        );
-        zero_provider::validate_request(&initial).map_err(|e| EngineError::State(e.to_string()))?;
+        self.run_agent_input(session_id, command_id, request, events, None)
+            .await
+    }
+    pub(super) async fn run_agent_input(
+        &self,
+        session_id: String,
+        command_id: String,
+        request: AgentRequest,
+        events: mpsc::Sender<ExecutionEvent>,
+        queued_input: Option<String>,
+    ) -> Result<Reply, EngineError> {
+        let initial = validate_initial(&request)?;
         let receiver = {
             let mut control = lock(&self.shared.control)?;
             if control.closing {
                 return Err(EngineError::State("engine is shutting down".into()));
+            }
+            if let Some(input_id) = &queued_input {
+                let input = lock(&self.shared.store)?.queued_agent(&session_id, input_id)?;
+                if input.status == zero_protocol::queue::QueuedAgentStatus::Cancelled
+                    || input.run_command_id != command_id
+                    || input
+                        .resolved_request
+                        .as_ref()
+                        .map(serde_json::to_value)
+                        .transpose()?
+                        != Some(serde_json::to_value(&request)?)
+                {
+                    return Err(EngineError::State(
+                        "queued input authority changed before admission".into(),
+                    ));
+                }
+            } else if command_id.starts_with("queued-agent:") {
+                return Err(EngineError::State(
+                    "queued agent command IDs require queue dispatch".into(),
+                ));
             }
             if control
                 .active

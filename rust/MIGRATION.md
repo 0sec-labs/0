@@ -31,25 +31,25 @@ upgrading scaffolds or model assessments into successful verification.
 | Surface | Native owner and current behavior | Remaining acceptance gate |
 | --- | --- | --- |
 | Wire schema | `crates/zero-protocol`: strict versioned requests, replies, execution/session values, JSON Schema | Stable compatibility policy, generated external clients, negotiated additions and schema migration tests |
-| Native state | `crates/zero-store`: SQLite sessions, command admission, owner-bound operation settlement, ordered events, budget reservation/settlement, transactional epoch recovery and schema v1/v2/v3→v4 migration, optional activation epoch pins and immutable operation artifacts | Full prompt/message/context projection; further schema upgrades; explicit legacy import; durable multi-process campaign accounting |
-| Application engine | `crates/zero-engine`: session queries, idempotent execution, cancellation, engine ownership lock, uncertain-operation recovery, finding reconciliation, durable Responses/Chat/Anthropic inference, bounded offline Docker/smolvm snapshot agent with explicit completed-turn continuation from immutable journal records | Remaining providers, full tools/permissions and agent workflows, queued/steering input, interrupted-turn checkpoints and generation lifecycle |
+| Native state | `crates/zero-store`: SQLite sessions, command admission, owner-bound operation settlement, ordered events, budget reservation/settlement, transactional epoch recovery and schema v1/v2/v3/v4→v5 migration, optional activation epoch pins and immutable operation artifacts | Full message/context projection; further schema upgrades; explicit legacy import; durable multi-process campaign accounting |
+| Application engine | `crates/zero-engine`: session queries, idempotent execution, cancellation, engine ownership lock, uncertain-operation recovery, finding reconciliation, durable Responses/Chat/Anthropic inference, bounded offline Docker/smolvm snapshot agent with explicit completed-turn continuation and durable FIFO inputs from immutable journal records | Remaining providers, full tools/permissions and agent workflows, mid-turn steering input, interrupted-turn checkpoints and generation lifecycle |
 | Batch execution | `crates/zero-executor`: validated snapshot pin/copy, local image identity, nonroot Linux offline Docker lifecycle, bounded raw output, cancellation and explicit cleanup outcome | All other execution profiles below; real Docker qualification remains separate from injected CLI fixtures |
 | MicroVM execution | `crates/zero-smolvm` and `zero-sandbox`: explicit pinned archive, qualified runtime version, nonroot offline batch lifecycle, verified snapshot staging and native engine/agent selection; real guest and engine/agent smoke passed | Broader isolation/SIGKILL qualification, live-provider matrix and interactive execution |
 | Source review | `crates/zero-source` and engine `source.rs`: bounded selected source bundle, grounded structured hypotheses, retained request/bundle/completion/submission, same-session provenance and exact retry; `source-review` CLI | Source exploration, automatic investigation and specialist verification; hypotheses remain unverified, including successful model submissions |
 | Frozen reproduction | `crates/zero-verification` and engine `reproduction.rs`: host-owned immutable exact-output plans, repeated attack/control matrix, journaled sandbox children and retained requests/evidence; `source-reproduce` CLI | Broader domain oracles, automated plan proposals and independent detection-quality evaluation; `ObservedForPlan` never means vulnerability reportable |
 | Plan-qualified repair | `crates/zero-repair` plus engine `repair.rs`: host-authorized private single-file candidate, protected paths, baseline evidence revalidation, safe-expectation matrix and fresh reconstruction; `source-repair` CLI | Workspace installation, broader repair generation/verification, specialist safety oracles and full legacy `fix` parity; validation is limited to the frozen plan |
 | Artifact inspection/export | Read-only exact-schema `zero-store` opener and CLI `artifact list/export`: session ownership, bounded hash-checked bytes, private no-clobber export while the engine remains active | Legacy evidence-pack/report integration, disclosure authority and broader storage/platform qualification |
-| Provider transport | `crates/zero-provider`: bounded Responses/Chat/Anthropic SSE, explicit routes, final/provisional usage distinction, integer rate accounting and conservative uncertainty | Remaining wire features, provider OAuth/refresh, hosted inference routing, live-provider qualification |
+| Provider transport | `crates/zero-provider`: bounded Responses/Chat/Anthropic SSE, explicit routes, final/provisional usage distinction, integer rate accounting, exact hosted catalog quotes and conservative uncertainty | Remaining wire features, provider OAuth/refresh, live-provider qualification |
 | Plugin admission | `crates/zero-plugin`: strict manifests, hashed artifacts, exact dependency graph, host grants and bounded inert RPC framing | Bidirectional broker and persistent workers; admission alone never executes plugin code |
 | Plugin runner | `crates/zero-plugin-runner`: pinned offline single-call RPC through Docker/smolvm, exact response correlation, retained leases on uncertainty; actual Node fixture passed on local Docker | Bidirectional broker, persistent workers, broader backend/platform qualification; engine direct calls now journal preparation and settlement |
 | Generation graph | `crates/zero-harness`: verified complete plugin/artifact/policy graph, activation epoch pins, durable invocation leases and current-state rollback | Measured evaluator promotion and native process replacement; persisted session epochs and direct engine calls are implemented |
 | Generation registry | `crates/zero-evolution`: immutable artifacts/receipts, eligibility, instance-bound preparation, activation CAS, leases and current-state rollback | Runtime graph disposal, measured evidence import/promotion, campaign qualification and native process handoff |
 | Fixture evaluation | `crates/zero-evaluation`: isolated paired baseline/candidate execution, frozen exact JSON oracles, durable attempt budgets, observed outcomes and deterministic receipts; real Docker fixture passed | Portable evidence import, independent corpus governance, production eligibility/canary and autonomous candidate writing; fixture eligibility is not a detection-quality claim |
 | Report rendering | `crates/zero-report`: bounded legacy JSON preservation, SARIF, Markdown and HTML rendering with actual TypeScript formatter golden fixtures | Full workflow integration and report schema qualification; rendering does not verify findings |
-| Hosted metadata | `crates/zero-cloud-client`: explicit authenticated health/catalog/account/usage GETs, bounded browser-session login polling, typed gateway errors and credit normalization; CLI resolves environment or private legacy `cloud.env` credentials | Live service qualification, provider OAuth/refresh, price identity/inference routing, upload/accounting and managed-worker qualification |
+| Hosted metadata | `crates/zero-cloud-client`: explicit authenticated health/catalog/account/usage GETs, bounded browser-session login polling, explicit catalog inference routing, typed gateway errors and credit normalization; CLI resolves environment or private legacy `cloud.env` credentials | Live service qualification, provider OAuth/refresh, upload/accounting and managed-worker qualification |
 | Cloud wire adapter | `crates/zero-cloud-compat`: result/event framing, typed outcomes, cost provenance and atomic report writing | Scanner integration, ordered scan-total accounting, uploads and managed deployment qualification |
 | Finding reduction | `crates/zero-evidence`: source IDs/provenance retained through complete reconciliation, explicit disposition accounting | Discovery, independent vulnerability oracles, storage/export and disclosure eligibility; reconciliation is not truth validation |
-| CLI | `crates/zero-cli`: `schema`, `snapshot pin`, `session create/create-pinned/list/show/events/budget/reconcile-usage`, `exec`, `sandbox`, `infer`, `agent`, `plugin-call`, `evaluate run/status`, `source-review`, `source-reproduce`, `source-repair`, `artifact list/export`, line `console`, `hosted login/health/models/account/usage`, `doctor`, `app-server`, help/version; separate `.0sec/native/state.db` | All legacy commands below; UX/exit/schema compatibility; installer and platform release qualification |
+| CLI | `crates/zero-cli`: `schema`, `snapshot pin`, `session create/create-pinned/list/show/events/budget/reconcile-usage`, `exec`, `sandbox`, `infer`, `agent`, `plugin-call`, `evaluate run/status`, `source-review`, `source-reproduce`, `source-repair`, `artifact list/export`, durable `queue enqueue/list/run/cancel`, line `console`, `hosted login/health/models/account/usage`, `doctor`, `app-server`, help/version; separate `.0sec/native/state.db` | All legacy commands below; UX/exit/schema compatibility; installer and platform release qualification |
 | Stdio lifecycle | Initialize/version gate, correlated replies, bounded NDJSON framing, concurrent execute/cancel, durable-admission notification before cancellation, EOF/SIGINT/SIGTERM cleanup | Durable event streaming/reconnect contract, authenticated remote transports if required |
 
 Current acceptance sources include crate unit and integration tests for CLI
@@ -499,3 +499,37 @@ IPv6 loopback routing. The first workspace run exposed a global JSON-number
 feature regression in existing agent/console decoding; the final implementation
 uses local raw decimal parsing and canonical strings in retained quotes. Existing
 agent and console executable tests pass in the final workspace run.
+
+
+### Durable queued agent inputs
+
+Native `QueueAgent`, `AgentQueue`, `RunQueuedAgent` and `CancelQueuedAgent` commands
+replace the in-memory follow-up queue boundary with journaled intent. The CLI
+exposes `queue enqueue/list/run/cancel`; console lines receive durable input IDs
+while a turn is active. FIFO follow-ups name exact successful predecessors and
+retain the existing provider/history/authority checks. Exact dispatch retry uses
+a fixed operation identity; Unknown work never replays and budget holds remain.
+
+The legacy reference is the 50-item composer queue in
+`packages/cli/src/tui/composer-queue.ts` and chat-screen idle draining; core
+`ConsoleSession.send` itself rejects simultaneous turns. The native store owns
+acceptance/cancellation and schema 5 migration, the engine owns dispatch and
+operation recovery, and the console/app-server are clients. Read-only exports
+require the current schema without migrating it. Existing native artifacts and
+operation identities survive the v4→v5 upgrade.
+
+See [queue semantics](crates/zero-engine/QUEUE.md) for restart, partial stdin,
+continuation and cancellation boundaries. Pending inputs are explicit resumable
+intent, not already-spent operations. Queue admission does not reserve funds or
+attest a current provider quote. Full TUI, editing queued prompts, mid-turn
+steering, subagent coordination, interrupted-turn checkpoints and context
+projection/compaction remain open parts of gate A/U.
+
+Qualification passed 484 tests across the complete workspace on Rust 1.85,
+plus strict production Clippy and formatting. Focused acceptance includes six
+engine queue tests, twelve store queue/migration/provenance fixtures and five CLI
+queue scenarios. Those exercise concurrent cancel/dispatch, restart and generic
+recovery receipts, Unknown usage holds, altered persisted authority, partial stdin
+across turn completion, app-server enqueue during work, EOF drain and signal
+shutdown with acknowledged pending inputs. Backends and providers use the existing
+qualified paths; these new queue fixtures use loopback inference, not paid calls.

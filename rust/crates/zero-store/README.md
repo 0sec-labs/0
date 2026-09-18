@@ -51,3 +51,11 @@ attachments are rejected. Reads validate SHA-256 content identity and bound the
 SQL blob before materializing it. These are retained evidence bytes, not executed
 code or an authorization to label a finding reproduced. Existing v1/v2/v3 stores
 migrate without changing operation ownership, results, or session activation pins.
+
+Schema v5 adds durable agent input intent with exact enqueue identities, fixed
+run-command correlation, bounded FIFO/dependency resolution and pending-only
+cancellation. Operation outcomes remain the source of queue execution status;
+there is no independently settled queue worker. Native v4 migration preserves
+all previous artifacts, reservations and ownership records. Read-only access
+requires the current exact schema and never performs migration. See
+[queue lifecycle](../zero-engine/QUEUE.md) for dispatch and recovery semantics.
