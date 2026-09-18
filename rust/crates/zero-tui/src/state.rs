@@ -20,6 +20,7 @@ enum Pending {
     Init,
     Findings(crate::findings::Pending),
     Steering(crate::steering::Pending),
+    Questions(crate::questions::Pending),
     Sessions,
     Create,
     History {
@@ -58,6 +59,7 @@ pub struct State {
     pub options: Options,
     pub findings: crate::findings::Findings,
     pub steering: crate::steering::Steering,
+    pub questions: crate::questions::Questions,
     pub view: View,
     pub session: Option<String>,
     pub sessions: Vec<Value>,
@@ -109,6 +111,7 @@ impl State {
             options,
             findings: crate::findings::Findings::default(),
             steering: crate::steering::Steering::default(),
+            questions: crate::questions::Questions::default(),
             sessions: vec![],
             selected: 0,
             history: vec![],
@@ -148,6 +151,16 @@ impl State {
             .into_iter()
             .map(|a| self.request(a.command, Pending::Findings(a.pending)))
             .collect()
+    }
+    fn question_actions(&mut self, actions: Vec<crate::questions::Action>) -> Vec<Request> {
+        actions
+            .into_iter()
+            .map(|a| self.request(a.command, Pending::Questions(a.pending)))
+            .collect()
+    }
+    fn refresh_questions(&mut self) -> Vec<Request> {
+        let actions = self.questions.refresh();
+        self.question_actions(actions)
     }
     fn steering_actions(&mut self, actions: Vec<crate::steering::Action>) -> Vec<Request> {
         actions
@@ -243,6 +256,7 @@ impl State {
         }
         self.findings.reset();
         self.steering.reset();
+        self.questions.reset();
         self.session = Some(session);
         self.history.clear();
         self.latest = None;
@@ -257,9 +271,21 @@ impl State {
         self.selected = 0;
         self.view = View::Conversation;
         self.status = "Loading saved session…".into();
-        self.refresh()
+        let mut requests = self.refresh();
+        let actions = self
+            .questions
+            .initialize(self.session.as_deref().unwrap_or(""));
+        requests.extend(self.question_actions(actions));
+        requests
     }
     pub fn paste(&mut self, text: &str) {
+        if self.help {
+            return;
+        }
+        if self.questions.open {
+            self.questions.paste(text);
+            return;
+        }
         if self.view == View::Findings {
             self.findings.paste(text);
             return;
@@ -290,6 +316,18 @@ impl State {
         let help_lifecycle = ctrl && matches!(key.code, KeyCode::Char('q' | 'c' | 'x'));
         if self.help && !help_lifecycle && !matches!(key.code, KeyCode::F(1) | KeyCode::Esc) {
             return vec![];
+        }
+        if ctrl && key.code == KeyCode::Char('o') && !self.help {
+            let actions = self.questions.toggle(self.session.as_deref());
+            return self.question_actions(actions);
+        }
+        if self.questions.open
+            && !self.help
+            && !(ctrl && matches!(key.code, KeyCode::Char('q' | 'c' | 'x')))
+            && key.code != KeyCode::F(1)
+        {
+            let actions = self.questions.key(key);
+            return self.question_actions(actions);
         }
         if self.view == View::Findings
             && !self.help
@@ -438,7 +476,8 @@ impl State {
         vec![]
     }
     fn mutation_pending(&self) -> bool {
-        self.steering.sending
+        self.questions.blocks_navigation()
+            || self.steering.sending
             || self.findings.blocks_navigation()
             || self.pending.values().any(|p| {
                 matches!(
@@ -708,6 +747,15 @@ impl State {
     pub fn message(&mut self, message: ServerMessage) -> Result<Vec<Request>> {
         match message {
             ServerMessage::Event { event, .. } => {
+                if let ExecutionEvent::OperatorQuestionRequested {
+                    session_id,
+                    question_operation_id,
+                    ..
+                } = &event
+                {
+                    let actions = self.questions.notified(session_id, question_operation_id);
+                    return Ok(self.question_actions(actions));
+                }
                 let retry_cancel = matches!(&event,ExecutionEvent::Admitted{session_id,command_id,..} if Some(session_id)==self.session.as_ref() && self.active.as_ref().is_some_and(|a|a.cancel_requested&&a.command==*command_id));
                 let refresh_steering = matches!(&event,ExecutionEvent::ModelProgress{session_id,operation_id,parent_operation_id,..} if Some(session_id)==self.session.as_ref() && self.active.as_ref().is_some_and(|a|a.operation.is_some() && a.operation==*parent_operation_id && a.operation==self.steering.target && a.sequences.len()<64 && !a.sequences.contains_key(operation_id)));
                 self.event(event);
@@ -724,6 +772,10 @@ impl State {
                 let Some(pending) = self.pending.remove(&id) else {
                     return Err(Error::Protocol("unknown app-server response ID".into()));
                 };
+                if let Pending::Questions(tag) = pending {
+                    let actions = self.questions.reply(tag, *reply)?;
+                    return Ok(self.question_actions(actions));
+                }
                 if let Pending::Steering(tag) = pending {
                     let (actions, clear) = self.steering.reply(tag, *reply)?;
                     if clear.as_deref() == Some(self.composer.as_str()) {
@@ -755,6 +807,7 @@ impl State {
                         self.halted = true;
                         let mut actions = self.refresh();
                         actions.extend(self.refresh_steering());
+                        actions.extend(self.refresh_questions());
                         return Ok(actions);
                     }
                     if let Pending::Enqueue { prompt, .. } = pending {
@@ -767,7 +820,7 @@ impl State {
                 }
                 let value = serde_json::to_value(reply.as_ref())?;
                 match pending {
-                    Pending::Findings(_) | Pending::Steering(_) => {
+                    Pending::Findings(_) | Pending::Steering(_) | Pending::Questions(_) => {
                         unreachable!("scoped responses handled above")
                     }
                     Pending::Init => {
@@ -780,8 +833,11 @@ impl State {
                         ) {
                             return Err(Error::Protocol("app-server initialization failed".into()));
                         }
-                        if self.session.is_some() {
-                            Ok(self.refresh())
+                        if let Some(session) = self.session.clone() {
+                            let mut requests = self.refresh();
+                            let actions = self.questions.initialize(&session);
+                            requests.extend(self.question_actions(actions));
+                            Ok(requests)
                         } else {
                             Ok(vec![self.sessions_page()])
                         }
@@ -996,6 +1052,7 @@ impl State {
                         }
                         let mut out = self.refresh();
                         out.extend(self.refresh_steering());
+                        out.extend(self.refresh_questions());
                         out.extend(self.auto());
                         Ok(out)
                     }

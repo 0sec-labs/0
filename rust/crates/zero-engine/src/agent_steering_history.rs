@@ -54,6 +54,7 @@ fn authority(request: &AgentRequest) -> Result<Value, EngineError> {
         "source_snapshot_tools":request.source_snapshot_tools,
         "source_submission_max_hypotheses":request.source_submission_max_hypotheses,
         "plugin_tools":request.plugin_tools,"delegation_policy":request.delegation_policy,
+        "operator_questions":request.operator_questions,
         "context_policy":request.context_policy}),
     )
 }
@@ -253,7 +254,7 @@ pub(super) fn validate(
                 .content
                 .iter()
                 .filter_map(|item| match item {
-                    Content::ToolCall { id, .. } => Some(id),
+                    Content::ToolCall { id, name, .. } => Some((id, name)),
                     _ => None,
                 })
                 .collect();
@@ -275,13 +276,41 @@ pub(super) fn validate(
                 {
                     return Err(error("steering predecessor tool replay differs"));
                 }
-                for (call, output) in calls.into_iter().zip(&recorded[expected.len()..]) {
+                for (call_index, ((call, name), output)) in calls
+                    .into_iter()
+                    .zip(&recorded[expected.len()..])
+                    .enumerate()
+                {
                     if output.as_object().map(|o| o.len()) != Some(3)
                         || output["type"] != "function_call_output"
                         || output["call_id"] != *call
                         || !output["output"].is_string()
                     {
                         return Err(error("steering predecessor tool result differs"));
+                    }
+                    if name == "ask_operator" && req.operator_questions {
+                        match store.get_operation_by_command(
+                            &ancestor.session_id,
+                            &format!("{}:tool:{index}:{call_index}", ancestor.id),
+                        ) {
+                            Ok(question) => {
+                                if question.payload["kind"] != "agent_operator_question"
+                                    || question.payload["parent_operation"] != ancestor.id
+                                    || question.payload["call_id"] != *call
+                                    || output["output"]
+                                        != agent_questions::validate_receipt(store, &question)?
+                                {
+                                    return Err(error(
+                                        "operator answer history differs from durable decision",
+                                    ));
+                                }
+                            }
+                            Err(zero_store::Error::NotFound(_))
+                                if output["output"]
+                                    .as_str()
+                                    .is_some_and(|text| text.starts_with("Tool rejected:")) => {}
+                            Err(error) => return Err(error.into()),
+                        }
                     }
                 }
                 expected = recorded;

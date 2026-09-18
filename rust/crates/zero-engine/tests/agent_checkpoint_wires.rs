@@ -158,6 +158,7 @@ impl Setup {
                 provider: "local".into(),
                 context_policy: None,
                 delegation_policy: None,
+                operator_questions: false,
                 model: "fixture".into(),
                 instructions: "Use only offered tools".into(),
                 prompt: "Inspect the authorized snapshot".into(),

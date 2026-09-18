@@ -237,3 +237,13 @@ request. Captured does not prove provider receipt. Messages left when the target
 stops are Undelivered and never automatically run in another turn. Steering
 preserves the target's tools, provider, source scope, resource and turn limits.
 See [durable input semantics](crates/zero-engine/QUEUE.md#steering-an-active-agent).
+
+
+Interactive request profiles can explicitly enable `"operator_questions": true`.
+The model may then call `ask_operator` with bounded choices or custom-text
+questions. Operator answers and dismissals are durable, informational tool
+results; they never grant tools, widen source scope, change a provider, or approve
+an execution. Only explicitly selected delegated roles receive this tool.
+A cancelled or interrupted question remains inspectable and never automatically
+restarts its actor. See the [migration record](MIGRATION.md#durable-operator-questions)
+for receipt and continuation guarantees.

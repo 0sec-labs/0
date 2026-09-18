@@ -304,7 +304,7 @@ fn schema6_migrates_and_readonly_does_not_migrate() {
     let path = dir.path().join("state.db");
     let conn = rusqlite::Connection::open(&path).unwrap();
     conn.execute_batch(
-        "DROP TABLE agent_steering; DROP TABLE agent_steering_windows; PRAGMA user_version=6;",
+        "DROP TABLE operator_question_decisions; DROP TABLE operator_questions; DROP TABLE agent_steering; DROP TABLE agent_steering_windows; PRAGMA user_version=6;",
     )
     .unwrap();
     drop(conn);

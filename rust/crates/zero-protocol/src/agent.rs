@@ -14,6 +14,9 @@ pub struct AgentRequest {
     /// User prompts and protected legacy context remain verbatim.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub context_policy: Option<crate::context::ContextPolicy>,
+    /// Explicitly offer informational operator questions; answers grant no authority.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub operator_questions: bool,
     /// Host-authored roles for bounded joined tasks; omitted requests retain their identity.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub delegation_policy: Option<crate::delegation::DelegationPolicy>,

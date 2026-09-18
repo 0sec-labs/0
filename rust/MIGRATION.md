@@ -31,8 +31,8 @@ upgrading scaffolds or model assessments into successful verification.
 | Surface | Native owner and current behavior | Remaining acceptance gate |
 | --- | --- | --- |
 | Wire schema | `crates/zero-protocol`: strict versioned requests, replies, execution/session values, JSON Schema | Stable compatibility policy, generated external clients, negotiated additions and schema migration tests |
-| Native state | `crates/zero-store`: SQLite sessions, command admission, owner-bound operation settlement, ordered events, budget reservation/settlement, transactional epoch recovery and schema v1/v2/v3/v4/v5/v6→v7 migration, optional activation epoch pins and immutable operation artifacts | Full UI message projection, semantic compaction and retained-history retrieval; further schema upgrades; explicit legacy import; durable multi-process campaign accounting |
-| Application engine | `crates/zero-engine`: session queries, idempotent execution, cancellation, engine ownership lock, uncertain-operation recovery, finding reconciliation, durable Responses/Chat/Anthropic inference, bounded offline Docker/smolvm snapshot agent with explicit completed-turn continuation, durable FIFO inputs, active-agent steering, bounded joined subagents and explicit byte-bounded context projection from immutable journal records | Remaining providers, full tools/permissions and agent workflows, mid-turn steering input, interrupted-turn checkpoints and generation lifecycle |
+| Native state | `crates/zero-store`: SQLite sessions, command admission, owner-bound operation settlement, ordered events, budget reservation/settlement, transactional epoch recovery and schema v1/v2/v3/v4/v5/v6/v7→v8 migration, optional activation epoch pins and immutable operation artifacts | Full UI message projection, semantic compaction and retained-history retrieval; further schema upgrades; explicit legacy import; durable multi-process campaign accounting |
+| Application engine | `crates/zero-engine`: session queries, idempotent execution, cancellation, engine ownership lock, uncertain-operation recovery, finding reconciliation, durable Responses/Chat/Anthropic inference, bounded offline Docker/smolvm snapshot agent with explicit completed-turn continuation, durable FIFO inputs, active-agent steering, bounded joined subagents and explicit byte-bounded context projection from immutable journal records | Remaining providers, full tools/permissions and agent workflows, interrupted-turn checkpoints and generation lifecycle |
 | Batch execution | `crates/zero-executor`: validated snapshot pin/copy, local image identity, nonroot Linux offline Docker lifecycle, bounded raw output, cancellation and explicit cleanup outcome | All other execution profiles below; real Docker qualification remains separate from injected CLI fixtures |
 | MicroVM execution | `crates/zero-smolvm` and `zero-sandbox`: explicit pinned archive, qualified runtime version, nonroot offline batch lifecycle, verified snapshot staging and native engine/agent selection; real guest and engine/agent smoke passed | Broader isolation/SIGKILL qualification, live-provider matrix and interactive execution |
 | Source review | `crates/zero-source` and engine `source.rs`: bounded selected source bundle, grounded structured hypotheses, retained request/bundle/completion/submission, same-session provenance and exact retry; `source-review` CLI | Source exploration, automatic investigation and specialist verification; hypotheses remain unverified, including successful model submissions |
@@ -49,7 +49,7 @@ upgrading scaffolds or model assessments into successful verification.
 | Hosted metadata | `crates/zero-cloud-client`: explicit authenticated health/catalog/account/usage GETs, bounded browser-session login polling, explicit catalog inference routing, typed gateway errors and credit normalization; CLI resolves environment or private legacy `cloud.env` credentials | Live service qualification, provider OAuth/refresh, upload/accounting and managed-worker qualification |
 | Cloud wire adapter | `crates/zero-cloud-compat`: result/event framing, typed outcomes, cost provenance and atomic report writing | Scanner integration, ordered scan-total accounting, uploads and managed deployment qualification |
 | Finding reduction | `crates/zero-evidence`: source IDs/provenance retained through complete reconciliation, explicit disposition accounting | Discovery, independent vulnerability oracles, storage/export and disclosure eligibility; reconciliation is not truth validation |
-| CLI | `crates/zero-cli`: `schema`, `snapshot pin`, `session create/create-pinned/list/show/events/budget/reconcile-usage`, `exec`, `sandbox`, `infer`, `agent`, `plugin-call`, `evaluate run/status`, `source-review`, `source-reproduce`, `source-repair`, `artifact list/export`, durable `queue enqueue/list/run/cancel`, line `console`, full-screen `tui`, `hosted login/health/models/account/usage`, `doctor`, `app-server`, help/version; separate `.0sec/native/state.db` | All legacy commands below; UX/exit/schema compatibility; installer and platform release qualification |
+| CLI | `crates/zero-cli`: `schema`, `snapshot pin`, `session create/create-pinned/list/show/events/budget/reconcile-usage`, `exec`, `sandbox`, `infer`, `agent`, `plugin-call`, `evaluate run/status`, `source-review`, `source-reproduce`, `source-repair`, `artifact list/export`, durable `queue enqueue/list/run/cancel`, read-only `steer list` and `questions list/show`, line `console`, full-screen `tui`, `hosted login/health/models/account/usage`, `doctor`, `app-server`, help/version; separate `.0sec/native/state.db` | All legacy commands below; UX/exit/schema compatibility; installer and platform release qualification |
 | Stdio lifecycle | Initialize/version gate, correlated replies, bounded NDJSON framing, concurrent execute/cancel, durable-admission notification before cancellation, EOF/SIGINT/SIGTERM cleanup | Durable event streaming/reconnect contract, authenticated remote transports if required |
 
 Current acceptance sources include crate unit and integration tests for CLI
@@ -834,3 +834,49 @@ real subprocess signals and real PTYs; they do not claim live-provider or sandbo
 isolation qualification. Schema migration, rollback of interrupted capture,
 terminal admission races, byte-bounded witness reads, frozen retry targets and
 terminal restoration are exercised. Production TypeScript routing is unchanged.
+
+
+### Durable operator questions
+
+The native `ask_operator` tool implements the legacy information-gathering
+workflow in `agent/tools/ask-operator.ts`, rather than treating a question answer
+as a scope or tool approval. The host explicitly enables
+`AgentRequest.operator_questions`; false is omitted from serialization and keeps
+historical requests and plugin aliases compatible. Delegated roles require the
+parent opt-in and an explicit `ask_operator` tool selection.
+
+A request has 1–4 bounded questions, each with 2–4 unique options and/or custom
+text. Indexed answers must cover the exact retained questions and choices.
+Neither a recommended option nor pressing Enter implies a submitted answer.
+Question admission precedes notification; decision commands bind the immutable
+request digest and caller command ID. Competing or changed decisions conflict,
+while exact retries return the retained receipt without a new model request.
+
+Schema 8 records question discovery and immutable decisions. Waiting remains
+inside the owned actor and spends no additional inference budget. Answer and
+explicit dismissal produce ordinary untrusted tool-result data; cancellation
+and owner loss remain distinct outcomes. There is no timeout-generated answer.
+Checkpoint, projected-context and ordinary-history validation derive historical
+answers from original question calls and durable decisions. A decision labeled
+Answered proves persistence, not that a later model consumed or obeyed it.
+
+This advances operator interaction in gates A/T/U. Permission approvals, scope
+extensions, detached/reconnectable engine service and safe interrupted-turn
+resumption remain separate requirements. Restarted clients may inspect receipts;
+opening a database does not restart a waiting actor or replay its prior effects.
+
+Question qualification includes Rust 1.85 lifecycle and history fixtures covering
+answer/cancel races, immutable retry after restart, bounded pages, corrupted
+receipts and full/projected continuation. A real plugin-runner fixture preserves
+a historical `ask_operator` plugin alias when the native opt-in is false,
+including checkpoint/restart and later continuation without repeated execution.
+
+Combined qualification: the actual Rust 1.85 workspace passed 666 tests with
+11 explicit backend/platform ignores before final frontend hardening. The final
+CLI/TUI run passed 160 tests with 4 explicit ignores; the subsequent plugin alias
+fixture passed separately. Strict production workspace Clippy and formatting
+checks passed. Executable question fixtures include real PTY answer/cancel,
+Unicode paste and explicit submission, console answer/dismiss, EOF before and
+after question notification, read-only inspection and unattended batch guards.
+These fixtures use local provider/backend doubles and do not add a claim of
+new real Docker, VM, managed-cloud or production-release qualification.

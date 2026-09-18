@@ -15,6 +15,7 @@ pub mod history;
 pub mod microvm;
 pub mod model;
 pub mod plugin;
+pub mod questions;
 pub mod queue;
 pub mod repair;
 pub mod sandbox;
@@ -151,6 +152,23 @@ pub enum Command {
         session_id: String,
         command_id: String,
         request: source::SourceReviewRequest,
+    },
+    OperatorQuestions {
+        session_id: String,
+        root_operation_id: Option<String>,
+        after_sequence: u64,
+        limit: u32,
+    },
+    OperatorQuestion {
+        session_id: String,
+        question_operation_id: String,
+    },
+    DecideOperatorQuestion {
+        session_id: String,
+        command_id: String,
+        question_operation_id: String,
+        expected_request_sha256: String,
+        decision: questions::OperatorDecision,
     },
     SteerAgent {
         session_id: String,
@@ -324,6 +342,17 @@ pub enum Reply {
     SourceReview {
         operation: Operation,
         result: Option<source::SourceReviewOutcome>,
+        duplicate: bool,
+    },
+    OperatorQuestions {
+        questions: Vec<questions::OperatorQuestionRecord>,
+    },
+    OperatorQuestion {
+        question: questions::OperatorQuestionRecord,
+    },
+    OperatorQuestionDecided {
+        question: questions::OperatorQuestionRecord,
+        decision: questions::OperatorQuestionDecisionReceipt,
         duplicate: bool,
     },
     AgentSteered {

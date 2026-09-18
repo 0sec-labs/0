@@ -764,3 +764,63 @@ fn reopened_history_loads_retained_steering_without_replacing_an_acknowledged_ta
     assert!(ui.steering.messages.is_empty());
     assert!(ui.steering.target.is_none());
 }
+
+#[test]
+fn question_overlay_preserves_composer_and_findings_view_and_cancel_remains_global() {
+    let mut ui = state();
+    ready(&mut ui);
+    ui.paste("draft outside question");
+    ui.view = View::Findings;
+    ui.findings.status = "retained finding context".into();
+    ui.key(KeyEvent::new(KeyCode::Char('o'), KeyModifiers::CONTROL));
+    assert!(ui.questions.open);
+    ui.paste("inert without selected custom field");
+    assert_eq!(ui.composer, "draft outside question");
+    ui.key(key(KeyCode::Esc));
+    assert!(!ui.questions.open);
+    assert_eq!(ui.view, View::Findings);
+    assert_eq!(ui.findings.status, "retained finding context");
+    ui.view = View::Conversation;
+    let _ = ui.start(queued("run", 1, QueuedAgentStatus::Pending));
+    ui.active.as_mut().unwrap().operation = Some("root".into());
+    ui.key(KeyEvent::new(KeyCode::Char('o'), KeyModifiers::CONTROL));
+    assert!(
+        !ui.key(KeyEvent::new(KeyCode::Char('x'), KeyModifiers::CONTROL))
+            .is_empty()
+    );
+    assert!(ui.active.as_ref().unwrap().cancel_requested);
+}
+
+#[test]
+fn explicit_session_start_initializes_question_discovery_before_first_hint() {
+    let mut ui = state();
+    let initial = ui.initialize();
+    let requests = response(
+        &mut ui,
+        &initial,
+        json!({"type":"initialized","protocol_version":PROTOCOL_VERSION,"capabilities":[]}),
+    );
+    assert!(
+        requests
+            .iter()
+            .any(|r| matches!(r.command, Command::OperatorQuestions { .. }))
+    );
+    let requests = ui
+        .message(ServerMessage::Event {
+            protocol_version: PROTOCOL_VERSION,
+            event: ExecutionEvent::OperatorQuestionRequested {
+                session_id: "session".into(),
+                root_operation_id: "root".into(),
+                actor_operation_id: "child".into(),
+                question_operation_id: "question".into(),
+            },
+        })
+        .unwrap();
+    assert!(
+        matches!(&requests[0].command,Command::OperatorQuestion{question_operation_id,..} if question_operation_id=="question")
+    );
+    assert!(
+        !ui.questions.open,
+        "notification must not take keyboard focus"
+    );
+}

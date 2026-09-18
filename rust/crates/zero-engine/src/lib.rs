@@ -5,6 +5,7 @@ mod agent_context;
 mod agent_context_history;
 mod agent_delegation;
 mod agent_plugins;
+mod agent_questions;
 mod agent_source;
 mod agent_steering;
 mod agent_submission;
@@ -24,6 +25,7 @@ mod source_report;
 mod triage;
 mod workflow_provenance;
 
+pub use agent_questions::{read_operator_question, read_operator_questions};
 pub use agent_steering::read_agent_steering;
 pub use discovery::read_source_reviews;
 pub use source_report::{read_source_report, read_source_workflow_report};
@@ -70,6 +72,7 @@ struct Control {
     closing: bool,
     active: HashMap<String, Active>,
     actors: HashMap<String, agent_steering::Target>,
+    questions: HashMap<String, agent_questions::Waiter>,
 }
 
 struct Shared {
@@ -253,6 +256,7 @@ impl Engine {
             "bounded_offline_snapshot_agent",
             "bounded_joined_subagents",
             "durable_boundary_steering",
+            "durable_operator_questions",
             "durable_agent_input_queue",
             "explicit_context_projection",
             "generation_pinned_offline_plugins",
@@ -411,6 +415,22 @@ impl Engine {
                 )
                 .await;
         }
+        if let Command::DecideOperatorQuestion {
+            session_id,
+            command_id,
+            question_operation_id,
+            expected_request_sha256,
+            decision,
+        } = command
+        {
+            return self.decide_operator_question(
+                &session_id,
+                &command_id,
+                &question_operation_id,
+                &expected_request_sha256,
+                &decision,
+            );
+        }
         if let Command::SteerAgent {
             session_id,
             operation_id,
@@ -469,6 +489,26 @@ impl Engine {
                 input_id,
             } => Ok(Reply::AgentInput {
                 input: lock(&self.shared.store)?.cancel_queued_agent(&session_id, &input_id)?,
+            }),
+            Command::OperatorQuestions {
+                session_id,
+                root_operation_id,
+                after_sequence,
+                limit,
+            } => Ok(Reply::OperatorQuestions {
+                questions: lock(&self.shared.store)?.operator_questions(
+                    &session_id,
+                    root_operation_id.as_deref(),
+                    after_sequence,
+                    limit,
+                )?,
+            }),
+            Command::OperatorQuestion {
+                session_id,
+                question_operation_id,
+            } => Ok(Reply::OperatorQuestion {
+                question: lock(&self.shared.store)?
+                    .get_operator_question(&session_id, &question_operation_id)?,
             }),
             Command::AgentSteering {
                 session_id,
@@ -626,6 +666,7 @@ impl Engine {
                 .map_err(|e| EngineError::State(e.to_string())),
             Command::Execute { .. }
             | Command::SteerAgent { .. }
+            | Command::DecideOperatorQuestion { .. }
             | Command::Infer { .. }
             | Command::ReproduceSource { .. }
             | Command::ValidateSourceRepair { .. }

@@ -718,3 +718,58 @@ also accepts an explicitly identified running delegated child. App-server sends
 use session/operation/command IDs plus exact prompt text; exact retries retain
 identity, while changed payloads conflict. TUI errors retain the draft/command ID
 for retry; acknowledgments remain associated with their original operation.
+
+## Operator questions (information only)
+
+Set `"operator_questions": true` explicitly in an agent profile to offer
+`ask_operator`. The default is false and keeps the existing tool surface and
+request identity. It accepts one to four structured questions, each offering
+choices or custom text. Answers grant no tools, filesystem access, networking,
+scope changes or other permissions; the actor's original authority stays fixed.
+Questions and answers are retained in the journal as untrusted tool data.
+
+The terminal shows a waiting count without stealing the composer or Findings
+note. Ctrl-O opens the inbox; Enter selects a question. Arrows/Tab move through
+choices and custom fields; Space selects choices. Enter and Unicode paste only
+edit a custom field. Ctrl-S explicitly submits all answers. Ctrl-D explicitly
+dismisses. Esc closes the overlay while retaining its draft; Ctrl-U explicitly
+discards the local draft and returns to the inbox without answering/dismissing.
+Submitted drafts freeze their question ID, request hash, command ID and answer
+for exact retry. Ctrl-X/Ctrl-C cancel active work; Ctrl-Q exits and awaits cleanup.
+
+In the line console, use the printed durable question ID:
+
+```text
+/answer QUESTION_ID {"type":"answer","answers":[{"question_index":0,"selected_indices":[0]},{"question_index":1,"custom_text":"Unicode λ\nadditional detail"}]}
+/dismiss QUESTION_ID
+```
+
+Invalid answer commands never become queued prompts. `//answer` and `//dismiss`
+escape literal follow-up lines. EOF while a pending question needs an answer
+cancels owned work, including questions first arriving after EOF; it never
+fabricates dismissal or an answer. A rejected console answer makes the eventual
+exit nonzero. Ordinary EOF continues to drain accepted work that needs no answer.
+
+```sh
+0sec-native --state .0sec/native/state.db questions list --session SESSION_ID
+0sec-native --state .0sec/native/state.db questions show \
+  --session SESSION_ID --question QUESTION_OPERATION_ID
+```
+
+These commands read existing state while an engine owns it, bypass provider and
+harness configuration, and perform no migration, recovery or network calls.
+Lists support `--root`, `--after-sequence` and `--limit` (1–100, default 50) with a
+1 MiB page bound. Advance to the last returned sequence until empty; refresh from
+zero for updated statuses. The terminal keeps a 20-record page, up to 20 separately retained pending
+records, and its selected detail, retaining known pending questions across concurrent older page replies;
+it refreshes those pending identities individually. Custom answers are limited
+to 16 KiB each; whole request/decision packets are limited to 64 KiB.
+
+Pending, Answered, Dismissed, Cancelled and Interrupted are distinct retained
+states. Answered means a saved decision, not proof the model consumed it. The
+TUI owns a private app-server: exiting cancels its workers, and reopening shows
+receipts without restarting lost waits or replaying effects. Plain batch `agent`
+and fresh `queue run` reject question-enabled work before operation admission;
+use app-server, console or TUI for an answer channel. Already dispatched exact
+cached receipts can be returned without creating a waiter. Existing database
+migration remains available for ordinary queue commands.

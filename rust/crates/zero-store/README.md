@@ -174,4 +174,30 @@ materialization; a page may stop early at either bound. Continue using the last
 returned message sequence until an empty page. Captured labels and inference
 replay both validate original enqueue and capture events. SQL size checks precede
 witness/prompt decoding; source/provider outcome bodies are not read. Read-only
-opening requires exact schema v7 and performs no migration or ownership recovery.
+opening requires exact schema v8 and performs no migration or ownership recovery.
+
+
+Schema v8 adds informational operator questions and immutable decisions. Creation
+atomically admits and starts an owner-bound tool operation, verifies the original
+successful model call and offered question tool, and indexes its root and actor.
+The request digest binds the actor, original inference identity, call, and packet.
+Question requests contain 1–4 questions, optional 2–4 indexed choices, and explicit
+custom/multiple-selection flags; validation bounds each text field and the total
+serialized packet to 64 KiB. Each actor can create at most 128 question packets.
+
+Answer/dismiss command IDs use a separate session-scoped decision namespace.
+The transaction compares the request digest, requires a live owner, inserts one
+immutable decision and event, and settles the tool together. Exact retries return
+the original decision before owner checks. Answers cover every question exactly
+once and may select only offered indices; custom input needs explicit permission.
+Answers and dismissals authorize nothing and never change actor configuration.
+Cancellation creates a distinct cancelled receipt. Epoch recovery leaves unresolved
+questions interrupted; it never resumes a waiter or accepts a late answer.
+
+Question reads use a single SQLite snapshot, cached operation/event witnesses,
+SQL byte sentinels before materialization, and a shared 64 MiB witness budget.
+Lists accept an optional root filter, 1–100 records, and a 1 MiB serialized page;
+continue after the last returned admission sequence until an empty page. A first
+oversized witness fails explicitly; later quota exhaustion returns a prefix.
+Reads revalidate original admission, original provider call, and immutable decision
+receipts, with no provider access, ownership claim, or recovery mutation.

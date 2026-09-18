@@ -73,7 +73,9 @@ impl SandboxExecutor {
                 let image = image.clone();
                 let events = Arc::new(move |event| match event {
                     // Engine/provider events are never emitted by the Docker primitive.
-                    ExecutionEvent::Admitted { .. } | ExecutionEvent::ModelProgress { .. } => {}
+                    ExecutionEvent::Admitted { .. }
+                    | ExecutionEvent::ModelProgress { .. }
+                    | ExecutionEvent::OperatorQuestionRequested { .. } => {}
                     ExecutionEvent::Sandbox { event } => sink(event),
                     ExecutionEvent::Started {
                         execution_id,

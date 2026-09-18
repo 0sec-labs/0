@@ -218,9 +218,15 @@ mod compatibility {
         let original = json!({"provider":"p","model":"m","instructions":"i","prompt":"hello","execution":{"execution_id":"e","image":"local","argv":["true"],"snapshot":{"id":"s","root":"/tmp/source","digest":"sha256:abc","files":[]},"timeout_ms":1000,"memory_mb":128,"cpus":0.5,"max_output_bytes":1024},"max_turns":2,"reservation_per_turn":10});
         let request: AgentRequest = serde_json::from_value(original.clone()).unwrap();
         assert!(request.delegation_policy.is_none());
+        assert!(!request.operator_questions);
         // Defaults on the legacy execution profile are independent of this new field.
         let canonical = serde_json::to_value(&request).unwrap();
         assert!(canonical.get("delegation_policy").is_none());
+        assert!(canonical.get("operator_questions").is_none());
+        let mut explicit_false = canonical.clone();
+        explicit_false["operator_questions"] = json!(false);
+        let decoded: crate::agent::AgentRequest = serde_json::from_value(explicit_false).unwrap();
+        assert_eq!(serde_json::to_value(decoded).unwrap(), canonical);
         let old_canonical = serde_json::to_vec(&canonical).unwrap();
         let mut explicit_null = canonical.clone();
         explicit_null["delegation_policy"] = serde_json::Value::Null;

@@ -9,6 +9,7 @@ mod harness;
 mod hosted;
 mod hosted_provider;
 mod providers;
+mod questions;
 mod report;
 mod server;
 mod source_report;
@@ -69,6 +70,9 @@ async fn run(args: Args) -> Result<bool, Box<dyn Error>> {
     } = &args.command
     {
         return tui::run(&args, session.clone(), request.as_deref(), *budget_limit).await;
+    }
+    if let Command::Questions { command } = args.command {
+        return questions::run(&args.state, command).await;
     }
     if let Command::Steer { command } = args.command {
         return steering::run(&args.state, command).await;
@@ -135,6 +139,7 @@ async fn run(args: Args) -> Result<bool, Box<dyn Error>> {
             .unwrap_or_else(|| std::path::Path::new("smolvm"));
         return doctor::run(&args, *timeout_ms, smolvm).await;
     }
+    questions::preflight(&args.state, &args.command).await?;
     let engine = Arc::new(Engine::open_with_backends(
         &args.state,
         args.docker_bin,
@@ -205,10 +210,13 @@ async fn run(args: Args) -> Result<bool, Box<dyn Error>> {
                 session_id: session,
                 input_id: input,
             },
-            QueueCommand::Run { session, input } => EngineCommand::RunQueuedAgent {
-                session_id: session,
-                input_id: input,
-            },
+            QueueCommand::Run { session, input } => {
+                questions::unattended_queue(&args.state, &session, &input)?;
+                EngineCommand::RunQueuedAgent {
+                    session_id: session,
+                    input_id: input,
+                }
+            }
         },
         Command::Session { command } => match command {
             SessionCommand::CreatePinned { budget_limit } => {
@@ -364,14 +372,24 @@ async fn run(args: Args) -> Result<bool, Box<dyn Error>> {
             request,
         } => {
             let bytes = providers::read_bounded(&request).await?;
+            let request: zero_protocol::agent::AgentRequest =
+                serde_json::from_slice(&bytes).map_err(|_| "Invalid agent request JSON")?;
+            if request.operator_questions
+                && !questions::cached_agent_request(&args.state, &session, &command_id, &request)
+            {
+                return Err(
+                    "question-enabled agent requires an answer-capable app-server, console or tui"
+                        .into(),
+                );
+            }
             EngineCommand::RunAgent {
                 session_id: session,
                 command_id,
-                request: serde_json::from_slice(&bytes)
-                    .map_err(|_| "Invalid agent request JSON")?,
+                request,
             }
         }
-        Command::Steer { .. }
+        Command::Questions { .. }
+        | Command::Steer { .. }
         | Command::Findings { .. }
         | Command::SourceReport { .. }
         | Command::Schema

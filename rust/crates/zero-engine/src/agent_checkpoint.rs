@@ -137,6 +137,22 @@ fn validate(store: &Store, checkpoint: &Checkpoint) -> Result<(), EngineError> {
                 {
                     return Err(error("checkpoint includes unsettled tool effects"));
                 }
+                if (name.as_str() == "ask_operator"
+                    && parent.payload["request"]["operator_questions"] == true)
+                    || child.payload["kind"] == "agent_operator_question"
+                {
+                    if name.as_str() != "ask_operator"
+                        || child.payload["kind"] != "agent_operator_question"
+                    {
+                        return Err(error("checkpoint operator question kind mismatch"));
+                    }
+                    let output = agent_questions::validate_receipt(store, &child)?;
+                    if item["output"].as_str() != Some(output.as_str()) {
+                        return Err(error(
+                            "checkpoint operator answer differs from durable decision",
+                        ));
+                    }
+                }
                 if name.as_str() == "delegate_tasks" || child.payload["kind"] == "agent_delegation"
                 {
                     if name.as_str() != "delegate_tasks"

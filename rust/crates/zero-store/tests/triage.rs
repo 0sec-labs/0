@@ -486,7 +486,7 @@ fn schema5_migration_preserves_source_queue_budget_and_readonly_refuses_migratio
     s.reserve_budget(&session, "held", 7).unwrap();
     drop(s);
     let conn = rusqlite::Connection::open(&path).unwrap();
-    conn.execute_batch("DROP TABLE agent_steering; DROP TABLE agent_steering_windows; DROP TABLE source_triage_decisions; PRAGMA user_version=5;")
+    conn.execute_batch("DROP TABLE operator_question_decisions; DROP TABLE operator_questions; DROP TABLE agent_steering; DROP TABLE agent_steering_windows; DROP TABLE source_triage_decisions; PRAGMA user_version=5;")
         .unwrap();
     drop(conn);
     let before = std::fs::read(&path).unwrap();

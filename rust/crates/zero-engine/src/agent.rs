@@ -18,6 +18,16 @@ pub(super) struct PreparedActor {
 }
 
 pub(super) fn validate_initial(request: &AgentRequest) -> Result<ResponsesRequest, EngineError> {
+    if request.operator_questions
+        && request
+            .plugin_tools
+            .iter()
+            .any(|p| p.alias == "ask_operator")
+    {
+        return Err(EngineError::State(
+            "plugin alias shadows native operator question tool".into(),
+        ));
+    }
     if let Some(policy) = &request.delegation_policy {
         policy
             .validate()
@@ -352,7 +362,8 @@ fn continuation_input(
                 .cloned()
                 .unwrap_or_else(|| serde_json::json!("responses")),
         )?;
-        if prior.context_policy != request.context_policy
+        if prior.operator_questions != request.operator_questions
+            || prior.context_policy != request.context_policy
             || prior.delegation_policy != request.delegation_policy
             || parent.payload.get("delegation_context") != delegation.map(|d| &d.identity)
             || prior.source_submission_max_hypotheses != request.source_submission_max_hypotheses
@@ -482,6 +493,9 @@ fn model_request(
     let mut model = ResponsesRequest{model:request.model.clone(),instructions:request.instructions.clone(),input,max_output_tokens:8192,
         tools:vec![ToolDefinition{name:"execute_snapshot".into(),description:"Run an argv vector in the explicitly pinned offline snapshot sandbox. This cannot change the image, mounts, networking, limits or host files. The working copy is disposable for each call.".into(),
             parameters:serde_json::json!({"type":"object","properties":{"argv":{"type":"array","items":{"type":"string"},"minItems":1,"maxItems":128}},"required":["argv"],"additionalProperties":false})}]};
+    if request.operator_questions {
+        model.tools.push(agent_questions::definition());
+    }
     if request.source_snapshot_tools || request.source_review_operation_id.is_some() {
         model.tools.extend(agent_source::definitions());
     }
@@ -792,6 +806,41 @@ async fn run_rounds(
             }
             if !model.tools.iter().any(|tool| tool.name == name) {
                 input.push(serde_json::json!({"type":"function_call_output","call_id":id,"output":"Tool rejected: tool was not offered by the host."}));
+                continue;
+            }
+            if name == "ask_operator" && request.operator_questions {
+                let question = serde_json::from_value::<
+                    zero_protocol::questions::OperatorQuestionRequest,
+                >(arguments.clone())
+                .map_err(|e| e.to_string())
+                .and_then(|q| q.validate().map(|_| q).map_err(|e| e.to_string()));
+                let question = match question {
+                    Ok(question) => question,
+                    Err(error) => {
+                        input.push(serde_json::json!({"type":"function_call_output","call_id":id,"output":format!("Tool rejected: {error}")}));
+                        continue;
+                    }
+                };
+                let answer = agent_questions::run(
+                    shared,
+                    session,
+                    parent,
+                    &format!("{parent}:tool:{turn}:{index}"),
+                    &id,
+                    &child,
+                    &question,
+                    &cancel,
+                    &events,
+                )
+                .await?;
+                output.tool_calls += 1;
+                let Some(answer) = answer else {
+                    output.status = AgentStatus::Cancelled;
+                    break 'turns;
+                };
+                input.push(
+                    serde_json::json!({"type":"function_call_output","call_id":id,"output":answer}),
+                );
                 continue;
             }
             if name == "delegate_tasks" && request.delegation_policy.is_some() {

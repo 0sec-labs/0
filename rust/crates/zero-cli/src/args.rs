@@ -41,6 +41,11 @@ pub struct Args {
 
 #[derive(Debug, Subcommand)]
 pub enum Command {
+    /// Inspect durable operator questions without changing execution authority.
+    Questions {
+        #[command(subcommand)]
+        command: crate::questions::QuestionsCommand,
+    },
     /// Inspect durable steering history; live send is available in console/TUI/app-server.
     Steer {
         #[command(subcommand)]

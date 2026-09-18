@@ -8,7 +8,7 @@ use zero_protocol::steering::{
 };
 const PAGE: usize = 1024 * 1024;
 const ROW: usize = 32 * 1024 * 1024;
-fn id(s: &str) -> Result<()> {
+pub(super) fn id(s: &str) -> Result<()> {
     nonempty(s)?;
     if s.len() > 4096 {
         return Err(Error::Invalid("steering identity exceeds 4 KiB".into()));
@@ -18,7 +18,7 @@ fn id(s: &str) -> Result<()> {
 fn conflict(s: &str) -> Error {
     Error::Conflict(s.into())
 }
-fn operation(conn: &Connection, key: &str) -> Result<Operation> {
+pub(super) fn operation(conn: &Connection, key: &str) -> Result<Operation> {
     id(key)?;
     let row = conn.query_row("SELECT id,CASE WHEN length(CAST(session_id AS BLOB))<=4096 THEN session_id END,CASE WHEN length(CAST(command_id AS BLOB))<=4096 THEN command_id END,CASE WHEN length(CAST(payload AS BLOB))<=?2 THEN payload END,CASE WHEN length(status)<=32 THEN status END,CASE WHEN length(CAST(owner AS BLOB))<=4096 THEN owner END FROM operations WHERE id=?1",params![key,ROW],|r|Ok((r.get::<_,String>(0)?,r.get::<_,String>(1)?,r.get::<_,String>(2)?,r.get::<_,Option<String>>(3)?,r.get::<_,String>(4)?,r.get::<_,Option<String>>(5)?))).optional()?.ok_or_else(||Error::NotFound(key.into()))?;
     if row.3.is_none() {
@@ -60,14 +60,21 @@ fn sealed(conn: &Connection, op: &str) -> Result<bool> {
         .optional()?
         .unwrap_or(false))
 }
-const READ_BUDGET: &str = "steering page witness read budget exceeded";
+pub(super) const READ_BUDGET: &str = "steering page witness read budget exceeded";
 #[derive(Default)]
-struct Witnesses {
+pub(super) struct Witnesses {
     events: std::collections::BTreeMap<(String, u64), (String, Value)>,
     bytes: usize,
 }
 impl Witnesses {
-    fn event(
+    pub(super) fn reserve(&mut self, size: usize) -> Result<()> {
+        if self.bytes.saturating_add(size) > 64 * 1024 * 1024 {
+            return Err(Error::Invalid(READ_BUDGET.into()));
+        }
+        self.bytes += size;
+        Ok(())
+    }
+    pub(super) fn event(
         &mut self,
         conn: &Connection,
         session: &str,
@@ -80,15 +87,12 @@ impl Witnesses {
             if size > max {
                 return Err(Error::Invalid("steering witness exceeds byte bound".into()));
             }
-            if self.bytes.saturating_add(size) > 64 * 1024 * 1024 {
-                return Err(Error::Invalid(READ_BUDGET.into()));
-            }
+            self.reserve(size)?;
             let text: String = conn.query_row(
                 "SELECT payload FROM events WHERE session_id=?1 AND sequence=?2",
                 params![session, integer(sequence)?],
                 |r| r.get(0),
             )?;
-            self.bytes += size;
             self.events
                 .insert(key.clone(), (kind, serde_json::from_str(&text)?));
         }

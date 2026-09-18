@@ -149,6 +149,13 @@ pub enum OutputStream {
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ExecutionEvent {
+    /// Durable question exists; read its typed record before answering.
+    OperatorQuestionRequested {
+        session_id: String,
+        root_operation_id: String,
+        actor_operation_id: String,
+        question_operation_id: String,
+    },
     /// Live, untrusted display data; final journaled completion is authoritative.
     /// Sequence starts at one per inference operation and advances on dropped
     /// deliveries. It is not a SessionEvents cursor and is not replayed on retry.

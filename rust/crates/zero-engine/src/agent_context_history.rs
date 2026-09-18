@@ -112,7 +112,8 @@ pub(super) fn validate(
         if req.context_policy.as_ref() != Some(policy) || count > 32 {
             return Err(error("context lineage policy/round mismatch"));
         }
-        if req.provider != request.provider
+        if req.operator_questions != request.operator_questions
+            || req.provider != request.provider
             || req.delegation_policy != request.delegation_policy
             || req.model != request.model
             || req.instructions != request.instructions
@@ -232,31 +233,41 @@ pub(super) fn validate(
                 })
                 .enumerate()
             {
-                if call.1 != "delegate_tasks" {
+                let question = call.1 == "ask_operator" && request.operator_questions;
+                if call.1 != "delegate_tasks" && !question {
                     continue;
                 }
                 let output = witness
                     .tool_outputs
                     .get(call_index)
-                    .ok_or_else(|| error("context delegation output missing"))?;
+                    .ok_or_else(|| error("context receipted tool output missing"))?;
                 if output["call_id"] != *call.0 {
-                    return Err(error("context delegation output correlation mismatch"));
+                    return Err(error("context receipted tool output correlation mismatch"));
                 }
                 match journal.command(
                     &parent.session_id,
                     &format!("{}:tool:{index}:{call_index}", ancestor.id),
                 )? {
                     Some(group) => {
-                        if group.payload["kind"] != "agent_delegation"
+                        let expected_kind = if question {
+                            "agent_operator_question"
+                        } else {
+                            "agent_delegation"
+                        };
+                        if group.payload["kind"] != expected_kind
                             || group.payload["parent_operation"] != ancestor.id
                             || group.payload["call_id"] != *call.0
                         {
-                            return Err(error("context delegation group identity mismatch"));
+                            return Err(error("context receipted tool identity mismatch"));
                         }
-                        let derived = agent_delegation::validate_receipt(store, &group)?;
+                        let derived = if question {
+                            agent_questions::validate_receipt(store, &group)?
+                        } else {
+                            agent_delegation::validate_receipt(store, &group)?
+                        };
                         if output["output"].as_str() != Some(derived.as_str()) {
                             return Err(error(
-                                "context delegation output differs from child receipts",
+                                "context receipted tool output differs from child receipts",
                             ));
                         }
                     }
@@ -265,7 +276,7 @@ pub(super) fn validate(
                             .as_str()
                             .is_some_and(|s| s.starts_with("Tool rejected:"))
                         {
-                            return Err(error("context delegation output lacks settled group"));
+                            return Err(error("context receipted tool output lacks settled group"));
                         }
                     }
                 }

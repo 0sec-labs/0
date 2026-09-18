@@ -209,6 +209,8 @@ fn child_request(parent: &AgentRequest, role: &DelegationRole, prompt: &str) -> 
     request.continuation_of = None;
     request.source_submission_max_hypotheses = None;
     request.context_policy = None;
+    request.operator_questions =
+        parent.operator_questions && role.tools.iter().any(|tool| tool == "ask_operator");
     request
         .plugin_tools
         .retain(|binding| role.tools.contains(&binding.alias));

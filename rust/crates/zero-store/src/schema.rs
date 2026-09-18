@@ -8,7 +8,7 @@ pub fn initialize(conn: &mut Connection) -> Result<()> {
     if application != 0 && application != APPLICATION_ID {
         return Err(Error::ForeignDatabase);
     }
-    if !(0..=7).contains(&version) {
+    if !(0..=8).contains(&version) {
         return Err(Error::Schema(version));
     }
     if application == 0 {
@@ -57,6 +57,13 @@ CREATE INDEX agent_steering_target ON agent_steering(operation_id,sequence);
 CREATE INDEX agent_steering_inference ON agent_steering(inference_operation_id);")?;
         tx.pragma_update(None, "user_version", 7)?;
     }
+    if version < 8 {
+        tx.execute_batch("CREATE TABLE operator_questions(operation_id TEXT PRIMARY KEY REFERENCES operations(id),session_id TEXT NOT NULL REFERENCES sessions(id),actor_operation_id TEXT NOT NULL REFERENCES operations(id),root_operation_id TEXT NOT NULL REFERENCES operations(id),sequence INTEGER NOT NULL CHECK(sequence>0),UNIQUE(session_id,sequence));
+CREATE INDEX operator_questions_root ON operator_questions(session_id,root_operation_id,sequence);
+CREATE INDEX operator_questions_actor ON operator_questions(actor_operation_id);
+CREATE TABLE operator_question_decisions(id TEXT PRIMARY KEY,session_id TEXT NOT NULL REFERENCES sessions(id),command_id TEXT NOT NULL,question_operation_id TEXT NOT NULL UNIQUE REFERENCES operator_questions(operation_id),request_sha256 TEXT NOT NULL,decision TEXT NOT NULL CHECK(length(CAST(decision AS BLOB))<=65536),sequence INTEGER NOT NULL CHECK(sequence>0),UNIQUE(session_id,command_id),UNIQUE(session_id,sequence));")?;
+        tx.pragma_update(None, "user_version", 8)?;
+    }
     tx.commit()?;
     Ok(())
 }
@@ -70,7 +77,7 @@ pub(super) fn validate_current(conn: &Connection) -> Result<()> {
     if application != APPLICATION_ID {
         return Err(Error::ForeignDatabase);
     }
-    if version != 7 {
+    if version != 8 {
         return Err(Error::Schema(version));
     }
     let observed = crate::readonly::definitions(conn)?;

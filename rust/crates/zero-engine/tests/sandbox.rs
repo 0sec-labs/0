@@ -389,6 +389,7 @@ async fn real_microvm_engine_and_agent_ownership_accounting_and_durable_retry() 
         provider: "fixture".into(),
         context_policy: None,
         delegation_policy: None,
+        operator_questions: false,
         model: "loopback".into(),
         instructions: "Only execute the offered snapshot tool".into(),
         prompt: "Inspect this pinned fixture".into(),

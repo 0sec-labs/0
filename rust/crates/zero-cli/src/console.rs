@@ -3,7 +3,13 @@ use crate::{
     framing::{self, Frame},
     server,
 };
-use std::{collections::VecDeque, error::Error, future::Future, pin::Pin, sync::Arc};
+use std::{
+    collections::{BTreeSet, VecDeque},
+    error::Error,
+    future::Future,
+    pin::Pin,
+    sync::Arc,
+};
 use tokio::{
     io::{AsyncWriteExt, BufReader},
     sync::{mpsc, watch},
@@ -33,25 +39,36 @@ pub async fn run(
     let diagnostic_engine = engine.clone();
     let (admitted_tx, admitted_rx) = watch::channel(None::<(String, String)>);
     let (active_tx, active_rx) = watch::channel(None::<String>);
+    let (question_tx, question_rx) = mpsc::channel::<String>(32);
     let drain = tokio::spawn(async move {
         while let Some(event) = event_rx.recv().await {
-            if let ExecutionEvent::Admitted {
-                operation_id,
-                command_id,
-                ..
-            } = event
-            {
-                if active_rx.borrow().as_deref() == Some(command_id.as_str()) {
-                    admitted_tx.send_replace(Some((command_id.clone(), operation_id.clone())));
+            match event {
+                ExecutionEvent::Admitted {
+                    operation_id,
+                    command_id,
+                    ..
+                } => {
+                    if active_rx.borrow().as_deref() == Some(command_id.as_str()) {
+                        admitted_tx.send_replace(Some((command_id.clone(), operation_id.clone())));
+                    }
+                    if let Err(error) = diagnostic(&format!(
+                        "admitted operation {operation_id} command {command_id}"
+                    ))
+                    .await
+                    {
+                        let _ = diagnostic_engine.shutdown().await;
+                        return Err(error);
+                    }
                 }
-                if let Err(error) = diagnostic(&format!(
-                    "admitted operation {operation_id} command {command_id}"
-                ))
-                .await
-                {
-                    let _ = diagnostic_engine.shutdown().await;
-                    return Err(error);
+                ExecutionEvent::OperatorQuestionRequested {
+                    question_operation_id,
+                    ..
+                } => {
+                    if question_tx.send(question_operation_id).await.is_err() {
+                        break;
+                    }
                 }
+                _ => {}
             }
         }
         Ok::<(), std::io::Error>(())
@@ -63,6 +80,7 @@ pub async fn run(
         events.clone(),
         admitted_rx,
         active_tx,
+        question_rx,
     )
     .await;
     let shutdown = engine.shutdown().await;
@@ -80,6 +98,7 @@ async fn conversation(
     events: mpsc::Sender<ExecutionEvent>,
     admitted: watch::Receiver<Option<(String, String)>>,
     active_command: watch::Sender<Option<String>>,
+    mut questions: mpsc::Receiver<String>,
 ) -> Result<bool, Box<dyn Error>> {
     // A single reader owns read_frame across awaits. Cancelling/recreating that
     // future for every completed turn would lose a partially consumed line.
@@ -102,6 +121,7 @@ async fn conversation(
     let mut active: Option<Active> = None;
     let mut eof = false;
     let mut rejected = false;
+    let mut awaiting_questions = BTreeSet::new();
     loop {
         tokio::select! {
             biased;
@@ -116,6 +136,7 @@ async fn conversation(
             reply = async { match active.as_mut() { Some((_,work)) => work.as_mut().await, None => std::future::pending().await } }, if active.is_some() => {
                 let (command, _) = active.take().ok_or("Missing completed console turn")?;
                 active_command.send_replace(None);
+                awaiting_questions.clear();
                 let completed = tokio::select! {
                     biased;
                     _ = &mut signal => return Ok(false),
@@ -136,14 +157,38 @@ async fn conversation(
                     owner.handle(Command::RunQueuedAgent { session_id, input_id:input }, events).await
                 })));
             }
+            Some(id)=questions.recv()=>{
+                let reply=engine.handle(Command::OperatorQuestion{session_id:session.clone(),question_operation_id:id.clone()},events.clone()).await;
+                if let Reply::OperatorQuestion{question}=reply {
+                    if question.status==zero_protocol::questions::OperatorQuestionStatus::Pending {
+                        if eof {return stop_unanswered(&engine,&mut active).await;}
+                        awaiting_questions.insert(id);
+                        diagnostic(&format!("operator question {} actor {} root {} — information only, no permissions granted\n{}\nUse /answer QUESTION_ID {{\"type\":\"answer\",\"answers\":[{{\"question_index\":0,\"selected_indices\":[0]}}]}} or /dismiss QUESTION_ID",question.operation_id,question.actor_operation_id,question.root_operation_id,serde_json::to_string(&question.request)?)).await?;
+                    } else {awaiting_questions.remove(&id);}
+                } else {return Err("Could not load durable operator question notification".into());}
+            }
             frame = input_rx.recv(), if !eof => {
-                let Some(frame) = frame else { eof=true; continue; };
-                let Some(frame) = frame? else { eof=true; continue; };
+                let Some(frame) = frame else { eof=true;if !awaiting_questions.is_empty(){return stop_unanswered(&engine,&mut active).await;} continue; };
+                let Some(frame) = frame? else { eof=true;if !awaiting_questions.is_empty(){return stop_unanswered(&engine,&mut active).await;} continue; };
                 let Frame::Data(bytes) = frame else { return Err("Console prompt exceeds frame byte limit".into()); };
                 let prompt=String::from_utf8(bytes).map_err(|_| "Console prompt must be UTF-8")?;
                 if prompt.trim().is_empty() { continue; }
                 let prompt=match console_line(prompt) {
                     ConsoleLine::Followup(prompt)=>prompt,
+                    ConsoleLine::Question(line)=>{
+                        let (id,decision)=match crate::questions::console_decision(&line){Ok(value)=>value,Err(error)=>{rejected=true;diagnostic(&format!("Answer not sent: {error}. Nothing was queued.")).await?;continue;}};
+                        let question=match engine.handle(Command::OperatorQuestion{session_id:session.clone(),question_operation_id:id.clone()},events.clone()).await {
+                            Reply::OperatorQuestion{question}=>question,
+                            Reply::Error{message,..}=>{rejected=true;diagnostic(&format!("Answer not sent: {message}. Nothing was queued.")).await?;continue;},
+                            _=>return Err("Unexpected question detail response".into()),
+                        };
+                        let command_id=format!("console-answer-{}",uuid::Uuid::new_v4());
+                        match engine.handle(Command::DecideOperatorQuestion{session_id:session.clone(),command_id,question_operation_id:id.clone(),expected_request_sha256:question.request_sha256,decision},events.clone()).await {
+                            Reply::OperatorQuestionDecided{question,..}=>{awaiting_questions.remove(&id);diagnostic(&format!("question decision {} {:?} — answer receipt saved, not proof of model consumption; no permissions granted",question.operation_id,question.status)).await?;},
+                            Reply::Error{message,..}=>{rejected=true;diagnostic(&format!("Answer not sent: {message}. Nothing was queued.")).await?;},
+                            _=>return Err("Unexpected question decision response".into()),
+                        }continue;
+                    }
                     ConsoleLine::Steer(prompt)=>{
                         let operation=active.as_ref().and_then(|(command,_)|admitted.borrow().as_ref().filter(|(seen,_)|seen==command).map(|(_,operation)|operation.clone()));
                         let Some(operation_id)=operation else {rejected=true;diagnostic("Steering not sent: no admitted active turn. Nothing was queued.").await?;continue;};
@@ -180,11 +225,36 @@ async fn conversation(
     }
 }
 
+async fn stop_unanswered(
+    engine: &Arc<Engine>,
+    active: &mut Option<Active>,
+) -> Result<bool, Box<dyn Error>> {
+    diagnostic("Input ended while an operator answer was required; cancelling owned work. No answer or dismissal was fabricated.").await?;
+    engine.shutdown().await?;
+    if let Some((command, work)) = active.take() {
+        let _ = finish(work.await, &command, true).await?;
+    }
+    Ok(false)
+}
+
 enum ConsoleLine {
+    Question(String),
     Followup(String),
     Steer(String),
 }
 fn console_line(prompt: String) -> ConsoleLine {
+    for prefix in ["/answer", "/dismiss"] {
+        if let Some(rest) = prompt.strip_prefix(&format!("/{prefix}")) {
+            if rest.is_empty() || rest.starts_with(char::is_whitespace) {
+                return ConsoleLine::Followup(prompt[1..].into());
+            }
+        }
+        if let Some(rest) = prompt.strip_prefix(prefix) {
+            if rest.is_empty() || rest.starts_with(char::is_whitespace) {
+                return ConsoleLine::Question(prompt);
+            }
+        }
+    }
     if let Some(rest) = prompt.strip_prefix("//steer") {
         if rest.is_empty() || rest.starts_with(char::is_whitespace) {
             return ConsoleLine::Followup(prompt[1..].to_owned());

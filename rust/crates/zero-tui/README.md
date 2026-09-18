@@ -94,3 +94,22 @@ credential management, profile editing, plugin activation or visual scan workflo
 Tool drafts are inert text and never initiate execution. Terminal sanitization
 removes control bytes from displayed server content. The actual sandbox, provider,
 budget, cancellation and cleanup policies remain app-server responsibilities.
+
+Operator questions are explicitly enabled by `AgentRequest.operator_questions`.
+They gather information and grant no permissions. Durable notifications update a
+bounded waiting count without stealing the active composer or Findings draft.
+Ctrl-O opens/closes the inbox; Enter inspects a selected question. Arrows/Tab
+navigate option/custom rows, Space selects, and Enter/bracketed paste only edit
+custom text. Ctrl-S submits; Ctrl-D dismisses. Esc closes and retains the draft;
+Ctrl-U discards only the local draft and returns to the list. Cancellation and
+quit remain global. Answer drafts bind the original question digest and stable
+command ID across error/retry; stale reads cannot reopen terminal questions.
+
+Questions use 20-row / 1 MiB pages plus at most 20 retained pending records; Ctrl-L advances and Ctrl-G refreshes. Known
+pending identities survive older concurrent page responses and receive bounded
+individual refreshes. The selected question/decision is bounded to 192 KiB;
+custom fields to 16 KiB each and whole decision packets to 64 KiB. All model text
+and labels are inert terminal content. Answered means a saved receipt, not proof
+of model consumption. Reopening shows retained receipts; lost workers are not
+implicitly resumed. Tool approval and permission-grant widgets remain separate,
+unimplemented workflows.

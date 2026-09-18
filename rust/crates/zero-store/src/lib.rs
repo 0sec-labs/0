@@ -5,6 +5,7 @@ mod discovery;
 mod history;
 mod lifecycle;
 mod operations;
+mod questions;
 mod queue;
 mod readonly;
 mod schema;
