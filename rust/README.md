@@ -69,3 +69,12 @@ retain pre-dispatch recovery identities and post-settlement lease release eviden
 Journal schema v4 retains immutable source/plan/evidence artifacts with owner-bound
 operation attachments. Attachment bytes and the hash-only event commit atomically;
 ordinary event streams do not expose source bytes. Reads recheck content identity.
+
+The native CI workflow tests the declared minimum Rust 1.85.0 and stable on Linux,
+builds the experimental executable, and checks formatting/production lints. The
+lockfile pins `yoke-derive` 0.8.2: 0.8.3 uses `str::from_utf8`, which failed an
+actual 1.85.0 build despite dependency metadata allowing its selection. Preserve
+this pin until the minimum-toolchain job demonstrates an upgrade works. Default
+CI uses deterministic subprocess/loopback fixtures; opt-in Docker/smolvm tests
+still require separately prepared local runtimes and images. CI does not publish
+or replace the production TypeScript CLI.

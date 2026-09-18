@@ -1,0 +1,52 @@
+name: Native Rust
+
+on:
+  pull_request:
+    paths:
+      - 'rust/**'
+      - '.github/workflows/native.yml'
+  push:
+    branches: [main, the-great-rust-rewrite]
+    paths:
+      - 'rust/**'
+      - '.github/workflows/native.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: native-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  native:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        toolchain: ['1.85.0', stable]
+    defaults:
+      run:
+        working-directory: rust
+    env:
+      CARGO_TERM_COLOR: always
+      RUST_BACKTRACE: '1'
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install toolchain
+        run: rustup toolchain install '${{ matrix.toolchain }}' --profile minimal --no-self-update
+      - name: Test offline contracts
+        run: cargo +${{ matrix.toolchain }} test --workspace --locked
+      - name: Build experimental CLI
+        run: cargo +${{ matrix.toolchain }} build --release --bin 0sec-native --locked
+      - name: Install formatting and lint tools
+        if: matrix.toolchain == 'stable'
+        run: rustup component add --toolchain stable rustfmt clippy
+      - name: Check formatting
+        if: matrix.toolchain == 'stable'
+        run: cargo +stable fmt --all -- --check
+      - name: Lint production code
+        if: matrix.toolchain == 'stable'
+        run: cargo +stable clippy --workspace --lib --bins --locked -- -D warnings -A clippy::unwrap_used -A clippy::expect_used
