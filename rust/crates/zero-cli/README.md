@@ -103,3 +103,30 @@ cancellation keeps the operation/accounting unresolved and the reservation
 held. One-shot agent exit is successful only for a succeeded parent operation.
 The subprocess tests use a localhost fixture for a no-tool completion and a
 cancelled provider stream; they make no external provider calls.
+
+## Native prerequisite diagnostics
+
+`0sec-native doctor` prints JSON with native platform/build, provider profile and
+credential-presence validation, Docker client/selected context/server probes,
+smolvm 1.14.6 version, non-root Linux and KVM read/write access. Use global
+`--providers` and `--docker-bin`, and doctor options `--smolvm-bin` and
+`--timeout-ms` (10–30000, default 2000 per concurrent executable probe).
+Raw executable output, provider URLs, profile names and credential values are
+never printed. Provider checks make no network calls; Docker server availability
+uses the operator's selected Docker context and can contact that daemon.
+
+The state check creates/removes a private temporary file in the nearest existing
+parent, without creating state directories or opening/migrating the database.
+It assesses current writability, not future race-free access or database health.
+KVM access does not prove working virtualization. Smolvm's version check does
+not verify the qualified archive digest, images, kernel, rootfs or guest boot.
+No tools are installed, no images pulled and no resources provisioned.
+
+Exit 1 means an invalid requested provider configuration, unwritable state
+location, or unavailable explicitly selected Docker executable/context/server.
+Missing optional default backends are reported as unavailable but do not make
+an inference-only installation fail. Exit 0 is prerequisite status, not proof of
+valid provider credentials or a working security scan. Argument/setup errors
+exit 2. Legacy Node/Bun/TUI and external Claude/Codex/Gemini CLI checks are not
+implemented: those are not requirements of the current native engine. Legacy
+`doctor` had no flags requiring compatibility. Help/schema still bypass config.

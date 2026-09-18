@@ -1,4 +1,5 @@
 mod args;
+mod doctor;
 mod framing;
 mod providers;
 mod server;
@@ -38,6 +39,13 @@ async fn run(args: Args) -> Result<bool, Box<dyn Error>> {
         let pin = zero_executor::pin_snapshot(root).map_err(std::io::Error::other)?;
         println!("{}", serde_json::to_string(&pin)?);
         return Ok(true);
+    }
+    if let Command::Doctor {
+        timeout_ms,
+        smolvm_bin,
+    } = &args.command
+    {
+        return doctor::run(&args, *timeout_ms, smolvm_bin).await;
     }
     let engine = Arc::new(Engine::open(&args.state, args.docker_bin)?);
     if let Some(path) = args.providers {
@@ -120,7 +128,10 @@ async fn run(args: Args) -> Result<bool, Box<dyn Error>> {
                     .map_err(|_| "Invalid agent request JSON")?,
             }
         }
-        Command::Schema | Command::Snapshot { .. } | Command::AppServer => unreachable!(),
+        Command::Schema
+        | Command::Snapshot { .. }
+        | Command::Doctor { .. }
+        | Command::AppServer => unreachable!(),
     };
     let (events, mut event_rx) = mpsc::channel(128);
     // One-shot commands reserve stdout for their final JSON result.

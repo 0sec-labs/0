@@ -23,6 +23,13 @@ pub struct Args {
 
 #[derive(Debug, Subcommand)]
 pub enum Command {
+    /// Inspect native prerequisites locally without opening the state database.
+    Doctor {
+        #[arg(long, default_value_t = 2000, value_parser = clap::value_parser!(u64).range(10..=30000))]
+        timeout_ms: u64,
+        #[arg(long, default_value = "smolvm")]
+        smolvm_bin: PathBuf,
+    },
     /// Print the versioned application protocol JSON Schema.
     Schema,
     /// Generate a content-addressed execution snapshot manifest.

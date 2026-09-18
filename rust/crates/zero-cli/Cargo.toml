@@ -21,8 +21,9 @@ zero-engine = { path = "../zero-engine" }
 zero-executor.workspace = true
 zero-provider.workspace = true
 
-[dev-dependencies]
 tempfile.workspace = true
+
+[dev-dependencies]
 
 [lints]
 workspace = true

@@ -28,10 +28,19 @@ pub async fn read_bounded(path: &Path) -> Result<Vec<u8>, Box<dyn Error>> {
     Ok(bytes)
 }
 
-pub async fn configure(engine: &Engine, path: &Path) -> Result<(), Box<dyn Error>> {
+pub async fn load(path: &Path) -> Result<Vec<(String, ProviderClient, Rates)>, Box<dyn Error>> {
     let profiles: BTreeMap<String, Profile> = serde_json::from_slice(&read_bounded(path).await?)
         .map_err(|_| "Invalid provider configuration JSON")?;
+    let mut loaded = Vec::new();
     for (name, profile) in profiles {
+        if name.is_empty()
+            || name.len() > 128
+            || !name
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-')
+        {
+            return Err("Invalid provider profile name".into());
+        }
         // Report fixed messages: configuration can contain misplaced credentials.
         if profile.api_key_env.is_empty()
             || !profile
@@ -57,7 +66,14 @@ pub async fn configure(engine: &Engine, path: &Path) -> Result<(), Box<dyn Error
             Duration::from_millis(profile.timeout_ms),
             profile.max_response_bytes,
         )?;
-        engine.configure_provider(&name, client, profile.rates)?;
+        loaded.push((name, client, profile.rates));
+    }
+    Ok(loaded)
+}
+
+pub async fn configure(engine: &Engine, path: &Path) -> Result<(), Box<dyn Error>> {
+    for (name, client, rates) in load(path).await? {
+        engine.configure_provider(&name, client, rates)?;
     }
     Ok(())
 }
