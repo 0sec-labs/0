@@ -1,4 +1,5 @@
 //! Session-owned native execution. Client disconnect is not a request replay.
+mod agent;
 mod inference;
 mod lifecycle;
 
@@ -141,6 +142,8 @@ impl Engine {
             "offline_docker_snapshot",
             "execution_cancellation",
             "finding_reconciliation",
+            "responses_inference",
+            "bounded_offline_snapshot_agent",
         ]
         .map(String::from)
         .to_vec()
@@ -170,6 +173,16 @@ impl Engine {
         {
             return self
                 .execute(session_id, command_id, request, event_tx)
+                .await;
+        }
+        if let Command::RunAgent {
+            session_id,
+            command_id,
+            request,
+        } = command
+        {
+            return self
+                .run_agent(session_id, command_id, request, event_tx)
                 .await;
         }
         if let Command::Infer {
@@ -235,7 +248,7 @@ impl Engine {
             Command::Reconcile(request) => zero_evidence::reconcile(request)
                 .map(Reply::Reconciled)
                 .map_err(|e| EngineError::State(e.to_string())),
-            Command::Execute { .. } | Command::Infer { .. } => {
+            Command::Execute { .. } | Command::Infer { .. } | Command::RunAgent { .. } => {
                 unreachable!("execution dispatched before acquiring synchronous locks")
             }
         }

@@ -182,7 +182,7 @@ where
         }
         if matches!(
             request.command,
-            Command::Execute { .. } | Command::Infer { .. }
+            Command::Execute { .. } | Command::Infer { .. } | Command::RunAgent { .. }
         ) {
             if tasks.len() >= MAX_EXECUTIONS {
                 if out

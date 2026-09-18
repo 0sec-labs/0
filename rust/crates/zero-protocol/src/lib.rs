@@ -5,6 +5,7 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
+pub mod agent;
 mod binary;
 pub mod execution;
 pub mod model;
@@ -60,6 +61,11 @@ pub enum Command {
         session_id: String,
         command_id: String,
         request: ExecutionRequest,
+    },
+    RunAgent {
+        session_id: String,
+        command_id: String,
+        request: agent::AgentRequest,
     },
     Infer {
         session_id: String,
@@ -151,6 +157,11 @@ pub enum Reply {
     Execution {
         operation: Operation,
         result: Option<ExecutionResult>,
+        duplicate: bool,
+    },
+    Agent {
+        operation: Operation,
+        result: Option<agent::AgentResult>,
         duplicate: bool,
     },
     Inference {

@@ -57,6 +57,15 @@ pub enum Command {
         #[arg(long)]
         request: PathBuf,
     },
+    /// Run an experimental bounded model/tool workflow with a pinned offline snapshot.
+    Agent {
+        #[arg(long)]
+        session: String,
+        #[arg(long)]
+        command_id: String,
+        #[arg(long)]
+        request: PathBuf,
+    },
     /// Serve versioned NDJSON on stdin/stdout; initialize before other requests.
     AppServer,
 }

@@ -27,6 +27,7 @@ Contract references checked 2026-09-18 using the OpenAI Docs skill:
 
 - [Function calling](https://developers.openai.com/api/docs/guides/function-calling)
 - [Streaming Responses](https://developers.openai.com/api/docs/guides/streaming-responses)
+- [Stateless reasoning replay](https://developers.openai.com/api/docs/guides/reasoning)
 
 Existing 0sec provider tests remain the broader parity reference, especially
 `packages/core/src/runtime/responses-provider.test.ts` and

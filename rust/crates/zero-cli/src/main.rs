@@ -107,6 +107,19 @@ async fn run(args: Args) -> Result<bool, Box<dyn Error>> {
                     .map_err(|_| "Invalid inference request JSON")?,
             }
         }
+        Command::Agent {
+            session,
+            command_id,
+            request,
+        } => {
+            let bytes = providers::read_bounded(&request).await?;
+            EngineCommand::RunAgent {
+                session_id: session,
+                command_id,
+                request: serde_json::from_slice(&bytes)
+                    .map_err(|_| "Invalid agent request JSON")?,
+            }
+        }
         Command::Schema | Command::Snapshot { .. } | Command::AppServer => unreachable!(),
     };
     let (events, mut event_rx) = mpsc::channel(128);
@@ -125,7 +138,9 @@ async fn run(args: Args) -> Result<bool, Box<dyn Error>> {
     drain.await?;
     let success = match &reply {
         Reply::Error { .. } => false,
-        Reply::Execution { operation, .. } | Reply::Inference { operation, .. } => {
+        Reply::Execution { operation, .. }
+        | Reply::Inference { operation, .. }
+        | Reply::Agent { operation, .. } => {
             matches!(operation.status, zero_protocol::OperationStatus::Succeeded)
         }
         _ => true,

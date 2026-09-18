@@ -81,3 +81,25 @@ provider call. Changed payloads conflict. Incomplete or failed outcomes exit
 nonzero; unknown usage does not become a zero charge. The app-server `infer`
 method uses the same fields; `cancel.execution_id` is the inference command ID.
 No OAuth or implicit provider routing is implemented.
+
+## Experimental bounded agent
+
+```sh
+0sec-native --providers providers.json agent --session SESSION_ID --command-id UNIQUE_ID --request agent.json
+```
+
+The request fields are `provider`, `model`, `instructions`, `prompt`,
+`max_turns`, `reservation_per_turn`, and `execution` (a complete execution
+request with a pinned snapshot; see `schema` and `snapshot pin`). All limits and
+provider selection are explicit. The model may request the offered execution
+tool's argv; the operator supplies image, snapshot, network policy and resource
+limits. Tools run in an offline disposable container from that pinned snapshot.
+This is an experimental model/tool loop, not production security scan parity.
+Its text is a model assessment, not independently verified security evidence.
+
+App-server `run_agent` runs concurrently with other requests; cancellation uses
+the parent agent command ID as `execution_id`. Unknown provider usage after
+cancellation keeps the operation/accounting unresolved and the reservation
+held. One-shot agent exit is successful only for a succeeded parent operation.
+The subprocess tests use a localhost fixture for a no-tool completion and a
+cancelled provider stream; they make no external provider calls.
