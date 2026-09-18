@@ -33,6 +33,7 @@ fn plan(f: &Bound) -> StrategySearchPlan {
         limits: f.setup.plan.limits.clone(),
         expires_at_ms: f.setup.plan.expires_at_ms,
         minimum_development_gain: 1,
+        protected_final: None,
     }
 }
 

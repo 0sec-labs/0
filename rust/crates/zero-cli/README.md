@@ -1099,9 +1099,9 @@ Preparation returns `evidence_sha256` and the exact descriptor; it creates no gr
 
 Historical unbound campaigns remain `qualification_only`; binding cannot be retrofitted. Only complete independently improved, correctly bound Development/Final evidence with settled accounting and cleanup can grant the narrow measured scope. Registry identity, baseline epoch/state, whole generation diff, host policy and exposure are revalidated atomically. Exact successful import retry resolves from the registry before requiring the source or current provider configuration, and returns the original receipt with current usability. Changed intent conflicts. A stale receipt remains historical evidence; it is not fresh permission.
 
-Status, preparation and receipt inspection run without engine ownership or unrelated provider/HTTP/harness loading. Mutable registry status is labelled with observation time; a receipt's measurement and current usability are distinct. Measured eligibility is not runtime activation, generic security truth, or proof that a required canary ran. Import preserves the current generation/state/leases. No candidate `activate`, proposal search or canary success stub is exposed in this CLI.
+Status, preparation and receipt inspection run without engine ownership or unrelated provider/HTTP/harness loading. Mutable registry status is labelled with observation time; a receipt's measurement and current usability are distinct. Measured eligibility is not runtime activation, generic security truth, or proof that a required canary ran. Import preserves the current generation/state/leases. No candidate `activate` or canary success stub is exposed in this CLI.
 
-### Autonomous Development search
+### Autonomous advisory search
 
 `strategy search` asks a configured proposal model for bounded advisory candidates, measures each against the captured baseline on Development fixtures, and feeds back independently reconstructed Development results. A proposal can stop the loop before its limit. It changes only advisory text; the host template, provider routes/rates, tool authority, private fixtures and scoring remain frozen.
 
@@ -1118,6 +1118,20 @@ The strict private search plan contains `schema_version`, a public `objective`, 
 
 Create freezes the plan and account without calling a model. Run explicitly starts that bounded loop; it does not request approval for each candidate. One durable campaign account covers proposal inferences and every candidate's baseline/evaluation actors, delegates, HTTP and experiments. New actor sessions do not refill it. Failed proposals consume admitted attempts and actual known usage; uncertain usage retains its reservation. Actual provider charges can exceed an estimate, so reservations are admission limits rather than an invoice guarantee. Unspent allowances do not require the model to keep searching.
 
-These commands implement **Development search only**. Final, canary, automatic promotion and activation options are unsupported and rejected. A useful Development candidate is not measured eligibility or an active strategy. The existing fixed-pair `strategy create/run` workflow remains separate; a search report must not be passed off as its protected Final evidence.
+A version 1 plan implements **Development search only**, with its existing behavior unchanged. A version 2 plan requires an additional private `protected_final` object: `scenarios` (Final lane only), `repeats` (2–3), and `minimum_gain`. Its exact Final corpus commitment must already be accepted by the captured host authority. Final scenarios require distinct families/markers and both positive and negative controls. All Development and possible Final runs must fit the same frozen account and run-slot limit.
+
+For version 2, the native proposal tool also accepts `{"action":"select_final","evaluation_id":"EVALUATION_ID","rationale":"..."}`. The model can select only a previously completed, independently improved Development evaluation from its authenticated feedback. Selection permanently seals proposals and consumes the protected exposure before fresh Final work. Stop, candidate limits and proposal limits never automatically select a winner. A candidate cap still permits a version 2 model to select or stop while proposal and spending allowances remain. No `--force-final`, Final lane override, canary, automatic promotion or activation flag is supported.
+
+Reports retain every proposal, including unsuccessful attempts, every Development evaluation, selection, available Final measurements and total charges/holds. Selection and allocated run slots do not prove that Final completed. Final results never return to the proposer. Partial, cancelled or uncertain work remains visible and cannot become a successful measurement by retrying the command.
+
+A complete version 2 search uses its own source-verified evidence route:
+
+```sh
+0sec-native --state state.db strategy search eligibility prepare --registry /absolute/registry.db --campaign CAMPAIGN
+0sec-native --state state.db strategy search eligibility import --registry /absolute/registry.db --campaign CAMPAIGN --command-id search-import-1 --expected-evidence EVIDENCE_SHA
+0sec-native strategy search eligibility show --registry /absolute/registry.db --receipt RECEIPT_SHA --format text
+```
+
+Preparation and import independently reassess the complete search history, not a selected pair projected into an older report. The bounded portable closure includes all proposal and evaluation sessions, protected selection/exposure and aggregate accounting; export fails explicitly above its supported 64 MiB expanded bound. Registry inspection can reassess the retained closure after the original source and provider configuration are removed. Exact successful import retry resolves from the registry first; changed intent conflicts. Import preserves the active generation, state and leases. Measured eligibility is not activation, a completed canary, or a general security conclusion. The existing fixed-pair `strategy eligibility` route remains separate.
 
 Status, candidate pages/details and reports work without engine ownership or provider/host configuration. They show aggregate charges and unresolved holds, separately from proposal rationale and measured results. Text output is bounded and terminal-safe. Use the returned page cursor until absent. A retained terminal run can be read or retried without replaying model/target calls; restart does not retry Unknown work. Ctrl-C/SIGTERM during the owning run signals cancellation and waits for owned cleanup, then prints the retained partial result and exits nonzero. An accepted cancel is not proof that billing stopped, and readonly inspection is not second-process cancellation IPC.

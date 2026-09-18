@@ -170,6 +170,21 @@ pub async fn run_eligibility(
     state: &Path,
     command: &EligibilityCommand,
 ) -> Result<bool, Box<dyn Error>> {
+    eligibility(state, command, false).await
+}
+
+pub async fn run_search_eligibility(
+    state: &Path,
+    command: &EligibilityCommand,
+) -> Result<bool, Box<dyn Error>> {
+    eligibility(state, command, true).await
+}
+
+async fn eligibility(
+    state: &Path,
+    command: &EligibilityCommand,
+    search: bool,
+) -> Result<bool, Box<dyn Error>> {
     match command {
         EligibilityCommand::Prepare {
             registry,
@@ -180,7 +195,16 @@ pub async fn run_eligibility(
             let registry = registry.clone();
             let campaign = campaign.clone();
             let value = tokio::task::spawn_blocking(move || {
-                zero_engine::prepare_strategy_eligibility(&state, &registry, &campaign)
+                if search {
+                    serde_json::to_value(zero_engine::prepare_strategy_search_eligibility(
+                        &state, &registry, &campaign,
+                    )?)
+                } else {
+                    serde_json::to_value(zero_engine::prepare_strategy_eligibility(
+                        &state, &registry, &campaign,
+                    )?)
+                }
+                .map_err(zero_engine::EngineError::from)
             })
             .await??;
             output(
@@ -206,15 +230,16 @@ pub async fn run_eligibility(
             let expected = expected_evidence.clone();
             // The bridge resolves exact retained command identity before any source/config lookup.
             let mut task = tokio::task::spawn_blocking(move || {
-                zero_engine::import_strategy_eligibility(
-                    &state,
-                    &registry,
-                    &zero_protocol::strategy_registry::StrategyImportRequest {
-                        command_id: command,
-                        campaign_id: campaign,
-                        expected_evidence_sha256: expected,
-                    },
-                )
+                let request = zero_protocol::strategy_registry::StrategyImportRequest {
+                    command_id: command,
+                    campaign_id: campaign,
+                    expected_evidence_sha256: expected,
+                };
+                if search {
+                    zero_engine::import_strategy_search_eligibility(&state, &registry, &request)
+                } else {
+                    zero_engine::import_strategy_eligibility(&state, &registry, &request)
+                }
             });
             let mut interrupted = false;
             let value = tokio::select! {
@@ -240,7 +265,11 @@ pub async fn run_eligibility(
             let registry = registry.clone();
             let receipt = receipt.clone();
             let value = tokio::task::spawn_blocking(move || {
-                zero_engine::read_strategy_eligibility_receipt(&registry, &receipt)
+                if search {
+                    zero_engine::read_strategy_search_eligibility_receipt(&registry, &receipt)
+                } else {
+                    zero_engine::read_strategy_eligibility_receipt(&registry, &receipt)
+                }
             })
             .await??;
             output(

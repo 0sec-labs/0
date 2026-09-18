@@ -9,6 +9,7 @@ use zero_protocol::{
 pub fn plan(f: &Bound) -> StrategySearchPlan {
     StrategySearchPlan {
         schema_version: 1,
+        protected_final: None,
         objective: "Improve investigation choices, or stop when work is not useful.".into(),
         proposer: SearchProposer {
             provider: "fixture".into(),

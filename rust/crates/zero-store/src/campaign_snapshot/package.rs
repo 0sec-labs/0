@@ -52,22 +52,22 @@ impl CampaignSnapshotData {
             return Err(invalid("manifest exceeds bound"));
         }
         let parsed: Manifest = serde_json::from_slice(manifest)?;
-        if parsed.schema_version != 1
-            || parsed.store_schema != SNAPSHOT_STORE_LAYOUT
-            || parsed.campaign_id.is_empty()
+        let layout = Layout::from_manifest(&parsed)?;
+        let tables = layout.tables();
+        if parsed.campaign_id.is_empty()
             || parsed.campaign_id.len() > 256
             || parsed.sessions.is_empty()
-            || parsed.sessions.len() > 129
+            || parsed.sessions.len() > layout.max_sessions()
             || parsed
                 .sessions
                 .iter()
                 .any(|s| s.is_empty() || s.len() > 256)
             || parsed.sessions.windows(2).any(|v| v[0] >= v[1])
-            || parsed.tables.len() != TABLES.len()
+            || parsed.tables.len() != tables.len()
             || parsed
                 .tables
                 .iter()
-                .zip(TABLES)
+                .zip(&tables)
                 .any(|(table, expected)| table.name != *expected)
             || parsed.artifacts.len() > MAX_RECORDS
             || parsed.record_count as usize > MAX_RECORDS

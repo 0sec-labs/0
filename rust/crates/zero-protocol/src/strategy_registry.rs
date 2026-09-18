@@ -275,3 +275,18 @@ pub fn render_strategy_request(
 }
 
 pub type StrategySessionCapture = StrategyCapture;
+
+/// Complete adaptive history; never interchangeable with a projected fixed-pair report.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct StrategySearchEvidenceDescriptor {
+    pub schema_version: u32,
+    pub binding: StrategyRegistryBinding,
+    pub campaign_id: String,
+    pub snapshot_sha256: String,
+    pub report_sha256: String,
+    pub suite_sha256: String,
+    pub pair_sha256: String,
+    pub config_sha256: String,
+    pub selection_sha256: String,
+}

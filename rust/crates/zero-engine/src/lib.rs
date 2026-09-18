@@ -35,6 +35,13 @@ pub use strategy::{
     export_strategy_evidence, import_strategy_eligibility, prepare_strategy_eligibility,
     read_strategy_eligibility, read_strategy_eligibility_receipt, reassess_strategy_evidence,
 };
+pub use strategy::{
+    RecomputedStrategySearchEvidence, StrategySearchEligibilityPreparation,
+    VerifiedStrategySearchEvidence, export_strategy_search_evidence,
+    import_strategy_search_eligibility, prepare_strategy_search_eligibility,
+    read_strategy_search_eligibility, read_strategy_search_eligibility_receipt,
+    reassess_strategy_search_evidence,
+};
 pub use strategy_runtime::read_strategy_session;
 mod triage;
 mod web_experiment;

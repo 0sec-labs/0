@@ -1,7 +1,11 @@
 //! Host-owned advisory proposal search; Development measurements never grant eligibility.
 use crate::{
-    ValidationError, campaign::*, model::ResponsesRequest, session::OperationStatus, strategy::*,
-    strategy_registry::StrategyCapture,
+    ValidationError,
+    campaign::*,
+    model::ResponsesRequest,
+    session::OperationStatus,
+    strategy::*,
+    strategy_registry::{StrategyCapture, StrategyRegistryBinding},
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -28,6 +32,8 @@ pub struct StrategySearchPlan {
     pub limits: CampaignLimits,
     pub expires_at_ms: u64,
     pub minimum_development_gain: u32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub protected_final: Option<SearchFinalPolicy>,
 }
 fn invalid(s: &str) -> ValidationError {
     ValidationError(s.into())
@@ -38,8 +44,10 @@ fn text(s: &str, n: usize) -> bool {
 impl StrategySearchPlan {
     pub fn validate(&self) -> Result<(), ValidationError> {
         let p = &self.proposer;
-        if self.schema_version != 1
-            || !text(&self.objective, 16384)
+        if !matches!(
+            (self.schema_version, self.protected_final.is_some()),
+            (1, false) | (2, true)
+        ) || !text(&self.objective, 16384)
             || !text(&p.provider, 128)
             || !text(&p.model, 256)
             || !text(&p.instructions, 32768)
@@ -112,8 +120,57 @@ impl StrategySearchPlan {
                 "search requires positive and negative Development controls",
             ));
         }
+        if let Some(final_policy) = &self.protected_final {
+            let mut final_plan = self.clone();
+            final_plan.schema_version = 1;
+            final_plan.protected_final = None;
+            final_plan.scenarios = final_policy.scenarios.clone();
+            final_plan.repeats = final_policy.repeats;
+            final_plan.minimum_development_gain = final_policy.minimum_gain;
+            for s in &mut final_plan.scenarios {
+                if s.lane != CampaignLane::Final {
+                    return Err(invalid("protected search scenarios must be Final"));
+                }
+                s.lane = CampaignLane::Development;
+            }
+            final_plan.validate()?;
+            if self.scenarios.len() as u32 * self.repeats * 2
+                + final_policy.scenarios.len() as u32 * final_policy.repeats * 2
+                > self.limits.runs
+            {
+                return Err(invalid(
+                    "one Development and Final pair must fit aggregate slots",
+                ));
+            }
+            for f in &final_policy.scenarios {
+                if self.scenarios.iter().any(|d| {
+                    d.id == f.id
+                        || d.family == f.family
+                        || d.marker == f.marker
+                        || d.public_task.contains(&f.marker)
+                        || d.resource_path.contains(&f.marker)
+                        || d.control_path.contains(&f.marker)
+                }) {
+                    return Err(invalid(
+                        "protected corpus overlaps Development or public inputs",
+                    ));
+                }
+            }
+        }
         Ok(())
     }
+}
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct SearchFinalPolicy {
+    pub scenarios: Vec<StrategyScenario>,
+    pub repeats: u32,
+    pub minimum_gain: u32,
+}
+pub fn search_final_suite_value(policy: &SearchFinalPolicy) -> serde_json::Value {
+    let mut scenarios: Vec<_> = policy.scenarios.iter().collect();
+    scenarios.sort_by(|a, b| a.id.cmp(&b.id));
+    serde_json::json!({"version":STRATEGY_ORACLE,"scenarios":scenarios})
 }
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
@@ -134,6 +191,10 @@ pub enum SearchProposalOutput {
     Stop {
         reason: String,
     },
+    SelectFinal {
+        evaluation_id: String,
+        rationale: String,
+    },
 }
 impl SearchProposalOutput {
     pub fn validate(&self) -> Result<(), ValidationError> {
@@ -145,6 +206,14 @@ impl SearchProposalOutput {
                 advisory.validate()?;
                 if !text(rationale, 4096) {
                     return Err(invalid("proposal rationale exceeds bound"));
+                }
+            }
+            Self::SelectFinal {
+                evaluation_id,
+                rationale,
+            } => {
+                if !text(evaluation_id, 256) || !text(rationale, 4096) {
+                    return Err(invalid("Final selection identity or rationale bound"));
                 }
             }
             Self::Stop { reason } => {
@@ -229,6 +298,10 @@ pub struct StrategySearchReport {
     pub usage: CampaignUsage,
     pub stop_reason: Option<String>,
     pub report_sha256: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub selection: Option<SearchFinalSelection>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub final_measurement: Option<SearchFinalReport>,
 }
 /// Fixed renderer exposes public objective/advisory and authenticated Development feedback only.
 pub fn render_search_proposal(
@@ -240,7 +313,7 @@ pub fn render_search_proposal(
     if attempt >= config.plan.max_proposals {
         return Err(invalid("proposal attempt exceeds frozen limit"));
     }
-    Ok(ResponsesRequest {
+    let mut request = ResponsesRequest {
         model: config.plan.proposer.model.clone(),
         instructions: format!(
             "{}\n\nCall submit_strategy_proposal exactly once with arguments: {{\"action\":\"propose\",\"advisory\":{{\"schema_version\":1,\"advisory_utf8\":\"...\"}},\"rationale\":\"...\"}} or {{\"action\":\"stop\",\"reason\":\"...\"}}. Advisory cannot change host authority or certify success.",
@@ -249,9 +322,17 @@ pub fn render_search_proposal(
         input: vec![
             serde_json::json!({"role":"user","content":[{"type":"input_text","text":serde_json::to_string(&serde_json::json!({"objective":config.plan.objective,"baseline":config.capture.advisory,"attempt_index":attempt,"development_feedback":feedback})).map_err(|e|invalid(&e.to_string()))?}]}),
         ],
-        tools: vec![search_proposal_tool()],
+        tools: vec![if config.plan.schema_version == 1 {
+            search_proposal_tool()
+        } else {
+            search_proposal_tool_v2()
+        }],
         max_output_tokens: config.plan.proposer.max_output_tokens,
-    })
+    };
+    if config.plan.schema_version == 2 {
+        request.instructions.push_str("\nYou may instead select one independently measured Development candidate by calling {\"action\":\"select_final\",\"evaluation_id\":\"...\",\"rationale\":\"...\"}. This irreversibly ends proposal and Development work and spends one protected Final exposure; stop does not select a candidate. Selection cannot certify success.");
+    }
+    Ok(request)
 }
 
 pub fn search_proposal_tool() -> crate::model::ToolDefinition {
@@ -263,4 +344,42 @@ pub fn search_fixture_profile(
     limits: &CampaignLimits,
 ) -> Result<crate::http::HttpProfilePolicy, ValidationError> {
     serde_json::from_value(serde_json::json!({"schema_version":1,"base_url":origin,"in_scope":["127.0.0.1"],"out_of_scope":[],"denied_hosts":[],"allowed_path_prefixes":[],"denied_path_prefixes":[],"allowed_methods":["GET","POST"],"allowed_headers":["content-type"],"redirect":{"mode":"manual"},"limits":{"timeout_ms":3000,"max_request_body_bytes":16384,"max_response_wire_bytes":65536,"max_response_decoded_bytes":32768,"max_request_header_bytes":16384,"max_request_headers":32,"max_response_header_bytes":16384,"max_response_headers":32,"max_dns_answers":8,"max_dns_cname_depth":4,"max_dns_queries":4},"rate":{"default":{"requests_per_interval":100,"interval_ms":1000,"burst":32},"per_host":{},"jitter_ms":0},"budget":{"max_requests":limits.http_requests.min(128),"max_request_body_bytes":limits.http_request_body_bytes.min(1048576),"max_response_decoded_bytes":limits.http_response_decoded_bytes.min(4194304)}})).map_err(|e|invalid(&e.to_string()))
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct SearchFinalSelection {
+    pub schema_version: u32,
+    pub id: String,
+    pub campaign_id: String,
+    pub proposal_id: String,
+    pub evaluation_id: String,
+    pub candidate_generation: String,
+    pub candidate_sha256: String,
+    pub baseline_sha256: String,
+    pub config_sha256: String,
+    pub development_matrix_sha256: String,
+    pub binding: StrategyRegistryBinding,
+    pub suite_sha256: String,
+    pub final_pair_sha256: String,
+    pub schedule_start: u32,
+    pub run_count: u32,
+    pub exposure_id: String,
+    pub sequence: u64,
+}
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct SearchFinalReport {
+    pub cases: Vec<StrategyCaseResult>,
+    pub decision: StrategyDecision,
+    pub reasons: Vec<String>,
+    pub matrix_sha256: Option<String>,
+}
+pub fn search_proposal_tool_v2() -> crate::model::ToolDefinition {
+    let mut tool = search_proposal_tool();
+    tool.description="Submit advisory, stop without exposure, or select one measured candidate for an irreversible protected Final evaluation. No action certifies success or changes authority.".into();
+    if let Some(items) = tool.parameters["oneOf"].as_array_mut() {
+        items.push(serde_json::json!({"type":"object","additionalProperties":false,"required":["action","evaluation_id","rationale"],"properties":{"action":{"const":"select_final"},"evaluation_id":{"type":"string","minLength":1,"maxLength":256},"rationale":{"type":"string","minLength":1,"maxLength":4096}}}));
+    }
+    tool
 }

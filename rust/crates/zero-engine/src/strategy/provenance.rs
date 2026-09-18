@@ -244,6 +244,7 @@ pub(super) fn measure_run(
     journal: &[SessionEvent],
     budget: &mut usize,
 ) -> Result<StrategyCaseResult, EngineError> {
+    store.validate_session_admission_closure(&run.session_id)?;
     let spec = &run.spec;
     let money = store.budget(&run.session_id)?;
     let mut row = StrategyCaseResult {

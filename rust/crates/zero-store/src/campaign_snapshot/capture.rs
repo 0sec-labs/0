@@ -4,7 +4,7 @@ use rusqlite::{
     types::{Value, ValueRef},
 };
 pub(super) fn columns(conn: &Connection, table: &str) -> Result<Vec<String>> {
-    if !TABLES.contains(&table) {
+    if !TABLES.contains(&table) && !SEARCH_TABLES.contains(&table) {
         return Err(invalid("unsupported table"));
     }
     let mut q = conn.prepare(&format!("PRAGMA table_info({table})"))?;
@@ -71,7 +71,7 @@ fn read_rows(
     }
     Ok(output)
 }
-fn strings(
+pub(super) fn strings(
     conn: &Connection,
     sql: &str,
     parameters: &[Value],
@@ -93,16 +93,27 @@ fn strings(
     }
     Ok(result)
 }
-fn raw_identity(column: &str) -> String {
+pub(super) fn raw_identity(column: &str) -> String {
     format!("CASE WHEN length(CAST({column} AS BLOB))<=256 THEN {column} END")
 }
 impl Store {
     pub fn freeze_campaign(&self, campaign: &str) -> Result<CampaignSnapshotData> {
         self.freeze_campaign_inner(campaign, || {})
     }
+    pub fn freeze_strategy_search(&self, campaign: &str) -> Result<CampaignSnapshotData> {
+        self.freeze_layout(campaign, Layout::Search, || {})
+    }
     fn freeze_campaign_inner(
         &self,
         campaign: &str,
+        after_pin: impl FnOnce(),
+    ) -> Result<CampaignSnapshotData> {
+        self.freeze_layout(campaign, Layout::FixedPair, after_pin)
+    }
+    pub(super) fn freeze_layout(
+        &self,
+        campaign: &str,
+        layout: Layout,
         after_pin: impl FnOnce(),
     ) -> Result<CampaignSnapshotData> {
         if campaign.is_empty() || campaign.len() > 256 {
@@ -114,9 +125,9 @@ impl Store {
         // Search adds proposal spending and multiple pairs; omitting either
         // would allow a partial history to masquerade as measured eligibility.
         let search: bool = tx.query_row(
-            "SELECT EXISTS(SELECT 1 FROM strategy_searches WHERE campaign_id=?1) OR EXISTS(SELECT 1 FROM strategy_search_proposals WHERE campaign_id=?1) OR EXISTS(SELECT 1 FROM strategy_search_evaluations WHERE campaign_id=?1)",
+            "SELECT EXISTS(SELECT 1 FROM strategy_searches WHERE campaign_id=?1) OR EXISTS(SELECT 1 FROM strategy_search_proposals WHERE campaign_id=?1) OR EXISTS(SELECT 1 FROM strategy_search_evaluations WHERE campaign_id=?1) OR EXISTS(SELECT 1 FROM strategy_search_selections WHERE campaign_id=?1)",
             [campaign], |r| r.get(0))?;
-        if search {
+        if search && layout == Layout::FixedPair {
             return Err(invalid(
                 "search evidence requires its own complete portable layout",
             ));
@@ -130,21 +141,28 @@ impl Store {
             return Err(invalid("campaign identity differs"));
         }
         let search_witness: bool = tx.query_row(
-            "SELECT EXISTS(SELECT 1 FROM events WHERE session_id=?1 AND kind IN ('strategy_search_created','strategy_search_proposal_admitted','strategy_search_evaluation_registered'))",
+            "SELECT EXISTS(SELECT 1 FROM events WHERE session_id=?1 AND kind IN ('strategy_search_created','strategy_search_proposal_admitted','strategy_search_evaluation_registered','strategy_search_final_selected'))",
             [&journal], |r| r.get(0))?;
         let config = crate::artifacts::read(&tx, &c.plan.controller_plan_sha256)?;
-        if search_witness
-            || serde_json::from_slice::<serde_json::Value>(&config)
-                .ok()
-                .as_ref()
-                .and_then(|v| v.get("kind"))
-                .is_some_and(|v| v == "strategy_search")
-        {
-            return Err(invalid(
-                "search evidence requires its own complete portable layout",
-            ));
+        let config_is_search = serde_json::from_slice::<serde_json::Value>(&config)
+            .ok()
+            .as_ref()
+            .and_then(|v| v.get("kind"))
+            .is_some_and(|v| v == "strategy_search");
+        match layout {
+            Layout::FixedPair if search_witness || config_is_search => {
+                return Err(invalid(
+                    "search evidence requires its own complete portable layout",
+                ));
+            }
+            Layout::Search if !search || !search_witness || !config_is_search => {
+                return Err(invalid(
+                    "search evidence membership or controller mode differs",
+                ));
+            }
+            _ => {}
         }
-        let oversized:bool=tx.query_row("SELECT EXISTS(SELECT 1 FROM events WHERE kind IN ('campaign_session_bound','campaign_exposed') AND length(CAST(payload AS BLOB))>1048576)",[],|r|r.get(0))?;
+        let oversized:bool=tx.query_row("SELECT EXISTS(SELECT 1 FROM events WHERE kind IN ('campaign_session_bound','campaign_exposed','strategy_search_proposal_bound') AND length(CAST(payload AS BLOB))>1048576)",[],|r|r.get(0))?;
         if oversized {
             return Err(invalid("global campaign witness exceeds bound"));
         }
@@ -181,6 +199,9 @@ impl Store {
             return Err(invalid("run membership projections and witnesses differ"));
         }
         let mut sessions = projection;
+        if layout == Layout::Search {
+            search::add_sessions(&tx, campaign, &journal, &mut sessions)?;
+        }
         sessions.insert(journal);
         let parameters: Vec<Value> = sessions.iter().cloned().map(Value::Text).collect();
         let placeholders = vec!["?"; sessions.len()].join(",");
@@ -218,7 +239,11 @@ impl Store {
         if operation_bytes > MAX_BYTES || operation_max > 32 * 1024 * 1024 {
             return Err(invalid("operation exceeds source bound"));
         }
-        let kinds:bool=tx.query_row(&format!("SELECT EXISTS(SELECT 1 FROM operations WHERE {session_filter} AND CASE WHEN json_valid(payload) THEN coalesce(json_extract(payload,'$.kind'),'') ELSE '' END NOT IN ('strategy_evaluation','scoped_web_agent','agent_inference','agent_http','agent_delegation','agent_web_experiment'))"),rusqlite::params_from_iter(&parameters),|r|r.get(0))?;
+        let controller_kinds = match layout {
+            Layout::FixedPair => "'strategy_evaluation'",
+            Layout::Search => "'strategy_search','strategy_proposal_inference'",
+        };
+        let kinds:bool=tx.query_row(&format!("SELECT EXISTS(SELECT 1 FROM operations WHERE {session_filter} AND CASE WHEN json_valid(payload) THEN coalesce(json_extract(payload,'$.kind'),'') ELSE '' END NOT IN ({controller_kinds},'scoped_web_agent','agent_inference','agent_http','agent_delegation','agent_web_experiment'))"),rusqlite::params_from_iter(&parameters),|r|r.get(0))?;
         if kinds {
             return Err(invalid("unsupported operation kind"));
         }
@@ -229,11 +254,17 @@ impl Store {
         let mut remaining = MAX_BYTES;
         let mut count = 0;
         let mut values = vec![];
-        for &table in TABLES {
+        for table in layout.tables() {
             let (filter, args) = match table {
                 "engine_epoch" => ("0=1".to_string(), &[][..]),
                 "campaigns" => ("id=?1".to_string(), campaign_parameter.as_slice()),
-                "campaign_runs" | "campaign_exposures" | "campaign_debits" => {
+                "campaign_runs"
+                | "campaign_exposures"
+                | "campaign_debits"
+                | "strategy_searches"
+                | "strategy_search_proposals"
+                | "strategy_search_evaluations"
+                | "strategy_search_selections" => {
                     ("campaign_id=?1".to_string(), campaign_parameter.as_slice())
                 }
                 "sessions" => (format!("id IN ({placeholders})"), parameters.as_slice()),
@@ -297,6 +328,9 @@ impl Store {
             .collect::<std::result::Result<BTreeSet<_>, _>>()?;
         drop(q);
         digests.insert(c.plan.controller_plan_sha256);
+        if layout == Layout::Search {
+            digests.extend(search::artifacts(&tx, campaign)?);
+        }
         if digests.len() > MAX_RECORDS {
             return Err(invalid("too many artifacts"));
         }
@@ -314,8 +348,8 @@ impl Store {
             artifacts.insert(digest.clone(), crate::artifacts::read(&tx, &digest)?);
         }
         let manifest = Manifest {
-            schema_version: 1,
-            store_schema: SNAPSHOT_STORE_LAYOUT,
+            schema_version: layout.version(),
+            store_schema: layout.store_schema(),
             campaign_id: campaign.into(),
             sessions: sessions.into_iter().collect(),
             tables: vec![],

@@ -362,6 +362,7 @@ impl Store {
             }
             return Ok((p.clone(), o.clone(), true));
         }
+        selection::unsealed(&tx, &c)?;
         require_epoch(&tx, owner)?;
         open(&tx, campaign)?;
         if index as usize != prior.len()

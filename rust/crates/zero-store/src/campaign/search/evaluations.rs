@@ -1,5 +1,5 @@
 use super::*;
-fn read(conn: &Connection, c: &Campaign, key: &str) -> Result<SearchEvaluation> {
+pub(super) fn read(conn: &Connection, c: &Campaign, key: &str) -> Result<SearchEvaluation> {
     let (raw,seq):(String,u64)=conn.query_row("SELECT CASE WHEN length(CAST(record AS BLOB))<=1048576 THEN record END,sequence FROM strategy_search_evaluations WHERE campaign_id=?1 AND id=?2",params![c.id,key],|r|Ok((r.get(0)?,r.get(1)?)))?;
     let e: SearchEvaluation = serde_json::from_str(&raw)?;
     if e.id != key
@@ -57,6 +57,9 @@ pub(in super::super) fn validate_run(
     let Some(config) = configuration(conn, c)? else {
         return Ok(());
     };
+    if let Some(selected) = selection::raw(conn, c)? {
+        return selection::validate_run(conn, c, &config, &selected, spec);
+    }
     if proposals::list(conn, c)?.iter().any(|(_, o)| {
         matches!(
             o.status,
@@ -228,6 +231,7 @@ impl Store {
             }
             return Ok((e.clone(), true));
         }
+        selection::unsealed(&tx, &c)?;
         open(&tx, campaign)?;
         if candidates.len() >= config.plan.max_candidates as usize
             || candidate_sha256 == c.plan.baseline_sha256
@@ -250,6 +254,13 @@ impl Store {
                 .plan
                 .scenarios
                 .iter()
+                .chain(
+                    config
+                        .plan
+                        .protected_final
+                        .iter()
+                        .flat_map(|p| &p.scenarios),
+                )
                 .any(|s| advisory.advisory_utf8.contains(&s.marker))
         {
             return Err(bad("candidate does not match exact permitted proposal"));

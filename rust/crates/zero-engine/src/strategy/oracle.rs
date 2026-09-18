@@ -143,6 +143,26 @@ pub(super) fn score_development(
         reasons,
     )
 }
+pub(super) fn score_protected_final(
+    scenarios: &[StrategyScenario],
+    repeats: u32,
+    minimum: u32,
+    rows: &[StrategyCaseResult],
+    complete: bool,
+) -> (StrategyDecision, Vec<String>) {
+    score_cases(
+        scenarios,
+        repeats,
+        rows,
+        &[CampaignLane::Final],
+        if complete {
+            &[CampaignLane::Final]
+        } else {
+            &[]
+        },
+        [0, minimum],
+    )
+}
 fn score_cases(
     scenarios: &[StrategyScenario],
     repeats: u32,

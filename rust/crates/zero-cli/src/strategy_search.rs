@@ -1,4 +1,4 @@
-//! One immutable account for autonomous advisory proposals and Development evaluation.
+//! One immutable account for advisory proposals and independently measured search.
 use crate::strategy::Format;
 use clap::Subcommand;
 use std::{
@@ -9,7 +9,12 @@ use zero_protocol::{Command, Reply, strategy_search::StrategySearchPlan};
 
 #[derive(Debug, Subcommand)]
 pub enum SearchCommand {
-    /// Freeze a private Development-only plan and aggregate account; starts no model call.
+    /// Prepare/import/inspect full-history source evidence; never activates a candidate.
+    Eligibility {
+        #[command(subcommand)]
+        command: crate::strategy_registry::EligibilityCommand,
+    },
+    /// Freeze a private versioned search plan and aggregate account; starts no model call.
     Create {
         #[arg(long)]
         command_id: String,
@@ -48,7 +53,7 @@ pub enum SearchCommand {
         #[arg(long, value_enum, default_value = "json")]
         format: Format,
     },
-    /// Reconstruct the search report; Development measurements grant no eligibility or activation.
+    /// Reconstruct whole search history and measurements; grants no eligibility or activation.
     Report {
         #[arg(long)]
         campaign: String,
@@ -67,9 +72,8 @@ pub async fn command(command: &SearchCommand) -> Result<Command, Box<dyn Error>>
             let bytes = crate::providers::read_bounded(plan).await?;
             let plan: StrategySearchPlan = serde_json::from_slice(&bytes)
                 .map_err(|_| "Invalid private strategy search plan JSON")?;
-            plan.validate().map_err(
-                |_| "Invalid strategy search plan authority, Development schedule or bounds",
-            )?;
+            plan.validate()
+                .map_err(|_| "Invalid strategy search plan authority, schedules or bounds")?;
             Command::CreateStrategySearch {
                 command_id: command_id.clone(),
                 plan: Box::new(plan),
@@ -83,6 +87,9 @@ pub async fn command(command: &SearchCommand) -> Result<Command, Box<dyn Error>>
 }
 
 pub async fn readonly(path: &Path, command: &SearchCommand) -> Result<bool, Box<dyn Error>> {
+    if let SearchCommand::Eligibility { command } = command {
+        return crate::strategy_registry::run_search_eligibility(path, command).await;
+    }
     let (campaign, format) = match command {
         SearchCommand::Status { campaign, format }
         | SearchCommand::Candidates {
@@ -135,9 +142,14 @@ pub async fn readonly(path: &Path, command: &SearchCommand) -> Result<bool, Box<
 }
 fn render(reply: &Reply) -> Result<String, Box<dyn Error>> {
     use std::fmt::Write;
-    let mut out = String::from(
-        "Development search only — no protected Final, canary, eligibility or activation.\n",
-    );
+    let mut out = String::from(match reply {
+        Reply::StrategySearchReport { report } if report.schema_version == 1 => {
+            "Development search only — no protected Final, canary, eligibility or activation.\n"
+        }
+        _ => {
+            "Search inspection — measurements are not eligibility, canary completion or activation.\n"
+        }
+    });
     match reply {
         Reply::StrategySearchStatus { snapshot } => {
             out.push_str(&crate::strategy::render(&Reply::CampaignStatus {
@@ -175,7 +187,13 @@ fn render(reply: &Reply) -> Result<String, Box<dyn Error>> {
             candidate_text(&mut out, candidate)?;
         }
         Reply::StrategySearchReport { report } => {
-            if report.qualification != "development_only" {
+            if !matches!(
+                (report.schema_version, report.qualification.as_str()),
+                (1, "development_only") | (2, "adaptive_search_fixture")
+            ) || (report.schema_version == 1
+                && (report.selection.is_some() || report.final_measurement.is_some()))
+                || (report.final_measurement.is_some() && report.selection.is_none())
+            {
                 return Err("Unexpected strategy search qualification".into());
             }
             writeln!(
@@ -214,6 +232,17 @@ fn render(reply: &Reply) -> Result<String, Box<dyn Error>> {
                             "Model rationale (untrusted): {}",
                             crate::console::terminal_text(rationale)
                         )?,
+                        zero_protocol::strategy_search::SearchProposalOutput::SelectFinal {
+                            evaluation_id,
+                            rationale,
+                        } => {
+                            writeln!(
+                                out,
+                                "Model selected evaluation {} (untrusted rationale): {}",
+                                crate::console::terminal_text(evaluation_id),
+                                crate::console::terminal_text(rationale)
+                            )?;
+                        }
                         zero_protocol::strategy_search::SearchProposalOutput::Stop { reason } => {
                             writeln!(
                                 out,
@@ -226,6 +255,62 @@ fn render(reply: &Reply) -> Result<String, Box<dyn Error>> {
             }
             for c in &report.evaluations {
                 candidate_text(&mut out, c)?;
+            }
+            if report.schema_version == 2 {
+                if let Some(selection) = &report.selection {
+                    writeln!(
+                        out,
+                        "Protected Final selection: {}; candidate {}; exposure {}; allocated run slots {} at {}",
+                        crate::console::terminal_text(&selection.evaluation_id),
+                        crate::console::terminal_text(&selection.candidate_generation),
+                        crate::console::terminal_text(&selection.exposure_id),
+                        selection.run_count,
+                        selection.schedule_start
+                    )?;
+                    writeln!(
+                        out,
+                        "Protected suite {}; Final pair {}",
+                        crate::console::terminal_text(&selection.suite_sha256),
+                        crate::console::terminal_text(&selection.final_pair_sha256)
+                    )?;
+                    out.push_str("Selection seals further proposals; allocated slots do not prove execution or completion.\n");
+                } else {
+                    out.push_str("Protected Final: no retained selection; stopping does not select a winner.\n");
+                }
+                if let Some(measurement) = &report.final_measurement {
+                    if measurement
+                        .cases
+                        .iter()
+                        .any(|case| case.lane != zero_protocol::campaign::CampaignLane::Final)
+                    {
+                        return Err("Protected Final measurement contains a different lane".into());
+                    }
+                    writeln!(
+                        out,
+                        "Independent protected Final measurement: {:?}",
+                        measurement.decision
+                    )?;
+                    for reason in &measurement.reasons {
+                        writeln!(
+                            out,
+                            "Measurement reason: {}",
+                            crate::console::terminal_text(reason)
+                        )?;
+                    }
+                    crate::strategy::cases(&mut out, &measurement.cases);
+                    if let Some(digest) = &measurement.matrix_sha256 {
+                        writeln!(
+                            out,
+                            "Final matrix {}",
+                            crate::console::terminal_text(digest)
+                        )?;
+                    }
+                } else {
+                    out.push_str(
+                        "Protected Final measurement unavailable; no completed outcome inferred.\n",
+                    );
+                }
+                out.push_str("Full-history source evidence must be independently imported before measured eligibility; import never activates a candidate.\n");
             }
         }
         _ => return Err("Unexpected strategy search inspection response".into()),
@@ -291,9 +376,59 @@ mod tests {
         assert!(render(&Reply::StrategySearchReport { report: invalid }).is_err());
     }
     #[test]
+    fn unselected_v2_report_does_not_infer_final_or_eligibility() {
+        let mut report = report();
+        report.schema_version = 2;
+        report.qualification = "adaptive_search_fixture".into();
+        report.proposals[0].output =
+            Some(zero_protocol::strategy_search::SearchProposalOutput::Stop {
+                reason: "Enough investigation\u{1b}[2J".into(),
+            });
+        let text = render(&Reply::StrategySearchReport {
+            report: report.clone(),
+        })
+        .unwrap();
+        assert!(text.contains("no retained selection"));
+        assert!(text.contains("measurement unavailable"));
+        assert!(text.contains("7 charged, 10 held"));
+        assert!(!text.contains('\u{1b}'));
+        report.final_measurement = Some(zero_protocol::strategy_search::SearchFinalReport {
+            cases: vec![],
+            decision: zero_protocol::strategy::StrategyDecision::ImprovedForFixtureSuite,
+            reasons: vec![],
+            matrix_sha256: None,
+        });
+        assert!(render(&Reply::StrategySearchReport { report }).is_err());
+    }
+
+    #[test]
+    fn full_search_import_requires_identity_and_has_no_caller_success_flag() {
+        let base = [
+            "native",
+            "strategy",
+            "search",
+            "eligibility",
+            "import",
+            "--registry",
+            "r",
+            "--campaign",
+            "c",
+            "--command-id",
+            "i",
+        ];
+        assert!(crate::args::Args::try_parse_from(base).is_err());
+        let mut valid = base.to_vec();
+        valid.extend(["--expected-evidence", "sha256:example"]);
+        assert!(crate::args::Args::try_parse_from(&valid).is_ok());
+        valid.push("--pass");
+        assert!(crate::args::Args::try_parse_from(valid).is_err());
+    }
+
+    #[test]
     fn search_has_no_final_canary_activation_or_budget_reset_flags() {
         for suffix in [
             vec!["--final"],
+            vec!["--force-final"],
             vec!["--canary"],
             vec!["--auto-promote"],
             vec!["--budget-limit", "100"],

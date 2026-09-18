@@ -109,7 +109,7 @@ identities are explicit semantic versions, not binary attestations; changes to
 compiled evaluation semantics require a version change.
 
 This adapter supports snapshot-free HTTP actors and optional HTTP delegates;
-source/sandbox candidates, protected search Final evaluation, independent canaries,
+source/sandbox candidates, independent canaries,
 autonomous activation orchestration remain unfinished. Scanner, browser/auth/session, cloud, arbitrary source
 self-rewriting and production release parity remain in [MIGRATION.md](MIGRATION.md).
 
@@ -139,9 +139,8 @@ administered source databases; corpus governance remains host-owned.
 Import does not activate a candidate. The host Harness can activate measured
 eligibility under its frozen policy, and this path is tested with real paired
 fixture evidence and an actor running across the switch. A policy requiring canary
-evidence remains blocked until separately qualified evidence exists. Protected search Final evaluation,
-canary orchestration and the candidate activation CLI remain
-unfinished. Writable artifacts remain bounded advisory text, not host policy or code.
+evidence remains blocked until separately qualified evidence exists. Canary
+orchestration and the candidate activation CLI remain unfinished. Writable artifacts remain bounded advisory text, not host policy or code.
 
 ## Autonomous advisory search
 
@@ -161,15 +160,25 @@ controller runs actual paired agents and scores retained observations, controls,
 stability and cost with the shared evaluator. Feedback excludes raw model prose
 and private fixture bytes, and is rechecked against the preceding measurements.
 
-Reports are explicitly `development_only`. An improved Development pair does not
-grant eligibility, protected Final qualification, canary success or activation.
-This search interface rejects unsupported Final/canary controls. Those stages must
-extend the same account and retain the complete proposal/evaluation history; an
-export that drops proposal costs is not admissible measured evidence. The existing
-fixed-pair workflow and its measured eligibility path remain distinct.
+Version 1 reports remain explicitly `development_only`. Version 2 freezes an
+additional protected Final policy. The proposer can explicitly select a completed,
+independently improved Development evaluation or stop. Stop consumes no protected
+exposure, and exhausted limits never choose a winner automatically. Accepted
+selection permanently seals proposal/Development admission and consumes the suite
+exposure atomically. Final actors spend from the original account; current registry
+authority is checked against the original capture before new Final work.
+
+Version 2 reports include the whole adaptive history. Initial eligibility import
+requires source-exported evidence, all paid proposals and all candidate runs,
+independent Development and Final scoring, known settled accounting and the current
+registry binding. Portable evidence retains this history for offline reassessment;
+it cannot initiate a new grant without source authority. Full-search grants share
+protected-suite uniqueness with fixed-pair grants. Import does not activate the
+candidate, complete a canary, or certify general detection quality.
 
 Search cancellation closes admission and drains owned work. Completed retries use
 retained outcomes without fresh provider configuration or replay. Offline reports
-check both operation projections and immutable admission witnesses. Store schema15
-adds typed search records while preserving the original portable fixed-pair layout;
-that older exporter explicitly rejects search state instead of silently omitting it.
+check both operation projections and immutable admission witnesses. Store schema16
+adds the immutable Final selection. Portable layout2 retains all search records,
+proposal sessions, losing candidate advice and accounting in one source snapshot.
+The original fixed-pair layout remains stable and rejects search state explicitly.

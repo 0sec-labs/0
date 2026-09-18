@@ -5,8 +5,20 @@ use zero_protocol::{
     session::{Operation, OperationStatus},
     strategy_search::*,
 };
+mod bridge;
 mod controller;
+mod evidence;
+mod final_selection;
 mod provenance;
+pub use bridge::{
+    StrategySearchEligibilityPreparation, import_strategy_search_eligibility,
+    prepare_strategy_search_eligibility, read_strategy_search_eligibility,
+    read_strategy_search_eligibility_receipt,
+};
+pub use evidence::{
+    RecomputedStrategySearchEvidence, VerifiedStrategySearchEvidence,
+    export_strategy_search_evidence, reassess_strategy_search_evidence,
+};
 fn command(id: &str) -> String {
     format!("strategy-search:{id}")
 }
@@ -34,20 +46,29 @@ fn request(
 fn validate(c: &StrategySearchConfiguration) -> Result<(), EngineError> {
     c.plan.validate().map_err(error)?;
     c.capture.authority.validate().map_err(error)?;
-    render::validate_templates(
-        &c.capture.authority.host,
-        &[&c.capture.advisory],
-        &c.plan.scenarios,
-    )?;
+    validate_advisory(c, &c.capture.advisory)?;
     let model = serde_json::to_value(render_search_proposal(c, 0, None).map_err(error)?)?;
-    if c.plan
-        .scenarios
+    if scenarios(c)
         .iter()
         .any(|s| render::has_marker(&model, &s.marker))
     {
         return Err(error("private marker appears in proposer template"));
     }
+    final_selection::validate_policy(c)?;
     Ok(())
+}
+fn scenarios(c: &StrategySearchConfiguration) -> Vec<StrategyScenario> {
+    let mut all = c.plan.scenarios.clone();
+    if let Some(p) = &c.plan.protected_final {
+        all.extend(p.scenarios.clone());
+    }
+    all
+}
+fn validate_advisory(
+    c: &StrategySearchConfiguration,
+    a: &StrategyArtifact,
+) -> Result<(), EngineError> {
+    render::validate_templates(&c.capture.authority.host, &[a], &scenarios(c))
 }
 fn parsed(
     c: &StrategySearchConfiguration,
@@ -85,8 +106,21 @@ fn parsed(
         .validate()
         .map_err(|_| "proposal_arguments_invalid")?;
     if let SearchProposalOutput::Propose { advisory, .. } = &output {
-        render::validate_templates(&c.capture.authority.host, &[advisory], &c.plan.scenarios)
+        validate_advisory(c, advisory)
             .map_err(|_| "proposal_private_marker_or_template_invalid")?;
+    }
+    if matches!(&output, SearchProposalOutput::SelectFinal { .. })
+        && c.plan.protected_final.is_none()
+    {
+        return Err("final_selection_not_authorized");
+    }
+    if scenarios(c).iter().any(|s| {
+        render::has_marker(
+            &serde_json::to_value(&output).unwrap_or(Value::Null),
+            &s.marker,
+        )
+    }) {
+        return Err("private_marker_in_proposal");
     }
     Ok(output)
 }

@@ -1,4 +1,29 @@
 use super::*;
+use zero_protocol::strategy_search::StrategySearchReport;
+enum VerifiedReport {
+    Fixed(Box<StrategyReport>),
+    Search(Box<StrategySearchReport>),
+}
+fn search_head(d: &StrategySearchEvidenceDescriptor) -> StrategyEvidenceDescriptor {
+    StrategyEvidenceDescriptor {
+        schema_version: d.schema_version,
+        binding: d.binding.clone(),
+        campaign_id: d.campaign_id.clone(),
+        snapshot_sha256: d.snapshot_sha256.clone(),
+        report_sha256: d.report_sha256.clone(),
+        suite_sha256: d.suite_sha256.clone(),
+        pair_sha256: d.pair_sha256.clone(),
+    }
+}
+fn descriptor_head(bytes: &[u8]) -> Result<StrategyEvidenceDescriptor> {
+    let v: Value = serde_json::from_slice(bytes)?;
+    match v["schema_version"].as_u64() {
+        Some(1) => Ok(serde_json::from_value(v)?),
+        Some(2) => Ok(search_head(&serde_json::from_value(v)?)),
+        _ => Err(invalid("unsupported strategy evidence descriptor")),
+    }
+}
+
 fn request_hash(request: &StrategyImportRequest) -> Result<String> {
     if request.command_id.is_empty()
         || request.command_id.len() > 256
@@ -61,8 +86,7 @@ fn record(conn: &Connection, command: &str) -> Result<Option<StrategyImportRecei
     {
         return Err(invalid("strategy import projection differs"));
     }
-    let descriptor: StrategyEvidenceDescriptor =
-        serde_json::from_slice(&bounded_artifact(conn, &evidence, MAX_JSON_BYTES)?)?;
+    let descriptor = descriptor_head(&bounded_artifact(conn, &evidence, MAX_JSON_BYTES)?)?;
     let e: Eligibility = read_json(conn, "eligibilities", &eligibility)?;
     let evaluation: EvaluationReceipt = read_json(conn, "receipts", &receipt)?;
     if descriptor.binding.registry != r.registry
@@ -146,12 +170,58 @@ impl Registry {
     where
         F: FnOnce(&dyn Fn(&str) -> Result<Vec<u8>>) -> Result<StrategyReport>,
     {
+        if descriptor.schema_version != 1 {
+            return Err(invalid("fixed-pair descriptor version differs"));
+        }
+        self.import_measured(
+            request,
+            descriptor,
+            &encode(descriptor)?,
+            None,
+            artifacts,
+            |reader| verify(reader).map(|report| VerifiedReport::Fixed(Box::new(report))),
+        )
+    }
+    pub fn import_strategy_search_evidence<F>(
+        &mut self,
+        request: &StrategyImportRequest,
+        descriptor: &StrategySearchEvidenceDescriptor,
+        artifacts: &std::collections::BTreeMap<String, Vec<u8>>,
+        verify: F,
+    ) -> Result<StrategyImportResult>
+    where
+        F: FnOnce(&dyn Fn(&str) -> Result<Vec<u8>>) -> Result<StrategySearchReport>,
+    {
+        if descriptor.schema_version != 2 {
+            return Err(invalid("adaptive search descriptor version differs"));
+        }
+        self.import_measured(
+            request,
+            &search_head(descriptor),
+            &encode(descriptor)?,
+            Some(descriptor),
+            artifacts,
+            |reader| verify(reader).map(|report| VerifiedReport::Search(Box::new(report))),
+        )
+    }
+    #[allow(clippy::too_many_arguments)]
+    fn import_measured<F>(
+        &mut self,
+        request: &StrategyImportRequest,
+        descriptor: &StrategyEvidenceDescriptor,
+        encoded_descriptor: &str,
+        search: Option<&StrategySearchEvidenceDescriptor>,
+        artifacts: &std::collections::BTreeMap<String, Vec<u8>>,
+        verify: F,
+    ) -> Result<StrategyImportResult>
+    where
+        F: FnOnce(&dyn Fn(&str) -> Result<Vec<u8>>) -> Result<VerifiedReport>,
+    {
         if let Some(prior) = self.strategy_import_by_command(request)? {
             return Ok(prior);
         }
         let request_digest = request_hash(request)?;
-        let encoded_descriptor = encode(descriptor)?;
-        if descriptor.schema_version != 1
+        if !matches!(descriptor.schema_version, 1 | 2)
             || hash(encoded_descriptor.as_bytes()) != request.expected_evidence_sha256
             || descriptor.campaign_id != request.campaign_id
             || artifacts.len() > 4096
@@ -212,33 +282,56 @@ impl Registry {
             }
             bounded_artifact(&tx, id, 4 * 1024 * 1024)
         };
-        let report = verify(&reader)?;
-        let raw_report = encode(&report)?;
+        let verified = verify(&reader)?;
+        let raw_report = match &verified {
+            VerifiedReport::Fixed(r) => encode(r)?,
+            VerifiedReport::Search(r) => encode(r)?,
+        };
         if hash(raw_report.as_bytes()) != descriptor.report_sha256
             || artifacts.get(&descriptor.report_sha256).map(Vec::as_slice)
                 != Some(raw_report.as_bytes())
-            || report.campaign_id != descriptor.campaign_id
-            || report.baseline_sha256 != descriptor.binding.baseline_advisory_sha256
-            || report.candidate_sha256 != descriptor.binding.candidate_advisory_sha256
-            || report.suite_sha256 != descriptor.suite_sha256
-            || report.decision != StrategyDecision::ImprovedForFixtureSuite
-            || report.completed_lanes.len() != 2
-            || !report
-                .completed_lanes
-                .contains(&zero_protocol::campaign::CampaignLane::Development)
-            || !report
-                .completed_lanes
-                .contains(&zero_protocol::campaign::CampaignLane::Final)
-            || report.usage.model_reserved_micro_usd != 0
-            || report.usage.http_response_reserved_bytes != 0
-            || report.usage.active_runs != 0
-            || report.usage.unknown_runs != 0
-            || report.usage.model_charged_micro_usd > authority.campaign_limits.model_micro_usd
         {
-            return Err(Error::Ineligible(
-                "strategy evidence is not fully measured improvement".into(),
-            ));
+            return Err(invalid("full canonical strategy report differs"));
         }
+        let qualification = match &verified {
+            VerifiedReport::Fixed(report) => {
+                if hash(raw_report.as_bytes()) != descriptor.report_sha256
+                    || artifacts.get(&descriptor.report_sha256).map(Vec::as_slice)
+                        != Some(raw_report.as_bytes())
+                    || report.campaign_id != descriptor.campaign_id
+                    || report.baseline_sha256 != descriptor.binding.baseline_advisory_sha256
+                    || report.candidate_sha256 != descriptor.binding.candidate_advisory_sha256
+                    || report.suite_sha256 != descriptor.suite_sha256
+                    || report.decision != StrategyDecision::ImprovedForFixtureSuite
+                    || report.completed_lanes.len() != 2
+                    || !report
+                        .completed_lanes
+                        .contains(&zero_protocol::campaign::CampaignLane::Development)
+                    || !report
+                        .completed_lanes
+                        .contains(&zero_protocol::campaign::CampaignLane::Final)
+                    || report.usage.model_reserved_micro_usd != 0
+                    || report.usage.http_response_reserved_bytes != 0
+                    || report.usage.active_runs != 0
+                    || report.usage.unknown_runs != 0
+                    || report.usage.model_charged_micro_usd
+                        > authority.campaign_limits.model_micro_usd
+                {
+                    return Err(Error::Ineligible(
+                        "strategy evidence is not fully measured improvement".into(),
+                    ));
+                }
+                "measured_local_strategy_fixture"
+            }
+            VerifiedReport::Search(report) => {
+                validate_search_report(
+                    report,
+                    search.ok_or_else(|| invalid("search descriptor absent"))?,
+                    &authority,
+                )?;
+                "measured_adaptive_search_fixture"
+            }
+        };
         let evaluator = hash(&evaluator_descriptor());
         let renderer = hash(&renderer_descriptor());
         for (id, bytes) in [
@@ -271,7 +364,7 @@ impl Registry {
                 ("strategy.renderer".into(), renderer),
             ]),
             decision: EvaluationDecision::Eligible,
-            observations: serde_json::json!({"qualification":"measured_local_strategy_fixture","campaign_id":descriptor.campaign_id,"suite_sha256":descriptor.suite_sha256,"pair_sha256":descriptor.pair_sha256}),
+            observations: serde_json::json!({"qualification":qualification,"campaign_id":descriptor.campaign_id,"suite_sha256":descriptor.suite_sha256,"pair_sha256":descriptor.pair_sha256}),
         };
         for id in evaluation.evidence_artifacts.values() {
             bounded_artifact(&tx, id, 4 * 1024 * 1024)?;
@@ -315,7 +408,7 @@ impl Registry {
             baseline_generation: descriptor.binding.baseline_generation.clone(),
             baseline_epoch: descriptor.binding.baseline_epoch,
             baseline_state_sha256: descriptor.binding.baseline_state_sha256.clone(),
-            qualification: "measured_local_strategy_fixture".into(),
+            qualification: qualification.into(),
         };
         let raw = encode(&receipt)?;
         tx.execute(
@@ -342,4 +435,73 @@ impl Registry {
             usability,
         })
     }
+}
+
+fn validate_search_report(
+    r: &StrategySearchReport,
+    d: &StrategySearchEvidenceDescriptor,
+    a: &StrategyHostAuthority,
+) -> Result<()> {
+    let s = r
+        .selection
+        .as_ref()
+        .ok_or_else(|| invalid("search has no sealed Final selection"))?;
+    let measured = r
+        .final_measurement
+        .as_ref()
+        .ok_or_else(|| invalid("search has no Final measurement"))?;
+    let dev = r
+        .evaluations
+        .iter()
+        .find(|e| e.evaluation.id == s.evaluation_id)
+        .ok_or_else(|| invalid("selected Development evaluation absent"))?;
+    let u = &r.usage;
+    let invalid_case = |r: &zero_protocol::strategy::StrategyCaseResult| {
+        r.disposition != zero_protocol::strategy::StrategyCaseDisposition::Observed
+            || r.model_reserved_micro_usd != 0
+    };
+    if r.schema_version != 2
+        || r.qualification != "adaptive_search_fixture"
+        || r.campaign_id != d.campaign_id
+        || r.config_sha256 != d.config_sha256
+        || s.config_sha256 != d.config_sha256
+        || hash(encode(s)?.as_bytes()) != d.selection_sha256
+        || s.binding != d.binding
+        || s.suite_sha256 != d.suite_sha256
+        || s.final_pair_sha256 != d.pair_sha256
+        || !dev.improved
+        || dev.cases.len() != dev.evaluation.run_count as usize
+        || dev.cases.iter().any(invalid_case)
+        || measured.decision != StrategyDecision::ImprovedForFixtureSuite
+        || measured.cases.len() != s.run_count as usize
+        || measured.cases.iter().any(invalid_case)
+        || measured
+            .matrix_sha256
+            .as_ref()
+            .is_none_or(|d| !zero_protocol::is_sha256(d))
+        || r.proposals.iter().any(|p| {
+            matches!(
+                p.operation_status,
+                zero_protocol::session::OperationStatus::Admitted
+                    | zero_protocol::session::OperationStatus::Running
+                    | zero_protocol::session::OperationStatus::Unknown
+            )
+        })
+        || u.model_reserved_micro_usd != 0
+        || u.http_response_reserved_bytes != 0
+        || u.active_runs != 0
+        || u.unknown_runs != 0
+        || u.model_charged_micro_usd > a.campaign_limits.model_micro_usd
+        || u.model_calls > u64::from(a.campaign_limits.model_calls)
+        || u.http_requests > a.campaign_limits.http_requests
+        || u.http_request_body_bytes > a.campaign_limits.http_request_body_bytes
+        || u.http_response_charged_bytes > a.campaign_limits.http_response_decoded_bytes
+        || u.experiments > u64::from(a.campaign_limits.experiments)
+        || u.runs > u64::from(a.campaign_limits.runs)
+    {
+        return Err(Error::Ineligible(
+            "complete adaptive search does not establish independently measured improvement".into(),
+        ));
+    }
+    Ok(())
 }

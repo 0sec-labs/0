@@ -236,3 +236,15 @@ impl Harness {
         })
     }
 }
+impl Harness {
+    /// Trusted host guard; lock order is Registry then the bounded Store callback.
+    pub fn with_current_strategy_binding<T>(
+        &mut self,
+        binding: &StrategyRegistryBinding,
+        callback: impl FnOnce() -> zero_evolution::Result<T>,
+    ) -> Result<T> {
+        Ok(self
+            .registry
+            .with_current_strategy_binding(binding, callback)?)
+    }
+}

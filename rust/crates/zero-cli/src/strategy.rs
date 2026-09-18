@@ -27,7 +27,7 @@ pub enum Format {
 }
 #[derive(Debug, Subcommand)]
 pub enum StrategyCommand {
-    /// Bounded autonomous advisory proposals and Development evaluation under one account.
+    /// Bounded advisory search and authorized protected measurements under one account.
     Search {
         #[command(subcommand)]
         command: crate::strategy_search::SearchCommand,

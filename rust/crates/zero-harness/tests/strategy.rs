@@ -473,3 +473,136 @@ fn registry_schema_rejects_extra_columns_even_when_object_count_matches() {
     assert!(Registry::open_read_only(f.dir.path().join("registry")).is_err());
     assert!(Registry::open(f.dir.path().join("registry"), "v1", &json!({})).is_err());
 }
+
+#[test]
+fn guarded_strategy_binding_runs_only_for_exact_current_epoch() {
+    let mut f = Fixture::new();
+    f.bootstrap();
+    let candidate = f
+        .harness
+        .register_strategy_candidate(
+            &f.generation,
+            &StrategyArtifact {
+                schema_version: 1,
+                advisory_utf8: "Candidate guard test".into(),
+            },
+        )
+        .unwrap();
+    let binding = f
+        .harness
+        .strategy_binding(&candidate.candidate_generation)
+        .unwrap();
+    let mut calls = 0;
+    let value = f
+        .harness
+        .with_current_strategy_binding(&binding, || {
+            calls += 1;
+            Ok(42)
+        })
+        .unwrap();
+    assert_eq!((value, calls), (42, 1));
+    let mut stale = binding.clone();
+    stale.baseline_epoch += 1;
+    assert!(
+        f.harness
+            .with_current_strategy_binding(&stale, || {
+                calls += 1;
+                Ok(())
+            })
+            .is_err()
+    );
+    assert_eq!(calls, 1);
+    assert!(
+        f.harness
+            .with_current_strategy_binding(&binding, || Err::<(), _>(
+                zero_evolution::Error::Invalid("callback failed".into())
+            ))
+            .is_err()
+    );
+    assert_eq!(
+        f.harness
+            .strategy_binding(&candidate.candidate_generation)
+            .unwrap(),
+        binding
+    );
+}
+
+#[test]
+fn typed_full_search_import_checks_whole_account_and_retries_without_source() {
+    use zero_protocol::strategy_search::{SearchFinalSelection, StrategySearchReport};
+    let mut f = Fixture::with_canary(false);
+    let (_, fixed, _, _) = import_fixture(&mut f);
+    let binding = fixed.binding;
+    let config = digest(b"search config");
+    let selection:SearchFinalSelection=serde_json::from_value(json!({"schema_version":1,"id":"selection","campaign_id":"campaign","proposal_id":"selector","evaluation_id":"evaluation","candidate_generation":binding.candidate_generation,"candidate_sha256":binding.candidate_advisory_sha256,"baseline_sha256":binding.baseline_advisory_sha256,"config_sha256":config,"development_matrix_sha256":digest(b"dev matrix"),"binding":binding,"suite_sha256":digest(b"suite"),"final_pair_sha256":digest(b"final pair"),"schedule_start":8,"run_count":1,"exposure_id":"exposure","sequence":40})).unwrap();
+    let case = json!({"schedule_index":0,"run_id":"trusted-host-case","session_id":"case-session","operation_id":null,"scenario_id":"positive","family":"p","lane":"development","variant":"candidate","repeat_index":0,"disposition":"observed","matched":true,"supported_findings":1,"unsupported_claims":0,"observations":[],"model_charged_micro_usd":1,"model_reserved_micro_usd":0,"error":null});
+    // This tests installer mechanics behind the trusted callback boundary. Engine
+    // physical tests provide the full independently reconstructed source matrix.
+    let report:StrategySearchReport=serde_json::from_value(json!({"schema_version":2,"campaign_id":"campaign","config_sha256":config,"qualification":"adaptive_search_fixture","proposals":[],"evaluations":[{"evaluation":{"id":"evaluation","campaign_id":"campaign","command_id":"pair","proposal_id":"proposal","candidate_generation":binding.candidate_generation,"candidate_sha256":binding.candidate_advisory_sha256,"baseline_sha256":binding.baseline_advisory_sha256,"evaluation_pair_sha256":digest(b"dev pair"),"config_sha256":config,"schedule_start":0,"run_count":1,"sequence":10},"cases":[case],"improved":true,"reasons":[]}],"usage":{"model_reserved_micro_usd":0,"model_charged_micro_usd":2,"model_calls":2,"http_requests":2,"http_request_body_bytes":0,"http_response_reserved_bytes":0,"http_response_charged_bytes":10,"experiments":0,"runs":2,"active_runs":0,"unknown_runs":0},"stop_reason":"model_selected_final","report_sha256":digest(b"internal checksum"),"selection":selection,"final_measurement":{"cases":[case],"decision":"improved_for_fixture_suite","reasons":[],"matrix_sha256":digest(b"final matrix")}})).unwrap();
+    let descriptor = StrategySearchEvidenceDescriptor {
+        schema_version: 2,
+        binding,
+        campaign_id: "campaign".into(),
+        snapshot_sha256: digest(b"trusted snapshot"),
+        report_sha256: digest(&canonical(&report)),
+        suite_sha256: digest(b"suite"),
+        pair_sha256: digest(b"final pair"),
+        config_sha256: config,
+        selection_sha256: digest(&canonical(&selection)),
+    };
+    let artifacts_for = |d: &StrategySearchEvidenceDescriptor, r: &StrategySearchReport| {
+        BTreeMap::from([
+            (digest(&canonical(d)), canonical(d)),
+            (d.report_sha256.clone(), canonical(r)),
+            (d.snapshot_sha256.clone(), b"trusted snapshot".to_vec()),
+        ])
+    };
+    let request_for = |d: &StrategySearchEvidenceDescriptor| StrategyImportRequest {
+        command_id: "import-search".into(),
+        campaign_id: "campaign".into(),
+        expected_evidence_sha256: digest(&canonical(d)),
+    };
+    let mut registry = f.open();
+    let mut unresolved = report.clone();
+    unresolved.usage.unknown_runs = 1;
+    let mut bad = descriptor.clone();
+    bad.report_sha256 = digest(&canonical(&unresolved));
+    assert!(
+        registry
+            .import_strategy_search_evidence(
+                &request_for(&bad),
+                &bad,
+                &artifacts_for(&bad, &unresolved),
+                |_| Ok(unresolved)
+            )
+            .is_err()
+    );
+    let request = request_for(&descriptor);
+    let imported = registry
+        .import_strategy_search_evidence(
+            &request,
+            &descriptor,
+            &artifacts_for(&descriptor, &report),
+            |_| Ok(report),
+        )
+        .unwrap();
+    assert_eq!(
+        imported.receipt.qualification,
+        "measured_adaptive_search_fixture"
+    );
+    let again = registry
+        .import_strategy_search_evidence(&request, &descriptor, &BTreeMap::new(), |_| {
+            panic!("exact retry must not request source")
+        })
+        .unwrap();
+    assert!(again.duplicate);
+    assert_eq!(again.receipt, imported.receipt);
+    assert_eq!(
+        registry
+            .strategy_import_receipt(&imported.receipt_sha256)
+            .unwrap()
+            .receipt,
+        imported.receipt
+    );
+    assert_eq!(registry.current().unwrap().generation, Some(f.generation));
+}

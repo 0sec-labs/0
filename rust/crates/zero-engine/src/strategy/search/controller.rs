@@ -78,7 +78,7 @@ impl Engine {
         drop(profiles);
         let config = StrategySearchConfiguration {
             kind: "strategy_search".into(),
-            schema_version: 1,
+            schema_version: plan.schema_version,
             plan,
             capture,
             proposer_context,
@@ -299,7 +299,7 @@ async fn worker(
             &op.id,
             &shared.owner,
             status,
-            &json!({"qualification":"development_only","stop_reason":reason}),
+            &json!({"qualification":if c.plan.schema_version==1{"development_only"}else{"adaptive_search_fixture"},"stop_reason":reason}),
         )?;
     }
     Ok(Reply::StrategySearchReport {
@@ -325,7 +325,9 @@ async fn run(
         let (proposal, operation, req) = {
             let mut store = lock(&shared.store)?;
             let report = provenance::report(&store, campaign)?;
-            if report.evaluations.len() >= c.plan.max_candidates as usize {
+            if c.plan.schema_version == 1
+                && report.evaluations.len() >= c.plan.max_candidates as usize
+            {
                 return Ok("candidate_limit_reached".into());
             }
             if report.usage.model_reserved_micro_usd > 0
@@ -339,6 +341,13 @@ async fn run(
             } else {
                 Some(provenance::feedback(&report, index))
             };
+            if feedback.as_ref().is_some_and(|v| {
+                scenarios(c)
+                    .iter()
+                    .any(|s| render::has_marker(v, &s.marker))
+            }) {
+                return Err(error("private marker in proposal feedback"));
+            }
             let digest = if let Some(v) = &feedback {
                 Some(store.retain_operation_artifact(
                     &op.id,
@@ -397,7 +406,34 @@ async fn run(
         };
         match output {
             SearchProposalOutput::Stop { .. } => return Ok("model_chose_stop".into()),
+            SearchProposalOutput::SelectFinal { evaluation_id, .. } => {
+                let selected =
+                    final_selection::select(shared, campaign, op, c, &proposal, &evaluation_id)?;
+                let Some((selection, evaluation, advisory)) = selected else {
+                    continue;
+                };
+                evaluate(
+                    shared,
+                    campaign,
+                    op,
+                    c,
+                    &evaluation,
+                    &advisory,
+                    Some(&selection),
+                    cancel,
+                    events.clone(),
+                    progress.clone(),
+                    active,
+                )
+                .await?;
+                return Ok("model_selected_final".into());
+            }
             SearchProposalOutput::Propose { advisory, .. } => {
+                if lock(&shared.store)?.search_evaluations(campaign)?.len()
+                    >= c.plan.max_candidates as usize
+                {
+                    continue;
+                }
                 if advisory.advisory_utf8 == c.capture.advisory.advisory_utf8 {
                     continue;
                 }
@@ -432,6 +468,7 @@ async fn run(
                     c,
                     &evaluation,
                     &advisory,
+                    None,
                     cancel,
                     events.clone(),
                     progress.clone(),
@@ -451,17 +488,28 @@ async fn evaluate(
     c: &StrategySearchConfiguration,
     evaluation: &SearchEvaluation,
     advisory: &StrategyArtifact,
+    selection: Option<&SearchFinalSelection>,
     cancel: &CancellationToken,
     events: mpsc::Sender<ExecutionEvent>,
     progress: Option<mpsc::Sender<ExecutionEvent>>,
     active: &mut Active,
 ) -> Result<(), EngineError> {
-    for entry in render::schedule_cases(&c.plan.scenarios, c.plan.repeats) {
+    let (cases, repeats, start) = if let Some(selection) = selection {
+        let policy = c
+            .plan
+            .protected_final
+            .as_ref()
+            .ok_or_else(|| error("Final policy absent"))?;
+        (&policy.scenarios, policy.repeats, selection.schedule_start)
+    } else {
+        (&c.plan.scenarios, c.plan.repeats, evaluation.schedule_start)
+    };
+    for entry in render::schedule_cases(cases, repeats) {
         if cancel.is_cancelled() || now() >= c.plan.expires_at_ms {
             return Err(error("search stopped"));
         }
         current(shared, c)?;
-        let index = evaluation.schedule_start + entry.index;
+        let index = start + entry.index;
         active.fixture = Some(fixture::Fixture::bind().await?);
         let origin = active
             .fixture
@@ -479,7 +527,7 @@ async fn evaluate(
             name.clone(),
             Arc::new(zero_http::Client::new(policy.clone(), None).map_err(error)?),
         );
-        let scenario = &c.plan.scenarios[entry.scenario];
+        let scenario = &cases[entry.scenario];
         let artifact = if entry.variant == CampaignVariant::Baseline {
             &c.capture.advisory
         } else {
@@ -488,10 +536,18 @@ async fn evaluate(
         let request = request(c, artifact, scenario, &name)?;
         let spec = CampaignRunSpec {
             candidate_sha256: evaluation.candidate_sha256.clone(),
-            suite_sha256: hash(&serde_json::to_value(&c.plan.scenarios)?)?,
-            evaluation_pair_sha256: evaluation.evaluation_pair_sha256.clone(),
+            suite_sha256: if let Some(s) = selection {
+                s.suite_sha256.clone()
+            } else {
+                hash(&serde_json::to_value(&c.plan.scenarios)?)?
+            },
+            evaluation_pair_sha256: if let Some(s) = selection {
+                s.final_pair_sha256.clone()
+            } else {
+                evaluation.evaluation_pair_sha256.clone()
+            },
             schedule_index: index,
-            lane: CampaignLane::Development,
+            lane: scenario.lane,
             scenario_id: scenario.id.clone(),
             repeat_index: entry.repeat,
             variant: entry.variant,
@@ -499,14 +555,23 @@ async fn evaluate(
             request: request.clone(),
             provider_context: c.capture.authority.provider_context.clone(),
             http_policy: policy,
-            exposure_id: None,
+            exposure_id: selection.map(|s| s.exposure_id.clone()),
         };
-        let (run, duplicate) = lock(&shared.store)?.create_search_evaluation_run(
-            &evaluation.id,
-            &format!("search-case:{campaign}:{index}"),
-            &spec,
-            &shared.owner,
-        )?;
+        let (run, duplicate) = if let Some(selection) = selection {
+            lock(&shared.store)?.create_search_final_run(
+                &selection.id,
+                &format!("search-final-case:{campaign}:{index}"),
+                &spec,
+                &shared.owner,
+            )?
+        } else {
+            lock(&shared.store)?.create_search_evaluation_run(
+                &evaluation.id,
+                &format!("search-case:{campaign}:{index}"),
+                &spec,
+                &shared.owner,
+            )?
+        };
         if duplicate {
             return Err(error("automatic actor replay forbidden"));
         }
@@ -561,23 +626,45 @@ async fn evaluate(
     }
     let mut store = lock(&shared.store)?;
     let report = provenance::report(&store, campaign)?;
-    let cases = &report
-        .evaluations
-        .iter()
-        .find(|e| e.evaluation.id == evaluation.id)
-        .ok_or_else(|| error("evaluation absent"))?
-        .cases;
+    let cases = if selection.is_some() {
+        &report
+            .final_measurement
+            .as_ref()
+            .ok_or_else(|| error("Final report absent"))?
+            .cases
+    } else {
+        &report
+            .evaluations
+            .iter()
+            .find(|e| e.evaluation.id == evaluation.id)
+            .ok_or_else(|| error("evaluation absent"))?
+            .cases
+    };
+    let name = if selection.is_some() {
+        "search.final.matrix".into()
+    } else {
+        format!("search.matrix.{}", evaluation.id)
+    };
     let digest = store.retain_operation_artifact(
         &op.id,
         &shared.owner,
-        &format!("search.matrix.{}", evaluation.id),
+        &name,
         &serde_json::to_vec(cases)?,
     )?;
-    store.append_operation_event(
-        &op.id,
-        &shared.owner,
-        "strategy_search_evaluation_completed",
-        &json!({"evaluation_id":evaluation.id,"matrix_sha256":digest}),
-    )?;
+    if let Some(selection) = selection {
+        store.append_operation_event(
+            &op.id,
+            &shared.owner,
+            "strategy_search_final_completed",
+            &json!({"selection_id":selection.id,"matrix_sha256":digest}),
+        )?;
+    } else {
+        store.append_operation_event(
+            &op.id,
+            &shared.owner,
+            "strategy_search_evaluation_completed",
+            &json!({"evaluation_id":evaluation.id,"matrix_sha256":digest}),
+        )?;
+    }
     Ok(())
 }

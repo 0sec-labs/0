@@ -3,7 +3,7 @@ use super::*;
 
 pub(super) fn feedback(report: &StrategySearchReport, index: u32) -> Value {
     let proposals:Vec<_>=report.proposals.iter().filter(|p|p.proposal.attempt_index<index).map(|p|{
- let (action,candidate)=match &p.output{Some(SearchProposalOutput::Propose{advisory,..})=>(Some("propose"),hash(&serde_json::to_value(advisory).unwrap_or(Value::Null)).ok()),Some(SearchProposalOutput::Stop{..})=>(Some("stop"),None),None=>(None,None)};
+ let (action,candidate)=match &p.output{Some(SearchProposalOutput::Propose{advisory,..})=>(Some("propose"),hash(&serde_json::to_value(advisory).unwrap_or(Value::Null)).ok()),Some(SearchProposalOutput::Stop{..})=>(Some("stop"),None),Some(SearchProposalOutput::SelectFinal{..})=>(Some("select_final"),None),None=>(None,None)};
  json!({"attempt_index":p.proposal.attempt_index,"operation_id":p.proposal.operation_id,"operation_status":p.operation_status,"action":action,"candidate_sha256":candidate,"error":p.error})}).collect();
     let evaluations:Vec<_>=report.evaluations.iter().filter(|e|report.proposals.iter().any(|p|p.proposal.id==e.evaluation.proposal_id&&p.proposal.attempt_index<index)).map(|e|{
  let cases:Vec<_>=e.cases.iter().map(|r|json!({"scenario_id":r.scenario_id,"family":r.family,"variant":r.variant,"repeat_index":r.repeat_index,"disposition":r.disposition,"matched":r.matched,"supported_findings":r.supported_findings,"unsupported_claims":r.unsupported_claims,"error":r.error})).collect();
@@ -22,7 +22,8 @@ pub(super) fn report(store: &Store, id: &str) -> Result<StrategySearchReport, En
         &snapshot.campaign.campaign.journal_session_id,
         &mut budget,
     )?;
-    if journal.iter().any(|e| e.kind == "campaign_exposed") {
+    let selection = store.search_final_selection(id)?;
+    if selection.is_none() && journal.iter().any(|e| e.kind == "campaign_exposed") {
         return Err(error("Development search contains protected exposure"));
     }
     let phase = match store.get_operation_by_command_bounded(
@@ -43,6 +44,14 @@ pub(super) fn report(store: &Store, id: &str) -> Result<StrategySearchReport, En
         Err(zero_store::Error::NotFound(_)) => None,
         Err(e) => return Err(e.into()),
     };
+    if journal
+        .iter()
+        .filter(|e| e.kind == "command_admitted")
+        .count()
+        != usize::from(phase.is_some())
+    {
+        return Err(error("search journal contains extra controller operation"));
+    }
     let mut proposals = vec![];
     let mut proposal_operations = BTreeMap::new();
     for (p, op) in store.search_proposals(id)? {
@@ -193,6 +202,28 @@ pub(super) fn report(store: &Store, id: &str) -> Result<StrategySearchReport, En
             reasons,
         });
     }
+    let final_measurement = if let Some(selection) = &selection {
+        let selected = evaluations
+            .iter()
+            .find(|e| e.evaluation.id == selection.evaluation_id)
+            .ok_or_else(|| error("selected evaluation absent"))?;
+        Some(final_selection::measure(
+            store,
+            &config,
+            selection,
+            selected,
+            &proposals,
+            phase
+                .as_ref()
+                .ok_or_else(|| error("selected search controller absent"))?,
+            &journal,
+            &all_runs,
+            &mut consumed,
+            &mut budget,
+        )?)
+    } else {
+        None
+    };
     if consumed.len() != all_runs.len() {
         return Err(error("search contains unbound evaluation runs"));
     }
@@ -202,10 +233,17 @@ pub(super) fn report(store: &Store, id: &str) -> Result<StrategySearchReport, En
         .and_then(|v| v["stop_reason"].as_str())
         .map(Into::into);
     let mut report = StrategySearchReport {
-        schema_version: 1,
+        schema_version: config.plan.schema_version,
         campaign_id: id.into(),
         config_sha256: snapshot.campaign.campaign.plan.controller_plan_sha256,
-        qualification: "development_only".into(),
+        qualification: if config.plan.schema_version == 1 {
+            "development_only"
+        } else {
+            "adaptive_search_fixture"
+        }
+        .into(),
+        selection,
+        final_measurement,
         proposals,
         evaluations,
         usage: snapshot.campaign.usage,

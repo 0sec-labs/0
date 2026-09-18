@@ -277,7 +277,7 @@ separate units; an accounting receipt is not proof of agent quality or a hard
 provider invoice cap.
 
 
-## Shared advisory-search account (schema 15)
+## Shared advisory-search account (schema 16)
 
 A typed search uses one existing campaign account for proposer inference and all
 candidate Development evaluations. Proposal admission atomically binds a private
@@ -299,5 +299,18 @@ start, settlement/recovery and binding witnesses. Read-only metadata and candida
 pages are bounded; proposal reassessment preflights a 64 MiB read budget.
 Existing fixed-pair campaigns and opaque controller artifacts retain their prior
 behavior. Historical portable schema-14 evidence rejects search state rather than
-silently omitting it. Search currently supports Development only and never issues
-eligibility, protected Final exposure, canary completion or activation.
+silently omitting it.
+
+Search version2 can atomically seal a host-validated explicit Final selection,
+consume one permanent suite exposure and reserve its global schedule range.
+Further proposal and Development admissions then fail. Exact selection retry uses
+the original record; a missing projection with a retained witness is corruption.
+The Engine guards selection with the current Registry binding, using a short
+Registry transaction before the Store transaction, without provider work inside.
+
+Portable layout2 (store layout16) captures all search tables, proposal sessions,
+evaluation roots, debits and candidate artifacts from one read transaction.
+Hydration is private and read-only, validates membership against witnesses, and
+requires an identical canonical refreeze. Search packages do not grant authority;
+independent Engine reassessment and Registry import are separate steps. Historical
+fixed-pair layout1/store layout14 bytes remain stable after schema migration.

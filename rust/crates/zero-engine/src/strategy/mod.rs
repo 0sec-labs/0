@@ -79,3 +79,11 @@ pub use search::{
     read_strategy_search_candidate, read_strategy_search_candidates, read_strategy_search_report,
     read_strategy_search_status,
 };
+
+pub use search::{
+    RecomputedStrategySearchEvidence, StrategySearchEligibilityPreparation,
+    VerifiedStrategySearchEvidence, export_strategy_search_evidence,
+    import_strategy_search_eligibility, prepare_strategy_search_eligibility,
+    read_strategy_search_eligibility, read_strategy_search_eligibility_receipt,
+    reassess_strategy_search_evidence,
+};

@@ -7,6 +7,7 @@ use zero_protocol::{
 };
 mod evaluations;
 mod proposals;
+mod selection;
 pub(super) use evaluations::validate_run;
 pub(super) use proposals::{
     authorize_proposal_session, proposal_binding, reserve_model, settle_model,
@@ -54,11 +55,22 @@ fn config_validate(config: &StrategySearchConfiguration) -> Result<()> {
         return Err(bad("search capture identity is invalid"));
     }
     if config.kind != "strategy_search"
-        || config.schema_version != 1
+        || config.schema_version != config.plan.schema_version
         || hash(&serde_json::to_value(&config.capture.advisory)?)? != config.capture.advisory_sha256
         || config.plan.minimum_development_gain < config.capture.authority.minimum_development_gain
     {
         return Err(bad("search captured authority differs"));
+    }
+    if let Some(policy) = &config.plan.protected_final {
+        if policy.minimum_gain < config.capture.authority.minimum_final_gain
+            || !config
+                .capture
+                .authority
+                .accepted_suite_sha256
+                .contains(&hash(&search_final_suite_value(policy))?)
+        {
+            return Err(bad("protected search suite or minimum is not authorized"));
+        }
     }
     let limits = serde_json::to_value(&config.plan.limits)?;
     let maximum = serde_json::to_value(&config.capture.authority.campaign_limits)?;
@@ -75,7 +87,13 @@ fn config_validate(config: &StrategySearchConfiguration) -> Result<()> {
     {
         return Err(bad("search proposer route invalid"));
     }
-    for s in &config.plan.scenarios {
+    for s in config.plan.scenarios.iter().chain(
+        config
+            .plan
+            .protected_final
+            .iter()
+            .flat_map(|p| &p.scenarios),
+    ) {
         if config.capture.advisory.advisory_utf8.contains(&s.marker)
             || config
                 .capture
@@ -141,14 +159,9 @@ fn configuration(conn: &Connection, c: &Campaign) -> Result<Option<StrategySearc
         "strategy_search_created",
         &json!({"campaign_id":c.id,"config_sha256":digest}),
     )?;
-    let exposed:bool=conn.query_row("SELECT EXISTS(SELECT 1 FROM campaign_exposures WHERE campaign_id=?1) OR EXISTS(SELECT 1 FROM events WHERE session_id=?2 AND kind='campaign_exposed')",params![c.id,c.journal_session_id],|r|r.get(0))?;
-    if exposed {
-        return Err(bad(
-            "Development search contains unsupported protected exposure",
-        ));
-    }
     let config: StrategySearchConfiguration = serde_json::from_value(value)?;
     config_validate(&config)?;
+    selection::check_exposure(conn, c, &config)?;
     Ok(Some(config))
 }
 fn required(conn: &Connection, c: &Campaign) -> Result<StrategySearchConfiguration> {
@@ -232,6 +245,28 @@ impl Store {
         if config_bytes > 2 * 1024 * 1024 || proposals > 16 || runs > 128 || evaluations > 16 {
             return Err(bad("search evidence count or configuration bound"));
         }
+        let selection_bytes: u64 = tx.query_row("SELECT COALESCE(sum(length(CAST(record AS BLOB))),0) FROM strategy_search_selections WHERE campaign_id=?1", [campaign], |r| r.get(0))?;
+        let matrix_bytes: u64 = tx.query_row("SELECT COALESCE(sum(length(a.bytes)),0) FROM strategy_search_selections s JOIN artifacts a ON a.digest=CASE WHEN length(CAST(s.record AS BLOB))<=65536 THEN json_extract(s.record,'$.development_matrix_sha256') END WHERE s.campaign_id=?1", [campaign], |r| r.get(0))?;
+        if selection_bytes > 65536 || matrix_bytes > 1024 * 1024 {
+            return Err(bad("selection evidence exceeds bound"));
+        }
+        // Full selection proof adds one proposal/evaluation verification pass.
+        // Configuration reads also validate the compact selection/exposure pair;
+        // charge those repeated reads without reloading every matrix per run.
+        let selected_charge = if selection_bytes == 0 {
+            0
+        } else {
+            proposal_bytes
+                .checked_add(events)
+                .and_then(|n| n.checked_add(evaluation_bytes))
+                .and_then(|n| n.checked_add(config_bytes.saturating_mul(proposals + 1)))
+                .and_then(|n| n.checked_add(proposals * 512 * 1024))
+                .and_then(|n| n.checked_add(matrix_bytes * 2))
+                .and_then(|n| {
+                    n.checked_add(selection_bytes.saturating_mul(2 * runs + 4 * proposals + 16))
+                })
+                .ok_or_else(|| bad("selection preflight overflow"))?
+        };
         // Snapshot and detail readers each verify proposals/evaluations; run pages
         // verify one record again for the caller's full detail. Config/feedback
         // decoding is charged for both passes, before either pass starts.
@@ -242,6 +277,7 @@ impl Store {
             .and_then(|n| n.checked_mul(2))
             .and_then(|n| n.checked_add(config_bytes.saturating_mul(2 * proposals + 4)))
             .and_then(|n| n.checked_add(proposals * 1024 * 1024))
+            .and_then(|n| n.checked_add(selected_charge))
             .and_then(|n| usize::try_from(n).ok())
             .ok_or_else(|| bad("search evidence preflight overflow"))?;
         *budget = budget

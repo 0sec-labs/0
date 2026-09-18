@@ -1218,3 +1218,40 @@ projection/recovery-witness corruption and prior fixed-pair measurement/import.
 No paid provider or live target is part of this fixture qualification. Remove the
 adapter only after full evolution workflow, independent corpus and production
 release parity are established.
+
+### Protected Final selection and complete adaptive evidence
+
+Search plan version2 adds host-frozen protected scenarios and an explicit model
+`select_final` action. Version1 keeps its Development-only wire shape. Selection
+requires a completed independently improved Development evaluation, the original
+Registry binding, settled prior work and remaining shared budget. A short Registry
+write guard covers the Store's atomic seal/exposure transaction. Stop and rejected
+selection consume no protected exposure; caps never automatically choose a winner.
+Accepted selection prevents subsequent proposal or Development admissions.
+
+Final actors use the original campaign account. Reports retain every paid proposal,
+earlier losing candidates, the selected evaluation, protected measurements and
+whole-history usage. Source export and import independently reconstruct the full
+history; the selected pair is never substituted for the complete search. Registry
+eligibility remains distinct from activation and shares protected-suite uniqueness
+with fixed-pair evidence. Independent canaries, automatic activation, general
+security-quality claims and arbitrary self-modifying source remain unqualified.
+
+Store schema16 adds immutable selection records. Portable search layout2/store
+layout16 retains all search records and referenced candidate advice in one source
+read transaction. Historical fixed-pair layout1/store layout14 identity is stable.
+Readonly reconstruction checks exact admission/membership witnesses and canonical
+refreeze; recalculating hashes cannot make an omitted proposal or debit valid.
+Retained Registry evidence supports exact offline import retries after source
+removal, without dispatch or fresh provider configuration.
+
+Physical engine and CLI fixtures cover two proposals, explicit selection after the
+candidate cap, 35 model calls, 8 HTTP requests and 24 evaluation roots charged to one
+account. Additional checks cover Stop, invalid or unimproved selection, cancellation
+during held Final inference, permanent exposure, source projection deletion,
+portable omission, concurrent source writes, migration and unchanged active strategy.
+
+Qualification: all workspace packages passed actual Rust 1.85 regression in two
+sequential frozen-source batches: 964 passed, zero failed, 11 explicit backend or
+platform ignores. Strict workspace production Clippy and formatting passed. Production
+TypeScript and release selection remain unchanged.

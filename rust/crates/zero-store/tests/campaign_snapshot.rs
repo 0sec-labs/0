@@ -115,7 +115,7 @@ fn schema_thirteen_migration_preserves_existing_campaign_snapshot() {
     drop(store);
     let path = dir.path().join("state.db");
     let sql = rusqlite::Connection::open(&path).unwrap();
-    sql.execute_batch("DROP TABLE strategy_search_evaluations; DROP TABLE strategy_search_proposals; DROP TABLE strategy_searches; DROP TABLE strategy_sessions; PRAGMA user_version=13;")
+    sql.execute_batch("DROP TABLE strategy_search_selections; DROP TABLE strategy_search_evaluations; DROP TABLE strategy_search_proposals; DROP TABLE strategy_searches; DROP TABLE strategy_sessions; PRAGMA user_version=13;")
         .unwrap();
     drop(sql);
     assert!(matches!(
@@ -209,7 +209,7 @@ fn schema_fourteen_migration_preserves_retained_portable_evidence() {
     drop(store);
     let path = dir.path().join("state.db");
     let sql = rusqlite::Connection::open(&path).unwrap();
-    sql.execute_batch("DROP TABLE strategy_search_evaluations; DROP TABLE strategy_search_proposals; DROP TABLE strategy_searches; PRAGMA user_version=14;").unwrap();
+    sql.execute_batch("DROP TABLE strategy_search_selections; DROP TABLE strategy_search_evaluations; DROP TABLE strategy_search_proposals; DROP TABLE strategy_searches; PRAGMA user_version=14;").unwrap();
     drop(sql);
     assert!(matches!(
         Store::open_read_only(&path),
@@ -274,5 +274,34 @@ fn additive_search_schema_preserves_opaque_nonsearch_campaign_artifacts() {
     assert_eq!(
         hydrated.freeze_campaign(&campaign.id).unwrap().digest(),
         evidence.digest()
+    );
+}
+
+#[test]
+fn schema_fifteen_upgrade_preserves_fixed_pair_portable_identity() {
+    let (dir, store, id) = fixture();
+    let before = store.freeze_campaign(&id).unwrap();
+    drop(store);
+    let path = dir.path().join("state.db");
+    let sql = rusqlite::Connection::open(&path).unwrap();
+    sql.execute_batch("DROP TABLE strategy_search_selections; PRAGMA user_version=15;")
+        .unwrap();
+    drop(sql);
+    assert!(matches!(
+        Store::open_read_only(&path),
+        Err(zero_store::Error::Schema(15))
+    ));
+    let migrated = Store::open(&path).unwrap();
+    assert_eq!(
+        migrated.freeze_campaign(&id).unwrap().manifest_bytes(),
+        before.manifest_bytes()
+    );
+    assert_eq!(
+        Store::hydrate_campaign_snapshot(&before)
+            .unwrap()
+            .freeze_campaign(&id)
+            .unwrap()
+            .digest(),
+        before.digest()
     );
 }

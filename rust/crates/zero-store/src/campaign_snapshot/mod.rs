@@ -1,6 +1,7 @@
 //! Bounded logical campaign evidence. Packages contain data, never executable SQL.
 mod capture;
 mod package;
+mod search;
 use crate::{Error, Result, Store};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -30,6 +31,51 @@ const TABLES: &[&str] = &[
     "agent_steering_windows",
     "web_triage_decisions",
 ];
+const SEARCH_TABLES: &[&str] = &[
+    "strategy_searches",
+    "strategy_search_proposals",
+    "strategy_search_evaluations",
+    "strategy_search_selections",
+];
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Layout {
+    FixedPair,
+    Search,
+}
+impl Layout {
+    fn version(self) -> u32 {
+        match self {
+            Self::FixedPair => 1,
+            Self::Search => 2,
+        }
+    }
+    fn store_schema(self) -> u32 {
+        match self {
+            Self::FixedPair => SNAPSHOT_STORE_LAYOUT,
+            Self::Search => 16,
+        }
+    }
+    fn max_sessions(self) -> usize {
+        match self {
+            Self::FixedPair => 129,
+            Self::Search => 145,
+        }
+    }
+    fn tables(self) -> Vec<&'static str> {
+        let mut tables = TABLES.to_vec();
+        if self == Self::Search {
+            tables.extend_from_slice(SEARCH_TABLES);
+        }
+        tables
+    }
+    fn from_manifest(manifest: &Manifest) -> Result<Self> {
+        match (manifest.schema_version, manifest.store_schema) {
+            (1, SNAPSHOT_STORE_LAYOUT) => Ok(Self::FixedPair),
+            (2, 16) => Ok(Self::Search),
+            _ => Err(invalid("unsupported portable layout")),
+        }
+    }
+}
 fn invalid(message: &str) -> Error {
     Error::Invalid(format!("campaign evidence: {message}"))
 }
@@ -143,8 +189,16 @@ impl Store {
         conn.pragma_update(None, "query_only", true)?;
         let frozen = Self { conn };
         // Metadata validation also catches omitted run projections against retained journal witnesses.
+        let layout = Layout::from_manifest(&data.manifest)?;
         frozen.campaign(data.campaign_id())?;
-        if frozen.freeze_campaign(data.campaign_id())?.manifest_bytes() != data.manifest_bytes() {
+        let refrozen = match layout {
+            Layout::FixedPair => frozen.freeze_campaign(data.campaign_id())?,
+            Layout::Search => {
+                frozen.search_snapshot(data.campaign_id())?;
+                frozen.freeze_strategy_search(data.campaign_id())?
+            }
+        };
+        if refrozen.manifest_bytes() != data.manifest_bytes() {
             return Err(invalid("package contains omitted or foreign records"));
         }
         Ok(frozen)

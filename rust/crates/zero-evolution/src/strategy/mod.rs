@@ -436,3 +436,20 @@ impl Registry {
         validate_binding(&tx, binding, true)
     }
 }
+impl Registry {
+    /// Hold Registry write exclusion while a trusted host commits its bounded
+    /// selection in another database. Callbacks perform no provider/fixture I/O.
+    pub fn with_current_strategy_binding<T>(
+        &mut self,
+        binding: &StrategyRegistryBinding,
+        callback: impl FnOnce() -> Result<T>,
+    ) -> Result<T> {
+        let tx = self
+            .conn
+            .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
+        validate_binding(&tx, binding, true)?;
+        let value = callback()?;
+        tx.commit()?;
+        Ok(value)
+    }
+}
