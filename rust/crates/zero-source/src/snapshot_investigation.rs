@@ -83,6 +83,7 @@ pub struct SnapshotInvestigation {
     directory: Option<File>,
     files: Vec<SnapshotFile>,
     digest: String,
+    snapshot_id: String,
 }
 impl Drop for SnapshotInvestigation {
     fn drop(&mut self) {
@@ -128,6 +129,7 @@ impl SnapshotInvestigation {
             directory: None,
             files: pin.files.clone(),
             digest: pin.digest.clone(),
+            snapshot_id: pin.id.clone(),
         };
         // Keep original array order for canonical catalog identity; listing/search
         // sort borrowed entries rather than changing the manifest.
@@ -258,6 +260,57 @@ impl SnapshotInvestigation {
             }
         }
         bounded(result)
+    }
+    /// Select retained citation text from this verified private copy only.
+    /// Empty selection produces a version-2 manifest-only adaptive bundle.
+    pub fn selected_bundle(
+        &self,
+        selected_files: &[String],
+        question: &str,
+        max_hypotheses: u32,
+    ) -> Result<crate::SourceBundle> {
+        crate::bundle::validate_options(question, max_hypotheses)
+            .map_err(|_| SnapshotError::Invalid("question or hypothesis bound"))?;
+        if selected_files.len() > 32 {
+            return Err(SnapshotError::Invalid("select at most 32 files"));
+        }
+        let mut selected = std::collections::BTreeSet::new();
+        let mut total = 0u64;
+        for path in selected_files {
+            if !path_valid(path) || !selected.insert(path.as_str()) {
+                return Err(SnapshotError::Invalid("invalid or duplicate selected path"));
+            }
+            let file = self
+                .files
+                .iter()
+                .find(|f| f.path == *path)
+                .ok_or(SnapshotError::Invalid("selected file not pinned"))?;
+            total += file.bytes;
+            if file.bytes > crate::MAX_FILE_BYTES as u64 || total > crate::MAX_SOURCE_BYTES as u64 {
+                return Err(SnapshotError::Invalid("selected source exceeds bounds"));
+            }
+        }
+        let mut text = Vec::with_capacity(selected.len());
+        for path in selected {
+            let file = self
+                .files
+                .iter()
+                .find(|f| f.path == path)
+                .ok_or(SnapshotError::Invalid("selected file not pinned"))?;
+            let bytes = self.text(file)?.map_err(|_| {
+                SnapshotError::Invalid("selected source must be bounded UTF-8 without NUL")
+            })?;
+            text.push((path.to_owned(), bytes));
+        }
+        crate::SourceBundle::from_selected_snapshot(
+            self.snapshot_id.clone(),
+            self.digest.clone(),
+            self.files.clone(),
+            text,
+            question,
+            max_hypotheses,
+        )
+        .map_err(|_| SnapshotError::Invalid("selected bundle validation failed"))
     }
     fn text(&self, file: &SnapshotFile) -> Result<std::result::Result<String, SkipReason>> {
         if file.bytes > crate::MAX_FILE_BYTES as u64 {

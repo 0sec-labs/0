@@ -57,7 +57,10 @@ impl SourceBundle {
         Self::validate(serde_json::from_slice(bytes)?)
     }
     fn validate(data: BundleData) -> Result<Self> {
-        if data.version != 1 || data.snapshot_id.is_empty() || data.snapshot_id.len() > 512 {
+        if !matches!(data.version, 1 | 2)
+            || data.snapshot_id.is_empty()
+            || data.snapshot_id.len() > 512
+        {
             return Err(invalid("bundle version/identity"));
         }
         validate_options(&data.question, data.max_hypotheses)?;
@@ -67,8 +70,13 @@ impl SourceBundle {
         {
             return Err(invalid("snapshot manifest digest mismatch"));
         }
-        if data.files.is_empty() || data.files.len() > 32 {
-            return Err(invalid("select 1..32 files"));
+        if data.files.len() > 32
+            || (data.version == 1 && data.files.is_empty())
+            || (data.version == 2 && !data.files.is_empty())
+        {
+            return Err(invalid(
+                "file selection does not match bundle version or bounds",
+            ));
         }
         let index: BTreeMap<_, _> = data
             .snapshot_files
@@ -101,6 +109,33 @@ impl SourceBundle {
         }
         let digest = identity(&data)?;
         Ok(Self { data, digest })
+    }
+    /// Build only from already hash-verified private snapshot text. Version 2
+    /// represents an explicitly empty adaptive selection, never a safety verdict.
+    pub(crate) fn from_selected_snapshot(
+        snapshot_id: String,
+        snapshot_digest: String,
+        snapshot_files: Vec<SnapshotFile>,
+        selected: Vec<(String, String)>,
+        question: &str,
+        max_hypotheses: u32,
+    ) -> Result<Self> {
+        Self::validate(BundleData {
+            version: if selected.is_empty() { 2 } else { 1 },
+            snapshot_id,
+            snapshot_digest,
+            snapshot_files,
+            files: selected
+                .into_iter()
+                .map(|(path, text)| SourceFile {
+                    sha256: hash(text.as_bytes()),
+                    path,
+                    text,
+                })
+                .collect(),
+            question: question.into(),
+            max_hypotheses,
+        })
     }
     pub fn to_bytes(&self) -> Result<Vec<u8>> {
         encoded(&self.data)
@@ -136,7 +171,7 @@ impl PreparedReview {
         PreparedSubmission::new(self.bundle.clone(), model)
     }
 }
-fn validate_options(question: &str, max: u32) -> Result<()> {
+pub(crate) fn validate_options(question: &str, max: u32) -> Result<()> {
     if question.trim().is_empty()
         || question.len() > 16384
         || question.contains('\0')

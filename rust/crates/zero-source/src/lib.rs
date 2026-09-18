@@ -7,7 +7,7 @@ mod submission;
 pub use bundle::{PreparedReview, SourceBundle, SourceFile, prepare};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
-pub use submission::PreparedSubmission;
+pub use submission::{PreparedSubmission, adaptive_submission_tool, submission_tool};
 pub use zero_protocol::source::{
     Citation, Claim, ClaimedSeverity, Hypothesis, ReviewRequest, ReviewResult, VerificationState,
 };
