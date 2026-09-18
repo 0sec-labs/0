@@ -33,6 +33,47 @@ pub fn pin_snapshot(root: &Path) -> Result<SnapshotPin, String> {
     }
 }
 
+/// Controller-owned verified source copy. Dropping this handle intentionally
+/// retains it: only a caller that confirms guest teardown may remove the tree.
+/// This favors recoverable leakage over deleting a still-mounted source.
+pub struct StagedSnapshot {
+    root: std::path::PathBuf,
+}
+impl StagedSnapshot {
+    pub fn root(&self) -> &Path {
+        &self.root
+    }
+    pub fn source(&self) -> std::path::PathBuf {
+        self.root.join("source")
+    }
+    pub fn remove(self) -> Result<(), String> {
+        std::fs::remove_dir_all(&self.root).map_err(|e| e.to_string())
+    }
+}
+/// Creates the private destination itself; callers cannot supply a symlinked or
+/// guest-writable copy target. Call off async runtime threads for large trees.
+pub fn stage_snapshot(
+    pin: &SnapshotPin,
+    check: &dyn Fn() -> Result<(), String>,
+) -> Result<StagedSnapshot, String> {
+    check()?;
+    let stage = tempfile::Builder::new()
+        .prefix("0sec-snapshot-")
+        .tempdir()
+        .map_err(|e| e.to_string())?;
+    let source = stage.path().join("source");
+    std::fs::create_dir(&source).map_err(|e| e.to_string())?;
+    verify_and_copy(pin, Some(&source), check)?;
+    Ok(StagedSnapshot { root: stage.keep() })
+}
+/// Rechecks the authorized source against its pinned manifest without copying.
+pub fn verify_snapshot(
+    pin: &SnapshotPin,
+    check: &dyn Fn() -> Result<(), String>,
+) -> Result<(), String> {
+    verify_and_copy(pin, None, check)
+}
+
 pub(crate) fn verify_and_copy(
     pin: &SnapshotPin,
     destination: Option<&Path>,
@@ -219,6 +260,9 @@ mod anchored {
         check: &dyn Fn() -> Result<(), String>,
     ) -> Result<(), String> {
         check()?;
+        if pin.files.is_empty() {
+            return Err("snapshot requires at least one file".into());
+        }
         if snapshot_digest(&pin.files)? != pin.digest {
             return Err("snapshot manifest digest mismatch".into());
         }
@@ -273,6 +317,29 @@ mod anchored {
 mod tests {
     use super::*;
     use std::fs;
+    #[test]
+    fn public_staging_is_private_verified_and_retained_until_explicit_disposal() {
+        let source = tempfile::tempdir().unwrap();
+        fs::write(source.path().join("main"), b"original").unwrap();
+        let pin = pin_snapshot(source.path()).unwrap();
+        let staged = stage_snapshot(&pin, &|| Ok(())).unwrap();
+        let recovery = staged.root().to_path_buf();
+        fs::write(source.path().join("main"), b"changed").unwrap();
+        assert_eq!(fs::read(staged.source().join("main")).unwrap(), b"original");
+        assert!(verify_snapshot(&pin, &|| Ok(())).is_err());
+        drop(staged);
+        assert!(
+            recovery.exists(),
+            "uncertain teardown must retain staged bytes"
+        );
+        fs::remove_dir_all(recovery).unwrap();
+        let pin = pin_snapshot(source.path()).unwrap();
+        let staged = stage_snapshot(&pin, &|| Ok(())).unwrap();
+        let root = staged.root().to_path_buf();
+        staged.remove().unwrap();
+        assert!(!root.exists());
+        assert!(stage_snapshot(&pin, &|| Err("cancelled".into())).is_err());
+    }
     #[test]
     fn pin_and_tampering() {
         let root = tempfile::tempdir().unwrap();

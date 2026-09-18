@@ -95,7 +95,13 @@ async fn owned_processes_at(root: &Path, proc_root: &Path) -> Result<Vec<u32>, S
         let contains = command
             .windows(marker.len())
             .any(|v| v == marker.as_bytes());
-        let cwd = if command.windows(6).any(|v| v == b"smolvm") {
+        // Only the launcher executable gets the cwd fallback. A command such
+        // as `sg kvm -c ...smolvm...` is not our runtime: its command text may
+        // mention smolvm while its protected cwd is intentionally unreadable.
+        let executable = command.split(|b| *b == 0).next().unwrap_or_default();
+        let basename = executable.rsplit(|b| *b == b'/').next().unwrap_or_default();
+        let runtime_name = basename == b"smolvm" || basename.starts_with(b"smolvm-");
+        let cwd = if runtime_name {
             match tokio::fs::read_link(entry.path().join("cwd")).await {
                 Ok(v) => Some(v),
                 Err(e) if e.kind() == std::io::ErrorKind::NotFound => None,
@@ -181,6 +187,14 @@ mod tests {
         }
         std::fs::write(pid.join("cwd"), b"not a symlink").unwrap();
         assert!(owned_processes_at(root.path(), proc.path()).await.is_err());
+        std::fs::write(pid.join("cmdline"), b"sg\0kvm\0-c\0smolvm something\0").unwrap();
+        assert!(
+            owned_processes_at(root.path(), proc.path())
+                .await
+                .unwrap()
+                .is_empty()
+        );
+        std::fs::write(pid.join("cmdline"), b"smolvm\0").unwrap();
         std::fs::remove_file(pid.join("cwd")).unwrap();
         std::os::unix::fs::symlink(root.path(), pid.join("cwd")).unwrap();
         std::fs::write(pid.join("stat"), "123 (smolvm) S 1 2 3").unwrap();

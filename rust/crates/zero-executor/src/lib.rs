@@ -4,7 +4,9 @@
 mod process;
 mod snapshot;
 pub use process::EventSink;
-pub use snapshot::{pin_snapshot, snapshot_digest};
+pub use snapshot::{
+    StagedSnapshot, pin_snapshot, snapshot_digest, stage_snapshot, verify_snapshot,
+};
 
 use std::{
     path::{Path, PathBuf},

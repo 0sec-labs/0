@@ -1,7 +1,9 @@
 # Native smolvm batch execution
 
-A separate backend primitive; it is not wired into the native application
-protocol or a replacement for Docker's snapshot-program executor yet.
+A low-level backend primitive. `zero-sandbox` adds the common pinned snapshot,
+build and disposable-workdir contract for Docker and smolvm; this crate retains
+its explicit host-authorized batch/mount API. Serde values live in
+`zero-protocol::microvm` and raw byte fields use base64 JSON strings.
 `execute(SmolvmRequest, SmolvmConfig, CancellationToken)` requires non-root Linux,
 usable `/dev/kvm`, `setpriv` and the complete smolvm **1.14.6** bundle.
 

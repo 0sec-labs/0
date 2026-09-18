@@ -1834,6 +1834,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "zero-sandbox"
+version = "0.1.0"
+dependencies = [
+ "serde_json",
+ "sha2",
+ "tempfile",
+ "tokio",
+ "tokio-util",
+ "zero-executor",
+ "zero-protocol",
+ "zero-smolvm",
+]
+
+[[package]]
 name = "zero-smolvm"
 version = "0.1.0"
 dependencies = [
@@ -1845,6 +1859,7 @@ dependencies = [
  "tempfile",
  "tokio",
  "tokio-util",
+ "zero-protocol",
 ]
 
 [[package]]
