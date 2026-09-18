@@ -261,3 +261,52 @@ fn concurrent_reservations_cannot_overbook() {
         60
     );
 }
+
+#[test]
+fn operator_reconciliation_retains_evidence_and_deduplicates_without_replaying() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("state.db");
+    let mut store = zero_store::Store::open(&path).unwrap();
+    let session = store.create_session("g", 100).unwrap();
+    let op = store
+        .admit_command(&session.id, "uncertain", &serde_json::json!({}))
+        .unwrap()
+        .operation;
+    store.begin_operation(&op.id, "owner").unwrap();
+    store.reserve_budget(&session.id, &op.id, 30).unwrap();
+    store
+        .mark_operation_unknown(&op.id, "owner", "lost reply")
+        .unwrap();
+    assert!(store.reconcile_budget(&session.id, &op.id, 7, " ").is_err());
+    let budget = store
+        .reconcile_budget(&session.id, &op.id, 7, "provider usage receipt receipt-1")
+        .unwrap();
+    assert_eq!((budget.reserved, budget.charged), (0, 7));
+    drop(store);
+    let mut store = zero_store::Store::open(&path).unwrap();
+    assert_eq!(
+        store
+            .reconcile_budget(&session.id, &op.id, 7, "provider usage receipt receipt-1")
+            .unwrap(),
+        budget
+    );
+    assert!(
+        store
+            .reconcile_budget(&session.id, &op.id, 8, "changed receipt")
+            .is_err()
+    );
+    assert_eq!(
+        store.get_operation(&op.id).unwrap().status,
+        zero_protocol::OperationStatus::Unknown
+    );
+    let events = store.events(&session.id, 0, 100).unwrap();
+    let reconciled: Vec<_> = events
+        .iter()
+        .filter(|e| e.kind == "budget_reconciled")
+        .collect();
+    assert_eq!(reconciled.len(), 1);
+    assert_eq!(
+        reconciled[0].payload["evidence"],
+        "provider usage receipt receipt-1"
+    );
+}

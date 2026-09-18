@@ -72,6 +72,17 @@ async fn run(args: Args) -> Result<bool, Box<dyn Error>> {
             SessionCommand::List => EngineCommand::SessionList,
             SessionCommand::Show { id } => EngineCommand::SessionGet { session_id: id },
             SessionCommand::Budget { id } => EngineCommand::SessionBudget { session_id: id },
+            SessionCommand::ReconcileUsage {
+                id,
+                operation,
+                charged,
+                evidence,
+            } => EngineCommand::ReconcileUsage {
+                session_id: id,
+                operation_id: operation,
+                charged,
+                evidence,
+            },
             SessionCommand::Events { id, after, limit } => EngineCommand::SessionEvents {
                 session_id: id,
                 after_sequence: after,

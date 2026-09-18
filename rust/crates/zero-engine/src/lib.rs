@@ -221,6 +221,38 @@ impl Engine {
             Command::SessionBudget { session_id } => Ok(Reply::SessionBudget {
                 budget: lock(&self.shared.store)?.budget(&session_id)?,
             }),
+            Command::ReconcileUsage {
+                session_id,
+                operation_id,
+                charged,
+                evidence,
+            } => {
+                if control.active.contains_key(&session_id) {
+                    return Err(EngineError::State(
+                        "usage reconciliation requires an idle session".into(),
+                    ));
+                }
+                let mut store = lock(&self.shared.store)?;
+                let operation = store.get_operation(&operation_id)?;
+                if operation.session_id != session_id
+                    || matches!(
+                        operation.status,
+                        OperationStatus::Admitted | OperationStatus::Running
+                    )
+                {
+                    return Err(EngineError::State(
+                        "usage reconciliation requires a settled operation in this session".into(),
+                    ));
+                }
+                Ok(Reply::SessionBudget {
+                    budget: store.reconcile_budget(
+                        &session_id,
+                        &operation_id,
+                        charged,
+                        &evidence,
+                    )?,
+                })
+            }
             Command::SessionEvents {
                 session_id,
                 after_sequence,

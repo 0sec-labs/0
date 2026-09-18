@@ -29,8 +29,7 @@ fn metadata_commands_skip_provider_files_and_credentials() {
     }
 }
 
-#[test]
-fn inference_persists_exact_retry_without_second_http_request() {
+fn exercise_inference(truncated: bool) {
     let dir = TempDir::new().unwrap();
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     listener.set_nonblocking(true).unwrap();
@@ -73,7 +72,11 @@ fn inference_persists_exact_retry_without_second_http_request() {
         }
         assert!(String::from_utf8_lossy(&bytes).contains("Bearer fixture-secret"));
         let event = json!({"type":"response.completed","response":{"id":"r1","status":"completed","output":[{"type":"message","content":[{"type":"output_text","text":"hello"}]}],"usage":{"input_tokens":2,"output_tokens":1}}});
-        let body = format!("data: {event}\n\n");
+        let body = if truncated {
+            "data: {\"type\":\"response.created\"}\n\n".to_owned()
+        } else {
+            format!("data: {event}\n\n")
+        };
         write!(socket, "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len()).unwrap();
         // Return listener alive to detect a second request during durable retry.
         listener
@@ -110,7 +113,7 @@ fn inference_persists_exact_retry_without_second_http_request() {
             .output()
             .unwrap();
         assert!(
-            output.status.success(),
+            output.status.success() != truncated,
             "{} {}",
             String::from_utf8_lossy(&output.stdout),
             String::from_utf8_lossy(&output.stderr)
@@ -118,7 +121,57 @@ fn inference_persists_exact_retry_without_second_http_request() {
         assert!(!String::from_utf8_lossy(&output.stdout).contains("fixture-secret"));
         let reply: Value = serde_json::from_slice(&output.stdout).unwrap();
         assert_eq!(reply["duplicate"], duplicate);
-        assert_eq!(reply["operation"]["status"], "succeeded");
+        assert_eq!(
+            reply["operation"]["status"],
+            if truncated { "unknown" } else { "succeeded" }
+        );
+        if truncated && !duplicate {
+            let initial = cli(&dir)
+                .args(["session", "budget", session])
+                .output()
+                .unwrap();
+            let initial: Value = serde_json::from_slice(&initial.stdout).unwrap();
+            assert_eq!(initial["budget"]["reserved"], 10);
+            assert_eq!(initial["budget"]["charged"], 0);
+            let operation = reply["operation"]["id"].as_str().unwrap();
+            let reconciled = cli(&dir)
+                .args([
+                    "session",
+                    "reconcile-usage",
+                    session,
+                    "--operation",
+                    operation,
+                    "--charged",
+                    "3",
+                    "--evidence",
+                    "operator receipt fixture; not cryptographically verified",
+                ])
+                .output()
+                .unwrap();
+            assert!(
+                reconciled.status.success(),
+                "{} {}",
+                String::from_utf8_lossy(&reconciled.stdout),
+                String::from_utf8_lossy(&reconciled.stderr)
+            );
+            let reconciled: Value = serde_json::from_slice(&reconciled.stdout).unwrap();
+            assert_eq!(reconciled["budget"]["reserved"], 0);
+            assert_eq!(reconciled["budget"]["charged"], 3);
+            let events = cli(&dir)
+                .args(["session", "events", session])
+                .output()
+                .unwrap();
+            assert!(events.status.success());
+            let events: Value = serde_json::from_slice(&events.stdout).unwrap();
+            assert!(
+                events["events"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .any(|event| event["payload"]["evidence"]
+                        == "operator receipt fixture; not cryptographically verified")
+            );
+        }
     }
     let listener = server.join().unwrap();
     assert!(
@@ -131,4 +184,14 @@ fn inference_persists_exact_retry_without_second_http_request() {
     let budget: Value = serde_json::from_slice(&budget.stdout).unwrap();
     assert_eq!(budget["budget"]["charged"], 3);
     assert_eq!(budget["budget"]["reserved"], 0);
+}
+
+#[test]
+fn inference_persists_exact_retry_without_second_http_request() {
+    exercise_inference(false);
+}
+
+#[test]
+fn unknown_inference_reconciles_charge_without_retrying_provider() {
+    exercise_inference(true);
 }

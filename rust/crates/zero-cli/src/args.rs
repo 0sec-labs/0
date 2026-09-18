@@ -92,6 +92,16 @@ pub enum SessionCommand {
     Budget {
         id: String,
     },
+    /// Record operator-reported billing for an unresolved operation without retrying it.
+    ReconcileUsage {
+        id: String,
+        #[arg(long)]
+        operation: String,
+        #[arg(long)]
+        charged: u64,
+        #[arg(long)]
+        evidence: String,
+    },
     Events {
         id: String,
         #[arg(long, default_value_t = 0)]

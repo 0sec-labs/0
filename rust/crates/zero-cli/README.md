@@ -130,3 +130,19 @@ valid provider credentials or a working security scan. Argument/setup errors
 exit 2. Legacy Node/Bun/TUI and external Claude/Codex/Gemini CLI checks are not
 implemented: those are not requirements of the current native engine. Legacy
 `doctor` had no flags requiring compatibility. Help/schema still bypass config.
+
+## Operator usage reconciliation
+
+```sh
+0sec-native session reconcile-usage SESSION_ID --operation OPERATION_ID --charged 3 --evidence 'Operator reviewed provider receipt reference'
+```
+
+Use this only after independently checking billing for an unresolved request.
+The charge is an operator-reported integer in the session's accounting units;
+the evidence string is recorded atomically with the charge, not cryptographically
+verified. The engine requires an idle session and a settled matching operation.
+Successful reconciliation returns the updated session budget and releases its
+held reservation. It leaves the operation Unknown and does not retry the provider
+request or convert its missing output into a successful result. An exact command
+retry still returns the original unresolved outcome. Engine rejection exits 1;
+missing or invalid CLI arguments exit 2.

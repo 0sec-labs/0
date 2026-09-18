@@ -68,6 +68,31 @@ impl Store {
         reservation_id: &str,
         charged: u64,
     ) -> Result<BudgetSnapshot> {
+        self.settle_budget_inner(session, reservation_id, charged, None)
+    }
+    /// Explicit trusted-operator reconciliation. Evidence is retained in the
+    /// same transaction as the charge; unknown execution state is unchanged.
+    pub fn reconcile_budget(
+        &mut self,
+        session: &str,
+        reservation_id: &str,
+        charged: u64,
+        evidence: &str,
+    ) -> Result<BudgetSnapshot> {
+        if evidence.trim().is_empty() || evidence.len() > 32768 {
+            return Err(Error::Invalid(
+                "reconciliation evidence must be 1..32768 bytes".into(),
+            ));
+        }
+        self.settle_budget_inner(session, reservation_id, charged, Some(evidence))
+    }
+    fn settle_budget_inner(
+        &mut self,
+        session: &str,
+        reservation_id: &str,
+        charged: u64,
+        evidence: Option<&str>,
+    ) -> Result<BudgetSnapshot> {
         let charged_sql = integer(charged)?;
         let tx = self
             .conn
@@ -101,11 +126,20 @@ impl Store {
             "UPDATE reservations SET charged=?3 WHERE session_id=?1 AND id=?2",
             params![session, reservation_id, charged_sql],
         )?;
+        let mut payload = json!({"reservation_id":reservation_id,"charged":charged});
+        if let Some(evidence) = evidence {
+            payload["evidence"] = json!(evidence);
+            payload["source"] = json!("operator_reconciliation");
+        }
         append(
             &tx,
             session,
-            "budget_settled",
-            &json!({"reservation_id":reservation_id,"charged":charged}),
+            if evidence.is_some() {
+                "budget_reconciled"
+            } else {
+                "budget_settled"
+            },
+            &payload,
         )?;
         let result = snapshot(&tx, session)?;
         tx.commit()?;

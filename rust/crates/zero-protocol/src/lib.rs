@@ -52,6 +52,12 @@ pub enum Command {
     SessionBudget {
         session_id: String,
     },
+    ReconcileUsage {
+        session_id: String,
+        operation_id: String,
+        charged: u64,
+        evidence: String,
+    },
     SessionEvents {
         session_id: String,
         after_sequence: u64,
