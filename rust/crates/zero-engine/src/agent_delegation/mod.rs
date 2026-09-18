@@ -35,6 +35,7 @@ struct Role {
     profile: inference::Profile,
     template: ResponsesRequest,
     plugins: Option<agent_plugins::Context>,
+    http: Option<agent_http::Context>,
 }
 #[derive(Clone, Deserialize, serde::Serialize)]
 #[serde(deny_unknown_fields)]
@@ -74,6 +75,7 @@ pub(super) fn capture(
     request: &AgentRequest,
     template: &ResponsesRequest,
     plugins: Option<&agent_plugins::Context>,
+    http: Option<&agent_http::Context>,
 ) -> Result<Option<Context>, EngineError> {
     let Some(policy) = &request.delegation_policy else {
         return Ok(None);
@@ -140,12 +142,19 @@ pub(super) fn capture(
         if let Some(plugins) = &plugins {
             identity["plugin_context"] = plugins.identity.clone();
         }
+        let http = http
+            .filter(|_| role.tools.iter().any(|t| t == "http_request"))
+            .cloned();
+        if let Some(context) = &http {
+            identity["http_context"] = context.identity.clone();
+        }
         identities.push(identity);
         roles.push(Role {
             policy: role.clone(),
             profile,
             template: model,
             plugins,
+            http,
         });
     }
     let mut identity = json!({"version":1,"policy":policy,"roles":identities});
@@ -194,6 +203,9 @@ pub(super) fn retry_identity(
         if let Some(policy) = entry.get("tool_approval_policy") {
             identity["tool_approval_policy"] = policy.clone();
         }
+        if let Some(context) = entry.get("http_context") {
+            identity["http_context"] = context.clone();
+        }
         if let Some(plugins) = entry.get("plugin_context") {
             identity["plugin_context"] = plugins.clone();
         }
@@ -220,6 +232,10 @@ fn child_request(parent: &AgentRequest, role: &DelegationRole, prompt: &str) -> 
     request.source_submission_max_hypotheses = None;
     request.context_policy = None;
     request.tool_approval_policy = agent_approvals::inherited(parent, &role.tools);
+    request.http_profile = parent
+        .http_profile
+        .clone()
+        .filter(|_| role.tools.iter().any(|t| t == "http_request"));
     request.operator_questions =
         parent.operator_questions && role.tools.iter().any(|tool| tool == "ask_operator");
     request
@@ -281,12 +297,16 @@ impl Context {
             if let Some(plugins) = &role.plugins {
                 payload["plugin_context"] = plugins.identity.clone();
             }
+            if let Some(context) = &role.http {
+                payload["http_context"] = context.identity.clone();
+            }
             payloads.push(payload);
             actors.push(agent::PreparedActor {
                 request,
                 profile: role.profile.clone(),
                 history,
                 plugins: role.plugins.clone(),
+                http: role.http.clone(),
                 source,
                 template: role.template.clone(),
                 delegation: None,

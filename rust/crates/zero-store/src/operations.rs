@@ -41,7 +41,7 @@ fn decode(value: &str) -> Result<OperationStatus> {
         _ => Err(Error::Invalid("invalid persisted operation status".into())),
     }
 }
-fn operation(conn: &Connection, id: &str) -> Result<Operation> {
+pub(super) fn operation(conn: &Connection, id: &str) -> Result<Operation> {
     let row=conn.query_row("SELECT id,session_id,command_id,payload,status,owner,outcome FROM operations WHERE id=?1",[id],|r|Ok((r.get::<_,String>(0)?,r.get::<_,String>(1)?,r.get::<_,String>(2)?,r.get::<_,String>(3)?,r.get::<_,String>(4)?,r.get::<_,Option<String>>(5)?,r.get::<_,Option<String>>(6)?))).optional()?.ok_or_else(||Error::NotFound(id.into()))?;
     Ok(Operation {
         id: row.0,

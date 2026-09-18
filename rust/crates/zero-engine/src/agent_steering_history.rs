@@ -56,6 +56,7 @@ fn authority(request: &AgentRequest) -> Result<Value, EngineError> {
         "plugin_tools":request.plugin_tools,"delegation_policy":request.delegation_policy,
         "operator_questions":request.operator_questions,
         "tool_approval_policy":request.tool_approval_policy,
+        "http_profile":request.http_profile,
         "context_policy":request.context_policy}),
     )
 }
@@ -155,6 +156,7 @@ pub(super) fn validate(
                 "hosted_catalog",
                 "plugin_context",
                 "delegation_context",
+                "http_context",
             ]
             .iter()
             .any(|key| ancestor.payload.get(key) != parent.payload.get(key))
@@ -292,7 +294,8 @@ pub(super) fn validate(
                     let approved = req.tool_approval_policy.as_ref().is_some_and(|policy| {
                         policy.require_approval.iter().any(|alias| alias == name)
                     });
-                    if approved || (name == "ask_operator" && req.operator_questions) {
+                    let http = name == "http_request" && req.http_profile.is_some();
+                    if approved || http || (name == "ask_operator" && req.operator_questions) {
                         match store.get_operation_by_command(
                             &ancestor.session_id,
                             &format!("{}:tool:{index}:{call_index}", ancestor.id),
@@ -300,11 +303,15 @@ pub(super) fn validate(
                             Ok(question) => {
                                 let kind = if approved {
                                     "agent_approved_tool"
+                                } else if http {
+                                    "agent_http"
                                 } else {
                                     "agent_operator_question"
                                 };
                                 let derived = if approved {
                                     agent_approvals::validate_receipt(store, &question)?
+                                } else if http {
+                                    agent_http::validate_receipt(store, &question)?
                                 } else {
                                     agent_questions::validate_receipt(store, &question)?
                                 };

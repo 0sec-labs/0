@@ -17,6 +17,9 @@ pub struct Args {
     /// Explicit smolvm executable; backend selection never falls back to Docker.
     #[arg(long, global = true)]
     pub smolvm_bin: Option<PathBuf>,
+    /// Explicit host-owned target HTTP profiles; credentials are named environment references.
+    #[arg(long, global = true)]
+    pub http_profiles: Option<PathBuf>,
     /// Provider profiles; secrets are read from explicitly named environment variables.
     #[arg(long, global = true)]
     pub providers: Option<PathBuf>,
@@ -41,6 +44,11 @@ pub struct Args {
 
 #[derive(Debug, Subcommand)]
 pub enum Command {
+    /// Inspect retained, redacted target HTTP evidence without network or owner access.
+    Http {
+        #[command(subcommand)]
+        command: crate::http_evidence::HttpCommand,
+    },
     /// Inspect exact-invocation permissions without dispatching any tools.
     Approvals {
         #[command(subcommand)]

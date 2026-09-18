@@ -4,6 +4,8 @@ mod artifacts;
 mod budget;
 mod discovery;
 mod history;
+mod http;
+pub use http::HttpAdmission;
 mod lifecycle;
 mod operations;
 mod questions;

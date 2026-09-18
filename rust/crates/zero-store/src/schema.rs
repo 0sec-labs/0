@@ -8,7 +8,7 @@ pub fn initialize(conn: &mut Connection) -> Result<()> {
     if application != 0 && application != APPLICATION_ID {
         return Err(Error::ForeignDatabase);
     }
-    if !(0..=9).contains(&version) {
+    if !(0..=10).contains(&version) {
         return Err(Error::Schema(version));
     }
     if application == 0 {
@@ -72,6 +72,15 @@ CREATE TABLE tool_approval_decisions(id TEXT PRIMARY KEY,session_id TEXT NOT NUL
 CREATE TABLE tool_approval_consumptions(approval_operation_id TEXT PRIMARY KEY REFERENCES tool_approvals(operation_id),effect_operation_id TEXT NOT NULL UNIQUE REFERENCES operations(id),effect_command_id TEXT NOT NULL,effect_payload_sha256 TEXT NOT NULL,sequence INTEGER NOT NULL CHECK(sequence>0));")?;
         tx.pragma_update(None, "user_version", 9)?;
     }
+    if version < 10 {
+        tx.execute_batch("CREATE TABLE http_accounts(id TEXT PRIMARY KEY,session_id TEXT NOT NULL REFERENCES sessions(id),root_operation_id TEXT NOT NULL REFERENCES operations(id),context TEXT NOT NULL CHECK(length(CAST(context AS BLOB))<=1048576));
+CREATE TABLE http_dispatches(id TEXT PRIMARY KEY,account_id TEXT NOT NULL REFERENCES http_accounts(id),effect_operation_id TEXT NOT NULL REFERENCES operations(id),hop_index INTEGER NOT NULL CHECK(hop_index BETWEEN 0 AND 5),host TEXT NOT NULL,intent TEXT NOT NULL CHECK(length(CAST(intent AS BLOB))<=65536),request_bytes INTEGER NOT NULL CHECK(request_bytes>=0),reserved_bytes INTEGER NOT NULL CHECK(reserved_bytes>=0),charged_bytes INTEGER CHECK(charged_bytes>=0 AND charged_bytes<=reserved_bytes),observation TEXT,headers TEXT,UNIQUE(effect_operation_id,hop_index));
+CREATE INDEX http_dispatches_account ON http_dispatches(account_id);
+CREATE INDEX http_receipt_events ON events(session_id,kind,json_extract(payload,'$.receipt')) WHERE kind IN ('http_dispatch_admitted','http_headers_observed','http_hop_settled');
+CREATE INDEX http_rate_events ON events(session_id,json_extract(payload,'$.account_id'),json_extract(payload,'$.host'),sequence) WHERE kind='http_rate_updated';
+CREATE TABLE http_rates(account_id TEXT NOT NULL REFERENCES http_accounts(id),host TEXT NOT NULL,tokens INTEGER NOT NULL CHECK(tokens>=0),last_ms INTEGER NOT NULL CHECK(last_ms>=0),cooldown_ms INTEGER NOT NULL CHECK(cooldown_ms>=0),PRIMARY KEY(account_id,host));")?;
+        tx.pragma_update(None, "user_version", 10)?;
+    }
     tx.commit()?;
     Ok(())
 }
@@ -85,7 +94,7 @@ pub(super) fn validate_current(conn: &Connection) -> Result<()> {
     if application != APPLICATION_ID {
         return Err(Error::ForeignDatabase);
     }
-    if version != 9 {
+    if version != 10 {
         return Err(Error::Schema(version));
     }
     let observed = crate::readonly::definitions(conn)?;

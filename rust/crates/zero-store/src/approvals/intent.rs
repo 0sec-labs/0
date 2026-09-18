@@ -101,6 +101,30 @@ pub(super) fn derive(
             .validate()
             .map_err(|e| Error::Invalid(e.to_string()))?;
         json!({"parent_operation":actor.id,"kind":"agent_tool","call_id":call,"request":request})
+    } else if alias == "http_request" && actor.payload["request"]["http_profile"].is_string() {
+        let context = actor
+            .payload
+            .get("http_context")
+            .ok_or_else(|| bad("HTTP approval context absent"))?;
+        if context.get("profile_name") != actor.payload["request"].get("http_profile") {
+            return Err(bad("HTTP approval profile mismatch"));
+        }
+        let policy: zero_protocol::http::HttpProfilePolicy =
+            serde_json::from_value(context["profile"].clone())?;
+        let normalized = zero_http::normalize_policy(policy.clone())
+            .map_err(|_| bad("HTTP approval policy invalid"))?;
+        if normalized != policy
+            || zero_http::profile_sha256(&policy)
+                .map_err(|_| bad("HTTP approval digest invalid"))?
+                != context["profile_sha256"].as_str().unwrap_or("")
+        {
+            return Err(bad("HTTP approval policy not canonical"));
+        }
+        let arguments: zero_protocol::http::HttpRequestArguments =
+            serde_json::from_value((*args).clone())?;
+        let request = zero_http::normalize_intent(&policy, arguments)
+            .map_err(|_| bad("HTTP approval request rejected"))?;
+        json!({"parent_operation":actor.id,"kind":"agent_http","call_id":call,"http_context":context,"request":request})
     } else {
         let bindings: Vec<zero_protocol::agent::PluginToolBinding> = serde_json::from_value(
             actor.payload["request"]

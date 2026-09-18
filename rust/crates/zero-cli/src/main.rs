@@ -9,6 +9,8 @@ mod framing;
 mod harness;
 mod hosted;
 mod hosted_provider;
+mod http_evidence;
+mod http_profiles;
 mod providers;
 mod questions;
 mod report;
@@ -71,6 +73,9 @@ async fn run(args: Args) -> Result<bool, Box<dyn Error>> {
     } = &args.command
     {
         return tui::run(&args, session.clone(), request.as_deref(), *budget_limit).await;
+    }
+    if let Command::Http { command } = args.command {
+        return http_evidence::run(&args.state, command).await;
     }
     if let Command::Approvals { command } = args.command {
         return approvals::run(&args.state, command).await;
@@ -144,11 +149,18 @@ async fn run(args: Args) -> Result<bool, Box<dyn Error>> {
         return doctor::run(&args, *timeout_ms, smolvm).await;
     }
     questions::preflight(&args.state, &args.command).await?;
+    let http_profiles = match args.http_profiles.as_deref() {
+        Some(path) => http_profiles::load(path).await?,
+        None => Vec::new(),
+    };
     let engine = Arc::new(Engine::open_with_backends(
         &args.state,
         args.docker_bin,
         args.smolvm_bin,
     )?);
+    for (name, client) in http_profiles {
+        engine.configure_http(&name, client)?;
+    }
     if let Some(path) = args.providers {
         providers::configure(&engine, &path).await?;
     }
@@ -392,7 +404,8 @@ async fn run(args: Args) -> Result<bool, Box<dyn Error>> {
                 request,
             }
         }
-        Command::Approvals { .. }
+        Command::Http { .. }
+        | Command::Approvals { .. }
         | Command::Questions { .. }
         | Command::Steer { .. }
         | Command::Findings { .. }

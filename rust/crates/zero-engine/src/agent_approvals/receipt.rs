@@ -11,6 +11,7 @@ fn uncertain(cleanup: &SandboxCleanup) -> bool {
 }
 
 pub(super) fn effect_output(
+    store: &Store,
     effect: &Operation,
 ) -> Result<(OperationStatus, Option<String>), EngineError> {
     if effect.status == OperationStatus::Unknown {
@@ -30,6 +31,12 @@ pub(super) fn effect_output(
         .clone()
         .ok_or_else(|| error("approved effect outcome missing"))?;
     let output = match effect.payload["kind"].as_str() {
+        Some("agent_http") => {
+            return Ok((
+                effect.status,
+                Some(agent_http::validate_receipt(store, effect)?),
+            ));
+        }
         Some("agent_tool") => {
             let result: SandboxResult = serde_json::from_value(outcome)?;
             if uncertain(&result.cleanup) {
@@ -130,7 +137,7 @@ pub(crate) fn validate_receipt(store: &Store, wrapper: &Operation) -> Result<Str
     {
         return Err(error("consumed effect differs from frozen approval"));
     }
-    let (status, output) = effect_output(&effect)?;
+    let (status, output) = effect_output(store, &effect)?;
     if status != wrapper.status
         || !matches!(status, OperationStatus::Succeeded | OperationStatus::Failed)
     {

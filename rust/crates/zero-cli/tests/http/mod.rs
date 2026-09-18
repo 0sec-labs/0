@@ -1,0 +1,4 @@
+use serde_json::{Value, json};
+pub fn policy(base: &str) -> Value {
+    json!({"schema_version":1,"base_url":base,"in_scope":["127.0.0.1"],"out_of_scope":[],"denied_hosts":[],"allowed_path_prefixes":["/target"],"denied_path_prefixes":[],"allowed_methods":["GET","POST"],"allowed_headers":["content-type","accept","x-fixture"],"redirect":{"mode":"manual"},"limits":{"timeout_ms":2000,"max_request_body_bytes":4096,"max_response_wire_bytes":65536,"max_response_decoded_bytes":65536,"max_request_header_bytes":8192,"max_request_headers":32,"max_response_header_bytes":8192,"max_response_headers":32,"max_dns_answers":16,"max_dns_cname_depth":4,"max_dns_queries":8},"rate":{"default":{"requests_per_interval":10,"interval_ms":1000,"burst":2},"per_host":{},"jitter_ms":0},"budget":{"max_requests":8,"max_request_body_bytes":32768,"max_response_decoded_bytes":524288}})
+}

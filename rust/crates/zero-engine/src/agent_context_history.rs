@@ -112,7 +112,8 @@ pub(super) fn validate(
         if req.context_policy.as_ref() != Some(policy) || count > 32 {
             return Err(error("context lineage policy/round mismatch"));
         }
-        if req.tool_approval_policy != request.tool_approval_policy
+        if req.http_profile != request.http_profile
+            || req.tool_approval_policy != request.tool_approval_policy
             || req.operator_questions != request.operator_questions
             || req.provider != request.provider
             || req.delegation_policy != request.delegation_policy
@@ -131,6 +132,7 @@ pub(super) fn validate(
                 "plugin_context",
                 "context_template",
                 "delegation_context",
+                "http_context",
             ]
             .iter()
             .any(|key| op.payload.get(key) != parent.payload.get(key))
@@ -239,7 +241,8 @@ pub(super) fn validate(
                     policy.require_approval.iter().any(|alias| alias == call.1)
                 });
                 let delegation = call.1 == "delegate_tasks" && request.delegation_policy.is_some();
-                if !delegation && !question && !approved {
+                let http = call.1 == "http_request" && request.http_profile.is_some();
+                if !delegation && !question && !approved && !http {
                     continue;
                 }
                 let output = witness
@@ -258,6 +261,8 @@ pub(super) fn validate(
                             "agent_approved_tool"
                         } else if question {
                             "agent_operator_question"
+                        } else if http {
+                            "agent_http"
                         } else {
                             "agent_delegation"
                         };
@@ -271,6 +276,8 @@ pub(super) fn validate(
                             agent_approvals::validate_receipt(store, &group)?
                         } else if question {
                             agent_questions::validate_receipt(store, &group)?
+                        } else if http {
+                            agent_http::validate_receipt(store, &group)?
                         } else {
                             agent_delegation::validate_receipt(store, &group)?
                         };

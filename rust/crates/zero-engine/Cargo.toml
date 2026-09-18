@@ -7,6 +7,8 @@ license.workspace = true
 publish.workspace = true
 
 [dependencies]
+httpdate = "1"
+zero-http = { path = "../zero-http" }
 futures-util.workspace = true
 zero-context = { path = "../zero-context" }
 zero-repair = { path = "../zero-repair" }

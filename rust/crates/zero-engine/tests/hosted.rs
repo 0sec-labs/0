@@ -213,6 +213,7 @@ fn agent(dir: &std::path::Path) -> zero_protocol::agent::AgentRequest {
         context_policy: None,
         delegation_policy: None,
         operator_questions: false,
+        http_profile: None,
         tool_approval_policy: None,
         model: "fixture".into(),
         instructions: "fixture".into(),

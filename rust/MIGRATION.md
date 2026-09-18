@@ -935,3 +935,91 @@ launcher now owns a bounded output relay through the existing child cleanup
 deadline, drains after UI closure and preserves other transport errors. A
 256 KiB queued-tail regression, read-error regression and the real terminal
 fixtures verify the fix; completed-exit assertions remain strict.
+
+### Native target HTTP authority and evidence
+
+An optional `AgentRequest.http_profile` selects a host-authored named target
+profile from `--http-profiles`. Without it, the native `http_request` tool is not
+offered and an existing plugin with that alias retains its historical behavior.
+The profile captures normalized host/path scope, deny precedence, allowed methods
+and caller headers, origin-bound attribution/static authentication, redirect
+policy, transport bounds, rate limits and a shared request/body budget. Model
+arguments contain only URL, method, caller headers and an optional string body.
+POST and `application/json` remain the legacy defaults. The CLI configuration
+and private environment references are separate from provider configuration.
+
+`zero-http` owns each DNS query, TCP/TLS connection and response reader. The
+transport connects a vetted literal address while preserving the original HTTP
+Host and TLS server name; all returned DNS addresses must pass the profile.
+Cancellation drops owned network work. There is no ambient proxy, implicit
+request retry, connection pool, cookie jar or insecure TLS fallback. Unix
+resolver capture supports bounded `/etc/hosts` and absolute DNS queries through
+an explicit nameserver; this is not arbitrary NSS, search-domain or mDNS parity.
+See [transport limitations](crates/zero-http/README.md) for the precise boundary.
+
+Manual redirects are the default. Host-enabled following admits every physical
+hop separately; a redirect never widens scope or creates another budget.
+Cross-origin hops drop caller headers, static authentication and attribution.
+The durable preceding response binds a followed URL and the resulting method
+and body transformation. Request bodies are bounded to 1 MiB; compressed and
+each decoded response stage are bounded to 16 MiB, independently of model display
+limits. Headers, DNS answers, CNAME traversal, query count, redirect count and
+elapsed time also have explicit bounds.
+
+Schema 10 adds immutable account identities, dispatch receipts and shared rate
+state. Dispatch and settlement projections must agree with their immutable
+journal witnesses before another request can spend the account. Every changed
+rate balance/cooldown has its own transactional witness; deleting a projection
+cannot create a fresh bucket or release a reservation. Joined children receive the same account only when their role offers
+`http_request`; continuations and branches retain the original root account.
+Admission atomically spends a request attempt, charges application request-body
+bytes and reserves the decoded response ceiling before a target socket opens.
+Known complete responses refund unused response reservations. Cancellation,
+owner loss or incomplete responses retain their full reservation. Accounting
+measures application body bytes, not TLS/IP octets. Integer token buckets avoid
+floating-point refill errors, per-host overrides share state, and a 429 parks
+that host for at least 60 seconds or the later Retry-After deadline.
+
+The host may require exact-invocation approval for native `http_request`.
+Permission consumption still precedes effect admission and never waives target
+scope. An approval decision does not establish request success. HTTP 4xx/5xx can
+be complete observations, while a possibly dispatched incomplete call remains
+Unknown and cannot be silently replayed. A journaled dispatch intent is a
+conservative possible-effect witness, not proof that the server received bytes.
+
+Credentials stay in private captured clients. Known credential/token reflections
+and sensitive response headers are redacted before evidence or model output;
+this does not claim recognition of arbitrary secret transformations. Hosts must
+change the opaque public authentication revision when rotating credentials.
+Retained response bytes use hash-checked chunks of at most 4 MiB plus a bounded
+manifest. Model display is limited separately; `http show --evidence` returns
+verified redacted bytes as base64, including binary responses. Read-only views
+load neither credentials nor a live target client. Exact completed retries do
+not require target connectivity or the original environment secret.
+
+Receipt validation binds original inference/call/tool authority, normalized
+intent, immutable dispatch/header/settlement witnesses, response metadata and
+body chunks. Checkpoints, plain history and projected context rederive HTTP tool
+output from that evidence. Changing profile authority or corrupting retained
+HTTP evidence rejects continuation before additional inference or dispatch.
+
+This advances gates A/T/D/U and the transport foundation of X. It does not close
+legacy scanner, browser, shell/patch, stateful login/cookie/re-authentication,
+arbitrary resolver/platform, autonomy-mode, managed deployment, report upload or
+production-release gates.
+
+HTTP qualification: the final actual Rust 1.85 workspace passed 785 tests
+with 11 explicit backend/platform ignores. Strict production workspace
+Clippy and formatting checks passed on the same source revision. Focused coverage
+includes 23 transport tests (real HTTP/TLS and UDP/TCP DNS), nine engine HTTP
+fixtures, four checkpoint/history corruption fixtures and eight executable CLI
+fixtures including real PTY interaction. Store regressions verify shared-account
+races, conservative recovery, oversized Retry-After, changed/deleted accounting
+and rate projections, redirected cooldown hosts and immutable redirect receipts.
+The full 16 MiB body bound and chunked binary evidence are physically exercised.
+
+Independent review found and corrected encoded-path deny bypasses, a hash-format
+integration mismatch, lost 429 cooldowns on rejected headers, and projection
+corruption that could otherwise hide spent quota or refill a bucket. The final
+checks include those fixes. These local fixtures do not add a claim of real
+managed deployment, arbitrary workload isolation or production release parity.

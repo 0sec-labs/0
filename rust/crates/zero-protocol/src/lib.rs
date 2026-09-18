@@ -13,6 +13,7 @@ pub mod delegation;
 pub mod discovery;
 pub mod execution;
 pub mod history;
+pub mod http;
 pub mod microvm;
 pub mod model;
 pub mod plugin;

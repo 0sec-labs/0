@@ -537,7 +537,7 @@ fn schema_eight_readonly_rejects_without_migration_then_write_preserves_journal(
     let before = f.actor.payload.clone();
     drop(f.store);
     let conn = rusqlite::Connection::open(&path).unwrap();
-    conn.execute_batch("DROP TABLE tool_approval_consumptions; DROP TABLE tool_approval_decisions; DROP TABLE tool_approvals; PRAGMA user_version=8;").unwrap();
+    conn.execute_batch("DROP INDEX http_receipt_events; DROP INDEX http_rate_events; DROP TABLE http_rates; DROP TABLE http_dispatches; DROP TABLE http_accounts; DROP TABLE tool_approval_consumptions; DROP TABLE tool_approval_decisions; DROP TABLE tool_approvals; PRAGMA user_version=8;").unwrap();
     drop(conn);
     assert!(Store::open_read_only(&path).is_err());
     let store = Store::open(&path).unwrap();

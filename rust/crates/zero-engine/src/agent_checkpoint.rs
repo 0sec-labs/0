@@ -156,6 +156,19 @@ fn validate(store: &Store, checkpoint: &Checkpoint) -> Result<(), EngineError> {
                         ));
                     }
                 }
+                let native_http = name.as_str() == "http_request"
+                    && parent.payload["request"]["http_profile"].is_string();
+                if (native_http && !approval_required) || child.payload["kind"] == "agent_http" {
+                    if !native_http || child.payload["kind"] != "agent_http" {
+                        return Err(error("checkpoint HTTP tool identity mismatch"));
+                    }
+                    let output = agent_http::validate_receipt(store, &child)?;
+                    if item["output"].as_str() != Some(output.as_str()) {
+                        return Err(error(
+                            "checkpoint HTTP output differs from durable evidence",
+                        ));
+                    }
+                }
                 if (name.as_str() == "ask_operator"
                     && parent.payload["request"]["operator_questions"] == true)
                     || child.payload["kind"] == "agent_operator_question"

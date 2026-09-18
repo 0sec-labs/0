@@ -11,6 +11,7 @@ pub(super) struct PreparedActor {
     pub profile: inference::Profile,
     pub history: agent_context::History,
     pub plugins: Option<agent_plugins::Context>,
+    pub http: Option<agent_http::Context>,
     pub source: Option<agent_source::Context>,
     pub template: ResponsesRequest,
     pub delegation: Option<agent_delegation::Context>,
@@ -19,6 +20,16 @@ pub(super) struct PreparedActor {
 
 pub(super) fn validate_initial(request: &AgentRequest) -> Result<ResponsesRequest, EngineError> {
     agent_approvals::validate_policy(request)?;
+    if request.http_profile.is_some()
+        && request
+            .plugin_tools
+            .iter()
+            .any(|p| p.alias == "http_request")
+    {
+        return Err(EngineError::State(
+            "plugin alias shadows native HTTP tool".into(),
+        ));
+    }
     if request.operator_questions
         && request
             .plugin_tools
@@ -171,6 +182,16 @@ impl Engine {
                         payload["wire_api"] = serde_json::to_value(profile.client.wire_api())?;
                     }
                     profile.stamp(&mut payload)?;
+                    if request.http_profile.is_some() {
+                        payload["http_context"] = agent_http::retry_identity(
+                            &self.shared,
+                            &session_id,
+                            &request,
+                            prior.payload.get("http_context").ok_or_else(|| {
+                                EngineError::State("missing historical HTTP context".into())
+                            })?,
+                        )?;
+                    }
                     if request.delegation_policy.is_some() {
                         payload["delegation_context"] = agent_delegation::retry_identity(
                             &self.shared,
@@ -222,6 +243,8 @@ impl Engine {
             agent_approvals::validate_plugins(&request, plugins.as_ref())?;
             let mut store = lock(&self.shared.store)?;
             let source = agent_source::capture(&store, &session_id, &request)?;
+            let http =
+                agent_http::capture(&self.shared, &store, &session_id, &command_id, &request)?;
             // A context lineage keeps its original offered schemas across upgrades.
             // continuation_input has already validated the ancestor's request and
             // hash-bound template; only fresh conversations capture current tools.
@@ -235,8 +258,13 @@ impl Engine {
             } else {
                 model_request(&request, vec![], plugins.as_ref())
             };
-            let delegation =
-                agent_delegation::capture(&self.shared, &request, &template, plugins.as_ref())?;
+            let delegation = agent_delegation::capture(
+                &self.shared,
+                &request,
+                &template,
+                plugins.as_ref(),
+                http.as_ref(),
+            )?;
             let input = continuation_input(
                 &store,
                 &session_id,
@@ -244,6 +272,7 @@ impl Engine {
                 &profile,
                 plugins.as_ref(),
                 delegation.as_ref(),
+                http.as_ref(),
             )?;
             let mut projected = template.clone();
             projected.input = input.projected(request.context_policy.as_ref())?;
@@ -264,6 +293,9 @@ impl Engine {
             }
             if let Some(context) = &plugins {
                 payload["plugin_context"] = context.identity.clone();
+            }
+            if let Some(context) = &http {
+                payload["http_context"] = context.identity.clone();
             }
             let admission = store.admit_command(&session_id, &command_id, &payload)?;
             if admission.duplicate {
@@ -302,6 +334,7 @@ impl Engine {
                         profile,
                         history: input,
                         plugins,
+                        http,
                         source,
                         template,
                         delegation,
@@ -334,6 +367,7 @@ fn continuation_input(
     profile: &inference::Profile,
     plugins: Option<&agent_plugins::Context>,
     delegation: Option<&agent_delegation::Context>,
+    http: Option<&agent_http::Context>,
 ) -> Result<agent_context::History, EngineError> {
     let mut history = agent_context::History::new(Vec::new(), request.context_policy.as_ref())?;
     if let Some(parent_id) = &request.continuation_of {
@@ -364,7 +398,9 @@ fn continuation_input(
                 .cloned()
                 .unwrap_or_else(|| serde_json::json!("responses")),
         )?;
-        if prior.tool_approval_policy != request.tool_approval_policy
+        if prior.http_profile != request.http_profile
+            || parent.payload.get("http_context") != http.map(|h| &h.identity)
+            || prior.tool_approval_policy != request.tool_approval_policy
             || prior.operator_questions != request.operator_questions
             || prior.context_policy != request.context_policy
             || prior.delegation_policy != request.delegation_policy
@@ -496,6 +532,9 @@ fn model_request(
     let mut model = ResponsesRequest{model:request.model.clone(),instructions:request.instructions.clone(),input,max_output_tokens:8192,
         tools:vec![ToolDefinition{name:"execute_snapshot".into(),description:"Run an argv vector in the explicitly pinned offline snapshot sandbox. This cannot change the image, mounts, networking, limits or host files. The working copy is disposable for each call.".into(),
             parameters:serde_json::json!({"type":"object","properties":{"argv":{"type":"array","items":{"type":"string"},"minItems":1,"maxItems":128}},"required":["argv"],"additionalProperties":false})}]};
+    if request.http_profile.is_some() {
+        model.tools.push(agent_http::definition());
+    }
     if request.operator_questions {
         model.tools.push(agent_questions::definition());
     }
@@ -540,6 +579,7 @@ async fn run_rounds(
     profile: inference::Profile,
     history: agent_context::History,
     plugins: Option<agent_plugins::Context>,
+    http: Option<agent_http::Context>,
     source: Option<Arc<agent_source::Context>>,
     cancel: CancellationToken,
     events: mpsc::Sender<ExecutionEvent>,
@@ -887,6 +927,76 @@ async fn run_rounds(
                 input.push(serde_json::json!({"type":"function_call_output","call_id":id,"output":result.output}));
                 continue;
             }
+            if let Some(context) = http.as_ref().filter(|_| name == "http_request") {
+                let prepared = match context.prepare(arguments.clone()) {
+                    Ok(request) => request,
+                    Err(reason) => {
+                        input.push(serde_json::json!({"type":"function_call_output","call_id":id,"output":format!("Tool rejected: {reason}")}));
+                        continue;
+                    }
+                };
+                let command = format!("{parent}:tool:{turn}:{index}");
+                let result = if agent_approvals::required(&request, &name) {
+                    agent_approvals::run(
+                        shared,
+                        session,
+                        parent,
+                        &command,
+                        &child,
+                        &id,
+                        &name,
+                        agent_approvals::Effect::Http {
+                            context: context.clone(),
+                            request: prepared,
+                        },
+                        &cancel,
+                        &events,
+                    )
+                    .await?
+                } else {
+                    let op = child_operation(
+                        shared,
+                        session,
+                        &command,
+                        &context.payload(parent, &id, &prepared),
+                    )?;
+                    let op =
+                        agent_http::execute_admitted(shared, op, context, prepared, cancel.clone())
+                            .await?;
+                    match op.status {
+                        OperationStatus::Failed
+                            if op
+                                .outcome
+                                .as_ref()
+                                .is_some_and(|v| v["error_code"] == "http_preparation_failed") =>
+                        {
+                            agent_approvals::ResultKind::Failed(
+                                "HTTP preparation failed before dispatch".into(),
+                            )
+                        }
+                        OperationStatus::Unknown => agent_approvals::ResultKind::Unknown(
+                            "HTTP dispatch or response is uncertain".into(),
+                        ),
+                        OperationStatus::Cancelled => agent_approvals::ResultKind::Cancelled,
+                        _ => agent_approvals::ResultKind::Output(agent_http::validate_receipt(
+                            &*lock(&shared.store)?,
+                            &op,
+                        )?),
+                    }
+                };
+                output.tool_calls += 1;
+                match result {
+                    agent_approvals::ResultKind::Output(value)=>input.push(serde_json::json!({"type":"function_call_output","call_id":id,"output":value})),
+                    agent_approvals::ResultKind::Cancelled=>{output.status=AgentStatus::Cancelled;break 'turns;},
+                    agent_approvals::ResultKind::Unknown(reason)=>{output.status=AgentStatus::Unknown;output.error=Some(reason);break 'turns;},
+                    agent_approvals::ResultKind::Failed(reason)=>{output.status=AgentStatus::Failed;output.error=Some(reason);break 'turns;},
+                }
+                if cancel.is_cancelled() {
+                    output.status = AgentStatus::Cancelled;
+                    break 'turns;
+                }
+                continue;
+            }
             if let Some(bundle) = source.as_ref().filter(|_| agent_source::is_tool(&name)) {
                 let context = Arc::clone(bundle);
                 let tool = name.clone();
@@ -1173,6 +1283,7 @@ pub(super) fn run_actor<'a>(
             profile,
             history: input,
             plugins,
+            http,
             mut source,
             template,
             delegation,
@@ -1259,6 +1370,7 @@ pub(super) fn run_actor<'a>(
                 profile,
                 input,
                 plugins,
+                http,
                 source.clone(),
                 cancel.clone(),
                 events,

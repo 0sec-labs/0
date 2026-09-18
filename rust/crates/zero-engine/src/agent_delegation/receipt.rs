@@ -150,6 +150,22 @@ fn derive_bounded(
             .as_array()
             .and_then(|roles| roles.iter().find(|entry| entry["name"] == task.role))
             .ok_or_else(|| error("delegation role receipt absent"))?;
+        let expected_http = if parent.http_profile.is_some()
+            && role.tools.iter().any(|name| name == "http_request")
+        {
+            Some(
+                root.payload
+                    .get("http_context")
+                    .ok_or_else(|| error("delegation root HTTP context absent"))?,
+            )
+        } else {
+            None
+        };
+        if identity.get("http_context") != expected_http
+            || child.payload.get("http_context") != expected_http
+        {
+            return Err(error("delegated HTTP authority or shared account differs"));
+        }
         if child.payload.get("delegation_root_approval_policy") != root_approval_policy.as_ref()
             || identity.get("tool_approval_policy")
                 != child.payload["request"].get("tool_approval_policy")

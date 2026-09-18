@@ -780,7 +780,8 @@ Opt in to **one-invocation tool approval** with an explicit agent profile field:
 "tool_approval_policy": {"require_approval": ["execute_snapshot"]}
 ```
 
-Only offered offline snapshot/plugin aliases are supported. Gated Docker profiles
+Offered offline snapshot/plugin aliases and the explicitly configured native
+`http_request` tool are supported. Gated Docker profiles
 must already use `sha256:<64 lowercase hex>` or `name@sha256:<64 lowercase hex>`;
 resolve and select an immutable local image before starting. Mutable image tags
 are rejected before provider admission. Existing profiles without this policy
@@ -820,3 +821,106 @@ Plain `agent` and fresh `queue run` reject approval-enabled profiles because the
 have no decision channel. Cached already-admitted exact retries remain readable;
 app-server, console and TUI support live decisions. These controls authorize one
 invocation, not an alias, future argv prefix, sibling actor, or source directory.
+
+## Scoped target HTTP
+
+`--http-profiles PATH` loads an explicit, strict JSON map of named target profiles.
+It is separate from `--providers`: provider credentials never grant target access.
+The same option works with `agent`, `console`, `app-server`, and `tui`; the TUI
+forwards it to its owned app-server. An agent request selects one host-configured
+profile with `"http_profile":"target"`. Omitting that field preserves the existing
+offline tool set and request identity.
+
+A minimal bounded local-target profile looks like this:
+
+```json
+{
+  "target": {
+    "policy": {
+      "schema_version": 1,
+      "base_url": "http://127.0.0.1:8080/target/",
+      "in_scope": ["127.0.0.1"],
+      "out_of_scope": [],
+      "denied_hosts": [],
+      "allowed_path_prefixes": ["/target"],
+      "denied_path_prefixes": [],
+      "allowed_methods": ["GET", "POST"],
+      "allowed_headers": ["accept", "content-type"],
+      "redirect": {"mode": "manual"},
+      "limits": {
+        "timeout_ms": 5000,
+        "max_request_body_bytes": 4096,
+        "max_response_wire_bytes": 65536,
+        "max_response_decoded_bytes": 65536,
+        "max_request_header_bytes": 8192,
+        "max_request_headers": 32,
+        "max_response_header_bytes": 8192,
+        "max_response_headers": 32,
+        "max_dns_answers": 16,
+        "max_dns_cname_depth": 4,
+        "max_dns_queries": 8
+      },
+      "rate": {
+        "default": {"requests_per_interval": 10, "interval_ms": 1000, "burst": 2},
+        "per_host": {},
+        "jitter_ms": 0
+      },
+      "budget": {
+        "max_requests": 8,
+        "max_request_body_bytes": 32768,
+        "max_response_decoded_bytes": 524288
+      }
+    },
+    "auth": {
+      "revision": "credential-version-1",
+      "headers_env": {"authorization": "TARGET_AUTHORIZATION"}
+    }
+  }
+}
+```
+
+Omit `auth` for an unauthenticated target. `TARGET_AUTHORIZATION` must contain the
+entire header value, including `Bearer ` when needed. The host must change the
+opaque `revision` whenever it rotates that credential. Only the revision, exact
+origin and header names are captured as public authority; environment references
+and credential values stay out of durable metadata. Authentication is injected
+only for its exact origin. Invalid or absent configured credentials fail; there
+is no unauthenticated fallback. Do not put a public `policy.auth` descriptor in the
+file: the loader derives it from the private configuration.
+
+The model can supply only `url`, `method`, `headers`, and optional UTF-8 `body` to
+`http_request`. Method defaults to `POST`; content type defaults to
+`application/json`. Scope, deny rules, path boundaries, methods, header allowlists,
+redirects, deadlines and aggregate budgets remain host authority. Denies take
+precedence. Private destinations require an explicitly private literal-IP or
+localhost base anchor; a public hostname resolving to a private address is not
+such an anchor. Per-host rate keys are canonical hostnames without ports.
+Redirect modes are `manual` (default), `error`, or `follow` with `max_hops` 1–5;
+each followed hop is authorized and accounted independently, and crossing an
+origin drops caller headers and saved authentication.
+
+Profile files must be regular JSON files, at most 1 MiB, containing at most 32
+unique profiles; unknown fields fail. Request bodies are capped at 1 MiB,
+response wire and decoded bodies at 16 MiB each, request and response headers at
+64 KiB/128 fields each, and request deadlines at 120 seconds. Smaller configured
+limits apply. Saved-cookie sessions, automatic reauthentication, proxies, TLS
+verification bypass, and model-driven scope expansion are unsupported.
+
+Inspect retained network observations without loading any profile, credential,
+provider or engine owner:
+
+```sh
+0sec-native --state state.db http show --session SESSION --operation HTTP_OPERATION
+0sec-native --state state.db http show --session SESSION --operation HTTP_OPERATION --evidence
+```
+
+The ordinary view validates the retained provenance and shows status, manifest and
+artifact identities. `--evidence` adds the exact retained **redacted** body as
+base64 with an explicit byte count; it does not interpret arbitrary bytes as
+UTF-8. Wire, decoded and retained-redacted byte counts are distinct. Evidence
+hashes identify retained redacted bytes, not the original network stream. Saved
+authentication values and sensitive response headers are redacted before engine
+retention. HTTP 4xx/5xx can be complete observations; a dispatched incomplete
+response remains uncertain and an exact retry reads its receipt without sending
+another target request. Neither a response nor its approval is a vulnerability
+verification or a safety verdict.

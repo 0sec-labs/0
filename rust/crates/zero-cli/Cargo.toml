@@ -12,8 +12,10 @@ path = "src/main.rs"
 
 [dependencies]
 zero-tui = { path = "../zero-tui" }
+zero-http = { path = "../zero-http" }
 nix = { workspace = true, features = ["fs"] }
 clap.workspace = true
+base64 = "0.22"
 uuid.workspace = true
 tokio.workspace = true
 tokio-util.workspace = true

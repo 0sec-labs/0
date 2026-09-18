@@ -5,6 +5,7 @@ mod agent_checkpoint;
 mod agent_context;
 mod agent_context_history;
 mod agent_delegation;
+mod agent_http;
 mod agent_plugins;
 mod agent_questions;
 mod agent_source;
@@ -27,6 +28,7 @@ mod triage;
 mod workflow_provenance;
 
 pub use agent_approvals::{read_tool_approval, read_tool_approval_intent, read_tool_approvals};
+pub use agent_http::{read_http_evidence, read_http_operation};
 pub use agent_questions::{read_operator_question, read_operator_questions};
 pub use agent_steering::read_agent_steering;
 pub use discovery::read_source_reviews;
@@ -86,6 +88,7 @@ struct Shared {
     sandbox: Arc<zero_sandbox::SandboxExecutor>,
     providers: Mutex<HashMap<String, inference::Profile>>,
     plugins: Mutex<Option<plugin::Profile>>,
+    http: Mutex<HashMap<String, Arc<zero_http::Client>>>,
     plugin_root: PathBuf,
     owner: String,
     // Retained by workers even when the client handle is dropped.
@@ -236,6 +239,7 @@ impl Engine {
                 sandbox: Arc::new(sandbox),
                 providers: Mutex::new(HashMap::new()),
                 plugins: Mutex::new(None),
+                http: Mutex::new(HashMap::new()),
                 plugin_root,
                 owner,
                 _lock: OwnershipLock(file),
@@ -261,6 +265,7 @@ impl Engine {
             "durable_boundary_steering",
             "durable_operator_questions",
             "exact_invocation_tool_approvals",
+            "scoped_http_requests",
             "durable_agent_input_queue",
             "explicit_context_projection",
             "generation_pinned_offline_plugins",

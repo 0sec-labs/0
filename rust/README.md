@@ -256,3 +256,16 @@ questions and from actual execution status. The CLI exposes read-only
 Console/TUI permission controls address a specific invocation and digest; they
 cannot widen the captured profile. See `MIGRATION.md` for remaining scope and
 autonomy-mode parity requirements.
+
+Target HTTP is an explicit host capability. Select a named profile with
+`"http_profile":"target"` in an agent request and supply its configuration using
+`--http-profiles`. The profile pins scope, authentication revision, redirect
+behavior, rate limits and budgets shared by delegated children and continuation
+branches. Native `http_request` can also be selected in `tool_approval_policy`;
+permission never overrides scope. See the [CLI configuration example](crates/zero-cli/README.md)
+and [transport contract](crates/zero-http/README.md).
+
+`http show --session ID --operation ID` verifies retained redacted HTTP evidence
+without contacting the target. Add `--evidence` for complete binary-safe base64
+bytes. An observed HTTP error status is distinct from an incomplete or uncertain
+request; uncertain effects retain their budget reservation and are not replayed.

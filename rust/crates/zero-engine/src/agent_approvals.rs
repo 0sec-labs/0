@@ -78,6 +78,7 @@ pub(super) fn validate_policy(request: &AgentRequest) -> Result<(), EngineError>
                 && (request.source_snapshot_tools || request.source_review_operation_id.is_some()));
         if native_non_effect
             || (name != "execute_snapshot"
+                && !(name == "http_request" && request.http_profile.is_some())
                 && !request.plugin_tools.iter().any(|b| &b.alias == name))
         {
             return Err(error(
@@ -123,6 +124,10 @@ pub(super) fn validate_plugins(
 }
 
 pub(super) enum Effect {
+    Http {
+        context: agent_http::Context,
+        request: zero_http::PreparedRequest,
+    },
     Snapshot(SandboxRequest),
     Plugin {
         context: agent_plugins::Context,
@@ -133,6 +138,7 @@ pub(super) enum Effect {
 impl Effect {
     fn payload(&self, actor: &str, call: &str) -> Value {
         match self {
+            Self::Http { context, request } => context.payload(actor, call, request),
             Self::Snapshot(request) => {
                 json!({"parent_operation":actor,"kind":"agent_tool","call_id":call,"request":request})
             }
@@ -147,6 +153,7 @@ impl Effect {
     }
     fn revalidate(&self, shared: &Shared) -> Result<(), EngineError> {
         match self {
+            Self::Http { .. } => Ok(()),
             Self::Snapshot(request) => request.validate().map_err(error),
             Self::Plugin {
                 context,
@@ -381,23 +388,31 @@ pub(super) async fn run(
         )?
     };
     guard.effect = Some(operation.id.clone());
-    let reply = match effect {
+    let operation = match effect {
+        Effect::Http { context, request } => {
+            agent_http::execute_admitted(shared, operation, &context, request, cancel.clone())
+                .await?
+        }
         Effect::Snapshot(request) => {
-            sandbox::run_sandbox_owned(
+            let reply = sandbox::run_sandbox_owned(
                 shared,
                 &operation.id,
                 request,
                 cancel.clone(),
                 events.clone(),
             )
-            .await?
+            .await?;
+            match reply {
+                Reply::Sandbox { operation, .. } => operation,
+                _ => return Err(error("unexpected approved sandbox reply")),
+            }
         }
         Effect::Plugin {
             context,
             binding,
             input,
         } => {
-            agent_plugins::execute_admitted(
+            let reply = agent_plugins::execute_admitted(
                 shared,
                 operation,
                 &context,
@@ -406,14 +421,33 @@ pub(super) async fn run(
                 cancel.clone(),
                 events.clone(),
             )
-            .await?
+            .await?;
+            match reply {
+                Reply::Plugin { operation, .. } => operation,
+                _ => return Err(error("unexpected approved plugin reply")),
+            }
         }
     };
-    let operation = match reply {
-        Reply::Sandbox { operation, .. } | Reply::Plugin { operation, .. } => operation,
-        _ => return Err(error("approved effect returned an unexpected reply")),
-    };
-    let (status, output) = receipt::effect_output(&operation)?;
+    if operation.payload["kind"] == "agent_http"
+        && operation.status == OperationStatus::Failed
+        && operation
+            .outcome
+            .as_ref()
+            .is_some_and(|v| v["error_code"] == "http_preparation_failed")
+    {
+        let value = receipt::settlement(&record, &operation, None)?;
+        lock(&shared.store)?.settle_operation(
+            &record.operation_id,
+            &shared.owner,
+            OperationStatus::Failed,
+            &value,
+        )?;
+        guard.settled = true;
+        return Ok(ResultKind::Failed(
+            "HTTP preparation failed before dispatch".into(),
+        ));
+    }
+    let (status, output) = receipt::effect_output(&*lock(&shared.store)?, &operation)?;
     let value = receipt::settlement(&record, &operation, output.as_deref())?;
     {
         let mut store = lock(&shared.store)?;
