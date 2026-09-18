@@ -154,6 +154,7 @@ impl Setup {
                 continuation_of: None,
                 source_review_operation_id: None,
                 source_snapshot_tools: false,
+                source_submission_max_hypotheses: None,
                 provider: "local".into(),
                 model: "fixture".into(),
                 instructions: "Use only offered tools".into(),

@@ -190,15 +190,8 @@ fn baseline(
             ));
         }
     }
-    let source = store.get_operation(&original.source_operation_id)?;
-    let source_outcome: zero_protocol::source::SourceReviewOutcome = serde_json::from_value(
-        source
-            .outcome
-            .ok_or_else(|| state("source outcome absent"))?,
-    )?;
-    let review = source_outcome
-        .review
-        .ok_or_else(|| state("source review absent"))?;
+    let source = source_provenance::load(&store, session, &original.source_operation_id)?;
+    let review = source.review;
     let hypothesis = review
         .hypotheses
         .iter()

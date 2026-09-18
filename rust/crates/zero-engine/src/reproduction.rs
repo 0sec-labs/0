@@ -3,7 +3,6 @@ use super::*;
 use serde_json::json;
 use zero_protocol::{
     sandbox::{SandboxCleanup, SandboxRequest},
-    source::{ReviewResult, SourceReviewOutcome, SourceReviewRequest},
     verification::{
         Disposition, Evidence, ReproductionOutcome, ReproductionStop, SourceReproductionRequest,
     },
@@ -93,61 +92,16 @@ pub(super) fn validate_source(
     frozen: &FrozenPlan,
 ) -> Result<(), EngineError> {
     let store = lock(&shared.store)?;
-    let source = store.get_operation(source_id)?;
-    if source.session_id != session
-        || source.status != OperationStatus::Succeeded
-        || source.payload["kind"] != "source_hypothesis_review"
-    {
-        return Err(state(
-            "plan requires a successful source review in this session",
-        ));
-    }
-    let source_request: SourceReviewRequest =
-        serde_json::from_value(source.payload["request"].clone())?;
-    let outcome: SourceReviewOutcome = serde_json::from_value(
-        source
-            .outcome
-            .ok_or_else(|| state("source outcome missing"))?,
-    )?;
-    let attachments = store.operation_artifacts(source_id)?;
-    for name in ["source.bundle", "source.review"] {
-        if !attachments.contains_key(name) || attachments.get(name) != outcome.artifacts.get(name) {
-            return Err(state("source attachment differs from outcome"));
-        }
-    }
-    let bundle_id = attachments
-        .get("source.bundle")
-        .ok_or_else(|| state("bundle absent"))?;
-    let review_id = attachments
-        .get("source.review")
-        .ok_or_else(|| state("review absent"))?;
-    let bundle =
-        zero_source::SourceBundle::from_bytes(&store.artifact(bundle_id)?).map_err(state)?;
-    let review: ReviewResult = serde_json::from_slice(&store.artifact(review_id)?)?;
-    if serde_json::to_value(&review)?
-        != serde_json::to_value(
-            outcome
-                .review
-                .ok_or_else(|| state("source review absent"))?,
-        )?
-        || review.bundle_sha256 != *bundle_id
-        || bundle.digest() != bundle_id
-        || bundle.digest() != frozen.plan().source_bundle_digest
-        || review.snapshot_sha256 != bundle.snapshot_digest()
-        || bundle.snapshot_digest() != frozen.plan().snapshot.digest
-        || !review
+    let source = source_provenance::load(&store, session, source_id)?;
+    if source.bundle.digest() != frozen.plan().source_bundle_digest
+        || !source
+            .review
             .hypotheses
             .iter()
             .any(|h| h.id == frozen.plan().hypothesis_id)
+        || serde_json::to_value(&source.snapshot)? != serde_json::to_value(&frozen.plan().snapshot)?
     {
-        return Err(state("plan hypothesis/bundle provenance mismatch"));
-    }
-    // Exact original root/id/full index; a matching digest alone cannot authorize
-    // a different host root. The executor independently verifies bytes per run.
-    if serde_json::to_value(&source_request.source.snapshot)?
-        != serde_json::to_value(&frozen.plan().snapshot)?
-    {
-        return Err(state("plan snapshot differs from admitted source snapshot"));
+        return Err(state("plan hypothesis/bundle/snapshot provenance mismatch"));
     }
     Ok(())
 }

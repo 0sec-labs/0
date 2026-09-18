@@ -2,11 +2,7 @@
 use super::*;
 use serde::Deserialize;
 use serde_json::{Value, json};
-use zero_protocol::{
-    agent::AgentRequest,
-    model::ToolDefinition,
-    source::{ReviewResult, SourceReviewOutcome, SourceReviewRequest},
-};
+use zero_protocol::{agent::AgentRequest, model::ToolDefinition};
 use zero_source::{SourceBundle, investigation::SourceInvestigation};
 pub(super) enum Context {
     Retained(SourceBundle),
@@ -66,51 +62,15 @@ pub(super) fn capture(
             "invalid source operation or plugin alias shadows an offered source tool",
         ));
     }
-    let op = store.get_operation(id)?;
-    if op.session_id != session
-        || op.status != OperationStatus::Succeeded
-        || op.payload["kind"] != "source_hypothesis_review"
-    {
-        return Err(error(
-            "source tools require a completed source review in this session",
-        ));
-    }
-    let original: SourceReviewRequest = serde_json::from_value(op.payload["request"].clone())?;
-    if serde_json::to_value(&original.source.snapshot)?
+    let source = source_provenance::load(store, session, id)?;
+    if serde_json::to_value(&source.snapshot)?
         != serde_json::to_value(&request.execution.sandbox_request().snapshot)?
     {
         return Err(error(
             "source tool authority differs from pinned execution snapshot",
         ));
     }
-    let outcome: SourceReviewOutcome = serde_json::from_value(
-        op.outcome
-            .ok_or_else(|| error("missing source review outcome"))?,
-    )?;
-    let artifacts = store.operation_artifacts(id)?;
-    for name in ["source.bundle", "source.review"] {
-        if !artifacts.contains_key(name) || artifacts.get(name) != outcome.artifacts.get(name) {
-            return Err(error("source artifact identity mismatch"));
-        }
-    }
-    let bundle =
-        SourceBundle::from_bytes(&store.artifact(&artifacts["source.bundle"])?).map_err(error)?;
-    let review: ReviewResult =
-        serde_json::from_slice(&store.artifact(&artifacts["source.review"])?)?;
-    if bundle.digest() != artifacts["source.bundle"]
-        || bundle.snapshot_digest() != original.source.snapshot.digest
-        || review.bundle_sha256 != *bundle.digest()
-        || review.snapshot_sha256 != bundle.snapshot_digest()
-        || serde_json::to_value(&review)?
-            != serde_json::to_value(
-                outcome
-                    .review
-                    .ok_or_else(|| error("missing source review"))?,
-            )?
-    {
-        return Err(error("retained source provenance mismatch"));
-    }
-    Ok(Some(Context::Retained(bundle)))
+    Ok(Some(Context::Retained(source.bundle)))
 }
 pub(super) fn definitions() -> Vec<ToolDefinition> {
     [

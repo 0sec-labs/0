@@ -77,3 +77,41 @@ The cursor must name a file inside the current authorized manifest and prefix;
 missing files, traversal and cursors outside that prefix are rejected. Cursor
 bytes count toward the existing serialized output limit. Identity comes from the
 fixed source authority and response digest, not from the path token alone.
+
+## Adaptive structured source review
+
+Set `source_submission_max_hypotheses` to 1..32 together with
+`source_snapshot_tools: true` to require a structured terminal review. The agent
+can inspect source and use its already authorized tools, then call
+`submit_source_hypotheses` as its sole final tool call. Arguments contain
+`selected_files` (0..32 paths) and `hypotheses`; every nonempty hypothesis must
+cite an exact selected file hash and valid inclusive line range. Final prose
+alone fails. A submission mixed with execution or any other tool fails before
+those mixed calls execute.
+
+Selection reads only the verified private copy. The engine retains the selected
+bundle, actual final model request including prior tool history, normalized
+completion and validated review as `source.bundle`, `source.request`,
+`source.completion` and `source.review`. The optional `AgentResult.source_review`
+contains the same review/outcome shape as one-shot discovery, including the final
+inference operation. It remains unverified. Provider work is charged through the
+normal per-turn budget; there is no additional hidden submission request.
+
+Nonempty bundles retain the existing version-1 encoding. An explicitly empty
+selection uses version 2 with the full snapshot manifest but no selected text;
+only empty hypotheses can validate against it. This means no hypotheses proposed,
+not proof of safety or exhaustive review. Bundle readers validate both versions;
+one-shot selected-source requests retain their existing nonempty requirement.
+
+Reproduction, repair preconditions and retained-source investigation accept a
+succeeded adaptive review operation. They reload/hash its artifacts and revalidate
+the original submission against its correlated final inference, source authority
+and host limits. Cleanup still precedes success; uncertainty makes the parent
+ineligible even if artifacts were written. Exact retries return its recorded
+outcome without more provider work. A terminal structured submission closes that
+conversation and cannot be continued as a normal answer; turn-limit checkpoints
+before submission can continue with unchanged submission authority.
+
+This connects exploration to retained hypotheses and existing frozen reproduction.
+It does not implement legacy review lenses, automatic independent oracle creation,
+all review flags, reportability or a model-quality guarantee.

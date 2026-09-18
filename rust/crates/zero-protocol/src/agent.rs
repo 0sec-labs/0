@@ -21,6 +21,9 @@ pub struct AgentRequest {
     /// Explicit read-only tools over a newly verified private copy of the full snapshot.
     #[serde(default, skip_serializing_if = "is_false")]
     pub source_snapshot_tools: bool,
+    /// Require a terminal structured source submission after snapshot investigation.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_submission_max_hypotheses: Option<u32>,
     /// execute_snapshot uses this pinned offline execution profile. The model
     /// supplies argv only; it cannot choose mounts, image, network or limits.
     /// Explicit plugin tools use the separately configured host launch profile.
@@ -59,6 +62,8 @@ pub struct AgentResult {
     pub continuation_artifact: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub source_recovery_path: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_review: Option<crate::source::SourceReviewOutcome>,
 }
 
 /// Legacy Docker-shaped requests retain their serialized retry identity. New

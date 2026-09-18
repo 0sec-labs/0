@@ -648,3 +648,426 @@ async fn listing_rejects_fabricated_or_noncanonical_cursors_without_expanding_au
     f.no_backend();
     f.engine.shutdown().await.unwrap();
 }
+
+fn submitted_claims(valid: bool) -> Value {
+    let hash = if valid {
+        format!(
+            "sha256:{}",
+            zero_plugin::sha256(b"const original = 'pinned';\nconsole.log(original);\n")
+        )
+    } else {
+        format!("sha256:{}", "0".repeat(64))
+    };
+    json!({"selected_files":["app.js"],"hypotheses":[{"title":"Fixture hypothesis","claimed_severity":"low","explanation":"Requires a separate observed plan","citations":[{"path":"app.js","sha256":hash,"start_line":1,"end_line":1}]}]})
+}
+#[tokio::test]
+async fn adaptive_review_retains_actual_provider_evidence_and_supports_reproduction() {
+    let mut f = Fixture::new(
+        vec![
+            completed(json!([tool(
+                "read",
+                "read_source_lines",
+                json!({"path":"app.js","start_line":1,"end_line":2})
+            )])),
+            completed(json!([tool(
+                "submit",
+                "submit_source_hypotheses",
+                submitted_claims(true)
+            )])),
+        ],
+        false,
+    )
+    .await;
+    f.request.source_submission_max_hypotheses = Some(4);
+    let command = f.command("adaptive");
+    let (parent, review) = match call(&f.engine, command.clone()).await {
+        Reply::Agent {
+            operation,
+            result: Some(result),
+            ..
+        } => {
+            assert_eq!(operation.status, OperationStatus::Succeeded, "{result:?}");
+            assert_eq!(result.status, AgentStatus::Completed);
+            (operation.id, result.source_review.unwrap().review.unwrap())
+        }
+        r => panic!("{r:?}"),
+    };
+    assert_eq!(review.hypotheses.len(), 1);
+    assert_eq!(
+        review.hypotheses[0].state,
+        zero_protocol::source::VerificationState::Unverified
+    );
+    let store = zero_store::Store::open_read_only(f.dir.path().join("state.db")).unwrap();
+    let artifacts = store.operation_artifacts(&parent).unwrap();
+    for name in [
+        "source.bundle",
+        "source.request",
+        "source.completion",
+        "source.review",
+    ] {
+        assert!(!store.artifact(&artifacts[name]).unwrap().is_empty());
+    }
+    let actual: Value =
+        serde_json::from_slice(&store.artifact(&artifacts["source.request"]).unwrap()).unwrap();
+    assert!(
+        actual["input"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|v| v["type"] == "function_call_output")
+    );
+    assert_eq!(review.request_sha256, artifacts["source.request"]);
+    assert_eq!(review.completion_sha256, artifacts["source.completion"]);
+    assert_eq!(f.http.count(), 2);
+    let prepared = f.prepared();
+    assert!(!PathBuf::from(prepared["path"].as_str().unwrap()).exists());
+    f.no_backend();
+    fs::write(
+        f.dir.path().join("docker"),
+        include_str!("../../zero-executor/tests/fixtures/fake-docker.py"),
+    )
+    .unwrap();
+    fs::write(f.dir.path().join("scenario.txt"), "echo").unwrap();
+    use zero_protocol::verification::{
+        Case, ExactOutput, Limits, Mode, Plan, SourceReproductionRequest,
+    };
+    let cases = [
+        ("attack", Mode::Attack),
+        ("control", Mode::LegitimateControl),
+    ]
+    .into_iter()
+    .map(|(id, mode)| Case {
+        id: id.into(),
+        mode,
+        argv: vec!["true".into()],
+        stdin: Some(format!("{id}\n")),
+        expected: ExactOutput {
+            exit_code: 0,
+            stdout: format!("{id}\n").into_bytes(),
+            stderr: b"fixture diagnostic\n".to_vec(),
+        },
+        safe_expected: None,
+    })
+    .collect();
+    let reproduction = Command::ReproduceSource {
+        session_id: f.session.clone(),
+        command_id: "adaptive-reproduction".into(),
+        request: SourceReproductionRequest {
+            source_operation_id: parent.clone(),
+            plan: Plan {
+                schema_version: 1,
+                oracle_version: "zero-verification-exact-output-v1".into(),
+                hypothesis_id: review.hypotheses[0].id.clone(),
+                source_bundle_digest: review.bundle_sha256,
+                snapshot: f.request.execution.sandbox_request().snapshot,
+                backend: zero_protocol::sandbox::SandboxBackend::Docker {
+                    image: format!("sha256:{}", "a".repeat(64)),
+                },
+                limits: Limits {
+                    timeout_ms: 3000,
+                    memory_mb: 128,
+                    cpus: 0.5,
+                    max_output_bytes: 1024,
+                },
+                repeats: 2,
+                cases,
+            },
+        },
+    };
+    match call(&f.engine, reproduction).await {
+        Reply::SourceReproduction {
+            operation,
+            result: Some(result),
+            ..
+        } => {
+            assert_eq!(operation.status, OperationStatus::Succeeded, "{result:?}");
+            assert_eq!(
+                result.assessment.unwrap().disposition,
+                zero_protocol::verification::Disposition::ObservedForPlan
+            );
+        }
+        r => panic!("{r:?}"),
+    };
+    fs::remove_dir_all(f.dir.path().join("source")).unwrap();
+    match call(&f.engine, command.clone()).await {
+        Reply::Agent {
+            duplicate: true,
+            result: Some(result),
+            ..
+        } => assert!(result.source_review.is_some()),
+        r => panic!("{r:?}"),
+    };
+    assert_eq!(f.http.count(), 2);
+    f.engine.shutdown().await.unwrap();
+    drop(f.engine);
+    let restarted = Engine::open(
+        f.dir.path().join("state.db"),
+        Some(f.dir.path().join("docker")),
+    )
+    .unwrap();
+    f.http.configure(&restarted);
+    match call(&restarted, command).await {
+        Reply::Agent {
+            duplicate: true,
+            result: Some(result),
+            ..
+        } => assert!(result.source_review.is_some()),
+        reply => panic!("{reply:?}"),
+    }
+    assert_eq!(f.http.count(), 2);
+    restarted.shutdown().await.unwrap();
+}
+#[tokio::test]
+async fn adaptive_submission_rejects_prose_invalid_citations_and_mixed_tool_effects() {
+    for response in [
+        answer(),
+        completed(json!([tool(
+            "invalid",
+            "submit_source_hypotheses",
+            submitted_claims(false)
+        )])),
+        completed(json!([
+            tool("submit", "submit_source_hypotheses", submitted_claims(true)),
+            tool("extra", "execute_snapshot", json!({"argv":["true"]}))
+        ])),
+    ] {
+        let mut f = Fixture::new(vec![response], false).await;
+        f.request.source_submission_max_hypotheses = Some(4);
+        match call(&f.engine, f.command("reject")).await {
+            Reply::Agent {
+                operation,
+                result: Some(result),
+                ..
+            } => {
+                assert_eq!(operation.status, OperationStatus::Failed, "{result:?}");
+                assert!(result.source_review.is_none());
+                assert!(result.error.is_some());
+            }
+            r => panic!("{r:?}"),
+        };
+        f.no_backend();
+        assert_eq!(f.http.count(), 1);
+        f.engine.shutdown().await.unwrap();
+    }
+}
+#[tokio::test]
+async fn empty_adaptive_submission_is_unverified_manifest_evidence_not_a_clean_verdict() {
+    let mut f = Fixture::new(
+        vec![completed(json!([tool(
+            "empty",
+            "submit_source_hypotheses",
+            json!({"selected_files":[],"hypotheses":[]})
+        )]))],
+        false,
+    )
+    .await;
+    f.request.source_submission_max_hypotheses = Some(4);
+    match call(&f.engine, f.command("empty")).await {
+        Reply::Agent {
+            operation,
+            result: Some(result),
+            ..
+        } => {
+            assert_eq!(operation.status, OperationStatus::Succeeded, "{result:?}");
+            let outcome = result.source_review.unwrap();
+            assert!(outcome.review.unwrap().hypotheses.is_empty());
+            let store = zero_store::Store::open_read_only(f.dir.path().join("state.db")).unwrap();
+            let bundle = zero_source::SourceBundle::from_bytes(
+                &store.artifact(&outcome.artifacts["source.bundle"]).unwrap(),
+            )
+            .unwrap();
+            assert!(bundle.files().is_empty());
+            assert_eq!(result.text, "");
+        }
+        r => panic!("{r:?}"),
+    };
+    f.no_backend();
+    f.engine.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn adaptive_review_storage_failure_is_not_a_successful_submission() {
+    let mut f = Fixture::new(
+        vec![completed(json!([tool(
+            "submit",
+            "submit_source_hypotheses",
+            submitted_claims(true)
+        )]))],
+        false,
+    )
+    .await;
+    f.request.source_submission_max_hypotheses = Some(4);
+    let db = rusqlite::Connection::open(f.dir.path().join("state.db")).unwrap();
+    db.execute_batch("CREATE TRIGGER reject_adaptive BEFORE INSERT ON operation_artifacts WHEN NEW.name='source.review' BEGIN SELECT RAISE(ABORT,'fixture review persistence failure'); END;").unwrap();
+    match call(&f.engine, f.command("persistence")).await {
+        Reply::Agent {
+            operation,
+            result: Some(result),
+            ..
+        } => {
+            assert_eq!(operation.status, OperationStatus::Failed);
+            assert!(result.source_review.is_none());
+            assert!(result.error.is_some());
+        }
+        r => panic!("{r:?}"),
+    };
+    db.execute_batch("DROP TRIGGER reject_adaptive").unwrap();
+    assert!(!PathBuf::from(f.prepared()["path"].as_str().unwrap()).exists());
+    assert_eq!(f.http.count(), 1);
+    f.no_backend();
+    assert_eq!(
+        db.query_row(
+            "SELECT count(*) FROM operations WHERE status='running'",
+            [],
+            |r| r.get::<_, u64>(0)
+        )
+        .unwrap(),
+        0
+    );
+    f.engine.shutdown().await.unwrap();
+}
+#[tokio::test]
+async fn adaptive_source_pin_revalidates_final_inference_before_reuse() {
+    let mut f = Fixture::new(
+        vec![completed(json!([tool(
+            "submit",
+            "submit_source_hypotheses",
+            submitted_claims(true)
+        )]))],
+        false,
+    )
+    .await;
+    f.request.source_submission_max_hypotheses = Some(4);
+    let (parent, inference) = match call(&f.engine, f.command("initial")).await {
+        Reply::Agent {
+            operation,
+            result: Some(result),
+            ..
+        } => {
+            assert_eq!(operation.status, OperationStatus::Succeeded, "{result:?}");
+            (
+                operation.id,
+                result.source_review.unwrap().inference_operation.unwrap(),
+            )
+        }
+        r => panic!("{r:?}"),
+    };
+    let db = rusqlite::Connection::open(f.dir.path().join("state.db")).unwrap();
+    db.execute(
+        "UPDATE operations SET outcome='{}' WHERE id=?1",
+        [inference],
+    )
+    .unwrap();
+    let mut next = f.request.clone();
+    next.source_snapshot_tools = false;
+    next.source_submission_max_hypotheses = None;
+    next.source_review_operation_id = Some(parent);
+    let reply = call(
+        &f.engine,
+        Command::RunAgent {
+            session_id: f.session.clone(),
+            command_id: "corrupt-review".into(),
+            request: next,
+        },
+    )
+    .await;
+    assert!(matches!(reply, Reply::Error { .. }), "{reply:?}");
+    assert_eq!(f.http.count(), 1);
+    f.no_backend();
+    f.engine.shutdown().await.unwrap();
+}
+#[tokio::test]
+async fn adaptive_submission_requires_host_opt_in_and_valid_bounds_before_provider() {
+    for (enabled, max) in [(false, Some(4)), (true, Some(0)), (true, Some(33))] {
+        let mut f = Fixture::new(vec![answer()], false).await;
+        f.request.source_snapshot_tools = enabled;
+        f.request.source_submission_max_hypotheses = max;
+        assert!(matches!(
+            call(&f.engine, f.command("invalid-mode")).await,
+            Reply::Error { .. }
+        ));
+        assert_eq!(f.http.count(), 0);
+        f.no_backend();
+        f.engine.shutdown().await.unwrap();
+    }
+}
+
+#[tokio::test]
+async fn adaptive_request_too_large_to_retain_never_reaches_provider() {
+    let mut f = Fixture::new(vec![answer()], false).await;
+    f.request.source_submission_max_hypotheses = Some(4);
+    f.request.instructions = "x".repeat(zero_source::MAX_ARTIFACT_BYTES);
+    let reply = call(&f.engine, f.command("oversized-evidence")).await;
+    assert!(
+        !matches!(reply,Reply::Agent{result:Some(ref r),..} if r.status==AgentStatus::Completed)
+    );
+    assert_eq!(f.http.count(), 0);
+    match call(
+        &f.engine,
+        Command::SessionBudget {
+            session_id: f.session.clone(),
+        },
+    )
+    .await
+    {
+        Reply::SessionBudget { budget } => assert_eq!((budget.charged, budget.reserved), (0, 0)),
+        r => panic!("{r:?}"),
+    }
+    f.no_backend();
+    f.engine.shutdown().await.unwrap();
+}
+#[tokio::test]
+async fn accepted_adaptive_evidence_is_ineligible_when_private_cleanup_fails() {
+    let mut f = Fixture::new(
+        vec![completed(json!([tool(
+            "submit",
+            "submit_source_hypotheses",
+            json!({"selected_files":[],"hypotheses":[]})
+        )]))],
+        true,
+    )
+    .await;
+    f.request.source_submission_max_hypotheses = Some(4);
+    let engine = f.engine.clone();
+    let command = f.command("cleanup-submission");
+    let run = tokio::spawn(async move { call(&engine, command).await });
+    f.http.wait().await;
+    let root = PathBuf::from(f.prepared()["path"].as_str().unwrap());
+    fs::set_permissions(root.join("source"), fs::Permissions::from_mode(0)).unwrap();
+    f.http.release.cancel();
+    let parent = match run.await.unwrap() {
+        Reply::Agent {
+            operation,
+            result: Some(result),
+            ..
+        } => {
+            assert_eq!(operation.status, OperationStatus::Unknown);
+            assert_eq!(result.status, AgentStatus::Unknown);
+            assert!(result.source_review.is_some());
+            assert!(result.source_recovery_path.is_some());
+            assert!(result.continuation_artifact.is_none());
+            operation.id
+        }
+        r => panic!("{r:?}"),
+    };
+    fs::set_permissions(root.join("source"), fs::Permissions::from_mode(0o700)).unwrap();
+    fs::remove_dir_all(root).unwrap();
+    let mut next = f.request.clone();
+    next.source_snapshot_tools = false;
+    next.source_submission_max_hypotheses = None;
+    next.source_review_operation_id = Some(parent);
+    assert!(matches!(
+        call(
+            &f.engine,
+            Command::RunAgent {
+                session_id: f.session.clone(),
+                command_id: "ineligible-source".into(),
+                request: next
+            }
+        )
+        .await,
+        Reply::Error { .. }
+    ));
+    assert_eq!(f.http.count(), 1);
+    f.engine.shutdown().await.unwrap();
+}

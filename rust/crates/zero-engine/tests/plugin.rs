@@ -704,6 +704,7 @@ fn agent_request(f: &Fixture) -> AgentRequest {
         continuation_of: None,
         source_review_operation_id: None,
         source_snapshot_tools: false,
+        source_submission_max_hypotheses: None,
         execution: zero_protocol::ExecutionRequest {
             execution_id: "profile".into(),
             image: "local:test".into(),

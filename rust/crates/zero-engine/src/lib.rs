@@ -3,6 +3,7 @@ mod agent;
 mod agent_checkpoint;
 mod agent_plugins;
 mod agent_source;
+mod agent_submission;
 mod inference;
 mod lifecycle;
 mod plugin;
@@ -10,6 +11,7 @@ mod repair;
 mod reproduction;
 mod sandbox;
 mod source;
+mod source_provenance;
 
 use std::{
     collections::HashMap,

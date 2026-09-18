@@ -45,7 +45,7 @@ upgrading scaffolds or model assessments into successful verification.
 | Generation graph | `crates/zero-harness`: verified complete plugin/artifact/policy graph, activation epoch pins, durable invocation leases and current-state rollback | Measured evaluator promotion and native process replacement; persisted session epochs and direct engine calls are implemented |
 | Generation registry | `crates/zero-evolution`: immutable artifacts/receipts, eligibility, instance-bound preparation, activation CAS, leases and current-state rollback | Runtime graph disposal, measured evidence import/promotion, campaign qualification and native process handoff |
 | Fixture evaluation | `crates/zero-evaluation`: isolated paired baseline/candidate execution, frozen exact JSON oracles, durable attempt budgets, observed outcomes and deterministic receipts; real Docker fixture passed | Portable evidence import, independent corpus governance, production eligibility/canary and autonomous candidate writing; fixture eligibility is not a detection-quality claim |
-| Report rendering | `crates/zero-report`: bounded legacy JSON preservation, SARIF and Markdown rendering with actual TypeScript formatter golden fixtures | Full workflow integration and report schema qualification; rendering does not verify findings |
+| Report rendering | `crates/zero-report`: bounded legacy JSON preservation, SARIF, Markdown and HTML rendering with actual TypeScript formatter golden fixtures | Full workflow integration and report schema qualification; rendering does not verify findings |
 | Hosted metadata | `crates/zero-cloud-client`: explicit authenticated health/catalog/account/usage GETs, bounded browser-session login polling, typed gateway errors and credit normalization; CLI resolves environment or private legacy `cloud.env` credentials | Live service qualification, provider OAuth/refresh, price identity/inference routing, upload/accounting and managed-worker qualification |
 | Cloud wire adapter | `crates/zero-cloud-compat`: result/event framing, typed outcomes, cost provenance and atomic report writing | Scanner integration, ordered scan-total accounting, uploads and managed deployment qualification |
 | Finding reduction | `crates/zero-evidence`: source IDs/provenance retained through complete reconciliation, explicit disposition accounting | Discovery, independent vulnerability oracles, storage/export and disclosure eligibility; reconciliation is not truth validation |
@@ -144,8 +144,9 @@ This is distinct from retained-review mode and does not broaden it implicitly.
 Source listings now expose deterministic `after_path` / `next_after_path` pages,
 so the per-call 32-file limit does not hide later files in a large directory.
 Manifest/scope validation and serialized-byte bounds apply to every page.
-Regex search, role-specific tool policy and investigation-driven structured
-submission remain open. The dedicated review still requires host-selected files.
+Regex search and role-specific tool policy remain open. Optional structured
+submission now connects adaptive snapshot investigation to retained unverified
+hypotheses; the dedicated one-shot review still requires host-selected files.
 
 ## Dependency gates
 
@@ -354,6 +355,38 @@ not scanner, managed-worker, HTML/PDF or complete report-workflow parity.
 
 The combined workspace run passed 389 tests and production Clippy before the
 last added Markdown output-expansion regression; that additional test passed
-separately on both compilers. The next source workflow gap remains converting
-adaptive investigation into a retained, structurally validated hypothesis
-submission; prose from the generic agent is not a source-review result.
+separately on both compilers. Adaptive investigation now has an explicit structured submission mode, described
+below. Generic agent prose remains distinct from a source-review result.
+
+## Adaptive discovery and HTML reports
+
+An agent request may opt into `source_submission_max_hypotheses: 1..32` together
+with whole-snapshot source tools. Only a sole terminal submission with validated
+selected-file/hash/line citations can complete this mode. The engine retains the
+actual final provider request and completion, selected source bundle and review;
+reproduction, repair preconditions and retained-source tools revalidate that
+provenance before accepting the operation. Empty selections use explicit
+manifest-only bundle version 2 and can establish no nonempty cited hypotheses.
+All hypotheses remain unverified; an empty result is not a clean verdict.
+
+Acceptance covers investigation → structured review → frozen reproduction,
+restart exact retry after source deletion, mixed-tool/prose/citation rejection,
+artifact persistence failure, corrupted provider evidence, cleanup uncertainty,
+and request-size rejection before provider expense. Private cleanup still
+precedes parent success. Turn-limit checkpoints may continue with the same mode;
+terminal structured submissions close their conversation. Full legacy review
+flags/lenses, automatic independent oracle construction, target scope/network
+tools, and finding/reportability policy remain unfinished.
+
+`8a0b6a30` adds `report --format html`, preserving representative legacy report
+fields and severity ordering against an actual TypeScript golden fixture. It
+uses self-contained styling, escaped content, explicit proof/remediation and
+truncation, and no inferred clean-target verdict. Nineteen report tests and six
+CLI report tests pass on current Rust and Rust 1.85. Whole-document byte identity
+is deliberately not claimed; PDF and complete scanner/managed-worker report
+integration remain open.
+
+Combined acceptance for adaptive discovery and HTML: all 410 workspace tests
+passed on Rust 1.85 with the locked dependency graph; production library/binary
+Clippy passed with warnings denied. These local checks do not establish the
+remaining deployment, scanner-quality or full command-parity gates.

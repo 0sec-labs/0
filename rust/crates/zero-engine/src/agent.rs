@@ -25,6 +25,19 @@ impl Engine {
                 "agent requires a prompt, 1..32 turns and nonzero per-turn reservation".into(),
             ));
         }
+        if let Some(max) = request.source_submission_max_hypotheses {
+            if !request.source_snapshot_tools
+                || !(1..=32).contains(&max)
+                || request.prompt.len() > 16384
+                || request.prompt.contains('\0')
+                || request
+                    .plugin_tools
+                    .iter()
+                    .any(|p| p.alias == "submit_source_hypotheses")
+            {
+                return Err(EngineError::State("structured submission requires snapshot tools, bounded question and 1..32 hypotheses; plugin alias cannot shadow submission".into()));
+            }
+        }
         let initial = model_request(
             &request,
             vec![serde_json::json!({"role":"user","content":request.prompt})],
@@ -205,7 +218,8 @@ fn continuation_input(
                 .cloned()
                 .unwrap_or_else(|| serde_json::json!("responses")),
         )?;
-        if prior.source_snapshot_tools != request.source_snapshot_tools
+        if prior.source_submission_max_hypotheses != request.source_submission_max_hypotheses
+            || prior.source_snapshot_tools != request.source_snapshot_tools
             || prior.source_review_operation_id != request.source_review_operation_id
             || prior.plugin_tools != request.plugin_tools
             || parent.payload.get("plugin_context") != plugins.map(|p| &p.identity)
@@ -219,6 +233,11 @@ fn continuation_input(
             || wire != profile.client.wire_api()
         {
             return Err(EngineError::State("continuation must retain its provider, model, instructions, rates and pinned execution profile".into()));
+        }
+        if result.source_review.is_some() {
+            return Err(EngineError::State(
+                "a terminal source submission cannot be continued as conversation".into(),
+            ));
         }
         let turn_limit =
             parent.status == OperationStatus::Failed && result.status == AgentStatus::TurnLimit;
@@ -276,6 +295,11 @@ fn model_request(
     if request.source_snapshot_tools || request.source_review_operation_id.is_some() {
         model.tools.extend(agent_source::definitions());
     }
+    if let Some(max) = request.source_submission_max_hypotheses {
+        if let Ok(tool) = zero_source::adaptive_submission_tool(max) {
+            model.tools.push(tool);
+        }
+    }
     if let Some(plugins) = plugins {
         model.tools.extend(plugins.tools.clone());
     }
@@ -318,6 +342,7 @@ async fn run_rounds(
         error: None,
         continuation_artifact: None,
         source_recovery_path: None,
+        source_review: None,
     };
     'turns: for turn in 0..request.max_turns {
         if cancel.is_cancelled() {
@@ -332,6 +357,14 @@ async fn run_rounds(
             }
         }
         let model = model_request(&request, input.clone(), plugins.as_ref());
+        // Adaptive evidence must be retainable before another provider charge.
+        if request.source_submission_max_hypotheses.is_some()
+            && serde_json::to_vec(&model)?.len() > zero_source::MAX_ARTIFACT_BYTES
+        {
+            output.status = AgentStatus::Failed;
+            output.error = Some("adaptive source request exceeds retained evidence limit".into());
+            break;
+        }
         // Validate accumulated context before reserving/spending or admitting an effect.
         if profile.client.validate(&model).is_err() {
             output.status = AgentStatus::Failed;
@@ -366,7 +399,7 @@ async fn run_rounds(
             session,
             &child.id,
             profile.clone(),
-            model,
+            model.clone(),
             cancel.clone(),
         )
         .await?;
@@ -408,6 +441,54 @@ async fn run_rounds(
                 _ => None,
             })
             .collect();
+        if let Some(max) = request.source_submission_max_hypotheses {
+            if calls
+                .iter()
+                .any(|(_, name, _)| name == "submit_source_hypotheses")
+            {
+                let context = source.as_ref().cloned().ok_or_else(|| {
+                    EngineError::State("missing snapshot submission authority".into())
+                })?;
+                let question = request.prompt.clone();
+                let model = model.clone();
+                let completion = completion.clone();
+                let accepted = tokio::task::spawn_blocking(move || {
+                    agent_submission::prepare(&context, &question, max, model, completion)
+                })
+                .await
+                .map_err(|e| EngineError::State(e.to_string()))?;
+                if cancel.is_cancelled() {
+                    output.status = AgentStatus::Cancelled;
+                    break;
+                }
+                match accepted {
+                    Ok(prepared) => {
+                        match agent_submission::retain(shared, parent, &child.id, prepared) {
+                            Ok(review) => {
+                                output.source_review = Some(review);
+                                output.status = AgentStatus::Completed;
+                            }
+                            Err(error) => {
+                                output.status = AgentStatus::Failed;
+                                output.error = Some(error.to_string());
+                            }
+                        }
+                    }
+                    Err(error) => {
+                        output.status = AgentStatus::Failed;
+                        output.error = Some(error.to_string());
+                    }
+                }
+                break;
+            }
+            if calls.is_empty() {
+                output.status = AgentStatus::Failed;
+                output.error = Some(
+                    "structured source submission required; final prose is not a review".into(),
+                );
+                break;
+            }
+        }
         if calls.is_empty() {
             output.status = AgentStatus::Completed;
             output.text = completion
@@ -664,6 +745,7 @@ async fn run_actor(
         error,
         continuation_artifact: None,
         source_recovery_path: None,
+        source_review: None,
     };
     let mut preparation_error = None;
     if request.source_snapshot_tools {
@@ -783,7 +865,12 @@ async fn run_actor(
         output.error = Some(error);
         output.source_recovery_path = recovery;
     }
-    if cancel.is_cancelled() && output.status == AgentStatus::TurnLimit {
+    if cancel.is_cancelled()
+        && matches!(
+            output.status,
+            AgentStatus::TurnLimit | AgentStatus::Completed
+        )
+    {
         output.status = AgentStatus::Cancelled;
     }
     if output.status == AgentStatus::TurnLimit {
