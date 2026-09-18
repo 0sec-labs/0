@@ -1741,6 +1741,7 @@ dependencies = [
  "uuid",
  "zero-cloud-client",
  "zero-engine",
+ "zero-evaluation",
  "zero-evolution",
  "zero-executor",
  "zero-harness",
@@ -1749,6 +1750,8 @@ dependencies = [
  "zero-protocol",
  "zero-provider",
  "zero-report",
+ "zero-sandbox",
+ "zero-smolvm",
 ]
 
 [[package]]
@@ -1960,6 +1963,19 @@ dependencies = [
  "tempfile",
  "tokio",
  "tokio-util",
+ "zero-protocol",
+]
+
+[[package]]
+name = "zero-source"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "sha2",
+ "tempfile",
+ "thiserror",
+ "zero-executor",
  "zero-protocol",
 ]
 

@@ -22,6 +22,9 @@ zero-engine = { path = "../zero-engine" }
 zero-executor.workspace = true
 zero-provider.workspace = true
 zero-cloud-client = { path = "../zero-cloud-client" }
+zero-evaluation = { path = "../zero-evaluation" }
+zero-sandbox = { path = "../zero-sandbox" }
+zero-smolvm = { path = "../zero-smolvm" }
 zero-report = { path = "../zero-report" }
 zero-harness = { path = "../zero-harness" }
 zero-evolution = { path = "../zero-evolution" }

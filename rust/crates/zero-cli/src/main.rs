@@ -1,6 +1,7 @@
 mod args;
 mod console;
 mod doctor;
+mod evaluation;
 mod framing;
 mod harness;
 mod hosted;
@@ -55,6 +56,14 @@ fn main() -> std::process::ExitCode {
 }
 
 async fn run(args: Args) -> Result<bool, Box<dyn Error>> {
+    if let Command::Evaluation { command } = &args.command {
+        return evaluation::run(
+            command,
+            args.docker_bin.as_deref(),
+            args.smolvm_bin.as_deref(),
+        )
+        .await;
+    }
     if matches!(args.command, Command::Schema) {
         println!(
             "{}",
@@ -230,7 +239,8 @@ async fn run(args: Args) -> Result<bool, Box<dyn Error>> {
         | Command::AppServer
         | Command::Console { .. }
         | Command::Hosted { .. }
-        | Command::Report { .. } => unreachable!(),
+        | Command::Report { .. }
+        | Command::Evaluation { .. } => unreachable!(),
     };
     let (events, mut event_rx) = mpsc::channel(128);
     // One-shot commands reserve stdout for their final JSON result.

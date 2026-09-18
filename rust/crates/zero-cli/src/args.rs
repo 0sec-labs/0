@@ -29,6 +29,11 @@ pub struct Args {
 
 #[derive(Debug, Subcommand)]
 pub enum Command {
+    /// Measure offline plugin fixtures; this does not promote production code.
+    Evaluation {
+        #[command(subcommand)]
+        command: crate::evaluation::EvaluationCommand,
+    },
     /// Read hosted service metadata with an explicitly named token environment variable.
     Hosted {
         #[arg(long, global = true)]

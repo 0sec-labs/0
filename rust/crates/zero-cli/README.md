@@ -307,3 +307,35 @@ account database if those are absent. Help/schema still bypass all resolution.
 Tests use only temporary home directories and loopback fixtures; no real
 credential files are modified. Device login and credential storage commands
 remain unimplemented.
+
+## Measured local fixture evaluation
+
+```sh
+0sec-native evaluation run --source-registry /absolute/registry.db \
+  --plan frozen-plan.json --grants host-grants.json --output-dir ./new-evaluation
+0sec-native evaluation status --directory ./new-evaluation
+```
+
+The plan uses `zero-evaluation::Plan`; grants are an explicit plugin-ID map of
+`{"enabled":true,"trusted":false,"grants":["compute"]}` host policies. Candidate
+artifacts cannot supply their own grants. The source registry is opened through
+SQLite read-only access and is never initialized or promoted. The output directory
+must be new. Plan/grants JSON inputs are bounded to 1 MiB and five seconds each.
+Provider profiles, hosted credentials and native engine state are not loaded.
+Global `--docker-bin`/`--smolvm-bin` select the installed backend executables;
+backend/image identity remains fixed in the frozen plan, with no image pulls.
+
+Run stdout contains only the measured report. Exit 0 means that the declared
+fixture criteria passed, exit 1 means rejected or inconclusive, and setup/I/O
+errors exit 2. Eligibility here does not grant production promotion or establish
+security detection quality. Signals request cancellation and await the owned
+runner's cleanup observation before returning the resulting report. Unknown work
+retains its durable reservation and recovery evidence; the command never retries
+or resumes an existing output directory.
+
+Status reads a consistent snapshot without claiming ownership, changing interrupted
+attempts, or starting guests. Its aggregate counts and verified receipt omit oracle
+values, inputs and guest outputs. It can inspect an active run. Private retained
+evidence remains in the evaluation directory; stdout writes have a five-second
+limit and can be interrupted. Production receipt import, candidate generation,
+canaries and native process replacement are separate remaining migration work.
