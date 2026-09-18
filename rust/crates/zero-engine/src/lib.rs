@@ -5,6 +5,7 @@ mod inference;
 mod lifecycle;
 mod plugin;
 mod sandbox;
+mod source;
 
 use std::{
     collections::HashMap,
@@ -192,6 +193,7 @@ impl Engine {
             "anthropic_messages_inference",
             "bounded_offline_snapshot_agent",
             "generation_pinned_offline_plugins",
+            "unverified_source_review",
         ]
         .map(String::from)
         .to_vec()
@@ -213,6 +215,16 @@ impl Engine {
         command: Command,
         event_tx: mpsc::Sender<ExecutionEvent>,
     ) -> Result<Reply, EngineError> {
+        if let Command::ReviewSource {
+            session_id,
+            command_id,
+            request,
+        } = command
+        {
+            return self
+                .review_source(session_id, command_id, request, event_tx)
+                .await;
+        }
         if let Command::RunPlugin {
             session_id,
             command_id,
@@ -362,6 +374,7 @@ impl Engine {
                 .map_err(|e| EngineError::State(e.to_string())),
             Command::Execute { .. }
             | Command::Infer { .. }
+            | Command::ReviewSource { .. }
             | Command::RunAgent { .. }
             | Command::RunSandbox { .. }
             | Command::RunPlugin { .. } => {

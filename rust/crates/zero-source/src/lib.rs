@@ -1,13 +1,20 @@
 //! Bounded source discovery. Valid submissions are unverified hypotheses only.
 mod bundle;
 mod submission;
-pub use bundle::{PreparedReview, ReviewRequest, SourceBundle, SourceFile, prepare};
+pub use bundle::{PreparedReview, SourceBundle, SourceFile, prepare};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
-pub use submission::{
-    Citation, Claim, ClaimedSeverity, Hypothesis, PreparedSubmission, ReviewResult,
-    VerificationState,
+pub use submission::PreparedSubmission;
+pub use zero_protocol::source::{
+    Citation, Claim, ClaimedSeverity, Hypothesis, ReviewRequest, ReviewResult, VerificationState,
 };
+pub fn review_result_bytes(result: &ReviewResult) -> Result<Vec<u8>> {
+    let bytes = encoded(result)?;
+    if bytes.len() > 512 * 1024 {
+        return Err(invalid("review summary exceeds 512 KiB"));
+    }
+    Ok(bytes)
+}
 pub const MAX_ARTIFACT_BYTES: usize = 4 * 1024 * 1024;
 pub const MAX_SOURCE_BYTES: usize = 512 * 1024;
 pub const MAX_FILE_BYTES: usize = 128 * 1024;

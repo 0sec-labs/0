@@ -184,6 +184,7 @@ where
             request.command,
             Command::Execute { .. }
                 | Command::Infer { .. }
+                | Command::ReviewSource { .. }
                 | Command::RunAgent { .. }
                 | Command::RunSandbox { .. }
                 | Command::RunPlugin { .. }

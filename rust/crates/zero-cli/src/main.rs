@@ -220,6 +220,23 @@ async fn run(args: Args) -> Result<bool, Box<dyn Error>> {
                     .map_err(|_| "Invalid inference request JSON")?,
             }
         }
+        Command::SourceReview {
+            session,
+            command_id,
+            request,
+        } => {
+            let bytes = tokio::select! {
+                result = tokio::time::timeout(std::time::Duration::from_secs(5), providers::read_bounded(&request)) =>
+                    result.map_err(|_| "Source review input deadline exceeded")??,
+                _ = server::shutdown_signal() => return Err("Source review input interrupted".into()),
+            };
+            EngineCommand::ReviewSource {
+                session_id: session,
+                command_id,
+                request: serde_json::from_slice(&bytes)
+                    .map_err(|_| "Invalid source review request JSON")?,
+            }
+        }
         Command::Agent {
             session,
             command_id,
@@ -262,6 +279,7 @@ async fn run(args: Args) -> Result<bool, Box<dyn Error>> {
         | Reply::Inference { operation, .. }
         | Reply::Agent { operation, .. }
         | Reply::Sandbox { operation, .. }
+        | Reply::SourceReview { operation, .. }
         | Reply::Plugin { operation, .. } => {
             matches!(operation.status, zero_protocol::OperationStatus::Succeeded)
         }

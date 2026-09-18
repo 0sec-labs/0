@@ -1,0 +1,206 @@
+#![cfg(target_os = "linux")]
+use serde_json::{Value, json};
+use std::{
+    fs,
+    io::{Read, Write},
+    net::TcpListener,
+    process::Command,
+    time::{Duration, Instant},
+};
+use tempfile::TempDir;
+
+fn cli(dir: &TempDir) -> Command {
+    let mut command = Command::new(env!("CARGO_BIN_EXE_0sec-native"));
+    command.arg("--state").arg(dir.path().join("state.db"));
+    command
+}
+fn exercise(mode: &str) {
+    let dir = tempfile::tempdir().unwrap();
+    let source = dir.path().join("source");
+    fs::create_dir(&source).unwrap();
+    fs::write(
+        source.join("app.js"),
+        "const SOURCE_BYTES_PRIVATE = 1;\nreturn SOURCE_BYTES_PRIVATE;\n",
+    )
+    .unwrap();
+    fs::write(source.join("excluded.txt"), "UNSELECTED_BYTES_PRIVATE").unwrap();
+    let snapshot = zero_executor::pin_snapshot(&source).unwrap();
+    let digest = snapshot
+        .files
+        .iter()
+        .find(|f| f.path == "app.js")
+        .unwrap()
+        .digest
+        .clone();
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    listener.set_nonblocking(true).unwrap();
+    let url = format!("http://{}/responses", listener.local_addr().unwrap());
+    let claim = json!({"title":"Possible missing check","claimed_severity":"low","explanation":"Requires behavioral verification","citations":[{"path":"app.js","sha256":digest,"start_line":1,"end_line":if mode == "bad_citation" {99} else {2}}]});
+    let hypotheses = if mode == "empty" {
+        json!([])
+    } else {
+        json!([claim])
+    };
+    let output = if mode == "prose" {
+        json!([{"type":"message","content":[{"type":"output_text","text":"This source is definitely safe"}]}])
+    } else {
+        json!([{"type":"function_call","id":"fc1","call_id":"submission-1","name":"submit_source_hypotheses","arguments":json!({"hypotheses":hypotheses}).to_string()}])
+    };
+    let server = std::thread::spawn(move || {
+        let deadline = Instant::now() + Duration::from_secs(10);
+        let mut socket = loop {
+            match listener.accept() {
+                Ok((socket, _)) => break socket,
+                Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                    assert!(Instant::now() < deadline);
+                    std::thread::sleep(Duration::from_millis(5));
+                }
+                Err(e) => panic!("{e}"),
+            }
+        };
+        socket
+            .set_read_timeout(Some(Duration::from_secs(3)))
+            .unwrap();
+        let mut bytes = Vec::new();
+        let request = loop {
+            let mut buf = [0; 4096];
+            let n = socket.read(&mut buf).unwrap();
+            assert_ne!(n, 0);
+            bytes.extend_from_slice(&buf[..n]);
+            if let Some(end) = bytes.windows(4).position(|b| b == b"\r\n\r\n") {
+                let header = String::from_utf8_lossy(&bytes[..end]);
+                let len: usize = header
+                    .lines()
+                    .find_map(|line| {
+                        let (key, value) = line.split_once(':')?;
+                        key.eq_ignore_ascii_case("content-length")
+                            .then(|| value.trim().parse().unwrap())
+                    })
+                    .unwrap();
+                if bytes.len() >= end + 4 + len {
+                    break serde_json::from_slice::<Value>(&bytes[end + 4..end + 4 + len]).unwrap();
+                }
+            }
+        };
+        assert!(request.to_string().contains("SOURCE_BYTES_PRIVATE"));
+        assert!(!request.to_string().contains("UNSELECTED_BYTES_PRIVATE"));
+        assert_eq!(request["tools"][0]["name"], "submit_source_hypotheses");
+        let event = json!({"type":"response.completed","response":{"id":"review-response","status":"completed","output":output,"usage":{"input_tokens":2,"output_tokens":1}}});
+        let body = format!("data: {event}\n\n");
+        write!(socket,"HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",body.len()).unwrap();
+        listener
+    });
+    let config = dir.path().join("providers.json");
+    fs::write(&config,json!({"fixture":{"url":url,"api_key_env":"SOURCE_TEST_KEY","rates":{"input":1000000,"cached_input":0,"output":1000000},"timeout_ms":3000,"max_response_bytes":32768}}).to_string()).unwrap();
+    let request = dir.path().join("request.json");
+    fs::write(&request,json!({"provider":"fixture","model":"fixture-model","reservation":10,"source":{"snapshot":snapshot,"selected_files":["app.js"],"question":"Find potential missing checks","max_hypotheses":2}}).to_string()).unwrap();
+    let created = cli(&dir)
+        .args(["session", "create", "--budget-limit", "100"])
+        .output()
+        .unwrap();
+    assert!(created.status.success());
+    let created: Value = serde_json::from_slice(&created.stdout).unwrap();
+    let session = created["session"]["id"].as_str().unwrap();
+    let mut first = None;
+    for duplicate in [false, true] {
+        let output = cli(&dir)
+            .arg("--providers")
+            .arg(&config)
+            .args([
+                "source-review",
+                "--session",
+                session,
+                "--command-id",
+                "source-one",
+                "--request",
+            ])
+            .arg(&request)
+            .env("SOURCE_TEST_KEY", "fixture-secret")
+            .output()
+            .unwrap();
+        let success = mode == "valid" || mode == "empty";
+        assert_eq!(
+            output.status.success(),
+            success,
+            "{} {}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let text = String::from_utf8(output.stdout).unwrap();
+        assert!(!text.contains("SOURCE_BYTES_PRIVATE"));
+        assert!(!text.contains("fixture-secret"));
+        assert!(!text.contains("definitely safe"));
+        let reply: Value = serde_json::from_str(&text).unwrap();
+        assert_eq!(reply["duplicate"], duplicate);
+        assert_eq!(
+            reply["operation"]["status"],
+            if success { "succeeded" } else { "failed" }
+        );
+        if success {
+            assert!(
+                reply["result"]["artifacts"]
+                    .as_object()
+                    .unwrap()
+                    .values()
+                    .all(|v| v.as_str().unwrap().starts_with("sha256:"))
+            );
+            let hypotheses = reply["result"]["review"]["hypotheses"].as_array().unwrap();
+            assert_eq!(hypotheses.len(), if mode == "empty" { 0 } else { 1 });
+            for hypothesis in hypotheses {
+                assert_eq!(hypothesis["state"], "unverified");
+            }
+        } else {
+            assert!(reply["result"]["review"].is_null());
+        }
+        if duplicate {
+            assert_eq!(first.as_ref().unwrap(), &reply["operation"]["id"]);
+        } else {
+            first = Some(reply["operation"]["id"].clone());
+            fs::remove_dir_all(&source).unwrap();
+        }
+    }
+    let listener = server.join().unwrap();
+    assert_eq!(
+        listener.accept().unwrap_err().kind(),
+        std::io::ErrorKind::WouldBlock,
+        "exact retry must not dispatch another provider call"
+    );
+}
+#[test]
+fn grounded_submission_remains_unverified_and_retries_after_source_deletion() {
+    exercise("valid");
+}
+#[test]
+fn empty_submission_is_not_a_safety_verdict() {
+    exercise("empty");
+}
+#[test]
+fn citation_outside_retained_lines_fails() {
+    exercise("bad_citation");
+}
+#[test]
+fn terminal_prose_without_submission_fails() {
+    exercise("prose");
+}
+
+#[test]
+fn source_review_metadata_bypasses_provider_harness_and_database() {
+    let dir = tempfile::tempdir().unwrap();
+    for args in [vec!["source-review", "--help"], vec!["schema"]] {
+        let output = cli(&dir)
+            .args([
+                "--providers",
+                "/missing/providers.json",
+                "--harness-config",
+                "/missing/harness.json",
+            ])
+            .args(args)
+            .env_remove("SOURCE_TEST_KEY")
+            .output()
+            .unwrap();
+        assert!(output.status.success());
+        let text = String::from_utf8(output.stdout).unwrap();
+        assert!(text.contains("source-review") || text.contains("review_source"));
+        assert!(!dir.path().join("state.db").exists());
+    }
+}

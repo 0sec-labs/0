@@ -51,7 +51,7 @@ normalized. Empty files have zero lines; LF terminates a line and a final LF doe
 not create an extra empty line. CRLF bytes remain intact.
 
 The controller must retain `bundle.to_bytes()`, `request_bytes()`, the complete
-normalized Completion and `ReviewResult::to_bytes()` together. Result hashes are
+normalized Completion and `review_result_bytes(&result)` together. Result hashes are
 references, not replacement evidence. Provider endpoint/wire identity, pricing,
 budget, operation IDs and idempotency belong to the engine's admission, not this
 library. Successful acceptance does not settle an inference reservation: only
@@ -63,7 +63,8 @@ Select 1–32 unique relative files, each at most 128 KiB, at most 512 KiB total
 The staged complete snapshot is limited to 4096 files/64 MiB. The question is at
 most 16 KiB; requested hypotheses 1–32, with 1–16 citations each. Every portable
 bundle/request/result/normalized-completion artifact is capped at 4 MiB, including
-JSON escaping. Files must be UTF-8 without NUL. Oversized/unsupported input is
+JSON escaping. Accepted review summaries are additionally limited to 512 KiB
+for compact engine outcomes. Files must be UTF-8 without NUL. Oversized/unsupported input is
 rejected explicitly, never silently truncated.
 
 The private staging tree is owned by this controller and never given to a guest.

@@ -339,3 +339,17 @@ values, inputs and guest outputs. It can inspect an active run. Private retained
 evidence remains in the evaluation directory; stdout writes have a five-second
 limit and can be interrupted. Production receipt import, candidate generation,
 canaries and native process replacement are separate remaining migration work.
+
+`source-review --session SESSION --command-id COMMAND --request request.json`
+submits explicitly selected files from a pinned snapshot through the configured
+provider. The request specifies `provider`, `model`, `reservation`, and `source`
+(`snapshot`, `selected_files`, `question`, `max_hypotheses`); provider profiles and
+credentials use the existing `--providers` configuration. The command returns a
+structured outcome and retained artifact hashes, without printing the source
+bundle. Only citations matching retained file hashes and line ranges are accepted.
+A successful command means the submission was structurally accepted: every
+hypothesis remains `unverified`, and an empty submission is not evidence of safety.
+Prose alone is not a result. This command performs no reproduction, patching,
+behavioral validation, or uploads beyond the explicitly configured model request.
+An exact command retry returns its durable result without rereading deleted source
+or issuing another provider request. Failed or unknown operations exit nonzero.

@@ -2,15 +2,7 @@ use crate::*;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 use std::io::Read;
-use zero_protocol::{SnapshotFile, SnapshotPin};
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct ReviewRequest {
-    pub snapshot: SnapshotPin,
-    pub selected_files: Vec<String>,
-    pub question: String,
-    pub max_hypotheses: u32,
-}
+use zero_protocol::SnapshotFile;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct SourceFile {

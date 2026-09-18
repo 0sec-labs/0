@@ -1,62 +1,9 @@
 use crate::*;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use serde_json::json;
 use zero_protocol::model::{
     Completion, CompletionStatus, Content, ResponsesRequest, ToolDefinition,
 };
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct Citation {
-    pub path: String,
-    pub sha256: String,
-    pub start_line: u32,
-    pub end_line: u32,
-}
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum ClaimedSeverity {
-    Info,
-    Low,
-    Medium,
-    High,
-    Critical,
-}
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct Claim {
-    pub title: String,
-    pub claimed_severity: ClaimedSeverity,
-    pub explanation: String,
-    pub citations: Vec<Citation>,
-}
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-pub enum VerificationState {
-    Unverified,
-}
-#[derive(Debug, Clone, Serialize)]
-pub struct Hypothesis {
-    pub id: String,
-    pub state: VerificationState,
-    pub claim: Claim,
-}
-#[derive(Debug, Clone, Serialize)]
-pub struct ReviewResult {
-    pub version: u32,
-    pub bundle_sha256: String,
-    pub snapshot_sha256: String,
-    pub request_sha256: String,
-    pub completion_sha256: String,
-    pub model: String,
-    pub provider_response_id: Option<String>,
-    pub submission_call_id: String,
-    pub hypotheses: Vec<Hypothesis>,
-}
-impl ReviewResult {
-    pub fn to_bytes(&self) -> Result<Vec<u8>> {
-        encoded(self)
-    }
-}
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Submission {
@@ -190,7 +137,7 @@ impl PreparedSubmission {
             submission_call_id,
             hypotheses,
         };
-        result.to_bytes()?;
+        review_result_bytes(&result)?;
         Ok(result)
     }
 }

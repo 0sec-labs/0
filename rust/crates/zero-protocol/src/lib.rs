@@ -13,6 +13,7 @@ pub mod model;
 pub mod plugin;
 pub mod sandbox;
 pub mod session;
+pub mod source;
 pub use execution::*;
 pub use session::*;
 
@@ -85,6 +86,11 @@ pub enum Command {
         session_id: String,
         command_id: String,
         request: sandbox::SandboxRequest,
+    },
+    ReviewSource {
+        session_id: String,
+        command_id: String,
+        request: source::SourceReviewRequest,
     },
     RunAgent {
         session_id: String,
@@ -191,6 +197,11 @@ pub enum Reply {
     Sandbox {
         operation: Operation,
         result: Option<sandbox::SandboxResult>,
+        duplicate: bool,
+    },
+    SourceReview {
+        operation: Operation,
+        result: Option<source::SourceReviewOutcome>,
         duplicate: bool,
     },
     Agent {
