@@ -36,10 +36,27 @@ impl Engine {
         command: String,
         plan: StrategyPlan,
     ) -> Result<Reply, EngineError> {
+        self.create_strategy_campaign_inner(command, plan, None)
+    }
+    pub(crate) fn create_bound_strategy_campaign(
+        &self,
+        command: String,
+        plan: StrategyPlan,
+        candidate_generation: String,
+    ) -> Result<Reply, EngineError> {
+        self.create_strategy_campaign_inner(command, plan, Some(candidate_generation))
+    }
+    fn create_strategy_campaign_inner(
+        &self,
+        command: String,
+        plan: StrategyPlan,
+        candidate: Option<String>,
+    ) -> Result<Reply, EngineError> {
         {
             let store = lock(&self.shared.store)?;
             if let Some(prior) = store.campaign_by_command(&command)? {
                 let (snapshot, old) = provenance::configuration(&store, &prior.id)?;
+                binding::match_retry(&old, candidate.as_deref())?;
                 if serde_json::to_value(&old.plan)? != serde_json::to_value(&plan)? {
                     return Err(error("strategy create command reused with changed plan"));
                 }
@@ -58,10 +75,15 @@ impl Engine {
         if control.closing {
             return Err(error("engine is shutting down"));
         }
-        let config = Configuration {
+        let mut config = Configuration {
             provider_context: provider_context(&self.shared, &plan)?,
             plan,
+            registry_binding: None,
+            registry_authority: None,
         };
+        if let Some(candidate) = candidate {
+            binding::configured(&self.shared, &mut config, &candidate)?;
+        }
         let value = serde_json::to_value(&config)?;
         let bytes = serde_json::to_vec(&value)?;
         let public = CampaignPlan {

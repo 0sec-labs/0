@@ -1058,3 +1058,45 @@ Final requires completed development for the same frozen pair and consumes a pro
 `strategy status --campaign ID` and `strategy runs --campaign ID --after-sequence 0 --limit 50` inspect retained aggregate accounting and bounded run metadata. Status, runs, report and dev-feedback default to JSON; `--format text` provides bounded terminal-safe text. These reads work while an engine owns the database, require no provider/target credentials, and never replay effects. Advance run pages using `next_after_sequence` until absent. Status exposes its journal sequence/time and separately reports actual charges, unresolved holds and active/unknown runs. Report usage is reconstructed from retained accounting without an as-of timestamp; request status for a snapshot with its sequence and time. Reservations constrain admissions, not arbitrary provider invoice overruns.
 
 A completed measurement report, including `not_improved` or development-only `inconclusive`, is successful command delivery. An explicitly signal-interrupted run exits nonzero after emitting its retained result and cleanup. Ctrl-C/SIGTERM during a foreground run closes campaign admissions and waits for owned actor/fixture cleanup through the engine lifecycle. An app-server client can send `CancelStrategyCampaign` on its owning connection. There is no second-process CLI cancellation IPC: readonly inspection does not take ownership or imply that a cancelled campaign has finished cleanup. Interrupted runs are retained without replay, unresolved usage remains held, and a fresh session does not refill campaign allowances. This controller does not implement candidate-pool proposal or production promotion.
+
+### Advisory registry capture and measured eligibility
+
+The explicit strategy adapter uses a verified graph with retained plugin components and one `strategy:advisory` component. It does not require a fake Docker launch for an HTTP-only strategy. Bootstrap is an explicit, **trusted unmeasured baseline**, permitted only for a fresh registry. It really installs the supported advisory capture; it is not an evaluation or an arbitrary candidate activation route.
+
+```sh
+0sec-native strategy registry bootstrap --host host.json --baseline baseline.json --command-id initial-baseline --reason 'Trusted initial host baseline'
+0sec-native strategy registry status --registry /absolute/registry.db --format text
+0sec-native strategy registry register --registry /absolute/registry.db --baseline-generation BASELINE_SHA --advisory candidate.json
+```
+
+`baseline.json` and `candidate.json` are strict `{"schema_version":1,"advisory_utf8":"..."}` artifacts. Registration copies the verified baseline manifest and changes only its advisory component; it grants no eligibility and preserves all other components and authority. Its generation digest differs from the advisory artifact digest. Existing active plugin-only registries are not silently converted by bootstrap.
+
+The explicitly selected host JSON contains `registry` (absolute path), `engine_artifact` (digest), `plugins` (the existing enabled/trusted/grants map) and `strategy` (`StrategyHostAuthority`). The authority freezes the host template, public provider identities/rates, named runtime HTTP policy, campaign limits, accepted protected suite digests, gain criteria and canary requirement. Credentials remain in separately selected provider/HTTP profile environment references. Descriptor artifacts identify supported semantic versions; they do not attest that an arbitrary different executable is running.
+
+Bootstrap additionally requires `bootstrap: {state_schema, compatible_state_schemas, initial_state, artifacts, plugin_components}`. `artifacts` maps exact `sha256:...` digests to local files (relative paths resolve from the host JSON directory); `plugin_components` maps only `plugin:ID` names to retained manifest digests. Include the engine and complete plugin artifact closure. Inputs are hash-checked and bounded to 64 MiB before insertion. The CLI adds canonical advice, generated host-policy bytes and the fixed graph-v2 configuration; the harness retains compiled renderer/evaluator descriptors. Unknown configuration fields fail. The bootstrap bundle can remain in the host file for exact retry; it is not replayed when configuring ordinary runtime capture.
+
+Explicit strategy sessions derive requests from their immutable captured host authority:
+
+```sh
+0sec-native --state state.db --providers providers.json --http-profiles http.json --strategy-host host.json strategy session create --budget-limit 100
+0sec-native --state state.db --providers providers.json --http-profiles http.json --strategy-host host.json strategy agent --session SESSION --command-id turn-1 --prompt 'Investigate the authorized target'
+```
+
+Session creation defaults to a zero budget unless specified. New work needs matching configured providers/HTTP authority and the supported current generation. Existing captured actors and joined children retain their exact advice; stale sessions never silently switch strategies. Fresh work on a stale capture can be rejected. Exact retained replies and history do not replay effects. A free-form `session create --generation` label cannot impersonate this verified mode. Existing generic agent requests retain their old behavior. The fullscreen/line console do not automatically translate arbitrary queued profiles into strategy-session commands; use these explicit wrappers or the corresponding app-server protocol.
+
+Bind a campaign **before** either evaluation lane by naming an inert candidate and the real host registry:
+
+```sh
+0sec-native --state state.db --providers providers.json --strategy-host host.json strategy create --command-id measured-pair --plan private-plan.json --candidate-generation CANDIDATE_GENERATION
+0sec-native --state state.db --providers providers.json strategy run --campaign CAMPAIGN --lane development
+0sec-native --state state.db --providers providers.json strategy run --campaign CAMPAIGN --lane final
+0sec-native --state state.db strategy eligibility prepare --registry /absolute/registry.db --campaign CAMPAIGN
+0sec-native --state state.db strategy eligibility import --registry /absolute/registry.db --campaign CAMPAIGN --command-id import-1 --expected-evidence EVIDENCE_SHA
+0sec-native strategy eligibility show --registry /absolute/registry.db --receipt RECEIPT_SHA --format text
+```
+
+Preparation returns `evidence_sha256` and the exact descriptor; it creates no grant. Import returns `receipt_sha256` for `show`, the immutable receipt, duplicate status and current usability. The expected digest correlates immutable intent, not an interactive approval ceremony. Initial import accepts independently source-verified evidence, never uploaded report JSON, model-authored scores or a caller pass flag. The bounded private evidence closure is retained so registry-only inspection can run the same validator without the source database, credentials or target. Missing/corrupt chunks fail closed.
+
+Historical unbound campaigns remain `qualification_only`; binding cannot be retrofitted. Only complete independently improved, correctly bound Development/Final evidence with settled accounting and cleanup can grant the narrow measured scope. Registry identity, baseline epoch/state, whole generation diff, host policy and exposure are revalidated atomically. Exact successful import retry resolves from the registry before requiring the source or current provider configuration, and returns the original receipt with current usability. Changed intent conflicts. A stale receipt remains historical evidence; it is not fresh permission.
+
+Status, preparation and receipt inspection run without engine ownership or unrelated provider/HTTP/harness loading. Mutable registry status is labelled with observation time; a receipt's measurement and current usability are distinct. Measured eligibility is not runtime activation, generic security truth, or proof that a required canary ran. Import preserves the current generation/state/leases. No candidate `activate`, proposal search or canary success stub is exposed in this CLI.

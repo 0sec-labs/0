@@ -206,6 +206,19 @@ pub(super) async fn run_agent_shared(
                 "engine active operation limit reached".into(),
             ));
         }
+        let strategy = strategy_runtime::admission(shared, &session_id, &command_id, &request)?;
+        if let Some((_, Some(prior))) = &strategy {
+            let result = prior
+                .outcome
+                .clone()
+                .map(serde_json::from_value)
+                .transpose()?;
+            return Ok(Reply::Agent {
+                operation: prior.clone(),
+                result,
+                duplicate: true,
+            });
+        }
         let profile = lock(&shared.providers)?
             .get(&request.provider)
             .cloned()
@@ -342,6 +355,9 @@ pub(super) async fn run_agent_shared(
                 payload["http_output_version"] = serde_json::json!(2);
             }
         }
+        if let Some((context, _)) = strategy {
+            payload["strategy_context"] = context;
+        }
         let admission = store.admit_command(&session_id, &command_id, &payload)?;
         if admission.duplicate {
             let result = admission
@@ -442,7 +458,9 @@ fn continuation_input(
                 .cloned()
                 .unwrap_or_else(|| serde_json::json!("responses")),
         )?;
-        if prior.http_profile != request.http_profile
+        if parent.payload.get("strategy_context")
+            != store.strategy_session_context(session)?.as_ref()
+            || prior.http_profile != request.http_profile
             || parent.payload.get("http_context") != http.map(|h| &h.identity)
             || parent.payload["http_output_version"].as_u64().unwrap_or(1)
                 != u64::from(http.map(|h| h.output_version).unwrap_or(1))

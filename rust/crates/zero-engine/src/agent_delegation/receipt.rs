@@ -166,7 +166,8 @@ fn derive_bounded(
         } else {
             None
         };
-        if identity.get("http_output_version") != expected_version
+        if child.payload.get("strategy_context") != root.payload.get("strategy_context")
+            || identity.get("http_output_version") != expected_version
             || child.payload.get("http_output_version") != expected_version
             || identity.get("http_context") != expected_http
             || child.payload.get("http_context") != expected_http

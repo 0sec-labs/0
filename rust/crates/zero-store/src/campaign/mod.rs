@@ -4,7 +4,7 @@ use rusqlite::{Connection, OptionalExtension, Transaction, TransactionBehavior, 
 use serde_json::{Value, json};
 use zero_protocol::campaign::*;
 
-mod delegation;
+pub(crate) mod delegation;
 mod hooks;
 mod lifecycle;
 mod read;

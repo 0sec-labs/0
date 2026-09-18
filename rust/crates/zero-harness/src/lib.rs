@@ -1,5 +1,6 @@
 //! Generation-bound inert plugin graphs. No worker execution or process hot swap.
 mod graph;
+mod strategy;
 pub use graph::{HostGrants, PreparedGraph};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -7,6 +8,7 @@ use std::{
     collections::{BTreeMap, BTreeSet},
     sync::Arc,
 };
+pub use strategy::PreparedStrategy;
 use zero_evolution::{
     GenerationLease, PreparedActivation, PreparedState, Registry, RuntimeLifecycle, RuntimeState,
 };

@@ -26,6 +26,7 @@ pub mod session;
 pub mod source;
 pub mod steering;
 pub mod strategy;
+pub mod strategy_registry;
 pub mod triage;
 pub mod verification;
 mod verification_binary;
@@ -62,6 +63,20 @@ pub struct Request {
 )]
 pub enum Command {
     Initialize,
+    CreateStrategySession {
+        budget_limit: u64,
+    },
+    RunStrategyAgent {
+        session_id: String,
+        command_id: String,
+        prompt: String,
+        continuation_of: Option<String>,
+    },
+    CreateBoundStrategyCampaign {
+        command_id: String,
+        plan: Box<strategy::StrategyPlan>,
+        candidate_generation: String,
+    },
     CreateStrategyCampaign {
         command_id: String,
         plan: Box<strategy::StrategyPlan>,

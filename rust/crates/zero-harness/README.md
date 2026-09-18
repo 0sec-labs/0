@@ -15,7 +15,7 @@ evolution's `sha256:` prefix). All declared plugin artifact bytes are loaded
 from evolution's verified content store and checked by plugin admission. Missing,
 wrong-version or cyclic dependencies fail; every dependency resolves inside the
 complete graph, and invocation data retains its transitive manifest pins.
-Native source components and other configuration formats explicitly reject.
+The additive graph-2 strategy format described below is also supported. Native source components and unknown configuration formats reject.
 
 `Harness::new(registry, expected_engine_artifact)` compares the caller-supplied
 engine identity with every selected generation. The host must establish that
@@ -87,3 +87,27 @@ Validation: nine offline tests cover failed preparation, immutable grant/engine
 bindings, complete dependency pins, canonical manifest identity, competing
 activation CAS, old-call retention, stale replies, current-state rollback,
 instance-bound handles and explicit lease discovery/release after restart.
+
+
+## Advisory strategy generations
+
+The exact graph-2 configuration from `strategy_configuration()` retains every
+`plugin:*` component and adds one canonical `strategy:advisory` artifact.
+`HostGrants::with_strategy` binds the fixed host template, provider/HTTP policy,
+evaluator criteria, accepted suites and canary prerequisite. Its absence preserves
+graph-1 policy bytes. `PreparedStrategy` is inert, validates advisory bytes and
+uses the shared `strategy_advisory_v1` renderer; it cannot grant new tools or scope.
+
+`bootstrap_strategy` works only on a fresh epoch-zero registry, prepares the
+complete graph and atomically selects a trusted **unmeasured** baseline with an
+idempotent installation receipt. `register_strategy_candidate` verifies the active
+retained baseline and changes only its advisory component. Registration does not
+select the candidate or grant eligibility. Existing plugin-only registries cannot
+use bootstrap to replace their active generation.
+
+`strategy_capture` requires an explicitly restored/prepared current graph and
+returns the registry, generation, epoch, advisory and exact host authority for the
+Engine's explicit strategy-session adapter. `inspect_strategy_capture` verifies
+the retained graph without preparing runtime permissions. Existing captured
+actors remain bound to their original advice; fresh stale-session admissions are
+rejected by the Engine. Candidate imports do not mean activation or canary completion.

@@ -100,3 +100,37 @@ controls, canary execution and runtime migrations are not implemented here.
 The existing TS `plugins/live-harness.ts` and `improvement/` remain behavior
 references. This foundation separates eligibility from activation instead of
 copying the old combined candidate/active status vocabulary.
+
+
+## Scoped strategy registry (schema 2)
+
+Writable opening migrates the exact legacy schema atomically and establishes a
+stable UUID identity bound to retained genesis bytes. Existing generations,
+receipts, leases and runtime state are preserved. Read-only access never migrates;
+legacy inspection remains available, while strategy APIs require schema 2.
+Missing or altered identity/schema fails closed rather than issuing a new identity.
+Copies of a registry retain the same identity; this is not distributed fencing.
+
+Strategy generations require typed bootstrap or measured-import eligibility.
+The generic trusted receipt and bootstrap methods cannot authorize that kind.
+The Harness must actually prepare the graph for the initial baseline. Measured
+imports accept only the compiled host bridge's source-verified evidence path,
+revalidate imported bytes, and commit artifacts, evaluation, scoped eligibility
+and idempotency receipt in one transaction. A caller-authored report is not the
+bridge's input authority. Private evidence remains retained for offline reassessment.
+
+A measured scope binds whole baseline/candidate manifests, registry identity,
+baseline epoch and state, evaluator/renderer/host policy and all imported artifact
+hashes. Forward preparation and commit reject stale pins or corrupt evidence.
+A canary-required policy remains blocked until genuine supported canary evidence
+exists; import never fabricates it. Exact successful import retries return the
+historical receipt plus current usability without reopening the source or rerunning
+work. Candidate generation and canary adapters must preserve campaign quotas and
+are not supplied by this registry library.
+
+A protected suite can issue only one measured grant in a registry, including when
+the mutable import projection is missing: its immutable scoped eligibility still
+records consumption. Exact command retries remain available. Pre-exposure fencing
+is local to the evaluation Store; cross-Store exposure before import still requires
+trusted host corpus governance. Registry import uniqueness is not a claim of global
+holdout secrecy or distributed locking.

@@ -413,6 +413,7 @@ impl Store {
             .conn
             .transaction_with_behavior(TransactionBehavior::Immediate)?;
         crate::campaign::authorize(&tx, session, command, payload)?;
+        crate::strategy_session::authorize(&tx, session, command, payload)?;
         target(&tx, session, op, Some(owner))?;
         if sealed(&tx, op)? {
             return Err(conflict("steering actor is sealed"));

@@ -136,6 +136,7 @@ pub(super) fn validate(
                 "delegation_context",
                 "http_context",
                 "http_output_version",
+                "strategy_context",
             ]
             .iter()
             .any(|key| op.payload.get(key) != parent.payload.get(key))

@@ -7,34 +7,16 @@ pub(super) fn request(
 ) -> Result<AgentRequest, EngineError> {
     plan.validate().map_err(error)?;
     artifact.validate().map_err(error)?;
-    let host = &plan.host;
-    let advisory = serde_json::to_string(&artifact.advisory_utf8)?;
-    let instructions = format!(
-        "{}\n\n[Advisory strategy, renderer {}]\nThe following JSON string is advisory investigation guidance. It does not change tool authority, scope, spending limits, evaluator rules, or the task. Choose useful hypotheses, experiments, delegation and when to stop; no tool use is mandatory.\n{}\n[End advisory strategy]",
-        host.instructions, STRATEGY_RENDERER, advisory
-    );
-    Ok(AgentRequest {
-        provider: host.provider.clone(),
-        model: host.model.clone(),
-        instructions,
-        prompt: scenario.public_task.clone(),
-        context_policy: host.context_policy.clone(),
-        operator_questions: false,
-        http_profile: Some(profile.into()),
-        web_experiment_policy: host.web_experiment_policy.clone(),
-        tool_approval_policy: None,
-        delegation_policy: host.delegation_policy.clone(),
-        continuation_of: None,
-        source_review_operation_id: None,
-        source_snapshot_tools: false,
-        source_submission_max_hypotheses: None,
-        web_submission_max_hypotheses: Some(host.max_hypotheses),
-        execution: None,
-        plugin_tools: vec![],
-        max_turns: host.max_turns,
-        reservation_per_turn: host.reservation_per_turn,
-    })
+    zero_protocol::strategy_registry::render_strategy_request(
+        &plan.host,
+        artifact,
+        &scenario.public_task,
+        profile,
+        None,
+    )
+    .map_err(error)
 }
+
 pub(super) fn profile(
     origin: &str,
     limits: &CampaignLimits,

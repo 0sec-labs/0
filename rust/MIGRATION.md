@@ -1157,3 +1157,36 @@ experiments sharing campaign quotas. Independent reviews produced fixes for
 private-marker leakage, unsupported candidate claims, retired-run witnesses and
 exact delegated authority. No paid provider, live target or production release
 was used to obtain these results.
+
+### Captured strategy and measured eligibility slice
+
+Native owners: `zero-protocol`, `zero-store`, `zero-engine`, `zero-evolution`,
+`zero-harness` and `zero-cli`. This extends the native strategy adapter; it does
+not replace the legacy scanner or production CLI. Store schema 14 adds immutable
+strategy-session capture with explicit migration; registry schema 2 adds registry
+identity, bootstrap and measured import with exact legacy-schema validation.
+Read-only inspection does not migrate databases.
+
+Implemented source includes explicit trusted baseline installation, advisory-only
+candidate registration, actual captured runtime requests and delegates, bound
+campaigns, one-transaction evidence snapshots, private read-only rehydration,
+independent reassessment and atomic eligibility import. Exact retries and retained
+evidence inspection work after source deletion. Snapshot packages cap manifest,
+chunks, records and expanded bytes; export never claims engine ownership.
+
+Focused Linux loopback tests cover real paired agents, preserved plugin components,
+source-deleted retries, corruption rejection, suite reuse, bypass attempts and a
+running actor across a measured Harness activation. These are fixture results;
+no paid model, live target, production rollout or generalized quality claim is
+implied. See [AUTONOMY.md](AUTONOMY.md) for authority and holdout boundaries.
+Autonomous proposals, independent canaries, activation CLI and full cloud/scanner
+parity remain open. Remove this adapter only after equivalent production workflow
+and release qualification, not merely a successful eligibility import.
+
+Qualification for this slice: actual Rust 1.85 workspace regression passed 926
+tests with zero failures and 11 explicit backend/platform ignores. Final evidence
+hardening then passed all six snapshot integration tests, bounded-encoding unit,
+12 affected engine tests and five executable CLI tests. Strict production
+workspace Clippy and final affected-crate Clippy passed; formatting passed.
+Independent review closed escaped-row allocation and unwitnessed-operation gaps.
+These checks qualify the bounded native fixture behavior described above.

@@ -104,6 +104,12 @@ impl Store {
                 return Err(Error::Conflict(command.clone()));
             }
             crate::campaign::authorize(&tx, session, command, &serde_json::from_str(&text)?)?;
+            crate::strategy_session::authorize(
+                &tx,
+                session,
+                command,
+                &serde_json::from_str(&text)?,
+            )?;
             let id = uuid::Uuid::new_v4().to_string();
             tx.execute("INSERT INTO operations(id,session_id,command_id,payload,payload_hash,status) VALUES (?1,?2,?3,?4,?5,'admitted')",params![id,session,command,text,hash])?;
             let mut op = operation(&tx, &id)?;
@@ -228,6 +234,7 @@ impl Store {
             });
         }
         crate::campaign::authorize(&tx, session, command_id, payload)?;
+        crate::strategy_session::authorize(&tx, session, command_id, payload)?;
         let id = uuid::Uuid::new_v4().to_string();
         tx.execute("INSERT INTO operations(id,session_id,command_id,payload,payload_hash,status) VALUES (?1,?2,?3,?4,?5,'admitted')",params![id,session,command_id,payload_text,hash])?;
         let operation = operation(&tx, &id)?;

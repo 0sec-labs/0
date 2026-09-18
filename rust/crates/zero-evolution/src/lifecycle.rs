@@ -57,6 +57,22 @@ fn authorized(
             ));
         }
     }
+    if crate::strategy::reserved(&manifest) {
+        crate::strategy::authorize(
+            conn,
+            generation,
+            eligibility_id,
+            &eligibility,
+            state,
+            rollback,
+        )?;
+        return Ok(manifest);
+    }
+    if eligibility.strategy_scope.is_some() {
+        return Err(Error::Ineligible(
+            "strategy scope on legacy generation".into(),
+        ));
+    }
     match eligibility.receipt {
         Some(id) => {
             let receipt: EvaluationReceipt = read_json(conn, "receipts", &id)?;
@@ -162,6 +178,30 @@ impl Registry {
     /// Publish only a preparation created by this live Registry instance.
     /// After reopening, prepare resources afresh; persisted intent is not readiness.
     pub fn commit(&mut self, preparation_id: &str) -> Result<RuntimeState> {
+        self.commit_inner(preparation_id, None)
+    }
+    pub fn commit_strategy_baseline(
+        &mut self,
+        preparation_id: &str,
+        generation: &str,
+        command: &str,
+        reason: &str,
+    ) -> Result<zero_protocol::strategy_registry::StrategyBaselineInstallReceipt> {
+        if let Some(prior) = self.strategy_bootstrap_by_command(command)? {
+            if prior.generation != generation || prior.reason != reason {
+                return Err(Error::Conflict("strategy bootstrap command reused".into()));
+            }
+            return Ok(prior);
+        }
+        self.commit_inner(preparation_id, Some((command, reason)))?;
+        self.strategy_bootstrap_by_command(command)?
+            .ok_or_else(|| Error::Missing(command.into()))
+    }
+    fn commit_inner(
+        &mut self,
+        preparation_id: &str,
+        baseline: Option<(&str, &str)>,
+    ) -> Result<RuntimeState> {
         let tx = self
             .conn
             .transaction_with_behavior(TransactionBehavior::Immediate)?;
@@ -205,6 +245,17 @@ impl Registry {
             return Err(Error::Conflict("activation compare-and-swap failed".into()));
         }
         authorized(&tx, &generation, &eligibility, &old, rollback)?;
+        let eligible: Eligibility = read_json(&tx, "eligibilities", &eligibility)?;
+        if matches!(
+            eligible.strategy_scope,
+            Some(crate::strategy::Scope::Bootstrap { .. })
+        ) && !rollback
+            && baseline.is_none()
+        {
+            return Err(Error::Ineligible(
+                "strategy bootstrap requires atomic install receipt".into(),
+            ));
+        }
         if json.len() > MAX_JSON_BYTES || hash(json.as_bytes()) != digest {
             return Err(Error::Invalid("prepared state corrupted".into()));
         }
@@ -233,6 +284,9 @@ impl Registry {
             ],
         )?;
         let result = current(&tx)?;
+        if let Some((command, reason)) = baseline {
+            crate::strategy::finish_bootstrap(&tx, preparation_id, command, reason, &result)?;
+        }
         tx.commit()?;
         Ok(result)
     }

@@ -110,5 +110,35 @@ compiled evaluation semantics require a version change.
 
 This adapter supports snapshot-free HTTP actors and optional HTTP delegates;
 source/sandbox candidates, autonomous proposal generation, independent canaries,
-measured eligibility import and runtime activation remain unfinished. Scanner, browser/auth/session, cloud, arbitrary source
+autonomous activation orchestration remain unfinished. Scanner, browser/auth/session, cloud, arbitrary source
 self-rewriting and production release parity remain in [MIGRATION.md](MIGRATION.md).
+
+## Captured runtime and measured eligibility
+
+An explicitly installed initial strategy is a trusted, unmeasured baseline.
+Strategy sessions capture its exact advisory, generation, epoch and host authority.
+Actual model requests render that capture; raw inference, altered instructions and
+unsupported queue admission cannot bypass it. Delegates inherit the same capture.
+Already-owned work finishes under its original strategy across a switch. Fresh work
+on a stale session fails; a new session captures the new active strategy. Exact
+completed retries need neither current provider credentials nor a fresh dispatch.
+
+Registry-bound campaigns freeze baseline/candidate identity before evaluation.
+Only an independently recomputed, complete, observed, improved campaign can import
+measured eligibility. Import checks current registry identity, baseline epoch,
+state, authority and advisory-only change. The original source ledger is required
+for first import; portable evidence alone cannot create initial authority. Atomic
+import retains bounded evidence for offline reassessment and exact retries after
+source deletion. Corrupt retained evidence cannot authorize activation.
+
+Protected-suite exposure is permanent within the source Store. Registry-wide suite
+uniqueness prevents another measured grant, including after deletion of its import
+projection. This does not establish unseen holdouts across copied or independently
+administered source databases; corpus governance remains host-owned.
+
+Import does not activate a candidate. The host Harness can activate measured
+eligibility under its frozen policy, and this path is tested with real paired
+fixture evidence and an actor running across the switch. A policy requiring canary
+evidence remains blocked until separately qualified evidence exists. Autonomous
+proposal generation, canary orchestration and the candidate activation CLI remain
+unfinished. Writable artifacts remain bounded advisory text, not host policy or code.

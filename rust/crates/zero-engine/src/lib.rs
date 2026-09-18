@@ -29,6 +29,13 @@ mod source;
 mod source_provenance;
 mod source_report;
 mod strategy;
+mod strategy_runtime;
+pub use strategy::{
+    RecomputedStrategyEvidence, StrategyEligibilityPreparation, VerifiedStrategyEvidence,
+    export_strategy_evidence, import_strategy_eligibility, prepare_strategy_eligibility,
+    read_strategy_eligibility, read_strategy_eligibility_receipt, reassess_strategy_evidence,
+};
+pub use strategy_runtime::read_strategy_session;
 mod triage;
 mod web_experiment;
 mod web_experiment_read;
@@ -111,6 +118,7 @@ struct Shared {
     sandbox: Arc<zero_sandbox::SandboxExecutor>,
     providers: Mutex<HashMap<String, inference::Profile>>,
     plugins: Mutex<Option<plugin::Profile>>,
+    strategy_runtime: Mutex<Option<zero_harness::Harness>>,
     http: Mutex<HashMap<String, Arc<zero_http::Client>>>,
     plugin_root: PathBuf,
     owner: String,
@@ -265,6 +273,7 @@ impl Engine {
                 sandbox: Arc::new(sandbox),
                 providers: Mutex::new(HashMap::new()),
                 plugins: Mutex::new(None),
+                strategy_runtime: Mutex::new(None),
                 http: Mutex::new(HashMap::new()),
                 plugin_root,
                 owner,
@@ -301,6 +310,9 @@ impl Engine {
             "host_frozen_source_observation",
             "durable_strategy_campaign_accounting",
             "qualification_only_strategy_evaluation",
+            "captured_advisory_strategy_sessions",
+            "registry_bound_strategy_campaigns",
+            "source_verified_strategy_eligibility",
         ]
         .map(String::from)
         .to_vec()
@@ -352,6 +364,39 @@ impl Engine {
         progress_tx: Option<mpsc::Sender<ExecutionEvent>>,
     ) -> Result<Reply, EngineError> {
         match command {
+            Command::CreateStrategySession { budget_limit } => {
+                return Ok(Reply::Session {
+                    session: self.create_strategy_session(budget_limit)?,
+                });
+            }
+            Command::RunStrategyAgent {
+                session_id,
+                command_id,
+                prompt,
+                continuation_of,
+            } => {
+                return self
+                    .run_strategy_agent(
+                        session_id,
+                        command_id,
+                        prompt,
+                        continuation_of,
+                        event_tx,
+                        progress_tx,
+                    )
+                    .await;
+            }
+            Command::CreateBoundStrategyCampaign {
+                command_id,
+                plan,
+                candidate_generation,
+            } => {
+                return self.create_bound_strategy_campaign(
+                    command_id,
+                    *plan,
+                    candidate_generation,
+                );
+            }
             Command::CreateStrategyCampaign { command_id, plan } => {
                 return self.create_strategy_campaign(command_id, *plan);
             }
@@ -950,7 +995,10 @@ impl Engine {
             Command::Reconcile(request) => zero_evidence::reconcile(request)
                 .map(Reply::Reconciled)
                 .map_err(|e| EngineError::State(e.to_string())),
-            Command::CreateStrategyCampaign { .. }
+            Command::CreateStrategySession { .. }
+            | Command::RunStrategyAgent { .. }
+            | Command::CreateBoundStrategyCampaign { .. }
+            | Command::CreateStrategyCampaign { .. }
             | Command::RunStrategyCampaign { .. }
             | Command::StrategyCampaignReport { .. }
             | Command::StrategyDevelopmentFeedback { .. }

@@ -402,7 +402,7 @@ fn readonly_registry_reads_verified_artifacts_and_refuses_writes_or_initializati
     let connection = rusqlite::Connection::open(&path).unwrap();
     connection
         .execute_batch(
-            "DROP TABLE artifacts; CREATE VIEW artifacts AS SELECT 'x' AS digest, 'x' AS bytes;",
+            "PRAGMA foreign_keys=OFF; DROP TABLE artifacts; CREATE VIEW artifacts AS SELECT 'x' AS digest, 'x' AS bytes;",
         )
         .unwrap();
     assert!(Registry::open_read_only(&path).is_err());

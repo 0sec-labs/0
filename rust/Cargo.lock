@@ -2461,6 +2461,7 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.20",
  "uuid",
+ "zero-protocol",
 ]
 
 [[package]]
@@ -2482,6 +2483,7 @@ dependencies = [
 name = "zero-harness"
 version = "0.1.0"
 dependencies = [
+ "rusqlite",
  "serde",
  "serde_json",
  "tempfile",
@@ -2489,6 +2491,7 @@ dependencies = [
  "uuid",
  "zero-evolution",
  "zero-plugin",
+ "zero-protocol",
 ]
 
 [[package]]
@@ -2645,6 +2648,7 @@ name = "zero-store"
 version = "0.1.0"
 dependencies = [
  "rusqlite",
+ "serde",
  "serde_json",
  "sha2",
  "tempfile",

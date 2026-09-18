@@ -27,12 +27,41 @@ pub enum Format {
 }
 #[derive(Debug, Subcommand)]
 pub enum StrategyCommand {
+    /// Bootstrap or inspect a real host-owned advisory registry.
+    Registry {
+        #[command(subcommand)]
+        command: crate::strategy_registry::RegistryCommand,
+    },
+    /// Prepare/import independent measured evidence or inspect a retained scoped grant.
+    Eligibility {
+        #[command(subcommand)]
+        command: crate::strategy_registry::EligibilityCommand,
+    },
+    /// Create an explicitly strategy-bound session with captured generation and host authority.
+    Session {
+        #[command(subcommand)]
+        command: crate::strategy_registry::StrategySessionCommand,
+    },
+    /// Run a prompt using the session's immutable host template and advisory.
+    Agent {
+        #[arg(long)]
+        session: String,
+        #[arg(long)]
+        command_id: String,
+        #[arg(long)]
+        prompt: String,
+        #[arg(long)]
+        continuation: Option<String>,
+    },
     /// Retain a private, frozen host plan; does not run either evaluation lane.
     Create {
         #[arg(long)]
         command_id: String,
         #[arg(long)]
         plan: PathBuf,
+        /// Bind before evaluation to the configured real baseline/epoch and this inert candidate.
+        #[arg(long)]
+        candidate_generation: Option<String>,
     },
     /// Run one explicit lane. Final requires completed development and consumes protected exposure.
     Run {
@@ -76,22 +105,53 @@ pub enum StrategyCommand {
 }
 impl StrategyCommand {
     pub fn requires_dispatch(&self) -> bool {
-        matches!(self, Self::Create { .. } | Self::Run { .. })
+        matches!(
+            self,
+            Self::Create { .. } | Self::Run { .. } | Self::Session { .. } | Self::Agent { .. }
+        )
     }
 }
 pub async fn command(command: &StrategyCommand) -> Result<Command, Box<dyn Error>> {
     Ok(match command {
-        StrategyCommand::Create { command_id, plan } => {
+        StrategyCommand::Create {
+            command_id,
+            plan,
+            candidate_generation,
+        } => {
             let bytes = crate::providers::read_bounded(plan).await?;
             let plan: StrategyPlan =
                 serde_json::from_slice(&bytes).map_err(|_| "Invalid private strategy plan JSON")?;
             plan.validate()
                 .map_err(|_| "Invalid strategy plan authority, schedule or bounds")?;
-            Command::CreateStrategyCampaign {
-                command_id: command_id.clone(),
-                plan: Box::new(plan),
+            if let Some(candidate_generation) = candidate_generation {
+                Command::CreateBoundStrategyCampaign {
+                    command_id: command_id.clone(),
+                    plan: Box::new(plan),
+                    candidate_generation: candidate_generation.clone(),
+                }
+            } else {
+                Command::CreateStrategyCampaign {
+                    command_id: command_id.clone(),
+                    plan: Box::new(plan),
+                }
             }
         }
+        StrategyCommand::Session {
+            command: crate::strategy_registry::StrategySessionCommand::Create { budget_limit },
+        } => Command::CreateStrategySession {
+            budget_limit: *budget_limit,
+        },
+        StrategyCommand::Agent {
+            session,
+            command_id,
+            prompt,
+            continuation,
+        } => Command::RunStrategyAgent {
+            session_id: session.clone(),
+            command_id: command_id.clone(),
+            prompt: prompt.clone(),
+            continuation_of: continuation.clone(),
+        },
         StrategyCommand::Run { campaign, lane } => Command::RunStrategyCampaign {
             campaign_id: campaign.clone(),
             lane: (*lane).into(),
@@ -100,6 +160,15 @@ pub async fn command(command: &StrategyCommand) -> Result<Command, Box<dyn Error
     })
 }
 pub async fn readonly(path: &Path, command: &StrategyCommand) -> Result<bool, Box<dyn Error>> {
+    match command {
+        StrategyCommand::Registry { command } => {
+            return crate::strategy_registry::run_registry(command).await;
+        }
+        StrategyCommand::Eligibility { command } => {
+            return crate::strategy_registry::run_eligibility(path, command).await;
+        }
+        _ => {}
+    }
     let path = path.to_owned();
     let (id, format) = match command {
         StrategyCommand::Status { campaign, format }

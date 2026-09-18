@@ -3,6 +3,7 @@
 //! execute candidates, attest evaluator honesty or undo external effects.
 mod lifecycle;
 mod schema;
+mod strategy;
 mod types;
 use rusqlite::{Connection, OptionalExtension, TransactionBehavior, params};
 use serde::{Serialize, de::DeserializeOwned};
@@ -159,6 +160,12 @@ impl Registry {
         let tx = self
             .conn
             .transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let m: Manifest = read_json(&tx, "generations", candidate)?;
+        if strategy::reserved(&m) {
+            return Err(Error::Ineligible(
+                "strategy requires measured scoped import".into(),
+            ));
+        }
         let receipt: EvaluationReceipt = read_json(&tx, "receipts", receipt_id)?;
         if receipt.candidate != candidate
             || receipt.baseline != baseline
@@ -174,6 +181,7 @@ impl Registry {
             generation: candidate.into(),
             receipt: Some(receipt_id.into()),
             bootstrap_reason: None,
+            strategy_scope: None,
         };
         let json = encode(&eligibility)?;
         let id = hash(json.as_bytes());
@@ -194,11 +202,17 @@ impl Registry {
                 "bootstrap requires an empty active registry".into(),
             ));
         }
-        let _: Manifest = read_json(&tx, "generations", generation)?;
+        let m: Manifest = read_json(&tx, "generations", generation)?;
+        if strategy::reserved(&m) {
+            return Err(Error::Ineligible(
+                "strategy requires verified baseline installation".into(),
+            ));
+        }
         let json = encode(&Eligibility {
             generation: generation.into(),
             receipt: None,
             bootstrap_reason: Some(reason.into()),
+            strategy_scope: None,
         })?;
         let id = hash(json.as_bytes());
         insert_json(&tx, "eligibilities", &id, &json)?;
@@ -240,9 +254,11 @@ fn hash(bytes: &[u8]) -> String {
 }
 fn artifact(conn: &Connection, id: &str) -> Result<Vec<u8>> {
     let bytes: Vec<u8> = conn
-        .query_row("SELECT bytes FROM artifacts WHERE digest=?1", [id], |r| {
-            r.get(0)
-        })
+        .query_row(
+            "SELECT CASE WHEN length(bytes)<=?2 THEN bytes END FROM artifacts WHERE digest=?1",
+            params![id, MAX_ARTIFACT_BYTES],
+            |r| r.get(0),
+        )
         .optional()?
         .ok_or_else(|| Error::Missing(id.into()))?;
     if bytes.len() > MAX_ARTIFACT_BYTES || hash(&bytes) != id {
@@ -253,8 +269,8 @@ fn artifact(conn: &Connection, id: &str) -> Result<Vec<u8>> {
 fn read_json<T: DeserializeOwned>(conn: &Connection, table: &str, id: &str) -> Result<T> {
     let json: String = conn
         .query_row(
-            &format!("SELECT json FROM {table} WHERE digest=?1"),
-            [id],
+            &format!("SELECT CASE WHEN length(CAST(json AS BLOB))<=?2 THEN json END FROM {table} WHERE digest=?1"),
+            params![id,MAX_JSON_BYTES],
             |r| r.get(0),
         )
         .optional()?

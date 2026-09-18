@@ -320,6 +320,10 @@ impl Context {
             let history = agent_context::History::new(model.input, None)?;
             let mut payload = json!({"kind":zero_protocol::agent::actor_kind(&request),"request":request,"endpoint":role.profile.client.endpoint_identity(),"rates":role.profile.rates,"wire_api":role.profile.client.wire_api(),"delegation_role":task.role,"delegation_template":role.template});
             role.profile.stamp(&mut payload)?;
+            if let Some(context) = lock(&shared.store)?.strategy_session_context(session)? {
+                payload["strategy_context"] = context;
+            }
+
             if let Some(policy) = &parent.tool_approval_policy {
                 payload["delegation_root_approval_policy"] = serde_json::to_value(policy)?;
             }
@@ -372,7 +376,8 @@ pub(crate) fn validate_member(
         .as_u64()
         .and_then(|n| usize::try_from(n).ok())
         .ok_or_else(|| error("joined index absent"))?;
-    if tasks.is_empty()
+    if child.payload.get("strategy_context") != root.payload.get("strategy_context")
+        || tasks.is_empty()
         || tasks.len() > policy.max_children as usize
         || commands.len() != tasks.len()
         || i >= tasks.len()

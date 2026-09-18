@@ -12,9 +12,43 @@ pub(super) fn group(
     command: &str,
     payload: &Value,
 ) -> Result<()> {
-    let policy = r
-        .spec
-        .request
+    group_request(
+        conn,
+        &r.session_id,
+        &r.spec.request,
+        parent,
+        command,
+        payload,
+    )
+}
+pub(super) fn child(
+    conn: &Connection,
+    r: &CampaignRun,
+    parent: &Operation,
+    command: &str,
+    payload: &Value,
+    role: &zero_protocol::delegation::DelegationRole,
+) -> Result<()> {
+    child_request(
+        conn,
+        &r.session_id,
+        &r.owner,
+        &r.spec.request,
+        parent,
+        command,
+        payload,
+        role,
+    )
+}
+pub(crate) fn group_request(
+    conn: &Connection,
+    session: &str,
+    request: &zero_protocol::agent::AgentRequest,
+    parent: &Operation,
+    command: &str,
+    payload: &Value,
+) -> Result<()> {
+    let policy = request
         .delegation_policy
         .as_ref()
         .ok_or_else(|| bad("delegation absent"))?;
@@ -53,18 +87,18 @@ pub(super) fn group(
         .and_then(|(a, b)| Some((a.parse::<u32>().ok()?, b.parse::<usize>().ok()?)))
         .filter(|(a, b)| *a < 32 && *b < 32)
         .ok_or_else(|| bad("delegation command differs"))?;
-    let origin = by_command(conn, &r.session_id, &format!("{}:model:{turn}", parent.id))?;
+    let origin = by_command(conn, session, &format!("{}:model:{turn}", parent.id))?;
     if origin.status != OperationStatus::Succeeded
         || origin.payload["kind"] != "agent_inference"
         || origin.payload["parent_operation"] != parent.id
     {
         return Err(bad("delegation origin is not completed inference"));
     }
-    let witness:(u64,u64)=conn.query_row("SELECT count(*),COALESCE(sum(length(CAST(payload AS BLOB))),0) FROM events WHERE session_id=?1 AND kind='operation_settled' AND CASE WHEN json_valid(payload) THEN coalesce(json_extract(payload,'$.id'),json_extract(payload,'$.operation_id')) END=?2",params![r.session_id,origin.id],|q|Ok((q.get(0)?,q.get(1)?)))?;
+    let witness:(u64,u64)=conn.query_row("SELECT count(*),COALESCE(sum(length(CAST(payload AS BLOB))),0) FROM events WHERE session_id=?1 AND kind='operation_settled' AND CASE WHEN json_valid(payload) THEN coalesce(json_extract(payload,'$.id'),json_extract(payload,'$.operation_id')) END=?2",params![session,origin.id],|q|Ok((q.get(0)?,q.get(1)?)))?;
     if witness.0 != 1 || witness.1 > 32 * 1024 * 1024 {
         return Err(bad("delegation origin settlement bound"));
     }
-    let valid:bool=conn.query_row("SELECT json(payload)=json(?3) FROM events WHERE session_id=?1 AND kind='operation_settled' AND CASE WHEN json_valid(payload) THEN coalesce(json_extract(payload,'$.id'),json_extract(payload,'$.operation_id')) END=?2",params![r.session_id,origin.id,serde_json::to_string(&serde_json::to_value(&origin)?)?],|q|q.get(0))?;
+    let valid:bool=conn.query_row("SELECT json(payload)=json(?3) FROM events WHERE session_id=?1 AND kind='operation_settled' AND CASE WHEN json_valid(payload) THEN coalesce(json_extract(payload,'$.id'),json_extract(payload,'$.operation_id')) END=?2",params![session,origin.id,serde_json::to_string(&serde_json::to_value(&origin)?)?],|q|q.get(0))?;
     if !valid {
         return Err(bad("delegation origin settlement differs"));
     }
@@ -107,9 +141,12 @@ pub(super) fn group(
     }
     Ok(())
 }
-pub(super) fn child(
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn child_request(
     conn: &Connection,
-    r: &CampaignRun,
+    session: &str,
+    owner: &str,
+    request: &zero_protocol::agent::AgentRequest,
     parent: &Operation,
     command: &str,
     payload: &Value,
@@ -119,11 +156,18 @@ pub(super) fn child(
         .as_str()
         .filter(|s| s.len() <= 4096)
         .ok_or_else(|| bad("delegated group absent"))?;
-    let joined = by_command(conn, &r.session_id, group_command)?;
-    if joined.status != OperationStatus::Running || joined.owner.as_deref() != Some(&r.owner) {
+    let joined = by_command(conn, session, group_command)?;
+    if joined.status != OperationStatus::Running || joined.owner.as_deref() != Some(owner) {
         return Err(bad("delegation group not owned running"));
     }
-    group(conn, r, parent, group_command, &joined.payload)?;
+    group_request(
+        conn,
+        session,
+        request,
+        parent,
+        group_command,
+        &joined.payload,
+    )?;
     let index = payload["delegation_index"]
         .as_u64()
         .filter(|n| *n < 16)
@@ -134,12 +178,12 @@ pub(super) fn child(
     if task["role"] != role.name || joined.payload["child_commands"][index] != command {
         return Err(bad("delegation child membership differs"));
     }
-    let mut expected = r.spec.request.clone();
+    let mut expected = request.clone();
     expected.provider = role.provider.clone();
     expected.model = role.model.clone();
     expected.instructions = format!(
         "{}\n\nHost-defined delegated role {}:\n{}",
-        r.spec.request.instructions, role.name, role.instructions
+        request.instructions, role.name, role.instructions
     );
     expected.prompt = task["prompt"]
         .as_str()

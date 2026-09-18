@@ -35,6 +35,7 @@ pub async fn run(
         ("--providers", args.providers.as_deref()),
         ("--http-profiles", args.http_profiles.as_deref()),
         ("--harness-config", args.harness_config.as_deref()),
+        ("--strategy-host", args.strategy_host.as_deref()),
         ("--docker-bin", args.docker_bin.as_deref()),
         ("--smolvm-bin", args.smolvm_bin.as_deref()),
     ] {

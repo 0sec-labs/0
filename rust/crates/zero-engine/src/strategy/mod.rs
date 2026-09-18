@@ -7,7 +7,18 @@ use zero_protocol::{
     campaign::*,
     strategy::*,
 };
+mod binding;
+mod bridge;
+pub use bridge::{
+    StrategyEligibilityPreparation, import_strategy_eligibility, prepare_strategy_eligibility,
+    read_strategy_eligibility, read_strategy_eligibility_receipt,
+};
 mod controller;
+mod evidence;
+pub use evidence::{
+    RecomputedStrategyEvidence, VerifiedStrategyEvidence, export_strategy_evidence,
+    reassess_strategy_evidence,
+};
 mod fixture;
 mod oracle;
 mod provenance;
@@ -33,9 +44,13 @@ fn now() -> u64 {
 struct Configuration {
     plan: StrategyPlan,
     provider_context: BTreeMap<String, CampaignProviderContext>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    registry_binding: Option<zero_protocol::strategy_registry::StrategyRegistryBinding>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    registry_authority: Option<zero_protocol::strategy_registry::StrategyHostAuthority>,
 }
 fn feedback(store: &Store, campaign: &str) -> Result<StrategyDevelopmentFeedback, EngineError> {
-    let report = provenance::report(store, campaign)?;
+    let report = evidence::snapshot_report(store, campaign)?;
     Ok(StrategyDevelopmentFeedback {
         schema_version: 1,
         campaign_id: campaign.into(),
@@ -50,7 +65,7 @@ fn feedback(store: &Store, campaign: &str) -> Result<StrategyDevelopmentFeedback
     })
 }
 pub fn read_strategy_report(path: &Path, campaign: &str) -> Result<StrategyReport, EngineError> {
-    provenance::report(&Store::open_read_only(path)?, campaign)
+    evidence::snapshot_report(&Store::open_read_only(path)?, campaign)
 }
 pub fn read_strategy_development_feedback(
     path: &Path,

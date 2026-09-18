@@ -6,11 +6,27 @@ use zero_plugin::{Bundle, HostPolicy, Manifest, Registry};
 /// Trusted host input, not deserializable from model/plugin output. Its exact
 /// serialized bytes must already be pinned as the generation policy artifact.
 pub struct HostGrants {
-    policies: BTreeMap<String, HostPolicy>,
+    pub(crate) policies: BTreeMap<String, HostPolicy>,
+    pub(crate) strategy: Option<zero_protocol::strategy_registry::StrategyHostAuthority>,
 }
 impl HostGrants {
     pub fn new(policies: BTreeMap<String, HostPolicy>) -> Self {
-        Self { policies }
+        Self {
+            policies,
+            strategy: None,
+        }
+    }
+    pub fn with_strategy(
+        policies: BTreeMap<String, HostPolicy>,
+        authority: zero_protocol::strategy_registry::StrategyHostAuthority,
+    ) -> Result<Self> {
+        authority
+            .validate()
+            .map_err(|_| Error::Binding("invalid strategy host authority"))?;
+        Ok(Self {
+            policies,
+            strategy: Some(authority),
+        })
     }
     pub fn artifact_bytes(&self) -> Result<Vec<u8>> {
         let policies: BTreeMap<_, _> = self
@@ -23,7 +39,12 @@ impl HostGrants {
                 )
             })
             .collect();
-        let bytes = serde_json::to_vec(&json!({"native_host_grants":1,"plugins":policies}))?;
+        let value = if let Some(authority) = &self.strategy {
+            json!({"native_host_grants":2,"plugins":policies,"strategy":authority})
+        } else {
+            json!({"native_host_grants":1,"plugins":policies})
+        };
+        let bytes = serde_json::to_vec(&value)?;
         if bytes.len() > zero_evolution::MAX_JSON_BYTES {
             return Err(Error::Binding("host grants exceed limit"));
         }
@@ -33,8 +54,12 @@ impl HostGrants {
 pub struct PreparedGraph {
     pub(crate) generation: String,
     pub(crate) plugins: Registry,
+    pub(crate) strategy: Option<crate::strategy::PreparedStrategy>,
 }
 impl PreparedGraph {
+    pub fn strategy(&self) -> Option<&crate::strategy::PreparedStrategy> {
+        self.strategy.as_ref()
+    }
     pub fn generation(&self) -> &str {
         &self.generation
     }
@@ -58,7 +83,12 @@ impl PreparedGraph {
         let manifest = registry.generation(generation)?;
         if manifest.protocol_version != 1
             || manifest.engine_artifact != engine_artifact
-            || manifest.configuration != json!({"native_plugin_graph":1})
+            || manifest.configuration
+                != if grants.strategy.is_some() {
+                    zero_protocol::strategy_registry::strategy_configuration()
+                } else {
+                    json!({"native_plugin_graph":1})
+                }
         {
             return Err(Error::Binding(
                 "unsupported generation configuration, engine or protocol",
@@ -68,12 +98,24 @@ impl PreparedGraph {
         if registry.artifact(&manifest.policy_artifact)? != grants.artifact_bytes()? {
             return Err(Error::Binding("host grants differ from pinned policy"));
         }
-        if manifest.components.len() != grants.policies.len() {
+        if manifest.components.len()
+            != grants.policies.len() + usize::from(grants.strategy.is_some())
+        {
             return Err(Error::Binding("grant/plugin set differs"));
         }
+        let strategy = grants
+            .strategy
+            .as_ref()
+            .map(|authority| {
+                crate::strategy::PreparedStrategy::verify(registry, &manifest, authority)
+            })
+            .transpose()?;
         let mut bundles = vec![];
         let mut total = 0usize;
         for (component, digest) in &manifest.components {
+            if component == "strategy:advisory" && strategy.is_some() {
+                continue;
+            }
             let id = component
                 .strip_prefix("plugin:")
                 .ok_or(Error::Binding("non-plugin component unsupported"))?;
@@ -117,6 +159,7 @@ impl PreparedGraph {
         Ok(Self {
             generation: generation.into(),
             plugins,
+            strategy,
         })
     }
 }

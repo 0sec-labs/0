@@ -20,6 +20,7 @@ pub(super) fn configuration(
     let config: Configuration = serde_json::from_slice(&bytes)?;
     config.plan.validate().map_err(error)?;
     render::validate_public_inputs(&config.plan)?;
+    binding::validate(&config)?;
     if hash(&serde_json::to_value(&config)?)? != snapshot.campaign.plan.controller_plan_sha256
         || snapshot.campaign.plan.baseline_sha256
             != hash(&serde_json::to_value(&config.plan.baseline)?)?

@@ -18,6 +18,8 @@ mod server;
 mod source_report;
 mod steering;
 mod strategy;
+mod strategy_host;
+mod strategy_registry;
 mod tui;
 mod web;
 
@@ -209,6 +211,9 @@ async fn run(args: Args) -> Result<bool, Box<dyn Error>> {
     }
     if let Some(path) = args.harness_config {
         harness::configure(&engine, &path).await?;
+    }
+    if let Some(path) = args.strategy_host {
+        strategy_host::configure(&engine, &path).await?;
     }
     if matches!(args.command, Command::AppServer) {
         server::serve(
