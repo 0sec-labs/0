@@ -77,3 +77,51 @@ symlink rejection, content tampering, UTF-8/NUL/size bounds, citation line/hash
 validation, unknown schema fields, duplicate/missing submissions, hallucinated
 citations, refusal/incomplete responses and prose-only verdicts. No paid model
 or live security target is contacted.
+
+## Retained-source investigation API
+
+`investigation::SourceInvestigation::new(&bundle)` borrows a validated
+`SourceBundle`. It does not accept a root path, deserialize an authority handle,
+open a file, run a shell, or follow a link. Local bundle construction first uses
+anchored verification of the complete snapshot and a private copy; portable bundle
+import rechecks retained byte/hash/index integrity. Imported hash identity alone
+does not authorize use: the engine/host must supply an authorized retained bundle.
+Original files can change or disappear after retention without changing answers.
+
+- `list_files(path, limit)` lists only retained selected-file metadata: canonical
+  relative path, full SHA-256, UTF-8 byte length and line count. Limits are 1–32.
+- `read_file(path, start_line, end_line)` returns an exact inclusive 1-based slice,
+  its full-file hash citation, total line count and bundle digest. It accepts at
+  most 200 lines and rejects invalid/out-of-file ranges, including reads of an
+  empty file. Text preserves original CRLF/LF and final-newline bytes; no status
+  prose is injected into cited source text.
+- `search_files(query, path, limit)` searches literal case-sensitive substrings,
+  returning one complete line per match with exact hash/line citation. Query size
+  is 1–256 UTF-8 bytes, without CR/LF/NUL; result limits are 1–200. No regex or
+  locale-sensitive case folding occurs. A query can match multiple times in a
+  line but yields one result for that line.
+
+Optional listing/search scope is a retained file or directory prefix; `None` or
+`.` means the retained root. One leading `./` and a directory scope's single
+trailing slash normalize to canonical paths. Absolute paths, traversal, repeated
+separators, backslashes, colon and control characters are rejected. Directory
+prefix matching observes path boundaries (`src` does not include `src2`). Files
+present only in the original snapshot index are inaccessible unless retained.
+
+Every serialized result is limited to 64 KiB, including JSON escaping and
+metadata. Listing/search stop at the result or byte cap and mark `truncated` only
+when additional matching results are omitted. A single matching line too large
+to return fails explicitly; citations never describe silently clipped text.
+Reads exceeding the byte cap also fail. No matches means no matches within this
+retained selection, not coverage of an entire repository. The existing 32-file,
+512-KiB aggregate and 128-KiB per-file bundle bounds limit search work. This library
+surface adds no model-tool, engine, CLI, finding-verification, or provider behavior.
+
+Legacy comparison: `packages/core/src/agent/tools/scoped-source.ts` walks a live
+scoped directory, excludes `.git`/`node_modules`, lists up to 500 files, and searches
+up to 500 files of 256 KiB, skipping unreadable/binary files. It defaults to
+case-insensitive matching and clips previews to 500 characters.
+`read-file-window.ts` defaults to 500-line windows and appends pagination notes.
+The native API operates on explicitly retained files only, fails invalid ranges
+and output limits, preserves exact bytes and returns explicit citations. It does
+not yet reproduce legacy live-tree breadth, case-folding, or window pagination.
