@@ -424,3 +424,24 @@ fn unexpected_schema_objects_reject_before_owner_recovery() {
     drop(db);
     assert!(Evaluation::reopen(&f.root()).is_err());
 }
+
+#[test]
+fn rejected_foreign_wal_database_is_not_mutated() {
+    let dir = tempfile::tempdir().unwrap();
+    fs::write(dir.path().join("owner.lock"), b"").unwrap();
+    let path = dir.path().join("evaluation.sqlite");
+    let db = rusqlite::Connection::open(&path).unwrap();
+    db.execute_batch("PRAGMA journal_mode=WAL; CREATE TABLE unrelated(value TEXT);")
+        .unwrap();
+    drop(db);
+    let before = fs::read(&path).unwrap();
+    assert!(Evaluation::reopen(dir.path()).is_err());
+    assert_eq!(before, fs::read(&path).unwrap());
+    let db =
+        rusqlite::Connection::open_with_flags(&path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
+            .unwrap();
+    let mode: String = db
+        .pragma_query_value(None, "journal_mode", |r| r.get(0))
+        .unwrap();
+    assert_eq!(mode, "wal");
+}

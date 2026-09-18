@@ -25,6 +25,7 @@ impl Ledger {
             return Err(invalid("evaluation ownership requires Unix"));
         }
         let (conn, lock, root) = open(root, true)?;
+        configure_owned_database(&conn)?;
         conn.execute_batch("PRAGMA application_id=1514493505; PRAGMA user_version=1;
             CREATE TABLE run(id TEXT PRIMARY KEY, plan TEXT NOT NULL, digest TEXT NOT NULL, owner TEXT NOT NULL, started INTEGER NOT NULL DEFAULT 0, report TEXT);
             CREATE TABLE attempts(id INTEGER PRIMARY KEY, json TEXT NOT NULL);")?;
@@ -120,6 +121,8 @@ impl Ledger {
             _lock: lock,
         };
         let rows = value.attempts()?;
+        // Ownership/schema/plan checks must precede any persistent PRAGMA.
+        configure_owned_database(&value.conn)?;
         let tx = value.conn.transaction()?;
         tx.execute("UPDATE run SET owner=?1", [&value.owner])?;
         for mut a in rows {
@@ -250,10 +253,14 @@ fn open(root: &Path, create: bool) -> Result<(Connection, File, PathBuf)> {
         return Err(invalid("ledger replaced"));
     }
     conn.busy_timeout(std::time::Duration::from_secs(5))?;
-    conn.execute_batch("PRAGMA synchronous=FULL; PRAGMA journal_mode=DELETE;")?;
     Ok((conn, lock, root))
 }
 #[cfg(not(unix))]
 fn open(_: &Path, _: bool) -> Result<(Connection, File, PathBuf)> {
     Err(invalid("evaluation ownership requires Unix"))
+}
+
+fn configure_owned_database(conn: &Connection) -> Result<()> {
+    conn.execute_batch("PRAGMA synchronous=FULL; PRAGMA journal_mode=DELETE;")?;
+    Ok(())
 }
