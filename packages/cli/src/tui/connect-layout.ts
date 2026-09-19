@@ -423,7 +423,7 @@ export function connectDialogItems({
       items.push({
         id: CLOUD_ITEM_ID,
         label: CLOUD_LABEL,
-        description: "Sign in once to use the 0security-managed model catalog",
+        description: "Sign in once to use the 0.security-managed model catalog",
         meta,
         category: CLOUD_GROUP.label,
         current,
@@ -563,7 +563,7 @@ export function connectDetailLines(
 
     push("0cloud", "title");
     separate();
-    push("Sign in once to use the 0security-managed model catalog.", "text");
+    push("Sign in once to use the 0.security-managed model catalog.", "text");
     push("Model access and credits are checked when used.", "muted");
     separate();
     if (connected) {
