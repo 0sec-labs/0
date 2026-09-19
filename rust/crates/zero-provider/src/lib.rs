@@ -2,6 +2,8 @@
 mod anthropic;
 mod anthropic_stream;
 mod chat;
+#[cfg(unix)]
+mod entra;
 mod progress;
 mod responses;
 mod sse;

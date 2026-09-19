@@ -204,3 +204,77 @@ actual native CLI fixtures cover tool-result replay, exact integration headers,
 401/redirect behavior, cancellation, final charges, incomplete billing holds,
 and command retry without another provider request. No live Copilot call or
 subscription/pricing compatibility is claimed.
+
+## Explicit Azure Entra public-client refresh (Unix)
+
+Set `authentication: "azure_entra"` with `entra_credentials_file` naming an
+absolute credential file; omit `api_key_env`. The profile still supplies the
+exact Azure `/openai/v1/responses` or `/openai/v1/chat/completions` URL, wire,
+prices, timeout and response limit. This adapter supports Azure OpenAI resource
+hosts under `.openai.azure.com` and the public Microsoft tenant issuer. It does
+not discover credentials, log in, read Azure CLI state, or support confidential
+client secrets, sovereign issuers, arbitrary gateways or Codex OAuth endpoints.
+
+A host application must issue a private file with exactly this schema:
+
+```json
+{
+  "schema_version": 1,
+  "session_id": "00000000-0000-0000-0000-000000000001",
+  "tenant_id": "00000000-0000-0000-0000-000000000002",
+  "client_id": "00000000-0000-0000-0000-000000000003",
+  "account_id": "host-defined-account-identity",
+  "endpoint": "https://YOUR_RESOURCE.openai.azure.com/openai/v1/responses",
+  "scope": "https://cognitiveservices.azure.com/.default",
+  "revision": 0,
+  "refresh_token": "HOST_ISSUED_REFRESH_TOKEN",
+  "access_token": null,
+  "expires_at_ms": null
+}
+```
+
+Use real tenant/client/session UUIDs. `account_id` and `session_id` are host
+assertions, not locally verified JWT claims. A new login must use a new session
+ID. Endpoint, tenant, client, scope and account/session identity stay pinned for
+the configured client. Credentials never enter request receipts or debug output.
+Cached access token and absolute expiry must both be present or both null.
+
+The file must be owned by the current Unix user, mode `0600`, regular and singly
+linked. Its immediate directory must be owned and not group/world writable
+(`0700` is suitable); symlink path components are rejected. Input and token
+responses are capped at 64 KiB. A stable sibling `<filename>.oauth-lock` serializes
+refresh across processes. Every writer, including the external login host, must
+honor this lock; it must not delete or replace the lock file. A changed session,
+backwards revision or mutation at the same revision is rejected, not adopted.
+
+Refresh is sent only to
+`https://login.microsoftonline.com/{tenant_id}/oauth2/v2.0/token`, with the pinned
+client and Cognitive Services scope. No model request is sent before a received
+rotation passes validation and is durably replaced using a private temporary
+file, compare-before-rename, file sync and directory sync. New revisions from
+another cooperating process can be reused without duplicate refresh. Uncertain
+refresh or persistence errors disable the configured client until explicit
+reconfiguration. A model 401 never triggers refresh or inference replay.
+
+The inference deadline and cancellation cover refresh-network and lock waits.
+Once a rotation response is accepted, normal cancellation drains its credential
+commit before returning; a local filesystem sync may finish after the network
+deadline, and no inference is dispatched in that case. Callers must drain the
+provider future rather than abort it during credential persistence. Failed or
+cancelled refresh retains the inference reservation as unknown under existing
+engine accounting; credential maintenance itself invents no model usage.
+
+For deterministic tests only, `entra_token_endpoint` may override the issuer
+when both URLs are literal HTTP loopback addresses on the same IP. Production
+Azure endpoints cannot use this override. No live token or provider call is part
+of the test suite.
+
+Official contracts checked 2026-09-19:
+
+- [Microsoft identity refresh grant](https://learn.microsoft.com/en-us/entra/identity-platform/v2-oauth2-auth-code-flow#refresh-the-access-token)
+- [Refresh-token replacement and revocation](https://learn.microsoft.com/en-us/entra/identity-platform/refresh-tokens)
+- [Azure OpenAI Entra Bearer authentication and scope](https://learn.microsoft.com/en-us/azure/developer/ai/how-to/switching-endpoints)
+
+The existing TypeScript `llm-api.codex-refresh.test.ts` supplies migration
+regressions for credential isolation, single refresh and newer-login preservation.
+This adapter uses Microsoft's documented grant, not the TypeScript Codex endpoint.

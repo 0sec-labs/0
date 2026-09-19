@@ -12,6 +12,10 @@ pub enum TransportError {
         "invalid provider endpoint; use HTTPS or explicit loopback HTTP without URL credentials"
     )]
     InvalidEndpoint,
+    #[error(
+        "provider credential refresh unavailable; explicit credential reconfiguration may be required"
+    )]
+    CredentialUnavailable,
     #[error("invalid provider request")]
     InvalidRequest,
     #[error("invalid provider response")]
@@ -33,6 +37,7 @@ enum Authentication {
     WireDefault,
     AzureApiKey,
     GithubCopilot,
+    AzureEntra,
 }
 
 // Recorded compatibility contract in llm-api.copilot.test.ts. These are fixed
@@ -52,6 +57,8 @@ pub struct Endpoint {
     authorization: Option<HeaderValue>,
     api_key: Option<HeaderValue>,
     authentication: Authentication,
+    #[cfg(unix)]
+    entra: Option<std::sync::Arc<crate::entra::Credential>>,
 }
 impl Endpoint {
     /// Exact provider URL, including its complete gateway prefix. The historical
@@ -75,6 +82,20 @@ impl Endpoint {
             return Err(TransportError::InvalidEndpoint);
         }
         Self::configured(url, Some(access_token), Authentication::GithubCopilot)
+    }
+    /// Explicit private Entra credential snapshot. Production refresh uses the
+    /// fixed Microsoft tenant endpoint; override is restricted to loopback tests.
+    #[cfg(unix)]
+    pub async fn azure_entra(
+        url: &str,
+        credential_file: &std::path::Path,
+        token_endpoint: Option<&str>,
+    ) -> Result<Self, TransportError> {
+        let mut endpoint = Self::configured(url, None, Authentication::AzureEntra)?;
+        endpoint.entra = Some(std::sync::Arc::new(
+            crate::entra::Credential::open(&endpoint.url, credential_file, token_endpoint).await?,
+        ));
+        Ok(endpoint)
     }
     fn configured(
         url: &str,
@@ -122,6 +143,8 @@ impl Endpoint {
             authorization,
             api_key,
             authentication,
+            #[cfg(unix)]
+            entra: None,
         })
     }
 }
@@ -155,8 +178,10 @@ impl ProviderClient {
         if timeout.is_zero()
             || timeout > Duration::from_secs(3600)
             || !(1024..=64 * 1024 * 1024).contains(&max_bytes)
-            || (endpoint.authentication == Authentication::AzureApiKey
-                && wire == crate::WireApi::AnthropicMessages)
+            || (matches!(
+                endpoint.authentication,
+                Authentication::AzureApiKey | Authentication::AzureEntra
+            ) && wire == crate::WireApi::AnthropicMessages)
             || (endpoint.authentication == Authentication::GithubCopilot
                 && wire != crate::WireApi::ChatCompletions)
         {
@@ -287,6 +312,22 @@ impl ProviderClient {
             return Err(TransportError::Cancelled);
         }
         let deadline = tokio::time::Instant::now() + self.timeout;
+        #[cfg(unix)]
+        let refreshed = if let Some(credential) = &self.endpoint.entra {
+            Some(
+                credential
+                    .authorization(&self.client, deadline, &cancel)
+                    .await?,
+            )
+        } else {
+            None
+        };
+        if cancel.is_cancelled() {
+            return Err(TransportError::Cancelled);
+        }
+        if tokio::time::Instant::now() >= deadline {
+            return Err(TransportError::Timeout);
+        }
         let mut post = self
             .client
             .post(self.endpoint.url.clone())
@@ -303,6 +344,10 @@ impl ProviderClient {
             }
         } else if let Some(auth) = &self.endpoint.authorization {
             post = post.header(AUTHORIZATION, auth.clone());
+        }
+        #[cfg(unix)]
+        if let Some(header) = refreshed {
+            post = post.header(AUTHORIZATION, header);
         }
         if self.endpoint.authentication == Authentication::GithubCopilot {
             for (name, value) in COPILOT_HEADERS {

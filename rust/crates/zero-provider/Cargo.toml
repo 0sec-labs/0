@@ -16,5 +16,11 @@ tokio.workspace = true
 tokio-util.workspace = true
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json", "stream"] }
 
+[target.'cfg(unix)'.dependencies]
+nix = { workspace = true, features = ["fs"] }
+
+[dev-dependencies]
+tempfile.workspace = true
+
 [lints]
 workspace = true

@@ -15,6 +15,7 @@ enum Authentication {
     WireDefault,
     AzureApiKey,
     GithubCopilot,
+    AzureEntra,
 }
 
 #[derive(Deserialize)]
@@ -25,7 +26,9 @@ struct Profile {
     wire_api: WireApi,
     #[serde(default)]
     authentication: Authentication,
-    api_key_env: String,
+    api_key_env: Option<String>,
+    entra_credentials_file: Option<std::path::PathBuf>,
+    entra_token_endpoint: Option<String>,
     rates: Rates,
     timeout_ms: u64,
     max_response_bytes: usize,
@@ -64,29 +67,58 @@ pub async fn load(path: &Path) -> Result<Vec<(String, ProviderClient, Rates)>, B
         {
             return Err("Invalid provider profile name".into());
         }
-        // Report fixed messages: configuration can contain misplaced credentials.
-        if profile.api_key_env.is_empty()
-            || !profile
+        let endpoint = if matches!(profile.authentication, Authentication::AzureEntra) {
+            if profile.api_key_env.is_some() {
+                return Err(
+                    "Entra credentials cannot be combined with an API key environment variable"
+                        .into(),
+                );
+            }
+            let credential_file = profile
+                .entra_credentials_file
+                .as_deref()
+                .ok_or("Entra requires an explicit credential file")?;
+            #[cfg(unix)]
+            {
+                tokio::select! {
+                    result = tokio::time::timeout(Duration::from_secs(5), Endpoint::azure_entra(&profile.url, credential_file, profile.entra_token_endpoint.as_deref())) => result.map_err(|_| "Provider credential file deadline exceeded")??,
+                    _ = crate::server::shutdown_signal() => return Err("Provider credential loading interrupted".into()),
+                }
+            }
+            #[cfg(not(unix))]
+            {
+                let _ = credential_file;
+                return Err("Entra credential rotation requires Unix private-file support".into());
+            }
+        } else {
+            if profile.entra_credentials_file.is_some() || profile.entra_token_endpoint.is_some() {
+                return Err("Entra credential fields require explicit Entra authentication".into());
+            }
+            // Report fixed messages: configuration can contain misplaced credentials.
+            let key_env = profile
                 .api_key_env
-                .bytes()
-                .enumerate()
-                .all(|(index, byte)| {
+                .as_deref()
+                .ok_or("Provider credential environment variable is required")?;
+            if key_env.is_empty()
+                || !key_env.bytes().enumerate().all(|(index, byte)| {
                     byte.is_ascii_alphabetic()
                         || byte == b'_'
                         || (index > 0 && byte.is_ascii_digit())
                 })
-        {
-            return Err("Invalid provider credential environment variable name".into());
-        }
-        let key = std::env::var(&profile.api_key_env)
-            .map_err(|_| "Provider credential environment variable is unavailable")?;
-        if key.is_empty() {
-            return Err("Provider credential environment variable is empty".into());
-        }
-        let endpoint = match profile.authentication {
-            Authentication::WireDefault => Endpoint::responses(&profile.url, Some(&key))?,
-            Authentication::AzureApiKey => Endpoint::azure_api_key(&profile.url, &key)?,
-            Authentication::GithubCopilot => Endpoint::github_copilot(&profile.url, &key)?,
+            {
+                return Err("Invalid provider credential environment variable name".into());
+            }
+            let key = std::env::var(key_env)
+                .map_err(|_| "Provider credential environment variable is unavailable")?;
+            if key.is_empty() {
+                return Err("Provider credential environment variable is empty".into());
+            }
+            match profile.authentication {
+                Authentication::WireDefault => Endpoint::responses(&profile.url, Some(&key))?,
+                Authentication::AzureApiKey => Endpoint::azure_api_key(&profile.url, &key)?,
+                Authentication::GithubCopilot => Endpoint::github_copilot(&profile.url, &key)?,
+                Authentication::AzureEntra => unreachable!(),
+            }
         };
         let client = ProviderClient::with_wire(
             endpoint,
