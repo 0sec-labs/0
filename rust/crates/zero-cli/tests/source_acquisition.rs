@@ -252,7 +252,10 @@ async fn actual_acquisition_is_reviewable_and_retained_source_survives_repositor
         receipt.snapshot.digest
     );
     let provenance = store.review_acquisition_receipt(id).unwrap().unwrap();
-    assert_eq!(provenance.receipt.commit_oid, commit);
+    let zero_protocol::source_acquisition::SourceReceipt::Git(receipt) = provenance.receipt else {
+        panic!()
+    };
+    assert_eq!(receipt.commit_oid, commit);
     assert_eq!(
         result["review"]["review"]["acquisition_receipt"]["commit_oid"],
         commit
@@ -431,3 +434,6 @@ async fn signal_drains_acquisition_and_reports_its_disposition() {
             .contains("Acquisition stopped: Git acquisition cancelled")
     );
 }
+
+#[path = "source_acquisition/npm.rs"]
+mod npm;

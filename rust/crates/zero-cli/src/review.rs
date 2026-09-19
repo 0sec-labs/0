@@ -159,8 +159,8 @@ pub async fn run(args: &crate::args::Args, options: &ReviewArgs) -> Result<u8, B
             if let Some(record) = store.review_by_command(&command_id)? {
                 if record.input_path != input_path
                     || record.profile_name != profile_name
-                    || record.acquisition_receipt.as_ref().map(|v| &v.input_path)
-                        != acquisition_selector.as_ref()
+                    || record.acquisition_receipt.as_ref().map(|v| v.input_path())
+                        != acquisition_selector.as_deref()
                 {
                     return Err(
                         "Review command identity conflicts with retained path, profile or acquisition receipt selector".into(),

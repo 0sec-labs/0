@@ -1,4 +1,8 @@
-# Native repository acquisition
+# Native source acquisition
+
+Explicit-version published npm source is also supported; see
+[NPM-ACQUISITION.md](NPM-ACQUISITION.md) for its separate registry, integrity and
+no-install contract. The Git workflow below keeps its original receipt format.
 
 The opt-in native CLI can fetch one explicitly selected Git ref into a new private
 directory, without opening its state database or invoking a model:

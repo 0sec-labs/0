@@ -67,7 +67,7 @@ fn safe_absolute(path: &Path) -> Result<(), String> {
     Ok(())
 }
 
-fn open_parent(path: &Path) -> Result<std::fs::File, String> {
+pub(crate) fn open_parent(path: &Path) -> Result<std::fs::File, String> {
     use nix::{
         fcntl::{OFlag, open, openat},
         sys::stat::Mode,
@@ -91,7 +91,7 @@ fn open_parent(path: &Path) -> Result<std::fs::File, String> {
     }
     Ok(directory)
 }
-fn parent_unchanged(path: &Path, anchor: &std::fs::File) -> Result<(), String> {
+pub(crate) fn parent_unchanged(path: &Path, anchor: &std::fs::File) -> Result<(), String> {
     use std::os::unix::fs::MetadataExt;
     let current = open_parent(path)?.metadata().map_err(|e| e.to_string())?;
     let captured = anchor.metadata().map_err(|e| e.to_string())?;

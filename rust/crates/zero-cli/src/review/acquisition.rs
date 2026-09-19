@@ -11,7 +11,7 @@ use std::{
 };
 use zero_protocol::{
     SnapshotPin,
-    source_acquisition::{AcquisitionReceiptInput, MAX_RECEIPT_BYTES, RepositoryReceipt},
+    source_acquisition::{AcquisitionReceiptInput, MAX_RECEIPT_BYTES, SourceReceipt},
 };
 
 pub(super) fn selector(path: &Path) -> Result<String, String> {
@@ -100,7 +100,7 @@ pub(super) fn load(
         }
         bytes.extend_from_slice(&chunk[..n]);
     }
-    let receipt: RepositoryReceipt =
+    let receipt: SourceReceipt =
         serde_json::from_slice(&bytes).map_err(|e| format!("Invalid acquisition receipt: {e}"))?;
     if receipt.canonical_bytes()? != bytes {
         return Err("Acquisition receipt must use exact canonical JSON bytes".into());
@@ -130,7 +130,7 @@ pub(super) fn validate_modes(
             executable.push(entry.path.clone());
         }
     }
-    if executable != input.receipt.executable_paths {
+    if executable != input.receipt.executable_paths() {
         return Err("Acquisition receipt executable modes differ from captured source".into());
     }
     check()
@@ -140,7 +140,7 @@ pub(super) fn validate_modes(
 mod tests {
     use super::*;
     use std::os::unix::fs::{PermissionsExt, symlink};
-    use zero_protocol::source_acquisition::GitSource;
+    use zero_protocol::source_acquisition::{GitSource, RepositoryReceipt};
     fn fixture() -> (tempfile::TempDir, AcquisitionReceiptInput, SnapshotPin) {
         let dir = tempfile::tempdir().unwrap();
         let root = dir.path().join("source");
@@ -162,7 +162,8 @@ mod tests {
                 tree_oid: "b".repeat(40),
                 snapshot: pin.clone(),
                 executable_paths: vec![],
-            },
+            }
+            .into(),
         };
         std::fs::write(&input.input_path, input.receipt.canonical_bytes().unwrap()).unwrap();
         (dir, input, pin)

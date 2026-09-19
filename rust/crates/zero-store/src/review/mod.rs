@@ -420,7 +420,11 @@ impl Store {
         )?;
         if let Some(acquisition) = &a.acquisition_receipt {
             let bytes = acquisition.receipt.canonical_bytes().map_err(bad)?;
-            let digest = acquisition.reference().map_err(bad)?.receipt_sha256;
+            let digest = acquisition
+                .reference()
+                .map_err(bad)?
+                .receipt_sha256()
+                .to_owned();
             tx.execute(
                 "INSERT OR IGNORE INTO artifacts(digest,bytes) VALUES(?1,?2)",
                 params![digest, bytes],

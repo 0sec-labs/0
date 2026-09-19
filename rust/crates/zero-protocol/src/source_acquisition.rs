@@ -1,5 +1,7 @@
-//! Host-captured Git acquisition identity, not a repository authenticity signature.
+//! Host-captured source acquisition identity, not an upstream authenticity signature.
+mod npm;
 use crate::{SnapshotPin, is_sha256};
+pub use npm::{NpmReceipt, NpmReceiptRef, NpmSource, validate_npm_name, validate_npm_version};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::path::{Component, Path};
@@ -133,47 +135,59 @@ impl RepositoryReceipt {
         {
             return Err("invalid repository receipt identity".into());
         }
-        let mut total = 0u64;
-        let mut previous: Option<&str> = None;
-        for file in &self.snapshot.files {
-            validate_repository_path(&file.path)?;
-            if previous.is_some_and(|p| p >= file.path.as_str()) || !is_sha256(&file.digest) {
-                return Err("repository manifest order or digest differs".into());
-            }
-            previous = Some(&file.path);
-            total = total
-                .checked_add(file.bytes)
-                .ok_or("repository size overflow")?;
-        }
-        let manifest: Vec<_> = self
-            .snapshot
-            .files
-            .iter()
-            .map(|f| serde_json::json!({"path":f.path,"digest":f.digest,"bytes":f.bytes}))
-            .collect();
-        let digest = format!(
-            "sha256:{:x}",
-            Sha256::digest(serde_json::to_vec(&manifest).map_err(|e| e.to_string())?)
-        );
-        if total > MAX_REPOSITORY_BYTES || self.snapshot.digest != digest {
-            return Err("repository snapshot digest or size differs".into());
-        }
-        let mut last: Option<&str> = None;
-        for path in &self.executable_paths {
-            if last.is_some_and(|p| p >= path.as_str())
-                || !self.snapshot.files.iter().any(|f| &f.path == path)
-            {
-                return Err("repository executable index differs".into());
-            }
-            last = Some(path);
-        }
-        Ok(())
+        validate_snapshot(&self.snapshot, &self.executable_paths)
     }
     pub fn canonical_bytes(&self) -> Result<Vec<u8>, String> {
         self.validate()?;
         serde_json::to_vec(&serde_json::to_value(self).map_err(|e| e.to_string())?)
             .map_err(|e| e.to_string())
     }
+}
+
+fn validate_snapshot(snapshot: &SnapshotPin, executable_paths: &[String]) -> Result<(), String> {
+    validate_absolute(&snapshot.root)?;
+    if snapshot.files.len() > MAX_REPOSITORY_FILES
+        || executable_paths.len() > snapshot.files.len()
+        || snapshot.id.is_empty()
+        || snapshot.id.len() > 256
+        || snapshot.id.chars().any(char::is_control)
+    {
+        return Err("invalid acquired snapshot bounds".into());
+    }
+    let mut total = 0u64;
+    let mut previous: Option<&str> = None;
+    for file in &snapshot.files {
+        validate_repository_path(&file.path)?;
+        if previous.is_some_and(|p| p >= file.path.as_str()) || !is_sha256(&file.digest) {
+            return Err("repository manifest order or digest differs".into());
+        }
+        previous = Some(&file.path);
+        total = total
+            .checked_add(file.bytes)
+            .ok_or("repository size overflow")?;
+    }
+    let manifest: Vec<_> = snapshot
+        .files
+        .iter()
+        .map(|f| serde_json::json!({"path":f.path,"digest":f.digest,"bytes":f.bytes}))
+        .collect();
+    let digest = format!(
+        "sha256:{:x}",
+        Sha256::digest(serde_json::to_vec(&manifest).map_err(|e| e.to_string())?)
+    );
+    if total > MAX_REPOSITORY_BYTES || snapshot.digest != digest {
+        return Err("repository snapshot digest or size differs".into());
+    }
+    let mut last: Option<&str> = None;
+    for path in executable_paths {
+        if last.is_some_and(|p| p >= path.as_str())
+            || !snapshot.files.iter().any(|f| &f.path == path)
+        {
+            return Err("repository executable index differs".into());
+        }
+        last = Some(path);
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -263,19 +277,19 @@ mod tests {
     }
 }
 
-/// Explicit host-selected provenance. This is neither a repository signature nor
-/// proof that an arbitrary caller's Git object IDs were issued by an acquisition.
+/// Explicit host-selected provenance. This is neither a publisher signature nor
+/// proof that arbitrary caller-supplied upstream identities were acquired.
 #[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct AcquisitionReceiptInput {
     /// Absolute normalized host selector; consumers never discover or open it.
     pub input_path: String,
-    pub receipt: RepositoryReceipt,
+    pub receipt: SourceReceipt,
 }
 /// Compact retained provenance, derived only from the complete captured receipt.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
-pub struct AcquisitionReceiptRef {
+pub struct GitReceiptRef {
     pub input_path: String,
     pub receipt_sha256: String,
     pub source: GitSource,
@@ -294,23 +308,37 @@ impl AcquisitionReceiptInput {
         if bytes.len() > MAX_RECEIPT_BYTES {
             return Err("acquisition receipt byte bound".into());
         }
-        Ok(AcquisitionReceiptRef {
+        if let SourceReceipt::Npm(receipt) = &self.receipt {
+            return Ok(AcquisitionReceiptRef::Npm(NpmReceiptRef {
+                input_path: self.input_path.clone(),
+                receipt_sha256: format!("sha256:{:x}", Sha256::digest(bytes)),
+                source: receipt.source.clone(),
+                tarball_url: receipt.tarball_url.clone(),
+                integrity: receipt.integrity.clone(),
+                tarball_sha256: receipt.tarball_sha256.clone(),
+                metadata_sha256: receipt.metadata_sha256.clone(),
+            }));
+        }
+        let SourceReceipt::Git(receipt) = &self.receipt else {
+            unreachable!()
+        };
+        Ok(AcquisitionReceiptRef::Git(GitReceiptRef {
             input_path: self.input_path.clone(),
             receipt_sha256: format!("sha256:{:x}", Sha256::digest(bytes)),
-            source: self.receipt.source.clone(),
-            requested_ref: self.receipt.requested_ref.clone(),
-            commit_oid: self.receipt.commit_oid.clone(),
-            tree_oid: self.receipt.tree_oid.clone(),
-        })
+            source: receipt.source.clone(),
+            requested_ref: receipt.requested_ref.clone(),
+            commit_oid: receipt.commit_oid.clone(),
+            tree_oid: receipt.tree_oid.clone(),
+        }))
     }
     /// Compare the original selected root and exact captured content identity.
     /// Only the private execution location is allowed to differ from the receipt.
     pub fn validate_capture(&self, pin: &SnapshotPin, original_root: &str) -> Result<(), String> {
         self.reference()?;
-        if self.receipt.snapshot.root != original_root
-            || self.receipt.snapshot.id != pin.id
-            || self.receipt.snapshot.digest != pin.digest
-            || serde_json::to_value(&self.receipt.snapshot.files).map_err(|e| e.to_string())?
+        if self.receipt.snapshot().root != original_root
+            || self.receipt.snapshot().id != pin.id
+            || self.receipt.snapshot().digest != pin.digest
+            || serde_json::to_value(&self.receipt.snapshot().files).map_err(|e| e.to_string())?
                 != serde_json::to_value(&pin.files).map_err(|e| e.to_string())?
         {
             return Err("acquisition receipt differs from captured root or source".into());
@@ -323,8 +351,8 @@ impl AcquisitionReceiptInput {
         manifest: &crate::source_archive::ArchiveManifest,
     ) -> Result<(), String> {
         self.reference()?;
-        let files = &self.receipt.snapshot.files;
-        if manifest.snapshot_sha256 != self.receipt.snapshot.digest
+        let files = &self.receipt.snapshot().files;
+        if manifest.snapshot_sha256 != self.receipt.snapshot().digest
             || manifest.files.len() != files.len()
             || manifest
                 .files
@@ -336,12 +364,71 @@ impl AcquisitionReceiptInput {
                 .iter()
                 .filter(|f| f.executable)
                 .map(|f| &f.path)
-                .ne(self.receipt.executable_paths.iter())
+                .ne(self.receipt.executable_paths().iter())
         {
             return Err(
                 "acquisition receipt differs from archived source or executable modes".into(),
             );
         }
         Ok(())
+    }
+}
+
+/// Untagged for exact backwards compatibility: historical Git receipts gain no
+/// discriminator or default field. Each variant denies unknown fields.
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(untagged)]
+pub enum SourceReceipt {
+    Git(RepositoryReceipt),
+    Npm(NpmReceipt),
+}
+impl From<RepositoryReceipt> for SourceReceipt {
+    fn from(value: RepositoryReceipt) -> Self {
+        Self::Git(value)
+    }
+}
+impl From<NpmReceipt> for SourceReceipt {
+    fn from(value: NpmReceipt) -> Self {
+        Self::Npm(value)
+    }
+}
+impl SourceReceipt {
+    pub fn snapshot(&self) -> &SnapshotPin {
+        match self {
+            Self::Git(r) => &r.snapshot,
+            Self::Npm(r) => &r.snapshot,
+        }
+    }
+    pub fn executable_paths(&self) -> &[String] {
+        match self {
+            Self::Git(r) => &r.executable_paths,
+            Self::Npm(r) => &r.executable_paths,
+        }
+    }
+    pub fn canonical_bytes(&self) -> Result<Vec<u8>, String> {
+        match self {
+            Self::Git(r) => r.canonical_bytes(),
+            Self::Npm(r) => r.canonical_bytes(),
+        }
+    }
+}
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(untagged)]
+pub enum AcquisitionReceiptRef {
+    Git(GitReceiptRef),
+    Npm(NpmReceiptRef),
+}
+impl AcquisitionReceiptRef {
+    pub fn input_path(&self) -> &str {
+        match self {
+            Self::Git(r) => &r.input_path,
+            Self::Npm(r) => &r.input_path,
+        }
+    }
+    pub fn receipt_sha256(&self) -> &str {
+        match self {
+            Self::Git(r) => &r.receipt_sha256,
+            Self::Npm(r) => &r.receipt_sha256,
+        }
     }
 }

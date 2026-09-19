@@ -660,7 +660,8 @@ fn acquisition_admission(archive: &SourceArchive) -> ReviewAdmission {
             tree_oid: "b".repeat(40),
             snapshot: a.snapshot.clone(),
             executable_paths: vec!["app.rs".into()],
-        },
+        }
+        .into(),
     });
     a
 }
@@ -681,12 +682,12 @@ fn acquisition_receipt_is_atomic_retained_and_modes_bound_to_archive() {
     retry.acquisition_receipt = None;
     assert!(store.admit_review("acquired", "owner", &retry).is_err());
     retry = a.clone();
-    retry
-        .acquisition_receipt
-        .as_mut()
-        .unwrap()
-        .receipt
-        .commit_oid = "c".repeat(40);
+    let zero_protocol::source_acquisition::SourceReceipt::Git(receipt) =
+        &mut retry.acquisition_receipt.as_mut().unwrap().receipt
+    else {
+        panic!("expected Git")
+    };
+    receipt.commit_oid = "c".repeat(40);
     assert!(store.admit_review("acquired", "owner", &retry).is_err());
     store
         .begin_review_source_preparation(&a.root_operation_id, "owner")
@@ -729,9 +730,13 @@ fn acquisition_capture_mismatch_rolls_back_and_absence_preserves_historical_seri
     for mutate in 0..3 {
         let mut a = acquisition_admission(&archive);
         let input = a.acquisition_receipt.as_mut().unwrap();
+        let zero_protocol::source_acquisition::SourceReceipt::Git(receipt) = &mut input.receipt
+        else {
+            panic!()
+        };
         match mutate {
-            0 => input.receipt.snapshot.root = "/elsewhere".into(),
-            1 => input.receipt.snapshot.id = "other".into(),
+            0 => receipt.snapshot.root = "/elsewhere".into(),
+            1 => receipt.snapshot.id = "other".into(),
             _ => input.input_path = "relative.json".into(),
         };
         assert!(store.admit_review("bad", "owner", &a).is_err());
@@ -764,4 +769,85 @@ fn acquisition_capture_mismatch_rolls_back_and_absence_preserves_historical_seri
             .get("acquisition_receipt_sha256")
             .is_none()
     );
+}
+
+#[test]
+fn npm_receipt_retains_exact_published_identity_and_archive_modes() {
+    use zero_protocol::source_acquisition::*;
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("db");
+    let mut store = Store::open(&path).unwrap();
+    store.claim_engine_epoch("owner").unwrap();
+    let archive = source(b"published source".to_vec());
+    let mut a = prepared(&archive);
+    a.acquisition_receipt = Some(AcquisitionReceiptInput {
+        input_path: "/removed/npm/receipt.json".into(),
+        receipt: NpmReceipt {
+            schema_version: 1,
+            source: NpmSource {
+                registry: "https://registry.example/".into(),
+                package: "@scope/package".into(),
+                version: "1.2.3".into(),
+            },
+            metadata_sha256: format!("sha256:{}", "a".repeat(64)),
+            tarball_url: "https://registry.example/package.tgz".into(),
+            integrity: format!("sha512-{}==", "A".repeat(86)),
+            tarball_sha256: format!("sha256:{}", "b".repeat(64)),
+            tarball_bytes: 123,
+            snapshot: a.snapshot.clone(),
+            executable_paths: vec!["app.rs".into()],
+        }
+        .into(),
+    });
+    store.admit_review("npm-review", "owner", &a).unwrap();
+    let mut changed = a.clone();
+    let SourceReceipt::Npm(receipt) = &mut changed.acquisition_receipt.as_mut().unwrap().receipt
+    else {
+        panic!()
+    };
+    receipt.source.version = "1.2.4".into();
+    assert!(store.admit_review("npm-review", "owner", &changed).is_err());
+    store
+        .begin_review_source_preparation(&a.root_operation_id, "owner")
+        .unwrap();
+    let mut wrong = archive.clone();
+    wrong.manifest.files[0].executable = false;
+    assert!(
+        store
+            .retain_review_source_archive(&a.root_operation_id, "owner", &wrong)
+            .is_err()
+    );
+    store
+        .retain_review_source_archive(&a.root_operation_id, "owner", &archive)
+        .unwrap();
+    drop(store);
+    let store = Store::open_read_only(&path).unwrap();
+    let retained = store
+        .review_acquisition_receipt(&a.review_id)
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        serde_json::to_value(&retained).unwrap(),
+        serde_json::to_value(a.acquisition_receipt.unwrap()).unwrap()
+    );
+    assert!(matches!(
+        store
+            .review_snapshot(&a.review_id)
+            .unwrap()
+            .review
+            .acquisition_receipt,
+        Some(AcquisitionReceiptRef::Npm(_))
+    ));
+    retained
+        .validate_archive(
+            &store
+                .review_source_archive(&a.review_id)
+                .unwrap()
+                .unwrap()
+                .manifest,
+        )
+        .unwrap();
+    let sql = rusqlite::Connection::open(&path).unwrap();
+    sql.execute("DELETE FROM events WHERE kind='operation_artifact' AND json_extract(payload,'$.name')='review.acquisition_receipt'",[]).unwrap();
+    assert!(store.review_acquisition_receipt(&a.review_id).is_err());
 }

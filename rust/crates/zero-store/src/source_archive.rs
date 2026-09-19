@@ -17,7 +17,7 @@ fn witness(binding: &review::ArchiveBinding, manifest: &str) -> serde_json::Valu
         "manifest_sha256":manifest,"owner":binding.owner,
         "preparation_sequence":binding.preparation_sequence});
     if let Some(acquisition) = &binding.review.acquisition_receipt {
-        value["acquisition_receipt_sha256"] = json!(acquisition.receipt_sha256);
+        value["acquisition_receipt_sha256"] = json!(acquisition.receipt_sha256());
     }
     value
 }

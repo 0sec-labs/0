@@ -1,5 +1,5 @@
 //! Explicit host provenance carried by the immutable review intent. No path here
-//! is opened, and validating a receipt does not authenticate its Git origin.
+//! is opened, and validating a receipt does not authenticate its upstream origin.
 use super::*;
 use zero_protocol::source_acquisition::{AcquisitionReceiptInput, MAX_RECEIPT_BYTES};
 pub(super) fn validate_retained(
@@ -23,10 +23,10 @@ pub(super) fn validate_retained(
         return Ok(());
     };
     let expected = input.reference().map_err(bad)?;
-    if digest.as_deref() != Some(expected.receipt_sha256.as_str()) || sequences.len() != 1 {
+    if digest.as_deref() != Some(expected.receipt_sha256()) || sequences.len() != 1 {
         return Err(bad("acquisition receipt attachment or witness absent"));
     }
-    let bytes = r.artifact(conn, &expected.receipt_sha256, MAX_RECEIPT_BYTES)?;
+    let bytes = r.artifact(conn, expected.receipt_sha256(), MAX_RECEIPT_BYTES)?;
     let binding: u64 = conn.query_row(
         "SELECT binding_sequence FROM reviews WHERE id=?1",
         [&record.id],
@@ -35,7 +35,7 @@ pub(super) fn validate_retained(
     if bytes != input.receipt.canonical_bytes().map_err(bad)?
         || sequences[0] >= binding
         || r.event(conn, &record.session_id, sequences[0])?.1
-            != json!({"operation_id":record.controller_operation_id,"name":"review.acquisition_receipt","digest":expected.receipt_sha256,"bytes":bytes.len()})
+            != json!({"operation_id":record.controller_operation_id,"name":"review.acquisition_receipt","digest":expected.receipt_sha256(),"bytes":bytes.len()})
     {
         return Err(bad("acquisition receipt bytes or attribution differs"));
     }

@@ -3,8 +3,12 @@
 //! cleanup guarantee. Event sinks must be nonblocking; capture remains bounded.
 mod archive;
 #[cfg(target_os = "linux")]
+mod npm;
+#[cfg(target_os = "linux")]
 mod repository;
 pub use archive::{capture_source_archive, stage_source_archive};
+#[cfg(target_os = "linux")]
+pub use npm::{NpmRequest, acquire_npm};
 #[cfg(target_os = "linux")]
 pub use repository::{RepositoryRequest, acquire_repository};
 mod interactive;
