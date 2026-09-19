@@ -74,3 +74,52 @@ spoofed model verdicts, citation/preimage/oracle drift, protected-file edits,
 setup failure, truncated output, cleanup uncertainty, cancellation, and restart
 with exact retry. Live-provider qualification and scanner detection quality are
 separate from these deterministic contract fixtures.
+
+## Direct local review: authority and preparation
+
+The next product workflow is `review <local-path> --profile <name>`. This command
+is not wired yet. Its first prerequisites now exist:
+
+- `zero_protocol::review::ReviewProfile` compiles one host-captured snapshot into
+  the existing adaptive source actor. It captures provider/model, instructions,
+  question, total budget/currency, per-turn reservation, turn/hypothesis limits,
+  deadline, context policy and optional bounded delegation roles. Source reads,
+  searches, experiments and stopping remain agent choices. Only the root can
+  submit hypotheses; neither a delegate nor a submission verifies a claim.
+- Its explicit offline execution profile requires an immutable Docker image
+  digest or smolvm archive path/hash and resource limits. It does not include a
+  source path, credentials, mounts, network authority, startup/build command or
+  plugins. Compilation supplies the captured manifest. The actor replaces the
+  inert argv template only when it chooses an authorized execution tool call.
+  Selecting execution authority does not force execution.
+- `zero_executor::pin_snapshot_checked` bounds capture to a selected positive
+  file/byte limit, with supported ceilings of 4,096 files and 64 MiB, and checks
+  cancellation throughout traversal, content reads/hashing and manifest
+  completion. It preserves the existing anchored no-follow capture and manifest
+  identity. It rejects oversize input instead of silently trimming the tree.
+  Directories do not count as files; a caller must supply a preparation deadline.
+  Blocking filesystem calls require a blocking worker and cannot be preempted by
+  a callback. No `.git`/dependency exclusions are implied by this API.
+
+The controller and command remain required work. Resolve an exact retained retry
+before reading current configuration or the source path. For a new command,
+perform bounded cancellable local capture before admission, with no model/backend
+work. Drain its blocking worker on cancellation. Atomically admit a dedicated
+review session, controller, actual root and frozen intent/provider rates; start
+the durable deadline at that admission. Cap serialized intent/catalog size as
+well as file contents. Do not label preflight hashing as an admitted actor.
+
+Use `prepare_actor` and `run_actor` directly under the dedicated controller.
+Review-specific Store fences must cover inference, delegated roles and sandbox
+requests, including source/backend/resource identity, cancellation, deadline and
+shared funding. Do not overload the HTTP scan record or recursively invoke the
+public `RunAgent` command. Reuse worker ownership and cleanup handling so owner
+loss produces Unknown and exact retries never repeat effects.
+
+Compose reports from one pinned Store read snapshot, reusing retained source
+provenance. A partial run without a terminal submission must not be turned into
+an empty successful review. Preserve charged/reserved funding and cleanup
+uncertainty independently of hypothesis counts. The command acceptance still
+requires a real loopback-provider fixture exercising search/read, cited
+submission, unchanged source, cancellation, owner loss, config-free retry and
+reporting after source deletion.

@@ -22,6 +22,7 @@ pub mod plugin;
 pub mod questions;
 pub mod queue;
 pub mod repair;
+pub mod review;
 pub mod sandbox;
 pub mod scan;
 pub mod session;

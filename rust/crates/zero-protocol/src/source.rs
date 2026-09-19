@@ -1,5 +1,7 @@
 //! Source discovery data: no finding is behaviorally verified here.
 use crate::SnapshotPin;
+/// UTF-8 byte limit shared by source review prompts and retained questions.
+pub const MAX_SOURCE_QUESTION_BYTES: usize = 16 * 1024;
 use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]

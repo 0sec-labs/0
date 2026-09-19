@@ -173,7 +173,7 @@ impl PreparedReview {
 }
 pub(crate) fn validate_options(question: &str, max: u32) -> Result<()> {
     if question.trim().is_empty()
-        || question.len() > 16384
+        || question.len() > zero_protocol::source::MAX_SOURCE_QUESTION_BYTES
         || question.contains('\0')
         || !(1..=32).contains(&max)
     {

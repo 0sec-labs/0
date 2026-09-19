@@ -88,7 +88,7 @@ pub(super) fn validate_initial(request: &AgentRequest) -> Result<ResponsesReques
     if let Some(max) = request.source_submission_max_hypotheses {
         if !request.source_snapshot_tools
             || !(1..=32).contains(&max)
-            || request.prompt.len() > 16384
+            || request.prompt.len() > zero_protocol::source::MAX_SOURCE_QUESTION_BYTES
             || request.prompt.contains('\0')
             || request
                 .plugin_tools
