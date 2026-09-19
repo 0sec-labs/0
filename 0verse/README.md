@@ -29,15 +29,16 @@
 ## What it is
 
 `0verse` is a **binary-native Cyber Reasoning System** for compiled programs with
-no source. It runs a **find → prove → patch → verify** loop:
+no source. Its research pipeline supports a **find → prove → patch → verify** loop;
+the patch lane is separately opt-in and confirmation requires a working executor:
 
 - **finds** memory-safety and logic bug *hypotheses* via static slicing, bug-class
   lenses, and a mined seed registry;
-- **proves** each one by reproducing a crash — a runnable **proof-of-vulnerability
+- **attempts to prove** hypotheses with a reproducing **proof-of-vulnerability
   (PoV)**;
-- **patches** the confirmed bug with a fix that closes the PoV; and
-- **verifies** the patch deterministically (the PoV no longer reproduces, no
-  regression).
+- **proposes patches** when `ZEROVERSE_PATCH=1`; and
+- **verifies** a patch only against the reproduced PoV and available regression
+  checks. This is not a guarantee that a binary is secure or a fix is complete.
 
 It's the binary counterpart to a source scanner: when you have source, use SAST
 ([foxguard](https://github.com/0sec-labs)); when all you have is a compiled
@@ -47,51 +48,75 @@ ground-truth types, no symbols.
 
 **The one rule — PoV-is-truth.** A finding without a reproducing input + crash
 trace is a *hypothesis*, not a finding. `confirmed` is true **only** when a
-deterministic oracle reproduces a PoV. The LLM proposes; the oracle disposes. A
-hallucinating or rate-limited model can never manufacture a false confirmation —
-at worst it degrades a finding to an honest hypothesis.
+deterministic oracle reproduces a PoV. An LLM verdict alone cannot set
+confirmation. Review the oracle, target identity, control, and replay evidence;
+this gate is not a universal zero-false-positive guarantee.
 
 ## Quickstart
 
-The core install is dependency-free, so `triage` works anywhere; the heavy
-engines (Ghidra / angr / AFL++) are optional extras or come with the Docker
-image. No PyPI or public image channel is published yet — use the locked source
+Use **Python 3.11+** and `uv` from the **`0verse/` directory** of this repository.
+This is a separate Python package: installing the 0 CLI with npm or the binary
+installer does not install 0verse, Ghidra, or a dynamic executor.
+The core install has no runtime dependencies and supports format triage.
+Full analysis needs a decompiler; confirmation needs a compatible execution
+environment. No PyPI or public image channel is assumed here — use the locked
 checkout or build the image locally.
 
 ```bash
+cd 0verse
 # Day-one triage from a locked checkout — format / arch / mitigations, no deps.
 uv sync --frozen
 uv run --frozen 0verse triage ./target
 
-# Full pipeline (decompile → slice → reason → prove → PoV) with a mock LLM.
+# Request the pipeline with a mock LLM; missing engines/execution are not a clean bill.
 uv run --frozen 0verse run ./target --bug-class memory-safety
 
-# Drive it with a real model on the triage funnel + harness synthesis.
-uv run --frozen 0verse run ./target --llm codex     # ChatGPT-OAuth, ~/.codex/auth.json
-uv run --frozen 0verse run ./target --llm claude    # ANTHROPIC_API_KEY
-uv run --frozen 0verse run ./target --model glm-4.6  # Z_AI_API_KEY
+# Real-provider lanes need their optional SDKs and your own credentials.
+uv sync --frozen --extra llm
+uv run --frozen --extra llm 0verse run ./target --llm codex     # ~/.codex/auth.json
+uv run --frozen --extra llm 0verse run ./target --llm claude    # ANTHROPIC_API_KEY
+uv run --frozen --extra llm 0verse run ./target --model glm-4.6 # Z_AI_API_KEY
 
 # Emit the versioned machine contract for a platform/agent to ingest.
-uv run --frozen 0verse scan ./target --format ndjson [--backend rizin]
+uv run --frozen 0verse scan ./target --format ndjson --backend auto
 
 # Sweep a fleet from one known seed; confirmations still require a PoV per target.
 uv run --frozen 0verse fleet --seed-archetype cmdi --fleet ./vendor-bins
 ```
 
-For the full toolchain (Ghidra/angr/AFL++), build the image locally:
+Install and select a backend using [Ghidra setup](docs/GHIDRA-SETUP.md) or the
+fallback requirements in [Integration](docs/INTEGRATION.md#decompiler-backends-27--ghidra-is-replaceable).
+For the Ghidra/angr/AFL++ toolchain, build the Linux x86-64 image locally:
 
 ```bash
 docker build --platform linux/amd64 -t 0verse:local .
-docker run --rm -v "$PWD:/work" 0verse:local run /work/target
+docker run --rm --platform linux/amd64 -v "$PWD:/work:ro" \
+  0verse:local scan /work/target --format json
 ```
+
+The image includes JDK 21, Ghidra 12.1.2, angr, AFL++, and x86-64 QEMU-mode
+support. It does **not** install every optional extra: Qiling, binwalk, the
+radare2/r2ghidra fallback, and firmware cross-toolchains need separate setup.
+ARM hosts need amd64 container emulation. Container execution alone does not
+select an oracle or turn the image into a managed analysis service.
 
 Dynamic execution of a target is **opt-in and fail-closed** — never a silent host
 subprocess. It's disabled unless you choose an executor:
 
 ```bash
-ZEROVERSE_EXECUTOR=local 0verse run ./target   # run natively on this host (explicit trust)
-ZEROVERSE_EXECUTOR=msb   0verse run ./target   # run inside a microsandbox microVM (recommended)
+ZEROVERSE_EXECUTOR=local uv run --frozen 0verse run ./target # trusted fixtures only
+ZEROVERSE_EXECUTOR=msb uv run --frozen 0verse run ./target   # separately provisioned remote microVM
 ```
+
+`msb` needs an operator-provisioned SSH/KVM host and the pinned microsandbox
+toolchain; setting the variable does not provision them. Never enable `local`
+for an untrusted binary on a workstation. Generated PoV scripts are executable
+artifacts too; replay them only inside the authorized execution boundary.
+
+For `scan`, inspect `terminal_state`, `status_reason`, and `stage_outcomes` in
+the emitted contract. A local command can print an `infra-failed` result and exit
+zero; an empty finding list is not proof that analysis completed.
+See [Result contract](docs/RESULT-CONTRACT.md).
 
 Embed it, or expose it to an agent over MCP:
 
@@ -102,8 +127,39 @@ print(api.format_result(result, "ndjson"))
 ```
 
 ```bash
-python -m zeroverse.mcp   # stdio MCP: scan_binary / list_findings / get_pov / get_report
+uv run --frozen --extra mcp python -m zeroverse.mcp
 ```
+
+### Calling 0verse from the 0 harness
+
+The local agent tool `analyze_binary` is **off by default**. Put the installed
+`0verse` executable on the launching process's `PATH` (for example, activate
+`0verse/.venv`), then launch 0 with `0SEC_FEATURE_ZEROVERSE=1` and an authorized
+local source scope. The tool accepts only a regular file confined to that scope;
+its arguments are `binary_path`, `bug_class`, `backend`, and `timeout_s`.
+
+This bridge launches `0verse scan --format ndjson`, not a remote worker. It does
+not install engines, forward provider credentials or `ZEROVERSE_*` settings, or
+enable dynamic execution. Configure and run advanced 0verse workflows separately.
+Its default timeout is eight minutes, with a thirty-minute ceiling. Confirmed
+results and unconfirmed hypotheses remain separate. A local bridge is not the
+managed platform's generic binary-dispatch lane.
+
+### Offline firmware evidence
+
+Firmware Scout has a hardware-free CLI. From this directory:
+
+```bash
+uv run --frozen 0verse scout capture --fixture standard --output ./scout-example
+uv run --frozen 0verse scout inspect ./scout-example
+uv run --frozen 0verse scout report ./scout-example --format md
+```
+
+The output directory must be new. This captures a deterministic virtual trace,
+not a physical ECU. Inspection/reports validate sealed Scout evidence and
+separate observations, inferences, and unknowns. They do not open a live
+interface, transmit frames, dump firmware, or confirm vulnerabilities.
+See [Firmware Scout safety](docs/FIRMWARE-SCOUT-SAFETY.md).
 
 ## Capability matrix
 
@@ -175,8 +231,10 @@ methodology. Full method and misses:
 
 ## Architecture (in words)
 
-A deterministic scheduler runs a best-effort stage spine; every optional engine
-degrades gracefully rather than blocking the run:
+A deterministic scheduler runs a bounded stage spine. Optional engines may
+degrade with recorded outcomes; a missing required backend or execution
+capability can fail the requested profile. Read the terminal state, not just
+the number of findings:
 
 ```
 ingest → decompile → lift → slice → foxguard pre-pass → seed-prime → bug-class lenses
@@ -191,7 +249,7 @@ ingest → decompile → lift → slice → foxguard pre-pass → seed-prime →
   backend (Ghidra, else rizin/angr at lower fidelity).
 - **slice + lenses + seeds** union many hypotheses (high recall by design);
   **angr** prunes the ones it proves unreachable.
-- the **crash oracle** confirms the rest with a reproducing PoV; **patch + verify**
+- the **crash oracle** attempts to confirm candidates with a reproducing PoV; **patch + verify**
   (opt-in) marks a fix `verified` only when the PoV stops reproducing with no
   regression — the deterministic, LLM-free adjudicator.
 - the **fuzz complement** catches bugs the slice structurally misses: the LLM
@@ -218,8 +276,9 @@ several lanes are honest degrades. We publish the misses in
 - **rizin/angr fallbacks are lower-fidelity** (no SSA def-use, no per-sink
   addresses → the angr reachability prune is skipped).
 - **logic / auth-bypass is hypothesis-only** — no generic binary oracle.
-- **foxguard and Ghidra are optional** external tools; the pipeline degrades when
-  they're absent.
+- **foxguard is optional; analysis still needs a decompiler.** Missing Ghidra can
+  fall back to rizin/angr, but no usable backend is an infrastructure failure,
+  not a successful empty scan.
 - The headline runs on real Magma libraries but under **bounded budget / single
   model / single trial**; the held-out set is a sanity/regression check, not the
   capability claim.

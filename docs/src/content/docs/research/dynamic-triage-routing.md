@@ -25,22 +25,26 @@ interface RoutingDecision {
 }
 ```
 
-v0 ships `RuleBasedRouter`. A follow-up PR ships `XGBoostRouter` (or a VulnBERT-style hybrid head) consuming the same input contract.
+v0 ships `RuleBasedRouter`. A future learned layer-selection classifier could
+consume the same contract; the TP/FP scorer in `learned-router.ts` is separate.
 
 ## The four decision rules (v0)
 
-The rules are evaluated in priority order. The first match wins.
+The current evaluation order is SQLi, strong FP match (when a matcher is supplied),
+ambiguous logic, then default. The first match wins; historical rule numbers
+below are retained.
 
-### Rule 1 — high-confidence SQLi with error-based signal → skip `debate`
+### Rule 1 — high-confidence SQLi with error-based signal → static layer set
 
 ```
 IF finding.category == "sql-injection"
 AND finding.confidence >= 0.8
 AND finding.evidence.response matches a SQL-error regex
-THEN invoke the default static layer set MINUS `debate`
+THEN invoke DEFAULT_STATIC_LAYER_SET with high routing confidence
 ```
 
-The [0sec#72 ablation](https://github.com/0sec-labs/0sec/issues/72#issuecomment-4229254355) found that `adversarial_debate` removed real findings on this SQLi slice. The deterministic oracle required no model call.
+This selects the same layers as the fallback, with a different routing confidence
+and trace reason. There is no active `debate` layer to subtract.
 
 ### Rule 2 — ambiguous logic bug → invoke `structured_verify` + `pov_gate`
 
@@ -70,6 +74,10 @@ Coarse token overlap can reject a real finding. This rule requires all three con
 - Agent confidence < 0.6.
 
 Measure recall and false positives before loosening these thresholds.
+
+The default module slot constructs `new RuleBasedRouter()` without an FP matcher,
+so this rule is inactive unless a caller supplies one. Enabling the dynamic-triage
+flag alone does not wire a memory matcher.
 
 ### Rule 4 — default → static layer set
 
@@ -125,7 +133,10 @@ At the end of every scan with `0SEC_FEATURE_DYNAMIC_TRIAGE=1`, the scanner write
 }
 ```
 
-The 55-element `features` vector is the same vector the joint-paper dataset ([0sec#67](https://github.com/0sec-labs/0sec/issues/67)) trains on — extracted by `extractFeatures()` in `packages/core/src/triage/feature-extractor.ts`. The `ground_truth` field is left undefined for in-flight scans; the offline collector backfills it from flag extraction (XBOW / Cybench) or package verdict (npm-bench).
+The 55-element vector comes from `extractFeatures()` in
+`packages/core/src/triage/feature-extractor.ts`. The trace accepts optional ground
+truth, but a live trace is not labeled merely by enabling this flag; evaluate and
+join outcomes offline rather than treating router decisions as truth.
 
 ## The planned learned-classifier upgrade
 
@@ -133,7 +144,9 @@ Phase 2 of 0sec#113 (separate PR) replaces `RuleBasedRouter` with `XGBoostRouter
 
 1. Train an XGBoost multi-label classifier on `(features, decided_layers, ground_truth)` tuples accumulated by the v0 trace emitter.
 2. The target is "which subset of layers would have produced the same final verdict at minimum total cost". This is the cost-saved-per-recall-lost objective from the design doc.
-3. Inference must remain sub-millisecond — same constraint as the TP/FP scoring model that ships today as `triage/learned-router.ts`. The XGBoost tree evaluator at `learned-router.ts` is the reference implementation; the routing classifier reuses the same loader pattern.
+3. Keep inference cheap. The separate `triage/learned-router.ts` scorer contains
+   hand-coded rules derived from an XGBoost experiment, not a generic XGBoost
+   tree loader or a shipped learned layer-selection classifier.
 4. The learned model lands as `class XGBoostRouter implements RouterModel`. Switching from `RuleBasedRouter` to `XGBoostRouter` requires a single line at module load:
 
 ```ts
@@ -165,6 +178,11 @@ The routing decision for every finding is recorded in:
 - `~/.0sec/runs/<scan-id>/routing-trace.jsonl` at scan teardown.
 
 The existing static feature flags (`0SEC_FEATURE_HOLDING_IT_WRONG`, `0SEC_FEATURE_POV_GATE`, etc.) still gate whether a layer **can** run; the router decides which of the available layers actually runs per finding. The router can never invoke a layer the operator explicitly disabled via the env var.
+
+Layer selection is not model-provider routing. The current registry includes
+`publishability`, `poc_gen`, and `kernel_oracle`; it does not include an
+adversarial-debate implementation. Registry membership is not a guarantee that
+every layer runs on every workflow or target.
 
 ## Related work
 

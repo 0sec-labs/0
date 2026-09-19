@@ -5,7 +5,9 @@ description: Measured behavior of 0's 11-layer triage pipeline across benchmark 
 
 Measured from the 21-profile ablation (2026-04-11) and follow-up reruns after EGATS was removed from default moat aliases. The measured effect is slice-dependent: strong on XBOW black-box, a precision/recall trade on XBOW white-box, and variance-sensitive on npm-bench at current sample size. See the [2026-04-11 ablation results log](/research/2026-04-11-ablation/) for full tables, [0sec#72](https://github.com/0sec-labs/0sec/issues/72) for run tracking, and [0sec#116](https://github.com/0sec-labs/0sec/issues/116) for the EGATS profile change.
 
-0's triage pipeline is a stack of independent filters, each tuned for a different failure mode. Every layer is open-source, toggleable via feature flags, and represented in benchmarked profiles.
+The tables below preserve the April experiment's profiles. They are not a
+current pipeline inventory: feature flags, gates, and verification paths have
+changed. The current implementation notes follow the dated measurements.
 
 Related: [Finding Triage ML](/research/finding-triage-ml/) (design doc), [Triage Dataset](/research/triage-dataset/), [Feature Extractor](/research/feature-extractor/), [Architecture](/architecture/) (pipeline slot).
 
@@ -35,7 +37,10 @@ Published triage systems combine rules, reachability, neural models, and memory:
 
 ## Measured results — 2026-04-11 ablation
 
-The headline numbers from the 21-run ablation matrix dispatched on 2026-04-11. Every profile below is defined in `.github/workflows/xbow-bench.yml` and is reproducible via `gh workflow run xbow-bench.yml -f features=<profile>`.
+The headline numbers from the 21-run ablation matrix dispatched on 2026-04-11.
+The referenced `.github/workflows/xbow-bench.yml` is no longer in this checkout;
+the historical run/profile receipts, not a current workflow dispatch, define
+these configurations.
 
 ### XBOW white-box, limit=50 (4 profiles)
 
@@ -106,75 +111,46 @@ To figure out which moat layer causes the flag losses in white-box, each one was
 
 - [Triage Dataset](/research/triage-dataset/) — JSONL generation from XBOW,
   npm-bench, and verified local scans
-- [Feature Extractor](/research/feature-extractor/) — the 45 handcrafted
-  features carried in every row
+- [Feature Extractor](/research/feature-extractor/) — currently 55 handcrafted
+  features (the original 45 plus 10 kernel-crash features)
 
-## Runtime stack (11 shipped layers)
+## Runtime stack (current implementation boundaries)
 
-```mermaid
-flowchart TD
-    IN["Raw agent findings"]
-    IN --> L1["Layer 1 · Holding-it-wrong\nremoves library-API-as-vuln"]
-    L1 --> L2["Layer 2 · 45-feature extractor\n~15.9% FPR alone - VulnBERT"]
-    L2 --> L3["Layer 3 · Reachability gate\nkills dead code - Endor ~95% depends on this"]
-    L3 --> L4["Layer 4 · Per-class oracles\ndeterministic exploit proof"]
-    L4 --> L5["Layer 5 · Multi-modal foxguard\nrules+neural agreement"]
-    L5 --> L6["Layer 6 · Structured 4-step verify\nGitHub SL reference"]
-    L6 --> L7["Layer 7 · Consensus voting\nself-consistency majority"]
-    L7 --> L8["Layer 8 · PoV gate\nno executable PoC = FP"]
-    L8 --> L9["Layer 9 · Triage memories\nSemgrep ~96% with feedback"]
-    L9 --> L10["Layer 10 · Adversarial debate\nAnthropic arXiv:2402.06782"]
-    L10 --> OUT["Verified findings"]
+The historical “11-layer” label does not mean eleven independent proofs execute
+on every finding. The scanner gates checks by target type, available evidence,
+feature settings, and earlier verdicts. `triage/router/layer-registry.ts` lists
+dispatch IDs; `agentic-scanner.ts` contains the actual execution decisions.
 
-    style IN fill:#ef4444,stroke:#991b1b,color:#fff
-    style L1 fill:#7c2d12,stroke:#e94560,color:#fff
-    style L2 fill:#9a3412,stroke:#e94560,color:#fff
-    style L3 fill:#b45309,stroke:#e94560,color:#fff
-    style L4 fill:#a16207,stroke:#e94560,color:#fff
-    style L5 fill:#65a30d,stroke:#e94560,color:#fff
-    style L6 fill:#16a34a,stroke:#e94560,color:#fff
-    style L7 fill:#059669,stroke:#e94560,color:#fff
-    style L8 fill:#0d9488,stroke:#e94560,color:#fff
-    style L9 fill:#0891b2,stroke:#e94560,color:#fff
-    style L10 fill:#533483,stroke:#e94560,color:#fff
-    style OUT fill:#10b981,stroke:#059669,color:#fff
-```
+| Component | Current module | What it establishes |
+|---|---|---|
+| Holding-it-wrong | `triage/holding-it-wrong.ts` | Pattern-based triage, not proof that an API is safe in every calling context |
+| Evidence completeness | `triage/feature-extractor.ts` and scanner | Presence/shape of evidence; 55 features do not independently verify claims |
+| Reachability | `triage/reachability.ts` | Conservative source-pattern assessment, not full interprocedural proof |
+| Per-class oracles | `triage/oracles.ts` | Category-specific observed signals; unsupported or inconclusive cases need further verification |
+| Scanner agreement | `triage/multi-modal.ts` | FoxGuard agreement/disagreement on the tree, not independent exploit reproduction |
+| Publishability | `triage/publishability.ts` | Scope, known-advisory and disclosure eligibility checks, separate from exploitability |
+| Structured/consensus verification | `triage/structured-verify.ts` | Four model-judgment steps and optional repeated votes; not equivalent to executable replay |
+| PoV generation | `triage/pov-gate.ts` | Attempts a bounded proof; unavailable execution and failed reproduction need explicit interpretation |
+| Memory context | `triage/memories.ts` | Prior explanations supplied as untrusted context, not authority over fresh evidence |
+| Kernel oracle | `triage/kernel-oracle.ts` | Distinguishes execution, recognized/matching crash evidence, and static-only assessment |
 
-Each layer rejects or downgrades a fraction of the false positives that survived the previous layer. The numbers below are published figures for the reference technique — not a promise for any particular 0 scan — but they show the shape of the stack.
+There is no current `triage/adversarial.ts` implementation. The `feat-debate`
+rows above remain historical results, not instructions to enable a current
+debate flag. Cross-family hunt refutation lives in `stages/hunt-cross-family.ts`;
+it is a different mechanism with explicit fallback states.
 
-| # | Layer | Module | Reference signal | Acts on |
-|---|-------|--------|-----------------------------------|---------|
-| 0 | Raw agent findings | `agentic-scanner.ts` | baseline (~50% FP on noisy targets) | — |
-| 1 | Holding-it-wrong filter | `triage/holding-it-wrong.ts` | Removes library-API-as-vuln category entirely | Sink name |
-| 2 | Feature extractor (45 features) | `triage/feature-extractor.ts` | 15.9% FPR alone (VulnBERT ablation) | Finding fields |
-| 3 | Reachability gate | `triage/reachability.ts` | Large (Endor Labs' ~95% headline depends on this) | Source tree |
-| 4 | Per-class oracles | `triage/oracles.ts` | Exploitable-only acceptance | Live target |
-| 5 | Multi-modal (foxguard) | `triage/multi-modal.ts` | Mirrors Endor Labs' rules+neural agreement (~95% class) | Source tree |
-| 6 | Structured 4-step verify | `triage/verify-pipeline.ts` | GitHub Security Lab reference (~30 real vulns surfaced from noise) | Finding + target |
-| 7 | Consensus (self-consistency) | `verify-pipeline.ts` `runSelfConsistencyVerify` | Self-consistency voting converts single-run variance into stable majority | Finding + target |
-| 8 | PoV gate | `triage/pov-gate.ts` | "Fuzzing Brain" empirical: no PoC = almost always FP | Live target |
-| 9 | Triage memories | `triage/memories.ts` | Semgrep Assistant ~96% auto-triage (with user feedback) | Historical triage |
-| 10 | Adversarial debate | `triage/adversarial.ts` | Anthropic debate reference | Finding + target |
-
-The full stack reduces findings substantially on XBOW, with slice-dependent recall/cost tradeoffs. Public SAST reference numbers are directional context, not directly comparable to agent-generated web exploitation findings.
+External reference metrics in this page apply to those systems' own datasets.
+They cannot be multiplied into a predicted 0 false-positive rate, attributed
+to the feature extractor, or interpreted as guarantees about individual findings.
+See [Verification Results](/verification-result/) for evidence states.
 
 <span id="why-the-stack-ordering-matters"></span>
 ### Layer order
 
-Layers 1-3 are free (no LLM cost). Layers 4-5 need a live target or local tool but no LLM spend. Layers 6-10 spend LLM tokens only on findings that survived the free layers.
-
-| # | Layer | Cost | Effect |
-|---|-------|------|--------|
-| 1 | Holding-it-wrong | microsecond, ~100% precision when it fires | Pure blocklist removes library-API-as-vuln |
-| 2 | Features | regex/string ops, sub-millisecond | Fast prior: ~16% FPR alone (VulnBERT ablation) |
-| 3 | Reachability | milliseconds (grep over source tree) | Kills findings in dead code |
-| 4 | Oracles | deterministic exploit attempt | Verified = accept, zero LLM cost |
-| 5 | Multi-modal (foxguard) | independent scanner, no LLM | Agreement doubles confidence |
-| 6 | Structured verify | 4-step decomposition + category addendums | GitHub Security Lab reference architecture |
-| 7 | Consensus | majority vote, early termination | Converts single-shot variance into stable verdict |
-| 8 | PoV gate | mini agent loop | "No executable exploit = no finding" |
-| 9 | Memories | SQLite store lookup | Known FP patterns auto-reject without verify |
-| 10 | Debate | two-agent adversarial | Tie-breaker for unresolved cases |
+Cheap local checks can reduce work before model-assisted review, but cost and
+ordering depend on the actual branch. The dynamic layer selector and learned
+TP/FP scorer are separately opt-in; neither is a model-provider router. Record
+the active configuration and measured recall/cost together when evaluating them.
 
 <span id="why-this-is-auditable"></span>
 ## Audit records
@@ -192,7 +168,9 @@ Every moat component is inspectable:
 
 <span id="every-layer-ships-as-a-feature-flag"></span>
 
-Each layer ships as a feature flag (`0SEC_FEATURE_*` in `packages/core/src/agent/features.ts`), enabling independent A/B testing against the XBOW benchmark.
+Feature controls live in `packages/core/src/agent/features.ts`. Some checks are
+always-on or target-specific; do not assume every registry entry has an
+independently runnable feature flag.
 
 <span id="dataset-pipeline"></span>
 
@@ -200,7 +178,11 @@ The moat has an offline data-generation surface in addition to live runtime filt
 
 <span id="conservative-by-default"></span>
 
-Uncertainty policies vary by layer. Reachability returns `reachable: true` with low confidence when patterns give no verdict. Memories reject strong matches above a configurable threshold. Consensus defaults ties to `rejected`, with a caller opt-out.
+Uncertainty policies vary by layer. Reachability conservatively retains
+uncertain paths. Structured consensus ties are rejected/unverified, not proof
+of a false positive. Current structured verification uses memory explanations
+as untrusted context and still runs its steps; historical labels cannot
+authorize suppression of current evidence.
 
 <span id="foxguard--0sec-cross-validation"></span>
 <span id="zero-proprietary-dependencies"></span>
@@ -216,7 +198,7 @@ These components use open-source dependencies:
 
 - [Finding Triage ML](/research/finding-triage-ml/) — the design doc, feature list, datasets, and planned Layer 2/3 neural components.
 - [Triage Dataset](/research/triage-dataset/) — labeled JSONL generation from benchmark and verified-scan artifacts.
-- [Feature Extractor](/research/feature-extractor/) — the 45-feature reference and group-by-group rationale.
+- [Feature Extractor](/research/feature-extractor/) — the current 55-feature reference and group-by-group rationale.
 - [Agent Techniques](/research/agent-techniques/) — attack-phase techniques (early-stop, playbooks, EGATS, racing, handoff).
 - [Architecture](/architecture/) — how the triage stage fits into the overall plan-discover-attack-verify-report pipeline.
 - [Competitive Landscape](/research/competitive-landscape/) — how 0's stack compares to BoxPwnr, Shannon, KinoSec, and the academic agents.

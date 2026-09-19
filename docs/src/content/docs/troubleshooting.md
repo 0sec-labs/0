@@ -17,6 +17,8 @@ Failures usually mean one of:
 | `checksums.txt has no entry for ...` | Platform/arch not published for the latest release |
 | `checksum mismatch` | Download corrupted; retry. If persistent, [contact the team](https://0.security/contact/?intent=contact) |
 | `curl is required` | `curl` not installed. Install it (`apt install curl`, `brew install curl`) |
+| `sha256sum or shasum is required` | Install a SHA-256 utility; do not bypass checksum verification |
+| `refusing to replace existing .../0` | The installer found a regular file or unrelated symlink at the alias path; inspect it and choose an unused `INSTALL_DIR` rather than overwriting another program |
 
 Supported release assets (from `.github/workflows/release.yml`):
 
@@ -27,13 +29,24 @@ Supported release assets (from `.github/workflows/release.yml`):
 | `0sec-darwin-arm64` | macOS Apple Silicon |
 | `0sec-windows-x64.exe` | Windows x86_64 (manual download — install.sh supports Linux/macOS only) |
 
+Intel macOS is not in this native release matrix. Use a supported source/npm
+runtime or the container rather than renaming an Apple Silicon binary.
+`RELEASE_BASE_URL` must point to a release download directory containing both
+the binary and its matching `checksums.txt`; changing it does not change the
+pinned FoxGuard download.
+
 ### FoxGuard provisioning fails
 
 `install.sh` auto-provisions the FoxGuard static analyzer binary. If it fails:
 
-- `INSTALL_FOXGUARD=0` skips the provisioning — use this for pre-provisioned
-  hosts or CI runners that don't need static analysis
-- FoxGuard requires a working `curl` and write access to `~/.0sec/bin/`
+- `INSTALL_FOXGUARD=0` skips provisioning for a host where you deliberately
+  supply or do not need the analyzer; it does not provide equivalent static coverage.
+- FoxGuard requires working `curl`, checksum verification and write access to
+  `INSTALL_DIR` (default `~/.0sec/bin`).
+- The main binary and alias are installed before FoxGuard is downloaded, so a
+  companion failure can leave the CLI installed. Correct the failure and rerun
+  the installer. `FOXGUARD_TAG` cannot select an arbitrary release: its checksums
+  are pinned in the script.
 
 ```bash
 # Install without FoxGuard
@@ -65,6 +78,14 @@ Download the release asset manually from the
 ```
 
 Replace your current binary in place. Auto-upgrade is tracked separately.
+The Unix alias is not created. In PowerShell, run the actual downloaded file:
+
+```powershell
+.\0sec-windows-x64.exe --help
+```
+
+Download `checksums.txt` from the same release and compare its entry with
+`Get-FileHash .\0sec-windows-x64.exe -Algorithm SHA256` before execution.
 
 ## Runtime
 
@@ -85,6 +106,11 @@ The standalone release binary includes its runtime and does not require Node
 or Bun installed separately. The full terminal UI requires Bun when running
 from source; Node provides the readline fallback.
 
+If `pnpm build` succeeds but `0` is missing, that is expected: a source checkout
+does not globally install an alias. Use `node packages/cli/dist/index.js --help`
+or `bun packages/cli/dist/index.js` for the TUI. The published Node package is
+`0sec-cli`; install it with `npm install -g 0sec-cli` if you want global commands.
+
 ### No API runtime configured
 
 `0 doctor` reports `API runtime missing`:
@@ -102,7 +128,10 @@ export ANTHROPIC_API_KEY="sk-ant-..."
 export OPENAI_API_KEY="sk-..."
 ```
 
-Then run `0 doctor` again to confirm.
+Then run `0 doctor` again to check configuration discovery. **Configured is not
+authenticated**: doctor checks local prerequisites; the first model request
+establishes whether credentials, model access and quota actually work. Under
+Bun with a TTY, doctor opens its interactive screen instead of the text table.
 
 ### API runtime configured but unusable
 
@@ -110,15 +139,16 @@ Then run `0 doctor` again to confirm.
 API runtime   bad  Azure OpenAI
 ```
 
-The runtime detected environment variables for a provider, but the credentials
-are incomplete or invalid. Common cases:
+The runtime detected a provider but its local configuration is incomplete or
+unusable. This is not a live provider-authentication test. Common cases:
 
 | Provider | Missing |
 |----------|---------|
 | Azure OpenAI | `AZURE_OPENAI_BASE_URL` or `AZURE_OPENAI_MODEL` not set. The base URL must include `/openai/v1` for the Responses API |
 | ChatGPT Codex | Neither `0SEC_CHATGPT_ACCESS_TOKEN`, `0SEC_CHATGPT_OAUTH_REFRESH_TOKEN`, nor `~/.codex/auth.json` was found. Run `codex login` first, or pass the env var directly: `env 0SEC_CHATGPT_OAUTH_REFRESH_TOKEN="..." 0 scan ...` |
 
-Azure OpenAI configuration requires all three variables:
+For an explicit Azure setup, supply all three variables (a supported Azure-backed
+Codex config can also supply deployment configuration):
 
 ```bash
 export AZURE_OPENAI_API_KEY="..."
@@ -161,8 +191,9 @@ Common causes:
   [Configuration](/configuration/) for available models
 - **Network error** — the provider API is unreachable. Check network connectivity
   and proxy settings
-- **Timeout** — the scan ran longer than `--timeout`. Increase the timeout or
-  reduce scan depth with `--depth quick`
+- **Timeout** — a request or agent operation exceeded its configured timeout.
+  `scan --timeout` is a request timeout, not a universal wall-clock scan limit.
+  Check the failing stage before raising it; reduce depth if less work is appropriate.
 
 See [Budget Management](/budget-management/) for cost and timeout controls.
 
@@ -212,26 +243,28 @@ For an operator-provided host, retry `0 auth login` or use the manual token path
 
 ### Multiple providers configured — which one is used?
 
-0 picks the first available provider from the configured variables. To pin a
-specific model, use `--model <id>` or `0SEC_MODEL`. Model routing recognizes:
+Routing is not simply “first key wins.” A saved or explicit provider selection,
+per-call model override, model prefix and available credentials can all affect
+the route. Review the active model/provider in `/model` and follow
+[provider pinning](/api-keys/#provider-pinning).
 
-| Prefix | Provider |
-|--------|----------|
-| `claude-*` / `anthropic/*` | Anthropic |
-| `gpt-*` / `o*` | ChatGPT Codex subscription (if configured), then OpenAI |
-| `glm-*` / `z-ai/*` | Z.ai |
-| `qwen*` | Alibaba Qwen |
-| `grok*` / `xai/*` | xAI Grok |
-| `opencode/*` | OpenCode Zen (preserves upstream protocol) |
-| Other | Detected from credential presence |
+For a direct OpenAI route without deleting other keys:
 
-If no explicit model is set, 0 picks an available fallback. Pin a model
-rather than relying on ambient credential order.
+```bash
+env 0SEC_SELECTED_PROVIDER=openai 0SEC_MODEL="<model-id-your-account-can-use>" \
+  0 review ./authorized-repo --runtime api
+```
+
+Replace the model ID with one your provider exposes. In the TUI, connecting a
+provider usually stages the next chat rather than replacing a healthy current
+runtime: reselect the model in `/model` to apply it live. A worker-role override
+is inactive while single-model mode is enabled; **Ctrl+S** in `/model` toggles
+that policy. See [model picker controls](/console/#model-picker).
 
 ### `0SEC_*` env vars with leading digit
 
 Variables like `0SEC_CHATGPT_ACCESS_TOKEN` start with a digit. Most shells
-reject `export 0SEC_*=...`. Use `env` or a subshell:
+reject `export 0SEC_*=...`. Pass them to the process with `env`:
 
 ```bash
 # Correct
@@ -293,15 +326,22 @@ works in your installed build.
 
 ### Deep review produces no findings
 
-Possible causes:
+`deep-review` emits **leads**, not confirmed bugs. Inspect its JSON status,
+warnings and incomplete coverage, not just the findings list:
 
-- **No matching evidence** — the analysis found no vulnerability patterns; review coverage before drawing conclusions
-- **Provider could not analyze** — try a different model or runtime
-  (`--runtime claude`, `--model claude-sonnet-4`)
-- **Scope too narrow** — `--changed-only --diff-base <sha>` limits the review to
-  diff lines. Remove `--changed-only` for a full review
-- **Budget exhausted** — `--cost-ceiling` hit before analysis completed. Increase
-  the ceiling or remove it
+- **Exit 0** — the sweep completed, with or without leads; this is not a
+  claim that the whole source tree is secure.
+- **Exit 2** — skipped, for example no candidate files or a tree over the
+  review cap. Use `--subsystem` to narrow a deliberately large target.
+- **Exit 3** — error, including unreadable targets, bad flags or all finders
+  failing. Resolve the reported failure before interpreting zero results.
+- **Limited coverage** — `--max-candidates`, `--models`, `--attempts`,
+  concurrency and budget constrain the work. Increase only the relevant limit
+  after inspecting the coverage report and provider capacity.
+
+`--changed-only`, `--diff-base` and singular `--model` are not deep-review
+options. Use its plural `--models <a,b>` and command-specific
+`0 deep-review --help`; do not copy the ordinary review command's flags.
 
 ### Scan times out
 
@@ -314,11 +354,11 @@ Possible causes:
 For the MCP server, the default per-tool timeout is 30 seconds:
 
 ```bash
-0 mcp-server --target https://example.com --scan-id s1 --timeout 60000
+0 mcp-server --target https://example.com --scan-id s1 --scope ./scope.json --timeout 60000
 ```
 
-Deep scans on complex targets can take 10-30 minutes. Use `--depth quick` for
-faster results.
+Total duration depends on work, concurrency and provider response time. There is
+no fixed completion time implied by `--depth quick` or a longer request timeout.
 
 ### `spawnSync rg ENOENT` warnings
 
@@ -350,37 +390,39 @@ PDF reports require pdfkit (bundled in the CLI dependencies).
 
 ### Report contains warnings section
 
-The report JSON and SARIF may include a `warnings` array. Warnings indicate
-non-fatal issues:
-
-- Provider returned partial responses
-- Some scan modes were unavailable for the target type
-- Scope rules excluded certain endpoints
-
-Warnings appear in the GitHub Actions output summary when using the action
-wrapper.
+Warnings describe degraded or incomplete work, not successful verification.
+Read the warning's stage and message alongside scan status and coverage; a
+report with zero findings after provider/tool failures is not a clean bill of
+health. Preserve the database and any emitted journal when reporting a failure.
+The report formats expose warnings differently, so inspect the JSON result
+when you need structured diagnostics. Do not assume a CI wrapper publishes
+warnings unless your actual workflow is configured to do so.
 
 ## Docker
 
 ### Container exits immediately
 
-The image shows CLI help by default. Pass a command:
+The image shows CLI help by default. It does not automatically mount your
+current directory or inherit host credentials. Pass both explicitly:
 
 ```bash
-docker run --rm ghcr.io/0sec-labs/0sec:latest review .
+docker run --rm -e ANTHROPIC_API_KEY \
+  -v "$PWD:/work/source:ro" ghcr.io/0sec-labs/0sec:latest \
+  review /work/source --runtime api --depth quick
 ```
+
+Add a writable output mount and explicit database/report paths when results
+must survive `--rm`; see the [container workflow](/getting-started/#run-your-first-scan).
+The image runs Node, so adding `-it` does not turn it into the Bun TUI.
 
 ### Permission errors on mounted volumes
 
-The container runs as `ubuntu` (uid 1000). Prefer a mount with matching ownership or narrowly granted read access. The `chmod` example below exposes source to every local user; avoid it for private code.
-
-```bash
-# If your files are owned by uid 1000, they work directly:
-docker run --rm -v "$PWD:/work" ghcr.io/0sec-labs/0sec:latest review .
-
-# Otherwise, ensure world-readable permissions:
-chmod -R o+r /path/to/source
-```
+The container runs as `ubuntu` (UID 1000). Give that user narrowly scoped access
+to the mounted source and a separate writable output directory. Directory
+traversal needs execute permission as well as file read permission. On Linux,
+check host ownership/ACLs; on Docker Desktop, also check file-sharing settings.
+Do not recursively make private source world-readable as a general workaround,
+and do not grant write access to source just to make report output work.
 
 ### AD tools not found despite being in the image
 
@@ -399,85 +441,113 @@ the agent's helper scripts can import the apt-managed `requests` and `bs4`.
 
 ### SQLite database locked
 
-Multiple concurrent scans writing to the same database file can produce
-`SQLITE_BUSY` errors. Each scan/review/console session should have its own
-database, or use `--db-path` to point to an exclusive path:
+The database uses a WASM SQLite backend with rollback journaling, not WAL.
+Concurrent writers can contend. First stop the competing scan/dashboard
+writer cleanly and retry; do not remove a live database or lock directory.
+Initialization and migrations are transactional, but that does not make
+concurrent writers unlimited. For intentionally separate runs, choose separate
+database paths and keep each with its run artifacts.
+
+Fresh scan/review runs already receive isolated
+`~/.0sec/runs/<run-id>/state.db` paths unless overridden. Reusing one explicit
+`--db-path` or `0SEC_DB_PATH` across jobs defeats that separation; the console
+still uses its shared local store by default.
 
 ```bash
 0 scan --target https://example.com --scope ./scope.json --db-path ./scans/scan-001.db
 ```
 
+After a crashed process, the database opener can clear an advisory `.lock`
+directory older than its stale-lock threshold (10 seconds). A stale lock is
+different from corruption. Preserve a backup before repair; `0 db repair`
+recreates the working database after moving the old file aside and does not
+recover its rows. Do not use reset/repair as the first response to contention.
+
 ### Resume scan not found
 
-`0 resume` looks up a previous scan by ID or by the database path. Ensure
-the database from the original scan is still available and pass `--db-path`:
+`0 resume` requires a scan ID (or unique prefix); a database path alone is not
+enough. Keep the original database and its sibling run artifacts, then pass both:
 
 ```bash
-0 resume --db-path ./scans/scan-001.db
+0 resume <scan-id> --db-path ./scans/scan-001.db
 ```
 
 The scan ID is printed at the start of the original run.
+`0 console --resume` is separate: it loads a saved chat transcript, not a scan
+checkpoint. See [console resume](/console/#resume) for its scope and model
+limitations.
 
 ## TUI / Console
 
 ### Console doesn't start
 
-The interactive console requires a TUI-capable terminal and OpenTUI support.
+The full UI needs the standalone Bun-compiled release, or Bun plus an installed
+source checkout, and both stdin and stdout must be TTYs. Node and redirected
+stdio do not select the TUI.
 
 ```bash
 # Verify prerequisites
 0 doctor
 ```
 
-If running from source, ensure `@opentui/core` and `@opentui/react` are
-installed (they are bundled in the CLI package). The bun-compiled binary
-includes everything.
+For a source checkout, install the repository dependencies and run
+`bun packages/cli/dist/index.js` after building. Running the same entry point
+with Node selects readline, which requires `--scope`; default YOLO also requires
+a nonempty `in_scope` list. The Docker image similarly uses Node.
+
+See [launch and approval limitations](/console/#launch) before substituting
+readline or `--print`: Standard without an approval callback is not fail-closed,
+and Co-pilot does not prompt for each effectful call.
 
 ### `/providers` command shows no options
 
-The console's `/providers` (or `/connect`) command lists available LLM providers.
-If none appear:
+`/providers` now opens the same connection pane as `/connect`; it is not a
+read-only credential-status listing. The pane offers connections before keys
+are configured. If a provider is disconnected, choose its supported method and
+finish sign-in or key entry, then select the model again in `/model`.
 
-- No provider credentials are configured. See [API Keys](/api-keys/)
-- The console cannot detect `~/.codex/auth.json`. Point to it explicitly via
-  env var or run `codex login` first
+If a saved credential appears missing, check which home directory the process
+uses and whether its `~/.0sec/credentials.json` is readable. An explicit
+environment credential takes precedence over the store. Do not paste that
+file into a bug report. See [API Keys](/api-keys/) for Codex auth-file overrides
+and provider-specific requirements.
 
 ### Finding chat intent does nothing
 
-The `--finding-intent` flag accepts one of three values:
+`--finding-intent` requires `--finding <id>` and accepts four prompt workflows:
 
-| Intent | Behavior |
-|--------|----------|
-| `investigate` (default) | Assess evidence, no source file modifications |
-| `verify` | Independent impact assessment, minimum reproduction |
-| `draft_fix` | Source root cause to patch and regression test (never applied) |
+| Intent | Instruction given to the model |
+|--------|-------------------------------|
+| `investigate` (default) | Assess evidence and propose the next authorized step; do not modify source |
+| `verify` | Independently assess impact and identify a minimal authorized reproduction; do not modify source |
+| `draft_fix` | Propose a minimal patch and regression test; wait for separate approval before applying |
+| `impact` | Explain evidence-qualified business impact and conditional chains; do not execute tools or expand scope |
 
-Invalid values produce:
-
-```
-Invalid --finding-intent '...'; expected one of investigate, verify, draft_fix.
-```
+These are instructions, not a separate filesystem sandbox or replacement for
+mode/tool authorization. Invalid values report the allowed list. Check that the
+finding exists in the database selected by `--db-path`; an unrelated scan ID or
+chat-session ID is not a finding ID.
 
 ## Known gaps
 
 | Gap | Details |
 |-----|---------|
 | **No composite GitHub Action** | The planned `.github/actions/0sec-scan` composite action has not shipped. Use the container image or binary install instead |
-| **Plugin registry empty** | The default plugin registry endpoint has no published plugins. The plugin system is scaffolded but no marketplace ships yet |
+| **Marketplace availability** | The TUI and plugin execution exist; catalog availability depends on the configured registry. Installation and enablement are separate. See [Hackstore](/hackstore/) |
 | **Windows upgrade** | `0 upgrade` does not support Windows. Download release assets manually |
 | **MCP transport** | The MCP server uses stdio transport only. SSE/WebSocket transport is not implemented |
-| **Cloud auth browser flow** | The browser-based login flow depends on the server-side session-mint endpoint. The `--token` escape hatch works independently |
+| **Cloud access** | Device/browser login and authenticated account/model endpoints require a compatible service. A manual token does not bypass service authorization or hosted request admission |
 
 ## Diagnostic quick reference
 
 | Command | What it checks |
 |---------|----------------|
 | `0 doctor` | Node version, API runtime, CLI runtimes |
-| `0 auth status` | Cloud credential validity against `/health` |
+| `0 auth status` | Cloud credential validity against the authenticated account endpoint |
 | `0 h1 auth` | HackerOne API credential validity |
 | `0 --version` | CLI version |
 | `0 config show` | Effective layered configuration (global + project) |
-| `0 scan --target <url> --dry-run` | Preview `--emit pr` publication commands only; the scan still executes |
+| `0 scan ... --emit pr --dry-run` | Preview publication commands only; the scan still executes and needs ordinary target authorization |
 
 ## See also
 

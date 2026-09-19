@@ -82,12 +82,12 @@ Guide: [Read the workflow](/console/).
 | Option | Registered default | Description |
 | --- | --- | --- |
 | `--target <url>` | — | Engagement target the tools operate against (optional; can be named in-chat) |
-| `--scope <file>` | — | Initial authorization scope; required for the Node fallback (optional otherwise) |
+| `--scope <file>` | — | Initial authorization scope. Non-TUI YOLO requires at least one in_scope entry; a scope file is not an OS-isolation boundary. |
 | `--finding <id>` | — | Focus the chat on one persisted finding |
-| `--finding-intent <intent>` | — | Finding workflow: investigate, verify, or draft_fix |
+| `--finding-intent <intent>` | — | Finding workflow: investigate, verify, draft_fix, or impact. These instructions do not independently enforce tool permissions. |
 | `--db-path <path>` | — | Persistent findings database (defaults to 0SEC_DB_PATH or the local store) |
-| `-m, --model <id>` | — | Override the LLM model id (else provider default) |
-| `--role <role>` | — | Tool set to expose: audit\|review\|discovery\|attack\|verify (default audit = every tool) |
+| `-m, --model <id>` | — | Model selection for the console. Saved-session precedence differs across TUI, readline, and print paths; see Console. |
+| `--role <role>` | — | Tool set to expose: audit, review, discovery, attack, verify, or report. Defaults to audit; role selection is not authorization or OS isolation. |
 | `--mode <mode>` | — | Autonomy mode: standard, recon, copilot, yolo. YOLO accepts absolute public-network targets without a launch target; explicit restrictions and exclusions still apply. |
 | `--yolo` | — | Shortcut for --mode yolo. Omits per-action approval prompts; explicit restrictions and exclusions still apply. |
 | `--autonomy <mode>` | — | Alias of --mode (standard\|copilot\|yolo\|recon); --mode/--yolo take precedence. |
@@ -111,7 +111,7 @@ See [Console](/console/) for Standard, Recon, Co-pilot, and YOLO behavior. No mo
 
 #### Approval prompts
 
-Tool, network-scope, and directory approvals are distinct gates; headless execution cannot approve an interactive request. See [Console](/console/).
+Tool, network-scope, and directory approvals are distinct gates. Standard's per-action prompts require a wired approval callback; Co-pilot skips that gate, and callback-free headless paths do not fail closed. Headless execution cannot answer an interactive request. Check the [console mode and launcher limitations](/console/) before relying on an approval boundary.
 
 #### Session persistence
 
@@ -385,28 +385,28 @@ Guide: [Read the workflow](/scan-workflows/).
 | `-m, --model <model>` | — | LLM model to use |
 | `--repo <path>` | — | Source code path for white-box scanning (read code before attacking) |
 | `--auth <json>` | — | Auth credentials as JSON string or path to JSON file (types: bearer, cookie, basic, header) |
-| `--scope <path>` | — | Path to a JSON scope file ({in_scope, out_of_scope} arrays of host / *.domain / cidr rules). Out-of-scope URLs return as ToolResult.error at every fetch site. See 0#215. |
-| `--allow-scanners` | `false` | Disable the generic-scanner suppression gate (0#217). When --scope is set, the agent refuses to spawn sqlmap/wpscan/nikto/gobuster/dirb/wfuzz/ffuf/`nmap -sV`/`nmap -A` by default; pass this flag only when the engagement explicitly permits generic-scanner traffic. |
+| `--scope <path>` | — | Path to a JSON scope file ({in_scope, out_of_scope} arrays of host / *.domain / cidr rules). Out-of-scope URLs return as ToolResult.error at every fetch site. See 0sec#215. |
+| `--allow-scanners` | `false` | Disable the generic-scanner suppression gate (0sec#217). When --scope is set, the agent refuses to spawn sqlmap/wpscan/nikto/gobuster/dirb/wfuzz/ffuf/`nmap -sV`/`nmap -A` by default; pass this flag only when the engagement explicitly permits generic-scanner traffic. |
 | `--require-scope` | `false` | Set 0SEC_REQUIRE_SCOPE for scope-aware execution paths. Ordinary live-target scan already refuses missing scope, independently of this flag. |
-| `--attribution-header <name=value>` | — | Attribution header to attach to in-scope outbound requests (0#216). Repeatable: pass `--attribution-header X-A=1 --attribution-header X-B=2`. Lower precedence than the scope file's `attribution.headers` block and 0SEC_ATTRIBUTION_HEADERS env var. NEVER attached to out-of-scope traffic. |
-| `--attribution-ua <token>` | — | Engagement token to embed in the User-Agent on in-scope traffic (0#216). Resulting UA: `0sec/&lt;ver&gt; (engagement: &lt;token&gt;)`. Lower precedence than the scope file's `attribution.user_agent_token` and 0SEC_ATTRIBUTION_UA_TOKEN env var. |
+| `--attribution-header <name=value>` | — | Attribution header to attach to in-scope outbound requests (0sec#216). Repeatable: pass `--attribution-header X-A=1 --attribution-header X-B=2`. Lower precedence than the scope file's `attribution.headers` block and 0SEC_ATTRIBUTION_HEADERS env var. NEVER attached to out-of-scope traffic. |
+| `--attribution-ua <token>` | — | Engagement token to embed in the User-Agent on in-scope traffic (0sec#216). Resulting UA: `0sec/&lt;ver&gt; (engagement: &lt;token&gt;)`. Lower precedence than the scope file's `attribution.user_agent_token` and 0SEC_ATTRIBUTION_UA_TOKEN env var. |
 | `--api-spec <path>` | — | Path to OpenAPI 3.x / Swagger 2.0 spec file (JSON or YAML) for pre-loaded endpoint knowledge |
 | `--export <target>` | — | Export findings to issue tracker (e.g. github:owner/repo) |
 | `--race` | `false` | Enable benchmark/CTF best-of-N strategy racing: run multiple flag-oriented attack strategies in parallel. Do not use for normal live-target audits. |
 | `--egats` | `false` | Enable EGATS (Evidence-Gated Attack Tree Search): beam-search over a hypothesis tree |
-| `--cost-ceiling <usd>` | — | Hard per-scan USD cost ceiling. Aborts cleanly with partial findings if exceeded. Overrides 0SEC_COST_CEILING_USD. |
+| `--cost-ceiling <usd>` | — | Soft estimated-model-cost ceiling; partial findings are retained when enforcement trips. In-flight work may overshoot. Overrides 0SEC_COST_CEILING_USD. |
 | `--rate-limit <spec>` | — | Per-host requests-per-second cap for outbound scan traffic. Plain number (e.g. '5') sets the default rps; comma-separated form 'api.example.com=5,*.example.com=3:6,2' allows per-host overrides and a fallback default. Default is 5 rps when unset. Each host carries an independent token bucket; 429 responses honour Retry-After (with a conservative 60s floor). |
 | `--engagement-profile <name>` | — | Engagement hardening posture for authorized enterprise work. 'standard' (default) is the existing behaviour. 'conservative' applies ONE quiet posture: no password-reset burst probe, the deterministic web-recon pre-pass routed through the per-host rate limiter, no adaptive WAF-evasion ladder, full jitter on the token bucket, and a reduced default of 1 rps/host. The applied posture is recorded in the report as `engagementPosture` so it can be handed to the client as evidence. Lower precedence than the scope file's `engagement` block and 0SEC_ENGAGEMENT_PROFILE. |
 | `--no-waf-evasion` | — | Disable the adaptive WAF-evasion ladder (default: on). When a response classifies as blocked, the engine normally retries with encoding/casing/whitespace-mutated payload variants, which escalates a routine WAF block into a SOC incident. Detection and reporting of the block are unaffected. Independent of --engagement-profile; env form: 0SEC_WAF_EVASION=0. |
 | `--tui` | `false` | Open the local terminal UI after the scan completes |
 | `--features <list>` | — | Comma-separated list of opt-in feature flags to enable for this scan (e.g. 'wp_fingerprint,web_search'). Each flag maps to the corresponding 0SEC_FEATURE_&lt;NAME&gt; environment variable. The token 'fp-moat' is a preset that enables the full false-positive moat (reachability, multi-modal, publishability, pov-gate, poc-gen, consensus) for an A/B run; an env var you set yourself always wins over the preset, so '0SEC_FEATURE_POV_GATE=0 --features fp-moat' is a single-layer ablation. |
 | `--no-decoy-detection` | — | Disable the anti-honeypot flag-shape validator (default: on). When enabled, the `done` tool rejects low-confidence flags (e.g. `FLAG{I'm_a_Script_Kiddie}`) once with a hint to keep exploring. See GitHub issue #82. |
-| `--dispatch <mode>` | `auto` | Tool-call protocol for the legacy text agent loop (0#232): 'json' (default TOOL_CALL JSON lines), 'xml' (&lt;command&gt;/&lt;flag&gt;/&lt;finding&gt;/&lt;note&gt; tags — survives malformed JSON from cheap OpenRouter / Gemini / DeepSeek models), or 'auto' (xml for cheap providers, json otherwise). No effect on the native API loop. Env override: 0SEC_DISPATCH=xml. |
-| `--emit <target>` | — | Emit target. Default unset → existing terminal/json/etc. `pr` → emit each reproduced finding as a GitHub PR with repro + suggested patch (0#377). Unverified findings roll up into `hypotheses.md`. |
+| `--dispatch <mode>` | `auto` | Tool-call protocol for the legacy text agent loop (0sec#232): 'json' (default TOOL_CALL JSON lines), 'xml' (&lt;command&gt;/&lt;flag&gt;/&lt;finding&gt;/&lt;note&gt; tags — survives malformed JSON from cheap OpenRouter / Gemini / DeepSeek models), or 'auto' (xml for cheap providers, json otherwise). No effect on the native API loop. Env override: 0SEC_DISPATCH=xml. |
+| `--emit <target>` | — | Emit target. Default unset → existing terminal/json/etc. `pr` → emit each reproduced finding as a GitHub PR with repro + suggested patch (0sec#377). Unverified findings roll up into `hypotheses.md`. |
 | `--base <branch>` | — | Base branch for `--emit pr` (default: main) |
 | `--dry-run` | `false` | For --emit pr only: print proposed git/gh emission commands. The scan itself still executes. |
 | `--emit-out-dir <path>` | — | Directory for `--emit pr` rollup files (default: system temp) |
-| `--resume <run-id>` | — | Resume a previous run from its journal on disk (0#374). Locates the run's journal, rehydrates agent state, and continues from the last entry. |
+| `--resume <run-id>` | — | Resume a previous run from its journal on disk (0sec#374). Locates the run's journal, rehydrates agent state, and continues from the last entry. |
 | `--branch-from <entry-index>` | — | Branch the journal at the given entry index before resuming (requires --resume). Copies entries 0..N into a new run and resumes from there. |
 | `--verbose` | `false` | Show detailed output |
 | `--replay` | `false` | Replay the last scan's results |
@@ -476,9 +476,9 @@ Guide: [Read the workflow](/scan-workflows/).
 | `--db-path <path>` | — | Path to SQLite database |
 | `--api-key <key>` | — | API key for LLM provider |
 | `-m, --model <model>` | — | LLM model to use |
-| `--cost-ceiling <usd>` | — | Hard per-audit USD cost ceiling. Aborts cleanly with partial findings if exceeded. |
+| `--cost-ceiling <usd>` | — | Soft estimated-model-cost ceiling; partial findings are retained when enforcement trips. In-flight work may overshoot. Overrides 0SEC_COST_CEILING_USD. |
 | `--tui` | `false` | Open the local terminal UI after the audit completes |
-| `--resume <run-id>` | — | Resume a previous run from its journal on disk (0#374) |
+| `--resume <run-id>` | — | Resume a previous run from its journal on disk (0sec#374) |
 | `--branch-from <entry-index>` | — | Branch the journal at the given entry index before resuming (requires --resume). |
 | `--verbose` | `false` | Show detailed output |
 | `--timeout <ms>` | `600000` | AI agent timeout in milliseconds |
@@ -507,17 +507,17 @@ Guide: [Read the workflow](/scan-workflows/).
 | `--db-path <path>` | — | Path to SQLite database |
 | `--api-key <key>` | — | API key for LLM provider |
 | `-m, --model <model>` | — | LLM model to use |
-| `--cost-ceiling <usd>` | — | Hard per-review USD cost ceiling. Aborts cleanly with partial findings if exceeded. |
+| `--cost-ceiling <usd>` | — | Soft estimated-model-cost ceiling; partial findings are retained when enforcement trips. In-flight work may overshoot. Overrides 0SEC_COST_CEILING_USD. |
 | `--tui` | `false` | Open the local terminal UI after the review completes |
 | `--diff-base <ref>` | — | Git base ref to review against (for diff-aware review) |
 | `--changed-only` | `false` | Restrict static scanner leads + prioritization to changed files |
 | `--profile <profile>` | `default` | Review profile: default (web/JS/TS/Python), c-library (C/C++ memory safety, tier-1/2/3 harness), linux-kernel (kernel-aware static review), cardano-onchain (Aiken/Plutus validator logic), solana-onchain (Anchor/native Rust account-model authorization), evm-onchain (Solidity/Foundry/Hardhat DeFi/bridge — reentrancy, oracle manipulation, cross-chain replay), cairo-onchain (Cairo/Starknet DeFi — caller-auth gaps, share-rounding, L1↔L2 messages), move-onchain (Sui/Aptos Move — object/capability binding, shared-math overflow, reward-index accounting), cardano-haskell (first-party Cardano Haskell node stack — ledger/plutus/ouroboros/cardano-base), xnu-kernel (Apple XNU macOS/iOS source review), or xnu-re (decompiled Apple kext pseudo-C) |
-| `--target <target>` | — | Review target alias: app/default, c-library, or linux-kernel |
+| `--target <target>` | — | Alias for --profile; accepts the supported review profiles, with app normalized to default. |
 | `--ecosystem <ecosystem>` | — | Review the SOURCE of a published package instead of a repo: npm, pypi, cargo, or oci. When set, &lt;repo&gt; is the package NAME — 0 installs it and reviews its extracted source. Omit for a local path or git URL. |
 | `--package-version <version>` | — | Pin the package version to review (only with --ecosystem). Defaults to latest. |
-| `--seed-findings <path>` | — | Path to ND-JSON leads from an external producer. "-" reads stdin. Schema: gemmaforge.leads/v1. Tracked: 0#368. |
+| `--seed-findings <path>` | — | Path to ND-JSON leads from an external producer. "-" reads stdin. Schema: gemmaforge.leads/v1. Tracked: 0sec#368. |
 | `--seed-only` | `false` | Skip static scanner prioritisation and rely solely on --seed-findings. Only meaningful when --seed-findings is set. |
-| `--emit <target>` | — | Emit target. Default unset → existing terminal/json/etc. `pr` → emit each reproduced finding as a GitHub PR with repro + suggested patch (0#377). Unverified findings roll up into `hypotheses.md`. |
+| `--emit <target>` | — | Emit target. Default unset → existing terminal/json/etc. `pr` → emit each reproduced finding as a GitHub PR with repro + suggested patch (0sec#377). Unverified findings roll up into `hypotheses.md`. |
 | `--base <branch>` | — | Base branch for `--emit pr` (default: main) |
 | `--dry-run` | `false` | For --emit pr only: print proposed git/gh emission commands. The source review itself still executes. |
 | `--emit-out-dir <path>` | — | Directory for `--emit pr` rollup files (default: system temp) |
@@ -537,7 +537,7 @@ Guide: [Read the workflow](/scan-workflows/).
 | `--fix-commit <sha>` | — | Analyze a security-fix commit and hunt for structurally similar unpatched code paths (variant hunting). Requires a local git repo. Resolves the commit to its full SHA and first-parent preimage. When used alone, feeds candidates as SeedFindings into the review pipeline. Combine with --variants-only to emit candidates as JSON without model/network calls. |
 | `--variants-only` | `false` | Emit full variant-hunt result as JSON (candidates, language coverage, errors) and exit. Requires --fix-commit. No model, cloud, or network calls are made. |
 | `--npm-dynamic` | `false` | Also run the npm dynamic-discovery detector sweep (SSPP fuzz / validation read-stability / SSRF parser-diff) over the package in a disposable sandbox. Only effective with --ecosystem npm. Confirmed leads flow into the same verify → disclosure path. |
-| `--resume <run-id>` | — | Resume a previous run from its journal on disk (0#374) |
+| `--resume <run-id>` | — | Resume a previous run from its journal on disk (0sec#374) |
 | `--branch-from <entry-index>` | — | Branch the journal at the given entry index before resuming (requires --resume). |
 | `--verbose` | `false` | Show detailed output |
 | `--timeout <ms>` | `600000` | AI agent timeout in milliseconds |
@@ -562,7 +562,9 @@ For example, after reviewing the repository's test command:
 0 secure ./my-repo --test-command "npm test" --state-dir "$HOME/.0sec/secure/my-repo"
 ```
 
-The regression command must pass before and after a repair. Findings that cannot be reproduced or verified must not be treated as fixed. Inspect the JSON result's `status`, `repairs`, and `errors`; a completed run is not a guarantee that the repository contains no vulnerabilities.
+The regression command must pass before and after a repair. Findings that cannot be reproduced or verified must not be treated as fixed. Inspect `repairs`, `repairedFindingIds`, `blockedFindingIds`, and `errors` as well as `status`: the current implementation can return `completed` while other findings remain blocked or errors are retained. Completion is not proof that every finding was fixed or that the repository contains no vulnerabilities.
+
+Reported `costUsd` is not a reliable whole-workflow total: investigation usage is initially added, but a later repair-ledger update replaces it. The repair ceiling also checks that ledger separately from investigation spend. Use provider-side limits and inspect usage independently; do not treat `--cost-ceiling` as a guaranteed end-to-end cap.
 
 `--resume` requires an explicit `--state-dir`. It checks configuration identity and repository revision, can retry blocked or failed work, and does not resume cancelled runs. It does not blindly replay publication.
 
@@ -586,8 +588,8 @@ Guide: [Scope & Authorization](/scope/).
 | `--runtime <runtime>` | `api` | Native repair runtime: auto or api |
 | `-m, --model <model>` | — | Model for investigation and repair; inherits configured provider when omitted |
 | `--timeout <ms>` | `3600000` | Whole workflow deadline in milliseconds |
-| `--cost-ceiling <usd>` | — | Whole workflow model cost ceiling in USD |
-| `--max-findings <n>` | `10` | Maximum findings to repair; remaining findings keep the run blocked |
+| `--cost-ceiling <usd>` | — | Requested model-cost limit. Current accounting checks the repair ledger separately from investigation usage; this is not a guaranteed whole-workflow spend cap. |
+| `--max-findings <n>` | `10` | Maximum findings selected for repair. Inspect blockedFindingIds separately from the overall run status. |
 | `--max-attempts <n>` | `3` | Maximum repair candidates per finding |
 | `--max-turns <n>` | `30` | Maximum model turns per repair phase |
 | `--resume` | `false` | Resume the compatible persisted run for this repository; never blindly replays publication |
@@ -616,7 +618,7 @@ Guide: [Read the workflow](/research-workflows/).
 | `--runtime <mode>` | — | Engine runtime: api\|claude\|codex\|gemini\|ollama (default api) |
 | `-m, --model <model>` | — | Model for the investigation/revalidation agents |
 | `--timeout <ms>` | `600000` | Per-invocation timeout in milliseconds |
-| `--max-cost-usd <usd>` | — | Hard USD cap for the whole run (resumable stop) |
+| `--max-cost-usd <usd>` | — | Estimated-cost stop at resumable checkpoints; in-flight inventory, batches, and revalidation can overshoot. |
 | `--max-duration <dur>` | — | Wall-clock cap: 30m / 2h / ms (resumable stop) |
 | `--batch-size <n>` | — | Files per investigation batch (default 5) |
 | `--concurrency <n>` | — | Batches in flight (default 2) |
@@ -646,7 +648,7 @@ Guide: [Read the workflow](/research-workflows/).
 | `--models <a,b>` | — | Comma-separated finder models for diversity (default: single provider model, or $0SEC_DEEP_REVIEW_MODELS) |
 | `--attempts <N>` | — | Finder attempts per candidate×lens×model, best-of-N (default 1, or $0SEC_DEEP_REVIEW_ATTEMPTS) |
 | `--concurrency <N>` | — | Max finders in flight (default 8) |
-| `--cost-ceiling <usd>` | — | Hard scan-wide USD ceiling. Overrides $0SEC_COST_CEILING_USD. |
+| `--cost-ceiling <usd>` | — | Shared estimated-model-cost ceiling for planner and finder work. Checks can stop further work after recorded usage reaches the threshold; in-flight calls can overshoot. |
 | `--max-candidates <N>` | — | Cap candidate files hunted, largest-first (default 8, or $0SEC_DEEP_REVIEW_MAX_CANDIDATES) |
 | `--threat-model` | — | Enable pre-selection threat-model planner pass (trust-boundary lanes); default OFF |
 | `--quorum <N>` | — | Multi-lens verify quorum (default: majority of the verify-lens count) |
@@ -983,7 +985,7 @@ Guide: [Read the workflow](/verification-result/).
 
 | Argument | Required | Description |
 | --- | --- | --- |
-| `finding` | No | Path to a finding.json (0#193 deterministic-replay path). Equivalent to --finding when --runner is supplied. |
+| `finding` | No | Path to a finding.json (0sec#193 deterministic-replay path). Equivalent to --finding when --runner is supplied. |
 
 | Option | Registered default | Description |
 | --- | --- | --- |
@@ -993,7 +995,7 @@ Guide: [Read the workflow](/verification-result/).
 | `--qemu-binary <path>` | — | QEMU emulator for --runner qemu. |
 | `--qemu-kernel <path>` | — | Guest kernel image for --runner qemu. |
 | `--qemu-busybox <path>` | — | Static BusyBox binary used to build the offline QEMU guest. |
-| `--out <dir>` | — | 0#193 run directory (artifacts go under &lt;out&gt;/artifacts/). Defaults to a fresh tmpdir. |
+| `--out <dir>` | — | 0sec#193 run directory (artifacts go under &lt;out&gt;/artifacts/). Defaults to a fresh tmpdir. |
 | `--finding <path>` | — | Path to a finding.json. |
 | `--bundle <path>` | — | Path to a reproduction bundle directory; requires --runner local\|docker. Replays the bundle's vulnerable and patched snapshots through the configured runner and emits an aggregate ReproductionBundleResult. |
 | `--create-bundle <plan.json>` | — | Path to a BundlePlan JSON. Creates a reproduction bundle without executing any PoC steps. Requires --out &lt;bundle-dir&gt;. |
@@ -1132,7 +1134,7 @@ Guide: [Read the workflow](/kernel-vm/).
 | `--kernel-config <name>` | — | Kernel build config name for --kernel-tree (e.g. kasan, defconfig+kasan) |
 | `--config <profile>` | — | [deprecated] alias for --kernel-config |
 | `--kernel-cache-dir <path>` | — | Kernel build cache directory (default: ~/.0sec/kernel-cache) |
-| `--expected-signature <pattern>` | — | Expected dmesg signature substring (case-insensitive) for verify |
+| `--expected-signature <pattern>` | — | Registered but not forwarded to kernel verification; do not rely on this option as a required crash-signature match. |
 | `--force-kernel-build` | — | Rebuild kernel VM artifacts even when a cache entry exists |
 | `--review-subsystem` | — | After ingest, run linux-kernel review against the crash subsystem for sibling bugs |
 | `--tree <path>` | — | Linux source tree used by --review-subsystem |
@@ -1140,7 +1142,7 @@ Guide: [Read the workflow](/kernel-vm/).
 | `--api-key <key>` | — | API key for --review-subsystem API runtime |
 | `-m, --model <model>` | — | Model for --review-subsystem |
 | `--timeout <ms>` | `600000` | AI review timeout for --review-subsystem |
-| `--cost-ceiling <usd>` | — | Hard USD cost ceiling for --review-subsystem |
+| `--cost-ceiling <usd>` | — | Estimated model-cost ceiling for subsystem review, not a guaranteed whole-job billing cap. |
 | `--review-subsystem-fixture <path>` | — |  |
 | `-v, --verbose` | — | Verbose output |
 | `--persist` | — | Write ingested findings to an isolated 0 run database (default: classify only) |
@@ -1279,7 +1281,7 @@ Guide: [Read the workflow](/research-workflows/).
 | `--seed <path>` **required** | — | Fix diff / .patch whose bug class to hunt variants of |
 | `--ref <name>` | — | Provenance label for the seed (e.g. the CVE / commit) |
 | `--concurrency <N>` | — | Max finders in flight (default 4) |
-| `--max-candidates <N>` | — | Cap candidate sites hunted (default 40) |
+| `--max-candidates <N>` | — | Registered but not forwarded by the current CLI handler; do not rely on this flag to bound work. |
 | `--skip-candidates <N>` | — | Skip the first N ranked candidate sites before hunting (default 0) |
 | `--models <a,b>` | — | Comma-separated finder models for diversity (default: provider default) |
 | `--reachable-only` | — | Restrict candidates to paths built + zero-cap reachable on the kernelCTF COS target (default: HUNT_REACHABLE_ONLY env) |
@@ -2750,6 +2752,15 @@ These commands use the configured Cloud host's `/api/scans` and
 `/api/scan-schedules` APIs. `start`, `cancel` and `disconnect` make remote changes.
 They are separate from local `scan`, `secure` and hosted inference.
 
+:::caution[Confirm managed API compatibility before changing schedules]
+The audited client trusts the server to filter schedules by repository. The
+reviewed server source returns organization-wide schedules instead: `connect`
+can select another repository's schedule and `service disconnect` can delete
+all returned schedules. Do not use these as repository-selective operations
+until the deployed contract is confirmed. See the
+[compatibility findings and source revisions](/ci/github-action/#managed-lifecycle-compatibility).
+:::
+
 Guide: [Managed work and onboarding](/getting-started/#managed-work-and-onboarding).
 For repository enrollment and recurring schedules, see [connect](#connect).
 
@@ -2766,10 +2777,11 @@ an accepted request as proof of completed testing or a verified repair.
 0 service start [options]
 ```
 
-`--json` returns the created scan ID and target ID. A requested cost ceiling
-is sent to the service; this CLI does not itself enforce the remote budget.
-Confirm enforcement and cancellation behavior for the selected environment
-before starting work.
+`--json` returns the created scan ID and target ID. The current client sends
+`--cost-ceiling` as `secure_config.cost_ceiling`, while the reviewed server
+expects `secure_config.cost_ceiling_usd`. Do not rely on this flag to enforce
+a remote budget. Confirm the deployed request contract, enforcement, and
+cancellation behavior before starting work; the CLI is not a local hard stop.
 
 | Option | Registered default | Description |
 | --- | --- | --- |
@@ -2777,7 +2789,7 @@ before starting work.
 | `--test-command <cmd>` **required** | — | Test command to verify repairs (e.g. "npm test") |
 | `--setup-command <cmd>` | — | Setup command to run before the test command (e.g. "npm ci") |
 | `--model <model>` | — | Model to use for the scan (default: service-configured) |
-| `--cost-ceiling <usd>` | — | Requested USD ceiling sent to the managed service. Enforcement requires a qualified service implementation; this is not a local hard-stop guarantee. |
+| `--cost-ceiling <usd>` | — | Sends secure_config.cost_ceiling, but the reviewed server expects cost_ceiling_usd. Do not rely on this flag for managed budget enforcement without confirming deployed compatibility. |
 | `--json` | — | Emit result as machine-readable JSON |
 
 #### service status
@@ -2841,10 +2853,14 @@ does not prove execution has stopped or that previous consumption is refunded.
 
 #### service disconnect
 
-Remove schedules matching a repository, using its URL or the current checkout's
-`origin` remote. Confirmation is required unless `--yes` is supplied.
-In JSON mode, a nonempty schedule list requires `--yes` rather than an
-interactive answer. No matching schedules is a no-op.
+Request schedules using a repository URL or the current checkout's `origin`
+remote, then delete every returned schedule after confirmation. The client
+does not verify each schedule's repository. **An unfiltered server response
+can therefore delete schedules for other repositories.** Confirm compatibility
+before use; do not bypass that check with `--yes`.
+
+In JSON mode, a nonempty returned list requires `--yes` rather than an
+interactive answer. An empty returned list is a no-op.
 
 ```text
 0 service disconnect [options] [repo]
@@ -2872,7 +2888,7 @@ Authenticate with a configured control plane.
 0 auth
 ```
 
-These credentials grant access to a managed control plane. Model-provider credentials are configured separately. Browser login requires authorized access and a compatible server-side flow; public availability remains gated. See [0cloud](/roadmap/#0cloud).
+These credentials authenticate to the configured 0cloud host. Hosted inference, managed scans, and repository enrollment have separate account and access requirements; signing in does not grant every capability. Other model-provider credentials are configured separately. See [0cloud's current boundaries](/roadmap/#0cloud).
 
 Guide: [Read the workflow](/api-keys/).
 
@@ -2893,7 +2909,7 @@ Log in through the browser, or supply a credential with `--token`.
 
 #### auth logout
 
-Delete ~/.0sec/cloud.env
+Delete saved credentials for the current Cloud profile. Development credentials remain separate from the normal profile; logout does not revoke repository access or delete managed schedules.
 
 ```text
 0 auth logout
@@ -2901,7 +2917,7 @@ Delete ~/.0sec/cloud.env
 
 #### auth status
 
-Check configured control-plane credentials against `/health`.
+Check configured credentials against the authenticated inference-account endpoint, not `/health`. Success establishes account-endpoint access, not available credits, successful inference, or permission to dispatch managed work.
 
 ```text
 0 auth status
@@ -2911,8 +2927,8 @@ Check configured control-plane credentials against `/health`.
 
 Discover the installed CLI's capabilities, execution boundaries and command
 contracts. Hosted inference with local tools and managed security execution are
-separate paths. Use `0 --help` to check whether your installed build contains
-`guide`; its addition follows the v0.18.0 release.
+separate paths. `guide` is included in the v0.19.0 release; use `0 --help` to check
+your installed build rather than assuming it matches the current source reference.
 
 ```text
 0 guide [options] [topic]
@@ -2951,11 +2967,18 @@ Request a managed `secure` run and optional recurrence for an authorized
 repository. Readiness and schedule lookups must succeed before creating work.
 Unavailable enrollment APIs block dispatch rather than assuming authorization.
 
+The current client takes the first returned schedule without independently
+checking its repository. Against the reviewed organization-wide list endpoint,
+`no-open` can refer to a different repository. Confirm deployed filtering
+before using this flow, and read the
+[managed compatibility warning](#service). A successful lookup is not proof
+that repository matching is correct.
+
 ```text
 0 connect [options] [repo]
 ```
 
-Authenticate, then review and approve the connection:
+After confirming service compatibility and account access, authenticate and review the connection:
 
 ```bash
 0 auth login
@@ -2973,7 +2996,7 @@ For a noninteractive agent, request JSON and inspect any required action first:
 
 ```bash
 0 connect --format json --test-command "npm test"
-# After reviewing the scope, cadence, per-run budget and publication policy:
+# Only after confirming API compatibility and reviewing scope, cadence, budget and publication:
 0 connect --format json --test-command "npm test" --yes
 ```
 
@@ -2990,7 +3013,7 @@ not a monthly subscription allowance.
 | JSON state | Meaning |
 | --- | --- |
 | `ready` | The scan was created and requested recurrence was confirmed. |
-| `no-open` | An existing schedule was found; no new work was created. |
+| `no-open` | A returned schedule was selected; no new work was created. Repository identity is not independently verified by the client. |
 | `action-required` | Enrollment, authorization, approval or an operation failed; inspect `reason` and `message`. |
 
 Readiness and schedule-lookup failures exit with status 2 and create no work.
@@ -3025,7 +3048,7 @@ Guide: [Cloud authentication](/api-keys/).
 
 ## XBOW benchmark runner
 
-The XBOW runner lives in the benchmark workspace. See [Benchmarks](/benchmark/) and [Methodology](/methodology/) for measured results. From a source checkout, run `pnpm --filter @0sec/benchmark xbow --help` for options. Execution requires dedicated target environments and a benchmark budget.
+The XBOW runner lives in the benchmark workspace. See [Benchmarks](/benchmark/) and [Methodology](/methodology/) for current commands, prerequisites, and measured-result interpretation. **The specialized runner does not implement a help-only `--help` path; passing it can start benchmark execution.** Inspect the documented arguments or `packages/benchmark/src/xbow-runner.ts` instead. Execution requires dedicated target environments and a benchmark budget.
 
 ## Reference sources
 

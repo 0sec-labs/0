@@ -2,7 +2,7 @@
 
 > Status: 2026-06-28. Living document.
 
-0verse is 0sec's **binary-only** vulnerability-research engine. For kernel work it
+0verse is 0's **binary-only** vulnerability-research engine. For kernel work it
 is the tool you reach for when there is **no source**:
 
 | Surface | Tool | Why |
@@ -21,9 +21,10 @@ source lane. 0verse earns its keep precisely where source-analysis can't run.
 
 0verse classifies the target, decompiles it (Ghidra by default), and primes a
 **seed-bug-class** — a directed, Big-Sleep-style variant-analysis hypothesis set
-keyed to the surface. Two kernel families ship today (`src/zeroverse/seedbugs.py`):
+keyed to the surface. Kernel families ship in `src/zeroverse/seedbugs.py`;
+the [seed catalog](SEEDS.md) is the fuller cross-reference:
 
-- **Linux `.ko`** (`origin seed:linux-ko:*`) — five kernel-module LPE classes:
+- **Linux `.ko`** (`origin seed:linux-ko:*`) — examples include:
   - `linux-ko:copy-from-user` — `copy_from_user`/`copy_to_user` with a
     user-controlled size into a fixed buffer → OOB (CWE-787 / CWE-125). *Flagship.*
   - `linux-ko:ioctl-dispatch` — `unlocked_ioctl`/`compat_ioctl` cmd dispatch where
@@ -36,6 +37,10 @@ keyed to the surface. Two kernel families ship today (`src/zeroverse/seedbugs.py
     gate (CWE-862, **hypothesis-only**, no generic oracle).
 - **macOS / XNU kext** (`origin seed:iokit.*`) — IOKit user-client `externalMethod`
   dispatch OOB / missing input-count check.
+
+The registry also includes selector-index, double-fetch, mmap-offset,
+uninitialized-copy, and netlink patterns, plus deferred-free/refcount/error-path
+UAF leads. Adding a seed increases static hypotheses, not dynamic kernel support.
 
 ### Why detection survives stripping
 
@@ -63,9 +68,11 @@ kernel lane. To confirm, hand the ranked hypothesis to a kernel PoV harness
 
 ## How a kernel-hunt agent calls 0verse
 
-0verse exposes the engine over the **MCP bridge** (`src/zeroverse/mcp.py`), so an
-agent that hits a binary-only kernel surface calls it as a tool — same engine,
-one versioned contract (`api.CONTRACT_VERSION`):
+0verse exposes its own optional **MCP bridge** (`src/zeroverse/mcp.py`). From
+`0verse/`, launch `uv run --frozen --extra mcp python -m zeroverse.mcp` in an
+environment with the chosen backend installed. An external agent can then call
+the versioned local API through these tools; this is not the 0 CLI's MCP server
+or an automatically dispatched kernel worker:
 
 ```
 scan_binary(path)            # run the pipeline on a .ko / kext / firmware blob
@@ -79,8 +86,9 @@ Routing decision for the hunt agent:
 1. **Do I have the kernel/module source?** → yes: syzkaller / source analysis. Stop.
 2. **No source, binary-only kernel surface** (closed `.ko`, firmware, vendor/Android,
    XNU kext, n-day diff)? → call `scan_binary(path)`.
-3. Read `list_findings()`; the `seed:linux-ko:*` / `seed:iokit.*` origins are the
-   directed kernel hypotheses. Treat them as **leads**, not bugs.
+3. Read `list_findings()` and the report's terminal state/backend notes.
+   The flat public contract carries `kmod:` / `iokit:` source labels rather than
+   the internal `seed:<id>` origin field. Treat these as **leads**, not bugs.
 4. Confirmation needs a live kernel — route the lead to a kernelCTF/KASAN PoV
    harness. 0verse will not (and must not) report a `.ko` finding as confirmed.
 
@@ -98,5 +106,7 @@ assert out["confirmed"] == 0          # honest degrade — hypotheses only on a 
 
 With Ghidra available, `list_findings()` surfaces the `seed:linux-ko:*` hypotheses
 (e.g. `copy-from-user`, `kmalloc-overflow`, `user-deref`, `missing-capable` on a
-vulnerable ioctl handler). Without Ghidra the bridge still classifies the `.ko`
-and degrades to ingest-only — it never fabricates a finding.
+vulnerable ioctl handler). Without Ghidra, `auto` can try rizin/angr at lower
+fidelity. If no backend can analyze the target, the report records the
+infrastructure failure rather than a successful empty scan. Classification
+alone is not proof that kernel hypotheses were evaluated.

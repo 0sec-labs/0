@@ -1,6 +1,6 @@
 # @0sec/benchmark
 
-Benchmark runners for 0sec across multiple security evaluation suites
+Benchmark runners for 0 across multiple security evaluation suites
 (XBOW, AutoPenBench, CyBench, HarmBench, NPM advisories).
 
 ## Canonical bench integrations
@@ -11,8 +11,8 @@ sealed evidence. This package contributes XBOW and CyberGym integrations; it
 does not add another runner/scorecard format.
 
 ```sh
-0sec bench run --integration xbow --xbow-path /path/to/xbow --variants variants.json
-0sec bench run --integration cybergym \
+0 bench run --integration xbow --xbow-path /path/to/xbow --variants variants.json
+0 bench run --integration cybergym \
   --cybergym-harness /path/to/cybergym \
   --cybergym-subset results/cybergym-fair-v1.subset.txt \
   --variants variants.json
@@ -22,6 +22,17 @@ Use `--attempt-policy independent-repeat --pass-at-k N` for an honest
 per-attempt rate. The CyberGym integration defaults to one official
 differential submission per task; an ensemble or wider submit budget must be
 declared explicitly.
+
+`variants.json` is a nonempty array of descriptors, for example
+`[{"id":"baseline","runtime":"api","model":"YOUR_MODEL_ID","depth":"deep"}]`.
+Without it, `--model`, `--runtime`, and `--depth` create one implicit variant.
+The explicit array takes precedence over these shorthand flags.
+Use `--tournament-output ./evidence/run-001.json` for create-once
+`{manifest,tournament}` evidence and `--ledger ./evidence/ledger.json` for the
+local tournament ledger. These are not the historical publication ledger below.
+`--max-turns` defaults to 40, `--cost-ceiling` is per attempt, and `--format json`
+selects machine-readable stdout. Runs require configured model access plus the
+integration's actual target/runtime prerequisites and may incur model charges.
 
 This document focuses on the **XBOW runner** and how to point it at
 arbitrary XBOW-compatible benchmark suites.
@@ -34,6 +45,13 @@ keeps an explicit benchmark ledger at
 - retained artifact-backed results that are machine-recoverable from GitHub
   Actions artifacts, and
 - older historical mixed local+CI publication tallies.
+
+That committed ledger is a 2026-05-07 document with a 2026-05-06 XBOW/Cybench
+snapshot, not a live leaderboard. Its per-model consolidator counts any successful
+retained result for a challenge and does not separate white-box/black-box or
+enforce one attempt/configuration. Do not label the 93/95 gpt-5.4 grouping
+pass@1 or black-box-only from this summary. Repeat rows contribute `meanCostUsd`
+to consolidation, so use per-attempt receipts to compute total repeat spend.
 
 ## Windows research evidence ledger
 
@@ -51,7 +69,7 @@ pnpm --filter @0sec/benchmark windows-research \
 The ledger retains every outcome, including no-candidate, not-reproduced,
 inconclusive, and safety-rejected attempts. Contract fixtures are reported
 separately and are never included in capability metrics. A live reproduced row
-is claim-eligible only when it is bound to a passing 0sec import verdict, the
+is claim-eligible only when it is bound to a passing 0 import verdict, the
 exact receipt hash, distinct retained dump bytes, a pre-run sealed label, and
 all execution safety gates. Raw commands, exploit material, secrets, and local
 paths are rejected or omitted.
@@ -227,7 +245,7 @@ All outputs remain evaluator-private and retain human promotion/report gates.
 ## XBOW runner
 
 The XBOW runner (`src/xbow-runner.ts`, exposed as `pnpm xbow`) executes
-0sec against the [XBOW validation benchmarks][xbow] — 104 Docker CTF
+0 against the [XBOW validation benchmarks][xbow] — 104 Docker CTF
 challenges covering SQLi, XSS, SSRF, deserialization, IDOR, auth bypass,
 command injection, and other classic web bug classes.
 
@@ -259,7 +277,8 @@ pnpm --filter @0sec/benchmark xbow \
   --agentic --limit 10
 ```
 
-Run against the community patched fork (fixes all 104 Docker builds):
+Run against the community patched fork (historically used for build fixes;
+pin and check the revision, platform, and service readiness for your run):
 
 ```sh
 pnpm --filter @0sec/benchmark xbow \
@@ -285,18 +304,12 @@ pnpm --filter @0sec/benchmark xbow \
   --agentic --limit 5
 ```
 
-### CI (GitHub Actions)
+### CI status
 
-The `.github/workflows/xbow-bench.yml` workflow exposes two
-`workflow_dispatch` inputs that drive the same behavior:
-
-- `benchmark_repo` — any XBOW-compatible source repo
-  (default: `0ca/xbow-validation-benchmarks-patched`)
-- `benchmark_ref` — optional branch/tag/sha inside that repo
-
-The clone step in the workflow honors these inputs before any benchmark
-runs, so scheduled and dispatched runs can easily target upstream, the
-patched fork, or a cleaned fork for apples-to-apples comparisons.
+The historical `.github/workflows/xbow-bench.yml` workflow is not present in this
+checkout. Run the package commands above directly or the canonical `0 bench run`
+integration. Historical workflow inputs and artifact names remain provenance for
+old results, not runnable current dispatch instructions.
 
 ### Other flags
 
@@ -304,6 +317,10 @@ See the header comment in `src/xbow-runner.ts` for the full flag list
 (`--agentic`, `--white-box`, `--limit`, `--tag`, `--level`, `--only`,
 `--start`, `--retries`, `--models`, `--fresh`, `--save-findings`,
 `--runtime`, `--dry-run`, `--json`).
+
+This script parses arguments directly and does **not** implement a help-only
+`--help` branch. Read its source options or use `0 bench run --help` for the
+canonical CLI; do not use `pnpm ... xbow --help` as a harmless inspection command.
 
 ### Statistical evaluation (`--repeat N`)
 
@@ -337,13 +354,13 @@ Wald produces degenerate intervals like `[0, 0]` or extends outside
                                    result carries costCeilingHit: true.
 ```
 
-Default reasoning for the cost ceiling: `$5/cell × 8 unsolved challenges
-× n=10 = $40 max per sweep.` Affordable for a nightly CI job.
+The ceiling is checked between attempts: an attempt already in progress can
+overshoot it. At $5 per cell, eight cells budget roughly $40 before such overshoot,
+not $5 × eight × N. It is not a hard cap on the whole sweep.
 
-#### Recommended invocation (n=10 evaluation)
+#### Example invocation (n=10 evaluation)
 
-Run the n=10 harness over the 8 unsolved XBEN challenges with the
-lean-scaffolding feature combo under investigation:
+This preserves the historical eight-case selection; it is not today's unsolved set:
 
 ```sh
 pnpm --filter @0sec/benchmark xbow \
@@ -354,9 +371,9 @@ pnpm --filter @0sec/benchmark xbow \
   --fresh --json
 ```
 
-The CI workflow exposes the same via the `repeat` and
-`repeat_cost_ceiling_usd` `workflow_dispatch` inputs on
-`.github/workflows/xbow-bench.yml`.
+The earlier workflow exposed `repeat` and `repeat_cost_ceiling_usd`; it is not
+available for dispatch in this checkout. The package runner still accepts the
+flags above.
 
 ### JIT skills A/B
 
@@ -433,11 +450,10 @@ was hit, `costCeilingHit: true` and `attempts < repeatProtocol.N` —
 a reader can tell at a glance that the sample is smaller than the
 requested N.
 
-The Wilson CI computation and the aggregation logic live in
-`src/wilson.ts` and are independently unit-tested in
-`src/wilson.test.ts` (15 tests, including the k=0 / k=n boundary
-clamps) and `src/xbow-runner.test.ts` (4 tests covering the repeat
-harness with an injected fake `runOne`).
+The Wilson interval and aggregation implementations live in `src/wilson.ts`;
+their regression coverage lives in `src/wilson.test.ts` and
+`src/xbow-runner.test.ts`. These unit fixtures do not substitute for real
+attempt receipts.
 
 ## CyberGym fair-config pass@1 (pre-registration = claim-gate integrity)
 
@@ -548,10 +564,10 @@ upstream set, all reachable through the Squid egress allowlist:
 
 | Provider | Variables | Default model |
 |---|---|---|
-| Kimi (Moonshot, flat-rate) | `KIMI_API_KEY` (+`KIMI_BASE_URL`) | `k3` |
+| Kimi (Moonshot) | `KIMI_API_KEY` (+`KIMI_BASE_URL`) | `k3` |
 | Qwen (Alibaba Token Plan) | `QWEN_API_KEY` (+`QWEN_BASE_URL`) | `qwen3.8-max` |
 | DeepSeek direct | `DEEPSEEK_API_KEY` (+`DEEPSEEK_BASE_URL`) | `deepseek-v4-flash` |
-| Z.ai GLM (flat-rate) | `Z_AI_API_KEY` (+`Z_AI_BASE_URL`) | `glm-5.2` |
+| Z.ai GLM | `Z_AI_API_KEY` (+`Z_AI_BASE_URL`) | `glm-5.2` |
 | Anthropic | `ANTHROPIC_API_KEY` | `claude-sonnet-4-6` |
 | OpenAI | `OPENAI_API_KEY` | `gpt-4o` |
 | Azure OpenAI | `AZURE_OPENAI_API_KEY` + `AZURE_OPENAI_BASE_URL` + `AZURE_OPENAI_MODEL` | deployment |
@@ -564,6 +580,12 @@ variable from model-written Python, so these keys never reach untrusted
 code.
 
 ### Subscription topology — which models share which quota pool
+
+> **Historical operator snapshot, not current billing or access guidance.**
+> The dated plan prices, shared-key topology, quotas and terms below are retained
+> research notes. Verify your own account terms, quotas and credentials before a
+> run; this table is not a 0 hosted-model offer, free-credit promise, or evidence
+> that production and benchmark traffic currently share a credential.
 
 Measured and documented 2026-08-07. The one thing to internalize: **the
 Alibaba Token Plan is a single credit pool** — qwen, the plan-side DeepSeek
@@ -617,6 +639,6 @@ revision recomputes historical cost offline (`priceRun`).
 The full fair-run protocol (firewall, one-container-per-task, relaunch
 policy, Wilson-CI reporting) lives in the
 [runbook](../../../docs/operations/runbooks/cybergym-harness.md) and
-issue [#1029]. The fairness fix itself is already in the engine
-(`0sec/packages/core/src/stages/craft-scan.ts`, commit 704b84b5) —
-not a flag.
+issue [#1029]. The historical fairness implementation reference is
+`packages/core/src/stages/craft-scan.ts`, commit `704b84b5`; inspect the selected
+runner's current protocol rather than treating the old receipt as a fresh result.

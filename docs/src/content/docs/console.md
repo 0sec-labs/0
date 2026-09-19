@@ -43,7 +43,7 @@ when running the full terminal UI from source.
 0 console --resume
 
 # One-shot: run a prompt and exit (non-interactive)
-0 console --print "Summarise findings" --continue
+0 console --mode recon --print "Summarise findings" --continue
 
 # Resume a specific session by id (or unique prefix)
 0 console --resume a1b2c3d4
@@ -55,14 +55,14 @@ when running the full terminal UI from source.
 |------|-------------|---------|
 | `--target <url>` | Engagement target the tools operate against | (optional; set in chat) |
 | `--scope <file>` | Initial authorization [scope file](/scope/); required under Node | (none) |
-| `--role <role>` | Tool set: `audit`, `review`, `discovery`, `attack`, `verify` | `audit` |
+| `--role <role>` | Tool set: `audit`, `review`, `discovery`, `attack`, `verify`, `report` | `audit` |
 | `--mode <mode>` | Autonomy mode: `standard`, `recon`, `copilot`, `yolo` | `yolo` |
 | `--yolo` | Shortcut for `--mode yolo` | — |
 | `--model <id>` | Override the LLM model ID | provider default |
 | `--max-tool-calls <n>` | Safety cap on tool-call rounds per operator message | `20` |
 | `--allow-scanners` | Expose scanner wrappers (sqlmap, nikto, …) | off |
 | `--finding <id>` | Focus the chat on one persisted finding | (none) |
-| `--finding-intent <intent>` | Finding workflow: `investigate`, `verify`, `draft_fix` | (none) |
+| `--finding-intent <intent>` | Finding workflow: `investigate`, `verify`, `draft_fix`, `impact` (requires `--finding`) | `investigate` |
 | `--db-path <path>` | Persistent findings database, also used by history screens | `0SEC_DB_PATH` or `~/.0sec/0sec.db` |
 | `--resume [id]` | Reopen a saved session; omitting id opens a picker | (none) |
 | `--continue` | Reopen the most recent session, no picker | (none) |
@@ -71,6 +71,10 @@ when running the full terminal UI from source.
 A [`--scope` file](/scope/) is required for the Node readline fallback. Under
 the Bun TUI it is optional. YOLO public-network tools accept absolute URLs
 without a launch target; explicit configured restrictions and exclusions still apply.
+Outside the TUI, YOLO also requires at least one `in_scope` entry, including
+with `--print`. Resuming a transcript does not supply a scope file for this
+check. For text-only analysis of saved context, explicitly choose `--mode recon`;
+Recon is a restricted tool policy, not a guarantee of no network activity.
 
 :::caution[Choose your autonomy policy]
 The console defaults to **YOLO**. Use `--mode standard` in the Bun TUI for
@@ -84,10 +88,13 @@ ordinary `scan` command's requirement for a scope file on live targets.
 
 ### Review previous work
 
-The console connects to the same persistent findings database as `/history`
-and `/findings`. Ask it to review earlier findings; `query_findings` can search
-all sessions or a specific scan ID. `--db-path` works independently of
-`--finding`, including with `--print`.
+The console attaches a persistent findings database. `query_findings` can
+search all sessions or a particular scan ID **within that attached database**.
+Use `--db-path` to open a scan's run-local `state.db`; it works independently
+of `--finding`, including with `--print`. The console's default remains the
+local `~/.0sec/0sec.db` (or `0SEC_DB_PATH`), whereas fresh scan workflows use
+run-local databases. Do not assume a global history listing means every run's
+findings are loaded into this chat.
 
 Saved conversations are a separate store, shared with `/resume`. The model can
 use `list_conversations` to discover them and `read_conversation` to retrieve
@@ -112,6 +119,7 @@ make these tools available.
 | `discovery` | Reconnaissance and enumeration |
 | `attack` | Offensive/exploit tools |
 | `verify` | Verification and patch validation |
+| `report` | Reporting role's tool set |
 
 ### Autonomy modes
 
@@ -120,7 +128,7 @@ Cycle the mode with **Shift+Tab** in the TUI, or the `/mode` command.
 | Mode | Behavior |
 |------|----------|
 | **Standard** | Prompts before each effectful (non-read-only) tool call when an `approveTool` callback is wired, as in the TUI. Without that callback, this gate is bypassed. Scope-extension requests are separate. |
-| **Recon** | Passive, read-only reconnaissance only. Effectful tools are refused. |
+| **Recon** | Allows tools classified read-only plus a conservative passive-network reconnaissance set. Effectful/exploit tools are refused; allowed network tools still use authorization and transport checks. Not an offline mode or OS sandbox. |
 | **Co-pilot** | Skips Standard's per-action approval gate. Eligible tools proceed automatically, subject to scope and the other authorization controls. |
 | **YOLO** | Public-network tools need no launch target or per-discovered-host approval. Explicit operator-configured scope, exclusions and prior refusals remain effective. |
 
@@ -182,14 +190,15 @@ authorized workflow; this is not a blanket network-scope bypass.
 
 ### Supported runtimes
 
-The console auto-detects available runtimes. The runtime is determined by
-[`0SEC_RUNTIME`](/configuration/) or the model ID matching a provider.
+The console constructs the direct **API runtime**, including supported
+API-key, provider-subscription and hosted transports. It does not choose the
+Claude Code, Codex or Gemini CLI subprocess wrappers, and has no `--runtime`
+option. Installing one of those CLIs is not by itself a console connection.
 
-- **auto** — runtime probe, picks the first available
-- **api** — direct API access
-- **claude** — Claude Code CLI
-- **codex** — ChatGPT Codex
-- **gemini** — Gemini CLI
+Use `/connect` and `/model`, or supply the provider configuration described in
+[API Keys](/api-keys/). The `--runtime auto|api|claude|codex|gemini` options on
+scan/review commands are a different surface; see
+[runtime configuration](/configuration/#runtime-modes).
 
 ## First interaction
 
@@ -232,9 +241,10 @@ JSON even when copying fails. An OSC52 notice means the content was sent to the
 terminal clipboard; it does not verify clipboard contents.
 
 Use `/impact <finding-id>` to discuss a persisted finding in the current chat.
-Without an ID, select a finding from the conversation. The analysis distinguishes
-observed impact from conditional chains and missing evidence; it does not
-execute tools or expand authorization.
+Without an ID, select a finding from the conversation. Its prompt asks the model
+to distinguish observed impact from conditional chains and missing evidence,
+and not to execute tools or expand authorization. This is an analysis workflow,
+not a new tool-permission boundary; the session's actual mode and gates still apply.
 
 ## Screens
 
@@ -250,14 +260,19 @@ execute tools or expand authorization.
 | Replay | `/replay` | Event-level turn replay for a completed scan |
 | Settings | `/settings`, `/config`, `/prefs` | Console display settings (persist across sessions) |
 | Theme | `/theme`, `/themes` | Colour theme live preview |
-| Model | `/model`, `/models` | Select the model for a new chat |
+| Model | `/model`, `/models` | Select the current audit's model, worker-role overrides and single-model policy |
 | Resume | `/resume`, `/sessions` | Saved chat-session list browser |
 | Herd | `/herd`, `/workers` | Active subagent worker overview |
-| Market | `/market`, `/marketplace` | Extension marketplace |
+| Communications | `/comms`, `/messages` | Agent activity and messages |
+| Hackstore | `/hackstore`, `/store`, `/market`, `/marketplace` | Extension marketplace |
 | Connect | `/connect`, `/login`, `/auth` | Cloud sign-in, API-key and subscription connections |
 | Usage | `/usage`, `/cost`, `/tokens` | Token, cost, and context-window usage for this chat session |
-| Provider | `/providers` | Read-only provider connection status |
+| Provider | `/providers` | Opens the same connection pane as `/connect` |
 | Scope | `/scope` | Current engagement scope view |
+| Audits | `/audits` | Switch among independent live audits without stopping their work |
+| Onboarding | `/onboard` | Reopen guided setup without replacing the current audit |
+| Harness | `/harness` | Live harness controls, workspace trust and rollback |
+| Keybindings | `/keybindings`, `/keys`, `/keymap` | Inspect or rebind supported keyboard shortcuts |
 | Back | `/back` | Navigate to the previous screen |
 
 ### Slash commands
@@ -272,7 +287,12 @@ the command menu. The readline console supports a subset (noted below).
 | `/status` | — | info | ✓ |
 | `/tools` | — | info | ✓ |
 | `/agents` | — | info | — |
-| `/clear` | `/new` | session | ✓ |
+| `/clear` | — | session | ✓ |
+| `/new-chat` | `/new` | navigation | — |
+| `/audits` | — | navigation | — |
+| `/onboard` | — | navigation | — |
+| `/harness` | — | navigation | — |
+| `/stop` | — | session | — |
 | `/history` | — | session | — |
 | `/transcript` | `/review` | session | — |
 | `/findings` | `/finds` | session | — |
@@ -288,7 +308,8 @@ the command menu. The readline console supports a subset (noted below).
 | `/launcher` | `/run`, `/home` | navigation | — |
 | `/ops` | `/runs` | navigation | — |
 | `/herd` | `/workers` | navigation | — |
-| `/market` | `/marketplace` | navigation | — |
+| `/comms` | `/messages` | navigation | — |
+| `/hackstore` | `/store`, `/market`, `/marketplace` | navigation | — |
 | `/connect` | `/login`, `/auth` | navigation | — |
 | `/usage` | `/cost`, `/tokens` | navigation | — |
 | `/back` | — | navigation | — |
@@ -297,6 +318,7 @@ the command menu. The readline console supports a subset (noted below).
 | `/feedback` | — | system | — |
 | `/settings` | `/config`, `/prefs` | system | — |
 | `/theme` | `/themes` | system | — |
+| `/keybindings` | `/keys`, `/keymap` | system | — |
 | `/doctor` | — | system | — |
 | `/providers` | — | system | — |
 
@@ -339,9 +361,30 @@ If the selected provider is not connected, the selection stays staged for the
 next audit. Connect that provider, then select the model again to apply it live.
 These rules also apply when opening the picker through **Ctrl+P**.
 
+To assign different models to workers:
+
+1. Connect a provider route that serves all intended models through `/connect`.
+2. Open `/model`. **Ctrl+Left / Ctrl+Right** changes the target from the parent
+   model to a worker role. Search, highlight a model and press **Enter**.
+3. **Ctrl+Backspace** removes the selected role's override and restores parent
+   inheritance. **Ctrl+S** toggles single-model mode; while it is on, role picks
+   remain stored but are inactive.
+
+The parent selection closes the picker; a role selection keeps it open for more
+assignments. **Ctrl+R** reloads an available hosted catalog. Role overrides
+select models for work that actually runs; they do not start workers themselves.
+Workers inherit the parent's provider, key and endpoint; selecting a role's
+model does not switch it to another account. A gateway route can serve several
+vendors' models through that one transport. See
+[multi-model role routing](/configuration/#multi-model-role-routing) for a
+concrete example and precedence. The role map and single-model switch are TUI
+and embedding-API controls, not general CLI flags or environment variables.
+
 ## Keyboard shortcuts
 
-All shortcuts apply in the main Chat screen unless otherwise noted.
+These are default shortcuts in the main Chat screen unless otherwise noted.
+`/keybindings` shows effective bindings and lets you change supported actions;
+fixed composer and safety keys are not all rebindable.
 
 ### Global exit
 
@@ -359,6 +402,8 @@ All shortcuts apply in the main Chat screen unless otherwise noted.
 | **Ctrl+P** / **Ctrl+K** | Open command palette (all screens) |
 | **Ctrl+O** | Open transcript review; in worker focus, expand/collapse its tool output |
 | **Ctrl+R** | Toggle collapsed/expanded tool call detail across the entire transcript |
+| **Ctrl+G** | Jump to agents |
+| **Ctrl+T** | Open agent communications |
 | **Esc** | Clear composer / close overlay / go back / interrupt running turn |
 | **Esc** (with no overlay or draft) | Stop a running turn, or navigate back |
 
@@ -495,11 +540,17 @@ Categories: engagement, findings, verification, connect, settings, evolution, au
 
 ### Session persistence
 
-Saved conversations are persisted to `~/.0sec/console-sessions/<id>.json` with
-owner-only permissions (`0o600`). Each saved session includes recorded operator
-and assistant turns, the model and target used, a preview (first message,
-truncated to 120 chars), an optional summary, timestamp, and turn count.
-Interrupted partial assistant generations are not saved.
+The TUI saves conversations to `~/.0sec/console-sessions/<id>.json` after turns,
+including failed turns. Files are owner-only (`0600`), and the directory is
+`0700`. Metadata includes working directory, model, target, mode, preview,
+optional summary, timestamp and native-message count.
+
+The payload is the native message array: **prompts, replies, tool calls and full
+tool results are plaintext and are not scrubbed for secrets**. It can include
+source, captured requests, credentials and undisclosed findings. Filesystem
+permissions are not encryption; review exports and backups before sharing.
+The redacted conversation-history tools described above are a different view.
+Readline and `--print` can load saved context, but do not write this TUI store.
 
 ### Resume
 
@@ -528,34 +579,57 @@ leaves the session visible and reports the error.
 A session that cannot be loaded reports the failure in the browser rather than
 closing the console.
 
+`--continue` chooses the most recent saved transcript across projects; it is not
+the same as the picker's initial current-project filter. Bare `--resume` needs
+the TUI picker; use an explicit ID outside it.
+
+Resume restores conversation context, not running workers or session-only
+authorization decisions. Supply the intended scope and mode again. Current CLI
+precedence also differs by front-end: a saved target wins over `--target`;
+the TUI accepts `--model` over the saved model, `--print` prefers the saved model,
+and readline uses the supplied/default model. For a different engagement,
+start a new audit rather than assuming resume flags replace all saved context.
+
 
 ### Session management
 
 | Command | Action |
 |---------|--------|
-| `/clear` / `/new` | Clear the current conversation in memory (keeps session running) |
+| `/clear` | Clear the idle audit's conversation; retain target, scope, mode and prior authorization refusals |
+| `/new-chat` / `/new` | Create a separate audit using staged model/connection choices |
+| `/audits` | Switch live audits without cancelling their workers |
+| `/stop audit` | Stop the current audit's work |
+| `/stop worker <exact name or id>` | Stop an owned worker and its descendants |
 | `/resume` | Browse saved sessions and pick one to resume |
 | `/history` | Review scan history from the database |
 
+`/clear` is not `/new` and is not saved-transcript deletion. Live audits have
+separate conversation/runtime ownership; selecting another audit does not
+stop background work. Use `/stop` deliberately, and `/resume` for disk history.
+
 ### Pruning
 
-The session store keeps the newest 20 sessions by default. Older sessions are
-removed on the next session write. The keep count is a compile-time constant
-(`DEFAULT_PRUNE_KEEP = 20`) — there is no env-var override.
+After TUI writes, pruning keeps the newest **20 unprotected archived sessions
+across all projects**. Active and pending-resume sessions are protected and do
+not consume that allowance. `DEFAULT_PRUNE_KEEP = 20` is a code constant with
+no environment override. Back up needed evidence before it ages out; corrupt
+files that cannot be listed are not automatically pruned.
 
 ### Non-interactive mode (`--print`)
 
 ```bash
 # Inline prompt
-0 console --print "Check the target for CORS misconfiguration" --continue
+0 console --mode recon --print "Summarise the saved findings" --continue
 
 # Piped prompt — reads from stdin
-echo "Summarise the findings" | 0 console --print --continue
+echo "Summarise the findings" | 0 console --mode recon --print --continue
 ```
 
-`--print` runs one prompt through the engine and exits. Engine responses stream
-to stdout as text tokens. Combine with `--continue` or `--resume <id>` to query
-a saved session's context without the TUI.
+`--print` runs one prompt through the engine and exits. Text, tool traces and
+outcomes can appear on stdout; this is not a JSON-only or answer-only protocol.
+Combine it with `--continue` or `--resume <id>` to load saved conversation context.
+The YOLO default requires an explicit nonempty scope on this path; the examples
+choose Recon, which still permits its restricted tool set.
 
 There is no interactive approval prompt in `--print`. Standard without an
 approval callback and Co-pilot both bypass the per-action gate; see
@@ -571,8 +645,8 @@ The console has two views into past data:
 | Scope | Current session's conversation turns | Any persisted scan (by scan ID or database) |
 | Content | Operator + model turns, tool calls, outcomes | Event-level turn timeline: stages, tool calls, model output |
 | Access | `/transcript` (Ctrl+O) | `/replay` |
-| Data source | Console session store (`~/.0sec/console-sessions/`) | Scan database (`--db-path` or `~/.0sec/0sec.db`) |
-| Use case | Review what was discussed in this chat | Audit every action a completed scan took |
+| Data source | Current in-memory conversation; saved native messages can seed a resumed chat | Scan database (`--db-path` or `~/.0sec/0sec.db`) |
+| Use case | Review what was discussed and returned by tools in this chat | Inspect the events that a scan actually persisted |
 
 The **transcript review** (Ctrl+O) is a scrollable, virtualised rendering of
 the current conversation.
@@ -617,9 +691,13 @@ submit never blocks the session.
 ### Automatic problem reports
 
 Problem reporting defaults to `automatic`. Tool and runtime failures can produce
-a limited diagnostic summary through the same feedback transport, independently
-of manually staged messages. The summary excludes prompts, tool arguments and
-output, paths, and credentials; it does not upload `~/.0sec/feedback.md`.
+a diagnostic through the same feedback transport, independently of manually
+staged messages; it does not upload `~/.0sec/feedback.md`. At analytics levels
+`off` or `usage`, the diagnostic is limited to failure categories and runtime
+metadata. Opting into `commands` or `full` allows bounded error messages,
+stack traces and captured output after redaction. Redaction is not a guarantee
+that arbitrary engagement data is safe to share; choose the sharing level
+appropriate for your target and credentials.
 
 Open `/feedback` → **Problem-report preferences** to choose `off`, `ask`, or
 `automatic`. This global preference cannot be overridden by a project. Explicit
@@ -642,10 +720,12 @@ affect provider credential storage.
 
 ### Storable providers (API-key auth)
 
-Credentials for these providers persist in `~/.0sec/credentials.json`:
-DeepSeek, OpenRouter, Azure OpenAI, OpenAI, Z.ai GLM, Moonshot Kimi, Alibaba
-Qwen, xAI Grok, OpenCode Zen. ChatGPT Codex uses OAuth and is not storable
-through this path.
+API-key connections offered by `/connect` are stored in
+`~/.0sec/credentials.json`; the account store also supports provider-specific
+OAuth records and multiple accounts. ChatGPT Codex is an OAuth connection, not
+a pasted API-key provider. Explicit nonblank environment credentials take
+precedence over saved credentials. See [API Keys](/api-keys/) for each provider's
+supported methods and the additional Azure settings.
 
 ## Settings
 

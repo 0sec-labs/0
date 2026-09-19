@@ -7,20 +7,22 @@ description: Install 0, configure a provider, define scope, and run your first a
 and work on a repository or target you're authorized to test. Model access and
 execution infrastructure are separate from the local engine.
 
-This guide uses the existing `0` executable alias. Repository and package paths,
+This guide uses `0` as the CLI command. Repository and package paths,
 release asset names, `~/.0sec` state paths, and `0SEC_*` environment variables
-retain their legacy technical names until a separate rename.
+retain their existing technical names.
 
 | Path | What you need | Where the work runs |
 | --- | --- | --- |
 | Local CLI with your model access | A supported [API key or provider subscription](#use-my-own-api-key) | Tools run on your configured executor; your provider handles inference and billing. No 0cloud account is required. |
-| Local CLI with hosted inference | An approved [0cloud test service](#hosted-models), compatible CLI and service access | The service handles model requests; tools still run on your configured executor. |
+| Local CLI with hosted inference | A compatible [0cloud account and service](#hosted-models), CLI, and model access | The service handles model requests; tools still run on your configured executor. |
 | Managed security work | Agreed scope, permissions, budget and service access | A separately scoped service. See [managed onboarding](#managed-work-and-onboarding). |
 
 ## Install
 
-Install the verified release binary with one command, build from source, or run
-the container image.
+Choose the standalone release for the full terminal UI, the npm package for
+Node-based commands, a source checkout for development, or the container for a
+separate execution environment. Documentation follows the source checkout:
+compare `0 --version` and command-specific `--help` with your installed release.
 
 ### Release binary
 
@@ -41,12 +43,29 @@ Add the `export` line to your shell profile for future shells. Inspect
 it if your environment requires script review. `INSTALL_DIR` changes the install
 location; `INSTALL_FOXGUARD=0` skips the companion on a pre-provisioned host.
 
+To install a specific release, set `RELEASE_BASE_URL` on the shell running the
+installer to `https://github.com/0sec-labs/0sec/releases/download/<tag>`.
+Use the checksums from that same release. The installer does not modify your
+shell profile, and checksum verification is not a signature or code audit.
+
 Windows release builds are experimental. Download the Windows asset from
 [GitHub Releases](https://github.com/0sec-labs/0sec/releases/latest);
 `install.sh` supports Linux and macOS only. See
 [Windows installation](/troubleshooting/#install-on-windows).
 On Windows, invoke the downloaded executable by its actual filename; the
 Unix `0` symlink is not installed there.
+
+### npm package
+
+With Node.js 24 or newer:
+
+```bash
+npm install -g 0sec-cli
+0 --help
+```
+
+The published package installs both command names, but Node execution does not
+provide the Bun TUI. Use the standalone binary for interactive onboarding.
 
 
 ### Build from source
@@ -66,6 +85,11 @@ node packages/cli/dist/index.js --help
 Source builds do not install a global `0` command. Use the built entry point
 shown above; for interactive source work, run `bun packages/cli/dist/index.js`.
 
+The bundled Node entry point is also available as `node dist/0sec.js`.
+Native dependency installation may need a compiler toolchain on platforms
+without prebuilt addons. The native release workflow uses its own pinned Bun
+compiler; `pnpm build` alone does not produce a standalone executable.
+
 
 ### Container
 
@@ -77,6 +101,10 @@ docker run --rm ghcr.io/0sec-labs/0sec:latest --help
 ```
 For a real scan, mount scope and persist any output you need before using
 `--rm`; files left only inside the container disappear when it exits.
+The image runs the Node bundle as the non-root `ubuntu` user (UID 1000), with
+`/work` as its working directory. It does **not** provide the Bun TUI. Mount
+source read-only unless the task requires writes, and use a separate writable
+mount for the database, journal and reports.
 
 
 ## Configure a provider
@@ -101,10 +129,11 @@ account eligible to make requests.
 
 ### Hosted models
 
-:::caution[Hosted access is a development integration]
-Cloud inference isn't available as a qualified public production flow yet.
-Use the compatible CLI and approved service supplied for your test. A browser
-login or a listed model does not establish that billing and inference are ready.
+:::caution[Confirm account and service compatibility]
+This source audit is not an authenticated production acceptance test.
+Use the compatible CLI and service approved for your account. A public
+sign-in page, browser login, or listed model does not establish that billing
+and inference are ready.
 :::
 
 0cloud model access and managed security work have separate setup and
@@ -113,9 +142,10 @@ off your machine.
 
 1. Set `HOSTED_TEST_HOST` to the operator-provided URL. Log in below, choose
    your organization, and authorize the CLI.
-2. Check the model catalog and credit account. Review free-credit eligibility,
-   any reported subscription windows, prepaid consent and admission state.
-   If credit data is unavailable, resolve CLI/service compatibility first.
+2. Check the model catalog and credit account. Review any reported eligibility,
+   subscription windows, prepaid consent and admission state. These fields are
+   deployment responses, not a promise of free credit. If account data is
+   unavailable, resolve CLI/service compatibility first.
 3. Choose an ID from `0 models`. Pin `hosted` to use it instead of any
    existing provider key or Codex login.
 
@@ -155,6 +185,44 @@ For supported subscription sign-in, use `/connect` and choose the provider's
 subscription entry. This is separate from buying hosted model access through
 0cloud. Provider account restrictions and model availability still apply.
 
+### Use multiple models deliberately
+
+Start with one connected provider route that can serve the models you want.
+For example, a gateway such as OpenRouter can expose models from multiple
+vendors through one account. In `/model`, use **Ctrl+Left / Ctrl+Right** to target
+the parent or a worker role, select the desired model, and press **Enter**.
+**Ctrl+Backspace** removes that role's override so it inherits the parent.
+**Ctrl+S** toggles single-model mode; when enabled it takes precedence over role
+choices.
+
+Workers inherit the parent's provider, credentials and endpoint: a role choice
+does not automatically switch accounts to another configured provider. See
+[multi-model role routing](/configuration/#multi-model-role-routing) for a
+concrete configuration and precedence, and [Console](/console/#model-picker)
+for live changes. These controls are exposed in the TUI and embedding API,
+not as a general CLI role-map flag or environment variable. A role override
+chooses a model when that role runs; it does not guarantee every workflow
+spawns that role or verifies every finding.
+
+### Start with a local repository
+
+For an initial authorized source review without a live network target:
+
+```bash
+0 review ./authorized-repo --runtime api --depth quick --cost-ceiling 2
+```
+
+For interactive work with approval prompts, launch the standalone binary or
+Bun TUI explicitly in Standard mode:
+
+```bash
+0 console --mode standard
+```
+
+Then describe the repository path and objective. The default no-argument console
+mode is **YOLO**, not Standard. Node/readline and `--print` have no interactive
+approval surface; see [approval limitations](/console/#non-interactive-approval-limitations).
+
 ## Run your first scan
 
 Every live network target needs a scope file. The CLI refuses an unscoped live
@@ -177,14 +245,28 @@ Model/tool availability and target access determine coverage.
 Review failures and incomplete coverage before interpreting empty results. [Scan Workflows](/scan-workflows/)
 covers saved runs, outputs, resuming, and verification.
 
-With Docker, mount the scope file and pass its container path:
+With Docker, persist the database and report outside the disposable container.
+Create a directory writable by UID 1000, then mount it separately from scope:
 
 ```bash
-docker run --rm -v "$PWD/scope.json:/work/scope.json:ro" -e ANTHROPIC_API_KEY \
+mkdir -p scan-output
+docker run --rm \
+  -v "$PWD/scope.json:/work/scope.json:ro" \
+  -v "$PWD/scan-output:/output" -e ANTHROPIC_API_KEY -e 0SEC_RUN_DIR=/output \
   ghcr.io/0sec-labs/0sec:latest scan \
   --target https://app.example.com --mode web --scope /work/scope.json \
-  --runtime api --depth quick --cost-ceiling 2
+  --runtime api --depth quick --cost-ceiling 2 \
+  --db-path /output/scan.db --format json
 ```
+
+`0SEC_RUN_DIR` enables the automatically written `report.json` under the mounted
+output directory even with an explicit database path. Use a fresh output
+directory per run. Optional execution journals use the separate
+`~/.0sec/runs/<scan-id>/` store; persist the container's state directory too if
+you enable journaling and need those traces after exit.
+
+Do not mount your Docker socket or entire home directory just to provide a key.
+For volume permission errors, see [Docker troubleshooting](/troubleshooting/#permission-errors-on-mounted-volumes).
 
 ## Common scan tasks
 
@@ -243,10 +325,17 @@ boundaries; enabling one does not sandbox every CLI operation. See
 
 ## Managed work and onboarding
 
-Proposed managed onboarding is a prototype, not a connected self-serve setup
-flow. Do not treat editable examples as saved settings, a repository
-connection or a started run. [Contact the team](https://0.security/contact/?intent=contact)
-to agree on managed work; use the local CLI above for an account-optional start.
+The CLI implements repository enrollment, managed run requests, and recurring
+schedules, and corresponding server integration exists. That is different
+from proving your account's access or a compatible deployed end-to-end flow.
+[Contact the team](https://0.security/contact/?intent=contact) to agree managed
+work; the local CLI above remains an account-optional starting point.
+
+Before automating `connect` or `service`, check
+[managed lifecycle compatibility](/ci/github-action/#managed-lifecycle-compatibility).
+The reviewed client/server pair has schedule-filtering and budget-field
+mismatches: repository-selective disconnect and per-run ceiling enforcement
+must not be assumed safe from the command names or flags alone.
 
 Before managed work starts, agree on the repositories and running targets,
 allowed actions, budget, cadence and evidence required. Repository access

@@ -9,8 +9,10 @@ Independent verification re-tests candidate findings. This design investigates
 how features, classifiers, and additional checks affect recall, false positives,
 and cost.
 
-> **April 2026 record:** implementation and planning coexist below. Neural fusion
-> and adversarial debate remain proposals. See [measured triage results](/research/fp-reduction-moat/).
+> **April 2026 design record:** implementation and planning coexist below.
+> The original 45-feature design and historical targets are preserved; today's
+> extractor has 55 features. Neural fusion and debate remain proposals.
+> Current runtime boundaries are in [False-positive reduction](/research/fp-reduction-moat/).
 
 ## Research Landscape (April 2026)
 
@@ -165,13 +167,18 @@ Fuse the 45-feature vector with CodeBERT embeddings via cross-attention:
 
 ### Layer 4: Structured LLM Verification (GitHub Security Lab-style) — SHIPPED
 
-For findings that the hybrid model classifies as "likely true positive" (high confidence), we run a structured multi-step LLM verification:
+The implemented structured verifier can run without the proposed neural fusion
+model. Its four model-judgment steps assess supplied evidence:
 1. **Reachability analysis** — can the vulnerability actually be triggered from user input?
 2. **Payload validation** — does the PoC actually demonstrate the claimed vulnerability?
 3. **Impact assessment** — what's the real-world impact? Information disclosure vs RCE?
-4. **Exploit confirmation** — independently reproduce the exploit (the original blind verify).
+4. **Exploit confirmation** — judge the exploit claim from the supplied evidence.
 
 Each step uses domain-specific prompts with category-specific addendums (SQLi, XSS, SSTI, IDOR, SSRF, command injection, file upload, deserialization, auth bypass). Any step failure marks the finding as a false positive.
+
+This function calls the runtime for text judgments; it is not itself the
+executable replay runner. A positive vote must not be relabeled as fresh dynamic
+reproduction. Native tool-based verification and replay have separate paths.
 
 **Implementation:** `packages/core/src/triage/structured-verify.ts` — `runStructuredVerify(finding, target, runtime, memoryOptions)`.
 
@@ -189,7 +196,10 @@ Following *All You Need Is A Fuzzing Brain* (arXiv:2509.07225), a scoped `bash` 
 
 ### Layer 5: Triage Memories (Semgrep-style) — SHIPPED
 
-Per-target persistent FP context that learns from human triage decisions. When a user marks a finding as a false positive and gives a reason, the reason is stored as a `TriageMemory` scoped to `global`, `package`, or `target`. On future scans, memories are injected as few-shot examples into the verify prompt; a sufficiently strong match auto-rejects the finding without spending a verification call.
+Per-target persistent explanations supply historical context for review.
+Current `structured-verify.ts` treats retrieved memories as untrusted context:
+a close text match or old label cannot reject fresh evidence without running
+the verification steps. Keep provenance and do not use model agreement as truth.
 
 **Implementation:** `packages/core/src/triage/memories.ts` — `MemoryStore`, `scoreMemory`, `inferPackage`. Feature flag: `0SEC_FEATURE_TRIAGE_MEMORIES`.
 

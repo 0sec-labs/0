@@ -1,12 +1,14 @@
 ---
-title: 0cloud scope and access — development draft
-description: Unpublished scope and access considerations for the unreleased 0cloud product.
+title: Managed scope and access
+description: Establish target authorization, organization and GitHub App access, execution constraints and data handling for managed work.
 draft: true
 pagefind: false
 ---
 
-**0cloud is not released.** This is draft planning material. It will be verified
-against the released product before publishing.
+Managed access and target authorization are separate requirements. The
+[Cloud overview](/cloud/) records the implemented integration and its current
+availability and compatibility boundary; these checks do not imply that a
+signed-in account is entitled to run every workflow.
 
 Scope describes what may be tested. Reachability and credentials describe what
 can be tested. Agree on both before execution; a reachable system is not
@@ -30,6 +32,37 @@ Do not use a broad wildcard when only a particular application is authorized.
 Redirects, shared hosting, and third-party login pages can cross the intended
 boundary. Identify those cases explicitly.
 
+## Organization and GitHub App access
+
+For managed repository enrollment, sign in to the correct Cloud organization,
+then configure its GitHub App integration. Grant access only to the intended
+repositories. GitHub sign-in authenticates an identity; it does not itself
+install the App or make private repositories available to workers.
+
+The enrollment endpoint checks a nonrevoked CLI token with `scans:dispatch`,
+current organization membership, and a nonsuspended, nonremoved installation.
+Repository access is checked against the synchronized installation inventory;
+an all-repositories installation can also cover a matching owner before the
+next inventory sync. A selected-repositories installation must include the
+requested repository. An installation for a different owner is not sufficient.
+
+If enrollment returns `github-app-not-installed`, use the supplied integration
+URL. If it returns `repo-not-accessible`, check repository selection, owner and
+installation state. Do not widen an installation to all repositories merely
+to silence a failed readiness check.
+
+These are access checks, not a complete legal authorization or runtime scope
+policy. The CLI's `connect` and `service start` commands submit repository and
+test/setup configuration; they do not upload a local `--scope` file or your
+engagement brief. Agree separately on the permitted behavior of tests, setup
+scripts, network access, repair publication and recurring runs.
+
+GitHub App reviews are also distinct from recurring `secure` runs. App
+repository policy can control whether reviews run on pull requests or pushes,
+which branches are allowed, draft pull requests and skip labels. Confirm that
+policy and the organization's available workflow before enabling automation.
+See [GitHub CI](/ci/github-action/) for App versus self-operated Actions.
+
 ## Prepare authenticated access
 
 Prefer dedicated, least-privilege test identities and synthetic data. For
@@ -45,6 +78,12 @@ disable security controls broadly.
 Keep secrets out of public issues and initial contact forms. Arrange credential
 transfer with the team, then revoke temporary access at the agreed end of the
 engagement.
+
+Repository credentials do not authenticate a running application. A managed
+source review with GitHub access cannot by itself establish authenticated API
+or tenant coverage. Private networks, SSO and short-lived sessions need an
+explicitly supported service-side access path; a target reachable from your
+laptop may not be reachable from a managed worker.
 
 ## Make side effects explicit
 
@@ -71,6 +110,13 @@ Before the testing window, confirm that the agreed access path reaches the
 right environment, test accounts still work, ownership of test records is
 known, and the stop contact is available. Record unresolved blockers as coverage
 limits, not clean results.
+
+Before enabling recurrence, confirm its target ID, cron/timezone, per-run and
+organization budgets, publication policy and schedule-removal procedure. The
+current [client/server compatibility warnings](/cloud/getting-started/#compatibility-checks)
+include an unfiltered schedule-list response: do not use repository disconnect
+as a safe selective stop until that contract is resolved. Cancelling a scan
+and disabling future schedules are separate operations.
 
 For a scan you operate yourself, use the [CLI quickstart scope example](/getting-started/#run-your-first-scan)
 and [Authorized Engagements](/engagements/) for engine-level controls. A managed

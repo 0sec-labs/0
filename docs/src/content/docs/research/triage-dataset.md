@@ -8,7 +8,7 @@ and local verified findings into a single JSONL dataset for training
 true-positive / false-positive classifiers.
 
 The dataset supports text classifiers and hybrid models combining text with
-the 45-feature vector. The model plan is tracked in
+the current 55-feature vector (45 original finding features plus 10 kernel features). The model plan is tracked in
 [issue #67](https://github.com/0sec-labs/0sec/issues/67).
 
 ## Inputs
@@ -35,26 +35,31 @@ Run against a specific benchmark artifact:
 
 ```bash
 pnpm --filter @0sec/benchmark exec tsx src/triage-data-collector.ts \
-  --npm-bench packages/benchmark/results/npm-bench-latest.json \
-  --output packages/benchmark/results/triage-dataset.jsonl
+  --npm-bench results/npm-bench-latest.json \
+  --output results/triage-dataset.jsonl
 ```
 
 Combine npm-bench with local verified findings from the SQLite DB:
 
 ```bash
 pnpm --filter @0sec/benchmark exec tsx src/triage-data-collector.ts \
-  --npm-bench packages/benchmark/results/npm-bench-latest.json \
-  --db ~/.0sec/0sec.db \
-  --output packages/benchmark/results/triage-dataset-mixed.jsonl
+  --npm-bench results/npm-bench-latest.json \
+  --db "$HOME/.0sec/0sec.db" \
+  --output results/triage-dataset-mixed.jsonl
 ```
 
 Pull labels from a whole directory of scan databases:
 
 ```bash
 pnpm --filter @0sec/benchmark exec tsx src/triage-data-collector.ts \
-  --scan-dir ./.0sec/scans \
-  --output packages/benchmark/results/triage-dataset-from-db.jsonl
+  --scan-dir /absolute/path/to/scan-dbs \
+  --output results/triage-dataset-from-db.jsonl
 ```
+
+`pnpm --filter ... exec` runs in the benchmark package, so these `results/`
+paths are package-relative. Choose actual database paths from your installation.
+A DB-only invocation also auto-collects benchmark JSON from the package's results
+directory; it is not a DB-only dataset. The collector overwrites `--output`.
 
 ## Output schema
 
@@ -63,7 +68,8 @@ Each line is one JSON object with this shape:
 | Field | Type | Meaning |
 |------|------|---------|
 | `text` | `string` | Flattened training text: title, category, severity, description, request, response, optional analysis |
-| `features` | `number[45]` | Handcrafted feature vector from `extractFeatures()` |
+| `features` | `number[55]` | Current handcrafted feature vector from `extractFeatures()`; historical datasets may have older widths |
+| `layer_verdicts` | `LayerVerdict[]` | Ordered per-layer telemetry; empty when the input lacks it |
 | `label` | `0 \| 1` | Numeric classification target |
 | `label_text` | `"true_positive" \| "false_positive"` | Human-readable target |
 | `source` | `string` | Provenance string identifying the benchmark case or verified scan |
@@ -99,18 +105,22 @@ The current `TriageSample` type exposes these values:
 | npm-bench | `npm-bench:<pkg>:<verdict>` | `npm-bench:event-stream:malicious` |
 | SQLite DB | `<target>-<scan_id>` | `https://example.com-scan_01HXYZ...` |
 
-The row `id` is stricter and used only for deduplication. It is built from
-the benchmark case / scan id plus the finding id when available.
+The internal sample `id` is used for deduplication before serialization; it is
+not emitted by `toTrainingFormat()`. XBOW rows without finding/template IDs use
+a random fallback ID, so stable source identifiers are important for repeatable
+deduplication.
 
 ## Example row
 
 Pretty-printed example, abbreviated for readability. The real `features`
-array always has 45 numeric entries.
+array below has 55 numeric entries. Preserve feature names/order and extractor
+revision alongside a dataset; do not silently combine old 45-D and new 55-D rows.
 
 ```json
 {
   "text": "Title: Prototype pollution\nCategory: prototype_pollution\nSeverity: high\nDescription: Vulnerable merge path reachable from user input\nRequest: GET /api/search?q=__proto__\nResponse: HTTP/1.1 500 Internal Server Error\nAnalysis: Confirmed by benchmark ground truth",
-  "features": [500, 0, 0, 1, 0, 0, 0, 0, 0, 33, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 3, 0.9, 1, 1, 0, 1, 0, 0, 58, 1, 1, 0, 1, 42, 0, 1, 1, 1, 1, 2.7, 1.5, 1],
+  "features": [500, 0, 0, 1, 0, 0, 0, 0, 0, 33, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 3, 0.9, 1, 1, 0, 1, 0, 0, 58, 1, 1, 0, 1, 42, 0, 1, 1, 1, 1, 2.7, 1.5, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+  "layer_verdicts": [],
   "label": 1,
   "label_text": "true_positive",
   "source": "npm-bench:lodash@4.17.20:vulnerable",
@@ -137,12 +147,15 @@ Recommended split policy:
 
 ## Label-noise caveat
 
-`package_verdict` labels every finding from a `safe` package as false positive.
-These coarse labels can contain per-finding errors. Report that label noise in
-training results and ablations.
+All three built-in sources are proxy labels, not independent per-finding truth.
+`package_verdict` labels every finding on a safe package negative; flag extraction
+assigns the challenge's outcome to every finding, even when a different finding
+earned the flag. Conversely, failure to extract a flag does not prove every
+reported bug false. `blind_verify` distills the stored verifier judgment. Review
+these labels, retain source cohorts, and disclose label noise in training results.
 
 ## Related
 
-- [Feature Extractor](/research/feature-extractor/) — the 45-element vector carried in every row
+- [Feature Extractor](/research/feature-extractor/) — the current 55-element vector
 - [FP Reduction Moat](/research/fp-reduction-moat/) — where the dataset fits into the broader triage stack
 - [Finding Triage ML](/research/finding-triage-ml/) — the design doc for the full hybrid model direction

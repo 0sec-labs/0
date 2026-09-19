@@ -38,6 +38,13 @@ Only gpt-5.4 solved the blind-SQLi case in these runs. Kimi K2.5 solved the IDOR
 and Jinja cases; Qwen3 Coder had the lowest listed time per turn.
 This small sample supplies no general model ranking.
 
+Model diversity is an explicit workflow choice, not a benchmark-trained
+automatic optimum. `deep-review --models` adds a finder fan-out axis; it defaults
+to one provider model. Hunt refutation can select a distinct model family when
+credentials and known finder families allow it, with recorded fallback states.
+Neither mechanism infers a globally best discovery/verification/fix model from
+these few challenges. See [Research Workflows](/research-workflows/).
+
 <span id="model-comparison-matters"></span>
 ## Effect of model choice
 

@@ -1,5 +1,13 @@
 # 0verse post-training-cutoff CVE evaluation — discovery, not memorization (#49)
 
+> **Historical evaluation and hypothesis, not proof of training-data exclusion.**
+> The retained gate checks publication dates against a declared cutoff; it
+> cannot inspect a provider's training corpus or establish that a vulnerability
+> instance was never seen during training. The original discovery/memorization
+> argument and measured results below are preserved as campaign context, not a
+> universal guarantee. Real Codex runs contact an external model provider;
+> “no external sends” below is not an offline/privacy guarantee.
+
 > **The discovery-vs-memorization proof.** Every other 0verse benchmark uses bugs
 > the model could, in principle, have seen during training. A find on those cannot
 > distinguish *discovery* from *recall*. This corpus is built **only** from real

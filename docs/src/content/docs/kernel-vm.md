@@ -16,16 +16,18 @@ does not execute the boots; a source checkout alone does not provision the guest
 
 A maintained build recipe at `packages/core/src/triage/kernel-vm/` builds:
 
-- `bzImage` — Linux 6.8.12 for x86_64 with KASAN, UBSAN, KCSAN, lock debugging,
-  RCU stall detection, and virtio/9p/ext4/NFS/Bluetooth/WiFi/SCTP support.
+- `bzImage` — Linux 6.8.12 for x86_64. The recipe requests KASAN, UBSAN,
+  KCSAN, lock debugging, RCU stall detection, and virtio/9p/ext4/NFS/Bluetooth/WiFi/SCTP
+  support; inspect the generated config rather than assuming every requested
+  option survives `olddefconfig`. Tree builds use separate `kasan` and `kcsan` profiles.
 - `rootfs.img` — 512 MB Debian Bookworm ext4 with `gcc`, `binutils`, `make`,
   `procps`, `kmod`, `strace`, `gdb`, OpenSSH, and `/sbin/0sec-init`.
 - `kernel.config` — the exact config used for the build.
 - `osec_vm_key[.pub]` — root SSH keypair for manual debugging only (the verifier
   uses a QEMU 9p share, not SSH).
 
-Prebuilt artifacts are not committed. Build locally or let the GitHub Actions
-E2E workflow build and cache them.
+Prebuilt artifacts are not committed. Build locally; the earlier kernel-validator
+GitHub Actions workflows are not present in this checkout.
 
 ## Requirements
 
@@ -41,8 +43,7 @@ E2E workflow build and cache them.
 From the repo root:
 
 ```bash
-pnpm install --frozen-lockfile
-
+# Docker builds the guest; the published 0 CLI and QEMU are needed to run it.
 cd packages/core/src/triage/kernel-vm
 env 0SEC_KERNEL_VM_MAKE_JOBS=4 \
   ./build.sh "$HOME/.0sec/kernel-vm/linux-6.8.12-kasan"
@@ -73,6 +74,8 @@ env \
   0SEC_KERNEL_QEMU=1 \
   0SEC_KERNEL_QEMU_KERNEL="$HOME/.0sec/kernel-vm/linux-6.8.12-kasan/bzImage" \
   0SEC_KERNEL_QEMU_DISK="$HOME/.0sec/kernel-vm/linux-6.8.12-kasan/rootfs.img" \
+  0SEC_KERNEL_QEMU_CONFIG="$HOME/.0sec/kernel-vm/linux-6.8.12-kasan/kernel.config" \
+  0SEC_KERNEL_QEMU_EXPECTED_RELEASE=6.8.12 \
   0 ingest --verify ./crashes
 ```
 
@@ -83,6 +86,8 @@ env \
   0SEC_KERNEL_QEMU=1 \
   0SEC_KERNEL_QEMU_KERNEL="$HOME/.0sec/kernel-vm/linux-6.8.12-kasan/bzImage" \
   0SEC_KERNEL_QEMU_DISK="$HOME/.0sec/kernel-vm/linux-6.8.12-kasan/rootfs.img" \
+  0SEC_KERNEL_QEMU_CONFIG="$HOME/.0sec/kernel-vm/linux-6.8.12-kasan/kernel.config" \
+  0SEC_KERNEL_QEMU_EXPECTED_RELEASE=6.8.12 \
   0SEC_KERNEL_QEMU_MEMORY_MB=2048 \
   0SEC_KERNEL_QEMU_SMP=2 \
   0SEC_KERNEL_QEMU_BOOT_TIMEOUT_SEC=180 \
@@ -99,6 +104,11 @@ Leave `0SEC_KERNEL_QEMU_APPEND` unset unless using a custom guest. Default:
 console=ttyS0 root=/dev/vda rw nokaslr panic=-1 init=/sbin/0sec-init
 ```
 
+The release above applies only to the unmodified 6.8.12 recipe. For custom
+images, supply the exact built release, including any local-version suffix.
+Direct VM execution requires the expected release and a real config for receipt
+binding; a filename is not provenance.
+
 ## Run verification
 
 Place crash reports and reproducers in one directory; file stems are matched:
@@ -114,6 +124,23 @@ crashes/
 ```bash
 0 ingest ./crashes --verify --output json
 ```
+
+Run this with the same `env` settings as above; they apply only to that one
+command and are not saved by the first invocation.
+
+For a standalone reproducer, use a source tree and the current profile flag:
+
+```bash
+0 ingest --reproducer ./poc.c --kernel-tree /path/to/linux \
+  --kernel-config kasan --output json
+```
+
+This resolves/builds cached artifacts (default `~/.0sec/kernel-cache`, override
+with `--kernel-cache-dir` or `0SEC_KERNEL_BUILD_CACHE`). Built-in profiles are
+`kasan`, `kcsan`, and `plain`. Existing `0SEC_KERNEL_QEMU_KERNEL`/`DISK` overrides
+take precedence unless `--force-kernel-build` is used, so unset those overrides
+when you intend to test the supplied tree. `--syz ./program.syz` requires
+`syz-execprog` in the guest; the stock rootfs recipe does not install it.
 
 For each C reproducer 0 writes `repro.c` and `runner.sh` to a temp dir, boots
 QEMU with a 9p share (`osecshare`), lets `/sbin/0sec-init` run
@@ -165,8 +192,8 @@ SSH is not part of the contract; the keypair is only for manual debugging.
 | `0SEC_KERNEL_QEMU` | Yes | - | `1` to enable VM execution |
 | `0SEC_KERNEL_QEMU_KERNEL` | Yes | - | Path to `bzImage` |
 | `0SEC_KERNEL_QEMU_DISK` | Yes | - | Path to `rootfs.img` or other bootable disk |
-| `0SEC_KERNEL_QEMU_CONFIG` | For provenance | - | Config used to build the selected kernel |
-| `0SEC_KERNEL_QEMU_EXPECTED_RELEASE` | For prebuilt artifacts | - | Exact expected `uname -r`; never inferred from filename |
+| `0SEC_KERNEL_QEMU_CONFIG` | For direct execution receipts | - | Config used to build the selected kernel |
+| `0SEC_KERNEL_QEMU_EXPECTED_RELEASE` | For direct/prebuilt execution | - | Exact expected `uname -r`; never inferred from filename |
 | `0SEC_KERNEL_QEMU_BINARY` | No | `qemu-system-x86_64` | QEMU binary |
 | `0SEC_KERNEL_QEMU_DISK_FORMAT` | No | inferred | `raw` or `qcow2` |
 | `0SEC_KERNEL_QEMU_MEMORY_MB` | No | `2048` | Guest memory (MB) |
@@ -181,18 +208,18 @@ SSH is not part of the contract; the keypair is only for manual debugging.
 
 ## Troubleshooting
 
-If the VM exits early, inspect `serial.log` in `0SEC_KERNEL_QEMU_ARTIFACT_DIR`:
-
-`.github/workflows/kernel-validator-e2e.yml` is the smoke-tested CI reference: it
-builds the artifacts, boots QEMU, runs a real `ingest --verify`, and uploads the
-logs.
+If the VM exits early, inspect `serial.log` in the configured artifact directory.
+The retained manual smoke script is `scripts/kernel-validator-e2e.sh`; it expects
+built `packages/cli/dist/index.js`, downloads a syzbot report/reproducer, and uses
+your configured VM artifacts. It is not a current GitHub Actions workflow.
 
 ## Batch validation
 
-Maintainers can run `.github/workflows/kernel-validator-batch.yml` manually to
-validate a curated syzbot corpus against the real VM. The default corpus is
-`scripts/kernel-validator-batch-corpus.json`; a JSON override is accepted. It
-uploads `summary.json` (with `verified`, `reproduced`, `crashMatch`,
-`reproducedMismatch`, `staticOnly`, `failed`, `errored` counts), `summary.md`,
-per-case `result.json`, raw CLI output, and VM artifacts. It is
-`workflow_dispatch` only.
+Maintainers can run `node scripts/kernel-validator-batch.mjs --help` from the
+repository root. The script accepts `--corpus`, `--out-dir`, `--cli`, and `--limit`;
+its default corpus is `scripts/kernel-validator-batch-corpus.json`.
+Supply the VM configuration above and a built CLI for actual execution.
+`--dry-run` writes skipped summaries without QEMU and is not reproduction proof.
+Outputs include `summary.json`, `summary.md`, per-case results, raw CLI output,
+and retained VM artifacts. Inspect `verified`, `crashMatch`, and `reason`:
+`reproduced` alone can mean execution occurred without a recognized crash.

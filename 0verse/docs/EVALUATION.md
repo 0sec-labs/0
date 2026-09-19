@@ -1,5 +1,11 @@
 # 0verse real-LLM evaluation
 
+> **Historical, condition-specific evaluation.** The host, provider, toolchain,
+> credentials, and numbers below describe the retained campaign, not today's
+> default setup or a current provider pricing/latency guarantee. Lab SSH aliases
+> and `/root/` paths are not installed by this repository. Use
+> [GHIDRA-SETUP.md](GHIDRA-SETUP.md) for the current toolchain.
+
 > **Honest, measured, reproducible.** This is the end-to-end evaluation of 0verse
 > driven by a **real frontier model** (not `MockLLM`) over a labeled corpus. No
 > cherry-picking: misses, false positives, and the places the model does *not*

@@ -16,16 +16,28 @@ description: Choose a scan or source review, authorize it, inspect saved finding
 | npm package | `0 audit express` | Package acquisition and analysis |
 | Whole-repository file coverage | `0 file-review ./my-app` | File-level review with its own checkpoints |
 | Seedless specialized review | `0 deep-review ./my-app` | Multi-lens discovery; survivors remain leads |
+| Repository investigation through repair | `0 secure ./my-app --test-command "npm test"` | Committed source, executable probes, disposable checkouts in the current worker |
+| Domain inventory | `0 recon example.com --json` | CT/DNS lookups and HTTP probes, not a vulnerability verdict |
+| Entra ID posture | `0 identity --tenant TENANT_ID --json` | Read-only Microsoft Graph collection with operator-supplied credentials |
+| Fix-seeded variant hunt | `0 hunt --source ./linux --seed ./security-fix.patch` | Source investigation; output remains leads to verify |
 
 Explicit commands avoid ambiguity in bare-target routing. `scan --mode` selects `probe`, `deep`, `mcp`, `web`, or worker-driven `http_audit`. A review target profile is different: `review --target c-library ./libfoo` selects the C-library review path, not a URL.
 
 For variant hunting, specification checks, fuzzing, binaries, and kernel workflows, see [Research Workflows](/research-workflows/).
 
+The website's network → web/API → AI → source/dependencies → runtime/OS/kernel
+taxonomy describes missions, not a single scan that covers every layer.
+Choose the command and its evidence contract: identity/graph analysis does not
+exploit a network service; a source-review lead does not establish a live exploit;
+kernel/VM execution needs separately provisioned artifacts. These CLI workflows
+run in your environment. Hosted model transport does not provision a managed
+execution worker.
+
 ## Authorization and scope
 
 `scan` requires an engagement scope for HTTP, HTTPS, and MCP targets, including localhost. Worker-driven `http_audit` instead builds its policy from operator-provided configuration. Neither `--require-scope` nor its absence is a way to bypass the live-target requirement.
 
-Start with the schema and matching rules in [Scope & Authorization](/scope/). Authorize only the hosts, paths, and activities covered by your engagement.
+Start with the schema and matching rules in [Scope & Authorization](/scope/). Authorize only the hosts and activities covered by your engagement. Ordinary scope rules match hostnames, not paths or ports; do not encode a path restriction as a hostname rule.
 
 ```bash
 0 scan --target https://staging.example.com --scope ./scope.json
@@ -95,6 +107,15 @@ it does not claim every layer ran or that all remaining findings are reproduced.
 ```
 
 Inspect per-finding triage provenance. A skipped layer and an unrecorded layer are different. [Features](/features/) lists current toggles; [Finding Triage](/triage/) explains the evidence gates.
+
+Jev assistance is separately opt-in through `0SEC_JEV_FEATURES`, not enabled by
+possessing a provider key. In this workflow it can assist browser navigation,
+memory ranking, or semantic deduplication. It does not grant scope, confirm a
+vulnerability, or turn a duplicate match into verification. Browser assistance
+also requires explicit scope and operator-approved read-only URLs; ambiguous
+steps, forms, writes, and authentication return to the main model.
+Review data egress and the separate Jev request/cost limits in
+[Configuration](/configuration/) before enabling it.
 
 ## Output formats and saved state
 
@@ -172,10 +193,14 @@ Do not assume standalone resume restores target credentials or authorization tha
 ```bash
 0 replay
 0 replay --scan SCAN_ID
-0 scan --replay
+0 scan --target https://staging.example.com --replay
 ```
 
 Replay renders saved findings; it does not launch a fresh assessment or independently reproduce the vulnerability. `verify` is a different operation.
+
+The `scan --replay` spelling still requires Commander’s `--target` option;
+it renders the latest row from the selected database, not a new scan of that
+argument. Prefer the standalone `replay` command for saved-result viewing.
 
 ## Verification and evidence
 
@@ -195,10 +220,17 @@ selected path.
 0 verify --bundle ./bundle-dir --runner docker
 
 # Use the separate kernel-finding verification path.
-0 verify --kernel-finding finding.json --kernel-tree ./linux
+env 0SEC_KERNEL_VERIFY=1 0 verify \
+  --kernel-finding finding.json --kernel-tree ./linux
 ```
 
 A scan report containing many findings is not itself a single `finding.json`. Preserve the selected finding's executable verification data and target context. The Docker runner requires its runtime prerequisites; local execution runs on the host. Kernel execution requires its own setup in [Kernel VM Verification](/kernel-vm/).
+
+Docker replay defaults to networking disabled. HTTP replay requiring a bridge
+or custom Docker network must explicitly select `--docker-network` and provide
+`--scope`; that network-enabled path permits HTTP steps only. A local runner
+instead executes on the host. Choose the runner for the finding's executable
+steps rather than assuming Docker can reach a remote application by default.
 
 The fixture path is documented with a complete invocation in [Verification Results](/verification-result/#cli-path-traversal-example). Reproduction bundles, runner-based replay, legacy PoC-step execution, and kernel verification have different result contracts. Inspect the emitted JSON and the mode's exit semantics rather than interpreting every exit `2` as the same condition.
 
@@ -213,7 +245,14 @@ A negative replay result can mean the tested environment differs from the origin
   --test-command "npm test" --output ./validated.apply-patch
 ```
 
-The external finding must carry `verificationSpec`. If it does not already carry the required verification result, pass `--verification-result ./verification-result.json`. Alternatively select a persisted finding with `--finding-id` and `--db-path`.
+The external finding must carry `verificationSpec` and a scoped source-file
+reference. It must also carry `verification_result.status: "reproduced"` (or the
+supported camel-case result field); otherwise pass
+`--verification-result ./verification-result.json`. The spec must reproduce the
+current vulnerable source state before patching. Specs with a `behavior` section
+are rejected by this source-fix runner because they require a provisioned target;
+the `secure` behavioral lifecycle is a different contract. Alternatively select
+a persisted finding with `--finding-id` and `--db-path`.
 
 The workflow generates and checks a candidate in an isolated worktree. `--output` writes validated **apply_patch DSL**, not a standard unified diff. By default it does not apply the candidate to the original worktree.
 
@@ -231,6 +270,69 @@ Only use `--apply` when you intend to modify the original repository. The regres
 | `2` | Precondition failed or error |
 
 See [Commands — fix](/commands/#fix) for the complete prerequisite and option reference.
+
+## Repository lifecycle with `secure`
+
+Use `secure` when you want discovery and behavioral repair in one repository
+workflow, rather than supplying the single reproduced finding required by
+`fix`. Commit the source you want assessed: local inputs are cloned from Git,
+so uncommitted edits are not the investigation baseline.
+
+```bash
+0 secure ./my-app \
+  --setup-command "npm ci" \
+  --test-command "npm test" \
+  --state-dir ../my-app-secure \
+  --runtime api --timeout 3600000 --cost-ceiling 10 > secure-result.json
+```
+
+Choose setup and regression commands appropriate to the project. Setup must
+preserve tracked source. The workflow investigates a managed checkout, checks
+baseline tests, generates a behavioral probe with a legitimate-use control,
+freezes that probe, and tests candidate patches. A repair is `verified` only
+after regression tests and the frozen probe also pass in a fresh patched
+checkout. This is fresh-checkout replay, not a guarantee that a different model
+independently invented the reproducer or that all repository vulnerabilities
+were found.
+
+Inspect `status`, `errors`, every finding's repair outcome, `baseline`,
+`verification`, and artifact paths together. The current aggregate `completed`
+status can coexist with explicitly blocked findings or retained errors; exit
+`0` is not an all-findings-fixed certificate. CLI exits are `0` completed,
+`2` blocked, `3` failed, and `130` cancelled.
+
+`costUsd` reports available metered model usage, not a hosted-service price or
+proof of completion. Investigation completion now supplies metered cost, but
+the current repair loop replaces that total with its own ledger; totals across
+phases/resumes can therefore be incomplete. Repair ceiling checks occur between
+findings and do not include all investigation/prior-run spend. Missing usage is
+not evidence of a free call. Treat `--cost-ceiling` as cooperative accounting,
+not a provider-enforced whole-workflow billing cap. Likewise, investigation does
+not accept the workflow's cancellation signal directly, so timeout/cancellation
+may not take effect until that pipeline returns.
+
+Retain the state directory, including per-finding `probe.json`, `baseline.json`,
+`verification.json`, `manifest.json`, and command logs when produced.
+`changes.diff` is a Git diff; `candidate.apply-patch` is apply_patch DSL.
+These differ from `fix --output`, which writes only the validated DSL.
+
+```bash
+# Retry a compatible interrupted/blocked/failed run with the same configuration.
+0 secure ./my-app --setup-command "npm ci" --test-command "npm test" \
+  --state-dir ../my-app-secure --runtime api \
+  --timeout 3600000 --cost-ceiling 10 --resume
+```
+
+Resume checks the source revision and configuration identity. Completed or
+cancelled runs require a fresh run instead. Without `--resume`, the same state
+directory starts fresh and can reset/clean its managed checkout: do not keep
+manual edits there. Secure state is not a `scan --db-path` checkpoint.
+
+Add `--publish` only when authorized to push repair branches and create GitHub
+PRs, with authenticated `gh` and repository credentials available. Publication
+selects verified repairs; it does not merge or deploy them. By default artifacts
+remain local. Setup, tests, and model-generated probes execute in the current
+worker; disposable checkouts are not containers or an OS sandbox.
 
 ## Package and source workflows
 

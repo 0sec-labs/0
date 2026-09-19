@@ -47,9 +47,11 @@ oracle that decided it**. It is the foxguard-style data moat, for binaries.
 `zeroverse.dataset.validate_record` enforces both — it runs before every write and
 on every read:
 
-1. **PoV-is-truth.** `verdict == "confirmed"` ⇒ a non-empty `pov.path`. A confirmed
-   record with no reproducing PoV is rejected — the same rule the engine uses to
-   refuse a finding. `pruned` (angr UNSAT) and `hypothesis` records carry no PoV.
+1. **PoV pointer required.** `verdict == "confirmed"` ⇒ a non-empty `pov.path`.
+   This schema check does not execute or independently authenticate that path;
+   the pipeline oracle establishes confirmation. Do not treat a hand-authored
+   schema-valid row as proof. `pruned` and `hypothesis` rows emitted by the
+   pipeline carry no confirmed PoV.
 2. **No raw exploit bytes.** The schema has **no field** for crash input bytes, and
    `validate_record` additionally rejects any record that smuggles a payload-bearing
    key (`input_bytes` / `crash_input` / `pov_bytes` / `payload` / `exploit_bytes` /
@@ -92,12 +94,14 @@ Enforcement is mechanical, not a promise:
 
 - The emitter **never** writes bytes (no field exists; `validate_record` rejects
   bytes-bearing keys).
-- Real capture lands wherever the operator points `ZEROVERSE_DATASET_PATH`; that
-  path is **git-ignored** (`*.0verse-dataset.ndjson`, `dataset-out/`).
-- A test (`tests/test_dataset.py::test_committed_example_corpus_is_synthetic_and_payload_free`)
-  asserts the only `*.ndjson` in the repo are the `examples/dataset/` rows, every
-  one `synthetic: true`, schema-valid, and payload-free. CI fails if a real corpus
-  or raw bytes are ever committed.
+- Real capture lands wherever the operator points `ZEROVERSE_DATASET_PATH`.
+  Use a private path outside the checkout, or the ignored
+  `*.0verse-dataset.ndjson` / `dataset-out/` conventions. Arbitrary filenames
+  such as `corpus.ndjson` are **not** automatically ignored.
+- `test_committed_example_corpus_is_synthetic_and_payload_free` checks
+  dataset-shaped NDJSON for synthetic-only committed examples. Other NDJSON
+  schemas, such as benchmark results, are not dataset rows and are excluded.
+  This is a corpus guard, not a general secret scanner or redactor.
 
 ## Emitting
 
@@ -106,20 +110,25 @@ from zeroverse import api, dataset
 from zeroverse.pipeline import run
 
 # Opt-in via the scan API (append-only NDJSON; one record per finding):
-#   ZEROVERSE_DATASET_PATH=corpus.ndjson  0verse scan ./target --format ndjson
+#   ZEROVERSE_DATASET_PATH=/private/corpus.0verse-dataset.ndjson 0verse scan ./target --format ndjson
 
 # Or directly from a RunResult:
 rr = run("./target")
-dataset.emit_run(rr, "corpus.ndjson", binary="./target", backend="ghidra")
+dataset.emit_run(rr, "/private/corpus.0verse-dataset.ndjson", binary="./target", backend="ghidra")
 ```
 
 Read back (validates each row):
 
 ```python
 from zeroverse import dataset
-for row in dataset.iter_records("corpus.ndjson"):
+for row in dataset.iter_records("/private/corpus.0verse-dataset.ndjson"):
     ...
 ```
+
+Treat explanations, binary names, paths, and reproduction commands as potentially
+sensitive even though the schema excludes payload-bearing keys. The ordinary
+dataset emitter is append-only; it is not the locked, receipt-verified production
+learning ledger described below.
 
 ## 0research production learning
 

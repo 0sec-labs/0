@@ -1,6 +1,6 @@
 ---
 title: 0 documentation
-description: Your self-improving, open-source cybersecurity team. Install 0, connect a model, and investigate authorized targets. Research Preview.
+description: Your multi-model, open-source cybersecurity team. Install 0, connect your models, hack & fix your systems. Research Preview.
 template: splash
 prev: false
 next: false
@@ -25,6 +25,37 @@ import { LinkCard, CardGrid } from "@astrojs/starlight/components";
   <LinkCard title="Troubleshooting" description="Resolve installation and runtime issues." href="/troubleshooting/" />
 </CardGrid>
 </div>
+
+## Find, verify, and fix
+
+Choose the workflow for your target, then inspect its evidence and outcome—not
+just its exit code—before treating a lead as confirmed or a repair as verified.
+
+| Your task | Start here |
+| --- | --- |
+| Assess an authorized web or API target | [Scan workflows](/scan-workflows/) and [scope files](/scope/) |
+| Review source or a package | [`review`, `file-review`, and `audit`](/commands/#start-by-task) |
+| Reproduce a finding or check a repair | [Verification results](/verification-result/) and [`secure`](/commands/#secure) |
+| Evaluate an AI endpoint or agent integration | [`eval` and `agent-assure`](/research-workflows/) |
+| Investigate identity and access paths | [Engagements](/engagements/) |
+| Hunt source variants, inspect binaries, or use kernel evidence | [Research workflows](/research-workflows/) and [0verse prerequisites](/commands/#binary) |
+
+`secure` brings repository investigation, reproduction, repair attempts,
+regression tests, and independent repair verification into one workflow.
+It runs on the current worker, not in a newly provisioned sandbox. Publication
+is opt-in, and a completed run can still contain blocked findings: inspect
+the individual outcomes before accepting a patch.
+
+## Connect your models
+
+Use [API Keys](/api-keys/) to establish a supported model connection, then
+choose models in the [console](/console/) or [configuration](/configuration/).
+[Role-model assignments](/configuration/#multi-model-role-routing) can use
+different models supported by that provider or gateway. Child agents inherit
+the parent connection; they do not automatically discover or switch to another
+provider account. Model choice is not a claim of automatically optimal routing.
+
+## Extend and automate
 
 [Build a Hackstore extension](/hackstore/) to add your own tools to 0, test
 them locally, and share them with other users.

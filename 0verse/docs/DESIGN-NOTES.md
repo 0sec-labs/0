@@ -2,6 +2,11 @@
 
 > Distilled from source-level study of three reference systems (2026-06-27).
 > These decisions drive the M1/M2 architecture in [../ROADMAP.md](../ROADMAP.md).
+>
+> **Historical design record, not a shipped-feature checklist.** Proposed
+> backends, caching, and orchestration below retain their original context.
+> For current setup and implemented boundaries, use [INTEGRATION.md](INTEGRATION.md)
+> and the [result contract](RESULT-CONTRACT.md).
 
 ## Systems studied
 
