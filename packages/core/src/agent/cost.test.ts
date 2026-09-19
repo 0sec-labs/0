@@ -87,6 +87,8 @@ describe("estimateCost", () => {
     expect(estimateCost(usage, "DeepSeek-V4-Flash")).toBeCloseTo(0.19 + 0.51, 5);
     expect(estimateCost(usage, "Kimi-K2.7-Code")).toBeCloseTo(0.95 + 4.00, 5);
     expect(estimateCost(usage, "gpt-oss-120b")).toBeCloseTo(0.15 + 0.60, 5);
+    expect(estimateCost(usage, "deepseek-v4.1-flash")).toBeCloseTo(0.375 + 1.5, 5);
+    expect(estimateCost(usage, "FW-DeepSeek-V4.1-Flash")).toBeCloseTo(0.375 + 1.5, 5);
   });
 
   it("prices exact Azure GPT-5.6 SOL, Luna, and Terra deployment names", () => {
@@ -111,6 +113,9 @@ describe("estimateCost", () => {
     ["DeepSeek-V4-Pro-2026-04-23", { input: 1.74, output: 3.48 }],
     ["KIMI-K2.7-CODE-2026-06-12", { input: 0.95, output: 4.00, cachedInput: 0.19 }],
     ["gpt-5.6-sol-2026-07-09", { input: 5.00, output: 30.00, cachedInput: 0.50 }],
+    ["deepseek-v4.1-flash", { input: 0.375, output: 1.5, cachedInput: 0.008 }],
+    ["FW-DeepSeek-V4.1-Flash", { input: 0.375, output: 1.5, cachedInput: 0.008 }],
+    ["deepseek-v4.1-flash-2026-09-20", { input: 0.375, output: 1.5, cachedInput: 0.008 }],
   ] as const)("prices Azure deployment alias %s without fallback", (model, expected) => {
     expect(getRates(model)).toEqual(expected);
   });
