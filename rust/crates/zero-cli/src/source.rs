@@ -37,6 +37,11 @@ pub enum SourceCommand {
         /// Explicit registry base (defaults to the public npm registry).
         #[arg(long, requires = "npm_package")]
         registry: Option<String>,
+        /// Explicit registry-scoped Bearer token environment; never reads npm config.
+        #[arg(long, requires_all = ["npm_package", "registry", "npm_credential_registry"])]
+        npm_credential_env: Option<String>,
+        #[arg(long, requires = "npm_credential_env")]
+        npm_credential_registry: Option<String>,
         /// New absolute output directory; never replaces existing content.
         #[arg(long)]
         output: PathBuf,
@@ -64,6 +69,8 @@ pub async fn run(command: &SourceCommand) -> Result<u8, Box<dyn Error>> {
             npm_package,
             version,
             registry,
+            npm_credential_env,
+            npm_credential_registry,
             output,
             git_bin,
             timeout_ms,
@@ -122,10 +129,17 @@ pub async fn run(command: &SourceCommand) -> Result<u8, Box<dyn Error>> {
                     repository_url: credential_url.clone().unwrap_or_default(),
                     username: credential_username.clone().unwrap_or_default(),
                 });
+        let npm_credential =
+            npm_credential_env
+                .as_ref()
+                .map(|environment| zero_executor::NpmCredential {
+                    environment: environment.clone(),
+                    registry: npm_credential_registry.clone().unwrap_or_default(),
+                });
         let mut signals = crate::scan::Signals::new()?;
         let mut task = tokio::spawn(async move {
             if let Some(request) = npm {
-                zero_executor::acquire_npm(request, worker_cancel)
+                zero_executor::acquire_npm_with_credential(request, npm_credential, worker_cancel)
                     .await
                     .map(zero_protocol::source_acquisition::SourceReceipt::Npm)
             } else {

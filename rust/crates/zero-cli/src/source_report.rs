@@ -8,6 +8,7 @@ pub enum SourceReportFormat {
     Json,
     Markdown,
     Html,
+    Sarif,
 }
 
 pub async fn run(
@@ -27,6 +28,7 @@ pub async fn run(
         SourceReportFormat::Json => zero_report::SourceReportFormat::Json,
         SourceReportFormat::Markdown => zero_report::SourceReportFormat::Markdown,
         SourceReportFormat::Html => zero_report::SourceReportFormat::Html,
+        SourceReportFormat::Sarif => zero_report::SourceReportFormat::Sarif,
     };
     let signal = crate::server::shutdown_signal();
     tokio::pin!(signal);

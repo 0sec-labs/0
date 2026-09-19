@@ -25,8 +25,44 @@ loopback HTTP fixtures. URLs must be canonical and contain no credentials, query
 or fragment. The metadata endpoint must return the exact requested package name
 and version. Its tarball URL must have the **same origin** as that registry.
 Redirects, automatic retries, ambient proxies, npm configuration and ambient
-credentials are not used. Private authenticated registries and cross-origin CDNs
-are unsupported in this first path.
+credentials are not used. Cross-origin CDNs remain unsupported.
+
+Private registry authentication is explicitly selected by the host:
+
+```sh
+0sec-native source acquire \
+  --npm-package @scope/package --version 1.2.3 \
+  --registry https://registry.example/private/ \
+  --npm-credential-env PRIVATE_NPM_TOKEN \
+  --npm-credential-registry https://registry.example/private/ \
+  --output /absolute/new-private-capture
+```
+
+Populate the named variable through the host's secret mechanism. The bounded ASCII
+Bearer token cannot contain whitespace. Both credential flags and an explicit
+registry are required; the credential registry must exactly equal the selected
+canonical base, including its trailing slash. No `.npmrc`, ambient `NPM_TOKEN`,
+`NODE_AUTH_TOKEN`, Git credential selector, or package configuration supplies auth.
+
+The header is sensitive and attached individually to the metadata and tarball
+requests, never as a client default. An authenticated tarball must remain within
+the **same literal registry base path**, not just the same origin. Encoded paths,
+path aliases and sibling prefixes are rejected rather than broadening authority.
+For example, a credential for `/private/` cannot reach `/another/package.tgz`.
+Metadata cannot move a token to another host, port, path prefix or redirect target.
+A registry returning tarballs outside that base requires a different separately
+reviewed mechanism; this command never silently widens the credential scope.
+
+Credential handling never writes the token into URLs, argv, npm config or
+receipts. Registry error response bodies are suppressed. Tarball URLs reflecting
+the literal token are rejected before download, and literal token occurrences in
+receipt source paths are rejected before publication, with fixed error messages.
+The registry still supplies untrusted package bytes: arbitrary file contents and
+encoded token reflections within source content or filenames are not scrubbed or
+certified secret-free. This preserves exact source identity rather than silently
+redacting it. Public acquisition and its receipt
+format remain unchanged. Local HTTP remains available only for explicitly chosen
+loopback fixtures; ordinary private registry traffic requires HTTPS.
 
 The tarball must have one canonical `sha512-...` integrity value. Its bytes are
 checked before extraction; SHA-1-only metadata is rejected. The receipt retains
@@ -73,3 +109,9 @@ fixtures, retained Store provenance and actual CLI review with a loopback model
 fixture. These tests do not contact npm or a paid provider and do not establish
 package safety. The registry's [version metadata API](https://github.com/npm/registry/blob/main/docs/REGISTRY-API.md)
 is the transport contract; dependency-install parity remains separate work.
+
+Private-auth qualification uses the actual native CLI and owned loopback registry
+fixtures, including metadata/tarball redirects, cross-origin and sibling-path
+exclusion, malformed selectors, corrupt integrity and secret-echo error bodies.
+These checks establish the local authority and request contract; no live private
+registry interoperability or package safety is claimed.

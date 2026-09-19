@@ -161,6 +161,7 @@ fn bad_versions_hash_links_citations_and_resource_limits_fail_for_all_formats() 
             SourceReportFormat::Json,
             SourceReportFormat::Markdown,
             SourceReportFormat::Html,
+            SourceReportFormat::Sarif,
         ] {
             assert!(
                 render_source_report(&report, format).is_err(),
@@ -321,6 +322,7 @@ fn linked_identity_status_and_reportability_mismatches_fail_closed() {
             SourceReportFormat::Json,
             SourceReportFormat::Markdown,
             SourceReportFormat::Html,
+            SourceReportFormat::Sarif,
         ] {
             assert!(
                 render_source_report(&r, format).is_err(),
@@ -367,6 +369,7 @@ fn cancelled_and_unknown_attempts_preserve_dispositions_and_stop_reasons() {
             SourceReportFormat::Json,
             SourceReportFormat::Markdown,
             SourceReportFormat::Html,
+            SourceReportFormat::Sarif,
         ] {
             let out = render_source_report(&r, format).unwrap();
             assert!(out.contains("unverified"));
@@ -401,4 +404,53 @@ fn hostile_link_identifiers_and_oracle_text_are_escaped_everywhere() {
     let md = render_source_report(&r, SourceReportFormat::Markdown).unwrap();
     assert!(!md.contains("<script>"));
     assert!(md.contains("\\[click\\](evil)<br>\\# header\\|"));
+}
+
+#[test]
+fn sarif_preserves_evidence_without_promoting_claims_and_encodes_paths() {
+    let mut report = linked_fixture();
+    report.review.hypotheses[0].claim.citations[0].path = "src/a #?%ü.rs".into();
+    report.repairs[0].candidate_receipt.as_mut().unwrap().target = "src/a #?%ü.rs".into();
+    let output = render_source_report(&report, SourceReportFormat::Sarif).unwrap();
+    let value: Value = serde_json::from_str(&output).unwrap();
+    assert_eq!(value["version"], "2.1.0");
+    let run = &value["runs"][0];
+    assert_eq!(
+        run["properties"]["sourceReport"],
+        serde_json::to_value(&report).unwrap()
+    );
+    assert!(run.get("invocations").is_none());
+    let result = &run["results"][0];
+    assert_eq!(result["kind"], "review");
+    assert_eq!(result["level"], "note");
+    assert_eq!(result["properties"]["claimedSeverity"], "high");
+    assert_eq!(result["properties"]["verificationState"], "unverified");
+    let location = &result["locations"][0];
+    assert_eq!(
+        location["physicalLocation"]["artifactLocation"]["uri"],
+        "src/a%20%23%3F%25%C3%BC.rs"
+    );
+    assert_eq!(
+        location["physicalLocation"]["region"],
+        json!({"startLine":2,"endLine":4})
+    );
+    assert_eq!(location["properties"]["sha256"], digest('5'));
+    assert_eq!(
+        output,
+        render_source_report(&report, SourceReportFormat::Sarif).unwrap()
+    );
+    // Optional local schema-validation artifact; never changes normal test behavior.
+    if let Some(path) = std::env::var_os("ZERO_SOURCE_SARIF_TEST_OUTPUT") {
+        std::fs::write(path, &output).unwrap();
+    }
+    report = fixture();
+    report.review.hypotheses.clear();
+    let empty: Value =
+        serde_json::from_str(&render_source_report(&report, SourceReportFormat::Sarif).unwrap())
+            .unwrap();
+    assert_eq!(empty["runs"][0]["results"], json!([]));
+    assert_eq!(
+        empty["runs"][0]["properties"]["sourceReport"]["security_conclusion"],
+        "not_established"
+    );
 }

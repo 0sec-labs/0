@@ -52,9 +52,12 @@ outputs under an explicit frozen contract. Top-level reproduction is part of
    `validated_candidate_for_plan` with that plan's identity; do not generalize it
    to an unrestricted fixed-security claim.
 6. Export validated review provenance through `source-report` in native JSON,
-   Markdown or HTML. Explicit reproduction/repair links revalidate retained
+   Markdown, HTML or SARIF 2.1.0 (`--format sarif`). SARIF results use kind
+   `review` and level `note`, retain claimed severity as a property, and preserve
+   the typed report and evidence links in run properties. Empty results do not
+   establish safety. Explicit reproduction/repair links revalidate retained
    matrices and candidate provenance without executing again. Hypotheses stay
-   unverified; legacy finding/SARIF semantics remain separate work.
+   unverified; rendering never promotes them to verified findings.
    Host application, Git changes and publishing are subsequent capabilities.
 
 The initial oracle can observe command exit/stdout/stderr from existing local

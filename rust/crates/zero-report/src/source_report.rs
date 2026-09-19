@@ -11,6 +11,7 @@ pub enum SourceReportFormat {
     Json,
     Markdown,
     Html,
+    Sarif,
 }
 const NOTICE: &str = "All source hypotheses remain unverified. Citation and provenance hashes identify retained evidence; they do not establish a vulnerability, a validated repair, or target safety.";
 /// Render a native source report without converting it to legacy findings.
@@ -25,6 +26,7 @@ pub fn render_source_report(report: &SourceReport, format: SourceReportFormat) -
         }
         SourceReportFormat::Markdown => markdown(report),
         SourceReportFormat::Html => html(report),
+        SourceReportFormat::Sarif => crate::source_sarif::render(report),
     }
 }
 fn bounded_text(value: &str, limit: usize, field: &'static str) -> Result<()> {

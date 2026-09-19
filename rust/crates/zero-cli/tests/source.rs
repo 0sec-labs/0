@@ -164,7 +164,7 @@ fn exercise(mode: &str) {
     }
     // Reports are read-only exports after the original source has disappeared.
     // Missing provider/harness/backend inputs must never be consulted.
-    for format in ["json", "markdown", "html"] {
+    for format in ["json", "markdown", "html", "sarif"] {
         let output = cli(&dir)
             .args([
                 "--providers",
@@ -198,6 +198,23 @@ fn exercise(mode: &str) {
         if success {
             assert!(text.to_lowercase().contains("unverified"));
             assert!(text.contains(first.as_ref().unwrap().as_str().unwrap()));
+            if format == "sarif" {
+                let report: Value = serde_json::from_str(&text).unwrap();
+                assert_eq!(report["version"], "2.1.0");
+                let run = &report["runs"][0];
+                assert_eq!(
+                    run["properties"]["sourceReport"]["security_conclusion"],
+                    "not_established"
+                );
+                assert_eq!(
+                    run["results"].as_array().unwrap().len(),
+                    if mode == "empty" { 0 } else { 1 }
+                );
+                for result in run["results"].as_array().unwrap() {
+                    assert_eq!(result["kind"], "review");
+                    assert_eq!(result["level"], "note");
+                }
+            }
             if format == "json" {
                 let report: Value = serde_json::from_str(&text).unwrap();
                 assert_eq!(report["security_conclusion"], "not_established");

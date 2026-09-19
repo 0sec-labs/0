@@ -8,7 +8,7 @@ mod npm;
 mod repository;
 pub use archive::{capture_source_archive, stage_source_archive};
 #[cfg(target_os = "linux")]
-pub use npm::{NpmRequest, acquire_npm};
+pub use npm::{NpmCredential, NpmRequest, acquire_npm, acquire_npm_with_credential};
 #[cfg(target_os = "linux")]
 pub use repository::{RepositoryCredential, RepositoryRequest, acquire_repository, acquire_repository_with_credential};
 mod interactive;

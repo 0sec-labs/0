@@ -1,5 +1,7 @@
 //! Explicit registry metadata + integrity-checked published source. Never installs.
+mod credential;
 mod extract;
+pub use credential::NpmCredential;
 use sha2::{Digest, Sha256, Sha512};
 use std::{
     path::{Component, PathBuf},
@@ -20,9 +22,17 @@ pub async fn acquire_npm(
     request: NpmRequest,
     cancel: CancellationToken,
 ) -> Result<NpmReceipt, String> {
+    acquire_npm_with_credential(request, None, cancel).await
+}
+/// Authenticate only with the explicit host selector; default acquisition stays public.
+pub async fn acquire_npm_with_credential(
+    request: NpmRequest,
+    credential: Option<NpmCredential>,
+    cancel: CancellationToken,
+) -> Result<NpmReceipt, String> {
     let token = cancel.child_token();
     let _on_drop = token.clone().drop_guard();
-    tokio::spawn(async move { owned(request, token).await })
+    tokio::spawn(async move { owned(request, credential, token).await })
         .await
         .map_err(|_| "npm acquisition supervisor failed")?
 }
@@ -41,9 +51,14 @@ async fn download(
     cap: usize,
     cancel: &CancellationToken,
     deadline: Instant,
+    credential: Option<&credential::ResolvedCredential>,
 ) -> Result<Vec<u8>, String> {
     check(cancel, deadline)?;
-    let mut response = tokio::select! {biased;_=cancel.cancelled()=>return Err("npm acquisition cancelled".into()),_=tokio::time::sleep_until(deadline)=>return Err("npm acquisition deadline exceeded".into()),v=client.get(url).header("Accept-Encoding","identity").send()=>v.map_err(|_|"npm registry transport failed")?};
+    let mut request = client.get(url).header("Accept-Encoding", "identity");
+    if let Some(credential) = credential {
+        request = request.header(reqwest::header::AUTHORIZATION, credential.header_for(url)?);
+    }
+    let mut response = tokio::select! {biased;_=cancel.cancelled()=>return Err("npm acquisition cancelled".into()),_=tokio::time::sleep_until(deadline)=>return Err("npm acquisition deadline exceeded".into()),v=request.send()=>v.map_err(|_|"npm registry transport failed")?};
     if !response.status().is_success()
         || response.content_length().is_some_and(|n| n > cap as u64)
         || response
@@ -65,8 +80,13 @@ async fn download(
     check(cancel, deadline)?;
     Ok(bytes)
 }
-async fn owned(request: NpmRequest, cancel: CancellationToken) -> Result<NpmReceipt, String> {
+async fn owned(
+    request: NpmRequest,
+    credential: Option<NpmCredential>,
+    cancel: CancellationToken,
+) -> Result<NpmReceipt, String> {
     request.source.validate()?;
+    let credential = credential.map(|c| c.resolve(&request.source)).transpose()?;
     if request.timeout_ms == 0
         || request.timeout_ms > 120_000
         || request.limits.max_files == 0
@@ -115,6 +135,7 @@ async fn owned(request: NpmRequest, cancel: CancellationToken) -> Result<NpmRece
         2 * 1024 * 1024,
         &cancel,
         deadline,
+        credential.as_ref(),
     )
     .await?;
     let value: serde_json::Value =
@@ -127,12 +148,23 @@ async fn owned(request: NpmRequest, cancel: CancellationToken) -> Result<NpmRece
         .ok_or("npm tarball URL missing")?
         .to_owned();
     request.source.validate_tarball(&tarball)?;
+    if let Some(credential) = &credential {
+        credential.validate_tarball(&tarball)?;
+    }
     let integrity = value["dist"]["integrity"]
         .as_str()
         .ok_or("npm SHA-512 integrity missing")?
         .to_owned();
     let expected = NpmReceipt::integrity_bytes(&integrity)?;
-    let compressed = download(&client, &tarball, 32 * 1024 * 1024, &cancel, deadline).await?;
+    let compressed = download(
+        &client,
+        &tarball,
+        32 * 1024 * 1024,
+        &cancel,
+        deadline,
+        credential.as_ref(),
+    )
+    .await?;
     let token = cancel.clone();
     // The blocking task owns extraction, publication and cleanup until it returns.
     // Public future drop only cancels the supervisor; it never abandons this work.
@@ -164,7 +196,15 @@ async fn owned(request: NpmRequest, cancel: CancellationToken) -> Result<NpmRece
         let mut published = false;
         let result = (|| {
             let (mut snapshot, executable_paths) =
-                extract::source(&compressed, output.path(), request.limits, &guarded)?;
+                extract::source(&compressed, output.path(), request.limits, &guarded).map_err(
+                    |error| {
+                        if credential.is_some() {
+                            "authenticated npm archive extraction failed".to_owned()
+                        } else {
+                            error
+                        }
+                    },
+                )?;
             snapshot.root = request
                 .output
                 .join("source")
@@ -182,6 +222,9 @@ async fn owned(request: NpmRequest, cancel: CancellationToken) -> Result<NpmRece
                 snapshot,
                 executable_paths,
             };
+            if let Some(credential) = &credential {
+                credential.validate_receipt_paths(&receipt)?;
+            }
             let package_path = output.path().join("source/package.json");
             if std::fs::metadata(&package_path)
                 .map_err(|_| "npm archive package.json missing")?
