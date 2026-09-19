@@ -8,12 +8,22 @@ use zero_protocol::{
 };
 use zero_provider::{Endpoint, ProviderClient};
 
+#[derive(Default, Deserialize)]
+#[serde(rename_all = "snake_case")]
+enum Authentication {
+    #[default]
+    WireDefault,
+    AzureApiKey,
+}
+
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Profile {
     url: String,
     #[serde(default)]
     wire_api: WireApi,
+    #[serde(default)]
+    authentication: Authentication,
     api_key_env: String,
     rates: Rates,
     timeout_ms: u64,
@@ -72,7 +82,10 @@ pub async fn load(path: &Path) -> Result<Vec<(String, ProviderClient, Rates)>, B
         if key.is_empty() {
             return Err("Provider credential environment variable is empty".into());
         }
-        let endpoint = Endpoint::responses(&profile.url, Some(&key))?;
+        let endpoint = match profile.authentication {
+            Authentication::WireDefault => Endpoint::responses(&profile.url, Some(&key))?,
+            Authentication::AzureApiKey => Endpoint::azure_api_key(&profile.url, &key)?,
+        };
         let client = ProviderClient::with_wire(
             endpoint,
             profile.wire_api,
@@ -89,4 +102,31 @@ pub async fn configure(engine: &Engine, path: &Path) -> Result<(), Box<dyn Error
         engine.configure_provider(&name, client, rates)?;
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn authentication_is_optional_strict_and_never_inferred_from_url() {
+        let mut profile = json!({"url":"https://azure.example/openai/v1/responses","api_key_env":"KEY","rates":{"input":1,"cached_input":0,"output":1},"timeout_ms":1000,"max_response_bytes":8192});
+        let parsed: Profile = serde_json::from_value(profile.clone()).unwrap();
+        assert!(matches!(parsed.authentication, Authentication::WireDefault));
+        profile["authentication"] = json!("azure_api_key");
+        let parsed: Profile = serde_json::from_value(profile.clone()).unwrap();
+        assert!(matches!(parsed.authentication, Authentication::AzureApiKey));
+        for invalid in [
+            json!("automatic"),
+            json!(null),
+            json!({"header":"Authorization"}),
+        ] {
+            profile["authentication"] = invalid;
+            assert!(serde_json::from_value::<Profile>(profile.clone()).is_err());
+        }
+        profile["authentication"] = json!("wire_default");
+        profile["credential"] = json!("do not echo");
+        assert!(serde_json::from_value::<Profile>(profile).is_err());
+    }
 }

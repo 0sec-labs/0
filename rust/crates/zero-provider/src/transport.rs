@@ -33,11 +33,28 @@ pub struct Endpoint {
     url: Url,
     authorization: Option<HeaderValue>,
     api_key: Option<HeaderValue>,
+    azure_api_key: bool,
 }
 impl Endpoint {
     /// Exact provider URL, including its complete gateway prefix. The historical
     /// constructor name does not select the wire; ProviderClient does.
     pub fn responses(url: &str, api_key: Option<&str>) -> Result<Self, TransportError> {
+        Self::configured(url, api_key, false)
+    }
+    /// Exact Azure OpenAI v1 Responses or Chat Completions URL. Sends only the
+    /// `api-key` credential header; no endpoint rewriting or token discovery.
+    /// Query-based legacy Azure API versions remain unsupported.
+    pub fn azure_api_key(url: &str, api_key: &str) -> Result<Self, TransportError> {
+        if api_key.trim().is_empty() {
+            return Err(TransportError::InvalidEndpoint);
+        }
+        Self::configured(url, Some(api_key), true)
+    }
+    fn configured(
+        url: &str,
+        api_key: Option<&str>,
+        azure_api_key: bool,
+    ) -> Result<Self, TransportError> {
         let url = Url::parse(url).map_err(|_| TransportError::InvalidEndpoint)?;
         let loopback = url.host_str().is_some_and(|host| {
             host == "localhost"
@@ -78,6 +95,7 @@ impl Endpoint {
             url,
             authorization,
             api_key,
+            azure_api_key,
         })
     }
 }
@@ -111,6 +129,7 @@ impl ProviderClient {
         if timeout.is_zero()
             || timeout > Duration::from_secs(3600)
             || !(1024..=64 * 1024 * 1024).contains(&max_bytes)
+            || (endpoint.azure_api_key && wire == crate::WireApi::AnthropicMessages)
         {
             return Err(TransportError::InvalidRequest);
         }
@@ -134,6 +153,7 @@ impl ProviderClient {
     pub fn bind_hosted(mut self, pin: crate::HostedCatalogPin) -> Result<Self, TransportError> {
         crate::validate_hosted_pin(&pin).map_err(|_| TransportError::InvalidRequest)?;
         if self.hosted_catalog.is_some()
+            || self.endpoint.azure_api_key
             || self.endpoint_identity() != pin.endpoint
             || self.wire != pin.wire_api
         {
@@ -234,7 +254,11 @@ impl ProviderClient {
             .post(self.endpoint.url.clone())
             .json(&body)
             .header("Accept", "text/event-stream");
-        if self.wire == crate::WireApi::AnthropicMessages {
+        if self.endpoint.azure_api_key {
+            if let Some(key) = &self.endpoint.api_key {
+                post = post.header("api-key", key.clone());
+            }
+        } else if self.wire == crate::WireApi::AnthropicMessages {
             post = post.header("anthropic-version", "2023-06-01");
             if let Some(key) = &self.endpoint.api_key {
                 post = post.header("x-api-key", key.clone());

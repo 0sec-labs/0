@@ -29,7 +29,7 @@ fn metadata_commands_skip_provider_files_and_credentials() {
     }
 }
 
-fn exercise_inference(truncated: bool) {
+fn exercise_inference(truncated: bool, azure: bool) {
     let dir = TempDir::new().unwrap();
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     listener.set_nonblocking(true).unwrap();
@@ -70,7 +70,13 @@ fn exercise_inference(truncated: bool) {
                 }
             }
         }
-        assert!(String::from_utf8_lossy(&bytes).contains("Bearer fixture-secret"));
+        let headers = String::from_utf8_lossy(&bytes);
+        if azure {
+            assert!(headers.contains("api-key: fixture-secret"));
+            assert!(!headers.to_ascii_lowercase().contains("authorization:"));
+        } else {
+            assert!(headers.contains("Bearer fixture-secret"));
+        }
         let event = json!({"type":"response.completed","response":{"id":"r1","status":"completed","output":[{"type":"message","content":[{"type":"output_text","text":"hello"}]}],"usage":{"input_tokens":2,"output_tokens":1}}});
         let body = if truncated {
             "data: {\"type\":\"response.created\"}\n\n".to_owned()
@@ -82,7 +88,11 @@ fn exercise_inference(truncated: bool) {
         listener
     });
     let config = dir.path().join("providers.json");
-    std::fs::write(&config, json!({"fixture":{"url":url,"api_key_env":"FIXTURE_PROVIDER_KEY","rates":{"input":1000000,"cached_input":0,"output":1000000},"timeout_ms":1000,"max_response_bytes":8192}}).to_string()).unwrap();
+    let mut profiles = json!({"fixture":{"url":url,"api_key_env":"FIXTURE_PROVIDER_KEY","rates":{"input":1000000,"cached_input":0,"output":1000000},"timeout_ms":1000,"max_response_bytes":8192}});
+    if azure {
+        profiles["fixture"]["authentication"] = json!("azure_api_key");
+    }
+    std::fs::write(&config, profiles.to_string()).unwrap();
     let request = dir.path().join("request.json");
     std::fs::write(&request, json!({"model":"fixture","instructions":"test","input":[],"tools":[],"max_output_tokens":32}).to_string()).unwrap();
     let created = cli(&dir)
@@ -188,10 +198,20 @@ fn exercise_inference(truncated: bool) {
 
 #[test]
 fn inference_persists_exact_retry_without_second_http_request() {
-    exercise_inference(false);
+    exercise_inference(false, false);
 }
 
 #[test]
 fn unknown_inference_reconciles_charge_without_retrying_provider() {
-    exercise_inference(true);
+    exercise_inference(true, false);
+}
+
+#[test]
+fn azure_inference_charges_once_and_retries_without_second_request() {
+    exercise_inference(false, true);
+}
+
+#[test]
+fn azure_unknown_inference_preserves_hold_until_reconciled() {
+    exercise_inference(true, true);
 }

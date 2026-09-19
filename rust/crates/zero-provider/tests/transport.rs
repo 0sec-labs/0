@@ -324,3 +324,145 @@ async fn provider_stream_error_never_echoes_raw_message_or_credentials() {
     redacted(completion.error.as_ref().unwrap());
     assert_eq!(server.await.unwrap().1, 1);
 }
+
+#[tokio::test]
+async fn azure_api_key_completes_both_wires_without_bearer_or_anthropic_headers() {
+    use zero_provider::WireApi;
+    for wire_api in [WireApi::Responses, WireApi::ChatCompletions] {
+        let body = match wire_api {
+            WireApi::Responses => format!(
+                "data: {}\n\n",
+                json!({"type":"response.completed","response":{"id":"r1","status":"completed","output":[],"usage":{"input_tokens":2,"output_tokens":1}}})
+            ),
+            WireApi::ChatCompletions => format!(
+                "data: {}\n\ndata: {}\n\ndata: [DONE]\n\n",
+                json!({"id":"c1","choices":[{"index":0,"delta":{"role":"assistant","content":"hello"},"finish_reason":"stop"}]}),
+                json!({"id":"c1","choices":[],"usage":{"prompt_tokens":2,"completion_tokens":1}})
+            ),
+            _ => unreachable!(),
+        };
+        let (url, server) =
+            fixed_response("200 OK", "Content-Type: text/event-stream\r\n", body).await;
+        let path = if wire_api == WireApi::Responses {
+            "/gateway/openai/v1/responses"
+        } else {
+            "/gateway/openai/v1/chat/completions"
+        };
+        let url = url.replace("/custom/responses", path);
+        let client = ProviderClient::with_wire(
+            Endpoint::azure_api_key(&url, KEY).unwrap(),
+            wire_api,
+            Duration::from_secs(2),
+            8192,
+        )
+        .unwrap();
+        assert_eq!(client.endpoint_identity(), url);
+        let completion = client
+            .complete(&request(), CancellationToken::new())
+            .await
+            .unwrap();
+        assert_eq!(completion.status, CompletionStatus::Completed);
+        let usage = completion.usage.unwrap();
+        assert_eq!((usage.input_tokens, usage.output_tokens), (2, 1));
+        let (raw, count) = server.await.unwrap();
+        let raw = String::from_utf8(raw).unwrap();
+        let headers = raw.split("\r\n\r\n").next().unwrap();
+        assert!(headers.starts_with(&format!("POST {path} HTTP/1.1")));
+        assert!(headers.contains(&format!("\r\napi-key: {KEY}\r\n")));
+        assert!(!headers.to_ascii_lowercase().contains("authorization:"));
+        assert!(!headers.contains("x-api-key:"));
+        assert!(!headers.contains("anthropic-version:"));
+        assert_eq!(count, 1);
+    }
+}
+
+#[test]
+fn azure_rejects_unsupported_routes_credentials_and_anthropic_wire() {
+    for url in [
+        "http://example.com/responses",
+        "https://u:p@example.com/responses",
+        "https://example.com/responses?api-version=2025-01-01",
+        "https://example.com/responses#fragment",
+    ] {
+        assert!(matches!(
+            Endpoint::azure_api_key(url, KEY),
+            Err(TransportError::InvalidEndpoint)
+        ));
+    }
+    for key in ["", "   ", "key\r\nAuthorization: injected"] {
+        assert!(matches!(
+            Endpoint::azure_api_key("https://example.com/openai/v1/responses", key),
+            Err(TransportError::InvalidEndpoint)
+        ));
+    }
+    assert!(matches!(
+        ProviderClient::with_wire(
+            Endpoint::azure_api_key("https://example.com/openai/v1/responses", KEY).unwrap(),
+            zero_provider::WireApi::AnthropicMessages,
+            Duration::from_secs(2),
+            8192
+        ),
+        Err(TransportError::InvalidRequest)
+    ));
+}
+
+#[tokio::test]
+async fn azure_redirect_and_throttling_never_forward_or_retry_credentials() {
+    let (destination, destination_url) = listener().await;
+    for status in ["307 Temporary Redirect", "429 Too Many Requests"] {
+        let (url, server) = fixed_response(
+            status,
+            &format!("Location: {destination_url}\r\nRetry-After: 0\r\n"),
+            format!("secret {KEY}"),
+        )
+        .await;
+        let client = ProviderClient::new(
+            Endpoint::azure_api_key(&url, KEY).unwrap(),
+            Duration::from_secs(2),
+            8192,
+        )
+        .unwrap();
+        let error = client
+            .complete(&request(), CancellationToken::new())
+            .await
+            .unwrap_err();
+        assert!(matches!(error, TransportError::Http(307 | 429)));
+        redacted(&format!("{error:?} {error}"));
+        assert_eq!(server.await.unwrap().1, 1);
+    }
+    assert!(
+        tokio::time::timeout(Duration::from_millis(100), destination.accept())
+            .await
+            .is_err()
+    );
+}
+
+#[test]
+fn azure_auth_cannot_be_mislabeled_as_hosted_catalog_transport() {
+    let cloud = zero_cloud_client::CloudClient::new(
+        "https://cloud.example",
+        KEY,
+        Duration::from_secs(1),
+        65536,
+    )
+    .unwrap();
+    let catalog = serde_json::from_value(json!({"object":"list","data":[{"id":"hosted","object":"model","owned_by":"cloud","provider":"fixture","upstream_model":"private","wire_api":"responses","context_length":32768,"max_output_tokens":8192,"pricing":{"input_per_million_usd":1,"cached_input_per_million_usd":0,"output_per_million_usd":2}}]})).unwrap();
+    let route = cloud.select_hosted_route(&catalog, "hosted").unwrap();
+    let legacy = ProviderClient::new(
+        Endpoint::responses(&route.endpoint, Some(KEY)).unwrap(),
+        Duration::from_secs(2),
+        8192,
+    )
+    .unwrap();
+    assert!(legacy.bind_hosted(route.provenance.clone()).is_ok());
+    let azure = ProviderClient::new(
+        Endpoint::azure_api_key(&route.endpoint, KEY).unwrap(),
+        Duration::from_secs(2),
+        8192,
+    )
+    .unwrap();
+    assert!(matches!(
+        azure.bind_hosted(route.provenance),
+        Err(TransportError::InvalidRequest)
+    ));
+}

@@ -135,3 +135,41 @@ Loopback tests cover all three wire formats, progress before terminal release,
 interleaved tool arguments, fragmented UTF-8 SSE, opaque-field exclusion,
 cancellation/malformed streams, fragment and aggregate bounds, and exact final
 completion equality with observers enabled or disabled. No paid calls are used.
+
+## Explicit Azure OpenAI v1 API keys
+
+The native provider profile accepts `authentication: "azure_api_key"` for an
+explicit Responses or Chat Completions route. For example:
+
+```json
+{
+  "azure": {
+    "url": "https://YOUR_RESOURCE.openai.azure.com/openai/v1/responses",
+    "wire_api": "responses",
+    "authentication": "azure_api_key",
+    "api_key_env": "AZURE_OPENAI_API_KEY",
+    "rates": { "input": 0, "cached_input": 0, "output": 0 },
+    "timeout_ms": 60000,
+    "max_response_bytes": 8388608
+  }
+}
+```
+
+Replace the example zero rates with your approved integer microcurrency prices
+before paid use. The request model is the operator-selected deployment/model name;
+no deployment discovery, URL rewriting, authentication fallback, or live price
+lookup occurs. Chat uses the separately configured complete Chat endpoint and
+`wire_api: "chat_completions"`.
+
+This sends `api-key` without Bearer, `x-api-key`, or Anthropic version headers.
+Omitted `authentication` (or `"wire_default"`) preserves existing behavior:
+Bearer for Responses/Chat, `x-api-key` for Anthropic. Azure authentication rejects
+Anthropic wires and hosted catalog bindings. Query-bearing URLs remain rejected,
+so legacy Azure routes requiring `api-version` are not supported. Entra tokens,
+OAuth refresh and broader Azure feature parity are outside this adapter.
+
+Rust callers use `Endpoint::azure_api_key(url, key)`. Keys remain sensitive header
+values outside serializable request/accounting metadata. Redirects and implicit
+retries remain disabled. Local TCP and actual CLI fixtures verify both stream
+formats, exact headers/path, rejected redirects, one-time charging, durable
+retry, and unknown-usage holds. No live Azure qualification is claimed.
