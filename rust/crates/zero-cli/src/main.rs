@@ -3,6 +3,7 @@ mod archive_export;
 mod args;
 mod artifact;
 mod code_evolution;
+mod connect;
 mod console;
 mod doctor;
 mod evaluation;
@@ -94,6 +95,9 @@ async fn dispatch(args: Args) -> Result<u8, Box<dyn Error>> {
     }
     if let Command::Scan(options) = &args.command {
         return scan::run(&args, options).await;
+    }
+    if let Command::Connect(options) = &args.command {
+        return connect::run(options).await;
     }
     run(args).await.map(|success| u8::from(!success))
 }
@@ -528,6 +532,7 @@ async fn run(args: Args) -> Result<bool, Box<dyn Error>> {
         | Command::EvolvePython { .. }
         | Command::Evaluation { .. }
         | Command::Artifact { .. }
+        | Command::Connect(_)
         | Command::Review(_)
         | Command::Scan(_)
         | Command::ManagedHttp(_)
@@ -575,7 +580,7 @@ async fn run(args: Args) -> Result<bool, Box<dyn Error>> {
 
 // Owned engine work has settled before one-shot output starts. Slow readers may
 // prevent delivery, but cannot hold the process or its signal handler forever.
-async fn write_json(value: &impl serde::Serialize, pretty: bool) -> Result<(), Box<dyn Error>> {
+pub(crate) async fn write_json(value: &impl serde::Serialize, pretty: bool) -> Result<(), Box<dyn Error>> {
     use tokio::io::AsyncWriteExt;
     let mut bytes = if pretty {
         serde_json::to_vec_pretty(value)?

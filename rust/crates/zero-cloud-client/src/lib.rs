@@ -12,7 +12,7 @@ use reqwest::{
     header::{AUTHORIZATION, HeaderValue},
 };
 pub use route::{HostedRoute, validate_hosted_pin};
-use serde::de::DeserializeOwned;
+use serde::{de::DeserializeOwned, Serialize};
 use std::time::Duration;
 use tokio_util::sync::CancellationToken;
 
@@ -139,6 +139,52 @@ impl CloudClient {
     ) -> Result<InferenceUsageResponse, CloudError> {
         self.get("/api/inference/usage", cancel).await
     }
+    pub async fn enrollment_status(
+        &self,
+        target: &str,
+        cancel: CancellationToken,
+    ) -> Result<EnrollmentStatusResponse, CloudError> {
+        let encoded: String = urlencode(target);
+        self.get(&format!("/api/enrollment/status?target={encoded}"), cancel)
+            .await
+    }
+    pub async fn check_existing_schedules(
+        &self,
+        target: &str,
+        cancel: CancellationToken,
+    ) -> Result<ScheduleListResponse, CloudError> {
+        let encoded: String = urlencode(target);
+        self.get(&format!("/api/scan-schedules?target={encoded}"), cancel)
+            .await
+    }
+    pub async fn create_scan(
+        &self,
+        target: &str,
+        secure_config: &serde_json::Value,
+        cancel: CancellationToken,
+    ) -> Result<ScanResponse, CloudError> {
+        let body = serde_json::json!({
+            "target": target,
+            "scan_mode": "secure",
+            "secure_config": secure_config,
+        });
+        self.post_json("/api/scans", &body, cancel).await
+    }
+    pub async fn create_schedule(
+        &self,
+        target_id: &str,
+        cron_expression: &str,
+        secure_config: &serde_json::Value,
+        cancel: CancellationToken,
+    ) -> Result<ScheduleResponse, CloudError> {
+        let body = serde_json::json!({
+            "target_id": target_id,
+            "cron_expression": cron_expression,
+            "scan_mode": "secure",
+            "secure_config": secure_config,
+        });
+        self.post_json("/api/scan-schedules", &body, cancel).await
+    }
     async fn get<T: DeserializeOwned>(
         &self,
         path: &str,
@@ -146,19 +192,57 @@ impl CloudClient {
     ) -> Result<T, CloudError> {
         tokio::select! {biased;
             _=cancel.cancelled()=>Err(CloudError::Cancelled),
-            result=tokio::time::timeout(self.timeout,self.exchange(path))=>result.map_err(|_|CloudError::Timeout)?,
+            result=tokio::time::timeout(self.timeout,self.exchange("GET", path, None::<&serde_json::Value>))=>
+                result.map_err(|_|CloudError::Timeout)?,
         }
     }
-    async fn exchange<T: DeserializeOwned>(&self, path: &str) -> Result<T, CloudError> {
+    pub async fn get_json<T: DeserializeOwned>(
+        &self,
+        path: &str,
+        cancel: CancellationToken,
+    ) -> Result<T, CloudError> {
+        tokio::select! {biased;
+            _=cancel.cancelled()=>Err(CloudError::Cancelled),
+            result=tokio::time::timeout(self.timeout,self.exchange("GET", path, None::<&serde_json::Value>))=>
+                result.map_err(|_|CloudError::Timeout)?,
+        }
+    }
+    async fn post_json<T: DeserializeOwned, B: Serialize>(
+        &self,
+        path: &str,
+        body: &B,
+        cancel: CancellationToken,
+    ) -> Result<T, CloudError> {
+        tokio::select! {biased;
+            _=cancel.cancelled()=>Err(CloudError::Cancelled),
+            result=tokio::time::timeout(self.timeout,self.exchange("POST", path, Some(body)))=>
+                result.map_err(|_|CloudError::Timeout)?,
+        }
+    }
+    async fn exchange<T: DeserializeOwned>(
+        &self,
+        method: &str,
+        path: &str,
+        body: Option<&impl Serialize>,
+    ) -> Result<T, CloudError> {
         let url = format!("{}{}", self.host.as_str().trim_end_matches('/'), path);
-        let mut response = self
+        let request = self
             .client
-            .get(url)
+            .request(
+                reqwest::Method::from_bytes(method.as_bytes())
+                    .map_err(|_| CloudError::InvalidConfiguration)?,
+                url,
+            )
             .header(AUTHORIZATION, self.authorization.clone())
-            .header("Accept", "application/json")
-            .send()
-            .await
-            .map_err(|_| CloudError::Network)?;
+            .header("Accept", "application/json");
+        let request = if let Some(payload) = body {
+            request
+                .header("Content-Type", "application/json")
+                .json(payload)
+        } else {
+            request
+        };
+        let mut response = request.send().await.map_err(|_| CloudError::Network)?;
         let status = response.status();
         if status.as_u16() == 401 {
             return Err(CloudError::Unauthorized);
@@ -199,4 +283,20 @@ impl CloudClient {
         }
         serde_json::from_slice(&body).map_err(|_| CloudError::InvalidResponse)
     }
+}
+
+/// Percent-encode a string for use in a URL path or query value.
+fn urlencode(input: &str) -> String {
+    let mut output = String::with_capacity(input.len());
+    for byte in input.bytes() {
+        match byte {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                output.push(byte as char);
+            }
+            _ => {
+                output.push_str(&format!("%{byte:02X}"));
+            }
+        }
+    }
+    output
 }

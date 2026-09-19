@@ -142,6 +142,8 @@ pub enum Command {
         #[command(subcommand)]
         command: crate::evaluation::EvaluationCommand,
     },
+    /// Check enrollment readiness and connect a repository to the managed cloud.
+    Connect(crate::connect::ConnectArgs),
     /// Manage cloud credentials and read hosted service metadata.
     #[command(alias = "auth")]
     Hosted {

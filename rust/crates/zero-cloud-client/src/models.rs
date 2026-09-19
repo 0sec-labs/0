@@ -149,3 +149,60 @@ pub(crate) fn normalize_account(value: Value) -> Result<InferenceAccountResponse
         credits: value.get("credits").and_then(credits),
     })
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EnrollmentStatusResponse {
+    pub authenticated: bool,
+    pub org: EnrollmentOrg,
+    pub installation: EnrollmentInstallation,
+    pub repo_accessible: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EnrollmentOrg {
+    pub id: String,
+    pub name: String,
+    pub slug: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EnrollmentInstallation {
+    pub installed: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub install_url: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ScanResponse {
+    pub id: String,
+    #[serde(default)]
+    pub target_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ScheduleResponse {
+    pub id: String,
+    #[serde(default)]
+    pub next_run_at: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ScheduleListResponse {
+    pub schedules: Vec<ScheduleEntry>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ScheduleEntry {
+    pub id: String,
+    pub cron_expression: String,
+    #[serde(default)]
+    pub next_run_at: Option<String>,
+    pub target_id: String,
+}
