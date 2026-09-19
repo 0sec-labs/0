@@ -135,6 +135,7 @@ impl Store {
             .conn
             .transaction_with_behavior(TransactionBehavior::Immediate)?;
         crate::scan::hooks_account(&tx, session, context)?;
+        crate::review::forbid_input(&tx, session)?;
         ensure_account(&tx, session, context)?;
         tx.commit()?;
         Ok(())
@@ -175,6 +176,7 @@ impl Store {
             .transaction_with_behavior(TransactionBehavior::Immediate)?;
         let op = owned(&tx, session, effect, owner)?;
         crate::scan::guard_effect(&tx, session, effect, intent)?;
+        crate::review::forbid_input(&tx, session)?;
         crate::web_verification::effect(&tx, &op)?;
         let (account_session, context): (String, String) = tx.query_row(
             "SELECT session_id,context FROM http_accounts WHERE id=?1",

@@ -41,6 +41,7 @@ impl Store {
             return Ok(current);
         }
         crate::scan::guard_reservation(&tx, session, reservation_id, amount)?;
+        crate::review::forbid_input(&tx, session)?;
         crate::campaign::reserve_model(&tx, session, reservation_id, amount)?;
         let total = current
             .charged
@@ -86,6 +87,7 @@ impl Store {
     ) -> Result<BudgetSnapshot> {
         crate::campaign::forbid_input(&self.conn, session)?;
         crate::scan::forbid_input(&self.conn, session)?;
+        crate::review::forbid_input(&self.conn, session)?;
         if evidence.trim().is_empty() || evidence.len() > 32768 {
             return Err(Error::Invalid(
                 "reconciliation evidence must be 1..32768 bytes".into(),

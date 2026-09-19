@@ -27,9 +27,11 @@ impl Store {
         let source = self.conn.unchecked_transaction()?;
         crate::schema::validate_current(&source)?;
         let record = crate::scan::snapshot_source_record(&source, id)?;
+        crate::review::forbid_input(&source, &record.session_id)?;
         after_pin();
         let parameter = [Value::Text(record.session_id.clone())];
         for table in [
+            "reviews",
             "agent_inputs",
             "agent_steering",
             "operator_questions",
@@ -248,6 +250,15 @@ mod tests {
             }
             assert!(store.scan_read_snapshot(&a.scan_id).is_err());
         }
+    }
+    #[test]
+    fn scan_view_rejects_review_membership_even_without_its_projection() {
+        let (_dir, store, a) = fixture();
+        store.conn.execute(
+            "INSERT INTO events(session_id,sequence,kind,payload) VALUES(?1,999,'review_created','{}')",
+            [&a.session_id],
+        ).unwrap();
+        assert!(store.scan_read_snapshot(&a.scan_id).is_err());
     }
     #[test]
     fn scan_view_rejects_oversized_unrelated_journal_record_before_copy() {

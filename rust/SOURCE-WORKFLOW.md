@@ -101,6 +101,26 @@ is not wired yet. Its first prerequisites now exist:
   Blocking filesystem calls require a blocking worker and cannot be preempted by
   a callback. No `.git`/dependency exclusions are implied by this API.
 
+Storage now has `ReviewAdmission`, immutable `ReviewRecord` and read-only
+`ReviewSnapshot` support (native schema 18). Admission creates the session,
+controller, actual root, captured intent artifact and journal binding in one
+transaction. It binds the original path, manifest, named profile, provider rates,
+budget and absolute deadline. Exact retries return the original graph before
+consulting changed profile/source values; changed original path/profile names
+conflict. Cancellation persists a stop witness without claiming that running work
+has finished. Epoch recovery marks the owned controller/root Unknown.
+
+Generic effects, new reservations, queue/steering/reconciliation, questions,
+approvals and HTTP access are currently closed for these sessions. This is an
+internal storage milestone, not a runnable review: the dedicated controller must
+replace the closed effect gate with exact source/inference/delegation/sandbox
+checks before exposing the command. Status reads validate projection/journal
+bindings, immutable intent and lifecycle witnesses, admission closure and the
+funding ledger. Deleting the review projection cannot reopen a generic session.
+Read-only opening never migrates old state; writable opening validates the prior
+schema before the additive migration. Existing portable campaign/scan evidence
+cannot silently omit review membership.
+
 The controller and command remain required work. Resolve an exact retained retry
 before reading current configuration or the source path. For a new command,
 perform bounded cancellable local capture before admission, with no model/backend

@@ -197,3 +197,44 @@ impl ReviewProfile {
         Ok(request)
     }
 }
+
+/// Immutable identity of an admitted local source investigation.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ReviewRecord {
+    pub schema_version: u32,
+    pub id: String,
+    pub command_id: String,
+    pub session_id: String,
+    pub controller_operation_id: String,
+    pub root_operation_id: String,
+    pub input_path: String,
+    pub canonical_path: String,
+    pub snapshot_sha256: String,
+    pub profile_name: String,
+    pub intent_sha256: String,
+    pub profile_sha256: String,
+    pub created_at_ms: u64,
+    pub deadline_at_ms: u64,
+    pub sequence: u64,
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum ReviewCloseReason {
+    Cancelled,
+    Deadline,
+}
+/// Retained lifecycle/funding only. An admitted or stopped run has no implied
+/// security conclusion or successful empty submission.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ReviewSnapshot {
+    pub review: ReviewRecord,
+    pub controller_status: crate::OperationStatus,
+    pub root_status: crate::OperationStatus,
+    pub close_reason: Option<ReviewCloseReason>,
+    pub budget: crate::BudgetSnapshot,
+    pub currency: ScanCurrency,
+    pub observed_sequence: u64,
+    pub observed_at_ms: u64,
+}

@@ -115,7 +115,7 @@ fn schema_thirteen_migration_preserves_existing_campaign_snapshot() {
     drop(store);
     let path = dir.path().join("state.db");
     let sql = rusqlite::Connection::open(&path).unwrap();
-    sql.execute_batch("DROP INDEX scan_command_created; DROP TABLE scans; DROP TABLE strategy_search_selections; DROP TABLE strategy_search_evaluations; DROP TABLE strategy_search_proposals; DROP TABLE strategy_searches; DROP TABLE strategy_sessions; PRAGMA user_version=13;")
+    sql.execute_batch("DROP INDEX review_command_created; DROP TABLE reviews; DROP INDEX scan_command_created; DROP TABLE scans; DROP TABLE strategy_search_selections; DROP TABLE strategy_search_evaluations; DROP TABLE strategy_search_proposals; DROP TABLE strategy_searches; DROP TABLE strategy_sessions; PRAGMA user_version=13;")
         .unwrap();
     drop(sql);
     assert!(matches!(
@@ -209,7 +209,7 @@ fn schema_fourteen_migration_preserves_retained_portable_evidence() {
     drop(store);
     let path = dir.path().join("state.db");
     let sql = rusqlite::Connection::open(&path).unwrap();
-    sql.execute_batch("DROP INDEX scan_command_created; DROP TABLE scans; DROP TABLE strategy_search_selections; DROP TABLE strategy_search_evaluations; DROP TABLE strategy_search_proposals; DROP TABLE strategy_searches; PRAGMA user_version=14;").unwrap();
+    sql.execute_batch("DROP INDEX review_command_created; DROP TABLE reviews; DROP INDEX scan_command_created; DROP TABLE scans; DROP TABLE strategy_search_selections; DROP TABLE strategy_search_evaluations; DROP TABLE strategy_search_proposals; DROP TABLE strategy_searches; PRAGMA user_version=14;").unwrap();
     drop(sql);
     assert!(matches!(
         Store::open_read_only(&path),
@@ -284,7 +284,7 @@ fn schema_fifteen_upgrade_preserves_fixed_pair_portable_identity() {
     drop(store);
     let path = dir.path().join("state.db");
     let sql = rusqlite::Connection::open(&path).unwrap();
-    sql.execute_batch("DROP INDEX scan_command_created; DROP TABLE scans; DROP TABLE strategy_search_selections; PRAGMA user_version=15;")
+    sql.execute_batch("DROP INDEX review_command_created; DROP TABLE reviews; DROP INDEX scan_command_created; DROP TABLE scans; DROP TABLE strategy_search_selections; PRAGMA user_version=15;")
         .unwrap();
     drop(sql);
     assert!(matches!(
@@ -313,7 +313,7 @@ fn schema_sixteen_scan_migration_preserves_fixed_pair_evidence() {
     drop(store);
     let path = dir.path().join("state.db");
     let sql = rusqlite::Connection::open(&path).unwrap();
-    sql.execute_batch("DROP INDEX scan_command_created; DROP TABLE scans; PRAGMA user_version=16;")
+    sql.execute_batch("DROP INDEX review_command_created; DROP TABLE reviews; DROP INDEX scan_command_created; DROP TABLE scans; PRAGMA user_version=16;")
         .unwrap();
     drop(sql);
     assert!(matches!(
@@ -340,7 +340,7 @@ fn changed_sixteen_schema_is_rejected_without_partial_scan_migration() {
     drop(store);
     let path = dir.path().join("state.db");
     let sql = rusqlite::Connection::open(&path).unwrap();
-    sql.execute_batch("DROP INDEX scan_command_created; DROP TABLE scans; PRAGMA user_version=16; CREATE INDEX changed_sessions ON sessions(created_at_ms);").unwrap();
+    sql.execute_batch("DROP INDEX review_command_created; DROP TABLE reviews; DROP INDEX scan_command_created; DROP TABLE scans; PRAGMA user_version=16; CREATE INDEX changed_sessions ON sessions(created_at_ms);").unwrap();
     assert!(matches!(
         Store::open(&path),
         Err(zero_store::Error::ForeignDatabase)

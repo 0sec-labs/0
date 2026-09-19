@@ -57,6 +57,7 @@ impl Store {
         payload["request_sha256"] = json!(hash(&payload)?);
         let text = serde_json::to_string(&payload)?;
         crate::scan::authorize(&tx, session, command, &payload)?;
+        crate::review::forbid_input(&tx, session)?;
         crate::campaign::authorize(&tx, session, command, &payload)?;
         let key = uuid::Uuid::new_v4().to_string();
         tx.execute("INSERT INTO operations(id,session_id,command_id,payload,payload_hash,status) VALUES(?1,?2,?3,?4,?5,'admitted')",params![key,session,command,text,format!("{:x}",Sha256::digest(text.as_bytes()))])?;

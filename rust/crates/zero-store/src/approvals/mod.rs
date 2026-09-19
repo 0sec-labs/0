@@ -60,6 +60,7 @@ fn insert(
     who: &str,
 ) -> Result<(Operation, u64)> {
     crate::scan::authorize(tx, session, command, payload)?;
+    crate::review::forbid_input(tx, session)?;
     crate::campaign::authorize(tx, session, command, payload)?;
     let key = uuid::Uuid::new_v4().to_string();
     let text = serde_json::to_string(payload)?;

@@ -104,6 +104,7 @@ impl Store {
                 return Err(Error::Conflict(command.clone()));
             }
             crate::scan::authorize(&tx, session, command, &serde_json::from_str(&text)?)?;
+            crate::review::forbid_input(&tx, session)?;
             crate::campaign::authorize(&tx, session, command, &serde_json::from_str(&text)?)?;
             crate::strategy_session::authorize(
                 &tx,
@@ -235,6 +236,7 @@ impl Store {
             });
         }
         crate::scan::authorize(&tx, session, command_id, payload)?;
+        crate::review::forbid_input(&tx, session)?;
         crate::campaign::authorize(&tx, session, command_id, payload)?;
         crate::strategy_session::authorize(&tx, session, command_id, payload)?;
         let id = uuid::Uuid::new_v4().to_string();
@@ -258,6 +260,7 @@ impl Store {
             .conn
             .transaction_with_behavior(TransactionBehavior::Immediate)?;
         let mut op = operation(&tx, id)?;
+        crate::review::forbid_input(&tx, &op.session_id)?;
         // Starting is not retryable: even the same owner must not execute twice.
         if op.status != OperationStatus::Admitted {
             return Err(Error::Conflict(id.into()));

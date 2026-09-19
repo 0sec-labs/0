@@ -1,4 +1,5 @@
 //! Atomic standalone scans and immutable session authority.
+use crate::workflow::Reader;
 use crate::{Error, Operation, OperationStatus, Result, Store, append, integer};
 use rusqlite::{Connection, OptionalExtension, TransactionBehavior, params};
 use serde::{Deserialize, Serialize};
@@ -67,42 +68,6 @@ fn epoch(conn: &Connection, owner: &str) -> Result<()> {
 }
 fn context(r: &ScanRecord) -> Value {
     json!({"schema_version":1,"scan_id":r.id,"intent_sha256":r.intent_sha256,"deadline_at_ms":r.deadline_at_ms})
-}
-struct Reader {
-    remaining: usize,
-}
-impl Reader {
-    fn new() -> Self {
-        Self {
-            remaining: 64 * 1024 * 1024,
-        }
-    }
-    fn charge(&mut self, n: usize, max: usize) -> Result<()> {
-        if n > max || n > self.remaining {
-            return Err(bad("bounded evidence read exhausted"));
-        }
-        self.remaining -= n;
-        Ok(())
-    }
-    fn event(&mut self, conn: &Connection, session: &str, seq: u64) -> Result<(String, Value)> {
-        let n: usize = conn.query_row(
-            "SELECT length(CAST(payload AS BLOB)) FROM events WHERE session_id=?1 AND sequence=?2",
-            params![session, integer(seq)?],
-            |r| r.get(0),
-        )?;
-        self.charge(n, 32 * 1024 * 1024)?;
-        let (kind,text):(String,String)=conn.query_row("SELECT CASE WHEN length(CAST(kind AS BLOB))<=128 THEN kind END,payload FROM events WHERE session_id=?1 AND sequence=?2",params![session,integer(seq)?],|r|Ok((r.get(0)?,r.get(1)?)))?;
-        Ok((kind, serde_json::from_str(&text)?))
-    }
-    fn artifact(&mut self, conn: &Connection, digest: &str, max: usize) -> Result<Vec<u8>> {
-        let n: usize = conn.query_row(
-            "SELECT length(bytes) FROM artifacts WHERE digest=?1",
-            [digest],
-            |r| r.get(0),
-        )?;
-        self.charge(n, max)?;
-        crate::artifacts::read(conn, digest)
-    }
 }
 
 pub(crate) fn hooks_account(conn: &Connection, session: &str, context: &Value) -> Result<()> {

@@ -240,6 +240,7 @@ impl Store {
             id(value)?;
         }
         crate::scan::forbid_input(&self.conn, session)?;
+        crate::review::forbid_input(&self.conn, session)?;
         crate::campaign::forbid_input(&self.conn, session)?;
         if prompt.trim().is_empty() || prompt.len() > 16384 || prompt.contains('\0') {
             return Err(Error::Invalid(
@@ -414,6 +415,7 @@ impl Store {
             .conn
             .transaction_with_behavior(TransactionBehavior::Immediate)?;
         crate::scan::authorize(&tx, session, command, payload)?;
+        crate::review::forbid_input(&tx, session)?;
         crate::campaign::authorize(&tx, session, command, payload)?;
         crate::strategy_session::authorize(&tx, session, command, payload)?;
         target(&tx, session, op, Some(owner))?;

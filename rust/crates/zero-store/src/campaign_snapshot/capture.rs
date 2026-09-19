@@ -203,6 +203,9 @@ impl Store {
             search::add_sessions(&tx, campaign, &journal, &mut sessions)?;
         }
         sessions.insert(journal);
+        for session in &sessions {
+            crate::review::forbid_input(&tx, session)?;
+        }
         let parameters: Vec<Value> = sessions.iter().cloned().map(Value::Text).collect();
         let placeholders = (1..=sessions.len())
             .map(|n| format!("?{n}"))
@@ -214,6 +217,7 @@ impl Store {
         let account_filter =
             format!("account_id IN (SELECT id FROM http_accounts WHERE {session_filter})");
         for table in [
+            "reviews",
             "agent_inputs",
             "agent_steering",
             "operator_questions",
