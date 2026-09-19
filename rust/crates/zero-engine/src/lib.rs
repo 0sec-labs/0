@@ -64,6 +64,8 @@ pub use agent_steering::read_agent_steering;
 pub use budget_read::read_session_budget;
 pub use campaign_read::{read_campaign_runs, read_campaign_status};
 pub use discovery::{read_source_reviews, read_web_runs};
+mod repair_export;
+pub use repair_export::read_source_repair_patch;
 pub use source_report::{read_source_report, read_source_workflow_report};
 pub use strategy::{read_strategy_development_feedback, read_strategy_report};
 pub use strategy::{

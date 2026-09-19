@@ -113,6 +113,8 @@ pub enum Command {
         #[arg(long, value_enum, default_value = "json")]
         format: crate::source_report::SourceReportFormat,
     },
+    /// Export a validated repair as a unified patch; never apply it to source files.
+    SourceRepairExport(crate::repair_export::ExportArgs),
     /// Inspect or export retained operation bytes without taking engine ownership.
     Artifact {
         #[command(subcommand)]

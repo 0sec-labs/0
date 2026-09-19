@@ -13,6 +13,9 @@ use zero_protocol::verification::{
     Case, ExactOutput, Limits, Mode, Plan, SourceReproductionRequest,
 };
 
+#[path = "support/repair_export.rs"]
+mod repair_export;
+
 struct Fixture {
     dir: tempfile::TempDir,
     session: String,
@@ -549,12 +552,18 @@ fn validate_candidate(image: Option<String>, microvm: bool) {
         original,
         fs::read(f.dir.path().join("source/app.js")).unwrap()
     );
+    if !f.real {
+        repair_export::not_validated(&f, &request);
+    }
     let calls = f.calls();
     fs::remove_dir_all(f.dir.path().join("source")).unwrap();
     let retry = parsed(&run());
     assert_eq!(retry["duplicate"], true);
     assert_eq!(retry["result"], result["result"]);
     f.assert_report(&baseline, Some(&result));
+    if !f.real {
+        repair_export::check(&f, &baseline, &result, &original, replacement);
+    }
     assert_eq!(calls, f.calls());
     assert_eq!(
         f.listener.accept().unwrap_err().kind(),

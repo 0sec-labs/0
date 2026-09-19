@@ -1294,3 +1294,24 @@ or report-path environment variable activates behavior here. The managed control
 remains responsible for reading, validating and publishing this **native** terminal
 contract with a matching consumer. This command is not a replacement for legacy
 `scan --mode http_audit`, a deployed worker image, or a verified security conclusion.
+
+### Export a retained repair patch
+
+```sh
+0sec-native --state state.db source-repair-export \
+  --session SESSION --operation SOURCE_REVIEW \
+  --reproduction BASELINE_REPRODUCTION --repair REPAIR > candidate.patch
+```
+
+This read-only command reassesses the linked retained source, baseline, candidate,
+and fresh reconstruction evidence. Only `validated_candidate_for_plan` can export.
+It uses the complete retained preimage and replacement, so the original checkout,
+provider credentials, and execution backend may be absent. It does not apply files,
+run a model or executor, or mark a vulnerability verified/reportable.
+
+Stdout contains only a full-file unified patch, with original line endings and
+missing final newlines preserved. Validation errors produce no patch bytes and
+exit nonzero. Missing retained preimages, binary content, and filenames containing
+control characters, backslashes, or double quotes are rejected explicitly. Review
+and apply the patch separately to a matching checkout; redirection may create an
+empty output file when validation fails. Existing file modes are unchanged.

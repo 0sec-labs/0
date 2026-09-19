@@ -15,6 +15,7 @@ mod http_profiles;
 mod managed_scan;
 mod providers;
 mod questions;
+mod repair_export;
 mod report;
 mod review;
 mod review_profiles;
@@ -165,6 +166,9 @@ async fn run(args: Args) -> Result<bool, Box<dyn Error>> {
             *format,
         )
         .await;
+    }
+    if let Command::SourceRepairExport(command) = &args.command {
+        return repair_export::run(&args.state, command).await;
     }
     if let Command::Artifact { command } = &args.command {
         return artifact::run(&args.state, command).await;
@@ -492,6 +496,7 @@ async fn run(args: Args) -> Result<bool, Box<dyn Error>> {
         | Command::Steer { .. }
         | Command::Findings { .. }
         | Command::SourceReport { .. }
+        | Command::SourceRepairExport(_)
         | Command::Schema
         | Command::Snapshot { .. }
         | Command::Doctor { .. }
