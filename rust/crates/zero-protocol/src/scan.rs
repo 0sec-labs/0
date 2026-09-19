@@ -116,6 +116,7 @@ impl ScanProfile {
         validate_scan_target(target)?;
         Ok(AgentRequest {
             interactive_policy: None,
+            workspace_policy: None,
             provider: self.provider.clone(),
             model: self.model.clone(),
             instructions: self.instructions.clone(),

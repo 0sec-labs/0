@@ -120,6 +120,13 @@ pub enum Command {
     },
     /// Export a validated repair as a unified patch; never apply it to source files.
     SourceRepairExport(crate::repair_export::ExportArgs),
+    /// Export a private edited generation into a new directory; never apply or certify a repair.
+    WorkspaceExport(crate::workspace_export::ExportArgs),
+    /// Preview, apply or recover exported workspace changes with checked file identities.
+    WorkspaceApply {
+        #[command(subcommand)]
+        command: crate::workspace_apply::WorkspaceApplyCommand,
+    },
     /// Inspect or export retained operation bytes without taking engine ownership.
     Artifact {
         #[command(subcommand)]

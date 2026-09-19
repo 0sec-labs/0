@@ -6,6 +6,9 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct AgentRequest {
+    /// Explicit private edit/test authority; never permission to mutate host checkout.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workspace_policy: Option<crate::workspace_edit::WorkspacePolicy>,
     /// Explicit host opt-in to bounded offline pipe sessions.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub interactive_policy: Option<crate::interactive::InteractivePolicy>,
@@ -150,6 +153,9 @@ impl AgentRequest {
             .ok_or_else(|| crate::ValidationError("snapshot execution is not authorized".into()))
     }
     pub fn validate_capabilities(&self) -> Result<(), crate::ValidationError> {
+        if let Some(policy) = &self.workspace_policy {
+            policy.validate_actor(self)?;
+        }
         if let Some(policy) = &self.interactive_policy {
             policy.validate_actor(self)?;
         }

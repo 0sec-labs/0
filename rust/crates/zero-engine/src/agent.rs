@@ -246,6 +246,14 @@ pub(super) async fn run_agent_shared(
                         .map_err(|e| EngineError::State(e.to_string()))?;
                     payload["interactive_capture"] = serde_json::to_value(capture)?;
                 }
+                if let Some(policy) = &request.workspace_policy {
+                    let capture: zero_protocol::workspace_edit::WorkspaceCapture =
+                        serde_json::from_value(prior.payload["workspace_capture"].clone())?;
+                    capture
+                        .validate(policy)
+                        .map_err(|e| EngineError::State(e.to_string()))?;
+                    payload["workspace_capture"] = serde_json::to_value(capture)?;
+                }
                 if let Some(version) = prior.payload.get("http_output_version") {
                     payload["http_output_version"] = version.clone();
                 }
@@ -381,7 +389,7 @@ pub(super) fn prepare_actor(
     plugins: Option<agent_plugins::Context>,
     checkpoint: bool,
 ) -> Result<(serde_json::Value, PreparedActor), EngineError> {
-    if request.interactive_policy.is_some()
+    if (request.interactive_policy.is_some() || request.workspace_policy.is_some())
         && (store.scan_by_session(session_id)?.is_some()
             || store.review_by_session(session_id)?.is_some())
     {
@@ -434,6 +442,16 @@ pub(super) fn prepare_actor(
                 deadline_at_ms: created_at_ms
                     .checked_add(policy.deadline_ms)
                     .ok_or_else(|| EngineError::State("interactive deadline overflow".into()))?,
+            })?;
+    }
+    if let Some(policy) = &request.workspace_policy {
+        let created_at_ms = agent_interactive::now()?;
+        payload["workspace_capture"] =
+            serde_json::to_value(zero_protocol::workspace_edit::WorkspaceCapture {
+                created_at_ms,
+                deadline_at_ms: created_at_ms
+                    .checked_add(policy.deadline_ms)
+                    .ok_or_else(|| EngineError::State("workspace deadline overflow".into()))?,
             })?;
     }
     if let Some(context) = &delegation {
@@ -524,6 +542,7 @@ fn continuation_input(
             || prior.web_experiment_policy != request.web_experiment_policy
             || prior.source_snapshot_tools != request.source_snapshot_tools
             || prior.source_review_operation_id != request.source_review_operation_id
+            || prior.workspace_policy.is_some()
             || prior.interactive_policy.is_some()
             || prior.plugin_tools != request.plugin_tools
             || parent.payload.get("plugin_context") != plugins.map(|p| &p.identity)
@@ -672,6 +691,9 @@ fn model_request(
             model.tools.push(tool);
         }
     }
+    if request.workspace_policy.is_some() {
+        model.tools = zero_protocol::workspace_edit::definitions();
+    }
     if let Some(policy) = &request.interactive_policy {
         model
             .tools
@@ -685,7 +707,7 @@ fn model_request(
     }
     model
 }
-fn child_operation(
+pub(super) fn child_operation(
     shared: &Shared,
     session: &str,
     command: &str,
@@ -720,6 +742,7 @@ async fn run_rounds(
     joined: &mut agent_delegation::JoinedTasks,
     workers: &mut plugin_workers::WorkerPool,
     interactive: &mut agent_interactive::Sessions,
+    workspace_stages: &mut agent_workspace::Stages,
 ) -> Result<(AgentResult, Vec<serde_json::Value>), EngineError> {
     let review_owned = lock(&shared.store)?.review_by_session(session)?.is_some();
     let mut input = history.input;
@@ -1068,6 +1091,35 @@ async fn run_rounds(
         input.extend(completion.replay.clone());
         let outputs_start = input.len();
         for (index, (id, name, arguments)) in calls.into_iter().enumerate() {
+            if request.workspace_policy.is_some() && zero_protocol::workspace_edit::is_tool(&name) {
+                match agent_workspace::call(
+                    shared,
+                    parent,
+                    &request,
+                    turn,
+                    index,
+                    &id,
+                    &name,
+                    &arguments,
+                    &cancel,
+                    &events,
+                    workspace_stages,
+                )
+                .await
+                {
+                    Ok(value) => {
+                        output.tool_calls += 1;
+                        input.push(serde_json::json!({"type":"function_call_output","call_id":id,"output":serde_json::to_string(&value)?}));
+                    }
+                    Err(error) => {
+                        output.status = AgentStatus::Unknown;
+                        output.error = Some(error.to_string());
+                        break 'turns;
+                    }
+                }
+                continue;
+            }
+
             if name.starts_with("interactive_") && request.interactive_policy.is_some() {
                 match interactive
                     .call(
@@ -1552,7 +1604,7 @@ async fn run_rounds(
                 .snapshot_request()
                 .map_err(|e| EngineError::State(e.to_string()))?;
             execution.execution_id = format!("agent-{parent}-{turn}-{index}");
-            let permitted = if name == "execute_snapshot" {
+            let permitted = if name == "execute_snapshot" && request.workspace_policy.is_none() {
                 arguments
                     .as_object()
                     .filter(|object| object.len() == 1 && object.contains_key("argv"))
@@ -1831,22 +1883,40 @@ pub(super) fn run_actor<'a>(
         let mut joined = agent_delegation::JoinedTasks::new();
         let mut workers = plugin_workers::WorkerPool::new();
         let mut interactive = agent_interactive::Sessions::default();
-        let checkpoint = checkpoint && request.interactive_policy.is_none();
-        let interactive_deadline = if request.interactive_policy.is_some() {
-            let captured: zero_protocol::interactive::InteractiveCapture = serde_json::from_value(
-                lock(&shared.store)?.get_operation(parent)?.payload["interactive_capture"].clone(),
-            )?;
-            let token = cancel.clone();
-            Some(tokio::spawn(async move {
-                let remaining = captured
+        let mut workspace_stages = agent_workspace::Stages::default();
+        if preparation_error.is_none() {
+            if let Err(error) = agent_workspace::prepare(shared, parent, &request, &cancel).await {
+                preparation_error = Some(error.to_string());
+            }
+        }
+
+        let checkpoint = checkpoint
+            && request.interactive_policy.is_none()
+            && request.workspace_policy.is_none();
+        let actor_deadline =
+            if request.interactive_policy.is_some() || request.workspace_policy.is_some() {
+                let payload = lock(&shared.store)?.get_operation(parent)?.payload;
+                let deadline_at_ms = if request.workspace_policy.is_some() {
+                    serde_json::from_value::<zero_protocol::workspace_edit::WorkspaceCapture>(
+                        payload["workspace_capture"].clone(),
+                    )?
                     .deadline_at_ms
-                    .saturating_sub(agent_interactive::now().unwrap_or(u64::MAX));
-                tokio::time::sleep(std::time::Duration::from_millis(remaining)).await;
-                token.cancel();
-            }))
-        } else {
-            None
-        };
+                } else {
+                    serde_json::from_value::<zero_protocol::interactive::InteractiveCapture>(
+                        payload["interactive_capture"].clone(),
+                    )?
+                    .deadline_at_ms
+                };
+                let token = cancel.clone();
+                Some(tokio::spawn(async move {
+                    let remaining =
+                        deadline_at_ms.saturating_sub(agent_interactive::now().unwrap_or(u64::MAX));
+                    tokio::time::sleep(std::time::Duration::from_millis(remaining)).await;
+                    token.cancel();
+                }))
+            } else {
+                None
+            };
         let work = if let Some(error) = preparation_error {
             Ok((
                 empty(
@@ -1878,6 +1948,7 @@ pub(super) fn run_actor<'a>(
                 &mut joined,
                 &mut workers,
                 &mut interactive,
+                &mut workspace_stages,
             ))
             .catch_unwind()
             .await
@@ -1899,7 +1970,8 @@ pub(super) fn run_actor<'a>(
         let drained = joined.drain(shared, &cancel).await;
         let worker_drain = workers.drain(&cancel).await;
         let interactive_drain = interactive.drain(shared, parent).await;
-        if let Some(timer) = interactive_deadline {
+        let workspace_drain = workspace_stages.drain().await;
+        if let Some(timer) = actor_deadline {
             timer.abort();
             let _ = timer.await;
         }
@@ -1932,6 +2004,7 @@ pub(super) fn run_actor<'a>(
             sealed
                 .and(drained)
                 .and(interactive_drain)
+                .and(workspace_drain)
                 .and(worker_drain.map(|_| ()))
                 .map(|_| value)
         }) {

@@ -33,6 +33,8 @@ mod strategy_search;
 mod timeline;
 mod tui;
 mod web;
+mod workspace_apply;
+mod workspace_export;
 
 use args::{Args, Command, QueueCommand, SessionCommand, SnapshotCommand};
 use clap::Parser;
@@ -172,8 +174,14 @@ async fn run(args: Args) -> Result<bool, Box<dyn Error>> {
         )
         .await;
     }
+    if let Command::WorkspaceExport(command) = &args.command {
+        return workspace_export::run(&args.state, command).await;
+    }
     if let Command::SourceRepairExport(command) = &args.command {
         return repair_export::run(&args.state, command).await;
+    }
+    if let Command::WorkspaceApply { command } = &args.command {
+        return workspace_apply::run(command).await;
     }
     if let Command::Artifact { command } = &args.command {
         return artifact::run(&args.state, command).await;
@@ -505,7 +513,9 @@ async fn run(args: Args) -> Result<bool, Box<dyn Error>> {
         | Command::Findings { .. }
         | Command::SourceReport { .. }
         | Command::Source { .. }
+        | Command::WorkspaceExport(_)
         | Command::SourceRepairExport(_)
+        | Command::WorkspaceApply { .. }
         | Command::Schema
         | Command::Snapshot { .. }
         | Command::Doctor { .. }

@@ -14,6 +14,7 @@ mod agent_steering;
 mod agent_submission;
 mod agent_web;
 mod agent_web_experiment;
+mod agent_workspace;
 mod budget_read;
 mod campaign_read;
 mod discovery;
@@ -1423,3 +1424,6 @@ mod worker_completion_tests;
 
 #[cfg(test)]
 mod review_effect_tests;
+
+#[cfg(test)]
+mod workspace_dispatch_tests;

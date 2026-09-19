@@ -174,6 +174,7 @@ impl Setup {
             dir,
             request: AgentRequest {
                 interactive_policy: None,
+                workspace_policy: None,
                 plugin_tools: vec![],
                 continuation_of: None,
                 source_review_operation_id: None,

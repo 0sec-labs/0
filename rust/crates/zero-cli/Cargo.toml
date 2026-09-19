@@ -11,6 +11,8 @@ name = "0sec-native"
 path = "src/main.rs"
 
 [dependencies]
+zero-workspace = { path = "../zero-workspace" }
+zero-workspace-host = { path = "../zero-workspace-host" }
 zero-cloud-compat = { path = "../zero-cloud-compat" }
 zero-tui = { path = "../zero-tui" }
 zero-http = { path = "../zero-http" }

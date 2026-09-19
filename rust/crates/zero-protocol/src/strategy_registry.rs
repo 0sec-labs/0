@@ -253,6 +253,7 @@ pub fn render_strategy_request(
     );
     Ok(AgentRequest {
         interactive_policy: None,
+        workspace_policy: None,
         provider: host.provider.clone(),
         model: host.model.clone(),
         instructions,

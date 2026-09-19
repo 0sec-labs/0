@@ -1,0 +1,21 @@
+[package]
+name = "zero-workspace-host"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+zero-protocol.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+rustix = { version = "=1.1.5", features = ["fs"] }
+nix = { workspace = true, features = ["fs"] }
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lints]
+workspace = true

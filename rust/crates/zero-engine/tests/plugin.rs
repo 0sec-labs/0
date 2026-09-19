@@ -698,6 +698,7 @@ fn agent_request(f: &Fixture) -> AgentRequest {
     fs::write(source.join("source.txt"), b"fixture").unwrap();
     AgentRequest {
         interactive_policy: None,
+        workspace_policy: None,
         provider: "local".into(),
         context_policy: None,
         delegation_policy: None,

@@ -210,6 +210,7 @@ fn agent(dir: &std::path::Path) -> zero_protocol::agent::AgentRequest {
     };
     zero_protocol::agent::AgentRequest {
         interactive_policy: None,
+        workspace_policy: None,
         provider: "hosted".into(),
         context_policy: None,
         delegation_policy: None,

@@ -88,6 +88,7 @@ pub(super) async fn run_sandbox_owned(
         &shared.owner,
         &serde_json::to_value(&request)?,
     )?;
+    lock(&shared.store)?.begin_workspace_test_dispatch(operation_id, &shared.owner, &request)?;
     let executor = Arc::clone(&shared.sandbox);
     let unavailable = Arc::new(std::sync::atomic::AtomicBool::new(false));
     let flag = Arc::clone(&unavailable);

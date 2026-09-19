@@ -35,6 +35,7 @@ impl InteractivePolicy {
         self.validate()?;
         let execution = request.snapshot_request()?;
         if !matches!(&execution.backend,SandboxBackend::Docker{image} if crate::is_sha256(image))
+            || request.workspace_policy.is_some()
             || request.http_profile.is_some()
             || request.delegation_policy.is_some()
             || request.tool_approval_policy.is_some()

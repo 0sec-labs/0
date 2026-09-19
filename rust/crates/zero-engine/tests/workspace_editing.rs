@@ -58,7 +58,38 @@ impl Http {
                     .get(n)
                     .unwrap_or_else(|| responses.last().unwrap());
                 let dynamic;
-                let body = if selected.starts_with("interactive:") {
+                let body = if selected.starts_with("workspace:") {
+                    let guard = captured.lock().unwrap();
+                    let request = guard.last().unwrap();
+                    let generation = request["input"]
+                        .as_array()
+                        .unwrap()
+                        .iter()
+                        .filter_map(|v| v["output"].as_str())
+                        .filter_map(|s| serde_json::from_str::<Value>(s).ok())
+                        .filter_map(|v| v["generation"].as_str().map(str::to_owned))
+                        .last()
+                        .unwrap();
+                    let action = selected.strip_prefix("workspace:").unwrap();
+                    let (name, args) = if action == "edit" {
+                        (
+                            "write_file",
+                            json!({"path":"file.txt","expected_generation":generation,"content":"edited"}),
+                        )
+                    } else {
+                        (
+                            "execute_workspace",
+                            json!({"expected_generation":generation,"argv":["fixture"]}),
+                        )
+                    };
+                    let body = complete(json!([tool(&format!("call-{n}"), name, args)]));
+                    dynamic = if action == "overbudget" {
+                        body.replace("\"input_tokens\":1", "\"input_tokens\":200")
+                    } else {
+                        body
+                    };
+                    &dynamic
+                } else if selected.starts_with("interactive:") {
                     let guard = captured.lock().unwrap();
                     let request = guard.last().unwrap();
                     let handle = request["input"]
@@ -284,78 +315,46 @@ async fn session(engine: &Engine, limit: u64) -> String {
         r => panic!("{r:?}"),
     }
 }
-async fn budget(engine: &Engine, session: &str) -> zero_protocol::session::BudgetSnapshot {
-    match call(
-        engine,
-        Command::SessionBudget {
-            session_id: session.into(),
-        },
-    )
-    .await
-    {
-        Reply::SessionBudget { budget } => budget,
-        r => panic!("{r:?}"),
-    }
-}
 
-fn enable(setup: &mut Setup, deadline: u64) {
-    setup.request.interactive_policy = Some(zero_protocol::interactive::InteractivePolicy {
-        max_sessions: 2,
-        max_writes: 4,
-        max_input_bytes: 4096,
-        max_read_bytes: 1024,
-        deadline_ms: deadline,
-    });
+fn enable(setup: &mut Setup, deadline_ms: u64) {
     let mut execution = setup.request.snapshot_request().unwrap();
     execution.backend = zero_protocol::sandbox::SandboxBackend::Docker {
         image: format!("sha256:{}", "a".repeat(64)),
     };
     execution.timeout_ms = 5000;
-    setup.request.execution = Some(zero_protocol::agent::AgentExecution::Sandbox(execution));
+    setup.request.execution = Some(zero_protocol::agent::AgentExecution::Sandbox(
+        execution.clone(),
+    ));
     setup.request.max_turns = 8;
+    setup.request.workspace_policy = Some(zero_protocol::workspace_edit::WorkspacePolicy {
+        paths: vec![zero_protocol::workspace_edit::EditablePath {
+            path: "file.txt".into(),
+            baseline_sha256: Some(execution.snapshot.files[0].digest.clone()),
+            executable: false,
+        }],
+        max_edits: 4,
+        max_changed_bytes: 4096,
+        max_test_runs: 2,
+        deadline_ms,
+    });
+}
+fn list() -> String {
+    complete(json!([tool(
+        "list",
+        "workspace_list",
+        json!({"prefix":"","after":"","max_results":10})
+    )]))
 }
 #[tokio::test]
-async fn interactive_pipe_roundtrip_and_duplicate_actor_are_retained() {
-    roundtrip(false).await;
-}
-#[tokio::test]
-#[ignore = "requires explicitly selected installed immutable Docker image; no pulls"]
-async fn actual_docker_interactive_roundtrip() {
-    roundtrip(true).await;
-}
-async fn roundtrip(real: bool) {
-    let mut setup = Setup::new("interactive");
-    enable(&mut setup, 10000);
-    if real {
-        let mut execution = setup.request.snapshot_request().unwrap();
-        execution.backend = zero_protocol::sandbox::SandboxBackend::Docker {
-            image: std::env::var("ZERO_INTERACTIVE_DOCKER_IMAGE")
-                .expect("set immutable installed image"),
-        };
-        setup.request.execution = Some(zero_protocol::agent::AgentExecution::Sandbox(execution));
-    }
+async fn cancelled_provider_preserves_committed_edit_and_never_replays_effect() {
+    let mut setup = Setup::new("echo");
+    enable(&mut setup, 1500);
     let http = Http::new(
-        vec![
-            complete(json!([tool(
-                "create",
-                "interactive_create",
-                json!({"argv":["cat"]})
-            )])),
-            "interactive:write".into(),
-            "interactive:read".into(),
-            "interactive:write".into(),
-            "interactive:read".into(),
-            "interactive:close".into(),
-            answer(),
-        ],
+        vec![list(), "workspace:edit".into(), ": hold\n\n".into()],
         false,
     )
     .await;
-    let engine = if real {
-        Engine::open(setup.dir.path().join("native.sqlite"), None).unwrap()
-    } else {
-        setup.engine()
-    };
+    let engine = setup.engine();
     http.configure(&engine);
     let session = session(&engine, 100).await;
     let command = setup.command(&session);
@@ -368,125 +367,16 @@ async fn roundtrip(real: bool) {
     else {
         panic!("{reply:?}")
     };
-    assert_eq!(result.status, AgentStatus::Completed, "{result:?}");
-    assert_eq!(result.tool_calls, 6);
-    let requests = http.requests.lock().unwrap();
-    let last = requests.last().unwrap();
-    let outputs: Vec<Value> = last["input"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .filter_map(|v| v["output"].as_str())
-        .filter_map(|s| serde_json::from_str(s).ok())
-        .collect();
-    assert!(
-        outputs.iter().any(|v| v["bytes_base64"] == "aGVsbG8K"),
-        "{outputs:?}"
-    );
-    assert!(outputs.iter().any(|v| v["forwarded_to_launcher"] == true));
-    assert!(
-        outputs
-            .iter()
-            .any(|v| v["after"] == 6 && v["bytes_base64"] == "aGVsbG8K"),
-        "{outputs:?}"
-    );
-    drop(requests);
-    let before = setup.docker_calls().len();
-    let retry = call(&engine, command).await;
-    assert!(matches!(
-        retry,
-        Reply::Agent {
-            duplicate: true,
-            ..
-        }
-    ));
-    assert_eq!(http.count(), 7);
-    assert_eq!(setup.docker_calls().len(), before);
+    assert_eq!(result.status, AgentStatus::Unknown);
     let store = zero_store::Store::open(setup.dir.path().join("native.sqlite")).unwrap();
-    let artifacts = store.operation_artifacts(&operation.id).unwrap();
+    let state = store.workspace_state(&operation.id).unwrap();
     assert_eq!(
-        artifacts
-            .keys()
-            .filter(|n| n.starts_with("interactive."))
-            .count(),
-        2
+        zero_workspace::bytes(&state.current, "file.txt").unwrap(),
+        b"edited"
     );
-    let transcript = artifacts
-        .iter()
-        .find(|(n, _)| n.ends_with(".transcript"))
-        .unwrap()
-        .1;
-    assert_eq!(store.artifact(transcript).unwrap(), b"hello\nhello\n");
-    let result = artifacts
-        .iter()
-        .find(|(n, _)| n.ends_with(".result"))
-        .unwrap()
-        .1;
-    let retained: zero_protocol::sandbox::SandboxResult =
-        serde_json::from_slice(&store.artifact(result).unwrap()).unwrap();
-    assert!(
-        matches!(
-            retained.cleanup,
-            zero_protocol::sandbox::SandboxCleanup::Confirmed
-        ),
-        "{retained:?}"
-    );
-    assert!(
-        outputs
-            .iter()
-            .filter(|v| v.get("cleanup").is_some())
-            .all(|v| v.get("stdout").is_none() && v.get("stderr").is_none())
-    );
-    assert_eq!(budget(&engine, &session).await.reserved, 0);
-}
-#[tokio::test]
-async fn interactive_capability_rejects_mutable_image_before_provider() {
-    let mut setup = Setup::new("interactive");
-    enable(&mut setup, 1000);
-    let mut execution = setup.request.snapshot_request().unwrap();
-    execution.backend = zero_protocol::sandbox::SandboxBackend::Docker {
-        image: "mutable:latest".into(),
-    };
-    setup.request.execution = Some(zero_protocol::agent::AgentExecution::Sandbox(execution));
-    let http = Http::new(vec![answer()], false).await;
-    let engine = setup.engine();
-    http.configure(&engine);
-    let session = session(&engine, 100).await;
-    let reply = call(&engine, setup.command(&session)).await;
-    assert!(matches!(reply, Reply::Error { .. }), "{reply:?}");
-    assert_eq!(http.count(), 0);
-    assert!(setup.docker_calls().is_empty());
-}
-
-#[tokio::test]
-async fn interactive_deadline_cancels_model_and_never_extends_on_retry() {
-    let mut setup = Setup::new("interactive");
-    enable(&mut setup, 200);
-    let http = Http::new(
-        vec!["data: {\"type\":\"response.created\",\"response\":{\"id\":\"r\"}}\n\n".into()],
-        true,
-    )
-    .await;
-    let engine = setup.engine();
-    http.configure(&engine);
-    let session = session(&engine, 100).await;
-    let command = setup.command(&session);
-    let start = std::time::Instant::now();
-    let reply = call(&engine, command.clone()).await;
-    let Reply::Agent {
-        result: Some(result),
-        ..
-    } = reply
-    else {
-        panic!("{reply:?}")
-    };
-    assert!(
-        matches!(result.status, AgentStatus::Cancelled | AgentStatus::Unknown),
-        "{result:?}"
-    );
-    assert!(start.elapsed() < Duration::from_secs(3));
-    assert_eq!(http.count(), 1);
-    assert!(setup.docker_calls().is_empty());
+    assert_eq!(state.receipts.len(), 1);
+    assert!(state.test_commands.is_empty());
+    assert_eq!(store.budget(&session).unwrap().reserved, 5);
     assert!(matches!(
         call(&engine, command).await,
         Reply::Agent {
@@ -494,21 +384,18 @@ async fn interactive_deadline_cancels_model_and_never_extends_on_retry() {
             ..
         }
     ));
-    assert_eq!(http.count(), 1);
+    assert_eq!(http.count(), 3);
+    assert!(setup.docker_calls().is_empty());
 }
-
 #[tokio::test]
-async fn interactive_unknown_cleanup_cannot_be_reported_completed() {
-    let mut setup = Setup::new("cleanup-fail");
+async fn completed_overage_blocks_execution_but_preserves_prior_edit_provenance() {
+    let mut setup = Setup::new("echo");
     enable(&mut setup, 10000);
     let http = Http::new(
         vec![
-            complete(json!([tool(
-                "create",
-                "interactive_create",
-                json!({"argv":["cat"]})
-            )])),
-            "interactive:read".into(),
+            list(),
+            "workspace:edit".into(),
+            "workspace:overbudget".into(),
             answer(),
         ],
         false,
@@ -519,29 +406,30 @@ async fn interactive_unknown_cleanup_cannot_be_reported_completed() {
     let session = session(&engine, 100).await;
     let reply = call(&engine, setup.command(&session)).await;
     let Reply::Agent {
+        operation,
         result: Some(result),
         ..
     } = reply
     else {
         panic!("{reply:?}")
     };
-    assert_eq!(result.status, AgentStatus::Unknown, "{result:?}");
-    assert!(setup.docker_calls().iter().any(|a| a[0] == "rm"));
+    assert_eq!(result.status, AgentStatus::Failed);
+    let store = zero_store::Store::open(setup.dir.path().join("native.sqlite")).unwrap();
+    let state = store.workspace_state(&operation.id).unwrap();
+    assert_eq!(
+        zero_workspace::bytes(&state.current, "file.txt").unwrap(),
+        b"edited"
+    );
+    assert!(state.test_commands.is_empty());
+    assert_eq!(store.budget(&session).unwrap().charged, 205);
+    assert!(setup.docker_calls().is_empty());
 }
-
 #[tokio::test]
-async fn durable_marker_rejects_duplicate_forged_and_wrong_owner_calls_then_shutdown_drains() {
-    let mut setup = Setup::new("interactive");
+async fn duplicate_forged_and_wrong_owner_edits_reject_while_actor_running() {
+    let mut setup = Setup::new("echo");
     enable(&mut setup, 10000);
     let http = Http::new(
-        vec![
-            complete(json!([tool(
-                "create",
-                "interactive_create",
-                json!({"argv":["cat"]})
-            )])),
-            ": hold\n\n".into(),
-        ],
+        vec![list(), "workspace:edit".into(), ": hold\n\n".into()],
         false,
     )
     .await;
@@ -560,147 +448,54 @@ async fn durable_marker_rejects_duplicate_forged_and_wrong_owner_calls_then_shut
     let actor = store
         .get_operation_by_command(&session, "parent-command")
         .unwrap();
-    let events = store.events(&session, 0, 1000).unwrap();
-    let marker = events
-        .iter()
-        .find(|e| e.kind == "interactive_effect")
-        .unwrap();
-    let handle = marker.payload["handle"].as_str().unwrap();
-    let create = zero_protocol::interactive::InteractiveCall::Create {
-        argv: vec!["cat".into()],
+    let state = store.workspace_state(&actor.id).unwrap();
+    let call = zero_protocol::workspace_edit::WorkspaceCall::Write {
+        path: "file.txt".into(),
+        expected_generation: zero_workspace::generation(&state.baseline).unwrap(),
+        content: "edited".into(),
     };
-    let duplicate = store
-        .claim_interactive(
-            &actor.id,
-            actor.owner.as_deref().unwrap(),
-            0,
-            0,
-            "create",
-            &create,
-            handle,
-        )
+    let position = zero_store::WorkspaceInvocation {
+        turn: 1,
+        index: 0,
+        call_id: "call-1".into(),
+    };
+    let error = store
+        .claim_workspace_effect(&actor.id, actor.owner.as_deref().unwrap(), &position, &call)
         .unwrap_err();
-    assert!(
-        duplicate.to_string().contains("already exists"),
-        "{duplicate}"
-    );
+    assert!(error.to_string().contains("already claimed"), "{error}");
     assert!(
         store
-            .claim_interactive(&actor.id, "another-engine", 0, 0, "create", &create, handle)
+            .claim_workspace_effect(&actor.id, "other-owner", &position, &call)
             .is_err()
     );
-    let forged = zero_protocol::interactive::InteractiveCall::Create {
-        argv: vec!["other".into()],
+    let forged = zero_protocol::workspace_edit::WorkspaceCall::Write {
+        path: "file.txt".into(),
+        expected_generation: zero_workspace::generation(&state.baseline).unwrap(),
+        content: "forged".into(),
     };
     assert!(
         store
-            .claim_interactive(
+            .claim_workspace_effect(
                 &actor.id,
                 actor.owner.as_deref().unwrap(),
-                0,
-                0,
-                "create",
-                &forged,
-                handle
+                &position,
+                &forged
             )
             .is_err()
     );
     drop(store);
     engine.shutdown().await.unwrap();
-    let reply = running.await.unwrap();
-    assert!(matches!(reply,Reply::Agent{result:Some(ref r),..} if r.status==AgentStatus::Unknown));
-    assert_eq!(http.count(), 2);
-    assert_eq!(
-        zero_store::Store::open(setup.dir.path().join("native.sqlite"))
-            .unwrap()
-            .budget(&session)
-            .unwrap()
-            .reserved,
-        5
-    );
+    running.await.unwrap();
 }
-
 #[tokio::test]
-async fn blocked_write_is_unknown_once_and_drains_original_guest() {
-    let mut setup = Setup::new("hang");
-    enable(&mut setup, 3000);
-    setup
-        .request
-        .interactive_policy
-        .as_mut()
-        .unwrap()
-        .max_input_bytes = 32768;
-    let http = Http::new(
-        vec![
-            complete(json!([tool(
-                "create",
-                "interactive_create",
-                json!({"argv":["cat"]})
-            )])),
-            "interactive:read".into(),
-            "interactive:write_block".into(),
-            answer(),
-        ],
-        false,
-    )
-    .await;
+async fn execution_cleanup_uncertainty_stops_actor_and_keeps_test_generation() {
+    let mut setup = Setup::new("cleanup-fail");
+    enable(&mut setup, 1500);
+    let http = Http::new(vec![list(), "workspace:execute".into(), answer()], false).await;
     let engine = setup.engine();
     http.configure(&engine);
     let session = session(&engine, 100).await;
-    let command = setup.command(&session);
-    let reply = call(&engine, command.clone()).await;
-    let Reply::Agent {
-        result: Some(result),
-        ..
-    } = reply
-    else {
-        panic!("{reply:?}")
-    };
-    assert_eq!(result.status, AgentStatus::Unknown, "{result:?}");
-    assert_eq!(http.count(), 3);
-    let before = setup.docker_calls().len();
-    assert!(matches!(
-        call(&engine, command).await,
-        Reply::Agent {
-            duplicate: true,
-            ..
-        }
-    ));
-    assert_eq!(setup.docker_calls().len(), before);
-    let store = zero_store::Store::open(setup.dir.path().join("native.sqlite")).unwrap();
-    let events = store.events(&session, 0, 1000).unwrap();
-    assert_eq!(
-        events
-            .iter()
-            .filter(|e| e.kind == "interactive_effect" && e.payload["call"]["action"] == "write")
-            .count(),
-        1
-    );
-}
-
-#[tokio::test]
-async fn final_usage_overage_stops_write_and_joins_prior_guest() {
-    let mut setup = Setup::new("interactive");
-    enable(&mut setup, 10000);
-    let http = Http::new(
-        vec![
-            complete(json!([tool(
-                "create",
-                "interactive_create",
-                json!({"argv":["cat"]})
-            )])),
-            "interactive:read".into(),
-            "interactive:write_overbudget".into(),
-            answer(),
-        ],
-        false,
-    )
-    .await;
-    let engine = setup.engine();
-    http.configure(&engine);
-    let session = session(&engine, 100).await;
-    let command = setup.command(&session);
-    let reply = call(&engine, command.clone()).await;
+    let reply = call(&engine, setup.command(&session)).await;
     let Reply::Agent {
         operation,
         result: Some(result),
@@ -709,48 +504,225 @@ async fn final_usage_overage_stops_write_and_joins_prior_guest() {
     else {
         panic!("{reply:?}")
     };
-    assert_eq!(result.status, AgentStatus::Failed, "{result:?}");
-    assert!(result.error.unwrap().contains("budget"));
-    assert_eq!(http.count(), 3);
+    assert_eq!(result.status, AgentStatus::Unknown, "{result:?}");
     let store = zero_store::Store::open(setup.dir.path().join("native.sqlite")).unwrap();
-    let account = store.budget(&session).unwrap();
-    assert_eq!(account.charged, 205);
-    assert_eq!(account.reserved, 0);
-    let child = store
-        .get_operation_by_command(&session, &format!("{}:model:2", operation.id))
-        .unwrap();
-    assert_eq!(
-        child.status,
-        zero_protocol::session::OperationStatus::Succeeded
-    );
-    let events = store.events(&session, 0, 1000).unwrap();
-    assert_eq!(
-        events
-            .iter()
-            .filter(|e| e.kind == "interactive_effect" && e.payload["call"]["action"] == "write")
-            .count(),
-        0
-    );
-    let artifacts = store.operation_artifacts(&operation.id).unwrap();
-    let digest = artifacts
+    let tests = store.workspace_tests(&operation.id).unwrap();
+    assert_eq!(tests.len(), 1);
+    assert_eq!(tests[0]["status"], "unknown");
+    assert_eq!(tests[0]["assessment"], "unverified");
+    assert_eq!(http.count(), 2);
+}
+
+#[tokio::test]
+async fn independent_workspace_inspection_rejects_missing_committed_edit_bytes() {
+    let mut setup = Setup::new("echo");
+    enable(&mut setup, 10000);
+    let http = Http::new(vec![list(), "workspace:edit".into(), answer()], false).await;
+    let engine = setup.engine();
+    http.configure(&engine);
+    let session = session(&engine, 100).await;
+    let reply = call(&engine, setup.command(&session)).await;
+    let Reply::Agent {
+        operation,
+        result: Some(result),
+        ..
+    } = reply
+    else {
+        panic!("{reply:?}")
+    };
+    assert_eq!(result.status, AgentStatus::Completed);
+    let store = zero_store::Store::open(setup.dir.path().join("native.sqlite")).unwrap();
+    let state = store.workspace_state(&operation.id).unwrap();
+    let sha = state
+        .current
+        .manifest
+        .files
         .iter()
-        .find(|(n, _)| n.ends_with(".result"))
+        .find(|f| f.path == "file.txt")
         .unwrap()
-        .1;
-    let retained: zero_protocol::sandbox::SandboxResult =
-        serde_json::from_slice(&store.artifact(digest).unwrap()).unwrap();
-    assert!(matches!(
-        retained.cleanup,
-        zero_protocol::sandbox::SandboxCleanup::Confirmed
-    ));
-    let before = setup.docker_calls().len();
-    assert!(matches!(
-        call(&engine, command).await,
-        Reply::Agent {
-            duplicate: true,
-            ..
+        .sha256
+        .clone();
+    drop(store);
+    let connection = rusqlite::Connection::open(setup.dir.path().join("native.sqlite")).unwrap();
+    assert_eq!(
+        connection
+            .execute("DELETE FROM artifacts WHERE digest=?1", [sha])
+            .unwrap(),
+        1
+    );
+    drop(connection);
+    let store = zero_store::Store::open_read_only(setup.dir.path().join("native.sqlite")).unwrap();
+    assert!(store.workspace_state(&operation.id).is_err());
+}
+
+#[tokio::test]
+async fn independent_workspace_inspection_rejects_settlement_after_effect() {
+    let mut setup = Setup::new("echo");
+    enable(&mut setup, 10000);
+    let http = Http::new(vec![list(), "workspace:edit".into(), answer()], false).await;
+    let engine = setup.engine();
+    http.configure(&engine);
+    let session = session(&engine, 100).await;
+    let reply = call(&engine, setup.command(&session)).await;
+    let Reply::Agent {
+        operation,
+        result: Some(result),
+        ..
+    } = reply
+    else {
+        panic!("{reply:?}")
+    };
+    assert_eq!(result.status, AgentStatus::Completed);
+    let store = zero_store::Store::open(setup.dir.path().join("native.sqlite")).unwrap();
+    assert_eq!(
+        store.workspace_state(&operation.id).unwrap().receipts.len(),
+        1
+    );
+    let origin = store
+        .get_operation_by_command(&session, &format!("{}:model:1", operation.id))
+        .unwrap();
+    drop(store);
+    let connection = rusqlite::Connection::open(setup.dir.path().join("native.sqlite")).unwrap();
+    let last: u64 = connection
+        .query_row(
+            "SELECT max(sequence) FROM events WHERE session_id=?1",
+            [&session],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(connection.execute("UPDATE events SET sequence=?3 WHERE session_id=?1 AND kind='budget_settled' AND json_extract(payload,'$.reservation_id')=?2",rusqlite::params![session,origin.id,last+1]).unwrap(),1);
+    drop(connection);
+    let store = zero_store::Store::open_read_only(setup.dir.path().join("native.sqlite")).unwrap();
+    let error = store
+        .workspace_state(&operation.id)
+        .err()
+        .expect("settlement after effect must fail historical inspection");
+    assert!(error.to_string().contains("settlement"), "{error}");
+}
+
+#[tokio::test]
+async fn independent_workspace_test_inspection_authenticates_dispatch_witness() {
+    let mut setup = Setup::new("echo");
+    enable(&mut setup, 10000);
+    let http = Http::new(vec![list(), "workspace:execute".into(), answer()], false).await;
+    let engine = setup.engine();
+    http.configure(&engine);
+    let session = session(&engine, 100).await;
+    let reply = call(&engine, setup.command(&session)).await;
+    let Reply::Agent {
+        operation,
+        result: Some(result),
+        ..
+    } = reply
+    else {
+        panic!("{reply:?}")
+    };
+    assert_eq!(result.status, AgentStatus::Completed, "{result:?}");
+    let path = setup.dir.path().join("native.sqlite");
+    let store = zero_store::Store::open_read_only(&path).unwrap();
+    assert_eq!(store.workspace_tests(&operation.id).unwrap().len(), 1);
+    drop(store);
+    let c = rusqlite::Connection::open(&path).unwrap();
+    let (sequence,payload):(u64,String)=c.query_row("SELECT sequence,payload FROM events WHERE session_id=?1 AND kind='workspace_test_started'",[&session],|r|Ok((r.get(0)?,r.get(1)?))).unwrap();
+    let last: u64 = c
+        .query_row(
+            "SELECT max(sequence) FROM events WHERE session_id=?1",
+            [&session],
+            |r| r.get(0),
+        )
+        .unwrap();
+    for variant in 0..4 {
+        match variant {
+            0 => {
+                c.execute(
+                    "DELETE FROM events WHERE session_id=?1 AND sequence=?2",
+                    rusqlite::params![session, sequence],
+                )
+                .unwrap();
+            }
+            1 => {
+                let mut bad: Value = serde_json::from_str(&payload).unwrap();
+                bad["request"]["memory_mb"] = json!(4096);
+                c.execute(
+                    "UPDATE events SET payload=?3 WHERE session_id=?1 AND sequence=?2",
+                    rusqlite::params![session, sequence, bad.to_string()],
+                )
+                .unwrap();
+            }
+            2 => {
+                c.execute(
+                    "UPDATE events SET sequence=?3 WHERE session_id=?1 AND sequence=?2",
+                    rusqlite::params![session, sequence, last + 1],
+                )
+                .unwrap();
+            }
+            _ => {
+                c.execute("INSERT INTO events(session_id,sequence,kind,payload) VALUES(?1,?2,'workspace_test_started',?3)",rusqlite::params![session,last+1,payload]).unwrap();
+            }
         }
-    ));
-    assert_eq!(setup.docker_calls().len(), before);
-    assert_eq!(http.count(), 3);
+        let store = zero_store::Store::open_read_only(&path).unwrap();
+        let error = store
+            .workspace_tests(&operation.id)
+            .err()
+            .expect("tampered dispatch must fail inspection");
+        assert!(
+            error.to_string().contains("dispatch"),
+            "variant {variant}: {error}"
+        );
+        drop(store);
+        c.execute(
+            "DELETE FROM events WHERE session_id=?1 AND kind='workspace_test_started'",
+            [&session],
+        )
+        .unwrap();
+        c.execute("INSERT INTO events(session_id,sequence,kind,payload) VALUES(?1,?2,'workspace_test_started',?3)",rusqlite::params![session,sequence,payload]).unwrap();
+    }
+    let store = zero_store::Store::open_read_only(&path).unwrap();
+    assert_eq!(store.workspace_tests(&operation.id).unwrap().len(), 1);
+    drop(store);
+    // Make an unused integer slot immediately before dispatch without changing
+    // any valid ordering, then corrupt each live-gate precondition separately.
+    c.execute(
+        "UPDATE events SET sequence=-sequence WHERE session_id=?1",
+        [&session],
+    )
+    .unwrap();
+    c.execute(
+        "UPDATE events SET sequence=-sequence*2 WHERE session_id=?1",
+        [&session],
+    )
+    .unwrap();
+    let before_start = sequence * 2 - 1;
+    c.execute(
+        "INSERT INTO events(session_id,sequence,kind,payload) VALUES(?1,?2,'budget_reserved',?3)",
+        rusqlite::params![
+            session,
+            before_start,
+            json!({"reservation_id":"late-unsettled-hold","amount":101}).to_string()
+        ],
+    )
+    .unwrap();
+    let store = zero_store::Store::open_read_only(&path).unwrap();
+    assert!(
+        store
+            .workspace_tests(&operation.id)
+            .unwrap_err()
+            .to_string()
+            .contains("account")
+    );
+    drop(store);
+    c.execute(
+        "DELETE FROM events WHERE session_id=?1 AND sequence=?2",
+        rusqlite::params![session, before_start],
+    )
+    .unwrap();
+    c.execute("UPDATE events SET sequence=?3 WHERE session_id=?1 AND kind='operation_settled' AND json_extract(payload,'$.id')=?2",rusqlite::params![session,operation.id,before_start]).unwrap();
+    let store = zero_store::Store::open_read_only(&path).unwrap();
+    assert!(
+        store
+            .workspace_tests(&operation.id)
+            .unwrap_err()
+            .to_string()
+            .contains("parent termination")
+    );
 }

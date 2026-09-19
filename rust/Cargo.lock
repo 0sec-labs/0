@@ -2362,6 +2362,8 @@ dependencies = [
  "zero-smolvm",
  "zero-store",
  "zero-tui",
+ "zero-workspace",
+ "zero-workspace-host",
 ]
 
 [[package]]
@@ -2439,6 +2441,7 @@ dependencies = [
  "zero-store",
  "zero-verification",
  "zero-web-verification",
+ "zero-workspace",
 ]
 
 [[package]]
@@ -2693,6 +2696,7 @@ dependencies = [
  "zero-repair",
  "zero-verification",
  "zero-web-verification",
+ "zero-workspace",
 ]
 
 [[package]]
@@ -2732,6 +2736,31 @@ dependencies = [
  "sha2",
  "thiserror 2.0.20",
  "zero-http",
+ "zero-protocol",
+]
+
+[[package]]
+name = "zero-workspace"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "sha2",
+ "tempfile",
+ "zero-executor",
+ "zero-protocol",
+]
+
+[[package]]
+name = "zero-workspace-host"
+version = "0.1.0"
+dependencies = [
+ "nix",
+ "rustix 1.1.5",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tempfile",
  "zero-protocol",
 ]
 

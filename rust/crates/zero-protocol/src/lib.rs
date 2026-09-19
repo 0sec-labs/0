@@ -42,6 +42,7 @@ mod verification_binary;
 pub mod web;
 pub mod web_experiment;
 pub mod workspace;
+pub mod workspace_edit;
 pub use execution::*;
 pub use session::*;
 
