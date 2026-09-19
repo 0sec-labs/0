@@ -22,6 +22,12 @@ on the published npm package and the GitHub Release tag.
 - `0dev` defaults to the development Cloud host and stores Cloud credentials
   separately, without changing normal `0sec` credentials or BYOK configuration.
 
+### Fixed
+
+- Use Azure's DeepSeek V4.1 Flash rates for exact, mixed-case and versioned
+  deployment names instead of the generic cost-estimation fallback. Direct
+  DeepSeek API pricing is unchanged; this does not rewrite recorded spend.
+
 ## [0.19.0] - 2026-09-18
 
 ### Added
