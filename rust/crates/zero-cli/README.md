@@ -1182,6 +1182,51 @@ Exact command retries compare original target/profile identity and return retain
 
 Output is terminal text, one native JSON document, Markdown (`md` alias), or inert HTML. These are native scan records, not legacy managed-worker reports. `0SEC_CLOUD_*`, `0SEC_EMIT_RESULT_LINE`, `0SEC_REPORT_PATH` and legacy target-auth environment variables do not automatically enable uploads, result markers, file writes or scope/auth overrides. This command does not claim managed `http_audit` compatibility; that requires a separately qualified controller/consumer adapter.
 
+### Native history and timeline exports
+
+`history` browses the current native database's standalone and managed HTTP
+scans, newest admission first. It shows exact scan/session IDs, retained lifecycle,
+observation time and sequence, model charges and holds, HTTP byte holds,
+unverified claim counts and report publication state. An unavailable terminal
+result has an unavailable count, never an invented zero. Local review and other
+agent sessions are not included in this scan index.
+
+```sh
+0sec-native --state state.db history --limit 10
+0sec-native --state state.db history --before-sequence CURSOR --format json
+0sec-native --state state.db timeline SCAN_ID --format markdown
+0sec-native --state state.db timeline --session SESSION_ID --format json
+0sec-native --state state.db timeline --session SESSION_ID --after-sequence CURSOR --format csv
+```
+
+These commands use read-only native storage while an engine owns the database.
+They do not load provider, sandbox, HTTP or harness configuration, create state,
+recover an epoch, dispatch work, or read a legacy TypeScript database. History
+JSON reuses the `scans` reply/page contract; follow `next_before_sequence` until
+it is null. Limits are 1–32 scans per page.
+
+Timeline accepts one exact scan or session identity and returns up to 100 events
+in durable sequence order, with a 4 MiB retained payload read budget. Oversized
+rows fail explicitly. JSON preserves each event's full retained payload; it is
+not a generic secret-redaction service. Human exports show bounded, escaped
+summaries and disclose omitted payload fields. CSV cells are quoted and protected
+against spreadsheet formula interpretation. The last exported sequence is the
+next cursor (also `next_after_sequence` in JSON); continue until an empty page.
+An active session can append more events after any read. The native journal does
+not record per-event wall-clock timestamps or MITRE ATT&CK/ATLAS labels, so these
+exports do not invent them or claim legacy forensic-timeline parity.
+
+Neither command replays effects or implies vulnerability verification. The
+legacy `history` multi-database discovery and timeline time/taxonomy filters
+remain unsupported. Explicit native `--state` selects one database. Read workers
+are drained after signals or a five-second read deadline; output also has a
+five-second deadline. Existing SQLite/host I/O completion can delay a drained read.
+
+Executable acceptance lives in `tests/history.rs` and `tests/timeline.rs`: real
+loopback scans, partial/cancelled usage holds, offline pagination after deleting
+configuration, live-owner reads, untrusted formatting, missing state and bounded
+oversized-row refusal. These fixtures do not qualify a paid provider or deployment.
+
 ### Explicit managed HTTP invocation
 
 `managed-http` is a separate native worker contract, `0sec-native-http/v1`:

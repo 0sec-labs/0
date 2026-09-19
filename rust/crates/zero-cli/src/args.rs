@@ -53,6 +53,10 @@ pub struct Args {
 
 #[derive(Debug, Subcommand)]
 pub enum Command {
+    /// Browse retained native HTTP scan history without starting work.
+    History(crate::history::HistoryArgs),
+    /// Export an ordered native session journal without replaying effects.
+    Timeline(crate::timeline::TimelineArgs),
     /// Execute an explicitly granted native managed HTTP investigation.
     ManagedHttp(crate::managed_scan::ManagedScanArgs),
     /// Run or inspect a durable standalone HTTP scan; findings remain unverified.

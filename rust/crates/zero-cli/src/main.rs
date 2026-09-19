@@ -7,6 +7,7 @@ mod evaluation;
 mod findings;
 mod framing;
 mod harness;
+mod history;
 mod hosted;
 mod hosted_provider;
 mod http_evidence;
@@ -26,6 +27,7 @@ mod strategy;
 mod strategy_host;
 mod strategy_registry;
 mod strategy_search;
+mod timeline;
 mod tui;
 mod web;
 
@@ -88,6 +90,12 @@ async fn dispatch(args: Args) -> Result<u8, Box<dyn Error>> {
 }
 
 async fn run(args: Args) -> Result<bool, Box<dyn Error>> {
+    if let Command::History(options) = &args.command {
+        return history::run(&args.state, options).await;
+    }
+    if let Command::Timeline(options) = &args.command {
+        return timeline::run(&args.state, options).await;
+    }
     if let Command::Session {
         command: SessionCommand::Budget { id },
     } = &args.command
@@ -496,7 +504,9 @@ async fn run(args: Args) -> Result<bool, Box<dyn Error>> {
         | Command::Artifact { .. }
         | Command::Review(_)
         | Command::Scan(_)
-        | Command::ManagedHttp(_) => unreachable!(),
+        | Command::ManagedHttp(_)
+        | Command::History(_)
+        | Command::Timeline(_) => unreachable!(),
     };
     let strategy_run = matches!(
         &command,
