@@ -687,6 +687,7 @@ async fn run_rounds(
     delegation: Option<agent_delegation::Context>,
     joined: &mut agent_delegation::JoinedTasks,
 ) -> Result<(AgentResult, Vec<serde_json::Value>), EngineError> {
+    let review_owned = lock(&shared.store)?.review_by_session(session)?.is_some();
     let mut input = history.input;
     let mut context_state = history.state;
     let mut output = AgentResult {
@@ -791,19 +792,23 @@ async fn run_rounds(
                     OperationStatus::Failed,
                     &serde_json::json!({"error":"budget reservation rejected"}),
                 )?;
-                if matches!(error, zero_store::Error::BudgetExceeded)
-                    && store
-                        .get_operation(parent)?
-                        .payload
-                        .get("scan_operation_id")
-                        .is_some()
-                {
-                    store.append_operation_event(
-                        parent,
-                        &shared.owner,
-                        "scan_terminal_budget_denied",
-                        &serde_json::json!({"operation_id":child.id}),
-                    )?;
+                if matches!(error, zero_store::Error::BudgetExceeded) {
+                    let payload = store.get_operation(parent)?.payload;
+                    let kind = if payload.get("scan_operation_id").is_some() {
+                        Some("scan_terminal_budget_denied")
+                    } else if payload.get("review_operation_id").is_some() {
+                        Some("review_terminal_budget_denied")
+                    } else {
+                        None
+                    };
+                    if let Some(kind) = kind {
+                        store.append_operation_event(
+                            parent,
+                            &shared.owner,
+                            kind,
+                            &serde_json::json!({"operation_id":child.id}),
+                        )?;
+                    }
                 }
                 output.status = AgentStatus::Failed;
                 output.error = Some(error.to_string());
@@ -1270,6 +1275,29 @@ async fn run_rounds(
                     .iter()
                     .find(|definition| definition.name == name)
                     .cloned();
+                let source_payload = serde_json::json!({"parent_operation":parent,"kind":"agent_source_tool","call_id":id,"name":name,"arguments":arguments,"source_operation":request.source_review_operation_id,"bundle_sha256":bundle.bundle_digest(),"source_identity":bundle.identity()});
+                // Review reads acquire durable permission before touching the
+                // private source copy. Legacy standalone source actors retain
+                // their historical failed-call behavior and retry identities.
+                let admitted_read = if review_owned {
+                    let child = child_operation(
+                        shared,
+                        session,
+                        &format!("{parent}:tool:{turn}:{index}"),
+                        &source_payload,
+                    )?;
+                    let mut store = lock(&shared.store)?;
+                    if let Err(error) =
+                        store.begin_review_effect(&child.id, &shared.owner, &source_payload)
+                    {
+                        store.settle_operation(&child.id, &shared.owner, OperationStatus::Failed,
+                            &serde_json::json!({"error":"review source read was not authorized","external_effects_started":false}))?;
+                        return Err(error.into());
+                    }
+                    Some(child)
+                } else {
+                    None
+                };
                 // The read owns its context until completion; cancellation must
                 // await it before cleanup, without blocking runtime threads.
                 let result = tokio::task::spawn_blocking(move || {
@@ -1278,20 +1306,33 @@ async fn run_rounds(
                 .await
                 .map_err(|e| EngineError::State(e.to_string()))?;
                 if cancel.is_cancelled() {
+                    if let Some(child) = &admitted_read {
+                        lock(&shared.store)?.settle_operation(&child.id, &shared.owner,
+                            OperationStatus::Cancelled,
+                            &serde_json::json!({"error":"source read cancelled after drain","external_effects_started":false}))?;
+                    }
                     output.status = AgentStatus::Cancelled;
                     break 'turns;
                 }
                 match result {
                     Err(error) => {
+                        if let Some(child) = &admitted_read {
+                            lock(&shared.store)?.settle_operation(&child.id, &shared.owner,
+                                OperationStatus::Failed,
+                                &serde_json::json!({"error":error.to_string(),"external_effects_started":false}))?;
+                        }
                         input.push(serde_json::json!({"type":"function_call_output","call_id":id,"output":format!("Tool rejected: {error}")}));
                     }
                     Ok(value) => {
-                        let child = child_operation(
-                            shared,
-                            session,
-                            &format!("{parent}:tool:{turn}:{index}"),
-                            &serde_json::json!({"parent_operation":parent,"kind":"agent_source_tool","call_id":id,"name":name,"arguments":arguments,"source_operation":request.source_review_operation_id,"bundle_sha256":bundle.bundle_digest(),"source_identity":bundle.identity()}),
-                        )?;
+                        let child = match admitted_read {
+                            Some(child) => child,
+                            None => child_operation(
+                                shared,
+                                session,
+                                &format!("{parent}:tool:{turn}:{index}"),
+                                &source_payload,
+                            )?,
+                        };
                         let bytes = serde_json::to_vec(&value)?;
                         let mut store = lock(&shared.store)?;
                         let persisted = (|| {
@@ -1568,6 +1609,13 @@ pub(super) fn run_actor<'a>(
         };
         let mut preparation_error = None;
         if request.source_snapshot_tools {
+            if let Err(error) =
+                lock(&shared.store)?.begin_review_source_preparation(parent, &shared.owner)
+            {
+                preparation_error = Some(error.to_string());
+            }
+        }
+        if request.source_snapshot_tools && preparation_error.is_none() {
             let pin = request
                 .snapshot_request()
                 .map_err(|e| EngineError::State(e.to_string()))?

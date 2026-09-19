@@ -169,7 +169,7 @@ fn cancellation_is_owned_durable_idempotent_and_does_not_fake_terminal_success()
     assert_eq!(r.close_reason, Some(ReviewCloseReason::Cancelled));
 }
 #[test]
-fn generic_effects_and_budget_mutations_stay_closed_until_dedicated_controller_is_wired() {
+fn generic_and_forged_effects_and_budget_mutations_remain_closed() {
     let (_d, mut s, a) = setup();
     s.admit_review("run", "owner", &a).unwrap();
     for payload in [

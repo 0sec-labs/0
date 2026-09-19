@@ -41,14 +41,16 @@ impl Store {
             return Ok(current);
         }
         crate::scan::guard_reservation(&tx, session, reservation_id, amount)?;
-        crate::review::forbid_input(&tx, session)?;
+        crate::review::guard_reservation(&tx, session, reservation_id, amount)?;
         crate::campaign::reserve_model(&tx, session, reservation_id, amount)?;
         let total = current
             .charged
             .checked_add(current.reserved)
             .and_then(|n| n.checked_add(amount));
         if total.is_none_or(|n| n > current.limit) {
-            if crate::scan::budget_denied(&tx, session, reservation_id, amount, &current)? {
+            if crate::scan::budget_denied(&tx, session, reservation_id, amount, &current)?
+                || crate::review::budget_denied(&tx, session, reservation_id, amount, &current)?
+            {
                 tx.commit()?;
             }
             return Err(Error::BudgetExceeded);

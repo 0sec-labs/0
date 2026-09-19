@@ -110,11 +110,24 @@ consulting changed profile/source values; changed original path/profile names
 conflict. Cancellation persists a stop witness without claiming that running work
 has finished. Epoch recovery marks the owned controller/root Unknown.
 
-Generic effects, new reservations, queue/steering/reconciliation, questions,
-approvals and HTTP access are currently closed for these sessions. This is an
-internal storage milestone, not a runnable review: the dedicated controller must
-replace the closed effect gate with exact source/inference/delegation/sandbox
-checks before exposing the command. Status reads validate projection/journal
+Review effects now require an exact captured actor and original completed model
+call. Inference retains its model/tool template, provider rates and per-turn
+reservation; bounded joined actors inherit only their selected role tools. Source
+and sandbox operations must match the original call, manifest and execution
+limits. Separate one-use journal permissions gate source preparation, source
+reads and physical sandbox dispatch while the original owner, open controller
+and deadline remain valid. The review source path admits before reading and
+settles rejected/cancelled reads after draining the blocking worker. Generic
+roots, external queue/steering/reconciliation, questions, approvals and HTTP
+access remain closed. Budget denials retain the requested/charged/held amounts;
+only a denied root inference is linked as the root's terminal budget cause.
+Generic cancellation, shutdown and abnormal worker cleanup persist the review
+stop before draining its work. Existing standalone source actors preserve their
+historical failed-tool behavior.
+
+This is still an internal execution milestone, not a runnable review command:
+the dedicated top-level controller and CLI remain to be connected. Status reads
+validate projection/journal
 bindings, immutable intent and lifecycle witnesses, admission closure and the
 funding ledger. Deleting the review projection cannot reopen a generic session.
 Read-only opening never migrates old state; writable opening validates the prior
@@ -143,3 +156,13 @@ uncertainty independently of hypothesis counts. The command acceptance still
 requires a real loopback-provider fixture exercising search/read, cited
 submission, unchanged source, cancellation, owner loss, config-free retry and
 reporting after source deletion.
+
+The internal review actor is now exercised with an actual loopback provider:
+search → exact source read → selected-file cited submission, with preparation
+permission before copying and tool permission before reading/result retention.
+The original source stays unchanged. Closed/expired reviews reject late tool
+calls from an already in-flight model response. Generic engine Cancel and
+shutdown record closure, drain the worker and retain the unresolved model hold
+instead of treating cancellation as free usage. These tests use the actual
+prepared actor and worker guard; they do not qualify the still-unwired top-level
+`review` command or a live Docker/smolvm execution.

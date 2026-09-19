@@ -415,7 +415,7 @@ impl Store {
             .conn
             .transaction_with_behavior(TransactionBehavior::Immediate)?;
         crate::scan::authorize(&tx, session, command, payload)?;
-        crate::review::forbid_input(&tx, session)?;
+        crate::review::authorize(&tx, session, command, payload)?;
         crate::campaign::authorize(&tx, session, command, payload)?;
         crate::strategy_session::authorize(&tx, session, command, payload)?;
         target(&tx, session, op, Some(owner))?;

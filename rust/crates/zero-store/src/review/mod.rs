@@ -1,5 +1,4 @@
-//! Durable local-review identity. Effect admission remains closed until the
-//! dedicated controller's source/inference/sandbox gates are connected.
+//! Durable local-review identity and frozen source/inference/sandbox authority.
 use crate::{
     Error, Operation, OperationStatus, Result, Store, append, integer,
     workflow::{self, Reader},
@@ -10,7 +9,9 @@ use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
 use zero_protocol::{SnapshotPin, campaign::CampaignProviderContext, review::*};
+mod hooks;
 mod read;
+pub(crate) use hooks::{authorize, budget_denied, guard_begin, guard_owner, guard_reservation};
 const MAX_INTENT_BYTES: usize = 2 * 1024 * 1024;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -432,12 +433,12 @@ impl Store {
         Ok(true)
     }
 }
-/// Until review-specific effect gates are wired, no generic API may turn a
-/// captured review into ambient execution authority. Missing projections fail closed.
+/// External input and unsupported capabilities cannot widen a captured review.
+/// Missing projections fail closed. Internal effects use the exact authority gates.
 pub(crate) fn forbid_input(conn: &Connection, session: &str) -> Result<()> {
     if read::binding(conn, session, &mut Reader::new())?.is_some() {
         return Err(bad(
-            "review effects and external input require the dedicated controller",
+            "external input or unsupported capability is forbidden for frozen review",
         ));
     }
     Ok(())

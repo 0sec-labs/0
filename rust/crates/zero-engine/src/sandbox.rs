@@ -81,6 +81,13 @@ pub(super) async fn run_sandbox_owned(
     cancel: CancellationToken,
     events: mpsc::Sender<ExecutionEvent>,
 ) -> Result<Reply, EngineError> {
+    // Linearize permission against the durable review close/owner frontier
+    // immediately before dispatch. Existing non-review workflows are unaffected.
+    lock(&shared.store)?.begin_review_effect(
+        operation_id,
+        &shared.owner,
+        &serde_json::to_value(&request)?,
+    )?;
     let executor = Arc::clone(&shared.sandbox);
     let unavailable = Arc::new(std::sync::atomic::AtomicBool::new(false));
     let flag = Arc::clone(&unavailable);

@@ -166,7 +166,7 @@ impl Drop for WorkerCompletion {
 
 /// Finalizes registration even if the worker panics or settlement fails.
 /// Caller holds control, preserving the admission lock order before Store.
-fn persist_scan_cancellation(shared: &Shared, session: &str) -> Result<bool, EngineError> {
+fn persist_workflow_cancellation(shared: &Shared, session: &str) -> Result<bool, EngineError> {
     let mut store = lock(&shared.store)?;
     match store.scan_by_session(session)? {
         Some(scan) => Ok(store.request_scan_stop(
@@ -174,7 +174,14 @@ fn persist_scan_cancellation(shared: &Shared, session: &str) -> Result<bool, Eng
             &shared.owner,
             zero_protocol::scan::ScanCloseReason::Cancelled,
         )?),
-        None => Ok(true),
+        None => match store.review_by_session(session)? {
+            Some(review) => Ok(store.request_review_stop(
+                &review.id,
+                &shared.owner,
+                zero_protocol::review::ReviewCloseReason::Cancelled,
+            )?),
+            None => Ok(true),
+        },
     }
 }
 
@@ -230,7 +237,7 @@ impl Drop for WorkerGuard {
             if let Ok(mut control) = self.shared.control.lock() {
                 control.closing = true;
                 for (session, active) in &control.active {
-                    let _ = persist_scan_cancellation(&self.shared, session);
+                    let _ = persist_workflow_cancellation(&self.shared, session);
                     active.cancel.cancel();
                 }
                 for campaign in control.strategy_campaigns.values() {
@@ -1076,7 +1083,7 @@ impl Engine {
                     .get(&session_id)
                     .filter(|active| active.execution_id == execution_id)
                 {
-                    let closed = persist_scan_cancellation(&self.shared, &session_id);
+                    let closed = persist_workflow_cancellation(&self.shared, &session_id);
                     // Cancellation still propagates when the ledger cannot record
                     // intent; in that case return an error, never a false receipt.
                     active.cancel.cancel();
@@ -1215,7 +1222,7 @@ impl Engine {
             let mut control = lock(&self.shared.control)?;
             control.closing = true;
             for (session, active) in &control.active {
-                if let Err(error) = persist_scan_cancellation(&self.shared, session) {
+                if let Err(error) = persist_workflow_cancellation(&self.shared, session) {
                     admission_error.get_or_insert(error);
                 }
                 active.cancel.cancel();
@@ -1248,7 +1255,7 @@ impl Drop for Engine {
         if let Ok(mut control) = self.shared.control.lock() {
             control.closing = true;
             for (session, active) in &control.active {
-                let _ = persist_scan_cancellation(&self.shared, session);
+                let _ = persist_workflow_cancellation(&self.shared, session);
                 active.cancel.cancel();
             }
             for campaign in control.strategy_campaigns.values() {
@@ -1343,3 +1350,6 @@ fn error_code(error: &EngineError) -> &'static str {
 mod tests;
 #[cfg(test)]
 mod worker_completion_tests;
+
+#[cfg(test)]
+mod review_effect_tests;
