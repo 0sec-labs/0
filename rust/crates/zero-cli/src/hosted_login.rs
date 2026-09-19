@@ -13,6 +13,7 @@ pub async fn run(
     token_env: &str,
     output: Option<&Path>,
     timeout_ms: u64,
+    token_from_env: Option<&str>,
 ) -> Result<bool, Box<dyn Error>> {
     if token_env != "0SEC_CLOUD_TOKEN" {
         return Err(
@@ -51,13 +52,17 @@ pub async fn run(
     }
     #[cfg(not(unix))]
     return Err("Hosted login persistence requires Unix permission support".into());
-    let session = LoginSession::new(
-        &host,
-        LoginOptions {
-            deadline: Duration::from_millis(timeout_ms),
-            ..LoginOptions::default()
-        },
-    )?;
+    let session = if token_from_env.is_none() {
+        Some(LoginSession::new(
+            &host,
+            LoginOptions {
+                deadline: Duration::from_millis(timeout_ms),
+                ..LoginOptions::default()
+            },
+        )?)
+    } else {
+        None
+    };
     // Unix signal streams must exist before displaying a URL or beginning polling.
     #[cfg(unix)]
     let mut interrupt = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::interrupt())?;
@@ -71,35 +76,56 @@ pub async fn run(
     let signal = crate::server::shutdown_signal();
     tokio::pin!(signal);
     let cancel = CancellationToken::new();
-    let line = format!(
-        "Open this URL to sign in to 0sec Cloud:\n{}\n",
-        session.browser_url()
-    );
-    tokio::select! {biased;
-        _=&mut signal=>return Err("Hosted login cancelled before polling".into()),
-        result=tokio::time::timeout(Duration::from_secs(1),async{
-            let mut stderr=tokio::io::stderr();stderr.write_all(line.as_bytes()).await?;stderr.flush().await
-        })=>result.map_err(|_|"Hosted login URL output deadline exceeded")??,
-    }
-    let waiting = session.wait(cancel.clone());
-    tokio::pin!(waiting);
-    let credential = tokio::select! {biased;
-        _=&mut signal=>{cancel.cancel();let _=waiting.await;return Err("Hosted login cancelled; credentials unchanged".into());},
-        result=&mut waiting=>result?,
+    let (saved_host, saved_token) = if let Some(name) = token_from_env {
+        if name.is_empty() || !name.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_') {
+            return Err("Invalid manual token environment variable name".into());
+        }
+        let token = std::env::var(name)
+            .map_err(|_| "Manual token environment variable is unavailable or not UTF-8")?;
+        let token = token.trim().to_owned();
+        if token.is_empty()
+            || token.len() > 16 * 1024
+            || token.chars().any(|c| c.is_whitespace() || c.is_control())
+        {
+            return Err(
+                "Manual token must be nonempty, bounded, and contain no whitespace or controls"
+                    .into(),
+            );
+        }
+        // Validate the same hosted transport contract without making a request.
+        zero_cloud_client::CloudClient::new(&host, &token, Duration::from_secs(30), 1024)?;
+        (host.trim_end_matches('/').to_owned(), token)
+    } else {
+        let session = session.ok_or("Hosted browser session unavailable")?;
+        let line = format!(
+            "Open this URL to sign in to 0sec Cloud:\n{}\n",
+            session.browser_url()
+        );
+        tokio::select! {biased;
+            _=&mut signal=>return Err("Hosted login cancelled before polling".into()),
+            result=tokio::time::timeout(Duration::from_secs(1),async{
+                let mut stderr=tokio::io::stderr();stderr.write_all(line.as_bytes()).await?;stderr.flush().await
+            })=>result.map_err(|_|"Hosted login URL output deadline exceeded")??,
+        }
+        let waiting = session.wait(cancel.clone());
+        tokio::pin!(waiting);
+        let credential = tokio::select! {biased;
+            _=&mut signal=>{cancel.cancel();let _=waiting.await;return Err("Hosted login cancelled; credentials unchanged".into());},
+            result=&mut waiting=>result?,
+        };
+        (
+            credential.host().to_owned(),
+            credential.expose_token().to_owned(),
+        )
     };
     let environment_override = std::env::var("0SEC_CLOUD_TOKEN")
         .ok()
         .is_some_and(|v| !v.trim().is_empty());
-    let saved_host = credential.host().to_owned();
+    let writer_host = saved_host.clone();
     let destination = path.clone();
     // Once atomic publication begins, await it even if interrupted; never detach a secret writer.
     let mut writer = tokio::task::spawn_blocking(move || {
-        persist(
-            &destination,
-            create_parent,
-            credential.host(),
-            credential.expose_token(),
-        )
+        persist(&destination, create_parent, &writer_host, &saved_token)
     });
     tokio::select! {
         result=&mut writer=>result?.map_err(|e|->Box<dyn Error>{e.into()})?,
@@ -108,7 +134,7 @@ pub async fn run(
             return Err("Hosted login interrupted after credentials were atomically saved".into());
         }
     }
-    crate::write_json(&serde_json::json!({"logged_in":true,"host":saved_host,"credential_file":path,"environment_override":environment_override,"credential_precedence":if environment_override {"0SEC_CLOUD_TOKEN remains active ahead of this saved file"}else{"saved file is available when 0SEC_CLOUD_TOKEN is unset or empty"}}),false).await?;
+    crate::write_json(&serde_json::json!({"logged_in":true,"credential_validation":if token_from_env.is_some(){"format_only"}else{"browser_session"},"host":saved_host,"credential_file":path,"environment_override":environment_override,"credential_precedence":if environment_override {"0SEC_CLOUD_TOKEN remains active ahead of this saved file"}else{"saved file is available when 0SEC_CLOUD_TOKEN is unset or empty"}}),false).await?;
     Ok(true)
 }
 
@@ -164,8 +190,10 @@ fn persist(path: &Path, create_parent: bool, host: &str, token: &str) -> Result<
     if stat.st_uid != geteuid().as_raw() || stat.st_mode & 0o7777 != 0o700 {
         return Err("Credential directory must be owned by the current user with permissions 0700");
     }
+    let dir = nix::fcntl::Flock::lock(dir, nix::fcntl::FlockArg::LockExclusiveNonblock)
+        .map_err(|_| "Credential directory is busy")?;
     match openat(
-        &dir,
+        &*dir,
         name,
         OFlag::O_RDONLY | OFlag::O_NOFOLLOW | OFlag::O_CLOEXEC | OFlag::O_NONBLOCK,
         Mode::empty(),
@@ -184,7 +212,7 @@ fn persist(path: &Path, create_parent: bool, host: &str, token: &str) -> Result<
     }
     let temporary = format!(".cloud-login-{}.tmp", uuid::Uuid::new_v4());
     let fd = openat(
-        &dir,
+        &*dir,
         temporary.as_str(),
         OFlag::O_WRONLY | OFlag::O_CREAT | OFlag::O_EXCL | OFlag::O_NOFOLLOW | OFlag::O_CLOEXEC,
         Mode::from_bits_truncate(0o600),
@@ -199,14 +227,14 @@ fn persist(path: &Path, create_parent: bool, host: &str, token: &str) -> Result<
             .map_err(|_| "Cannot write credential temporary file")?;
         file.sync_all()
             .map_err(|_| "Cannot sync credential temporary file")?;
-        renameat(&dir, temporary.as_str(), &dir, name)
+        renameat(&*dir, temporary.as_str(), &*dir, name)
             .map_err(|_| "Cannot publish credential file")?;
         dir.sync_all()
             .map_err(|_| "Credentials saved, but directory synchronization failed")?;
         Ok(())
     })();
     if result.is_err() {
-        let _ = unlinkat(&dir, temporary.as_str(), UnlinkatFlags::NoRemoveDir);
+        let _ = unlinkat(&*dir, temporary.as_str(), UnlinkatFlags::NoRemoveDir);
     }
     result
 }

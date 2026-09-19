@@ -142,7 +142,8 @@ pub enum Command {
         #[command(subcommand)]
         command: crate::evaluation::EvaluationCommand,
     },
-    /// Read hosted service metadata with an explicitly named token environment variable.
+    /// Manage cloud credentials and read hosted service metadata.
+    #[command(alias = "auth")]
     Hosted {
         #[arg(long, global = true)]
         host: Option<String>,

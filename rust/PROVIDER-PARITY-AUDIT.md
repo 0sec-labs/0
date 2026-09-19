@@ -5,7 +5,7 @@ This audit records remaining migration scope; it does not claim provider parity.
 | Legacy surface | Native state and next boundary |
 | --- | --- |
 | Cloud browser sign-in | Native `hosted login` already polls the browser session and writes private credentials. `hosted health/models/account/usage` and legacy environment/file resolution already exist. Do not count another browser-login wrapper as a new backend. |
-| `auth logout` / manual token | Legacy deletes its cloud credential stores and supports direct-token persistence. Complete native command/UX parity still requires a scoped credential lifecycle port. |
+| `auth logout` / manual token | Native `hosted` (alias `auth`) now supports offline manual import with `login --token-from-env NAME`, `status` as a health alias, and idempotent logout of both legacy stores (or one explicit file). Import uses atomic private `cloud.env` persistence; unlike legacy login it does not write the secondary `.0cloud` credentials file. Environment tokens and remote sessions survive local logout. See `HOSTED-CREDENTIALS.md`. |
 | `connect` | Legacy verifies cloud auth, detects repository tests, creates a managed scan, then creates a recurring schedule. This is fresh cloud execution/scheduling authority, not merely local authentication; port with the cloud admission lane. |
 | Claude CLI native loop | `cli-native.ts` implements multi-turn only for Claude, inherits process environment/cwd, uses retained subprocess sessions and ignores its supplied tool definitions. It cannot simply become a native provider without an isolated subprocess/tool-authority contract. |
 | Codex/Gemini subprocess loop | The same legacy adapter explicitly rejects these multi-turn routes; registry descriptions alone are not implementation proof. |

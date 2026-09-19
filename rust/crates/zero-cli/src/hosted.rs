@@ -3,6 +3,8 @@
 pub(crate) mod credentials;
 #[path = "hosted_login.rs"]
 mod login;
+#[path = "hosted_logout.rs"]
+mod logout;
 use clap::Subcommand;
 use std::{error::Error, time::Duration};
 use tokio::io::AsyncWriteExt;
@@ -18,7 +20,17 @@ pub enum HostedCommand {
         credentials: Option<std::path::PathBuf>,
         #[arg(long, default_value_t = 300_000, value_parser = clap::value_parser!(u64).range(1..=300_000))]
         timeout_ms: u64,
+        /// Import a token from this environment variable without browser/network access.
+        #[arg(long)]
+        token_from_env: Option<String>,
     },
+    /// Remove saved credentials; environment tokens and remote sessions remain active.
+    Logout {
+        /// Remove only this explicit file; default removes both legacy credential stores.
+        #[arg(long)]
+        credentials: Option<std::path::PathBuf>,
+    },
+    #[command(alias = "status")]
     Health,
     Models,
     Account,
@@ -33,9 +45,20 @@ pub async fn run(
     if let HostedCommand::Login {
         credentials,
         timeout_ms,
+        token_from_env,
     } = command
     {
-        return login::run(host, token_env, credentials.as_deref(), *timeout_ms).await;
+        return login::run(
+            host,
+            token_env,
+            credentials.as_deref(),
+            *timeout_ms,
+            token_from_env.as_deref(),
+        )
+        .await;
+    }
+    if let HostedCommand::Logout { credentials } = command {
+        return logout::run(credentials.as_deref(), token_env).await;
     }
     let credentials = credentials::resolve(host, token_env).await?;
     let client = CloudClient::new(
@@ -47,7 +70,7 @@ pub async fn run(
     let cancel = CancellationToken::new();
     let request = async {
         match command {
-            HostedCommand::Login { .. } => unreachable!(),
+            HostedCommand::Login { .. } | HostedCommand::Logout { .. } => unreachable!(),
             HostedCommand::Health => client.ping_health(cancel.clone()).await.and_then(|v| {
                 serde_json::to_string(&v)
                     .map_err(|_| zero_cloud_client::CloudError::InvalidResponse)
