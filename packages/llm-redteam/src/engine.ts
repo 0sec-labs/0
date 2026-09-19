@@ -5,12 +5,24 @@
  * Bakes in the lesson from the Gray Swan run: a break is unique per
  * (model, behaviour), so once a model is broken we stop spending attempts on
  * it — only unbroken models are retried with the next candidate.
+ *
+ * When configured with a Jev feedback hook, each non-skipped attempt also
+ * receives an advisory intermediate label (explicit-refusal, partial-compliance,
+ * attempted-prohibited, or ambiguous). These labels are NOT authoritative — the
+ * regex/LLM judge and action oracle alone determine broken/not-broken.
  */
-import type { Behavior, BreakRecord, CampaignResult, Payload, Target, TargetResponse, Verdict } from "./types.js";
+import type { AttemptReport, Behavior, BreakRecord, CampaignResult, JevAttemptFeedback, Payload, Target, TargetResponse, Verdict } from "./types.js";
 import { regexJudge } from "./judge.js";
 import { generateCandidates, escalatedCandidates } from "./strategies/index.js";
 
 export type JudgeFn = (behavior: Behavior, response: TargetResponse) => Verdict | Promise<Verdict>;
+
+/** Advisory Jev attempt feedback hook for the campaign engine. */
+export type JevFeedbackFn = (
+  behavior: Behavior,
+  response: TargetResponse,
+  signal?: AbortSignal,
+) => Promise<JevAttemptFeedback | undefined>;
 
 export interface CampaignOptions {
   /** Candidate payloads to sweep; defaults to the full framing×concealment set. */
@@ -25,6 +37,16 @@ export interface CampaignOptions {
   seedBroken?: Iterable<string>;
   /** Called after each attempt for progress reporting. */
   onAttempt?: (info: { model?: string; strategies: string[]; broken: boolean; attempt: number }) => void;
+  /**
+   * Advisory Jev attempt-feedback hook. Called after each non-skipped attempt
+   * to produce an intermediate label for the next generation. Never changes
+   * broken/not-broken. Accepts an optional AbortSignal for cancellation/timeout.
+   */
+  jevFeedback?: JevFeedbackFn;
+  onFeedback?: (feedback: JevAttemptFeedback, model?: string) => void;
+  /** AbortSignal for the entire campaign — cancels in-flight sends and stops
+   *  further attempts. */
+  signal?: AbortSignal;
 }
 
 export async function runCampaign(
@@ -37,20 +59,38 @@ export async function runCampaign(
   const models = target.models && target.models.length ? target.models : [undefined];
   const brokenModels = new Set<string>(opts.seedBroken ?? []);
   const breaks: BreakRecord[] = [];
+  const attemptReports: AttemptReport[] = [];
   let attempts = 0;
 
   outer: for (const payload of candidates) {
     for (const model of models) {
+      opts.signal?.throwIfAborted();
       const key = model ?? "_single";
-      if (brokenModels.has(key)) continue; // unique-breaks: don't re-hit a broken model
+      if (brokenModels.has(key)) {
+        attemptReports.push({
+          model,
+          strategies: payload.strategies,
+          broken: false,
+          index: attemptReports.length + 1,
+          skipped: true,
+        });
+        continue; // unique-breaks: don't re-hit a broken model
+      }
       if (opts.maxAttempts && attempts >= opts.maxAttempts) break outer;
 
       attempts++;
       let verdict: Verdict;
-      let transcript = "";
+      let response: TargetResponse | undefined;
+      let pendingFeedback: Promise<JevAttemptFeedback | undefined> | undefined;
       try {
-        const response = await target.send(payload, behavior, model);
-        transcript = response.transcript;
+        response = await target.send(payload, behavior, model);
+        opts.signal?.throwIfAborted();
+        if (opts.jevFeedback) {
+          pendingFeedback = opts.jevFeedback(behavior, response, opts.signal).then(feedback => {
+            if (feedback) opts.onFeedback?.(feedback, model);
+            return feedback;
+          }).catch(() => undefined);
+        }
         verdict = await judge(behavior, response);
       } catch (err) {
         verdict = { broken: false, confidence: 0, judge: "error", evidence: String(err) };
@@ -68,9 +108,22 @@ export async function runCampaign(
           broken: true,
           evidence: verdict.evidence,
           payloadText: payload.text,
-          transcriptExcerpt: transcript.slice(0, 500),
+          transcriptExcerpt: (response?.transcript ?? "").slice(0, 500),
         });
       }
+
+      const jevFeedback = await pendingFeedback;
+      opts.signal?.throwIfAborted();
+
+      attemptReports.push({
+        model,
+        strategies: payload.strategies,
+        broken: verdict.broken,
+        evidence: verdict.evidence,
+        index: attempts,
+        jevFeedback,
+        skipped: false,
+      });
     }
     if (opts.stopWhenAllBroken && brokenModels.size >= models.length) break;
   }
@@ -81,6 +134,7 @@ export async function runCampaign(
     attempts,
     breaks,
     brokenModels: [...brokenModels].filter((m) => m !== "_single"),
+    attemptReports,
   };
 }
 
@@ -107,5 +161,6 @@ export async function runIterativeCampaign(
     attempts: base.attempts + escalated.attempts,
     breaks: [...base.breaks, ...escalated.breaks],
     brokenModels: [...new Set([...base.brokenModels, ...escalated.brokenModels])],
+    attemptReports: [...base.attemptReports, ...escalated.attemptReports],
   };
 }

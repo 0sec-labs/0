@@ -618,16 +618,31 @@ describe("semanticDedupe", () => {
     }
   });
 
-  it("includes provenance in the result", async () => {
-    const items = [dedupeItem({ id: "t1" })];
-    const runtime = stubRuntime(payloadJson([{ ids: ["t1"], reason: "Unique" }]));
-
-    const result = await semanticDedupe(items, runtime, { scanId: "s1" });
-
-    expect(result.mappings).toBeDefined();
-    expect(typeof result.modelCalls).toBe("number");
-    expect(typeof result.retries).toBe("number");
-    expect(result.clusterReasons).toBeDefined();
-    expect(result.clusterReasons["t1"]).toBe("Unique");
+  it.each([
+    { insufficient: 0.01, canonicalId: "a1" },
+    { insufficient: 0.9, canonicalId: "t1" },
+  ])("respects insufficient-evidence veto at $insufficient despite high pair similarity", async ({ insufficient, canonicalId }) => {
+    const anchor = dedupeItem({ id: "a1" });
+    const target = dedupeItem({ id: "t1" });
+    const runtime = stubRuntime(payloadJson([{ ids: ["t1"], reason: "Independent evidence requires a distinct fix" }]));
+    const result = await semanticDedupe([anchor, target], runtime, {
+      anchors: [anchor], scanId: "s1",
+      jevEvaluator: {
+        async evaluate() {
+          return {
+            answers: {
+              p0_same_location: { type: "boolean", probability: 0.99 },
+              p0_same_defect: { type: "boolean", probability: 0.99 },
+              p0_same_fix: { type: "boolean", probability: 0.99 },
+              p0_insufficient: { type: "boolean", probability: insufficient },
+            },
+            model: "controlled-evaluator", durationMs: 1,
+            usage: { inputTokens: 1, outputTokens: 1, estimatedCostUsd: 0 },
+          };
+        },
+      },
+    });
+    expect(result.mappings["t1"].canonicalId).toBe(canonicalId);
+    expect(result.mappings["a1"].canonicalId).toBe("a1");
   });
 });

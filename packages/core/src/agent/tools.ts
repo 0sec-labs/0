@@ -15,7 +15,7 @@ import type {
   VerificationBehaviorStep,
   NamedIdentity,
 } from "@0sec/shared";
-import { resolveIdentities, compareRoles, DEFAULT_AUTONOMY_MODE } from "@0sec/shared";
+import { resolveIdentities, compareRoles, DEFAULT_AUTONOMY_MODE, createJevEvaluator, jevConfigFromEnvironment, type JevEvaluator } from "@0sec/shared";
 import type { ToolDefinition, ToolCall, ToolResult, ToolResultMeta, ToolContext, AgentRole } from "./types.js";
 import type {
   OperatorQuestion,
@@ -2917,6 +2917,8 @@ export class ToolExecutor {
    * old single-page `_browser`/`_browserPage`/`_browserActionContext` fields.
    */
   private _browserHost: BrowserDriverHost = {};
+  private _browserJev: JevEvaluator | null | undefined;
+  private _browserReadOnlyUrls: ReadonlySet<string> = new Set();
   private _playwrightAvailable: boolean | null = null;
   private _ptyManager: PtySessionManager | null = null;
   private _pyKernel: PythonKernelManager | null = null;
@@ -6005,12 +6007,23 @@ export class ToolExecutor {
       : "0sec-browser/1.0";
     const extraHeaders =
       attribution && Object.keys(attribution.headers).length > 0 ? attribution.headers : undefined;
+    if (this._browserJev === undefined) {
+      const config = jevConfigFromEnvironment("browser", process.env);
+      this._browserJev = config ? createJevEvaluator(config) : null;
+      this._browserReadOnlyUrls = new Set((process.env["0SEC_JEV_BROWSER_READ_ONLY_URLS"] ?? "")
+        .split(",").map(url => url.trim()).filter(Boolean).map(url => new URL(url).href));
+    }
+    const execution = this._executionContext.getStore();
 
     const result = await executeBrowser(this.ctx, args, {
       host: this._browserHost,
       userAgent,
       extraHeaders,
       interceptor: this._browserInterceptor,
+      jev: this._browserJev ?? undefined,
+      readOnlyUrls: this._browserReadOnlyUrls,
+      signal: execution?.signal,
+      assertAuthority: execution?.assertAuthority,
     });
 
     // Evidence trail: persist the action + resulting URL, as the old handler did.
