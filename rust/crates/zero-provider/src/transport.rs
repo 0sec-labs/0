@@ -28,18 +28,36 @@ pub enum TransportError {
     Http(u16),
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Authentication {
+    WireDefault,
+    AzureApiKey,
+    GithubCopilot,
+}
+
+// Recorded compatibility contract in llm-api.copilot.test.ts. These are fixed
+// integration metadata, never arbitrary caller-provided headers.
+const COPILOT_HEADERS: [(&str, &str); 6] = [
+    ("copilot-integration-id", "vscode-chat"),
+    ("editor-version", "vscode/1.99.3"),
+    ("editor-plugin-version", "copilot-chat/0.26.7"),
+    ("x-github-api-version", "2026-06-01"),
+    ("openai-intent", "conversation-edits"),
+    ("x-initiator", "user"),
+];
+
 /// Credentials are never serializable or printable, and are bound to one URL.
 pub struct Endpoint {
     url: Url,
     authorization: Option<HeaderValue>,
     api_key: Option<HeaderValue>,
-    azure_api_key: bool,
+    authentication: Authentication,
 }
 impl Endpoint {
     /// Exact provider URL, including its complete gateway prefix. The historical
     /// constructor name does not select the wire; ProviderClient does.
     pub fn responses(url: &str, api_key: Option<&str>) -> Result<Self, TransportError> {
-        Self::configured(url, api_key, false)
+        Self::configured(url, api_key, Authentication::WireDefault)
     }
     /// Exact Azure OpenAI v1 Responses or Chat Completions URL. Sends only the
     /// `api-key` credential header; no endpoint rewriting or token discovery.
@@ -48,12 +66,20 @@ impl Endpoint {
         if api_key.trim().is_empty() {
             return Err(TransportError::InvalidEndpoint);
         }
-        Self::configured(url, Some(api_key), true)
+        Self::configured(url, Some(api_key), Authentication::AzureApiKey)
+    }
+    /// Exact Copilot Chat URL and an already-issued device-flow access token.
+    /// No token exchange, refresh, discovery, or automatic authentication retry.
+    pub fn github_copilot(url: &str, access_token: &str) -> Result<Self, TransportError> {
+        if access_token.trim().is_empty() {
+            return Err(TransportError::InvalidEndpoint);
+        }
+        Self::configured(url, Some(access_token), Authentication::GithubCopilot)
     }
     fn configured(
         url: &str,
         api_key: Option<&str>,
-        azure_api_key: bool,
+        authentication: Authentication,
     ) -> Result<Self, TransportError> {
         let url = Url::parse(url).map_err(|_| TransportError::InvalidEndpoint)?;
         let loopback = url.host_str().is_some_and(|host| {
@@ -95,7 +121,7 @@ impl Endpoint {
             url,
             authorization,
             api_key,
-            azure_api_key,
+            authentication,
         })
     }
 }
@@ -129,7 +155,10 @@ impl ProviderClient {
         if timeout.is_zero()
             || timeout > Duration::from_secs(3600)
             || !(1024..=64 * 1024 * 1024).contains(&max_bytes)
-            || (endpoint.azure_api_key && wire == crate::WireApi::AnthropicMessages)
+            || (endpoint.authentication == Authentication::AzureApiKey
+                && wire == crate::WireApi::AnthropicMessages)
+            || (endpoint.authentication == Authentication::GithubCopilot
+                && wire != crate::WireApi::ChatCompletions)
         {
             return Err(TransportError::InvalidRequest);
         }
@@ -153,7 +182,7 @@ impl ProviderClient {
     pub fn bind_hosted(mut self, pin: crate::HostedCatalogPin) -> Result<Self, TransportError> {
         crate::validate_hosted_pin(&pin).map_err(|_| TransportError::InvalidRequest)?;
         if self.hosted_catalog.is_some()
-            || self.endpoint.azure_api_key
+            || self.endpoint.authentication != Authentication::WireDefault
             || self.endpoint_identity() != pin.endpoint
             || self.wire != pin.wire_api
         {
@@ -171,6 +200,15 @@ impl ProviderClient {
         model: &str,
         max_output_tokens: u32,
     ) -> Result<(), TransportError> {
+        // Native policy retains the exact wire model. TS routing prefixes are
+        // not silently stripped from a durable request or billing identity.
+        if self.endpoint.authentication == Authentication::GithubCopilot
+            && model
+                .get(..8)
+                .is_some_and(|prefix| prefix.eq_ignore_ascii_case("copilot/"))
+        {
+            return Err(TransportError::InvalidRequest);
+        }
         if let Some(pin) = &self.hosted_catalog {
             if model != pin.model
                 || max_output_tokens == 0
@@ -254,7 +292,7 @@ impl ProviderClient {
             .post(self.endpoint.url.clone())
             .json(&body)
             .header("Accept", "text/event-stream");
-        if self.endpoint.azure_api_key {
+        if self.endpoint.authentication == Authentication::AzureApiKey {
             if let Some(key) = &self.endpoint.api_key {
                 post = post.header("api-key", key.clone());
             }
@@ -265,6 +303,11 @@ impl ProviderClient {
             }
         } else if let Some(auth) = &self.endpoint.authorization {
             post = post.header(AUTHORIZATION, auth.clone());
+        }
+        if self.endpoint.authentication == Authentication::GithubCopilot {
+            for (name, value) in COPILOT_HEADERS {
+                post = post.header(name, value);
+            }
         }
         let mut response = tokio::select! {
             biased;

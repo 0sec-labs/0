@@ -173,3 +173,34 @@ values outside serializable request/accounting metadata. Redirects and implicit
 retries remain disabled. Local TCP and actual CLI fixtures verify both stream
 formats, exact headers/path, rejected redirects, one-time charging, durable
 retry, and unknown-usage holds. No live Azure qualification is claimed.
+
+## Explicit GitHub Copilot Chat tokens
+
+Set `authentication: "github_copilot"` and `wire_api: "chat_completions"` in a
+provider profile, with the exact complete Chat endpoint and an `api_key_env`
+naming your already-issued device-flow access token. For example, the public
+route is `https://api.githubcopilot.com/chat/completions`; an operator-selected
+enterprise endpoint is retained unchanged. Existing profile timeout, response
+bound and operator-supplied rates apply. Rust callers use
+`Endpoint::github_copilot(url, access_token)` with the Chat wire.
+
+The token is sent directly as Bearer with the six fixed integration headers from
+`packages/core/src/runtime/llm-api.copilot.test.ts`: Copilot integration ID,
+editor and plugin versions, GitHub API version, OpenAI intent and initiator.
+Those compatibility values are pinned to the recorded TypeScript contract;
+this adapter does not discover or assert a currently installed editor version.
+No vision header is sent. Requests retain the ordinary text/function Chat
+codec, final usage requirements, cancellation and bounded stream behavior.
+
+Supply the canonical wire model (for example `gpt-4o`), not the TypeScript
+`copilot/` routing prefix. Prefixed names and non-Chat wires fail before dispatch;
+request, replay and pricing identities are never silently rewritten. Hosted
+catalog binding is unavailable with this authentication style.
+
+This does not implement device authorization/login, a token exchange, token
+refresh, account discovery or provider fallback. A 401 is returned without
+retrying or contacting another endpoint. Redirects remain disabled. Loopback and
+actual native CLI fixtures cover tool-result replay, exact integration headers,
+401/redirect behavior, cancellation, final charges, incomplete billing holds,
+and command retry without another provider request. No live Copilot call or
+subscription/pricing compatibility is claimed.

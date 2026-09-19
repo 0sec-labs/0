@@ -14,6 +14,7 @@ enum Authentication {
     #[default]
     WireDefault,
     AzureApiKey,
+    GithubCopilot,
 }
 
 #[derive(Deserialize)]
@@ -85,6 +86,7 @@ pub async fn load(path: &Path) -> Result<Vec<(String, ProviderClient, Rates)>, B
         let endpoint = match profile.authentication {
             Authentication::WireDefault => Endpoint::responses(&profile.url, Some(&key))?,
             Authentication::AzureApiKey => Endpoint::azure_api_key(&profile.url, &key)?,
+            Authentication::GithubCopilot => Endpoint::github_copilot(&profile.url, &key)?,
         };
         let client = ProviderClient::with_wire(
             endpoint,
@@ -117,6 +119,12 @@ mod tests {
         profile["authentication"] = json!("azure_api_key");
         let parsed: Profile = serde_json::from_value(profile.clone()).unwrap();
         assert!(matches!(parsed.authentication, Authentication::AzureApiKey));
+        profile["authentication"] = json!("github_copilot");
+        let parsed: Profile = serde_json::from_value(profile.clone()).unwrap();
+        assert!(matches!(
+            parsed.authentication,
+            Authentication::GithubCopilot
+        ));
         for invalid in [
             json!("automatic"),
             json!(null),

@@ -466,3 +466,195 @@ fn azure_auth_cannot_be_mislabeled_as_hosted_catalog_transport() {
         Err(TransportError::InvalidRequest)
     ));
 }
+
+fn copilot_client(url: &str) -> ProviderClient {
+    ProviderClient::with_wire(
+        Endpoint::github_copilot(url, KEY).unwrap(),
+        zero_provider::WireApi::ChatCompletions,
+        Duration::from_secs(2),
+        8192,
+    )
+    .unwrap()
+}
+
+#[tokio::test]
+async fn copilot_tool_turns_preserve_exact_model_replay_accounting_and_fixed_headers() {
+    let (listener, url) = listener().await;
+    let url = url.replace("/custom/responses", "/enterprise/chat/completions");
+    let server = tokio::spawn(async move {
+        let mut captured = vec![];
+        for turn in 0..2 {
+            let (mut socket, _) = listener.accept().await.unwrap();
+            captured.push(read_request(&mut socket).await);
+            let delta = if turn == 0 {
+                json!({"role":"assistant","tool_calls":[{"index":0,"id":"call-1","type":"function","function":{"name":"inspect","arguments":"{\"path\":\"src/lib.rs\"}"}}]})
+            } else {
+                json!({"role":"assistant","content":"finished"})
+            };
+            let event = json!({"id":format!("c{turn}"),"choices":[{"index":0,"delta":delta,"finish_reason":if turn == 0 {"tool_calls"} else {"stop"}}]});
+            let usage = json!({"id":format!("c{turn}"),"choices":[],"usage":{"prompt_tokens":3,"completion_tokens":2,"prompt_tokens_details":{"cached_tokens":1}}});
+            let body = format!("data: {event}\n\ndata: {usage}\n\ndata: [DONE]\n\n");
+            socket.write_all(format!("HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len()).as_bytes()).await.unwrap();
+        }
+        captured
+    });
+    let client = copilot_client(&url);
+    let mut req = request();
+    req.tools.push(zero_provider::ToolDefinition { name:"inspect".into(), description:"inspect source".into(), parameters:json!({"type":"object","properties":{"path":{"type":"string"}},"required":["path"],"additionalProperties":false}) });
+    let first = client
+        .complete(&req, CancellationToken::new())
+        .await
+        .unwrap();
+    assert_eq!(first.status, CompletionStatus::Completed);
+    assert!(first.usage_is_final);
+    assert!(
+        matches!(&first.content[0], zero_provider::Content::ToolCall { id, name, arguments } if id == "call-1" && name == "inspect" && arguments["path"] == "src/lib.rs")
+    );
+    req.input.extend(first.replay);
+    req.input
+        .push(json!({"type":"function_call_output","call_id":"call-1","output":"retained source"}));
+    let second = client
+        .complete(&req, CancellationToken::new())
+        .await
+        .unwrap();
+    assert_eq!(second.status, CompletionStatus::Completed);
+    assert!(second.usage_is_final);
+    assert_eq!(second.usage.unwrap().cached_input_tokens, 1);
+    let captured = server.await.unwrap();
+    for (index, raw) in captured.iter().enumerate() {
+        let boundary = raw.windows(4).position(|part| part == b"\r\n\r\n").unwrap();
+        let headers = String::from_utf8_lossy(&raw[..boundary]).to_ascii_lowercase();
+        assert!(headers.starts_with("post /enterprise/chat/completions http/1.1"));
+        for (name, value) in [
+            ("authorization", format!("Bearer {KEY}")),
+            ("copilot-integration-id", "vscode-chat".into()),
+            ("editor-version", "vscode/1.99.3".into()),
+            ("editor-plugin-version", "copilot-chat/0.26.7".into()),
+            ("x-github-api-version", "2026-06-01".into()),
+            ("openai-intent", "conversation-edits".into()),
+            ("x-initiator", "user".into()),
+        ] {
+            assert!(
+                headers.lines().any(
+                    |line| line.trim_end() == format!("{name}: {}", value.to_ascii_lowercase())
+                )
+            );
+        }
+        assert!(!headers.contains("api-key:"));
+        assert!(!headers.contains("anthropic-version:"));
+        assert!(!headers.contains("copilot-vision-request:"));
+        let body: serde_json::Value = serde_json::from_slice(&raw[boundary + 4..]).unwrap();
+        assert_eq!(body["model"], "fixture-model");
+        assert_eq!(body["max_completion_tokens"], 32);
+        assert_eq!(body["stream_options"]["include_usage"], true);
+        if index == 1 {
+            assert_eq!(body["messages"][2]["tool_calls"][0]["id"], "call-1");
+            assert_eq!(body["messages"][3]["tool_call_id"], "call-1");
+        }
+    }
+}
+
+#[tokio::test]
+async fn copilot_unauthorized_and_redirect_never_exchange_refresh_retry_or_forward() {
+    let (destination, target) = listener().await;
+    for status in ["401 Unauthorized", "307 Temporary Redirect"] {
+        let (url, server) = fixed_response(
+            status,
+            &format!("Location: {target}\r\n"),
+            format!("credential error {KEY}"),
+        )
+        .await;
+        let error = copilot_client(&url)
+            .complete(&request(), CancellationToken::new())
+            .await
+            .unwrap_err();
+        assert!(matches!(error, TransportError::Http(401 | 307)));
+        redacted(&format!("{error:?} {error}"));
+        assert_eq!(server.await.unwrap().1, 1);
+    }
+    assert!(
+        tokio::time::timeout(Duration::from_millis(100), destination.accept())
+            .await
+            .is_err()
+    );
+}
+
+#[tokio::test]
+async fn copilot_cancellation_retains_incomplete_result_without_final_usage() {
+    let (listener, url) = listener().await;
+    let (ready_tx, ready) = oneshot::channel();
+    let (release, release_rx) = oneshot::channel();
+    let server = tokio::spawn(async move {
+        let (mut socket, _) = listener.accept().await.unwrap();
+        read_request(&mut socket).await;
+        let event = json!({"id":"c1","choices":[{"index":0,"delta":{"role":"assistant","content":"partial"},"finish_reason":null}]});
+        socket.write_all(format!("HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nConnection: close\r\n\r\ndata: {event}\n\n").as_bytes()).await.unwrap();
+        release_rx.await.unwrap();
+    });
+    let token = CancellationToken::new();
+    let child_token = token.clone();
+    let run = tokio::spawn(async move {
+        let mut ready_tx = Some(ready_tx);
+        copilot_client(&url)
+            .complete_with_progress(&request(), child_token, move |_| {
+                if let Some(ready) = ready_tx.take() {
+                    let _ = ready.send(());
+                }
+            })
+            .await
+    });
+    tokio::time::timeout(Duration::from_secs(1), ready)
+        .await
+        .unwrap()
+        .unwrap();
+    token.cancel();
+    let completion = tokio::time::timeout(Duration::from_secs(1), run)
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap();
+    assert_eq!(completion.status, CompletionStatus::Incomplete);
+    assert!(!completion.usage_is_final);
+    assert!(completion.content.is_empty());
+    release.send(()).unwrap();
+    server.await.unwrap();
+}
+
+#[tokio::test]
+async fn copilot_incompatible_wire_and_noncanonical_model_fail_before_socket() {
+    let (listener, url) = listener().await;
+    for wire in [
+        zero_provider::WireApi::Responses,
+        zero_provider::WireApi::AnthropicMessages,
+    ] {
+        assert!(matches!(
+            ProviderClient::with_wire(
+                Endpoint::github_copilot(&url, KEY).unwrap(),
+                wire,
+                Duration::from_secs(2),
+                8192
+            ),
+            Err(TransportError::InvalidRequest)
+        ));
+    }
+    let client = copilot_client(&url);
+    for model in ["copilot/gpt-4o", "COPILOT/gpt-4o"] {
+        let mut req = request();
+        req.model = model.into();
+        assert!(matches!(
+            client.complete(&req, CancellationToken::new()).await,
+            Err(TransportError::InvalidRequest)
+        ));
+    }
+    for key in ["", "  ", "secret\r\nInjected: 1"] {
+        assert!(matches!(
+            Endpoint::github_copilot(&url, key),
+            Err(TransportError::InvalidEndpoint)
+        ));
+    }
+    assert!(
+        tokio::time::timeout(Duration::from_millis(100), listener.accept())
+            .await
+            .is_err()
+    );
+}

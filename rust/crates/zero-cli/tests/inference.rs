@@ -29,7 +29,14 @@ fn metadata_commands_skip_provider_files_and_credentials() {
     }
 }
 
-fn exercise_inference(truncated: bool, azure: bool) {
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum FixtureProvider {
+    Default,
+    Azure,
+    Copilot,
+}
+
+fn exercise_inference(truncated: bool, provider: FixtureProvider) {
     let dir = TempDir::new().unwrap();
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     listener.set_nonblocking(true).unwrap();
@@ -71,14 +78,29 @@ fn exercise_inference(truncated: bool, azure: bool) {
             }
         }
         let headers = String::from_utf8_lossy(&bytes);
-        if azure {
+        if provider == FixtureProvider::Azure {
             assert!(headers.contains("api-key: fixture-secret"));
             assert!(!headers.to_ascii_lowercase().contains("authorization:"));
         } else {
             assert!(headers.contains("Bearer fixture-secret"));
         }
+        if provider == FixtureProvider::Copilot {
+            assert!(headers.contains("copilot-integration-id: vscode-chat"));
+            assert!(headers.contains("x-initiator: user"));
+            assert!(!headers.contains("x-api-key:"));
+        }
         let event = json!({"type":"response.completed","response":{"id":"r1","status":"completed","output":[{"type":"message","content":[{"type":"output_text","text":"hello"}]}],"usage":{"input_tokens":2,"output_tokens":1}}});
-        let body = if truncated {
+        let body = if provider == FixtureProvider::Copilot {
+            let initial = json!({"id":"c1","choices":[{"index":0,"delta":{"role":"assistant","content":"hello"},"finish_reason":if truncated { serde_json::Value::Null } else { json!("stop") }}]});
+            if truncated {
+                format!("data: {initial}\n\n")
+            } else {
+                format!(
+                    "data: {initial}\n\ndata: {}\n\ndata: [DONE]\n\n",
+                    json!({"id":"c1","choices":[],"usage":{"prompt_tokens":2,"completion_tokens":1}})
+                )
+            }
+        } else if truncated {
             "data: {\"type\":\"response.created\"}\n\n".to_owned()
         } else {
             format!("data: {event}\n\n")
@@ -89,8 +111,12 @@ fn exercise_inference(truncated: bool, azure: bool) {
     });
     let config = dir.path().join("providers.json");
     let mut profiles = json!({"fixture":{"url":url,"api_key_env":"FIXTURE_PROVIDER_KEY","rates":{"input":1000000,"cached_input":0,"output":1000000},"timeout_ms":1000,"max_response_bytes":8192}});
-    if azure {
+    if provider == FixtureProvider::Azure {
         profiles["fixture"]["authentication"] = json!("azure_api_key");
+    }
+    if provider == FixtureProvider::Copilot {
+        profiles["fixture"]["authentication"] = json!("github_copilot");
+        profiles["fixture"]["wire_api"] = json!("chat_completions");
     }
     std::fs::write(&config, profiles.to_string()).unwrap();
     let request = dir.path().join("request.json");
@@ -198,20 +224,30 @@ fn exercise_inference(truncated: bool, azure: bool) {
 
 #[test]
 fn inference_persists_exact_retry_without_second_http_request() {
-    exercise_inference(false, false);
+    exercise_inference(false, FixtureProvider::Default);
 }
 
 #[test]
 fn unknown_inference_reconciles_charge_without_retrying_provider() {
-    exercise_inference(true, false);
+    exercise_inference(true, FixtureProvider::Default);
 }
 
 #[test]
 fn azure_inference_charges_once_and_retries_without_second_request() {
-    exercise_inference(false, true);
+    exercise_inference(false, FixtureProvider::Azure);
 }
 
 #[test]
 fn azure_unknown_inference_preserves_hold_until_reconciled() {
-    exercise_inference(true, true);
+    exercise_inference(true, FixtureProvider::Azure);
+}
+
+#[test]
+fn copilot_inference_uses_explicit_auth_and_charges_exactly_once() {
+    exercise_inference(false, FixtureProvider::Copilot);
+}
+
+#[test]
+fn copilot_unknown_inference_retains_billing_hold_without_replay() {
+    exercise_inference(true, FixtureProvider::Copilot);
 }
