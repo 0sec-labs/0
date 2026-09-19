@@ -3,11 +3,13 @@ mod manifest;
 mod registry;
 mod rpc;
 mod schema;
+mod worker;
 pub use manifest::*;
 pub use registry::*;
 pub use rpc::*;
 pub use schema::Schema;
 use sha2::{Digest, Sha256};
+pub use worker::{WorkerDecoder, WorkerFrame};
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     #[error("invalid or unsupported plugin data: {0}")]

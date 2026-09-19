@@ -51,6 +51,11 @@ pub struct BrokerPin {
     pub lease_id: String,
     pub plugin_manifest: String,
 }
+/// Opaque process-instance correlation only, never an execution permission.
+/// Identical content-addressed generations in different registries do not make
+/// their independently issued leases interchangeable.
+#[derive(Clone, PartialEq, Eq)]
+pub struct InvocationIssuer(String);
 /// Not Clone/Deserialize. Issued only after durable acquisition and validation.
 /// Drop keeps its durable lease outstanding: lost work requires fenced recovery.
 pub struct PinnedCall {
@@ -61,6 +66,9 @@ pub struct PinnedCall {
     completed: bool,
 }
 impl PinnedCall {
+    pub fn issuer_identity(&self) -> InvocationIssuer {
+        InvocationIssuer(self.issuer.clone())
+    }
     pub fn pin(&self) -> BrokerPin {
         BrokerPin {
             generation: GenerationPin {

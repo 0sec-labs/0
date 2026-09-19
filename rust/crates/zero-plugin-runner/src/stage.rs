@@ -11,6 +11,15 @@ pub(super) fn prepare(
     plugin: &str,
     launch: &Launch,
 ) -> Result<Prepared, Error> {
+    prepare_mode(harness, call, plugin, launch, false)
+}
+pub(super) fn prepare_mode(
+    harness: &Harness,
+    call: &PinnedCall,
+    plugin: &str,
+    launch: &Launch,
+    persistent: bool,
+) -> Result<Prepared, Error> {
     harness
         .validate_reply(call, &call.pin())
         .map_err(|_| Error::Rejected("stale invocation"))?;
@@ -32,15 +41,17 @@ pub(super) fn prepare(
         if manifest.digest()? != *digest {
             return Err(Error::Rejected("dependency identity mismatch"));
         }
-        if manifest.capabilities().iter().any(|c| {
-            !matches!(
-                c,
-                Capability::Compute
-                    | Capability::ProcessExec
-                    | Capability::FilesystemRead
-                    | Capability::FilesystemWrite
-            )
-        }) {
+        if !persistent
+            && manifest.capabilities().iter().any(|c| {
+                !matches!(
+                    c,
+                    Capability::Compute
+                        | Capability::ProcessExec
+                        | Capability::FilesystemRead
+                        | Capability::FilesystemWrite
+                )
+            })
+        {
             return Err(Error::Rejected(
                 "only offline disposable-snapshot capabilities supported",
             ));

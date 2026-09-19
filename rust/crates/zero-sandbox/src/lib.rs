@@ -36,11 +36,32 @@ impl SandboxExecutor {
         cancel: CancellationToken,
         sink: EventSink,
     ) -> SandboxResult {
+        self.execute_input(request, cancel, sink, None).await
+    }
+
+    /// Persistent transport is Docker-only; other backends fail before dispatch.
+    pub async fn execute_interactive(
+        &self,
+        request: SandboxRequest,
+        cancel: CancellationToken,
+        sink: EventSink,
+        input: zero_executor::InteractiveInput,
+    ) -> SandboxResult {
+        self.execute_input(request, cancel, sink, Some(input)).await
+    }
+
+    async fn execute_input(
+        &self,
+        request: SandboxRequest,
+        cancel: CancellationToken,
+        sink: EventSink,
+        input: Option<zero_executor::InteractiveInput>,
+    ) -> SandboxResult {
         let token = cancel.child_token();
         let _cancel_on_drop = token.clone().drop_guard();
         let executor = self.clone();
         let mut fallback = initial(&request);
-        match tokio::spawn(async move { executor.run(request, token, sink).await }).await {
+        match tokio::spawn(async move { executor.run(request, token, sink, input).await }).await {
             Ok(result) => result,
             Err(error) => {
                 fallback.error = Some(format!("sandbox supervisor failed: {error}"));
@@ -57,6 +78,7 @@ impl SandboxExecutor {
         request: SandboxRequest,
         cancel: CancellationToken,
         sink: EventSink,
+        input: Option<zero_executor::InteractiveInput>,
     ) -> SandboxResult {
         let start = Instant::now();
         let deadline = tokio::time::Instant::now()
@@ -64,6 +86,10 @@ impl SandboxExecutor {
         let mut result = initial(&request);
         if let Err(error) = request.validate() {
             result.error = Some(error.to_string());
+            return result;
+        }
+        if input.is_some() && !matches!(request.backend, SandboxBackend::Docker { .. }) {
+            result.error = Some("interactive transport requires Docker".into());
             return result;
         }
         match &request.backend {
@@ -105,10 +131,18 @@ impl SandboxExecutor {
                         bytes,
                     }),
                 });
-                let value = self
-                    .docker
-                    .execute(request.docker_request(), cancel, events)
-                    .await;
+                let value = match input {
+                    Some(input) => {
+                        self.docker
+                            .execute_interactive(request.docker_request(), cancel, events, input)
+                            .await
+                    }
+                    None => {
+                        self.docker
+                            .execute(request.docker_request(), cancel, events)
+                            .await
+                    }
+                };
                 if let SandboxArtifact::Docker {
                     resolved_image_id, ..
                 } = &mut result.artifact

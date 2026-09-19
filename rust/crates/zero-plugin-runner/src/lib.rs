@@ -1,8 +1,10 @@
-//! Single-call offline plugin subprocesses. Results remain untrusted data.
+//! Sandboxed one-shot and persistent plugin workers. Results remain untrusted data.
 mod stage;
+mod worker;
 use std::path::{Path, PathBuf};
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
+pub use worker::*;
 use zero_harness::{Harness, PinnedCall};
 use zero_plugin::{Call, Decoder, Frame, RpcError};
 use zero_protocol::{
@@ -74,7 +76,7 @@ impl Launch {
         .map_err(|e| Error::Snapshot(e.to_string()))
     }
 }
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum UntrustedReply {
     Result(serde_json::Value),
     Error(RpcError),

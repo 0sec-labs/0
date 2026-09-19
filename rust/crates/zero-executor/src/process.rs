@@ -109,6 +109,20 @@ pub(crate) async fn run(
     cap: usize,
     events: Option<(&str, &EventSink)>,
 ) -> Captured {
+    run_input(binary, args, input, None, deadline, cancel, cap, events).await
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) async fn run_input(
+    binary: &Path,
+    args: &[String],
+    input: &[u8],
+    mut interactive: Option<crate::InteractiveInput>,
+    deadline: Instant,
+    cancel: &CancellationToken,
+    cap: usize,
+    events: Option<(&str, &EventSink)>,
+) -> Captured {
     let mut result = Captured {
         code: None,
         stdout: vec![],
@@ -160,6 +174,11 @@ pub(crate) async fn run(
     };
     let writer = async move {
         stdin.write_all(input).await?;
+        if let Some(ref mut input) = interactive {
+            while let Some(bytes) = input.receive().await {
+                stdin.write_all(&bytes).await?;
+            }
+        }
         stdin.shutdown().await
     };
     tokio::pin!(writer);

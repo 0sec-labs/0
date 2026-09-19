@@ -202,3 +202,23 @@ os.write(2,b'\xff\x00')
     );
     assert!(matches!(changed.cleanup, SandboxCleanup::Confirmed));
 }
+#[tokio::test]
+async fn interactive_microvm_is_unsupported_before_any_launcher_or_filesystem_access() {
+    let (_dir, mut request) = setup();
+    request.cpus = 1.0;
+    request.backend = SandboxBackend::Smolvm {
+        image_archive: "/missing/local.tar".into(),
+        archive_digest: format!("sha256:{}", "0".repeat(64)),
+        storage_gb: 1,
+    };
+    let (_tx, input) = zero_executor::interactive_input();
+    let result = SandboxExecutor::new()
+        .execute_interactive(request, CancellationToken::new(), Arc::new(|_| {}), input)
+        .await;
+    assert_eq!(result.status, ExecutionStatus::Failed);
+    assert_eq!(
+        result.error.as_deref(),
+        Some("interactive transport requires Docker")
+    );
+    assert!(matches!(result.cleanup, SandboxCleanup::NotCreated));
+}

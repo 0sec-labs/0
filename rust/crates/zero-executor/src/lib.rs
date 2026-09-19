@@ -1,9 +1,11 @@
 //! Native offline Docker snapshot execution. Linux/nonroot only. No host
-//! fallback, image pulls, interactive sessions, or abrupt-controller-death
+//! fallback, image pulls, or abrupt-controller-death
 //! cleanup guarantee. Event sinks must be nonblocking; capture remains bounded.
 mod archive;
 pub use archive::{capture_source_archive, stage_source_archive};
+mod interactive;
 mod process;
+pub use interactive::{InteractiveInput, InteractiveSender, interactive_input};
 mod snapshot;
 pub use process::EventSink;
 pub use snapshot::{
@@ -44,6 +46,28 @@ impl DockerExecutor {
         cancel: CancellationToken,
         sink: EventSink,
     ) -> ExecutionResult {
+        self.execute_input(request, cancel, sink, None).await
+    }
+
+    /// Bounded duplex stdin; stdout is delivered through the existing event sink.
+    /// The original deadline, aggregate output cap and daemon cleanup still apply.
+    pub async fn execute_interactive(
+        &self,
+        request: ExecutionRequest,
+        cancel: CancellationToken,
+        sink: EventSink,
+        input: InteractiveInput,
+    ) -> ExecutionResult {
+        self.execute_input(request, cancel, sink, Some(input)).await
+    }
+
+    async fn execute_input(
+        &self,
+        request: ExecutionRequest,
+        cancel: CancellationToken,
+        sink: EventSink,
+        input: Option<InteractiveInput>,
+    ) -> ExecutionResult {
         // Dropping a caller future requests cancellation, but does not drop the
         // lifecycle responsible for daemon cleanup. Runtime/process death remains
         // outside this guarantee; a live Tokio runtime must drain owned tasks.
@@ -53,8 +77,12 @@ impl DockerExecutor {
         let execution_id = request.execution_id.clone();
         let name = format!("0sec-rust-{}", uuid::Uuid::new_v4());
         let failure_name = name.clone();
-        match tokio::spawn(async move { executor.execute_owned(request, token, sink, name).await })
-            .await
+        match tokio::spawn(async move {
+            executor
+                .execute_owned(request, token, sink, name, input)
+                .await
+        })
+        .await
         {
             Ok(result) => result,
             Err(error) => ExecutionResult {
@@ -79,6 +107,7 @@ impl DockerExecutor {
         cancel: CancellationToken,
         sink: EventSink,
         name: String,
+        input: Option<InteractiveInput>,
     ) -> ExecutionResult {
         let start = Instant::now();
         let mut result = ExecutionResult {
@@ -189,10 +218,11 @@ impl DockerExecutor {
                 "--interactive".into(),
                 id,
             ];
-            let guest = process::run(
+            let guest = process::run_input(
                 &self.binary,
                 &args,
                 request.stdin.as_deref().unwrap_or("").as_bytes(),
+                input,
                 deadline,
                 &cancel,
                 request.max_output_bytes,
