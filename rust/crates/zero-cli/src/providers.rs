@@ -1,3 +1,4 @@
+mod accounts;
 use serde::Deserialize;
 use std::{collections::BTreeMap, error::Error, path::Path, time::Duration};
 use tokio::io::AsyncReadExt;
@@ -27,6 +28,7 @@ struct Profile {
     #[serde(default)]
     authentication: Authentication,
     api_key_env: Option<String>,
+    credential_account: Option<accounts::Selector>,
     entra_credentials_file: Option<std::path::PathBuf>,
     entra_token_endpoint: Option<String>,
     rates: Rates,
@@ -67,8 +69,11 @@ pub async fn load(path: &Path) -> Result<Vec<(String, ProviderClient, Rates)>, B
         {
             return Err("Invalid provider profile name".into());
         }
+        if profile.credential_account.is_some() && profile.api_key_env.is_some() {
+            return Err("Choose one explicit provider credential source".into());
+        }
         let endpoint = if matches!(profile.authentication, Authentication::AzureEntra) {
-            if profile.api_key_env.is_some() {
+            if profile.api_key_env.is_some() || profile.credential_account.is_some() {
                 return Err(
                     "Entra credentials cannot be combined with an API key environment variable"
                         .into(),
@@ -93,6 +98,7 @@ pub async fn load(path: &Path) -> Result<Vec<(String, ProviderClient, Rates)>, B
         } else if profile.wire_api == WireApi::OllamaChat
             && matches!(profile.authentication, Authentication::WireDefault)
             && profile.api_key_env.is_none()
+            && profile.credential_account.is_none()
         {
             if profile.entra_credentials_file.is_some() || profile.entra_token_endpoint.is_some() {
                 return Err("Entra credential fields require explicit Entra authentication".into());
@@ -102,25 +108,30 @@ pub async fn load(path: &Path) -> Result<Vec<(String, ProviderClient, Rates)>, B
             if profile.entra_credentials_file.is_some() || profile.entra_token_endpoint.is_some() {
                 return Err("Entra credential fields require explicit Entra authentication".into());
             }
-            // Report fixed messages: configuration can contain misplaced credentials.
-            let key_env = profile
-                .api_key_env
-                .as_deref()
-                .ok_or("Provider credential environment variable is required")?;
-            if key_env.is_empty()
-                || !key_env.bytes().enumerate().all(|(index, byte)| {
-                    byte.is_ascii_alphabetic()
-                        || byte == b'_'
-                        || (index > 0 && byte.is_ascii_digit())
-                })
-            {
-                return Err("Invalid provider credential environment variable name".into());
-            }
-            let key = std::env::var(key_env)
-                .map_err(|_| "Provider credential environment variable is unavailable")?;
-            if key.is_empty() {
-                return Err("Provider credential environment variable is empty".into());
-            }
+            let key = if let Some(selector) = &profile.credential_account {
+                selector.load(profile.wire_api, &profile.authentication)?
+            } else {
+                // Report fixed messages: configuration can contain misplaced credentials.
+                let key_env = profile
+                    .api_key_env
+                    .as_deref()
+                    .ok_or("Provider credential environment variable is required")?;
+                if key_env.is_empty()
+                    || !key_env.bytes().enumerate().all(|(index, byte)| {
+                        byte.is_ascii_alphabetic()
+                            || byte == b'_'
+                            || (index > 0 && byte.is_ascii_digit())
+                    })
+                {
+                    return Err("Invalid provider credential environment variable name".into());
+                }
+                let key = std::env::var(key_env)
+                    .map_err(|_| "Provider credential environment variable is unavailable")?;
+                if key.is_empty() {
+                    return Err("Provider credential environment variable is empty".into());
+                }
+                key
+            };
             match profile.authentication {
                 Authentication::WireDefault => Endpoint::responses(&profile.url, Some(&key))?,
                 Authentication::AzureApiKey => Endpoint::azure_api_key(&profile.url, &key)?,
