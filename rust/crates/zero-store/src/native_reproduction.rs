@@ -17,6 +17,7 @@ use zero_protocol::{
 use zero_verification::FrozenPlan;
 mod authority;
 mod read;
+pub(crate) use read::{capture_snapshot, capture_snapshot_with_extra_session, evidence_digest};
 const MAX_INTENT: usize = 2 * 1024 * 1024;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -319,6 +320,12 @@ fn close_in_transaction(
 /// All generic mutation APIs fail closed on any surviving native marker.
 /// This includes zero-cost reservations and a deleted/renamed projection.
 pub(crate) fn forbid_generic(conn: &Connection, session: &str) -> Result<()> {
+    crate::native_repair::forbid_generic(conn, session)?;
+    forbid_membership(conn, session)
+}
+// Membership probes must not reject a different workflow before its own
+// cancellation handler can inspect it. Mutation fences above cover both.
+fn forbid_membership(conn: &Connection, session: &str) -> Result<()> {
     let marked:bool=conn.query_row("SELECT EXISTS(SELECT 1 FROM native_reproductions WHERE session_id=?1) OR EXISTS(SELECT 1 FROM sessions WHERE id=?1 AND generation LIKE 'native-reproduction:%') OR EXISTS(SELECT 1 FROM events WHERE session_id=?1 AND kind IN ('native_reproduction_created','native_reproduction_closed','native_reproduction_preparation_started','native_reproduction_source_bound','native_reproduction_effect_started')) OR EXISTS(SELECT 1 FROM events WHERE session_id=?1 AND kind='command_admitted' AND json_valid(payload) AND json_extract(payload,'$.payload.kind')='native_source_reproduction') OR EXISTS(SELECT 1 FROM operations WHERE session_id=?1 AND json_valid(payload) AND json_extract(payload,'$.kind')='native_source_reproduction')",[session],|r|r.get(0))?;
     if marked {
         return Err(bad(
@@ -326,6 +333,14 @@ pub(crate) fn forbid_generic(conn: &Connection, session: &str) -> Result<()> {
         ));
     }
     Ok(())
+}
+pub(crate) fn authorization_record(
+    conn: &Connection,
+    key: &str,
+    reader: &mut Reader,
+) -> Result<(NativeReproductionRecord, ReviewReproductionPlan)> {
+    let b = bound(conn, key, reader)?;
+    Ok((b.record, b.admission.authorization))
 }
 impl Store {
     pub fn admit_native_reproduction(
@@ -483,7 +498,7 @@ impl Store {
         match key {
             Some(key) => Ok(Some(bound(&tx, &key, &mut Reader::new())?.record)),
             None => {
-                forbid_generic(&tx, session)?;
+                forbid_membership(&tx, session)?;
                 Ok(None)
             }
         }

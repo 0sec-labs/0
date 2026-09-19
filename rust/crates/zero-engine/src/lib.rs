@@ -20,11 +20,15 @@ mod history;
 mod inference;
 mod lifecycle;
 mod model_progress;
+mod native_repair;
+mod native_repair_export;
+pub use native_repair_export::read_review_repair_patch;
 mod native_reproduction;
 mod plugin;
 mod queue;
 mod repair;
 mod reproduction;
+pub use native_repair::{read_review_repair, read_review_repair_for_command};
 pub use native_reproduction::{read_review_reproduction, read_review_reproduction_for_command};
 mod review;
 mod review_read;
@@ -182,6 +186,15 @@ impl Drop for WorkerCompletion {
 /// Caller holds control, preserving the admission lock order before Store.
 fn persist_workflow_cancellation(shared: &Shared, session: &str) -> Result<bool, EngineError> {
     let mut store = lock(&shared.store)?;
+    // Repair is checked before reproduction: the latter's generic fallback
+    // deliberately rejects repair sessions as a separate authority domain.
+    if let Some(record) = store.native_repair_by_session(session)? {
+        return Ok(store.stop_native_repair(
+            &record.id,
+            &shared.owner,
+            zero_protocol::review::ReviewCloseReason::Cancelled,
+        )?);
+    }
     match store.scan_by_session(session)? {
         Some(scan) => Ok(store.request_scan_stop(
             &scan.id,

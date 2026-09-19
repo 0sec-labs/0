@@ -203,6 +203,63 @@ pub(super) async fn matrix_with_authority(
             "native authority only permits its reproduction matrix",
         ));
     }
+    matrix_with_dispatch(
+        shared,
+        session,
+        parent,
+        frozen,
+        cancel,
+        events,
+        phase,
+        native.map(MatrixAuthority::Reproduction),
+    )
+    .await
+}
+
+#[derive(Clone, Copy)]
+enum MatrixAuthority<'a> {
+    Reproduction(&'a str),
+    Repair(&'a str),
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(super) async fn repair_matrix(
+    shared: &Arc<Shared>,
+    session: &str,
+    parent: &str,
+    frozen: &FrozenPlan,
+    cancel: CancellationToken,
+    events: mpsc::Sender<ExecutionEvent>,
+    phase: &str,
+    repair: &str,
+) -> Result<(ReproductionOutcome, OperationStatus), EngineError> {
+    if !matches!(phase, "candidate" | "reconstructed") {
+        return Err(state("invalid native repair phase"));
+    }
+    matrix_with_dispatch(
+        shared,
+        session,
+        parent,
+        frozen,
+        cancel,
+        events,
+        phase,
+        Some(MatrixAuthority::Repair(repair)),
+    )
+    .await
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn matrix_with_dispatch(
+    shared: &Arc<Shared>,
+    session: &str,
+    parent: &str,
+    frozen: &FrozenPlan,
+    cancel: CancellationToken,
+    events: mpsc::Sender<ExecutionEvent>,
+    phase: &str,
+    native: Option<MatrixAuthority<'_>>,
+) -> Result<(ReproductionOutcome, OperationStatus), EngineError> {
     let mut outcome = empty_outcome();
     if let Err(error) = retain(
         shared,
@@ -233,16 +290,32 @@ pub(super) async fn matrix_with_authority(
                 .map_err(state)?;
             let child = {
                 let mut store = lock(&shared.store)?;
-                if let Some(key) = native {
-                    let (child, captured) = match store.admit_native_reproduction_case(
-                        key,
-                        &shared.owner,
-                        case_index,
-                        repeat,
-                    ) {
+                if let Some(authority) = native {
+                    let admission = match authority {
+                        MatrixAuthority::Reproduction(key) => store.admit_native_reproduction_case(
+                            key,
+                            &shared.owner,
+                            case_index,
+                            repeat,
+                        ),
+                        MatrixAuthority::Repair(key) => store.admit_native_repair_case(
+                            key,
+                            &shared.owner,
+                            phase,
+                            case_index,
+                            repeat,
+                        ),
+                    };
+                    let (child, captured) = match admission {
                         Ok(admitted) => admitted,
                         Err(error) => {
-                            if cancel.is_cancelled() || store.native_reproduction_closed(key)? {
+                            let closed = match authority {
+                                MatrixAuthority::Reproduction(key) => {
+                                    store.native_reproduction_closed(key)?
+                                }
+                                MatrixAuthority::Repair(key) => store.native_repair_closed(key)?,
+                            };
+                            if cancel.is_cancelled() || closed {
                                 outcome.stop_reason = Some(ReproductionStop::Cancelled);
                                 forced = Some(OperationStatus::Cancelled);
                                 break 'matrix;
@@ -302,12 +375,13 @@ pub(super) async fn matrix_with_authority(
                 forced = Some(OperationStatus::Cancelled);
                 break 'matrix;
             }
-            if let Some(key) = native {
-                let permission = lock(&shared.store)?.begin_native_reproduction_effect(
-                    key,
-                    &child.id,
-                    &shared.owner,
-                );
+            if let Some(authority) = native {
+                let permission = match authority {
+                    MatrixAuthority::Reproduction(key) => lock(&shared.store)?
+                        .begin_native_reproduction_effect(key, &child.id, &shared.owner),
+                    MatrixAuthority::Repair(key) => lock(&shared.store)?
+                        .begin_native_repair_effect(key, &child.id, &shared.owner),
+                };
                 if let Err(error) = permission {
                     lock(&shared.store)?.settle_operation(&child.id, &shared.owner, OperationStatus::Cancelled,
                         &json!({"external_effects_started":false,"request_artifact":request_digest}))?;

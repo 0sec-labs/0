@@ -12,6 +12,7 @@ pub(crate) fn columns(conn: &Connection, table: &str) -> Result<Vec<String>> {
                 | "reviews"
                 | "source_triage_decisions"
                 | "native_reproductions"
+                | "native_repairs"
                 | "source_archives"
         )
     {

@@ -260,12 +260,12 @@ as unrecorded, rather than inferred from a private snapshot path.
 
 ### Archive-backed reproduction preparation
 
-`ReviewReproductionPlan` is the strict host authorization envelope for a future
+`ReviewReproductionPlan` is the strict host authorization envelope for the
 native follow-up. It binds the original review/root, retained archive manifest,
 logical `verification::Plan`, a total deadline of at most one hour, and an explicit
 execution cap of at most 256. The full attack/control matrix must fit the cap;
 `FrozenPlan` still validates the complete oracle, backend, expectations and
-resource contract. This envelope is not yet a runnable CLI command.
+resource contract. The runnable `review reproduce` command is described below.
 
 `zero_engine::review_reproduction::prepare` checks a drained review controller,
 succeeded structured source submission, exact source bundle/hypothesis/snapshot
@@ -347,7 +347,57 @@ legitimate controls and execution limits for an exact private candidate.
 `zero_repair::materialize_checked` supplies cooperative cancellation through
 staging, replacement and final bounded pinning. Failed preparation explicitly
 cleans its private candidate and reports uncertain cleanup. It never writes the
-original source tree. This preparation checkpoint does not authorize matrix
-execution or establish ValidatedCandidateForPlan: native repair still needs its
-own durable admission, preparation and phase gates, owned worker, CLI route and
-independently reassessed two-phase report before that workflow is complete.
+original source tree. Preparation alone does not authorize matrix execution or
+establish ValidatedCandidateForPlan; the owned workflow below supplies the
+separate admission, phase gates and independent final assessment.
+
+
+### Owned native repair and patch export
+
+```sh
+0sec-native --state /absolute/state.db review repair \
+  --plan /absolute/host-repair.json --command-id repair-1
+0sec-native --state /absolute/state.db review repair-report --command-id repair-1
+0sec-native --state /absolute/state.db review repair-export --command-id repair-1 > candidate.patch
+```
+
+The strict plan is at most 1 MiB and uses the `ReviewRepairPlan` fields above.
+Schema21 adds isolated zero-model-budget repair sessions. Admission binds the
+complete independently assessed source/reproduction evidence fingerprint inside
+one write transaction. Preparation and source binding recheck that fingerprint;
+new source observations cannot silently replace the authorized baseline. Exact
+command retries inspect retained authorization before source, backend or current
+configuration access and never dispatch more cases.
+
+The owned worker restores the archive, materializes a private candidate, and
+checks its complete frozen safe attack/control matrix. Only independently
+reassessed successful observations permit a second, newly materialized candidate
+and complete reconstructed matrix. Limits cover both matrices together. One-use
+journal gates precede preparation, materialization and every physical dispatch;
+paired effect artifacts and events bind each case to its exact request. The
+original review and reproduction accounts remain unchanged.
+
+Cancellation closes admission, drains blocking preparation and sandbox work,
+and then settles the known result. Unknown effects or cleanup remain Unknown;
+accepted cancellation cannot be overwritten by a stale success. Failed cleanup
+retains the outer private staging path when available. No worker may reopen a
+closed repair or repeat an uncertain effect after restart.
+
+Read-only reporting captures the original review, native reproduction and repair
+journals under one bounded SQLite snapshot. It independently checks source and
+candidate identities, both observation matrices, complete artifact attribution,
+and final status. Raw archive chunks are excluded from this report view, so
+missing source bytes do not erase retained execution evidence. Export separately
+requires the full validated archive and reconstructs the exact preimage before
+emitting a unified patch. It never applies the patch to the user's checkout.
+
+Only Succeeded/ValidatedCandidateForPlan exits zero; an unvalidated or partial
+repair exits 2, and drained signals retain exit 130/143. This qualification means
+the two fresh private candidates met the original host-frozen expectations. It
+is not a general repair-safety claim or a verified vulnerability finding.
+
+Deterministic physical fixtures exercise the actual CLI and Engine with a local
+process backend, source/config/backend deletion, offline retry/report/export,
+patch application to a fixture, corruption rejection, cancellation and setup
+failure cleanup. They do not establish real Docker isolation or production
+backend qualification.

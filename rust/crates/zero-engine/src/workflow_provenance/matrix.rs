@@ -35,7 +35,7 @@ pub(super) fn validate(
     phase: &str,
     outcome: &ReproductionOutcome,
 ) -> Result<Validated, EngineError> {
-    validate_inner(store, session, parent, phase, outcome, false)
+    validate_inner(store, session, parent, phase, outcome, None)
 }
 // Native authority has already been authenticated against the Store's complete
 // case/witness inventory. Its extra effect receipt never relaxes legacy proofs.
@@ -45,7 +45,30 @@ pub(super) fn validate_native(
     parent: &str,
     outcome: &ReproductionOutcome,
 ) -> Result<Validated, EngineError> {
-    validate_inner(store, session, parent, "reproduction", outcome, true)
+    validate_inner(
+        store,
+        session,
+        parent,
+        "reproduction",
+        outcome,
+        Some("native_reproduction.effect_start"),
+    )
+}
+pub(super) fn validate_native_repair(
+    store: &Store,
+    session: &str,
+    parent: &str,
+    phase: &str,
+    outcome: &ReproductionOutcome,
+) -> Result<Validated, EngineError> {
+    validate_inner(
+        store,
+        session,
+        parent,
+        phase,
+        outcome,
+        Some("native_repair.effect_start"),
+    )
 }
 fn validate_inner(
     store: &Store,
@@ -53,7 +76,7 @@ fn validate_inner(
     parent: &str,
     phase: &str,
     outcome: &ReproductionOutcome,
-    native: bool,
+    effect_receipt: Option<&str>,
 ) -> Result<Validated, EngineError> {
     let attachments = store.operation_artifacts(parent)?;
     let get = |suffix: &str| -> Result<&str, EngineError> {
@@ -109,8 +132,8 @@ fn validate_inner(
             return Err(error("workflow child request identity mismatch"));
         }
         let mut refs = store.operation_artifacts(id)?;
-        let authorized = native && refs.remove("native_reproduction.effect_start").is_some();
-        if native
+        let authorized = effect_receipt.is_some_and(|name| refs.remove(name).is_some());
+        if effect_receipt.is_some()
             && (index.get(position).is_some() || child.status == OperationStatus::Unknown)
             && !authorized
         {

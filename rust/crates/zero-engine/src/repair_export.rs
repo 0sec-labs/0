@@ -57,7 +57,7 @@ fn fail(message: &str) -> EngineError {
     EngineError::State(message.into())
 }
 
-fn patch(path: &str, before: &str, after: &str) -> Result<String, EngineError> {
+pub(super) fn patch(path: &str, before: &str, after: &str) -> Result<String, EngineError> {
     // Tabs delimit unified-diff timestamps; control characters in a filename must
     // not be allowed to manufacture extra file headers. Binary patches are not
     // supported by this text-only export.

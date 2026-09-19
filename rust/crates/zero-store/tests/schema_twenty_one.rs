@@ -3,14 +3,14 @@ use rusqlite::Connection;
 use serde_json::json;
 use zero_store::{Error, Store};
 fn prior(conn: &Connection) {
-    conn.execute_batch("DROP INDEX native_repair_admission_command; DROP INDEX native_repair_parent_command; DROP INDEX native_repair_command; DROP TABLE native_repairs; DROP INDEX native_reproduction_admission_command; DROP INDEX native_reproduction_parent_command; DROP INDEX native_reproduction_command; DROP TABLE native_reproductions; PRAGMA user_version=19;").unwrap();
+    conn.execute_batch("DROP INDEX native_repair_admission_command; DROP INDEX native_repair_parent_command; DROP INDEX native_repair_command; DROP TABLE native_repairs; PRAGMA user_version=20;").unwrap();
 }
 fn version(conn: &Connection) -> i64 {
     conn.pragma_query_value(None, "user_version", |r| r.get(0))
         .unwrap()
 }
 #[test]
-fn exact_schema_nineteen_migrates_without_changing_existing_journal_or_artifacts() {
+fn exact_schema_twenty_migrates_without_changing_existing_journal_or_artifacts() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("state.db");
     let mut store = Store::open(&path).unwrap();
@@ -31,9 +31,9 @@ fn exact_schema_nineteen_migrates_without_changing_existing_journal_or_artifacts
     prior(&conn);
     assert!(matches!(
         Store::open_read_only(&path),
-        Err(Error::Schema(19))
+        Err(Error::Schema(20))
     ));
-    assert_eq!(version(&conn), 19);
+    assert_eq!(version(&conn), 20);
     let store = Store::open(&path).unwrap();
     assert_eq!(version(&conn), 21);
     assert_eq!(
@@ -45,19 +45,14 @@ fn exact_schema_nineteen_migrates_without_changing_existing_journal_or_artifacts
         events
     );
     assert_eq!(store.artifact(&digest).unwrap(), b"exact bytes");
-    assert!(
-        store
-            .native_reproduction_by_command("missing")
-            .unwrap()
-            .is_none()
-    );
+    assert!(store.native_repair_by_command("missing").unwrap().is_none());
     assert!(Store::open_read_only(&path).is_ok());
 }
 #[test]
-fn altered_prior_schema_is_rejected_before_any_native_reproduction_ddl() {
+fn altered_prior_schema_is_rejected_before_any_native_repair_ddl() {
     for change in [
         "CREATE INDEX unexpected ON sessions(created_at_ms);",
-        "DROP INDEX source_archive_command; CREATE INDEX source_archive_command ON events(session_id);",
+        "DROP INDEX native_reproduction_command; CREATE INDEX native_reproduction_command ON events(session_id);",
     ] {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("state.db");
@@ -66,10 +61,10 @@ fn altered_prior_schema_is_rejected_before_any_native_reproduction_ddl() {
         prior(&conn);
         conn.execute_batch(change).unwrap();
         assert!(matches!(Store::open(&path), Err(Error::ForeignDatabase)));
-        assert_eq!(version(&conn), 19);
+        assert_eq!(version(&conn), 20);
         let count: u64 = conn
             .query_row(
-                "SELECT count(*) FROM sqlite_schema WHERE name LIKE 'native_reproduction%'",
+                "SELECT count(*) FROM sqlite_schema WHERE name LIKE 'native_repair%'",
                 [],
                 |r| r.get(0),
             )

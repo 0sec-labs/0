@@ -12,6 +12,7 @@ zero-web-verification = { path = "../zero-web-verification" }
 zero-http = { path = "../zero-http" }
 zero-protocol.workspace = true
 zero-verification = { path = "../zero-verification" }
+zero-repair = { path = "../zero-repair" }
 rusqlite.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true

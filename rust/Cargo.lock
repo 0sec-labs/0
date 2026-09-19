@@ -2664,6 +2664,7 @@ dependencies = [
  "uuid",
  "zero-http",
  "zero-protocol",
+ "zero-repair",
  "zero-verification",
  "zero-web-verification",
 ]

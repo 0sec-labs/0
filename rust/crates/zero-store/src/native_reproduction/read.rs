@@ -1,7 +1,7 @@
 //! A pinned, bounded view of both the original review and its reproduction.
 //! Archive manifests are historical identity evidence; raw source is not copied.
 use super::*;
-use crate::campaign_snapshot::{capture, Cell, MAX_BYTES, MAX_RECORDS};
+use crate::campaign_snapshot::{Cell, MAX_BYTES, MAX_RECORDS, capture};
 use rusqlite::types::Value as SqlValue;
 use std::collections::BTreeSet;
 
@@ -56,9 +56,27 @@ pub(crate) fn capture_snapshot(conn: &Connection, key: &str) -> Result<Store> {
     capture_snapshot_inner(conn, key, || {})
 }
 
+pub(crate) fn capture_snapshot_with_extra_session(
+    source: &Connection,
+    key: &str,
+    session: &str,
+) -> Result<Store> {
+    id(session)?;
+    capture_snapshot_sessions(source, key, Some(session), || {})
+}
+
 fn capture_snapshot_inner(
     source: &Connection,
     key: &str,
+    after_pin: impl FnOnce(),
+) -> Result<Store> {
+    capture_snapshot_sessions(source, key, None, after_pin)
+}
+
+fn capture_snapshot_sessions(
+    source: &Connection,
+    key: &str,
+    extra_session: Option<&str>,
     after_pin: impl FnOnce(),
 ) -> Result<Store> {
     if source.is_autocommit() {
@@ -92,23 +110,33 @@ fn capture_snapshot_inner(
     let parameters = [
         SqlValue::Text(review.session_id.clone()),
         SqlValue::Text(original.record.session_id.clone()),
+        extra_session
+            .map(|s| SqlValue::Text(s.into()))
+            .unwrap_or(SqlValue::Null),
     ];
+    if extra_session.is_some_and(|s| s == review.session_id || s == original.record.session_id) {
+        return Err(bad("additional read session aliases original evidence"));
+    }
     after_pin();
     validate_sessions(source, &review, &original.record)?;
 
     let mut remaining = reader.remaining.min(MAX_BYTES);
     let mut count = 0;
     let mut tables = Vec::new();
-    for table in TABLES {
-        let filter = match *table {
-            "sessions" => "id IN (?1,?2)",
+    for table in TABLES
+        .iter()
+        .copied()
+        .chain(extra_session.map(|_| "native_repairs"))
+    {
+        let filter = match table {
+            "sessions" => "id IN (?1,?2,?3)",
             "operation_artifacts" | "agent_steering_windows" => {
-                "operation_id IN (SELECT id FROM operations WHERE session_id IN (?1,?2))"
+                "operation_id IN (SELECT id FROM operations WHERE session_id IN (?1,?2,?3))"
             }
-            _ => "session_id IN (?1,?2)",
+            _ => "session_id IN (?1,?2,?3)",
         };
         tables.push((
-            *table,
+            table,
             capture::read_rows(
                 source,
                 table,
@@ -121,7 +149,7 @@ fn capture_snapshot_inner(
     }
     let digests = capture::strings(
         source,
-        "SELECT CASE WHEN length(digest)=71 THEN digest END FROM (SELECT digest FROM operation_artifacts WHERE operation_id IN (SELECT id FROM operations WHERE session_id IN (?1,?2)) UNION SELECT source_review_sha256 AS digest FROM source_triage_decisions WHERE session_id IN (?1,?2) UNION SELECT manifest_sha256 AS digest FROM source_archives WHERE session_id IN (?1,?2)) ORDER BY digest LIMIT 65537",
+        "SELECT CASE WHEN length(digest)=71 THEN digest END FROM (SELECT digest FROM operation_artifacts WHERE operation_id IN (SELECT id FROM operations WHERE session_id IN (?1,?2,?3)) UNION SELECT source_review_sha256 AS digest FROM source_triage_decisions WHERE session_id IN (?1,?2,?3) UNION SELECT manifest_sha256 AS digest FROM source_archives WHERE session_id IN (?1,?2,?3)) ORDER BY digest LIMIT 65537",
         &parameters,
         MAX_RECORDS,
     )?;
@@ -297,6 +325,7 @@ fn validate_sessions(
         crate::admission_closure::validate(conn, session)?;
         for table in [
             "scans",
+            "native_repairs",
             "http_accounts",
             "web_experiment_admissions",
             "web_triage_decisions",
@@ -582,10 +611,12 @@ mod tests {
             frozen.get_operation(&child.id).unwrap().session_id,
             a.session_id
         );
-        assert!(frozen
-            .operation_artifacts(&child.id)
-            .unwrap()
-            .contains_key("reproduction.request"));
+        assert!(
+            frozen
+                .operation_artifacts(&child.id)
+                .unwrap()
+                .contains_key("reproduction.request")
+        );
         for chunk in archive.blobs.keys() {
             assert!(frozen.artifact(chunk).is_err());
         }
@@ -595,13 +626,17 @@ mod tests {
                 .unwrap(),
             Some(archive.manifest)
         );
-        assert!(frozen
-            .review_source_archive(&a.authorization.review_id)
-            .is_err());
-        assert!(frozen
-            .conn
-            .execute("DELETE FROM native_reproductions", [])
-            .is_err());
+        assert!(
+            frozen
+                .review_source_archive(&a.authorization.review_id)
+                .is_err()
+        );
+        assert!(
+            frozen
+                .conn
+                .execute("DELETE FROM native_reproductions", [])
+                .is_err()
+        );
         drop(writer);
         drop(store);
         drop(dir);

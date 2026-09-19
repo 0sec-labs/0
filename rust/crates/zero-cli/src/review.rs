@@ -19,6 +19,7 @@ use zero_protocol::{
     agent::AgentStatus,
     review::{ReviewCloseReason, ReviewReport, ReviewSnapshot},
 };
+mod repair;
 mod reproduce;
 
 #[derive(Debug, Args)]
@@ -39,6 +40,32 @@ pub struct ReviewArgs {
 }
 #[derive(Debug, Subcommand)]
 pub enum ReviewCommand {
+    /// Validate an exact private repair against the retained independent reproduction.
+    Repair(repair::RepairArgs),
+    /// Independently inspect retained repair evidence without ownership or a plan file.
+    RepairReport {
+        #[arg(
+            long,
+            required_unless_present = "command_id",
+            conflicts_with = "command_id"
+        )]
+        repair: Option<String>,
+        #[arg(long, required_unless_present = "repair", conflicts_with = "repair")]
+        command_id: Option<String>,
+        #[arg(long, value_enum, default_value = "json")]
+        format: repair::Format,
+    },
+    /// Export an independently validated retained repair as unified patch bytes on stdout.
+    RepairExport {
+        #[arg(
+            long,
+            required_unless_present = "command_id",
+            conflicts_with = "command_id"
+        )]
+        repair: Option<String>,
+        #[arg(long, required_unless_present = "repair", conflicts_with = "repair")]
+        command_id: Option<String>,
+    },
     /// Execute a separately host-authorized frozen reproduction from retained source.
     Reproduce(reproduce::ReproduceArgs),
     /// Independently inspect retained reproduction evidence without ownership or a plan file.
@@ -90,6 +117,9 @@ pub async fn run(args: &crate::args::Args, options: &ReviewArgs) -> Result<u8, B
     if let Some(command) = &options.command {
         if let ReviewCommand::Reproduce(options) = command {
             return reproduce::run(args, options).await;
+        }
+        if let ReviewCommand::Repair(options) = command {
+            return repair::run(args, options).await;
         }
         return readonly(&args.state, command).await;
     }
@@ -443,6 +473,20 @@ fn exit_code(review: &ReviewSnapshot) -> u8 {
 async fn readonly(path: &Path, command: &ReviewCommand) -> Result<u8, Box<dyn Error>> {
     let state = path.to_owned();
     match command {
+        ReviewCommand::Repair(_) => {
+            return Err("Repair requires the owned execution route".into());
+        }
+        ReviewCommand::RepairReport {
+            repair,
+            command_id,
+            format,
+        } => {
+            return repair::inspect(&state, repair.as_deref(), command_id.as_deref(), *format)
+                .await;
+        }
+        ReviewCommand::RepairExport { repair, command_id } => {
+            return repair::export(&state, repair.as_deref(), command_id.as_deref()).await;
+        }
         ReviewCommand::Reproduce(_) => {
             return Err("Reproduction requires the owned execution route".into());
         }

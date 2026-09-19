@@ -107,6 +107,9 @@ impl PreparedReviewReproduction {
     pub fn binding(&self) -> &ReviewReproductionBinding {
         &self.binding
     }
+    pub fn recovery_root(&self) -> &std::path::Path {
+        self.stage.root()
+    }
     /// Call only after all consumers and any guest using this tree have drained.
     pub fn remove(self) -> Result<(), EngineError> {
         self.stage.remove().map_err(error)

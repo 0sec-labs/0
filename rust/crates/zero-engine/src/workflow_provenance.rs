@@ -1,7 +1,9 @@
 //! Read-only journal validation; exact observations never establish reportability.
 mod matrix;
+mod native_repair;
 mod repair;
 use super::*;
+pub(super) use native_repair::native_repair;
 pub(super) use repair::repair;
 use serde::de::DeserializeOwned;
 use serde_json::{Value, json};

@@ -3,7 +3,7 @@ use crate::{Error, Result, Store, schema};
 use rusqlite::{Connection, OpenFlags};
 use std::{path::Path, time::Duration};
 impl Store {
-    /// Opens only an existing native schema-20 database. No initialization,
+    /// Opens only an existing native schema-21 database. No initialization,
     /// migrations, engine epoch claim or recovery is performed on this database.
     /// Ordinary read APIs remain available; SQLite rejects mutation methods.
     /// A read connection does not acquire the engine's exclusive lifetime lock.
@@ -29,7 +29,7 @@ impl Store {
     }
 }
 pub(super) fn definitions(conn: &Connection) -> Result<Vec<(String, String, String)>> {
-    definitions_with_count(conn, 55)
+    definitions_with_count(conn, 59)
 }
 pub(super) fn definitions_with_count(
     conn: &Connection,

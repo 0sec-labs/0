@@ -23,6 +23,10 @@ impl Candidate {
     pub fn snapshot(&self) -> &SnapshotPin {
         &self.snapshot
     }
+    /// Outer private stage used to identify recovery after joined cleanup fails.
+    pub fn recovery_root(&self) -> Option<&std::path::Path> {
+        self.stage.as_ref().map(StagedSnapshot::root)
+    }
     pub fn receipt(&self) -> &CandidateReceipt {
         &self.receipt
     }

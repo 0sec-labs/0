@@ -178,6 +178,9 @@ impl PreparedReviewRepair {
     pub fn execution_baseline(&self) -> &FrozenPlan {
         self.source.execution_plan()
     }
+    pub fn recovery_root(&self) -> &std::path::Path {
+        self.source.recovery_root()
+    }
     /// Derive only the already frozen safe expectations for an exact private candidate.
     pub fn candidate_plan(
         &self,

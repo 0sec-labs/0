@@ -1178,6 +1178,79 @@ async fn archived_review_preparation_preserves_logical_plan_and_revalidates_offl
     );
     assert_eq!(fs::read(f.dir.path().join("calls.jsonl")).unwrap(), calls);
     drop(store);
+    let repair_backend = include_str!("../../zero-executor/tests/fixtures/fake-docker.py")
+        .replace("sys.stderr.write(\"fixture diagnostic\\n\")", "pass")
+        .replace("{\"name\": name, \"id\": container_id}", "{\"name\": name, \"id\": container_id, \"argv\": args}")
+        .replace("sys.stdout.buffer.write(sys.stdin.buffer.read())", "sys.stdout.buffer.write(b'safe\\n' if 'z-tool.sh' in ' '.join(json.loads(state.read_text())['argv']) else b'')");
+    let binary = f.dir.path().join("no-backend");
+    fs::write(&binary, repair_backend).unwrap();
+    fs::set_permissions(&binary, fs::Permissions::from_mode(0o700)).unwrap();
+    let (tx, mut rx) = mpsc::channel(64);
+    let drain = tokio::spawn(async move { while rx.recv().await.is_some() {} });
+    let repaired = f
+        .engine
+        .repair_review("native-repair-engine".into(), repair.clone(), tx)
+        .await
+        .unwrap();
+    drain.await.unwrap();
+    let Reply::SourceRepair {
+        operation,
+        result: Some(result),
+        duplicate: false,
+    } = repaired
+    else {
+        panic!("wrong native repair reply");
+    };
+    assert_eq!(operation.status, OperationStatus::Succeeded, "{result:?}");
+    assert_eq!(
+        result.status,
+        zero_protocol::repair::RepairValidationStatus::ValidatedCandidateForPlan
+    );
+    assert_eq!(result.phases.len(), 2);
+    assert!(
+        result
+            .phases
+            .iter()
+            .all(|p| p.observations.children.len() == 4)
+    );
+    assert!(result.cleanup_recovery.is_empty());
+    assert!(!result.vulnerability_reportable);
+    let record = lock(&f.engine.shared.store)
+        .unwrap()
+        .native_repair_by_command("native-repair-engine")
+        .unwrap()
+        .unwrap();
+    fs::remove_file(binary).unwrap();
+    native_repair_export::tests::assert_retained_provenance(
+        &f.dir.path().join("state.db"),
+        &record.id,
+    );
+    let before_retry = fs::read(f.dir.path().join("calls.jsonl")).unwrap();
+    let (tx, _rx) = mpsc::channel(8);
+    assert!(matches!(
+        f.engine
+            .repair_review("native-repair-engine".into(), repair, tx)
+            .await
+            .unwrap(),
+        Reply::SourceRepair {
+            duplicate: true,
+            ..
+        }
+    ));
+    assert_eq!(
+        fs::read(f.dir.path().join("calls.jsonl")).unwrap(),
+        before_retry
+    );
+    assert_eq!(
+        serde_json::to_value(
+            lock(&f.engine.shared.store)
+                .unwrap()
+                .budget(&f.admission.session_id)
+                .unwrap()
+        )
+        .unwrap(),
+        budget_before
+    );
     f.engine.shutdown().await.unwrap();
 }
 

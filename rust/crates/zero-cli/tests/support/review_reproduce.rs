@@ -4,7 +4,7 @@ use super::*;
 use base64::Engine as _;
 use std::os::unix::fs::PermissionsExt;
 
-async fn setup() -> (Fixture, PathBuf) {
+pub(super) async fn setup() -> (Fixture, PathBuf) {
     let f = Fixture::new().await;
     std::fs::write(f.source.join("unselected.bin"), [0, 255, 128]).unwrap();
     let pin = zero_executor::pin_snapshot(&f.source).unwrap();
@@ -74,7 +74,7 @@ async fn setup() -> (Fixture, PathBuf) {
     std::fs::remove_file(&f.profiles).unwrap();
     (f, plan_path)
 }
-fn command(f: &Fixture, plan: &std::path::Path) -> Command {
+pub(super) fn command(f: &Fixture, plan: &std::path::Path) -> Command {
     let mut c = Command::new(env!("CARGO_BIN_EXE_0sec-native"));
     c.arg("--state")
         .arg(&f.state)
@@ -100,7 +100,7 @@ fn inspect(f: &Fixture, selector: &str, id: &str, format: &str) -> Command {
     c.args(["review", "reproduction", selector, id, "--format", format]);
     c
 }
-fn cleaned(f: &Fixture) {
+pub(super) fn cleaned(f: &Fixture) {
     assert!(!f._dir.path().join("container.json").exists());
     for line in std::fs::read_to_string(f._dir.path().join("mounts.jsonl"))
         .unwrap()
@@ -134,7 +134,7 @@ async fn native_reproduction_cli_uses_archive_and_retries_without_source_config_
     // invocation may upgrade it; the initial cached lookup must stay inert.
     let downgraded = std::process::Command::new("python3")
         .arg("-c")
-        .arg("import sqlite3,sys; db=sqlite3.connect(sys.argv[1]); db.executescript('DROP INDEX native_reproduction_admission_command; DROP INDEX native_reproduction_parent_command; DROP INDEX native_reproduction_command; DROP TABLE native_reproductions; PRAGMA user_version=19;'); db.close()")
+        .arg("import sqlite3,sys; db=sqlite3.connect(sys.argv[1]); db.executescript('DROP INDEX native_repair_admission_command; DROP INDEX native_repair_parent_command; DROP INDEX native_repair_command; DROP TABLE native_repairs; DROP INDEX native_reproduction_admission_command; DROP INDEX native_reproduction_parent_command; DROP INDEX native_reproduction_command; DROP TABLE native_reproductions; PRAGMA user_version=19;'); db.close()")
         .arg(&f.state)
         .output()
         .unwrap();
