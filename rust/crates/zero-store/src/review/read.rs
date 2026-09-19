@@ -15,8 +15,15 @@ pub(super) fn by_command(
     let key:Option<String>=conn.query_row("SELECT CASE WHEN length(CAST(id AS BLOB))<=256 THEN id END FROM reviews WHERE command_id=?1",[command],|r|r.get(0)).optional()?;
     let count:u64=conn.query_row("SELECT count(*) FROM events INDEXED BY review_command_created WHERE kind='review_created' AND json_extract(payload,'$.command_id')=?1",[command],|r|r.get(0))?;
     match key {
-        Some(key) if count == 1 => Ok(Some(bound(conn, &key, r)?.record)),
-        None if count == 0 => Ok(None),
+        Some(key) if count == 1 => {
+            let record = bound(conn, &key, r)?.record;
+            crate::source_archive::validate_command(conn, command, Some(&record))?;
+            Ok(Some(record))
+        }
+        None if count == 0 => {
+            crate::source_archive::validate_command(conn, command, None)?;
+            Ok(None)
+        }
         _ => Err(bad("global command projection or witness missing")),
     }
 }
@@ -25,7 +32,7 @@ pub(super) fn binding(conn: &Connection, session: &str, r: &mut Reader) -> Resul
     if let Some(key) = key {
         return Ok(Some(bound(conn, &key, r)?));
     }
-    let marked:bool=conn.query_row("SELECT EXISTS(SELECT 1 FROM sessions WHERE id=?1 AND generation LIKE 'native-review:%') OR EXISTS(SELECT 1 FROM events WHERE session_id=?1 AND kind='review_created')",[session],|r|r.get(0))?;
+    let marked:bool=conn.query_row("SELECT EXISTS(SELECT 1 FROM sessions WHERE id=?1 AND generation LIKE 'native-review:%') OR EXISTS(SELECT 1 FROM events WHERE session_id=?1 AND kind IN ('review_created','review_source_archived')) OR EXISTS(SELECT 1 FROM source_archives WHERE session_id=?1)",[session],|r|r.get(0))?;
     if marked {
         return Err(bad("review binding projection missing"));
     }

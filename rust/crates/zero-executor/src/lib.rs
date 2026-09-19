@@ -1,6 +1,8 @@
 //! Native offline Docker snapshot execution. Linux/nonroot only. No host
 //! fallback, image pulls, interactive sessions, or abrupt-controller-death
 //! cleanup guarantee. Event sinks must be nonblocking; capture remains bounded.
+mod archive;
+pub use archive::{capture_source_archive, stage_source_archive};
 mod process;
 mod snapshot;
 pub use process::EventSink;

@@ -81,7 +81,10 @@ impl Fixture {
         c
     }
     async fn next(&self) -> (TcpStream, Value) {
-        tokio::time::timeout(Duration::from_secs(15), async {
+        self.next_with_timeout(Duration::from_secs(15)).await
+    }
+    async fn next_with_timeout(&self, deadline: Duration) -> (TcpStream, Value) {
+        tokio::time::timeout(deadline, async {
             let (mut stream, _) = self.listener.accept().await.unwrap();
             let mut bytes = Vec::new();
             loop {
@@ -159,11 +162,84 @@ fn tool_output(request: &Value, id: &str) -> Value {
 
 #[tokio::test]
 async fn cited_local_review_retains_report_and_retries_without_source_or_configuration() {
+    use std::os::unix::fs::PermissionsExt;
     let f = Fixture::new().await;
+    std::fs::write(
+        f.source.join("unselected.txt"),
+        b"Retain this unselected source too.\n",
+    )
+    .unwrap();
+    std::fs::write(f.source.join("binary.dat"), [0, 255, 0xc3, 0x28, 10]).unwrap();
+    std::fs::write(
+        f.source.join("run.sh"),
+        b"#!/bin/sh\nprintf 'retained executable\\n'\n",
+    )
+    .unwrap();
+    std::fs::set_permissions(
+        f.source.join("run.sh"),
+        std::fs::Permissions::from_mode(0o755),
+    )
+    .unwrap();
+    // Distinct sparse chunks approach the archive cap without a giant fixture
+    // allocation. Copying these blobs into a normal report view would exhaust
+    // its 64 MiB aggregate budget once journal/request metadata is included.
+    {
+        use std::io::{Seek, SeekFrom, Write};
+        let mut large = std::fs::File::create(f.source.join("large-unselected.bin")).unwrap();
+        large.set_len(64 * 1024 * 1024 - 16 * 1024).unwrap();
+        for index in 0..8u64 {
+            large
+                .seek(SeekFrom::Start(index * 8 * 1024 * 1024))
+                .unwrap();
+            large.write_all(&[index as u8 + 1]).unwrap();
+        }
+    }
     let original = zero_executor::pin_snapshot(&f.source).unwrap();
-    let digest = original.files[0].digest.clone();
-    let child = f.run("cited-review").spawn().unwrap();
-    let (socket, first) = f.next().await;
+    let digest = original
+        .files
+        .iter()
+        .find(|file| file.path == "app.rs")
+        .unwrap()
+        .digest
+        .clone();
+    let started = std::time::Instant::now();
+    let mut child = f.run("cited-review").spawn().unwrap();
+    let (socket, first) = tokio::select! {
+        request = f.next_with_timeout(Duration::from_secs(90)) => request,
+        status = child.wait() => {
+            let mut stdout = String::new();
+            let mut stderr = String::new();
+            child.stdout.take().unwrap().read_to_string(&mut stdout).await.unwrap();
+            child.stderr.take().unwrap().read_to_string(&mut stderr).await.unwrap();
+            panic!("large archive review exited before provider: {status:?}; stdout={stdout}; stderr={stderr}");
+        }
+    };
+    eprintln!(
+        "near-64MiB review preparation before first provider: {:?}",
+        started.elapsed()
+    );
+    // Physical provider admission can only occur after the full root archive
+    // was atomically retained, not merely after a selected-text bundle exists.
+    {
+        let store = zero_store::Store::open_read_only(&f.state).unwrap();
+        let record = store.review_by_command("cited-review").unwrap().unwrap();
+        let events = store.events(&record.session_id, 0, 100).unwrap();
+        let archived = events
+            .iter()
+            .find(|event| {
+                event.kind == "review_source_archived"
+                    && event.payload["root_operation_id"] == record.root_operation_id
+            })
+            .unwrap();
+        let inference = events
+            .iter()
+            .find(|event| {
+                event.kind == "command_admitted"
+                    && event.payload["payload"]["kind"] == "agent_inference"
+            })
+            .unwrap();
+        assert!(archived.sequence < inference.sequence);
+    }
     let names: Vec<_> = first["tools"]
         .as_array()
         .unwrap()
@@ -237,6 +313,7 @@ async fn cited_local_review_retains_report_and_retries_without_source_or_configu
     .await;
     assert!(report_out.status.success());
     let report = decoded(&report_out)["report"].clone();
+    assert!(serde_json::to_vec(&report).unwrap().len() < 64 * 1024);
     assert_eq!(report["security_conclusion"], "not_established");
     assert_eq!(report["source"]["verification_state"], "unverified");
     let claims = report["source"]["review"]["hypotheses"].as_array().unwrap();
@@ -246,6 +323,63 @@ async fn cited_local_review_retains_report_and_retries_without_source_or_configu
     std::fs::remove_dir_all(&f.source).unwrap();
     std::fs::remove_file(&f.profiles).unwrap();
     std::fs::remove_file(&f.providers).unwrap();
+    {
+        let store = zero_store::Store::open_read_only(&f.state).unwrap();
+        let archive = store.review_source_archive(id).unwrap().unwrap();
+        archive.validate_pin(&original).unwrap();
+        assert_eq!(archive.manifest.files.len(), 5);
+        assert!(archive.blobs.values().map(Vec::len).sum::<usize>() > 63 * 1024 * 1024);
+        assert!(
+            archive
+                .manifest
+                .files
+                .iter()
+                .any(|file| file.path == "run.sh" && file.executable)
+        );
+        let (stage, restored) = zero_executor::stage_source_archive(&archive, &|| Ok(())).unwrap();
+        assert_eq!(restored.digest, original.digest);
+        assert_eq!(
+            serde_json::to_value(&restored.files).unwrap(),
+            serde_json::to_value(&original.files).unwrap()
+        );
+        zero_executor::verify_snapshot(&restored, &|| Ok(())).unwrap();
+        let root = std::path::Path::new(&restored.root);
+        assert_eq!(
+            std::fs::read(root.join("app.rs")).unwrap(),
+            SOURCE.as_bytes()
+        );
+        assert_eq!(
+            std::fs::read(root.join("unselected.txt")).unwrap(),
+            b"Retain this unselected source too.\n"
+        );
+        assert_eq!(
+            std::fs::read(root.join("binary.dat")).unwrap(),
+            [0, 255, 0xc3, 0x28, 10]
+        );
+        assert_ne!(
+            std::fs::metadata(root.join("run.sh"))
+                .unwrap()
+                .permissions()
+                .mode()
+                & 0o111,
+            0
+        );
+        assert_eq!(
+            std::fs::metadata(root.join("app.rs"))
+                .unwrap()
+                .permissions()
+                .mode()
+                & 0o111,
+            0
+        );
+        assert_eq!(
+            std::fs::metadata(root.join("large-unselected.bin"))
+                .unwrap()
+                .len(),
+            64 * 1024 * 1024 - 16 * 1024
+        );
+        stage.remove().unwrap();
+    }
     let retry_out = finish(
         f.run("cited-review")
             .env_remove("REVIEW_CLI_KEY")

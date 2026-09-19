@@ -221,6 +221,7 @@ impl Store {
             format!("account_id IN (SELECT id FROM http_accounts WHERE {session_filter})");
         for table in [
             "reviews",
+            "source_archives",
             "agent_inputs",
             "agent_steering",
             "operator_questions",
@@ -247,7 +248,7 @@ impl Store {
             return Err(invalid("unsupported approval consumption"));
         }
         let scan_witness: bool = tx.query_row(
-            &format!("SELECT EXISTS(SELECT 1 FROM events WHERE {session_filter} AND kind IN ('scan_created','scan_admission_closed','scan_budget_denied','review_created','review_admission_closed','review_budget_denied')) OR EXISTS(SELECT 1 FROM sessions WHERE id IN (SELECT session_id FROM events WHERE {session_filter}) AND (generation LIKE 'native-scan:%' OR generation LIKE 'native-review:%'))"),
+            &format!("SELECT EXISTS(SELECT 1 FROM events WHERE {session_filter} AND kind IN ('scan_created','scan_admission_closed','scan_budget_denied','review_created','review_admission_closed','review_budget_denied','review_source_archived')) OR EXISTS(SELECT 1 FROM sessions WHERE id IN (SELECT session_id FROM events WHERE {session_filter}) AND (generation LIKE 'native-scan:%' OR generation LIKE 'native-review:%'))"),
             rusqlite::params_from_iter(&parameters), |r| r.get(0))?;
         if scan_witness {
             return Err(invalid(

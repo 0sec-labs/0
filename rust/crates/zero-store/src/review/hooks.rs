@@ -561,6 +561,55 @@ pub(crate) fn budget_denied(
     Ok(true)
 }
 
+/// Authenticate original root and its preparation permission without reopening it.
+/// A historical archive retry may be read after shutdown; fresh retention calls
+/// this again with `require_open` before committing any bytes.
+pub(crate) fn archive_binding(
+    conn: &Connection,
+    root: &str,
+    owner: Option<&str>,
+    require_open: bool,
+) -> Result<super::ArchiveBinding> {
+    let session = session_for(conn, root)?;
+    let mut reader = Reader::new();
+    let b = read::binding(conn, &session, &mut reader)?
+        .ok_or_else(|| bad("source archive requires a captured review"))?;
+    if b.root.id != root || owner.is_some_and(|o| b.root.owner.as_deref() != Some(o)) {
+        return Err(bad(
+            "source archive requires the original owned review root",
+        ));
+    }
+    if require_open {
+        open(conn, &b)?;
+    }
+    let owner = b
+        .root
+        .owner
+        .as_deref()
+        .ok_or_else(|| bad("archive root owner absent"))?;
+    let (count, sequence): (u64, Option<u64>) = conn.query_row(
+        "SELECT count(*),min(sequence) FROM events WHERE session_id=?1 AND kind='operation_detail' AND CASE WHEN json_valid(payload) THEN json_extract(payload,'$.operation_id')=?2 AND json_extract(payload,'$.kind')='review_source_preparation_started' ELSE 0 END",
+        params![session,root], |r| Ok((r.get(0)?,r.get(1)?)))?;
+    if count != 1 {
+        return Err(bad(
+            "source archive preparation permission absent or duplicated",
+        ));
+    }
+    let sequence = sequence.ok_or_else(|| bad("source archive permission sequence absent"))?;
+    let (kind, value) = reader.event(conn, &session, sequence)?;
+    let expected = json!({"operation_id":root,"kind":"review_source_preparation_started","details":{
+        "review_id":b.record.id,"owner":owner,"snapshot_sha256":b.record.snapshot_sha256,"payload_sha256":hash(&b.root.payload)?}});
+    if kind != "operation_detail" || value != expected {
+        return Err(bad("source archive preparation witness differs"));
+    }
+    Ok(super::ArchiveBinding {
+        review: b.record,
+        snapshot: b.admission.snapshot,
+        owner: owner.into(),
+        preparation_sequence: sequence,
+    })
+}
+
 impl Store {
     /// Capture one permission to prepare the actor's private source copy. This
     /// grants neither provider work nor sandbox execution.

@@ -8,7 +8,7 @@ pub fn initialize(conn: &mut Connection) -> Result<()> {
     if application != 0 && application != APPLICATION_ID {
         return Err(Error::ForeignDatabase);
     }
-    if !(0..=18).contains(&version) {
+    if !(0..=19).contains(&version) {
         return Err(Error::Schema(version));
     }
     if application == 0 {
@@ -26,6 +26,9 @@ pub fn initialize(conn: &mut Connection) -> Result<()> {
     }
     if version == 17 {
         validate_seventeen(&tx)?;
+    }
+    if version == 18 {
+        validate_eighteen(&tx)?;
     }
     if version == 0 {
         tx.execute_batch("CREATE TABLE sessions(id TEXT PRIMARY KEY,generation TEXT NOT NULL,created_at_ms INTEGER NOT NULL,budget_limit INTEGER NOT NULL CHECK(budget_limit>=0));
@@ -131,6 +134,11 @@ CREATE INDEX scan_command_created ON events(json_extract(payload,'$.command_id')
         tx.execute_batch("CREATE TABLE reviews(sequence INTEGER PRIMARY KEY,id TEXT NOT NULL UNIQUE,command_id TEXT NOT NULL UNIQUE,session_id TEXT NOT NULL UNIQUE REFERENCES sessions(id),controller_operation_id TEXT NOT NULL UNIQUE REFERENCES operations(id),root_operation_id TEXT NOT NULL UNIQUE REFERENCES operations(id),intent_sha256 TEXT NOT NULL REFERENCES artifacts(digest),record TEXT NOT NULL CHECK(length(CAST(record AS BLOB))<=65536),binding_sequence INTEGER NOT NULL CHECK(binding_sequence>0),close_reason TEXT CHECK(close_reason IN ('cancelled','deadline')),close_sequence INTEGER,CHECK((close_reason IS NULL)=(close_sequence IS NULL)));\nCREATE INDEX review_command_created ON events(json_extract(payload,'$.command_id')) WHERE kind='review_created';")?;
         tx.pragma_update(None, "user_version", 18)?;
     }
+    if version < 19 {
+        tx.execute_batch("CREATE TABLE source_archives(root_operation_id TEXT PRIMARY KEY REFERENCES operations(id),command_id TEXT NOT NULL UNIQUE,review_id TEXT NOT NULL UNIQUE REFERENCES reviews(id),session_id TEXT NOT NULL REFERENCES sessions(id),manifest_sha256 TEXT NOT NULL REFERENCES artifacts(digest),sequence INTEGER NOT NULL CHECK(sequence>0));
+CREATE INDEX source_archive_command ON events(json_extract(payload,'$.command_id')) WHERE kind='review_source_archived';")?;
+        tx.pragma_update(None, "user_version", 19)?;
+    }
     tx.commit()?;
     Ok(())
 }
@@ -144,7 +152,7 @@ pub(super) fn validate_current(conn: &Connection) -> Result<()> {
     if application != APPLICATION_ID {
         return Err(Error::ForeignDatabase);
     }
-    if version != 18 {
+    if version != 19 {
         return Err(Error::Schema(version));
     }
     let observed = crate::readonly::definitions(conn)?;
@@ -163,7 +171,7 @@ fn validate_sixteen(conn: &Connection) -> Result<()> {
     let observed = crate::readonly::definitions_with_count(conn, 45)?;
     let mut reference = Connection::open_in_memory()?;
     initialize(&mut reference)?;
-    reference.execute_batch("DROP INDEX review_command_created; DROP TABLE reviews; DROP INDEX scan_command_created; DROP TABLE scans;")?;
+    reference.execute_batch("DROP INDEX source_archive_command; DROP TABLE source_archives; DROP INDEX review_command_created; DROP TABLE reviews; DROP INDEX scan_command_created; DROP TABLE scans;")?;
     if observed != crate::readonly::definitions_with_count(&reference, 45)? {
         return Err(Error::ForeignDatabase);
     }
@@ -175,8 +183,20 @@ fn validate_seventeen(conn: &Connection) -> Result<()> {
     let observed = crate::readonly::definitions_with_count(conn, 47)?;
     let mut reference = Connection::open_in_memory()?;
     initialize(&mut reference)?;
-    reference.execute_batch("DROP INDEX review_command_created; DROP TABLE reviews;")?;
+    reference.execute_batch("DROP INDEX source_archive_command; DROP TABLE source_archives; DROP INDEX review_command_created; DROP TABLE reviews;")?;
     if observed != crate::readonly::definitions_with_count(&reference, 47)? {
+        return Err(Error::ForeignDatabase);
+    }
+    Ok(())
+}
+
+/// Schema 18 reviews remain honest legacy records without an archive.
+fn validate_eighteen(conn: &Connection) -> Result<()> {
+    let observed = crate::readonly::definitions_with_count(conn, 49)?;
+    let mut reference = Connection::open_in_memory()?;
+    initialize(&mut reference)?;
+    reference.execute_batch("DROP INDEX source_archive_command; DROP TABLE source_archives;")?;
+    if observed != crate::readonly::definitions_with_count(&reference, 49)? {
         return Err(Error::ForeignDatabase);
     }
     Ok(())

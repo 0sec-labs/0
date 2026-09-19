@@ -102,7 +102,8 @@ dedicated owned controller and the existing adaptive source actor:
   a callback. No `.git`/dependency exclusions are implied by this API.
 
 Storage now has `ReviewAdmission`, immutable `ReviewRecord` and read-only
-`ReviewSnapshot` support (native schema 18). Admission creates the session,
+`ReviewSnapshot` support (introduced in schema 18; current schema 19). Admission
+creates the session,
 controller, actual root, captured intent artifact and journal binding in one
 transaction. It binds the original path, manifest, named profile, provider rates,
 budget and absolute deadline. Exact retries return the original graph before
@@ -194,3 +195,43 @@ read interfaces. These deterministic fixtures do not qualify live-provider
 quality, live Docker/smolvm execution, or the full production CLI replacement.
 Repository acquisition, package selection, patch application and external
 publication remain separate unfinished product work.
+
+### Complete source retention for independent follow-up
+
+New native reviews retain the entire captured file manifest and its bytes before
+first inference. This includes unselected text, binary and executable files;
+the smaller selected source bundle remains the report's hypothesis evidence.
+The root's one-use preparation permission, original owner, manifest, open
+controller and deadline govern retention. Delegates do not create separate
+archives. Failure to retain source stops the new actor before model dispatch.
+
+Schema 19 adds a separate archive projection and journal witness. A canonical
+manifest names hash-checked raw chunks of at most 8 MiB; the captured source is
+limited to 4,096 files and 64 MiB. Atomic archive storage is separate from the
+generic 32 MiB operation attachment allowance. Archive reads validate the
+projection, preparation and retention witnesses, original snapshot identity,
+chunk sizes/hashes and complete file hashes. Historical reviews without an
+archive return absence; deleting a recorded archive's projection is corruption,
+not evidence that it never existed.
+
+`Store::review_source_archive` explicitly reads full retained source.
+`stage_source_archive` verifies and reconstructs it in a new private directory,
+with executable flags preserved and no symlinks, traversal or host execution.
+Capture, validation and reconstruction check cancellation during bounded I/O
+and hashing. Large Store retention runs on a joined blocking worker. The caller
+must explicitly remove a reconstructed stage after its use/guest cleanup.
+Ordinary status and report reads neither load nor copy the raw archive blobs.
+
+Archive retention and reconstruction do not authorize reproduction or repair.
+Those follow-ups still need separate host-authorized sessions, frozen independent
+attack/control expectations, execution limits, cancellation and lineage to the
+original review. They must bind source identity independently of a temporary
+execution path and must not reopen the completed review's authority.
+
+Workspace selection remains unfinished. Capture currently includes every file in
+the requested directory, including an existing native state database if it is
+inside that directory. New commands can therefore capture prior archives and
+reach the source-size limit. Keep `--state` outside the selected source tree for
+repeated fresh reviews until an explicit, retained exclusion policy is wired.
+Exact retries do not capture source again. The default-state fixture proves the
+first run and its retained retry, not repeated fresh whole-workspace captures.

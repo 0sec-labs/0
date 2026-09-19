@@ -82,7 +82,7 @@ pub fn pin_snapshot(root: &Path) -> Result<SnapshotPin, String> {
 /// retains it: only a caller that confirms guest teardown may remove the tree.
 /// This favors recoverable leakage over deleting a still-mounted source.
 pub struct StagedSnapshot {
-    root: std::path::PathBuf,
+    pub(crate) root: std::path::PathBuf,
 }
 impl StagedSnapshot {
     pub fn root(&self) -> &Path {

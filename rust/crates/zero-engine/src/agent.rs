@@ -1608,34 +1608,100 @@ pub(super) fn run_actor<'a>(
             web_review: None,
         };
         let mut preparation_error = None;
+        let mut review_deadline = None;
+        let mut capture_review_archive = false;
         if request.source_snapshot_tools {
-            if let Err(error) =
-                lock(&shared.store)?.begin_review_source_preparation(parent, &shared.owner)
-            {
-                preparation_error = Some(error.to_string());
+            let permission = (|| {
+                let mut store = lock(&shared.store)?;
+                store.begin_review_source_preparation(parent, &shared.owner)?;
+                Ok::<_, EngineError>(store.review_by_session(session)?)
+            })();
+            match permission {
+                Ok(Some(review)) => {
+                    review_deadline = Some(review.deadline_at_ms);
+                    capture_review_archive = review.root_operation_id == parent;
+                }
+                Ok(None) => {}
+                Err(error) => preparation_error = Some(error.to_string()),
             }
         }
         if request.source_snapshot_tools && preparation_error.is_none() {
-            let pin = request
+            let mut pin = request
                 .snapshot_request()
                 .map_err(|e| EngineError::State(e.to_string()))?
                 .snapshot;
             let cancellation = cancel.clone();
-            // Never detach a blocking copy when cancelled: the owner must receive
-            // its handle and finish cleanup before settling the operation.
+            // Never detach a blocking copy/archive when cancelled: the owner
+            // receives its handle and completes cleanup before settlement.
             let prepared = tokio::task::spawn_blocking(move || {
-                zero_source::SnapshotInvestigation::prepare_checked(&pin, &|| {
+                let check = || {
                     if cancellation.is_cancelled() {
-                        Err("source preparation cancelled".into())
-                    } else {
-                        Ok(())
+                        return Err("source preparation cancelled".into());
                     }
-                })
+                    if let Some(deadline) = review_deadline {
+                        let now = std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .map_err(|_| "source preparation clock unavailable".to_string())?
+                            .as_millis();
+                        if now >= u128::from(deadline) {
+                            return Err("review source preparation deadline exceeded".into());
+                        }
+                    }
+                    Ok(())
+                };
+                let snapshot = zero_source::SnapshotInvestigation::prepare_checked(&pin, &check)
+                    .map_err(|error| error.to_string())?;
+                // The root alone retains a complete source archive. Delegated
+                // actors keep their own private source copy without duplicating
+                // the root's immutable archive or extending source authority.
+                let archive = if capture_review_archive {
+                    (|| {
+                        pin.root = snapshot
+                            .root()
+                            .join("source")
+                            .to_str()
+                            .ok_or("private source archive path must be UTF-8")?
+                            .into();
+                        check()?;
+                        zero_executor::capture_source_archive(&pin, &check).map(Some)
+                    })()
+                } else {
+                    Ok(None)
+                };
+                // Even an archive error returns the prepared handle, so the
+                // shared cleanup path records any failed removal honestly.
+                Ok::<_, String>((snapshot, archive))
             })
             .await;
             match prepared {
-                Ok(Ok(snapshot)) => {
-                    let retained = (|| {
+                Ok(Ok((snapshot, archive))) => {
+                    let archived = match archive {
+                        Ok(Some(archive)) => {
+                            let archive_shared = Arc::clone(shared);
+                            let root = parent.to_owned();
+                            // Hashing and writing up to 64 MiB must not occupy
+                            // an async executor thread. Await without detaching;
+                            // keep snapshot for the common cleanup path on error.
+                            match tokio::task::spawn_blocking(move || {
+                                lock(&archive_shared.store)?
+                                    .retain_review_source_archive(
+                                        &root,
+                                        &archive_shared.owner,
+                                        &archive,
+                                    )
+                                    .map(|_| ())
+                                    .map_err(EngineError::from)
+                            })
+                            .await
+                            {
+                                Ok(result) => result,
+                                Err(error) => Err(EngineError::State(error.to_string())),
+                            }
+                        }
+                        Ok(None) => Ok(()),
+                        Err(error) => Err(EngineError::State(error)),
+                    };
+                    let retained = archived.and_then(|()| {
                         let bytes = snapshot
                             .catalog_bytes()
                             .map_err(|e| EngineError::State(e.to_string()))?;
@@ -1649,13 +1715,13 @@ pub(super) fn run_actor<'a>(
                         store.append_operation_event(parent,&shared.owner,"source.snapshot_prepared",
                         &serde_json::json!({"path":snapshot.root(),"snapshot_digest":snapshot.snapshot_digest(),"catalog_artifact":digest}))?;
                         Ok::<_, EngineError>(())
-                    })();
+                    });
                     source = Some(agent_source::Context::Snapshot(snapshot));
                     if let Err(error) = retained {
                         preparation_error = Some(error.to_string());
                     }
                 }
-                Ok(Err(error)) => preparation_error = Some(error.to_string()),
+                Ok(Err(error)) => preparation_error = Some(error),
                 Err(error) => preparation_error = Some(error.to_string()),
             }
         }

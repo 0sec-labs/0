@@ -139,7 +139,7 @@ mod tests {
         let path = dir.path().join("db");
         let sql = Connection::open(&path).unwrap();
         sql.execute_batch(
-            "DROP INDEX review_command_created; DROP TABLE reviews; DROP INDEX scan_command_created; DROP TABLE scans; PRAGMA user_version=16;",
+            "DROP INDEX source_archive_command; DROP TABLE source_archives; DROP INDEX review_command_created; DROP TABLE reviews; DROP INDEX scan_command_created; DROP TABLE scans; PRAGMA user_version=16;",
         )
         .unwrap();
         drop(sql);

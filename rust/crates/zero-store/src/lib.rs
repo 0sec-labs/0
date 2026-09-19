@@ -21,6 +21,7 @@ mod scan;
 mod workflow;
 pub use review::{AdmittedReview, ReviewAdmission};
 mod schema;
+mod source_archive;
 pub use scan::{AdmittedScan, ScanAdmission};
 mod steering;
 mod strategy_session;
