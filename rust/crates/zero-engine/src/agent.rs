@@ -295,7 +295,7 @@ pub(super) async fn run_agent_shared(
             Err(error) => return Err(error.into()),
         }
         let session = lock(&shared.store)?.get_session(&session_id)?;
-        let plugins = agent_plugins::capture(shared, &session, &request.plugin_tools)?;
+        let plugins = agent_plugins::capture(shared, &session, &request)?;
         agent_approvals::validate_plugins(&request, plugins.as_ref())?;
         let mut store = lock(&shared.store)?;
         let (mut payload, prepared) = prepare_actor(
@@ -686,6 +686,7 @@ async fn run_rounds(
     template: ResponsesRequest,
     delegation: Option<agent_delegation::Context>,
     joined: &mut agent_delegation::JoinedTasks,
+    workers: &mut plugin_workers::WorkerPool,
 ) -> Result<(AgentResult, Vec<serde_json::Value>), EngineError> {
     let review_owned = lock(&shared.store)?.review_by_session(session)?.is_some();
     let mut input = history.input;
@@ -1388,6 +1389,34 @@ async fn run_rounds(
                     input.push(serde_json::json!({"type":"function_call_output","call_id":id,"output":format!("Tool rejected: {error}")}));
                     continue;
                 }
+                if context.workers.contains_key(&binding.plugin) {
+                    let result = workers
+                        .invoke(
+                            shared,
+                            session,
+                            parent,
+                            &format!("{parent}:tool:{turn}:{index}"),
+                            &child,
+                            &id,
+                            &request,
+                            context,
+                            binding,
+                            arguments,
+                            source.clone(),
+                            http.clone(),
+                            &cancel,
+                            &events,
+                        )
+                        .await?;
+                    output.tool_calls += 1;
+                    match result {
+                        agent_approvals::ResultKind::Output(value)=>input.push(serde_json::json!({"type":"function_call_output","call_id":id,"output":value})),
+                        agent_approvals::ResultKind::Cancelled=>{output.status=AgentStatus::Cancelled;break 'turns;},
+                        agent_approvals::ResultKind::Unknown(reason)=>{output.status=AgentStatus::Unknown;output.error=Some(reason);break 'turns;},
+                        agent_approvals::ResultKind::Failed(reason)=>{output.status=AgentStatus::Failed;output.error=Some(reason);break 'turns;},
+                    }
+                    continue;
+                }
                 if agent_approvals::required(&request, &name) {
                     let result = agent_approvals::run(
                         shared,
@@ -1733,6 +1762,7 @@ pub(super) fn run_actor<'a>(
             agent_source::Context::Retained(_) => None,
         });
         let mut joined = agent_delegation::JoinedTasks::new();
+        let mut workers = plugin_workers::WorkerPool::new();
         let work = if let Some(error) = preparation_error {
             Ok((
                 empty(
@@ -1762,6 +1792,7 @@ pub(super) fn run_actor<'a>(
                 template,
                 delegation,
                 &mut joined,
+                &mut workers,
             ))
             .catch_unwind()
             .await
@@ -1777,7 +1808,11 @@ pub(super) fn run_actor<'a>(
         let sealed = lock(&shared.store).and_then(|mut store| {
             Ok(store.seal_agent_steering(session, parent, &shared.owner, true)?)
         });
+        if work.is_err() {
+            cancel.cancel();
+        }
         let drained = joined.drain(shared, &cancel).await;
+        let worker_drain = workers.drain(&cancel).await;
         let cleanup = match source {
             Some(context) => {
                 tokio::task::spawn_blocking(move || match Arc::try_unwrap(context) {
@@ -1802,7 +1837,13 @@ pub(super) fn run_actor<'a>(
             }
             Err(error) => Some(error.to_string()),
         };
-        let (mut output, input) = match work.and_then(|value| sealed.and(drained).map(|_| value)) {
+        let worker_disposition = worker_drain.as_ref().ok().cloned().flatten();
+        let (mut output, input) = match work.and_then(|value| {
+            sealed
+                .and(drained)
+                .and(worker_drain.map(|_| ()))
+                .map(|_| value)
+        }) {
             Ok(value) => value,
             Err(error) => {
                 // Unexpected actor/journal failures close admission; all already
@@ -1824,6 +1865,12 @@ pub(super) fn run_actor<'a>(
                 return settle_agent(shared, parent, output);
             }
         };
+        if let Some((status, error)) = worker_disposition {
+            if output.status != AgentStatus::Unknown {
+                output.status = status;
+                output.error = Some(error);
+            }
+        }
         if let Some(error) = cleanup_error {
             output.status = AgentStatus::Unknown;
             output.error = Some(error);

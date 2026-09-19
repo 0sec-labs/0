@@ -68,6 +68,10 @@ pub(super) fn effect_output(
         }
         Some("agent_plugin") => {
             let result: PluginOutcome = serde_json::from_value(outcome)?;
+            plugin_workers::validate(store, effect, &result)?;
+            if store.plugin_worker_call(&effect.id)?.is_some() {
+                return Ok((effect.status, Some(plugin_workers::output(store, effect)?)));
+            }
             if result
                 .sandbox
                 .as_ref()

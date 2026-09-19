@@ -161,6 +161,17 @@ fn validate(store: &Store, checkpoint: &Checkpoint) -> Result<(), EngineError> {
                         ));
                     }
                 }
+                if !approval_required
+                    && child.payload["kind"] == "agent_plugin"
+                    && parent.payload["plugin_context"]["workers"]
+                        .get(child.payload["binding"]["plugin"].as_str().unwrap_or(""))
+                        .is_some()
+                {
+                    let output = plugin_workers::output(store, &child)?;
+                    if item["output"].as_str() != Some(output.as_str()) {
+                        return Err(error("checkpoint persistent worker output differs"));
+                    }
+                }
                 let native_experiment = name.as_str() == "run_web_experiment"
                     && parent.payload["request"]
                         .get("web_experiment_policy")

@@ -496,7 +496,8 @@ async fn actual_offline_python_worker_persists_across_calls() {
     let mut launch = launch();
     launch.interpreter = vec!["python3".into(), "-u".into()];
     launch.backend = zero_protocol::sandbox::SandboxBackend::Docker {
-        image: "python:3.12-alpine".into(),
+        image: std::env::var("ZERO_TEST_PYTHON_IMAGE")
+            .unwrap_or_else(|_| "python:3.12-alpine".into()),
     };
     launch.timeout_ms = 10000;
     let (mut worker, first) = f
@@ -514,7 +515,16 @@ async fn actual_offline_python_worker_persists_across_calls() {
         )
         .ok()
         .unwrap();
-    let first = value(first.wait().await.unwrap());
+    let first = match first.wait().await {
+        Ok(reply) => value(reply),
+        Err(cause) => {
+            let outcome = worker.finish().await.unwrap();
+            panic!(
+                "{cause}; status={:?}; error={:?}; sandbox={:?}",
+                outcome.status, outcome.error, outcome.sandbox
+            );
+        }
+    };
     let call = f.call();
     let second = value(
         worker

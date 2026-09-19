@@ -471,8 +471,11 @@ fn create_args(
         ),
         "--tmpfs".into(),
         "/tmp:rw,noexec,nosuid,nodev,size=64m".into(),
-        image.into(),
+        // The retained argv is host authority. An image ENTRYPOINT must not
+        // intercept it or bypass the controlled workspace/bootstrap script.
+        "--entrypoint".into(),
         "/bin/sh".into(),
+        image.into(),
         "-c".into(),
         script,
     ])

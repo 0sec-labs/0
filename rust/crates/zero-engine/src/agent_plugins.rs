@@ -11,6 +11,7 @@ pub(super) struct Context {
     pub launch: Launch,
     pub tools: Vec<ToolDefinition>,
     pub identity: Value,
+    pub workers: std::collections::BTreeMap<String, zero_protocol::plugin::PluginWorkerPolicy>,
 }
 fn error(e: impl std::fmt::Display) -> EngineError {
     EngineError::State(e.to_string())
@@ -19,8 +20,9 @@ fn error(e: impl std::fmt::Display) -> EngineError {
 pub(super) fn capture(
     shared: &Shared,
     session: &zero_protocol::Session,
-    bindings: &[PluginToolBinding],
+    request: &zero_protocol::agent::AgentRequest,
 ) -> Result<Option<Context>, EngineError> {
+    let bindings = &request.plugin_tools;
     if bindings.is_empty() {
         return Ok(None);
     }
@@ -56,23 +58,62 @@ pub(super) fn capture(
     let mut tools = vec![];
     let mut selected = vec![];
     for binding in bindings {
-        offline_graph(
-            profile.harness.prepared_graph(&pin).map_err(error)?,
-            &binding.plugin,
-        )?;
+        if !profile.workers.contains_key(&binding.plugin) {
+            offline_graph(
+                profile.harness.prepared_graph(&pin).map_err(error)?,
+                &binding.plugin,
+            )?;
+        }
         let (digest, tool) = profile
             .harness
             .tool_definition(&pin, &binding.plugin, &binding.tool)
             .map_err(error)?;
         tools.push(ToolDefinition {
             name: binding.alias.clone(),
-            description: tool.description,
-            parameters: serde_json::to_value(tool.parameters)?,
+            description: tool.description.clone(),
+            parameters: serde_json::to_value(&tool.parameters)?,
         });
-        selected.push(json!({"binding":binding,"manifest":digest}));
+        let mut capture = json!({"binding":binding,"manifest":digest});
+        if profile.workers.contains_key(&binding.plugin) {
+            capture["capabilities"] = serde_json::to_value(&tool.capabilities)?;
+        }
+        selected.push(capture);
+    }
+    let workers = profile
+        .workers
+        .iter()
+        .filter(|(name, _)| bindings.iter().any(|b| b.plugin == **name))
+        .map(|(k, v)| (k.clone(), v.clone()))
+        .collect::<std::collections::BTreeMap<_, _>>();
+    for policy in workers.values() {
+        for operation in &policy.operations {
+            match operation {
+                zero_protocol::plugin::PluginHostOperation::HttpRequest
+                    if request.http_profile.is_none() =>
+                {
+                    return Err(error(
+                        "plugin HTTP capability requires original actor HTTP profile",
+                    ));
+                }
+                zero_protocol::plugin::PluginHostOperation::HttpRequest => {}
+                _ if !request.source_snapshot_tools
+                    && request.source_review_operation_id.is_none() =>
+                {
+                    return Err(error(
+                        "plugin source capability requires original actor source authority",
+                    ));
+                }
+                _ => {}
+            }
+        }
+    }
+    let mut identity = json!({"generation":pin.generation,"epoch":pin.epoch,"selected":selected,"launch":profile.launch});
+    if !workers.is_empty() {
+        identity["workers"] = serde_json::to_value(&workers)?;
     }
     Ok(Some(Context {
-        identity: json!({"generation":pin.generation,"epoch":pin.epoch,"selected":selected,"launch":profile.launch}),
+        identity,
+        workers,
         pin,
         launch: profile.launch.clone(),
         tools,
@@ -87,6 +128,17 @@ pub(super) fn current(shared: &Shared, context: &Context) -> Result<(), EngineEr
     if GenerationPin::from_state(&profile.harness.current().map_err(error)?).map_err(error)?
         != context.pin
         || serde_json::to_value(&profile.launch)? != serde_json::to_value(&context.launch)?
+        || context.workers.iter().any(|(key, value)| {
+            profile.workers.get(key).is_none_or(|host| {
+                host.schema_version != value.schema_version
+                    || host.max_calls != value.max_calls
+                    || host.max_callbacks != value.max_callbacks
+                    || value
+                        .operations
+                        .iter()
+                        .any(|op| !host.operations.contains(op))
+            })
+        })
     {
         return Err(error(
             "agent plugin generation, epoch or host launch changed",

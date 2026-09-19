@@ -16,6 +16,7 @@ mod native_repair;
 mod native_reproduction;
 pub use native_repair::{AdmittedNativeRepair, NativeRepairAdmission};
 mod operations;
+mod plugin_worker;
 pub use native_reproduction::{AdmittedNativeReproduction, NativeReproductionAdmission};
 mod questions;
 mod queue;

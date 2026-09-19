@@ -45,6 +45,7 @@ impl Store {
         let intent = intent::derive(
             &tx, &actor, command, origin_id, call, alias, effect, &mut cache,
         )?;
+        crate::plugin_worker::guard_callback_approval(&tx, &intent, who)?;
         let bytes = serde_json::to_vec(&intent)?;
         if bytes.len() > MAX {
             return Err(bad("approval intent exceeds 8 MiB"));
@@ -102,6 +103,7 @@ impl Store {
         }
         let mut cache = Cache::default();
         let checked = read::checked(&tx, session, key, &mut cache)?;
+        crate::plugin_worker::guard_callback_approval(&tx, &checked.intent, who)?;
         let r = &checked.record;
         if r.status != Status::Pending || r.intent_sha256 != digest {
             return Err(bad("approval is not pending or digest changed"));
@@ -162,6 +164,7 @@ impl Store {
             .transaction_with_behavior(TransactionBehavior::Immediate)?;
         let mut cache = Cache::default();
         let checked = read::checked(&tx, session, key, &mut cache)?;
+        crate::plugin_worker::guard_callback_approval(&tx, &checked.intent, who)?;
         let r = &checked.record;
         if r.status != Status::Approved
             || r.intent_sha256 != digest

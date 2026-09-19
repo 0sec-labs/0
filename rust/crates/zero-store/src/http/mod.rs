@@ -175,6 +175,7 @@ impl Store {
             .conn
             .transaction_with_behavior(TransactionBehavior::Immediate)?;
         let op = owned(&tx, session, effect, owner)?;
+        crate::plugin_worker::guard_http(&tx, &op, owner, intent)?;
         crate::scan::guard_effect(&tx, session, effect, intent)?;
         crate::review::forbid_input(&tx, session)?;
         crate::web_verification::effect(&tx, &op)?;

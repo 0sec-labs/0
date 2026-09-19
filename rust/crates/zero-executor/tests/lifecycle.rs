@@ -96,6 +96,19 @@ async fn success_preserves_bytes_hardening_and_cleanup() {
     ] {
         assert!(calls.contains(required), "missing {required}");
     }
+    let create: Vec<String> = calls
+        .lines()
+        .map(|line| serde_json::from_str::<Vec<String>>(line).unwrap())
+        .find(|argv| argv.first().is_some_and(|arg| arg == "create"))
+        .unwrap();
+    let entry = create.iter().position(|arg| arg == "--entrypoint").unwrap();
+    assert_eq!(create[entry + 1], "/bin/sh");
+    let image = create
+        .iter()
+        .position(|arg| arg == &format!("sha256:{}", "a".repeat(64)))
+        .unwrap();
+    assert!(entry < image);
+    assert_eq!(create[image + 1], "-c");
     assert!(!f.dir.path().join("container.json").exists());
     assert!(
         events

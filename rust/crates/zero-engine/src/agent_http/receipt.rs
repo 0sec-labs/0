@@ -30,15 +30,59 @@ pub(super) fn origin(
     store: &Store,
     effect: &Operation,
 ) -> Result<(Operation, Operation), EngineError> {
-    let pair = match effect.payload.get("origin") {
-        Some(origin) if origin["kind"] == "frozen_web_plan" => {
-            crate::web_verification::effect_origin(store, effect)?
+    let pair = if let Some(origin) = effect.payload.get("plugin_worker_origin") {
+        if effect.payload.get("origin").is_some() {
+            return Err(error("ambiguous HTTP origin"));
         }
-        Some(origin) if origin["kind"] == "frozen_agent_experiment" => {
-            crate::web_experiment::effect_origin(store, effect)?
+        let id = origin["callback_operation_id"]
+            .as_str()
+            .ok_or_else(|| error("callback identity absent"))?;
+        let mut expected = store.plugin_callback_http_payload(id)?;
+        if let Some(approval) = effect.payload["approval_operation"].as_str() {
+            let record = store.get_tool_approval(&effect.session_id, approval)?;
+            if record.consumption.as_ref().is_none_or(|c| {
+                c.effect_operation_id != effect.id || c.effect_command_id != effect.command_id
+            }) {
+                return Err(error("callback HTTP approval consumption differs"));
+            }
+            expected["approval_operation"] = json!(approval);
         }
-        Some(_) => return Err(error("unsupported HTTP effect origin")),
-        None => model_origin(store, effect)?,
+        if expected != effect.payload || effect.command_id != format!("{id}:http") {
+            return Err(error("HTTP callback payload differs"));
+        }
+        let callback = store.get_operation(id)?;
+        let binding = store
+            .plugin_worker_call(
+                callback.payload["call_operation_id"]
+                    .as_str()
+                    .ok_or_else(|| error("callback call absent"))?,
+            )?
+            .ok_or_else(|| error("callback worker absent"))?;
+        let actor = store.get_operation(
+            callback.payload["parent_operation"]
+                .as_str()
+                .ok_or_else(|| error("callback actor absent"))?,
+        )?;
+        let inference = store.get_operation(
+            binding["inference_operation_id"]
+                .as_str()
+                .ok_or_else(|| error("callback inference absent"))?,
+        )?;
+        if actor.session_id != effect.session_id || callback.session_id != effect.session_id {
+            return Err(error("HTTP callback session differs"));
+        }
+        (actor, inference)
+    } else {
+        match effect.payload.get("origin") {
+            Some(origin) if origin["kind"] == "frozen_web_plan" => {
+                crate::web_verification::effect_origin(store, effect)?
+            }
+            Some(origin) if origin["kind"] == "frozen_agent_experiment" => {
+                crate::web_experiment::effect_origin(store, effect)?
+            }
+            Some(_) => return Err(error("unsupported HTTP effect origin")),
+            None => model_origin(store, effect)?,
+        }
     };
     let actor_version = match pair.0.payload.get("http_output_version") {
         None => 1,

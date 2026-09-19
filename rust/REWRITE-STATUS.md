@@ -1,6 +1,6 @@
 # Rust rewrite status
 
-Updated 2026-09-19 for the native repair workflow checkpoint. This is a feature
+Updated 2026-09-19 for the native repair and persistent worker checkpoints. This is a feature
 inventory, not a percentage estimate. A bounded working workflow does not prove
 full TypeScript parity, general security effectiveness, platform support or
 production readiness. Production CLI routing remains TypeScript.
@@ -22,8 +22,8 @@ production readiness. Production CLI routing remains TypeScript.
 
 ## Next integration priorities
 
-1. Integrate and qualify the persistent Engine worker branch against current Store
-   and CLI changes, then bind Git acquisition provenance into review admission.
+1. Expose explicit persistent worker policy through CLI configuration and bind Git
+   acquisition provenance into review admission.
 2. Connect existing managed-cloud components into an executable product workflow.
 3. Port remaining user-facing tools/providers and qualify state/distribution
    compatibility before production cutover.
@@ -32,4 +32,5 @@ Historical sections of `MIGRATION.md` and provider documentation describe earlie
 checkpoints. Resolve them against current source and executable acceptance tests;
 do not count old unchecked boxes, test totals or Rust line counts as completion.
 The native repair checkpoint advances Store schema to 21. Its process fixtures
-exercise lifecycle and evidence binding, not real Docker isolation or deployment.
+exercise lifecycle and evidence binding. Separate opt-in Docker tests qualify the
+specific local environment recorded in `PLUGIN-WORKERS.md`; no deployment is claimed.

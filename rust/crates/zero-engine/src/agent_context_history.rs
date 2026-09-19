@@ -246,7 +246,16 @@ pub(super) fn validate(
                 let http = call.1 == "http_request" && request.http_profile.is_some();
                 let experiment =
                     call.1 == "run_web_experiment" && request.web_experiment_policy.is_some();
-                if !delegation && !question && !approved && !http && !experiment {
+                let persistent = request
+                    .plugin_tools
+                    .iter()
+                    .find(|binding| binding.alias == *call.1)
+                    .is_some_and(|binding| {
+                        ancestor.payload["plugin_context"]["workers"]
+                            .get(&binding.plugin)
+                            .is_some()
+                    });
+                if !delegation && !question && !approved && !http && !experiment && !persistent {
                     continue;
                 }
                 let output = witness
@@ -263,6 +272,8 @@ pub(super) fn validate(
                     Some(group) => {
                         let expected_kind = if approved {
                             "agent_approved_tool"
+                        } else if persistent {
+                            "agent_plugin"
                         } else if experiment {
                             "agent_web_experiment"
                         } else if question {
@@ -280,6 +291,8 @@ pub(super) fn validate(
                         }
                         let derived = if approved {
                             agent_approvals::validate_receipt(store, &group)?
+                        } else if persistent {
+                            plugin_workers::output(store, &group)?
                         } else if experiment {
                             agent_web_experiment::validate_receipt(store, &group)?
                         } else if question {

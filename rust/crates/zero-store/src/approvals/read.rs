@@ -100,6 +100,19 @@ pub(super) fn checked(
     }
     cache.reads.witnesses.reserve(16 * 1024)?;
     let consumed=conn.query_row("SELECT CASE WHEN length(CAST(effect_operation_id AS BLOB))<=4096 THEN effect_operation_id END,CASE WHEN length(CAST(effect_command_id AS BLOB))<=4096 THEN effect_command_id END,CASE WHEN length(effect_payload_sha256)<=71 THEN effect_payload_sha256 END,sequence FROM tool_approval_consumptions WHERE approval_operation_id=?1",[key],|r|Ok(Consumption{effect_operation_id:r.get(0)?,effect_command_id:r.get(1)?,effect_payload_sha256:r.get(2)?,sequence:r.get(3)?})).optional()?;
+    if intent["schema_version"] == 2 {
+        for (kind, present) in [
+            ("tool_approval_decided", decision.is_some()),
+            ("tool_approval_consumed", consumed.is_some()),
+        ] {
+            let count:u64=conn.query_row("SELECT count(*) FROM events WHERE session_id=?1 AND kind=?2 AND json_extract(payload,'$.approval_operation_id')=?3",params![session,kind,key],|r|r.get(0))?;
+            if count != u64::from(present) {
+                return Err(bad(
+                    "callback approval projection differs from witness inventory",
+                ));
+            }
+        }
+    }
     let mut effect_status = None;
     let status = if let Some(c) = &consumed {
         if decision.as_ref().map(|d| d.decision) != Some(Decision::Approve) || c.sequence <= 2 {

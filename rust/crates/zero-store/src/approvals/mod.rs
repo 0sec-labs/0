@@ -59,6 +59,7 @@ fn insert(
     payload: &Value,
     who: &str,
 ) -> Result<(Operation, u64)> {
+    crate::plugin_worker::guard_http_admission(tx, payload, command, who)?;
     crate::scan::authorize(tx, session, command, payload)?;
     crate::review::forbid_input(tx, session)?;
     crate::campaign::authorize(tx, session, command, payload)?;

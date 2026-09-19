@@ -6,11 +6,13 @@ use zero_protocol::plugin::{PluginOutcome, PluginPin, UntrustedPluginReply};
 pub(super) struct Profile {
     pub(super) harness: Harness,
     pub(super) launch: Launch,
+    pub(super) workers:
+        std::collections::BTreeMap<String, zero_protocol::plugin::PluginWorkerPolicy>,
 }
 fn state(error: impl std::fmt::Display) -> EngineError {
     EngineError::State(error.to_string())
 }
-fn pin(call: &PinnedCall) -> PluginPin {
+pub(super) fn pin(call: &PinnedCall) -> PluginPin {
     let p = call.pin();
     PluginPin {
         generation: p.generation.generation,
@@ -32,7 +34,49 @@ impl Engine {
         if profile.is_some() {
             return Err(state("plugins already configured"));
         }
-        *profile = Some(Profile { harness, launch });
+        *profile = Some(Profile {
+            harness,
+            launch,
+            workers: Default::default(),
+        });
+        Ok(())
+    }
+    /// Explicit host-only opt-in. Actor captures freeze these policies; standalone
+    /// RunPlugin keeps the original one-shot route.
+    pub fn configure_plugin_workers(
+        &self,
+        workers: std::collections::BTreeMap<String, zero_protocol::plugin::PluginWorkerPolicy>,
+    ) -> Result<(), EngineError> {
+        let control = lock(&self.shared.control)?;
+        if control.closing || !control.active.is_empty() || workers.len() > 4 {
+            return Err(state(
+                "plugin worker configuration requires idle engine and at most four plugins",
+            ));
+        }
+        let mut profiles = lock(&self.shared.plugins)?;
+        let profile = profiles
+            .as_mut()
+            .ok_or_else(|| state("plugins not configured"))?;
+        if !profile.workers.is_empty() {
+            return Err(state("plugin workers already configured"));
+        }
+        if !matches!(
+            profile.launch.backend,
+            zero_protocol::sandbox::SandboxBackend::Docker { .. }
+        ) {
+            return Err(state("persistent plugin workers require Docker"));
+        }
+        agent_approvals::immutable_backend(&profile.launch.backend)?;
+        let pin =
+            GenerationPin::from_state(&profile.harness.current().map_err(state)?).map_err(state)?;
+        let graph = profile.harness.prepared_graph(&pin).map_err(state)?;
+        for (plugin, policy) in &workers {
+            policy.validate().map_err(state)?;
+            if graph.plugin_manifest(plugin).is_none() {
+                return Err(state("worker plugin not in captured graph"));
+            }
+        }
+        profile.workers = workers;
         Ok(())
     }
     pub(super) fn create_pinned_session(&self, budget: u64) -> Result<Reply, EngineError> {
@@ -343,7 +387,7 @@ pub(super) async fn run(
     }
     Ok(reply)
 }
-fn settle(
+pub(super) fn settle(
     shared: &Shared,
     id: &str,
     result: PluginOutcome,
@@ -362,7 +406,7 @@ fn settle(
         duplicate: false,
     })
 }
-fn journal_release(
+pub(super) fn journal_release(
     shared: &Shared,
     id: &str,
     result: Result<(), EngineError>,
@@ -377,7 +421,7 @@ fn journal_release(
     lock(&shared.store)?.append_operation_event(id, &shared.owner, kind, &details)?;
     Ok(())
 }
-fn private_root(path: &Path) -> Result<(), EngineError> {
+pub(super) fn private_root(path: &Path) -> Result<(), EngineError> {
     #[cfg(unix)]
     use std::os::unix::fs::PermissionsExt;
     let mut builder = std::fs::DirBuilder::new();

@@ -74,6 +74,7 @@ impl Store {
         let mut bytes = 0usize;
         for (command, payload) in intents {
             nonempty(command)?;
+            crate::plugin_worker::forbid_generic(payload)?;
             if command.len() > 4096 || !commands.insert(command) {
                 return Err(Error::Invalid(
                     "batch command identities must be bounded and unique".into(),
@@ -209,6 +210,7 @@ impl Store {
         payload: &Value,
     ) -> Result<Admission> {
         nonempty(command_id)?;
+        crate::plugin_worker::forbid_generic(payload)?;
         if payload["kind"] == "agent_web_experiment" {
             return Err(Error::Invalid(
                 "experiments require atomic owned admission".into(),

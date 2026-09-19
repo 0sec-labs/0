@@ -11,6 +11,11 @@ pub(super) fn derive(
     effect: &Value,
     cache: &mut Cache,
 ) -> Result<Value> {
+    if effect.get("plugin_worker_origin").is_some() {
+        return crate::plugin_worker::callback_approval_intent(
+            conn, actor, command, origin_id, call, alias, effect,
+        );
+    }
     let (turn, index) = command
         .strip_prefix(&format!("{}:tool:", actor.id))
         .and_then(|s| s.split_once(':'))

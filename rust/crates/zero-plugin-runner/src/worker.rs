@@ -211,7 +211,8 @@ impl RunningWorker {
     }
 }
 impl Runner {
-    /// Persistent Docker worker at a caller-recorded absent staging path.
+    /// Convenience preparation/start path. Durable controllers should use
+    /// `prepare_worker_in`, journal its digest, then call PreparedWorker::start.
     #[allow(clippy::too_many_arguments)]
     pub fn start_worker_in(
         &self,
@@ -225,7 +226,38 @@ impl Runner {
         cancel: CancellationToken,
         sink: EventSink,
     ) -> Result<(RunningWorker, WorkerReply), Box<RejectedCall>> {
-        let mut owned_staging = None;
+        self.prepare_worker_in(harness, call, plugin, launch, limits, handlers, directory)
+            .map(|prepared| prepared.start(cancel, sink))
+    }
+    /// Stages only. The controller must durably retain the exact request digest,
+    /// generation lease and attempt path before consuming the start permission.
+    #[allow(clippy::too_many_arguments)]
+    pub fn prepare_worker_in(
+        &self,
+        harness: &Harness,
+        call: PinnedCall,
+        plugin: &str,
+        launch: Launch,
+        limits: WorkerLimits,
+        handlers: BTreeMap<String, CapabilityHandler>,
+        directory: &Path,
+    ) -> Result<PreparedWorker, Box<RejectedCall>> {
+        self.capture_worker_in(harness, call, plugin, launch, limits, handlers, directory)?
+            .prepare()
+    }
+    /// Captures the issued lease and in-memory plugin graph without filesystem
+    /// staging. Hosts may release their Harness lock before calling prepare.
+    #[allow(clippy::too_many_arguments)]
+    pub fn capture_worker_in(
+        &self,
+        harness: &Harness,
+        call: PinnedCall,
+        plugin: &str,
+        launch: Launch,
+        limits: WorkerLimits,
+        handlers: BTreeMap<String, CapabilityHandler>,
+        directory: &Path,
+    ) -> Result<UnstagedWorker, Box<RejectedCall>> {
         let prepared = (|| {
             if !matches!(launch.backend, SandboxBackend::Docker { .. }) {
                 return Err(Error::Rejected("persistent workers require Docker"));
@@ -247,7 +279,56 @@ impl Runner {
                 .encode()?;
                 handler.parameters.validate()?;
             }
-            let prepared = stage::prepare_mode(harness, &call, plugin, &launch, true)?;
+            stage::prepare_mode(harness, &call, plugin, &launch, true)
+        })();
+        let prepared = match prepared {
+            Ok(v) => v,
+            Err(error) => {
+                return Err(Box::new(RejectedCall {
+                    call,
+                    error,
+                    owned_staging: None,
+                }));
+            }
+        };
+        Ok(UnstagedWorker {
+            runner: self.clone(),
+            call,
+            plugin: plugin.into(),
+            prepared,
+            launch,
+            limits,
+            handlers,
+            directory: directory.to_owned(),
+        })
+    }
+}
+/// Owns a captured permit but cannot start a guest. Filesystem work is explicit
+/// so an async controller can await it on a blocking executor without its locks.
+pub struct UnstagedWorker {
+    runner: Runner,
+    call: PinnedCall,
+    plugin: String,
+    prepared: stage::Prepared,
+    launch: Launch,
+    limits: WorkerLimits,
+    handlers: BTreeMap<String, CapabilityHandler>,
+    directory: PathBuf,
+}
+impl UnstagedWorker {
+    pub fn prepare(self) -> Result<PreparedWorker, Box<RejectedCall>> {
+        let Self {
+            runner,
+            call,
+            plugin,
+            prepared,
+            launch,
+            limits,
+            handlers,
+            directory,
+        } = self;
+        let mut owned_staging = None;
+        let result = (|| {
             if !directory.is_absolute()
                 || directory.parent().is_none()
                 || std::fs::symlink_metadata(directory.parent().expect("checked"))?
@@ -262,13 +343,13 @@ impl Runner {
                 use std::os::unix::fs::DirBuilderExt;
                 builder.mode(0o700);
             }
-            builder.create(directory)?;
+            builder.create(&directory)?;
             owned_staging = Some(directory.to_owned());
-            let mut request = stage::write(&call, prepared, launch, directory)?;
+            let mut request = stage::write(&call, prepared, launch, &directory)?;
             request.stdin = None;
             Ok(request)
         })();
-        let request = match prepared {
+        let request = match result {
             Ok(r) => r,
             Err(error) => {
                 return Err(Box::new(RejectedCall {
@@ -278,15 +359,65 @@ impl Runner {
                 }));
             }
         };
+        Ok(PreparedWorker {
+            runner,
+            call,
+            plugin,
+            request,
+            limits,
+            handlers,
+            directory,
+        })
+    }
+}
+
+pub struct PreparedWorker {
+    runner: Runner,
+    call: PinnedCall,
+    plugin: String,
+    request: SandboxRequest,
+    limits: WorkerLimits,
+    handlers: BTreeMap<String, CapabilityHandler>,
+    directory: PathBuf,
+}
+impl PreparedWorker {
+    pub fn call(&self) -> &PinnedCall {
+        &self.call
+    }
+    pub fn staging_path(&self) -> &Path {
+        &self.directory
+    }
+    pub fn request(&self) -> &SandboxRequest {
+        &self.request
+    }
+    pub fn execution_id(&self) -> &str {
+        &self.request.execution_id
+    }
+    pub fn request_digest(&self) -> Result<String, Error> {
+        Ok(zero_plugin::sha256(
+            &serde_json::to_vec(&self.request)
+                .map_err(|_| Error::Rejected("worker request encoding"))?,
+        ))
+    }
+    pub fn start(self, cancel: CancellationToken, sink: EventSink) -> (RunningWorker, WorkerReply) {
+        let Self {
+            runner,
+            call,
+            plugin,
+            request,
+            limits,
+            handlers,
+            directory,
+        } = self;
         let (sender, receiver) = mpsc::channel(1);
         let (reply, first) = oneshot::channel();
         let pin = call.pin();
         let issuer = call.issuer_identity();
         let token = cancel.child_token();
         let task_token = token.clone();
-        let staging = directory.to_owned();
+        let staging = directory;
         let task_staging = staging.clone();
-        let sandbox = self.sandbox.clone();
+        let sandbox = runner.sandbox.clone();
         let max_calls = limits.max_calls;
         let task = tokio::spawn(async move {
             supervise(
@@ -302,7 +433,7 @@ impl Runner {
             )
             .await
         });
-        Ok((
+        (
             RunningWorker {
                 task: Some(task),
                 sender: Some(sender),
@@ -310,12 +441,12 @@ impl Runner {
                 staging,
                 pin,
                 issuer,
-                plugin: plugin.into(),
+                plugin,
                 admitted: 1,
                 max_calls,
             },
             WorkerReply(first),
-        ))
+        )
     }
 }
 struct Session {

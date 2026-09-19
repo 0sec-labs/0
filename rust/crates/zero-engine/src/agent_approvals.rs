@@ -293,8 +293,73 @@ impl Engine {
     }
 }
 
+pub(super) enum ApprovalAdmission {
+    Ready(Box<ApprovedEffect>),
+    Finished(ResultKind),
+}
+pub(super) struct ApprovedEffect {
+    pub operation: Operation,
+    record: ToolApprovalRecord,
+    guard: Guard,
+}
+impl ApprovedEffect {
+    pub fn finish(
+        mut self,
+        shared: &Arc<Shared>,
+        operation: Operation,
+        cancel: &CancellationToken,
+    ) -> Result<ResultKind, EngineError> {
+        let record = &self.record;
+        let guard = &mut self.guard;
+        if operation.payload["kind"] == "agent_http"
+            && operation.status == OperationStatus::Failed
+            && operation
+                .outcome
+                .as_ref()
+                .is_some_and(|v| v["error_code"] == "http_preparation_failed")
+        {
+            let value = receipt::settlement(record, &operation, None)?;
+            lock(&shared.store)?.settle_operation(
+                &record.operation_id,
+                &shared.owner,
+                OperationStatus::Failed,
+                &value,
+            )?;
+            guard.settled = true;
+            return Ok(ResultKind::Failed(
+                "HTTP preparation failed before dispatch".into(),
+            ));
+        }
+        let (status, output) = receipt::effect_output(&*lock(&shared.store)?, &operation)?;
+        let value = receipt::settlement(record, &operation, output.as_deref())?;
+        {
+            let mut store = lock(&shared.store)?;
+            if status == OperationStatus::Unknown {
+                store.mark_operation_unknown_with_outcome(
+                    &record.operation_id,
+                    &shared.owner,
+                    &value,
+                )?;
+            } else {
+                store.settle_operation(&record.operation_id, &shared.owner, status, &value)?;
+            }
+        }
+        guard.settled = true;
+        if status == OperationStatus::Unknown {
+            return Ok(ResultKind::Unknown(
+                "approved effect cleanup or completion is uncertain".into(),
+            ));
+        }
+        if cancel.is_cancelled() || status == OperationStatus::Cancelled {
+            return Ok(ResultKind::Cancelled);
+        }
+        Ok(ResultKind::Output(output.ok_or_else(|| {
+            error("settled approved effect lacks tool output")
+        })?))
+    }
+}
 #[allow(clippy::too_many_arguments)]
-pub(super) async fn run(
+pub(super) async fn admit(
     shared: &Arc<Shared>,
     session: &str,
     actor: &str,
@@ -302,27 +367,88 @@ pub(super) async fn run(
     origin: &Operation,
     call: &str,
     name: &str,
-    effect: Effect,
+    effect: &Effect,
     cancel: &CancellationToken,
     events: &mpsc::Sender<ExecutionEvent>,
-) -> Result<ResultKind, EngineError> {
-    let payload = effect.payload(actor, call);
+) -> Result<ApprovalAdmission, EngineError> {
+    admit_internal(
+        shared,
+        session,
+        actor,
+        command,
+        Some(origin),
+        call,
+        name,
+        effect,
+        effect.payload(actor, call),
+        None,
+        cancel,
+        events,
+    )
+    .await
+}
+pub(super) async fn admit_callback(
+    shared: &Arc<Shared>,
+    callback: &Operation,
+    effect: &Effect,
+    cancel: &CancellationToken,
+    events: &mpsc::Sender<ExecutionEvent>,
+) -> Result<ApprovalAdmission, EngineError> {
+    let actor = callback.payload["parent_operation"]
+        .as_str()
+        .ok_or_else(|| error("callback actor absent"))?;
+    let payload = lock(&shared.store)?.plugin_callback_http_payload(&callback.id)?;
+    admit_internal(
+        shared,
+        &callback.session_id,
+        actor,
+        &format!("{}:approval", callback.id),
+        None,
+        &callback.id,
+        "http_request",
+        effect,
+        payload,
+        Some(&callback.id),
+        cancel,
+        events,
+    )
+    .await
+}
+#[allow(clippy::too_many_arguments)]
+async fn admit_internal(
+    shared: &Arc<Shared>,
+    session: &str,
+    actor: &str,
+    command: &str,
+    origin: Option<&Operation>,
+    call: &str,
+    name: &str,
+    effect: &Effect,
+    payload: Value,
+    callback: Option<&str>,
+    cancel: &CancellationToken,
+    events: &mpsc::Sender<ExecutionEvent>,
+) -> Result<ApprovalAdmission, EngineError> {
     let changed = Arc::new(Notify::new());
     let (record, mut guard) = {
         let mut control = lock(&shared.control)?;
         if control.closing || cancel.is_cancelled() {
-            return Ok(ResultKind::Cancelled);
+            return Ok(ApprovalAdmission::Finished(ResultKind::Cancelled));
         }
-        let record = lock(&shared.store)?.create_tool_approval(
-            session,
-            actor,
-            &shared.owner,
-            command,
-            &origin.id,
-            call,
-            name,
-            &payload,
-        )?;
+        let record = if let Some(callback) = callback {
+            lock(&shared.store)?.create_plugin_callback_approval(callback, &shared.owner)?
+        } else {
+            lock(&shared.store)?.create_tool_approval(
+                session,
+                actor,
+                &shared.owner,
+                command,
+                &origin.ok_or_else(|| error("approval origin absent"))?.id,
+                call,
+                name,
+                &payload,
+            )?
+        };
         control.approvals.insert(
             record.operation_id.clone(),
             Waiter {
@@ -360,7 +486,7 @@ pub(super) async fn run(
             if cancel.is_cancelled() {
                 store.cancel_tool_approval(session, &record.operation_id, &shared.owner)?;
                 guard.settled = true;
-                return Ok(ResultKind::Cancelled);
+                return Ok(ApprovalAdmission::Finished(ResultKind::Cancelled));
             }
             store
                 .get_tool_approval(session, &record.operation_id)?
@@ -372,7 +498,7 @@ pub(super) async fn run(
                 let wrapper = store.get_operation(&record.operation_id)?;
                 let output = validate_receipt(&store, &wrapper)?;
                 guard.settled = true;
-                return Ok(ResultKind::Output(output));
+                return Ok(ApprovalAdmission::Finished(ResultKind::Output(output)));
             }
             ToolApprovalStatus::Approved => break,
             ToolApprovalStatus::Pending => {}
@@ -383,9 +509,9 @@ pub(super) async fn run(
     if let Err(reason) = effect.revalidate(shared) {
         lock(&shared.store)?.cancel_tool_approval(session, &record.operation_id, &shared.owner)?;
         guard.settled = true;
-        return Ok(ResultKind::Failed(format!(
+        return Ok(ApprovalAdmission::Finished(ResultKind::Failed(format!(
             "approved invocation is no longer valid: {reason}"
-        )));
+        ))));
     }
     let operation = {
         let control = lock(&shared.control)?;
@@ -393,18 +519,46 @@ pub(super) async fn run(
         if control.closing || cancel.is_cancelled() {
             store.cancel_tool_approval(session, &record.operation_id, &shared.owner)?;
             guard.settled = true;
-            return Ok(ResultKind::Cancelled);
+            return Ok(ApprovalAdmission::Finished(ResultKind::Cancelled));
         }
         store.consume_tool_approval(
             session,
             &record.operation_id,
             &shared.owner,
             &record.intent_sha256,
-            &format!("{command}:effect"),
+            &callback.map_or_else(|| format!("{command}:effect"), |id| format!("{id}:http")),
             &payload,
         )?
     };
     guard.effect = Some(operation.id.clone());
+    Ok(ApprovalAdmission::Ready(Box::new(ApprovedEffect {
+        operation,
+        record,
+        guard,
+    })))
+}
+#[allow(clippy::too_many_arguments)]
+pub(super) async fn run(
+    shared: &Arc<Shared>,
+    session: &str,
+    actor: &str,
+    command: &str,
+    origin: &Operation,
+    call: &str,
+    name: &str,
+    effect: Effect,
+    cancel: &CancellationToken,
+    events: &mpsc::Sender<ExecutionEvent>,
+) -> Result<ResultKind, EngineError> {
+    let approved = match admit(
+        shared, session, actor, command, origin, call, name, &effect, cancel, events,
+    )
+    .await?
+    {
+        ApprovalAdmission::Ready(approved) => approved,
+        ApprovalAdmission::Finished(result) => return Ok(result),
+    };
+    let operation = approved.operation.clone();
     let operation = match effect {
         Effect::Experiment { context, prepared } => {
             web_experiment::execute_admitted(
@@ -455,49 +609,5 @@ pub(super) async fn run(
             }
         }
     };
-    if operation.payload["kind"] == "agent_http"
-        && operation.status == OperationStatus::Failed
-        && operation
-            .outcome
-            .as_ref()
-            .is_some_and(|v| v["error_code"] == "http_preparation_failed")
-    {
-        let value = receipt::settlement(&record, &operation, None)?;
-        lock(&shared.store)?.settle_operation(
-            &record.operation_id,
-            &shared.owner,
-            OperationStatus::Failed,
-            &value,
-        )?;
-        guard.settled = true;
-        return Ok(ResultKind::Failed(
-            "HTTP preparation failed before dispatch".into(),
-        ));
-    }
-    let (status, output) = receipt::effect_output(&*lock(&shared.store)?, &operation)?;
-    let value = receipt::settlement(&record, &operation, output.as_deref())?;
-    {
-        let mut store = lock(&shared.store)?;
-        if status == OperationStatus::Unknown {
-            store.mark_operation_unknown_with_outcome(
-                &record.operation_id,
-                &shared.owner,
-                &value,
-            )?;
-        } else {
-            store.settle_operation(&record.operation_id, &shared.owner, status, &value)?;
-        }
-    }
-    guard.settled = true;
-    if status == OperationStatus::Unknown {
-        return Ok(ResultKind::Unknown(
-            "approved effect cleanup or completion is uncertain".into(),
-        ));
-    }
-    if cancel.is_cancelled() || status == OperationStatus::Cancelled {
-        return Ok(ResultKind::Cancelled);
-    }
-    Ok(ResultKind::Output(output.ok_or_else(|| {
-        error("settled approved effect lacks tool output")
-    })?))
+    approved.finish(shared, operation, cancel)
 }

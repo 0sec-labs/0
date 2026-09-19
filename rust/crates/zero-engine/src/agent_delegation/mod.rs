@@ -139,20 +139,43 @@ pub(super) fn capture(
         if let Some(policy) = agent_approvals::inherited(request, &role.tools) {
             identity["tool_approval_policy"] = serde_json::to_value(policy)?;
         }
-        let plugins = plugins.cloned().and_then(|mut context| {
-            context.tools.retain(|tool| role.tools.contains(&tool.name));
-            if context.tools.is_empty() {
-                return None;
-            }
-            if let Some(selected) = context.identity["selected"].as_array_mut() {
-                selected.retain(|entry| {
-                    entry["binding"]["alias"]
-                        .as_str()
-                        .is_some_and(|name| role.tools.iter().any(|allowed| allowed == name))
-                });
-            }
-            Some(context)
-        });
+        let plugins = plugins
+            .cloned()
+            .map(
+                |mut context| -> Result<Option<agent_plugins::Context>, EngineError> {
+                    context.tools.retain(|tool| role.tools.contains(&tool.name));
+                    if context.tools.is_empty() {
+                        return Ok(None);
+                    }
+                    if let Some(selected) = context.identity["selected"].as_array_mut() {
+                        selected.retain(|entry| {
+                            entry["binding"]["alias"].as_str().is_some_and(|name| {
+                                role.tools.iter().any(|allowed| allowed == name)
+                            })
+                        });
+                    }
+                    if !context.workers.is_empty() {
+                        let selected_plugins = context.identity["selected"]
+                            .as_array()
+                            .into_iter()
+                            .flatten()
+                            .filter_map(|v| v["binding"]["plugin"].as_str().map(str::to_owned))
+                            .collect::<std::collections::BTreeSet<_>>();
+                        context
+                            .workers
+                            .retain(|name, _| selected_plugins.contains(name));
+                        for policy in context.workers.values_mut() {
+                            policy
+                                .operations
+                                .retain(|op| role.tools.iter().any(|tool| tool == op.name()));
+                        }
+                        context.identity["workers"] = serde_json::to_value(&context.workers)?;
+                    }
+                    Ok(Some(context))
+                },
+            )
+            .transpose()?
+            .flatten();
         if let Some(plugins) = &plugins {
             identity["plugin_context"] = plugins.identity.clone();
         }
