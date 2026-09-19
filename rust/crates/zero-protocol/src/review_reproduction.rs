@@ -58,3 +58,23 @@ impl ReviewReproductionPlan {
         Ok(())
     }
 }
+
+/// Durable identity of an independently authorized native verification run.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct NativeReproductionRecord {
+    pub schema_version: u32,
+    pub id: String,
+    pub command_id: String,
+    pub session_id: String,
+    pub operation_id: String,
+    pub source_review_id: String,
+    pub source_session_id: String,
+    pub source_operation_id: String,
+    pub source_operation_sha256: String,
+    pub authorization_sha256: String,
+    pub intent_sha256: String,
+    pub created_at_ms: u64,
+    pub deadline_at_ms: u64,
+    pub sequence: u64,
+}

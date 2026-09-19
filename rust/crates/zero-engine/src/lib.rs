@@ -20,10 +20,12 @@ mod history;
 mod inference;
 mod lifecycle;
 mod model_progress;
+mod native_reproduction;
 mod plugin;
 mod queue;
 mod repair;
 mod reproduction;
+pub use native_reproduction::{read_review_reproduction, read_review_reproduction_for_command};
 mod review;
 mod review_read;
 pub mod review_reproduction;
@@ -104,6 +106,8 @@ use zero_store::Store;
 #[derive(Debug, thiserror::Error)]
 pub enum EngineError {
     #[error("{0}")]
+    CleanupUnconfirmed(String),
+    #[error("{0}")]
     Store(#[from] zero_store::Error),
     #[error("{0}")]
     Io(#[from] std::io::Error),
@@ -130,6 +134,7 @@ struct Control {
 }
 
 struct Shared {
+    state_path: PathBuf,
     store: Mutex<Store>,
     control: Mutex<Control>,
     workers: Arc<Workers>,
@@ -188,7 +193,14 @@ fn persist_workflow_cancellation(shared: &Shared, session: &str) -> Result<bool,
                 &shared.owner,
                 zero_protocol::review::ReviewCloseReason::Cancelled,
             )?),
-            None => Ok(true),
+            None => match store.native_reproduction_by_session(session)? {
+                Some(record) => Ok(store.stop_native_reproduction(
+                    &record.id,
+                    &shared.owner,
+                    zero_protocol::review::ReviewCloseReason::Cancelled,
+                )?),
+                None => Ok(true),
+            },
         },
     }
 }
@@ -325,6 +337,7 @@ impl Engine {
         let sandbox = zero_sandbox::SandboxExecutor::with_backends(executor.clone(), smolvm);
         Ok(Self {
             shared: Arc::new(Shared {
+                state_path: std::path::absolute(path.as_ref())?,
                 store: Mutex::new(store),
                 control: Mutex::new(Control::default()),
                 workers: Arc::new(Workers::default()),
@@ -1377,6 +1390,7 @@ fn error_code(error: &EngineError) -> &'static str {
         EngineError::Store(zero_store::Error::NotFound(_)) => "not_found",
         EngineError::Store(zero_store::Error::BudgetExceeded) => "budget_exceeded",
         EngineError::Io(_) | EngineError::Store(_) => "storage_error",
+        EngineError::CleanupUnconfirmed(_) => "cleanup_unconfirmed",
         EngineError::State(_) | EngineError::Json(_) => "invalid_request",
     }
 }

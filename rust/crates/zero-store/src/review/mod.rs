@@ -456,6 +456,7 @@ impl Store {
 /// External input and unsupported capabilities cannot widen a captured review.
 /// Missing projections fail closed. Internal effects use the exact authority gates.
 pub(crate) fn forbid_input(conn: &Connection, session: &str) -> Result<()> {
+    crate::native_reproduction::forbid_generic(conn, session)?;
     if read::binding(conn, session, &mut Reader::new())?.is_some() {
         return Err(bad(
             "external input or unsupported capability is forbidden for frozen review",

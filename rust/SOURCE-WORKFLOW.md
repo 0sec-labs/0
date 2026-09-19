@@ -102,7 +102,7 @@ dedicated owned controller and the existing adaptive source actor:
   a callback. No `.git`/dependency exclusions are implied by this API.
 
 Storage now has `ReviewAdmission`, immutable `ReviewRecord` and read-only
-`ReviewSnapshot` support (introduced in schema 18; current schema 19). Admission
+`ReviewSnapshot` support (introduced in schema 18; current schema 20). Admission
 creates the session,
 controller, actual root, captured intent artifact and journal binding in one
 transaction. It binds the original path, manifest, named profile, provider rates,
@@ -290,12 +290,38 @@ archive's historical metadata and witnesses without loading its raw chunks.
 That metadata read does not establish that the raw bytes remain available or
 intact: actual preparation always uses the full validated archive read.
 
-The next integration step is a dedicated atomic native reproduction admission:
-a separate zero-model-budget session, immutable host intent, closed authority
-except its exact matrix children, and one-use physical dispatch permissions.
-Cancellation, total deadline and owner-loss recovery must close that session
-without changing the original review. Reports must validate this cross-session
-lineage and independently reassess the actual observations; a prepared binding
-alone proves neither authorized dispatch nor success. Existing same-session
-reproduction and repair commands retain their current contracts until those
-explicit native workflows are wired.
+Schema 20 adds dedicated atomic native reproduction admission in the Store:
+a separate zero-model-budget session, immutable host intent, an absolute deadline,
+and a global command identity. Exact retries return the original operation;
+changed authorization conflicts. Generic command, model budget, queue and tool
+admission cannot borrow this session's authority. The original review remains
+unchanged. Migration validates the exact prior schema before adding native state.
+
+Preparation permission is one-use. The reconstructed execution plan and source
+binding must be retained before ordered matrix children can be admitted. Each
+physical dispatch requires its exact retained request and a separate one-use
+permission under the current owner, open cancellation gate and deadline. A
+permission receipt establishes authorization, not an observed sandbox result.
+
+`Engine::reproduce_review` owns the native worker. Archive reconstruction runs
+on a joined blocking worker with an independent read connection, keeping the
+owner's cancellation journal writable. Its total deadline closes durable
+admission before draining the sandbox supervisor. Case admission handles a
+concurrent close without discarding already observed cases; final settlement
+rechecks close and deadline inside the same write transaction as the outcome.
+Uncertain cleanup remains Unknown. The original review's model account is never
+reopened or replenished.
+
+`review reproduce --plan FILE` runs this host-authorized matrix. Exact command
+retries compare the full authorization and independently reassess retained
+evidence before returning it, without current providers, source or backend.
+Read-only inspection uses a bounded, query-only snapshot of both session
+journals and ordinary evidence from one SQLite read transaction. Archive chunks
+are excluded; retained archive metadata authenticates the logical-to-execution
+binding, while complete case inventories, paired physical-start receipts and
+exact request/evidence checks authenticate each observation. A prepared binding
+alone proves neither authorized dispatch nor success, and ObservedForPlan never
+establishes vulnerability reportability.
+
+Native review-to-repair linkage remains a subsequent integration step. Existing
+same-session reproduction and repair commands retain their current contracts.

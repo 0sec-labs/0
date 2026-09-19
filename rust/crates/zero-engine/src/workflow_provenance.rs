@@ -96,3 +96,40 @@ pub(super) fn reproduction_plan(
         frozen,
     ))
 }
+
+/// Native provenance retains distinct logical and reconstructed execution plans.
+/// The caller supplies a pinned Store view containing both complete sessions.
+pub(super) fn native_reproduction(store: &Store, key: &str) -> Result<Reply, EngineError> {
+    let admitted = store.native_reproduction(key)?;
+    let op = admitted.operation;
+    let outcome: Option<ReproductionOutcome> =
+        op.outcome.clone().map(serde_json::from_value).transpose()?;
+    if let Some(outcome) = &outcome {
+        if outcome.assessment.is_some() || op.status == OperationStatus::Succeeded {
+            terminal(
+                &op,
+                &admitted.record.session_id,
+                "native_source_reproduction",
+            )?;
+            let authorization = store.native_reproduction_authorization(key)?;
+            let (plan, binding) = store
+                .native_reproduction_bound_source(key)?
+                .ok_or_else(|| error("native reproduction source binding unavailable"))?;
+            let frozen = FrozenPlan::new(plan).map_err(error)?;
+            review_reproduction::validate_binding(store, &authorization, &frozen, &binding)?;
+            let validated = matrix::validate_native(store, &op.session_id, &op.id, outcome)?;
+            if !same(validated.frozen.plan(), frozen.plan())? || validated.status != op.status {
+                return Err(error("native reproduction plan or terminal status differs"));
+            }
+        }
+    } else if op.status == OperationStatus::Succeeded {
+        return Err(error(
+            "successful native reproduction has no retained outcome",
+        ));
+    }
+    Ok(Reply::SourceReproduction {
+        operation: op,
+        result: outcome,
+        duplicate: true,
+    })
+}

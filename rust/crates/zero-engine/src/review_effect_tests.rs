@@ -604,6 +604,175 @@ async fn archived_review_preparation_preserves_logical_plan_and_revalidates_offl
     store.settle_operation(&f.admission.controller_operation_id, &f.engine.shared.owner,
         OperationStatus::Succeeded,
         &json!({"schema_version":1,"review_id":f.admission.review_id,"root_operation_id":operation.id,"root_status":operation.status})).unwrap();
+    let native = zero_store::NativeReproductionAdmission {
+        id: uuid::Uuid::new_v4().to_string(),
+        session_id: uuid::Uuid::new_v4().to_string(),
+        operation_id: uuid::Uuid::new_v4().to_string(),
+        authorization: authorization.clone(),
+        source_operation_sha256: format!(
+            "sha256:{}",
+            zero_plugin::sha256(
+                &serde_json::to_vec(&serde_json::to_value(&operation).unwrap()).unwrap()
+            )
+        ),
+    };
+    for change in 0..4 {
+        let mut forged = native.clone();
+        match change {
+            0 => forged.source_operation_sha256 = format!("sha256:{}", "0".repeat(64)),
+            1 => {
+                forged.authorization.archive_manifest_sha256 = format!("sha256:{}", "0".repeat(64))
+            }
+            2 => forged.authorization.plan.snapshot.root = "/different-original".into(),
+            _ => forged.authorization.plan.hypothesis_id = "uncaptured-claim".into(),
+        }
+        assert!(
+            store
+                .admit_native_reproduction("verify", &f.engine.shared.owner, &forged)
+                .is_err()
+        );
+        assert!(
+            store
+                .native_reproduction_by_command("verify")
+                .unwrap()
+                .is_none()
+        );
+    }
+    // A failure at the last durable creation event rolls back the entire new
+    // authorization, including its zero-budget session and retained intent.
+    let db = rusqlite::Connection::open(f.dir.path().join("state.db")).unwrap();
+    let counts = || {
+        [
+            "sessions",
+            "operations",
+            "artifacts",
+            "operation_artifacts",
+            "native_reproductions",
+            "events",
+        ]
+        .map(|table| {
+            db.query_row(&format!("SELECT count(*) FROM {table}"), [], |row| {
+                row.get::<_, u64>(0)
+            })
+            .unwrap()
+        })
+    };
+    let before = counts();
+    db.execute_batch("CREATE TRIGGER fail_native_created BEFORE INSERT ON events WHEN NEW.kind='native_reproduction_created' BEGIN SELECT RAISE(ABORT,'late native admission failure'); END;").unwrap();
+    assert!(
+        store
+            .admit_native_reproduction("verify", &f.engine.shared.owner, &native)
+            .is_err()
+    );
+    assert_eq!(counts(), before);
+    db.execute_batch("DROP TRIGGER fail_native_created")
+        .unwrap();
+    assert!(
+        store
+            .native_reproduction_by_command("verify")
+            .unwrap()
+            .is_none()
+    );
+    drop(db);
+    let admitted = store
+        .admit_native_reproduction("verify", &f.engine.shared.owner, &native)
+        .unwrap();
+    assert!(!admitted.duplicate);
+    assert_eq!(admitted.operation.status, OperationStatus::Running);
+    assert_eq!(
+        store.get_session(&native.session_id).unwrap().budget_limit,
+        0
+    );
+    assert_eq!(
+        store.native_reproduction(&native.id).unwrap().record,
+        admitted.record
+    );
+    assert!(
+        store
+            .admit_command(
+                &native.session_id,
+                "generic",
+                &json!({"kind":"responses_inference"})
+            )
+            .is_err()
+    );
+    assert!(
+        store
+            .admit_owned_batch(
+                &native.session_id,
+                &f.engine.shared.owner,
+                &[("generic".into(), json!({"kind":"offline_snapshot_agent"}))]
+            )
+            .is_err()
+    );
+    assert!(
+        store
+            .stop_native_reproduction(
+                &native.id,
+                &f.engine.shared.owner,
+                ReviewCloseReason::Deadline
+            )
+            .is_err()
+    );
+    assert!(
+        store
+            .stop_native_reproduction(&native.id, "other-owner", ReviewCloseReason::Cancelled)
+            .is_err()
+    );
+    assert!(
+        store
+            .stop_native_reproduction(
+                &native.id,
+                &f.engine.shared.owner,
+                ReviewCloseReason::Cancelled
+            )
+            .unwrap()
+    );
+    assert!(
+        !store
+            .stop_native_reproduction(
+                &native.id,
+                &f.engine.shared.owner,
+                ReviewCloseReason::Cancelled
+            )
+            .unwrap()
+    );
+    let mut retry = native.clone();
+    retry.id = "do-not-use-current-identities".into();
+    retry.source_operation_sha256 = "do-not-recapture".into();
+    assert!(
+        store
+            .admit_native_reproduction("verify", "no-current-owner", &retry)
+            .unwrap()
+            .duplicate
+    );
+    retry.authorization.deadline_ms += 1;
+    assert!(
+        store
+            .admit_native_reproduction("verify", &f.engine.shared.owner, &retry)
+            .is_err()
+    );
+    // A stale worker decision cannot overwrite the already accepted close,
+    // even when its cancellation token has not yet observed that close.
+    let finalized = store
+        .settle_native_reproduction(
+            &native.id,
+            &f.engine.shared.owner,
+            OperationStatus::Succeeded,
+            &reproduction::empty_outcome(),
+            false,
+        )
+        .unwrap();
+    assert_eq!(finalized.status, OperationStatus::Cancelled);
+    assert!(store.native_reproduction_closed(&native.id).unwrap());
+    assert_eq!(
+        store
+            .native_reproduction(&native.id)
+            .unwrap()
+            .operation
+            .status,
+        OperationStatus::Cancelled
+    );
     let events_before =
         serde_json::to_value(store.events(&f.admission.session_id, 0, 1000).unwrap()).unwrap();
     let budget_before =
@@ -617,6 +786,142 @@ async fn archived_review_preparation_preserves_logical_plan_and_revalidates_offl
         serde_json::to_value(prepared.logical_plan().plan()).unwrap(),
         serde_json::to_value(&authorization.plan).unwrap()
     );
+    let dispatch = zero_store::NativeReproductionAdmission {
+        id: uuid::Uuid::new_v4().to_string(),
+        session_id: uuid::Uuid::new_v4().to_string(),
+        operation_id: uuid::Uuid::new_v4().to_string(),
+        ..native.clone()
+    };
+    store
+        .admit_native_reproduction("dispatch", &f.engine.shared.owner, &dispatch)
+        .unwrap();
+    assert!(
+        store
+            .bind_native_reproduction_source(
+                &dispatch.id,
+                &f.engine.shared.owner,
+                execution.plan(),
+                &binding
+            )
+            .is_err()
+    );
+    store
+        .begin_native_reproduction_preparation(&dispatch.id, &f.engine.shared.owner)
+        .unwrap();
+    assert!(
+        store
+            .begin_native_reproduction_preparation(&dispatch.id, &f.engine.shared.owner)
+            .is_err()
+    );
+    store
+        .bind_native_reproduction_source(
+            &dispatch.id,
+            &f.engine.shared.owner,
+            execution.plan(),
+            &binding,
+        )
+        .unwrap();
+    store
+        .bind_native_reproduction_source(
+            &dispatch.id,
+            &f.engine.shared.owner,
+            execution.plan(),
+            &binding,
+        )
+        .unwrap();
+    assert_eq!(
+        store
+            .native_reproduction_bound_source(&dispatch.id)
+            .unwrap()
+            .unwrap()
+            .1,
+        binding
+    );
+    assert!(
+        store
+            .admit_native_reproduction_case(&dispatch.id, &f.engine.shared.owner, 1, 0)
+            .is_err()
+    );
+    let (child, physical) = store
+        .admit_native_reproduction_case(&dispatch.id, &f.engine.shared.owner, 0, 0)
+        .unwrap();
+    assert!(
+        store
+            .begin_native_reproduction_effect(&dispatch.id, &child.id, &f.engine.shared.owner)
+            .is_err()
+    );
+    store
+        .retain_operation_artifact(
+            &child.id,
+            &f.engine.shared.owner,
+            "reproduction.request",
+            &serde_json::to_vec(&physical).unwrap(),
+        )
+        .unwrap();
+    store
+        .begin_native_reproduction_effect(&dispatch.id, &child.id, &f.engine.shared.owner)
+        .unwrap();
+    native_case_corruption_rejected(
+        &f.dir.path().join("state.db"),
+        &dispatch.id,
+        &dispatch.session_id,
+        &child.id,
+        &f.engine.shared.owner,
+    );
+    assert!(
+        store
+            .begin_native_reproduction_effect(&dispatch.id, &child.id, &f.engine.shared.owner)
+            .is_err()
+    );
+    assert!(
+        store
+            .admit_native_reproduction_case(&dispatch.id, &f.engine.shared.owner, 0, 0)
+            .is_err()
+    );
+    assert!(
+        store
+            .admit_native_reproduction_case(&dispatch.id, &f.engine.shared.owner, 0, 1)
+            .is_err()
+    );
+    store
+        .mark_operation_unknown(
+            &child.id,
+            &f.engine.shared.owner,
+            "permission fixture does not dispatch a guest",
+        )
+        .unwrap();
+    assert!(
+        store
+            .admit_native_reproduction_case(&dispatch.id, &f.engine.shared.owner, 0, 1)
+            .is_err()
+    );
+    store
+        .stop_native_reproduction(
+            &dispatch.id,
+            &f.engine.shared.owner,
+            ReviewCloseReason::Cancelled,
+        )
+        .unwrap();
+    store
+        .mark_operation_unknown(
+            &dispatch.operation_id,
+            &f.engine.shared.owner,
+            "fixture ended with uncertain child",
+        )
+        .unwrap();
+    assert!(
+        store
+            .begin_native_reproduction_effect(&dispatch.id, &child.id, &f.engine.shared.owner)
+            .is_err()
+    );
+    store
+        .bind_native_reproduction_source(
+            &dispatch.id,
+            &f.engine.shared.owner,
+            execution.plan(),
+            &binding,
+        )
+        .unwrap();
     let restored = Path::new(&execution.plan().snapshot.root);
     assert_eq!(
         fs::read(restored.join("z-unread.bin")).unwrap(),
@@ -683,5 +988,158 @@ async fn archived_review_preparation_preserves_logical_plan_and_revalidates_offl
     drop(store);
     f.provider.assert_no_more_requests();
     assert!(!f.dir.path().join("no-backend").exists());
+    // Exercise the real owned Engine path against a process-lifecycle fixture.
+    // This checks dispatch ordering, not Docker isolation.
+    let fake = include_str!("../../zero-executor/tests/fixtures/fake-docker.py")
+        .replace("sys.stderr.write(\"fixture diagnostic\\n\")", "pass")
+        .replace("elif args[0] == \"start\":", "elif args[0] == \"start\":\n    import sqlite3\n    db=sqlite3.connect(root / \"state.db\")\n    started=sum(json.loads(line)[0]==\"start\" for line in (root/\"calls.jsonl\").read_text().splitlines())\n    assert db.execute(\"SELECT count(*) FROM events WHERE kind='native_reproduction_effect_started'\").fetchone()[0] >= started\n    assert db.execute(\"SELECT count(*) FROM operation_artifacts WHERE name='native_reproduction.effect_start'\").fetchone()[0] >= started");
+    let binary = f.dir.path().join("no-backend");
+    fs::write(&binary, fake).unwrap();
+    fs::set_permissions(&binary, fs::Permissions::from_mode(0o700)).unwrap();
+    fs::write(f.dir.path().join("scenario.txt"), "success").unwrap();
+    lock(&f.engine.shared.providers).unwrap().clear();
+    let (tx, mut rx) = mpsc::channel(64);
+    let drain = tokio::spawn(async move { while rx.recv().await.is_some() {} });
+    let reply = f
+        .engine
+        .reproduce_review("native-engine".into(), authorization.clone(), tx)
+        .await
+        .unwrap();
+    drain.await.unwrap();
+    let Reply::SourceReproduction {
+        operation: reproduced,
+        result: Some(result),
+        duplicate: false,
+    } = reply
+    else {
+        panic!("wrong native reply");
+    };
+    assert_eq!(
+        reproduced.status,
+        OperationStatus::Succeeded,
+        "{:?}",
+        result
+    );
+    assert_eq!(
+        result.assessment.unwrap().disposition,
+        zero_protocol::verification::Disposition::ObservedForPlan
+    );
+    assert_eq!(result.children.len(), 4);
+    assert_eq!(
+        lock(&f.engine.shared.store)
+            .unwrap()
+            .get_session(&reproduced.session_id)
+            .unwrap()
+            .budget_limit,
+        0
+    );
+    let calls = fs::read(f.dir.path().join("calls.jsonl")).unwrap();
+    assert_eq!(
+        String::from_utf8_lossy(&calls)
+            .lines()
+            .filter(|line| serde_json::from_str::<Value>(line).unwrap()[0] == "start")
+            .count(),
+        4
+    );
+    fs::remove_file(binary).unwrap();
+    let (tx, _rx) = mpsc::channel(8);
+    assert!(matches!(
+        f.engine
+            .reproduce_review("native-engine".into(), authorization, tx)
+            .await
+            .unwrap(),
+        Reply::SourceReproduction {
+            duplicate: true,
+            ..
+        }
+    ));
+    assert_eq!(fs::read(f.dir.path().join("calls.jsonl")).unwrap(), calls);
+    assert_eq!(
+        serde_json::to_value(
+            lock(&f.engine.shared.store)
+                .unwrap()
+                .budget(&f.admission.session_id)
+                .unwrap()
+        )
+        .unwrap(),
+        budget_before
+    );
+    f.provider.assert_no_more_requests();
     f.engine.shutdown().await.unwrap();
+}
+
+fn native_case_corruption_rejected(
+    path: &Path,
+    reproduction: &str,
+    session: &str,
+    child: &str,
+    owner: &str,
+) {
+    for change in 0..9 {
+        let copy = tempfile::tempdir().unwrap();
+        let copied = copy.path().join("corrupted.db");
+        let original = rusqlite::Connection::open(path).unwrap();
+        original
+            .execute("VACUUM INTO ?1", [copied.to_str().unwrap()])
+            .unwrap();
+        drop(original);
+        let db = rusqlite::Connection::open(&copied).unwrap();
+        match change {
+            0 | 1 => {
+                db.execute(
+                    "DELETE FROM operation_artifacts WHERE operation_id=?1",
+                    [child],
+                )
+                .unwrap();
+                db.execute("DELETE FROM operations WHERE id=?1", [child])
+                    .unwrap();
+                if change == 0 {
+                    db.execute("DELETE FROM events WHERE session_id=?1 AND kind='command_admitted' AND json_extract(payload,'$.id')=?2", rusqlite::params![session,child]).unwrap();
+                } else {
+                    // Keep only artifact/physical evidence for the missing case.
+                    db.execute("DELETE FROM events WHERE session_id=?1 AND kind IN ('command_admitted','operation_started') AND json_extract(payload,'$.id')=?2", rusqlite::params![session,child]).unwrap();
+                }
+            }
+            2 => {
+                db.execute("UPDATE events SET payload=json_set(payload,'$.owner','other-owner') WHERE session_id=?1 AND kind='native_reproduction_effect_started' AND json_extract(payload,'$.operation_id')=?2",rusqlite::params![session,child]).unwrap();
+            }
+            3 => {
+                db.execute("UPDATE events SET payload=json_set(payload,'$.request_sha256',?3) WHERE session_id=?1 AND kind='native_reproduction_effect_started' AND json_extract(payload,'$.operation_id')=?2",rusqlite::params![session,child,format!("sha256:{}","0".repeat(64))]).unwrap();
+            }
+            4 => {
+                db.execute("DELETE FROM operation_artifacts WHERE operation_id=?1 AND name='reproduction.request'",[child]).unwrap();
+            }
+            5 => {
+                db.execute("DELETE FROM events WHERE session_id=?1 AND kind='native_reproduction_effect_started' AND json_extract(payload,'$.operation_id')=?2",rusqlite::params![session,child]).unwrap();
+            }
+            6 => {
+                db.execute("DELETE FROM operation_artifacts WHERE operation_id=?1 AND name='native_reproduction.effect_start'",[child]).unwrap();
+            }
+            7 => {
+                db.execute("UPDATE artifacts SET bytes=x'00' WHERE digest=(SELECT digest FROM operation_artifacts WHERE operation_id=?1 AND name='native_reproduction.effect_start')",[child]).unwrap();
+            }
+            _ => {
+                db.execute("DELETE FROM events WHERE session_id=?1 AND kind='native_reproduction_effect_started' AND json_extract(payload,'$.operation_id')=?2",rusqlite::params![session,child]).unwrap();
+                db.execute("DELETE FROM operation_artifacts WHERE operation_id=?1 AND name='native_reproduction.effect_start'",[child]).unwrap();
+            }
+        }
+        drop(db);
+        let mut copied_store = zero_store::Store::open(&copied).unwrap();
+        assert!(
+            copied_store.native_reproduction(reproduction).is_err(),
+            "accepted corrupt case inventory {change}"
+        );
+        assert!(
+            copied_store
+                .admit_native_reproduction_case(reproduction, owner, 0, 0)
+                .is_err(),
+            "replayed corrupted slot {change}"
+        );
+        assert!(
+            copied_store
+                .begin_native_reproduction_effect(reproduction, child, owner)
+                .is_err(),
+            "replayed corrupted effect {change}"
+        );
+    }
 }

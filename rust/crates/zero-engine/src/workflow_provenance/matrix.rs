@@ -35,6 +35,26 @@ pub(super) fn validate(
     phase: &str,
     outcome: &ReproductionOutcome,
 ) -> Result<Validated, EngineError> {
+    validate_inner(store, session, parent, phase, outcome, false)
+}
+// Native authority has already been authenticated against the Store's complete
+// case/witness inventory. Its extra effect receipt never relaxes legacy proofs.
+pub(super) fn validate_native(
+    store: &Store,
+    session: &str,
+    parent: &str,
+    outcome: &ReproductionOutcome,
+) -> Result<Validated, EngineError> {
+    validate_inner(store, session, parent, "reproduction", outcome, true)
+}
+fn validate_inner(
+    store: &Store,
+    session: &str,
+    parent: &str,
+    phase: &str,
+    outcome: &ReproductionOutcome,
+    native: bool,
+) -> Result<Validated, EngineError> {
     let attachments = store.operation_artifacts(parent)?;
     let get = |suffix: &str| -> Result<&str, EngineError> {
         let key = format!("{phase}.{suffix}");
@@ -88,7 +108,16 @@ pub(super) fn validate(
         {
             return Err(error("workflow child request identity mismatch"));
         }
-        let refs = store.operation_artifacts(id)?;
+        let mut refs = store.operation_artifacts(id)?;
+        let authorized = native && refs.remove("native_reproduction.effect_start").is_some();
+        if native
+            && (index.get(position).is_some() || child.status == OperationStatus::Unknown)
+            && !authorized
+        {
+            return Err(error(
+                "native observation lacks physical dispatch authority",
+            ));
+        }
         if let Some(entry) = index.get(position) {
             let req = refs
                 .get("reproduction.request")

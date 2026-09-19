@@ -2663,6 +2663,7 @@ dependencies = [
  "uuid",
  "zero-http",
  "zero-protocol",
+ "zero-verification",
  "zero-web-verification",
 ]
 

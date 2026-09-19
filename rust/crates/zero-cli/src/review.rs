@@ -19,6 +19,7 @@ use zero_protocol::{
     agent::AgentStatus,
     review::{ReviewCloseReason, ReviewReport, ReviewSnapshot},
 };
+mod reproduce;
 
 #[derive(Debug, Args)]
 #[command(args_conflicts_with_subcommands = true, subcommand_negates_reqs = true)]
@@ -38,6 +39,25 @@ pub struct ReviewArgs {
 }
 #[derive(Debug, Subcommand)]
 pub enum ReviewCommand {
+    /// Execute a separately host-authorized frozen reproduction from retained source.
+    Reproduce(reproduce::ReproduceArgs),
+    /// Independently inspect retained reproduction evidence without ownership or a plan file.
+    Reproduction {
+        #[arg(
+            long,
+            required_unless_present = "command_id",
+            conflicts_with = "command_id"
+        )]
+        reproduction: Option<String>,
+        #[arg(
+            long,
+            required_unless_present = "reproduction",
+            conflicts_with = "reproduction"
+        )]
+        command_id: Option<String>,
+        #[arg(long, value_enum, default_value = "json")]
+        format: reproduce::Format,
+    },
     /// Inspect lifecycle and budget holds without source, configuration or ownership.
     Show {
         #[arg(
@@ -68,6 +88,9 @@ pub enum ReviewCommand {
 
 pub async fn run(args: &crate::args::Args, options: &ReviewArgs) -> Result<u8, Box<dyn Error>> {
     if let Some(command) = &options.command {
+        if let ReviewCommand::Reproduce(options) = command {
+            return reproduce::run(args, options).await;
+        }
         return readonly(&args.state, command).await;
     }
     let input_path = options
@@ -420,6 +443,22 @@ fn exit_code(review: &ReviewSnapshot) -> u8 {
 async fn readonly(path: &Path, command: &ReviewCommand) -> Result<u8, Box<dyn Error>> {
     let state = path.to_owned();
     match command {
+        ReviewCommand::Reproduce(_) => {
+            return Err("Reproduction requires the owned execution route".into());
+        }
+        ReviewCommand::Reproduction {
+            reproduction,
+            command_id,
+            format,
+        } => {
+            return reproduce::inspect(
+                &state,
+                reproduction.as_deref(),
+                command_id.as_deref(),
+                *format,
+            )
+            .await;
+        }
         ReviewCommand::Show {
             review,
             command_id,

@@ -117,7 +117,7 @@ fn retain(
     outcome.artifacts.insert(name.into(), digest);
     Ok(())
 }
-fn settle(
+pub(super) fn settle(
     shared: &Shared,
     parent: &str,
     outcome: ReproductionOutcome,
@@ -185,6 +185,24 @@ pub(super) async fn matrix(
     events: mpsc::Sender<ExecutionEvent>,
     phase: &str,
 ) -> Result<(ReproductionOutcome, OperationStatus), EngineError> {
+    matrix_with_authority(shared, session, parent, frozen, cancel, events, phase, None).await
+}
+#[allow(clippy::too_many_arguments)]
+pub(super) async fn matrix_with_authority(
+    shared: &Arc<Shared>,
+    session: &str,
+    parent: &str,
+    frozen: &FrozenPlan,
+    cancel: CancellationToken,
+    events: mpsc::Sender<ExecutionEvent>,
+    phase: &str,
+    native: Option<&str>,
+) -> Result<(ReproductionOutcome, OperationStatus), EngineError> {
+    if native.is_some() && phase != "reproduction" {
+        return Err(state(
+            "native authority only permits its reproduction matrix",
+        ));
+    }
     let mut outcome = empty_outcome();
     if let Err(error) = retain(
         shared,
@@ -215,13 +233,38 @@ pub(super) async fn matrix(
                 .map_err(state)?;
             let child = {
                 let mut store = lock(&shared.store)?;
-                let admission=store.admit_command(session,&format!("{parent}:{phase}:case:{case_index}:{repeat}"),&json!({"parent_operation":parent,"kind":"reproduction_case","plan_digest":frozen.digest(),"case_id":case.id,"repeat":repeat,"execution_id":request.execution_id}))?;
-                if admission.duplicate {
-                    return Err(state(
-                        "reproduction child already admitted; recovery required",
-                    ));
+                if let Some(key) = native {
+                    let (child, captured) = match store.admit_native_reproduction_case(
+                        key,
+                        &shared.owner,
+                        case_index,
+                        repeat,
+                    ) {
+                        Ok(admitted) => admitted,
+                        Err(error) => {
+                            if cancel.is_cancelled() || store.native_reproduction_closed(key)? {
+                                outcome.stop_reason = Some(ReproductionStop::Cancelled);
+                                forced = Some(OperationStatus::Cancelled);
+                                break 'matrix;
+                            }
+                            return Err(error.into());
+                        }
+                    };
+                    if serde_json::to_value(&captured)? != serde_json::to_value(&request)? {
+                        return Err(state(
+                            "native matrix request differs from captured authority",
+                        ));
+                    }
+                    child
+                } else {
+                    let admission=store.admit_command(session,&format!("{parent}:{phase}:case:{case_index}:{repeat}"),&json!({"parent_operation":parent,"kind":"reproduction_case","plan_digest":frozen.digest(),"case_id":case.id,"repeat":repeat,"execution_id":request.execution_id}))?;
+                    if admission.duplicate {
+                        return Err(state(
+                            "reproduction child already admitted; recovery required",
+                        ));
+                    }
+                    store.begin_operation(&admission.operation.id, &shared.owner)?
                 }
-                store.begin_operation(&admission.operation.id, &shared.owner)?
             };
             outcome.children.push(child.id.clone());
             let mut guard = ChildGuard {
@@ -258,6 +301,22 @@ pub(super) async fn matrix(
                 outcome.stop_reason = Some(ReproductionStop::Cancelled);
                 forced = Some(OperationStatus::Cancelled);
                 break 'matrix;
+            }
+            if let Some(key) = native {
+                let permission = lock(&shared.store)?.begin_native_reproduction_effect(
+                    key,
+                    &child.id,
+                    &shared.owner,
+                );
+                if let Err(error) = permission {
+                    lock(&shared.store)?.settle_operation(&child.id, &shared.owner, OperationStatus::Cancelled,
+                        &json!({"external_effects_started":false,"request_artifact":request_digest}))?;
+                    guard.settled = true;
+                    outcome.error = Some(error.to_string());
+                    outcome.stop_reason = Some(ReproductionStop::Cancelled);
+                    forced = Some(OperationStatus::Cancelled);
+                    break 'matrix;
+                }
             }
             outcome.external_effects_started = true;
             let (result, event_lost) =

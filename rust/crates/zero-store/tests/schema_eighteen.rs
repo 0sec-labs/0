@@ -7,7 +7,7 @@ type Rows = Vec<(String, Vec<Vec<Value>>)>;
 
 fn retained_rows(conn: &Connection) -> Rows {
     let mut tables = conn
-        .prepare("SELECT name FROM sqlite_schema WHERE type='table' AND name NOT GLOB 'sqlite_*' AND name NOT IN ('reviews','source_archives') ORDER BY name")
+        .prepare("SELECT name FROM sqlite_schema WHERE type='table' AND name NOT GLOB 'sqlite_*' AND name NOT IN ('reviews','source_archives','native_reproductions') ORDER BY name")
         .unwrap();
     let names = tables
         .query_map([], |row| row.get::<_, String>(0))
@@ -37,7 +37,7 @@ fn version(conn: &Connection) -> u32 {
 }
 
 fn historical(conn: &Connection, version: u32) {
-    conn.execute_batch("DROP INDEX source_archive_command; DROP TABLE source_archives; DROP INDEX review_command_created; DROP TABLE reviews;")
+    conn.execute_batch("DROP INDEX native_reproduction_admission_command; DROP INDEX native_reproduction_parent_command; DROP INDEX native_reproduction_command; DROP TABLE native_reproductions; DROP INDEX source_archive_command; DROP TABLE source_archives; DROP INDEX review_command_created; DROP TABLE reviews;")
         .unwrap();
     if version == 16 {
         conn.execute_batch("DROP INDEX scan_command_created; DROP TABLE scans;")
@@ -81,7 +81,7 @@ fn populated_seventeen_upgrade_preserves_all_rows_and_readonly_never_migrates() 
     assert_eq!(retained_rows(&conn), before);
 
     drop(Store::open(&path).unwrap());
-    assert_eq!(version(&conn), 19);
+    assert_eq!(version(&conn), 20);
     assert_eq!(retained_rows(&conn), before);
     let reader = Store::open_read_only(&path).unwrap();
     assert_eq!(reader.artifact(&digest).unwrap(), b"original intent");
@@ -146,7 +146,7 @@ fn review_schema_is_exact_and_enforces_byte_and_close_constraints() {
         .unwrap();
     drop(store);
     let conn = Connection::open(&path).unwrap();
-    assert_eq!(version(&conn), 19);
+    assert_eq!(version(&conn), 20);
     let (scan_sql, review_sql): (String, String) = conn.query_row("SELECT (SELECT sql FROM sqlite_schema WHERE name='scans'),(SELECT sql FROM sqlite_schema WHERE name='reviews')", [], |row| Ok((row.get(0)?,row.get(1)?))).unwrap();
     assert_eq!(
         review_sql,

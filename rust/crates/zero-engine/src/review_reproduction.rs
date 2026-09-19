@@ -60,6 +60,13 @@ fn source(
     }
     Ok((record, logical))
 }
+pub(super) fn validate_authorization(
+    store: &Store,
+    authorization: &ReviewReproductionPlan,
+) -> Result<(), EngineError> {
+    source(store, authorization)?;
+    Ok(())
+}
 fn binding(
     record: &ReviewRecord,
     authorization: &ReviewReproductionPlan,
@@ -141,7 +148,7 @@ pub fn prepare(
         Err(cause) => {
             return match stage.remove() {
                 Ok(()) => Err(cause),
-                Err(cleanup) => Err(error(format!(
+                Err(cleanup) => Err(EngineError::CleanupUnconfirmed(format!(
                     "{cause}; private source cleanup failed: {cleanup}"
                 ))),
             };

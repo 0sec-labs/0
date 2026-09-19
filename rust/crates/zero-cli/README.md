@@ -1315,3 +1315,48 @@ exit nonzero. Missing retained preimages, binary content, and filenames containi
 control characters, backslashes, or double quotes are rejected explicitly. Review
 and apply the patch separately to a matching checkout; redirection may create an
 empty output file when validation fails. Existing file modes are unchanged.
+
+### Reproduce a retained native review claim
+
+```sh
+0sec-native --state state.db --docker-bin /path/to/docker \
+  review reproduce --plan host-authorization.json --command-id verify-claim
+```
+
+The strict host-owned JSON envelope contains `schema_version: 1`, `review_id`,
+`source_operation_id`, `archive_manifest_sha256`, `plan`, `deadline_ms` (1–3600000),
+and `max_executions` (1–256). `plan` is the existing frozen verification plan:
+exact retained snapshot/bundle/hypothesis identities, immutable backend, resource,
+time and output limits, repeats, and independent attack/control cases. Exact
+expected stdout/stderr are base64 strings. The case/repeat product must fit the
+execution cap. No model chooses or receives this execution authorization.
+
+The input file is limited to 1 MiB with a five-second read deadline. The engine
+validates the retained review and restores its complete archive; the original
+source and provider configuration may be absent. A fresh invocation accepts only
+its plan and sandbox backend, rejecting provider and other runtime profiles.
+
+Default output is the typed `SourceReproduction` JSON reply; `--format terminal`
+prints a bounded summary. `ObservedForPlan` means the frozen expectations matched,
+not that a vulnerability is verified or reportable. Complete observed/not-observed
+assessments exit 0; partial, failed or unknown execution exits 2. SIGINT/SIGTERM
+wait for owned cleanup and exit 130/143.
+
+Reuse the command ID with the exact authorization file for an inert retained
+retry, even with missing backend/configuration files. Changed authorization is a
+conflict. Cached running/unknown results remain partial; a retry does not restart
+cases or claim completion. Native execution grants no model budget and does not
+reopen the original review session.
+
+Inspect independently reassessed retained evidence without a plan file, source,
+configuration, backend, or engine ownership:
+
+```sh
+0sec-native --state state.db review reproduction --command-id verify-claim
+0sec-native --state state.db review reproduction --reproduction REPRODUCTION_ID --format terminal
+```
+
+Choose exactly one identity. Inspection works while the original owner is active;
+running results show no completed assessment and exit 2. Terminal inspection uses
+the same assessment and exit rules as execution, and rejects damaged retained
+evidence. It does not resume cases or change the original review's claims.

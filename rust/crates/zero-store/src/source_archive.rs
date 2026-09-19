@@ -255,3 +255,10 @@ impl Store {
         load(&tx, &record)
     }
 }
+
+pub(crate) fn manifest_for_record(
+    conn: &Connection,
+    record: &ReviewRecord,
+) -> Result<Option<ArchiveManifest>> {
+    Ok(load_manifest(conn, record)?.map(|(_, manifest)| manifest))
+}

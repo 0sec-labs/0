@@ -8,7 +8,7 @@ pub fn initialize(conn: &mut Connection) -> Result<()> {
     if application != 0 && application != APPLICATION_ID {
         return Err(Error::ForeignDatabase);
     }
-    if !(0..=19).contains(&version) {
+    if !(0..=20).contains(&version) {
         return Err(Error::Schema(version));
     }
     if application == 0 {
@@ -26,6 +26,9 @@ pub fn initialize(conn: &mut Connection) -> Result<()> {
     }
     if version == 17 {
         validate_seventeen(&tx)?;
+    }
+    if version == 19 {
+        validate_nineteen(&tx)?;
     }
     if version == 18 {
         validate_eighteen(&tx)?;
@@ -139,6 +142,13 @@ CREATE INDEX scan_command_created ON events(json_extract(payload,'$.command_id')
 CREATE INDEX source_archive_command ON events(json_extract(payload,'$.command_id')) WHERE kind='review_source_archived';")?;
         tx.pragma_update(None, "user_version", 19)?;
     }
+    if version < 20 {
+        tx.execute_batch("CREATE TABLE native_reproductions(sequence INTEGER PRIMARY KEY,id TEXT NOT NULL UNIQUE,command_id TEXT NOT NULL UNIQUE,session_id TEXT NOT NULL UNIQUE REFERENCES sessions(id),operation_id TEXT NOT NULL UNIQUE REFERENCES operations(id),source_review_id TEXT NOT NULL REFERENCES reviews(id),intent_sha256 TEXT NOT NULL REFERENCES artifacts(digest),record TEXT NOT NULL CHECK(length(CAST(record AS BLOB))<=65536),binding_sequence INTEGER NOT NULL CHECK(binding_sequence>0),close_reason TEXT CHECK(close_reason IN ('cancelled','deadline')),close_sequence INTEGER,CHECK((close_reason IS NULL)=(close_sequence IS NULL)));
+CREATE INDEX native_reproduction_command ON events(json_extract(payload,'$.command_id')) WHERE kind='native_reproduction_created';
+CREATE INDEX native_reproduction_parent_command ON operations(json_extract(payload,'$.command_id')) WHERE CASE WHEN json_valid(payload) THEN json_extract(payload,'$.kind') END='native_source_reproduction';
+CREATE INDEX native_reproduction_admission_command ON events(json_extract(payload,'$.payload.command_id')) WHERE kind='command_admitted' AND CASE WHEN json_valid(payload) THEN json_extract(payload,'$.payload.kind') END='native_source_reproduction';")?;
+        tx.pragma_update(None, "user_version", 20)?;
+    }
     tx.commit()?;
     Ok(())
 }
@@ -152,7 +162,7 @@ pub(super) fn validate_current(conn: &Connection) -> Result<()> {
     if application != APPLICATION_ID {
         return Err(Error::ForeignDatabase);
     }
-    if version != 19 {
+    if version != 20 {
         return Err(Error::Schema(version));
     }
     let observed = crate::readonly::definitions(conn)?;
@@ -171,7 +181,7 @@ fn validate_sixteen(conn: &Connection) -> Result<()> {
     let observed = crate::readonly::definitions_with_count(conn, 45)?;
     let mut reference = Connection::open_in_memory()?;
     initialize(&mut reference)?;
-    reference.execute_batch("DROP INDEX source_archive_command; DROP TABLE source_archives; DROP INDEX review_command_created; DROP TABLE reviews; DROP INDEX scan_command_created; DROP TABLE scans;")?;
+    reference.execute_batch("DROP INDEX native_reproduction_admission_command; DROP INDEX native_reproduction_parent_command; DROP INDEX native_reproduction_command; DROP TABLE native_reproductions; DROP INDEX source_archive_command; DROP TABLE source_archives; DROP INDEX review_command_created; DROP TABLE reviews; DROP INDEX scan_command_created; DROP TABLE scans;")?;
     if observed != crate::readonly::definitions_with_count(&reference, 45)? {
         return Err(Error::ForeignDatabase);
     }
@@ -183,7 +193,7 @@ fn validate_seventeen(conn: &Connection) -> Result<()> {
     let observed = crate::readonly::definitions_with_count(conn, 47)?;
     let mut reference = Connection::open_in_memory()?;
     initialize(&mut reference)?;
-    reference.execute_batch("DROP INDEX source_archive_command; DROP TABLE source_archives; DROP INDEX review_command_created; DROP TABLE reviews;")?;
+    reference.execute_batch("DROP INDEX native_reproduction_admission_command; DROP INDEX native_reproduction_parent_command; DROP INDEX native_reproduction_command; DROP TABLE native_reproductions; DROP INDEX source_archive_command; DROP TABLE source_archives; DROP INDEX review_command_created; DROP TABLE reviews;")?;
     if observed != crate::readonly::definitions_with_count(&reference, 47)? {
         return Err(Error::ForeignDatabase);
     }
@@ -195,8 +205,21 @@ fn validate_eighteen(conn: &Connection) -> Result<()> {
     let observed = crate::readonly::definitions_with_count(conn, 49)?;
     let mut reference = Connection::open_in_memory()?;
     initialize(&mut reference)?;
-    reference.execute_batch("DROP INDEX source_archive_command; DROP TABLE source_archives;")?;
+    reference.execute_batch("DROP INDEX native_reproduction_admission_command; DROP INDEX native_reproduction_parent_command; DROP INDEX native_reproduction_command; DROP TABLE native_reproductions; DROP INDEX source_archive_command; DROP TABLE source_archives;")?;
     if observed != crate::readonly::definitions_with_count(&reference, 49)? {
+        return Err(Error::ForeignDatabase);
+    }
+    Ok(())
+}
+
+fn validate_nineteen(conn: &Connection) -> Result<()> {
+    let observed = crate::readonly::definitions_with_count(conn, 51)?;
+    let mut reference = Connection::open_in_memory()?;
+    initialize(&mut reference)?;
+    reference.execute_batch(
+        "DROP INDEX native_reproduction_admission_command; DROP INDEX native_reproduction_parent_command; DROP INDEX native_reproduction_command; DROP TABLE native_reproductions;",
+    )?;
+    if observed != crate::readonly::definitions_with_count(&reference, 51)? {
         return Err(Error::ForeignDatabase);
     }
     Ok(())

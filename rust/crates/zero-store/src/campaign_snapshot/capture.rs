@@ -3,10 +3,17 @@ use rusqlite::{
     Connection, OptionalExtension,
     types::{Value, ValueRef},
 };
-pub(super) fn columns(conn: &Connection, table: &str) -> Result<Vec<String>> {
+pub(crate) fn columns(conn: &Connection, table: &str) -> Result<Vec<String>> {
     if !TABLES.contains(&table)
         && !SEARCH_TABLES.contains(&table)
-        && !matches!(table, "scans" | "reviews" | "source_triage_decisions")
+        && !matches!(
+            table,
+            "scans"
+                | "reviews"
+                | "source_triage_decisions"
+                | "native_reproductions"
+                | "source_archives"
+        )
     {
         return Err(invalid("unsupported table"));
     }
@@ -16,7 +23,7 @@ pub(super) fn columns(conn: &Connection, table: &str) -> Result<Vec<String>> {
         .collect::<std::result::Result<Vec<_>, _>>()?;
     Ok(rows)
 }
-pub(super) fn read_rows(
+pub(crate) fn read_rows(
     conn: &Connection,
     table: &str,
     filter: &str,
@@ -74,7 +81,7 @@ pub(super) fn read_rows(
     }
     Ok(output)
 }
-pub(super) fn strings(
+pub(crate) fn strings(
     conn: &Connection,
     sql: &str,
     parameters: &[Value],

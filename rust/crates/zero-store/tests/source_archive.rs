@@ -320,7 +320,7 @@ fn schema_eighteen_migration_preserves_old_review_and_none_is_honest() {
     drop(store);
     let sql = rusqlite::Connection::open(dir.path().join("db")).unwrap();
     sql.execute_batch(
-        "DROP INDEX source_archive_command; DROP TABLE source_archives; PRAGMA user_version=18;",
+        "DROP INDEX native_reproduction_admission_command; DROP INDEX native_reproduction_parent_command; DROP INDEX native_reproduction_command; DROP TABLE native_reproductions; DROP INDEX source_archive_command; DROP TABLE source_archives; PRAGMA user_version=18;",
     )
     .unwrap();
     assert!(matches!(
@@ -336,7 +336,7 @@ fn changed_eighteen_schema_rejects_before_archive_migration() {
     let (dir, store, _, _) = fixture();
     drop(store);
     let sql = rusqlite::Connection::open(dir.path().join("db")).unwrap();
-    sql.execute_batch("DROP INDEX source_archive_command; DROP TABLE source_archives; PRAGMA user_version=18; CREATE INDEX alien ON sessions(created_at_ms);").unwrap();
+    sql.execute_batch("DROP INDEX native_reproduction_admission_command; DROP INDEX native_reproduction_parent_command; DROP INDEX native_reproduction_command; DROP TABLE native_reproductions; DROP INDEX source_archive_command; DROP TABLE source_archives; PRAGMA user_version=18; CREATE INDEX alien ON sessions(created_at_ms);").unwrap();
     assert!(matches!(
         Store::open(dir.path().join("db")),
         Err(zero_store::Error::ForeignDatabase)

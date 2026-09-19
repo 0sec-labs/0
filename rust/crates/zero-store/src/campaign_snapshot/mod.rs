@@ -1,5 +1,5 @@
 //! Bounded logical campaign evidence. Packages contain data, never executable SQL.
-mod capture;
+pub(crate) mod capture;
 mod package;
 mod review;
 mod scan;
@@ -11,8 +11,8 @@ use std::collections::{BTreeMap, BTreeSet};
 // Portable layout version, independent of the live SQLite schema. Additive
 // Store migrations must preserve retained campaign evidence identities.
 const SNAPSHOT_STORE_LAYOUT: u32 = 14;
-const MAX_BYTES: usize = 64 * 1024 * 1024;
-const MAX_RECORDS: usize = 65_536;
+pub(crate) const MAX_BYTES: usize = 64 * 1024 * 1024;
+pub(crate) const MAX_RECORDS: usize = 65_536;
 const MAX_CHUNK: usize = 4 * 1024 * 1024;
 const MAX_MANIFEST: usize = 1024 * 1024;
 const TABLES: &[&str] = &[
@@ -91,7 +91,7 @@ fn hash(bytes: &[u8]) -> String {
     rename_all = "snake_case",
     deny_unknown_fields
 )]
-enum Cell {
+pub(crate) enum Cell {
     Null,
     Integer(i64),
     Text(String),

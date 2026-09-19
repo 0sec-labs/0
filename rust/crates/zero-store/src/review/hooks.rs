@@ -455,6 +455,7 @@ pub(crate) fn authorize(
     command: &str,
     payload: &Value,
 ) -> Result<()> {
+    crate::native_reproduction::forbid_generic(conn, session)?;
     let mut r = Reader::new();
     let Some(b) = read::binding(conn, session, &mut r)? else {
         return Ok(());
@@ -463,6 +464,7 @@ pub(crate) fn authorize(
 }
 
 pub(crate) fn guard_owner(conn: &Connection, session: &str, owner: &str) -> Result<()> {
+    crate::native_reproduction::forbid_generic(conn, session)?;
     let Some(b) = read::binding(conn, session, &mut Reader::new())? else {
         return Ok(());
     };
@@ -479,6 +481,7 @@ pub(crate) fn guard_reservation(
     key: &str,
     amount: u64,
 ) -> Result<()> {
+    crate::native_reproduction::forbid_generic(conn, session)?;
     let mut r = Reader::new();
     let Some(b) = read::binding(conn, session, &mut r)? else {
         return Ok(());
@@ -509,6 +512,7 @@ pub(crate) fn guard_reservation(
 
 pub(crate) fn guard_begin(conn: &Connection, key: &str, owner: &str) -> Result<()> {
     let session = session_for(conn, key)?;
+    crate::native_reproduction::forbid_generic(conn, &session)?;
     let mut r = Reader::new();
     let Some(b) = read::binding(conn, &session, &mut r)? else {
         return Ok(());

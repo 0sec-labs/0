@@ -11,6 +11,8 @@ use tokio::{
     net::{TcpListener, TcpStream},
     process::Command,
 };
+#[path = "support/review_reproduce.rs"]
+mod review_reproduce;
 
 const SOURCE: &str = "fn main() {\n    println!(\"retained review marker\");\n}\n";
 struct Fixture {

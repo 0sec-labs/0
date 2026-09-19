@@ -406,7 +406,7 @@ fn schema12_migration_preserves_existing_session_and_has_exact_readonly_schema()
     let s = store.create_session("legacy", 50).unwrap();
     drop(store);
     let sql = rusqlite::Connection::open(&path).unwrap();
-    sql.execute_batch("DROP INDEX campaign_root_lifecycle;DROP INDEX campaign_exposure_witness;DROP TABLE campaign_debits;DROP TABLE campaign_exposures;DROP TABLE campaign_runs;DROP INDEX source_archive_command; DROP TABLE source_archives; DROP INDEX review_command_created; DROP TABLE reviews; DROP INDEX scan_command_created; DROP TABLE scans; DROP TABLE strategy_search_selections; DROP TABLE strategy_search_evaluations; DROP TABLE strategy_search_proposals; DROP TABLE strategy_searches; DROP TABLE strategy_sessions; DROP TABLE campaigns;PRAGMA user_version=12;").unwrap();
+    sql.execute_batch("DROP INDEX campaign_root_lifecycle;DROP INDEX campaign_exposure_witness;DROP TABLE campaign_debits;DROP TABLE campaign_exposures;DROP TABLE campaign_runs;DROP INDEX native_reproduction_admission_command; DROP INDEX native_reproduction_parent_command; DROP INDEX native_reproduction_command; DROP TABLE native_reproductions; DROP INDEX source_archive_command; DROP TABLE source_archives; DROP INDEX review_command_created; DROP TABLE reviews; DROP INDEX scan_command_created; DROP TABLE scans; DROP TABLE strategy_search_selections; DROP TABLE strategy_search_evaluations; DROP TABLE strategy_search_proposals; DROP TABLE strategy_searches; DROP TABLE strategy_sessions; DROP TABLE campaigns;PRAGMA user_version=12;").unwrap();
     drop(sql);
     assert!(Store::open_read_only(&path).is_err());
     let store = Store::open(&path).unwrap();
