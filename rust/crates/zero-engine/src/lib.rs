@@ -385,6 +385,7 @@ impl Engine {
             "provisional_model_progress",
             "chat_completions_inference",
             "anthropic_messages_inference",
+            "google_generate_content_inference",
             "bounded_offline_snapshot_agent",
             "bounded_joined_subagents",
             "durable_boundary_steering",

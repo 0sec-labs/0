@@ -10,6 +10,7 @@ pub enum WireApi {
     Responses,
     ChatCompletions,
     AnthropicMessages,
+    GoogleGenerateContent,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema, PartialEq, Eq)]

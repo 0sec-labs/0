@@ -181,7 +181,10 @@ impl ProviderClient {
             || (matches!(
                 endpoint.authentication,
                 Authentication::AzureApiKey | Authentication::AzureEntra
-            ) && wire == crate::WireApi::AnthropicMessages)
+            ) && !matches!(
+                wire,
+                crate::WireApi::Responses | crate::WireApi::ChatCompletions
+            ))
             || (endpoint.authentication == Authentication::GithubCopilot
                 && wire != crate::WireApi::ChatCompletions)
         {
@@ -234,6 +237,9 @@ impl ProviderClient {
         {
             return Err(TransportError::InvalidRequest);
         }
+        if self.wire == crate::WireApi::GoogleGenerateContent {
+            crate::google::validate_route(&self.endpoint.url, model)?;
+        }
         if let Some(pin) = &self.hosted_catalog {
             if model != pin.model
                 || max_output_tokens == 0
@@ -258,7 +264,9 @@ impl ProviderClient {
                     item.get("type")
                         .and_then(serde_json::Value::as_str)
                         .is_some_and(|kind| {
-                            kind.starts_with("chat_completion_") || kind.starts_with("anthropic_")
+                            kind.starts_with("chat_completion_")
+                                || kind.starts_with("anthropic_")
+                                || kind.starts_with("google_")
                         })
                 }) {
                     return Err(TransportError::InvalidRequest);
@@ -267,6 +275,7 @@ impl ProviderClient {
             }
             crate::WireApi::ChatCompletions => crate::chat::encode(request),
             crate::WireApi::AnthropicMessages => crate::anthropic::encode(request),
+            crate::WireApi::GoogleGenerateContent => crate::google::encode(request),
         }
     }
     /// Compatibility entry point for an explicitly configured Responses route.
@@ -328,14 +337,22 @@ impl ProviderClient {
         if tokio::time::Instant::now() >= deadline {
             return Err(TransportError::Timeout);
         }
+        let mut url = self.endpoint.url.clone();
+        if self.wire == crate::WireApi::GoogleGenerateContent {
+            url.set_query(Some("alt=sse"));
+        }
         let mut post = self
             .client
-            .post(self.endpoint.url.clone())
+            .post(url)
             .json(&body)
             .header("Accept", "text/event-stream");
         if self.endpoint.authentication == Authentication::AzureApiKey {
             if let Some(key) = &self.endpoint.api_key {
                 post = post.header("api-key", key.clone());
+            }
+        } else if self.wire == crate::WireApi::GoogleGenerateContent {
+            if let Some(key) = &self.endpoint.api_key {
+                post = post.header("x-goog-api-key", key.clone());
             }
         } else if self.wire == crate::WireApi::AnthropicMessages {
             post = post.header("anthropic-version", "2023-06-01");
@@ -377,6 +394,9 @@ impl ProviderClient {
         }
         let mut decoder = Decoder::default();
         let mut accumulator = match self.wire {
+            crate::WireApi::GoogleGenerateContent => {
+                StreamAccumulator::Google(crate::google_stream::Accumulator::new(&request.model))
+            }
             crate::WireApi::Responses => StreamAccumulator::Responses(Accumulator::default()),
             crate::WireApi::AnthropicMessages => StreamAccumulator::Anthropic(
                 crate::anthropic_stream::Accumulator::new(&request.model),
@@ -396,7 +416,11 @@ impl ProviderClient {
             };
             let chunk = match chunk {
                 Ok(Some(chunk)) => chunk,
-                Ok(None) => return Ok(accumulator.finish(None)),
+                Ok(None) => {
+                    let partial =
+                        self.wire == crate::WireApi::GoogleGenerateContent && decoder.has_pending();
+                    return Ok(accumulator.finish(partial.then_some("incomplete Google SSE frame")));
+                }
                 Err(_) => {
                     return Ok(accumulator.finish(Some(
                         "provider stream transport failed; usage may be incomplete",
@@ -434,6 +458,7 @@ enum StreamAccumulator {
     Responses(Accumulator),
     Chat(crate::chat::Accumulator),
     Anthropic(crate::anthropic_stream::Accumulator),
+    Google(crate::google_stream::Accumulator),
 }
 impl StreamAccumulator {
     fn event(&mut self, data: &[u8]) -> Result<(), TransportError> {
@@ -441,6 +466,7 @@ impl StreamAccumulator {
             Self::Responses(a) => a.event(data),
             Self::Chat(a) => a.event(data),
             Self::Anthropic(a) => a.event(data),
+            Self::Google(a) => a.event(data),
         }
     }
     fn finish(self, interrupted: Option<&str>) -> Completion {
@@ -448,6 +474,7 @@ impl StreamAccumulator {
             Self::Responses(a) => a.finish(interrupted),
             Self::Chat(a) => a.finish(interrupted),
             Self::Anthropic(a) => a.finish(interrupted),
+            Self::Google(a) => a.finish(interrupted),
         }
     }
 }

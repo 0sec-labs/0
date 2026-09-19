@@ -8,6 +8,9 @@ pub(crate) struct Decoder {
     data: Vec<u8>,
 }
 impl Decoder {
+    pub fn has_pending(&self) -> bool {
+        !self.line.is_empty() || !self.data.is_empty()
+    }
     pub fn feed(&mut self, bytes: &[u8]) -> Result<Vec<Vec<u8>>, TransportError> {
         let mut frames = Vec::new();
         for byte in bytes {

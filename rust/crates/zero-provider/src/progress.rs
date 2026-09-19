@@ -115,6 +115,25 @@ impl<'a> Observer<'a> {
             WireApi::Responses => self.responses(&value),
             WireApi::ChatCompletions => self.chat(&value),
             WireApi::AnthropicMessages => self.anthropic(&value),
+            WireApi::GoogleGenerateContent => self.google(&value),
+        }
+    }
+    fn google(&mut self, event: &Value) {
+        if let Some(parts) = event["candidates"][0]["content"]["parts"].as_array() {
+            for part in parts {
+                if let Some(text) = part["text"].as_str() {
+                    self.text(
+                        if part["thought"] == true {
+                            TextKind::Reasoning
+                        } else {
+                            TextKind::Text
+                        },
+                        0,
+                        0,
+                        text,
+                    );
+                }
+            }
         }
     }
     fn responses(&mut self, event: &Value) {

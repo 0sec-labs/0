@@ -79,3 +79,21 @@ entries, truncated/trailing data, trusted expectations, committed-source freezin
 Git export transformations, compiler controls and a racing output destination.
 The six packaging-boundary tests use fake local build tools; they do not replace
 the actual Rust builds described above.
+
+## Explicit native-only installation
+
+`scripts/install-native.py` installs only into an explicit dedicated user-owned
+prefix. A trusted archive SHA-256 is required. It snapshots and verifies archive
+bytes without execution, retains immutable versions, and atomically switches a
+native-only activation record. Exact reinstall reuses verified cached storage;
+rollback verifies the previous version again. Deactivation retains versions and
+history. Explicit recovery can restore a missing activation from a reverified
+cached version. See [the installation contract](../scripts/NATIVE-INSTALL.md).
+
+The actual release and development archives above passed installation, exact
+reinstall without duplicate archive storage, upgrade, release rollback,
+deactivation and reactivation in a temporary prefix on the same Linux host.
+Activated binary hashes and `--version` were checked after each switch. All 30
+distribution tests passed, including 15 installer tests for integrity, ownership,
+concurrency and interrupted activation. No production alias or user installation
+was changed by this qualification.

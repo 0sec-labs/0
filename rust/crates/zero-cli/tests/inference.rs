@@ -34,13 +34,19 @@ enum FixtureProvider {
     Default,
     Azure,
     Copilot,
+    Google,
 }
 
 fn exercise_inference(truncated: bool, provider: FixtureProvider) {
     let dir = TempDir::new().unwrap();
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     listener.set_nonblocking(true).unwrap();
-    let url = format!("http://{}/responses", listener.local_addr().unwrap());
+    let path = if provider == FixtureProvider::Google {
+        "/models/fixture:streamGenerateContent"
+    } else {
+        "/responses"
+    };
+    let url = format!("http://{}{path}", listener.local_addr().unwrap());
     let server = std::thread::spawn(move || {
         let deadline = std::time::Instant::now() + Duration::from_secs(5);
         let mut socket = loop {
@@ -78,7 +84,11 @@ fn exercise_inference(truncated: bool, provider: FixtureProvider) {
             }
         }
         let headers = String::from_utf8_lossy(&bytes);
-        if provider == FixtureProvider::Azure {
+        if provider == FixtureProvider::Google {
+            assert!(headers.starts_with("POST /models/fixture:streamGenerateContent?alt=sse "));
+            assert!(headers.contains("x-goog-api-key: fixture-secret"));
+            assert!(!headers.to_ascii_lowercase().contains("authorization:"));
+        } else if provider == FixtureProvider::Azure {
             assert!(headers.contains("api-key: fixture-secret"));
             assert!(!headers.to_ascii_lowercase().contains("authorization:"));
         } else {
@@ -90,7 +100,15 @@ fn exercise_inference(truncated: bool, provider: FixtureProvider) {
             assert!(!headers.contains("x-api-key:"));
         }
         let event = json!({"type":"response.completed","response":{"id":"r1","status":"completed","output":[{"type":"message","content":[{"type":"output_text","text":"hello"}]}],"usage":{"input_tokens":2,"output_tokens":1}}});
-        let body = if provider == FixtureProvider::Copilot {
+        let body = if provider == FixtureProvider::Google {
+            let mut event = json!({"responseId":"g1","candidates":[{"content":{"role":"model","parts":[{"text":"hello"}]}}]});
+            if !truncated {
+                event["candidates"][0]["finishReason"] = json!("STOP");
+                event["usageMetadata"] =
+                    json!({"promptTokenCount":2,"candidatesTokenCount":1,"totalTokenCount":3});
+            }
+            format!("data: {event}\n\n")
+        } else if provider == FixtureProvider::Copilot {
             let initial = json!({"id":"c1","choices":[{"index":0,"delta":{"role":"assistant","content":"hello"},"finish_reason":if truncated { serde_json::Value::Null } else { json!("stop") }}]});
             if truncated {
                 format!("data: {initial}\n\n")
@@ -118,9 +136,12 @@ fn exercise_inference(truncated: bool, provider: FixtureProvider) {
         profiles["fixture"]["authentication"] = json!("github_copilot");
         profiles["fixture"]["wire_api"] = json!("chat_completions");
     }
+    if provider == FixtureProvider::Google {
+        profiles["fixture"]["wire_api"] = json!("google_generate_content");
+    }
     std::fs::write(&config, profiles.to_string()).unwrap();
     let request = dir.path().join("request.json");
-    std::fs::write(&request, json!({"model":"fixture","instructions":"test","input":[],"tools":[],"max_output_tokens":32}).to_string()).unwrap();
+    std::fs::write(&request, json!({"model":"fixture","instructions":"test","input":[{"role":"user","content":"test"}],"tools":[],"max_output_tokens":32}).to_string()).unwrap();
     let created = cli(&dir)
         .args(["session", "create", "--budget-limit", "100"])
         .output()
@@ -250,4 +271,10 @@ fn copilot_inference_uses_explicit_auth_and_charges_exactly_once() {
 #[test]
 fn copilot_unknown_inference_retains_billing_hold_without_replay() {
     exercise_inference(true, FixtureProvider::Copilot);
+}
+
+#[test]
+fn google_native_cli_accounting_and_exact_retry() {
+    exercise_inference(false, FixtureProvider::Google);
+    exercise_inference(true, FixtureProvider::Google);
 }

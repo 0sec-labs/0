@@ -144,6 +144,21 @@ mod tests {
     use serde_json::json;
 
     #[test]
+    fn google_wire_is_explicit_and_preserves_exact_endpoint() {
+        let profile: Profile=serde_json::from_value(json!({"url":"https://generativelanguage.googleapis.com/v1beta/models/exact-model:streamGenerateContent","wire_api":"google_generate_content","api_key_env":"KEY","rates":{"input":1,"cached_input":0,"output":1},"timeout_ms":1000,"max_response_bytes":8192})).unwrap();
+        assert_eq!(profile.wire_api, WireApi::GoogleGenerateContent);
+        assert!(matches!(
+            profile.authentication,
+            Authentication::WireDefault
+        ));
+        assert!(
+            profile
+                .url
+                .ends_with("/models/exact-model:streamGenerateContent")
+        );
+    }
+
+    #[test]
     fn authentication_is_optional_strict_and_never_inferred_from_url() {
         let mut profile = json!({"url":"https://azure.example/openai/v1/responses","api_key_env":"KEY","rates":{"input":1,"cached_input":0,"output":1},"timeout_ms":1000,"max_response_bytes":8192});
         let parsed: Profile = serde_json::from_value(profile.clone()).unwrap();

@@ -44,6 +44,24 @@ pub(super) fn validate(replay: &[Value], call_ids: &[String], outputs: &[Value])
                     }
                 }
             }
+            Some("google_content") => {
+                if item["content"]["role"] != "model" {
+                    return Err(invalid());
+                }
+                let parts = item["content"]["parts"].as_array().ok_or_else(invalid)?;
+                let ids = item["call_ids"].as_array().ok_or_else(invalid)?;
+                if parts
+                    .iter()
+                    .filter(|p| p.get("functionCall").is_some())
+                    .count()
+                    != ids.len()
+                {
+                    return Err(invalid());
+                }
+                for call in ids {
+                    found.push(id(call)?);
+                }
+            }
             Some("anthropic_message") => {
                 if item["message"]["role"] != "assistant" {
                     return Err(invalid());

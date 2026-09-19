@@ -91,7 +91,9 @@ fn compile(
     let suffix = match wire_api {
         WireApi::Responses => "/api/inference/v1/responses",
         WireApi::ChatCompletions => "/api/inference/v1/chat/completions",
-        WireApi::AnthropicMessages => return Err(CloudError::InvalidResponse),
+        WireApi::AnthropicMessages | WireApi::GoogleGenerateContent => {
+            return Err(CloudError::InvalidResponse);
+        }
     };
     let host = host.as_str().trim_end_matches('/').to_owned();
     let endpoint = format!("{host}{suffix}");

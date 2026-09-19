@@ -1328,3 +1328,14 @@ production Clippy and formatting passed. Physical proof includes authenticated
 loopback HTTP, exact grant conflicts, absolute expiry, SIGTERM cleanup, SIGKILL
 recovery without credentials, no replay/refill, and report failure versus corrupt
 immutable metadata. No paid model, live target, upload or deployment was used.
+
+### Native Google provider checkpoint
+
+The native Gemini `streamGenerateContent` path now supports explicit API-key
+routes, bounded single-candidate SSE, exact signed-part/tool-result replay,
+context projection, cancellation and final thinking/cache usage accounting.
+See [GOOGLE-PROVIDER.md](GOOGLE-PROVIDER.md) for configuration and qualified
+limits. Google Code Assist/Vertex OAuth, multimodal/server tools and live-provider
+qualification remain pending. The legacy subscription process adapter remains
+unsupported: documented managed hooks cannot be disabled by local CLI flags;
+no unsandboxed host execution is substituted for Rust effect authority.

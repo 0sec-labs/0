@@ -4,6 +4,8 @@ mod anthropic_stream;
 mod chat;
 #[cfg(unix)]
 mod entra;
+mod google;
+mod google_stream;
 mod progress;
 mod responses;
 mod sse;
