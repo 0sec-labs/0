@@ -1,20 +1,20 @@
 ---
 title: Authorized Engagements
-description: Running 0sec inside a client engagement — conservative posture, forensic timelines, and ATT&CK/ATLAS-mapped evidence.
+description: Running 0 inside a client engagement — conservative posture, forensic timelines, and ATT&CK/ATLAS-mapped evidence.
 ---
 
-0sec runs under authorized, announced testing only. Attribution headers,
+0 runs under authorized, announced testing only. Attribution headers,
 per-engagement tokens, declared-scope enforcement, and request counters
 identify traffic. This page covers posture controls and engagement evidence.
 
 ## Engagement profile
 
-By default 0sec runs at 5 rps/host, no jitter, and escalates on WAF blocks.
+By default 0 runs at 5 rps/host, no jitter, and escalates on WAF blocks.
 For monitored production estates, `--engagement-profile conservative` applies
 one auditable posture:
 
 ```bash
-0sec scan --target https://app.example.com --mode web \
+0 scan --target https://app.example.com --mode web \
   --scope ./engagement-scope.json \
   --engagement-profile conservative
 ```
@@ -40,9 +40,9 @@ Disable the WAF-evasion ladder independently to stop automatic escalation into
 encoding-mutated payloads (detection and block reporting are unaffected):
 
 ```bash
-0sec scan --target https://app.example.com --scope ./engagement-scope.json --no-waf-evasion
+0 scan --target https://app.example.com --scope ./engagement-scope.json --no-waf-evasion
 # or
-env 0SEC_WAF_EVASION=0 0sec scan --target https://app.example.com --scope ./engagement-scope.json
+env 0SEC_WAF_EVASION=0 0 scan --target https://app.example.com --scope ./engagement-scope.json
 ```
 
 Env vars: `0SEC_ENGAGEMENT_PROFILE`, `0SEC_WAF_EVASION`,
@@ -56,16 +56,16 @@ fact. Runs without a profile are unchanged.
 
 ## Forensic timeline
 
-`0sec timeline` builds a chronological record from the pipeline-event audit
+`0 timeline` builds a chronological record from the pipeline-event audit
 trail. It uses the selected SQLite database (not all run-local databases).
 Pass `--db-path` for the inspected run:
 
 ```bash
-0sec timeline <scanId> --db-path ~/.0sec/runs/<scanId>/state.db
-0sec timeline <scanId> --db-path ~/.0sec/runs/<scanId>/state.db --format json
-0sec timeline <scanId> --db-path ~/.0sec/runs/<scanId>/state.db --format csv
-0sec timeline <scanId> --db-path ~/.0sec/runs/<scanId>/state.db --attack-only
-0sec timeline <scanId> --db-path ~/.0sec/runs/<scanId>/state.db \
+0 timeline <scanId> --db-path ~/.0sec/runs/<scanId>/state.db
+0 timeline <scanId> --db-path ~/.0sec/runs/<scanId>/state.db --format json
+0 timeline <scanId> --db-path ~/.0sec/runs/<scanId>/state.db --format csv
+0 timeline <scanId> --db-path ~/.0sec/runs/<scanId>/state.db --attack-only
+0 timeline <scanId> --db-path ~/.0sec/runs/<scanId>/state.db \
   --since 2026-09-01T09:00:00Z --until 2026-09-01T17:00:00Z
 ```
 
@@ -92,14 +92,14 @@ empty.
 
 :::note
 The current ATT&CK Enterprise matrix renamed tactic **TA0005** "Defense Evasion"
-to "Stealth" and **T1211** to "Exploitation for Stealth". 0sec uses the current
+to "Stealth" and **T1211** to "Exploitation for Stealth". 0 uses the current
 names; if a client's tooling is pinned to an older release, remap at the
 presentation layer.
 :::
 
 ## Identity and token analysis
 
-`0sec identity` assesses an Entra ID tenant read-only — 27 posture checks across
+`0 identity` assesses an Entra ID tenant read-only — 27 posture checks across
 privileged roles, conditional access, app registrations, service principals, and
 federation. Read-only is structural: every Graph request hard-codes `GET`.
 
@@ -128,28 +128,28 @@ obligations.
 Two commands, same shape. The client's collector runs wherever the engagement
 puts it; analysis runs here. Both are offline — no collection, auth, or network.
 
-**Active Directory** — `0sec adgraph --input <path>` computes attack paths from a
+**Active Directory** — `0 adgraph --input <path>` computes attack paths from a
 BloodHound CE / SharpHound export: paths to Domain Admin, kerberoastable
 principals, unconstrained delegation, DCSync rights, ACL abuse, and the ADCS
 escalation set (ESC1, ESC3–ESC7, ESC9, ESC10, ESC13). ~60 edge kinds each carry
 a written abuse technique.
 
-**Entra ID** — `0sec entragraph --input <path>` does the equivalent over an
+**Entra ID** — `0 entragraph --input <path>` does the equivalent over an
 AzureHound export: paths to Global Administrator, service-principal escalation,
 consent-grant escalation, owner-chain abuse, and guest escalation.
 
 ```bash
-0sec entragraph --input ./azurehound-export/
-0sec entragraph --input ./azurehound-export/ --json
-0sec entragraph --input ./export --owned <objectId>,<objectId>   # start from known-compromised principals
-0sec entragraph --input ./export --max-depth 4
+0 entragraph --input ./azurehound-export/
+0 entragraph --input ./azurehound-export/ --json
+0 entragraph --input ./export --owned <objectId>,<objectId>   # start from known-compromised principals
+0 entragraph --input ./export --max-depth 4
 ```
 
 :::caution
 An AzureHound run without membership or ownership collections cannot produce
 those paths; `entragraph` says so explicitly rather than presenting an empty
 result as a clean tenant. AzureHound exports also carry no conditional-access,
-federation, or PIM data — run `0sec identity` against a live tenant for those.
+federation, or PIM data — run `0 identity` against a live tenant for those.
 :::
 
 <span id="what-0sec-does-not-do"></span>
@@ -184,6 +184,6 @@ region (audit artifact). Two caveats:
    providers."* Other enrichment paths still egress — GitHub API, OSV, package
    registries, Microsoft Graph, OAST. Air-gapping those is separate.
 2. Pin `--runtime api`. The `claude`, `codex`, and `gemini` runtimes shell out to
-   third-party binaries whose egress 0sec does not control.
+   third-party binaries whose egress 0 does not control.
 
 See [API Keys](/api-keys/) for the full provider matrix.

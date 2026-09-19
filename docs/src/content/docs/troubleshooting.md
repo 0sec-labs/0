@@ -1,6 +1,6 @@
 ---
 title: Troubleshooting
-description: Common installation, runtime, configuration, and diagnostic issues with the 0sec CLI.
+description: Common installation, runtime, configuration, and diagnostic issues with the 0 CLI.
 ---
 
 ## Installation
@@ -15,7 +15,7 @@ Failures usually mean one of:
 | `curl: (22) The requested URL returned error: 404` | Release asset not found for your platform/arch. Check supported combos below |
 | `curl: (6) Could not resolve host` | No network access to `github.com` |
 | `checksums.txt has no entry for ...` | Platform/arch not published for the latest release |
-| `checksum mismatch` | Download corrupted; retry. If persistent, [contact 0sec Labs](https://0.security/contact) |
+| `checksum mismatch` | Download corrupted; retry. If persistent, [contact the team](https://0.security/contact/?intent=contact) |
 | `curl is required` | `curl` not installed. Install it (`apt install curl`, `brew install curl`) |
 
 Supported release assets (from `.github/workflows/release.yml`):
@@ -40,7 +40,8 @@ Supported release assets (from `.github/workflows/release.yml`):
 INSTALL_FOXGUARD=0 bash <(curl -fsSL https://raw.githubusercontent.com/0sec-labs/0sec/main/install.sh)
 ```
 
-### `0sec` command not found after install
+<span id="0sec-command-not-found-after-install"></span>
+### `0` command not found after install
 
 The binary is installed to `~/.0sec/bin/0sec` (and symlinked as `~/.0sec/bin/0`).
 Add it to your `PATH`:
@@ -55,8 +56,9 @@ warning with the command to add it.
 
 ### Install on Windows
 
-`install.sh` does not support Windows. Download the release asset manually from
-the [releases page](https://github.com/0sec-labs/0sec/releases/latest):
+Windows support is experimental. `install.sh` does not support Windows.
+Download the release asset manually from the
+[releases page](https://github.com/0sec-labs/0sec/releases/latest):
 
 ```
 0sec-windows-x64.exe
@@ -66,9 +68,10 @@ Replace your current binary in place. Auto-upgrade is tracked separately.
 
 ## Runtime
 
-### `0sec doctor` reports Node.js version as bad
+<span id="0sec-doctor-reports-nodejs-version-as-bad"></span>
+### `0 doctor` reports Node.js version as bad
 
-The CLI requires **Node.js 20+**. Node 24 is recommended and used in CI.
+Source/npm execution requires **Node.js 24 or newer**.
 
 ```bash
 # Check your version
@@ -78,13 +81,13 @@ node --version
 nvm install 24
 ```
 
-The bun-compiled binary (downloaded via `install.sh`) is self-contained and does
-not require Node.js. The Node version check only applies when running from
-source (`node packages/cli/dist/index.js`).
+The standalone release binary includes its runtime and does not require Node
+or Bun installed separately. The full terminal UI requires Bun when running
+from source; Node provides the readline fallback.
 
 ### No API runtime configured
 
-`0sec doctor` reports `API runtime missing`:
+`0 doctor` reports `API runtime missing`:
 
 ```
 API runtime   missing  not configured
@@ -99,7 +102,7 @@ export ANTHROPIC_API_KEY="sk-ant-..."
 export OPENAI_API_KEY="sk-..."
 ```
 
-Then run `0sec doctor` again to confirm.
+Then run `0 doctor` again to confirm.
 
 ### API runtime configured but unusable
 
@@ -113,7 +116,7 @@ are incomplete or invalid. Common cases:
 | Provider | Missing |
 |----------|---------|
 | Azure OpenAI | `AZURE_OPENAI_BASE_URL` or `AZURE_OPENAI_MODEL` not set. The base URL must include `/openai/v1` for the Responses API |
-| ChatGPT Codex | Neither `0SEC_CHATGPT_ACCESS_TOKEN`, `0SEC_CHATGPT_OAUTH_REFRESH_TOKEN`, nor `~/.codex/auth.json` was found. Run `codex login` first, or pass the env var directly: `env 0SEC_CHATGPT_OAUTH_REFRESH_TOKEN="..." 0sec scan ...` |
+| ChatGPT Codex | Neither `0SEC_CHATGPT_ACCESS_TOKEN`, `0SEC_CHATGPT_OAUTH_REFRESH_TOKEN`, nor `~/.codex/auth.json` was found. Run `codex login` first, or pass the env var directly: `env 0SEC_CHATGPT_OAUTH_REFRESH_TOKEN="..." 0 scan ...` |
 
 Azure OpenAI configuration requires all three variables:
 
@@ -123,10 +126,12 @@ export AZURE_OPENAI_BASE_URL="https://your-resource.openai.azure.com/openai/v1"
 export AZURE_OPENAI_MODEL="gpt-4o"
 ```
 
-### `0sec doctor` shows no CLI runtimes found
+<span id="0sec-doctor-shows-no-cli-runtimes-found"></span>
+### `0 doctor` shows no CLI runtimes found
 
-CLI runtimes (`claude`, `codex`, `gemini`) are optional. The `api` runtime is
-the default and works with any supported provider key. To install a CLI runtime:
+CLI runtimes (`claude`, `codex`, `gemini`) are optional. For scan, review and
+audit, `auto` selects an available runtime for the workflow. Use `--runtime api`
+to select direct provider calls explicitly. To install a CLI runtime:
 
 ```bash
 npm i -g @anthropic-ai/claude-code   # Claude Code CLI
@@ -137,16 +142,16 @@ npm i -g @google/gemini-cli          # Gemini CLI
 Verify:
 
 ```bash
-0sec doctor
+0 doctor
 # CLI runtimes  found  claude codex gemini
 ```
 
 ### Agent loop error during a scan
 
-If the agent loop encounters an unrecoverable error:
+An unrecoverable agent-loop failure reports an error such as:
 
 ```
-[0sec] Agent loop error: ...
+Agent loop error: ...
 ```
 
 Common causes:
@@ -187,7 +192,7 @@ matches an `out_of_scope` deny rule (deny takes precedence). See
 ### Cloud auth failure
 
 ```bash
-0sec auth status
+0 auth status
 # FAIL (HTTP 401)
 ```
 
@@ -197,17 +202,17 @@ matches an `out_of_scope` deny rule (deny takes precedence). See
 | `3` | Network error (host unreachable, DNS failure) |
 | `1` | Other error |
 
-For an operator-provided host, retry `0sec auth login` or use the manual token path below. See [0cloud setup](/getting-started/#hosted-models-draft) for availability.
+For an operator-provided host, retry `0 auth login` or use the manual token path below. See [0cloud setup](/getting-started/#hosted-models-draft) for availability.
 
 ```bash
-0sec auth login --host https://control-plane.example.com --token "your-token"
+0 auth login --host https://control-plane.example.com --token "your-token"
 ```
 
 ## Provider issues
 
 ### Multiple providers configured — which one is used?
 
-0sec picks the first available provider from the configured variables. To pin a
+0 picks the first available provider from the configured variables. To pin a
 specific model, use `--model <id>` or `0SEC_MODEL`. Model routing recognizes:
 
 | Prefix | Provider |
@@ -220,7 +225,7 @@ specific model, use `--model <id>` or `0SEC_MODEL`. Model routing recognizes:
 | `opencode/*` | OpenCode Zen (preserves upstream protocol) |
 | Other | Detected from credential presence |
 
-If no explicit model is set, 0sec picks an available fallback. Pin a model
+If no explicit model is set, 0 picks an available fallback. Pin a model
 rather than relying on ambient credential order.
 
 ### `0SEC_*` env vars with leading digit
@@ -230,7 +235,7 @@ reject `export 0SEC_*=...`. Use `env` or a subshell:
 
 ```bash
 # Correct
-env 0SEC_CHATGPT_OAUTH_REFRESH_TOKEN="..." 0sec review .
+env 0SEC_CHATGPT_OAUTH_REFRESH_TOKEN="..." 0 review .
 
 # Incorrect (bash syntax error)
 export 0SEC_CHATGPT_OAUTH_REFRESH_TOKEN="..."
@@ -241,7 +246,7 @@ export 0SEC_CHATGPT_OAUTH_REFRESH_TOKEN="..."
 By default, the Codex runtime reads tokens from `~/.codex/auth.json`. Override:
 
 ```bash
-env 0SEC_CHATGPT_AUTH_FILE="/path/to/auth.json" 0sec scan ...
+env 0SEC_CHATGPT_AUTH_FILE="/path/to/auth.json" 0 scan ...
 ```
 
 `0SEC_CODEX_AUTH_JSON_PATH` is a deprecated spelling. Prefer
@@ -249,11 +254,42 @@ env 0SEC_CHATGPT_AUTH_FILE="/path/to/auth.json" 0sec scan ...
 
 ### OpenRouter routing
 
-OpenRouter acts as a fallback when direct provider credentials are absent for a
-given model family. To use OpenRouter exclusively, set only
-`OPENROUTER_API_KEY` and no other provider keys.
+OpenRouter can provide a fallback when a model's direct provider credentials
+are absent. To select it as the primary route without deleting other keys,
+configure `OPENROUTER_API_KEY` and pin a model supported by your account:
+
+```bash
+env 0SEC_SELECTED_PROVIDER=openrouter 0SEC_MODEL="<OpenRouter-model-id>" \
+  0 review ./authorized-repo --runtime api
+```
+
+See [provider pinning](/api-keys/#provider-pinning) for per-call model overrides.
+
+### Hosted balance is unavailable
+
+Run `0 auth status` to check authenticated account access, then
+`0 balance --json`. A `null` result means the current client could not
+interpret the account response; it does not mean zero credit or a failed login.
+Use the CLI/service combination approved for your test environment.
+
+The client expects a `credits-v1` snapshot. An allowance-only response from
+another service revision is not compatible with that reader. Do not interpret
+a working catalog as proof of account compatibility or request admission.
+See [hosted account data](/api-keys/#hosted-inference).
 
 ## Scan and review
+### Triage command reports an ambiguous target
+
+If `0 triage --help` reports **Ambiguous target** before showing help,
+the root router has treated the command name as a target instead of reaching
+its registered subcommands. This is a current source routing defect, not
+missing model credentials or a scope-file problem.
+
+Check `0 --version` when reporting it. Do not add a URL, change scope or
+start a scan to bypass the error. The registered triage reference describes
+the intended command interface; it does not establish that this routing path
+works in your installed build.
+
 
 ### Deep review produces no findings
 
@@ -272,13 +308,13 @@ Possible causes:
 `scan --timeout` sets the request timeout in milliseconds (default `30000`). To increase it:
 
 ```bash
-0sec scan --target https://example.com --scope ./scope.json --timeout 600000
+0 scan --target https://example.com --scope ./scope.json --timeout 600000
 ```
 
 For the MCP server, the default per-tool timeout is 30 seconds:
 
 ```bash
-0sec mcp-server --target https://example.com --scan-id s1 --timeout 60000
+0 mcp-server --target https://example.com --scan-id s1 --timeout 60000
 ```
 
 Deep scans on complex targets can take 10-30 minutes. Use `--depth quick` for
@@ -307,7 +343,7 @@ The [Docker image](/integrations/#docker-image) includes ripgrep pre-installed.
 [Commands](/commands/) for the selected command's options.
 
 ```bash
-0sec scan --target http://127.0.0.1:8080 --scope ./scope.json --format pdf
+0 scan --target http://127.0.0.1:8080 --scope ./scope.json --format pdf
 ```
 
 PDF reports require pdfkit (bundled in the CLI dependencies).
@@ -328,7 +364,7 @@ wrapper.
 
 ### Container exits immediately
 
-The image entrypoint is `0sec --help` by default. Pass a command:
+The image shows CLI help by default. Pass a command:
 
 ```bash
 docker run --rm ghcr.io/0sec-labs/0sec:latest review .
@@ -368,16 +404,16 @@ Multiple concurrent scans writing to the same database file can produce
 database, or use `--db-path` to point to an exclusive path:
 
 ```bash
-0sec scan --target https://example.com --scope ./scope.json --db-path ./scans/scan-001.db
+0 scan --target https://example.com --scope ./scope.json --db-path ./scans/scan-001.db
 ```
 
 ### Resume scan not found
 
-`0sec resume` looks up a previous scan by ID or by the database path. Ensure
+`0 resume` looks up a previous scan by ID or by the database path. Ensure
 the database from the original scan is still available and pass `--db-path`:
 
 ```bash
-0sec resume --db-path ./scans/scan-001.db
+0 resume --db-path ./scans/scan-001.db
 ```
 
 The scan ID is printed at the start of the original run.
@@ -390,7 +426,7 @@ The interactive console requires a TUI-capable terminal and OpenTUI support.
 
 ```bash
 # Verify prerequisites
-0sec doctor
+0 doctor
 ```
 
 If running from source, ensure `@opentui/core` and `@opentui/react` are
@@ -428,7 +464,7 @@ Invalid --finding-intent '...'; expected one of investigate, verify, draft_fix.
 |-----|---------|
 | **No composite GitHub Action** | The planned `.github/actions/0sec-scan` composite action has not shipped. Use the container image or binary install instead |
 | **Plugin registry empty** | The default plugin registry endpoint has no published plugins. The plugin system is scaffolded but no marketplace ships yet |
-| **Windows upgrade** | `0sec upgrade` does not support Windows. Download release assets manually |
+| **Windows upgrade** | `0 upgrade` does not support Windows. Download release assets manually |
 | **MCP transport** | The MCP server uses stdio transport only. SSE/WebSocket transport is not implemented |
 | **Cloud auth browser flow** | The browser-based login flow depends on the server-side session-mint endpoint. The `--token` escape hatch works independently |
 
@@ -436,12 +472,12 @@ Invalid --finding-intent '...'; expected one of investigate, verify, draft_fix.
 
 | Command | What it checks |
 |---------|----------------|
-| `0sec doctor` | Node version, API runtime, CLI runtimes |
-| `0sec auth status` | Cloud credential validity against `/health` |
-| `0sec h1 auth` | HackerOne API credential validity |
-| `0sec --version` / `0 --version` | CLI version |
-| `0sec config show` | Effective layered configuration (global + project) |
-| `0sec scan --target <url> --dry-run` | Preview `--emit pr` publication commands only; the scan still executes |
+| `0 doctor` | Node version, API runtime, CLI runtimes |
+| `0 auth status` | Cloud credential validity against `/health` |
+| `0 h1 auth` | HackerOne API credential validity |
+| `0 --version` | CLI version |
+| `0 config show` | Effective layered configuration (global + project) |
+| `0 scan --target <url> --dry-run` | Preview `--emit pr` publication commands only; the scan still executes |
 
 ## See also
 

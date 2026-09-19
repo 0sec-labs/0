@@ -3,7 +3,7 @@ title: Agent Loop
 description: Model calls, tool execution, budgets, completion, and debugging.
 ---
 
-0sec runs assessments by putting a model in a loop with tools. The model reads
+0 runs assessments by putting a model in a loop with tools. The model reads
 the task, proposes tool calls, receives their results, and decides what to do
 next. Deterministic tool policies, budget checks, and verification constrain
 that process; model reasoning alone is not evidence.
@@ -132,8 +132,8 @@ Common patterns:
 a known scan ID:
 
 ```bash
-0sec history --limit 10
-0sec timeline <scan-id> --db-path ~/.0sec/runs/<scan-id>/state.db
+0 history --limit 10
+0 timeline <scan-id> --db-path ~/.0sec/runs/<scan-id>/state.db
 ```
 
 `timeline` reads the selected database; it does not search every run-local

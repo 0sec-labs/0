@@ -10,12 +10,12 @@ description: Choose a scan or source review, authorize it, inspect saved finding
 
 | Task | Command | Boundary |
 |---|---|---|
-| Web application | `0sec scan --target https://staging.example.com --scope ./scope.json` | Active network assessment |
-| MCP endpoint | `0sec scan --target mcp://server.example.com --scope ./scope.json` | Active MCP assessment |
-| Local source or Git repository | `0sec review ./my-app` | Source review; preparation and tools can access the network |
-| npm package | `0sec audit express` | Package acquisition and analysis |
-| Whole-repository file coverage | `0sec file-review ./my-app` | File-level review with its own checkpoints |
-| Seedless specialized review | `0sec deep-review ./my-app` | Multi-lens discovery; survivors remain leads |
+| Web application | `0 scan --target https://staging.example.com --scope ./scope.json` | Active network assessment |
+| MCP endpoint | `0 scan --target mcp://server.example.com --scope ./scope.json` | Active MCP assessment |
+| Local source or Git repository | `0 review ./my-app` | Source review; preparation and tools can access the network |
+| npm package | `0 audit express` | Package acquisition and analysis |
+| Whole-repository file coverage | `0 file-review ./my-app` | File-level review with its own checkpoints |
+| Seedless specialized review | `0 deep-review ./my-app` | Multi-lens discovery; survivors remain leads |
 
 Explicit commands avoid ambiguity in bare-target routing. `scan --mode` selects `probe`, `deep`, `mcp`, `web`, or worker-driven `http_audit`. A review target profile is different: `review --target c-library ./libfoo` selects the C-library review path, not a URL.
 
@@ -28,7 +28,7 @@ For variant hunting, specification checks, fuzzing, binaries, and kernel workflo
 Start with the schema and matching rules in [Scope & Authorization](/scope/). Authorize only the hosts, paths, and activities covered by your engagement.
 
 ```bash
-0sec scan --target https://staging.example.com --scope ./scope.json
+0 scan --target https://staging.example.com --scope ./scope.json
 ```
 
 Scope is an application-level policy, not an OS sandbox. Source review and package audit do not require a live-target scope file, but can acquire dependencies, clone repositories, or execute tooling. Run untrusted inputs on a disposable worker without unrelated credentials.
@@ -36,7 +36,7 @@ Scope is an application-level policy, not an OS sandbox. Source review and packa
 ### Attribution and engagement posture
 
 ```bash
-0sec scan --target https://staging.example.com --scope ./scope.json \
+0 scan --target https://staging.example.com --scope ./scope.json \
   --attribution-header "X-Customer=acme-corp" \
   --attribution-ua "pentest-engagement" \
   --engagement-profile conservative
@@ -49,7 +49,7 @@ The conservative posture changes request behavior, rate defaults, and WAF-evasio
 Provider credentials pay for model calls. Target credentials authenticate to the assessed application. Cloud login is a separate credential flow.
 
 ```bash
-0sec scan --target https://staging.example.com --scope ./scope.json \
+0 scan --target https://staging.example.com --scope ./scope.json \
   --auth ./auth.json --api-spec ./openapi.yaml --depth deep
 ```
 
@@ -78,7 +78,7 @@ Keep credential files out of version control and prefer a file over secrets in s
 `--depth quick`, `default`, and `deep` select different investigation budgets. They are not guaranteed wall-clock deadlines, and a clean result does not prove the absence of vulnerabilities.
 
 ```bash
-0sec scan --target https://staging.example.com --scope ./scope.json \
+0 scan --target https://staging.example.com --scope ./scope.json \
   --depth quick --cost-ceiling 5 --rate-limit 2
 ```
 
@@ -90,7 +90,7 @@ Keep credential files out of version control and prefer a file over secrets in s
 it does not claim every layer ran or that all remaining findings are reproduced.
 
 ```bash
-0sec scan --target https://staging.example.com --scope ./scope.json \
+0 scan --target https://staging.example.com --scope ./scope.json \
   --features fp-moat
 ```
 
@@ -101,9 +101,9 @@ Inspect per-finding triage provenance. A skipped layer and an unrecorded layer a
 The default output is `terminal`. `json`, `md`, and `sarif` support machine-readable or text exports:
 
 ```bash
-0sec scan --target https://staging.example.com --scope ./scope.json \
+0 scan --target https://staging.example.com --scope ./scope.json \
   --format json > scan.json
-0sec review ./my-app --format sarif > results.sarif
+0 review ./my-app --format sarif > results.sarif
 ```
 
 HTML and PDF output write a timestamped report under the system temporary directory and print its path. Redirecting stdout does not relocate the generated report. `scan` does not register `--report-path`; copy the emitted file to durable storage. See [Integrations](/integrations/#report-formats).
@@ -113,10 +113,10 @@ HTML and PDF output write a timestamped report under the system temporary direct
 Current scan storage is run-local: by default `~/.0sec/runs/<scan-id>/state.db`, subject to the configured state root. `--db-path` selects an explicit database. Do not assume every command uses a single `~/.0sec/0sec.db`.
 
 ```bash
-0sec scan --target https://staging.example.com --scope ./scope.json \
+0 scan --target https://staging.example.com --scope ./scope.json \
   --db-path ./engagement.db
-0sec history --db-path ./engagement.db
-0sec findings --db-path ./engagement.db
+0 history --db-path ./engagement.db
+0 findings --db-path ./engagement.db
 ```
 
 Keep the database and associated run artifacts when handing off or resuming work. Cloud engagement IDs, console sessions, and scan IDs are not interchangeable.
@@ -126,11 +126,11 @@ Keep the database and associated run artifacts when handing off or resuming work
 Use the same database that holds the scan:
 
 ```bash
-0sec findings --db-path ./engagement.db
-0sec findings show FINDING_ID --db-path ./engagement.db
-0sec findings accept FINDING_ID --db-path ./engagement.db
-0sec findings suppress FINDING_ID --db-path ./engagement.db
-0sec findings reopen FINDING_ID --db-path ./engagement.db
+0 findings --db-path ./engagement.db
+0 findings show FINDING_ID --db-path ./engagement.db
+0 findings accept FINDING_ID --db-path ./engagement.db
+0 findings suppress FINDING_ID --db-path ./engagement.db
+0 findings reopen FINDING_ID --db-path ./engagement.db
 ```
 
 Replace `FINDING_ID` with the recorded ID or supported unique prefix. Accepting or suppressing a finding records a human decision; it does not execute a verifier.
@@ -138,10 +138,10 @@ Replace `FINDING_ID` with the recorded ID or supported unique prefix. Accepting 
 For false-positive feedback and durable memories:
 
 ```bash
-0sec triage mark-fp FINDING_ID --reason "Known test-only behavior" --db-path ./engagement.db
-0sec triage memory add --finding FINDING_ID --reason "Known test-only behavior" --db-path ./engagement.db
-0sec triage memory list --db-path ./engagement.db
-0sec triage memory remove MEMORY_ID --db-path ./engagement.db
+0 triage mark-fp FINDING_ID --reason "Known test-only behavior" --db-path ./engagement.db
+0 triage memory add --finding FINDING_ID --reason "Known test-only behavior" --db-path ./engagement.db
+0 triage memory list --db-path ./engagement.db
+0 triage memory remove MEMORY_ID --db-path ./engagement.db
 ```
 
 Review request/response evidence, source locations, lifecycle state, verifier outcomes, and triage provenance together. Persisted rows and discovery leads are not automatically confirmed findings.
@@ -151,9 +151,9 @@ Review request/response evidence, source locations, lifecycle state, verifier ou
 ### Resume — continue execution
 
 ```bash
-0sec resume SCAN_ID --db-path ./engagement.db
-0sec resume SCAN_ID --db-path ./engagement.db --format json
-0sec resume SCAN_ID --db-path ./engagement.db --branch-from 12
+0 resume SCAN_ID --db-path ./engagement.db
+0 resume SCAN_ID --db-path ./engagement.db --format json
+0 resume SCAN_ID --db-path ./engagement.db --branch-from 12
 ```
 
 Resume requires compatible persisted scan state. Journal-based branching also requires the relevant journal entries. A JSON report alone is not a resumable checkpoint. The standalone resume command supports specific persisted target routes, not every research or console workflow.
@@ -161,7 +161,7 @@ Resume requires compatible persisted scan state. Journal-based branching also re
 For a live scan that needs its explicit scope supplied again, use the scan entry point:
 
 ```bash
-0sec scan --target https://staging.example.com --scope ./scope.json \
+0 scan --target https://staging.example.com --scope ./scope.json \
   --db-path ./engagement.db --resume SCAN_ID
 ```
 
@@ -170,9 +170,9 @@ Do not assume standalone resume restores target credentials or authorization tha
 ### Replay — render stored results
 
 ```bash
-0sec replay
-0sec replay --scan SCAN_ID
-0sec scan --replay
+0 replay
+0 replay --scan SCAN_ID
+0 scan --replay
 ```
 
 Replay renders saved findings; it does not launch a fresh assessment or independently reproduce the vulnerability. `verify` is a different operation.
@@ -184,17 +184,18 @@ verification. Deterministic replay executes a finding, fixture, or reproduction
 bundle and records concrete assertions. Verification availability depends on the
 selected path.
 
-### Explicit verification with `0sec verify`
+<span id="explicit-verification-with-0sec-verify"></span>
+### Explicit verification with `0 verify`
 
 ```bash
 # Execute a finding with the selected runner.
-0sec verify finding.json --runner docker
+0 verify finding.json --runner docker
 
 # Replay vulnerable and patched snapshots from a reproduction bundle.
-0sec verify --bundle ./bundle-dir --runner docker
+0 verify --bundle ./bundle-dir --runner docker
 
 # Use the separate kernel-finding verification path.
-0sec verify --kernel-finding finding.json --kernel-tree ./linux
+0 verify --kernel-finding finding.json --kernel-tree ./linux
 ```
 
 A scan report containing many findings is not itself a single `finding.json`. Preserve the selected finding's executable verification data and target context. The Docker runner requires its runtime prerequisites; local execution runs on the host. Kernel execution requires its own setup in [Kernel VM Verification](/kernel-vm/).
@@ -208,7 +209,7 @@ A negative replay result can mean the tested environment differs from the origin
 `fix` takes a **clean local Git worktree**, not a finding file as its positional argument. Select one reproduced source finding, provide its verification contract, and supply an explicit regression command.
 
 ```bash
-0sec fix ./my-app --finding ./finding.json \
+0 fix ./my-app --finding ./finding.json \
   --test-command "npm test" --output ./validated.apply-patch
 ```
 
@@ -217,7 +218,7 @@ The external finding must carry `verificationSpec`. If it does not already carry
 The workflow generates and checks a candidate in an isolated worktree. `--output` writes validated **apply_patch DSL**, not a standard unified diff. By default it does not apply the candidate to the original worktree.
 
 ```bash
-0sec fix ./my-app --finding ./finding.json \
+0 fix ./my-app --finding ./finding.json \
   --test-command "npm test" --apply
 ```
 
@@ -234,16 +235,16 @@ See [Commands — fix](/commands/#fix) for the complete prerequisite and option 
 ## Package and source workflows
 
 ```bash
-0sec audit express --package-version 4.18.2
-0sec audit requests --ecosystem pypi
-0sec audit serde --ecosystem cargo
-0sec audit alpine:3.20 --ecosystem oci
+0 audit express --package-version 4.18.2
+0 audit requests --ecosystem pypi
+0 audit serde --ecosystem cargo
+0 audit alpine:3.20 --ecosystem oci
 
-0sec review ./my-app
-0sec review https://github.com/your-org/your-repository
-0sec review ./my-app --diff-base origin/main --changed-only
-0sec review --target c-library ./libfoo --depth deep
-0sec review --target linux-kernel ./linux
+0 review ./my-app
+0 review https://github.com/your-org/your-repository
+0 review ./my-app --diff-base origin/main --changed-only
+0 review --target c-library ./libfoo --depth deep
+0 review --target linux-kernel ./linux
 ```
 
 Use the ecosystem and version actually covered by your authorization. `--changed-only` narrows the documented review path; it is not proof of whole-repository coverage. `file-review` and `deep-review` offer different coverage/analysis tradeoffs and do not share all of `review`'s options.
@@ -253,9 +254,9 @@ Use the ecosystem and version actually covered by your authorization. `--changed
 GitHub export and PR emission are external writes and require repository authorization and credentials:
 
 ```bash
-0sec scan --target https://staging.example.com --scope ./scope.json \
+0 scan --target https://staging.example.com --scope ./scope.json \
   --export github:your-org/security-findings
-0sec scan --target https://staging.example.com --scope ./scope.json \
+0 scan --target https://staging.example.com --scope ./scope.json \
   --emit pr --base main --dry-run
 ```
 
@@ -270,4 +271,4 @@ GitHub export and PR emission are external writes and require repository authori
 - **Verification cannot execute:** inspect the mode's prerequisites and errors. Changing a finding's human triage state will not repair an executable verification contract.
 - **Fix refuses:** check the clean Git worktree, source finding, verification evidence, and explicit regression command. Do not bypass preconditions by relabeling a finding.
 
-For detailed runtime diagnosis, see [Troubleshooting](/troubleshooting/). For every command's arguments and options, use [Commands](/commands/) or `0sec COMMAND --help` for your installed release.
+For detailed runtime diagnosis, see [Troubleshooting](/troubleshooting/). For every command's arguments and options, use [Commands](/commands/) or `0 COMMAND --help` for your installed release.

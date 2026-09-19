@@ -1,6 +1,6 @@
 ---
 title: Shell-First Rationale
-description: Why 0sec uses bash instead of structured tools, with A/B test data from the XBOW benchmark.
+description: Why 0 uses bash instead of structured tools, with A/B test data from the XBOW benchmark.
 ---
 
 Most AI security tools give agents structured tools with typed parameters -- `crawl(url)`, `submit_form(url, fields)`, `http_request(url, method, body)`. The agent must learn the tool API, choose the right tool, and compose multi-step operations across separate tool calls.
@@ -18,7 +18,8 @@ LLMs have seen millions of curl-based exploits, CTF writeups, and pentest report
 
 A single curl command handles login, cookies, redirects, and response parsing. With structured tools, that is 4 separate calls with state management. The agent can also run sqlmap, write Python exploit scripts, use jq, chain pipes.
 
-## The 0sec tool set
+<span id="the-0sec-tool-set"></span>
+## The 0 tool set
 
 | Tool | Purpose | When to use |
 |------|---------|-------------|

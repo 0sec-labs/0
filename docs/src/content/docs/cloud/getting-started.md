@@ -28,17 +28,18 @@ Deliverable needed: reproduction evidence and a retest after remediation
 This is an engagement brief. Testing is not authorized until the scope and
 rules of engagement are agreed.
 
-## 2. Request access
+## 2. Contact the team
 
-Open [Apply to get hacked](https://0.security/contact?intent=early-access).
-Provide your name, organization, role, work email, and a short description of
-what should be tested.
+Open [Contact the team](https://0.security/contact/?intent=contact) to discuss
+managed work. Describe your organization, authorized targets and access
+constraints. Availability, deliverables and commercial terms must be agreed
+before work starts.
 
 Do not paste passwords, API keys, session cookies, customer records, or private
 source code into the contact form. Describe the access you can provide; agree on
 how to transfer sensitive material separately.
 
-Submitting an application does not start a scan or purchase a plan. Managed
+Submitting the contact form does not start a scan or purchase a plan. Managed
 access and execution are arranged with the team.
 
 ## 3. Agree on scope and access

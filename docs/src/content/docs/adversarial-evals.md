@@ -3,7 +3,7 @@ title: Adversarial evals
 description: Attack-driven evaluation of AI systems, with scoped execution and replayable evidence.
 ---
 
-0sec evaluates AI systems by attempting scoped attacks and recording evidence.
+0 evaluates AI systems by attempting scoped attacks and recording evidence.
 
 ## What's shipped
 
@@ -56,4 +56,4 @@ A vuln report covers exploitability and severity. An adversarial-eval report sho
 <span id="relationship-to-0sec-cloud"></span>
 ## Product scope
 
-Run local evaluations through `0sec`. Managed testing belongs to **0cloud**; recurring adversarial evaluation remains planned. **0cloud** offers hosted model access and end-to-end managed security work. These products have separate access and billing.
+Run local evaluations through `0`. Managed testing belongs to **0cloud**; recurring adversarial evaluation remains planned. **0cloud** offers hosted model access and end-to-end managed security work. These products have separate access and billing.

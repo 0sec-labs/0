@@ -7,16 +7,16 @@ For organization credentials, see [Cloud auth](/integrations/#cloud-auth).
 
 ## MCP Server
 
-The MCP server (`0sec mcp-server`) exposes 0sec's live-attack tools through the
+The MCP server (`0 mcp-server`) exposes 0's live-attack tools through the
 [Model Context Protocol](https://modelcontextprotocol.io) over stdio. Any MCP
-client (Claude Desktop, Cline, Continue, etc.) can drive a 0sec target session.
+client (Claude Desktop, Cline, Continue, etc.) can drive a 0 target session.
 
 **Source:** `packages/cli/src/commands/mcp-server.ts`
 
 ### Usage
 
 ```bash
-0sec mcp-server \
+0 mcp-server \
   --target https://target.example.com \
   --scan-id my-scan-001 \
   [options]
@@ -35,7 +35,7 @@ client (Claude Desktop, Cline, Continue, etc.) can drive a 0sec target session.
 |--------|---------|-------------|
 | `--db-path <path>` | — | Path to SQLite database for persistence |
 | `--timeout <ms>` | `30000` | Per-tool timeout in milliseconds (minimum 1000) |
-| `--scope <path>` | — | Path to a 0sec scope JSON file. Out-of-scope URLs are refused by every tool |
+| `--scope <path>` | — | Path to a 0 scope JSON file. Out-of-scope URLs are refused by every tool |
 | `--tools <names>` | all tools | Comma-separated subset of MCP tools to expose |
 | `--rate-limit <spec>` | `5` rps | Per-host request rate limit. An active `--engagement-profile` caps this |
 | `--allow-scanners` | `false` | Disable generic-scanner suppression for scoped engagements |
@@ -81,7 +81,7 @@ variable. Set it to a JSON object with one of these shapes:
 ```
 
 See [Configuration](/configuration/) for the full `--auth` flag details used by
-`0sec scan` and `0sec review`.
+`0 scan` and `0 review`.
 
 ### Rate limiting and engagement posture
 
@@ -114,8 +114,8 @@ MCP supports attribution headers for authorized engagements:
 ```json
 {
   "mcpServers": {
-    "0sec": {
-      "command": "0sec",
+    "0": {
+      "command": "0",
       "args": [
         "mcp-server",
         "--target", "https://target.example.com",
@@ -133,7 +133,7 @@ MCP supports attribution headers for authorized engagements:
 
 ```json
 {
-  "command": "0sec",
+  "command": "0",
   "args": ["mcp-server", "--target", "https://target.example.com", "--scan-id", "cli-session"],
   "env": { "ANTHROPIC_API_KEY": "sk-ant-..." }
 }
@@ -144,7 +144,7 @@ lifetime.
 
 ## HackerOne integration
 
-`0sec h1` provides read-only access to the HackerOne hacker API for program
+`0 h1` provides read-only access to the HackerOne hacker API for program
 discovery and scope enumeration.
 
 **Source:** `packages/cli/src/commands/h1.ts`
@@ -153,10 +153,10 @@ discovery and scope enumeration.
 
 | Subcommand | Description |
 |------------|-------------|
-| `0sec h1 auth` | Verify H1 credentials against the API |
-| `0sec h1 programs list` | Paginate/filter the program list |
-| `0sec h1 programs show <handle>` | Program detail + scope summary |
-| `0sec h1 scope dump <handle>` | Export structured scopes as scope JSON |
+| `0 h1 auth` | Verify H1 credentials against the API |
+| `0 h1 programs list` | Paginate/filter the program list |
+| `0 h1 programs show <handle>` | Program detail + scope summary |
+| `0 h1 scope dump <handle>` | Export structured scopes as scope JSON |
 
 ### Credentials
 
@@ -178,21 +178,21 @@ there is no login flow.
 
 ```bash
 # Verify credentials
-0sec h1 auth
+0 h1 auth
 
 # List programs
-0sec h1 programs list --limit 20
+0 h1 programs list --limit 20
 
 # Show program detail
-0sec h1 programs show my-program-handle
+0 h1 programs show my-program-handle
 
-# Export scope for use as a 0sec scope file
-0sec h1 scope dump my-program-handle --out my-scope.json
+# Export scope for use as a 0 scope file
+0 h1 scope dump my-program-handle --out my-scope.json
 ```
 
 ## Cloud auth
 
-`0sec auth` manages scoped organization credentials. For 0cloud availability and operator-host setup, see [Getting started](/getting-started/#hosted-models-draft). Local API-key and subscription use require no 0sec account.
+`0 auth` manages scoped organization credentials. For 0cloud availability and operator-host setup, see [Getting started](/getting-started/#hosted-models-draft). Local API-key and subscription use require no 0cloud account.
 
 **Source:** `packages/cli/src/commands/auth.ts`
 
@@ -200,18 +200,17 @@ there is no login flow.
 
 | Subcommand | Description |
 |------------|-------------|
-| `0sec auth login` | Open browser at the cloud host's `/cli-auth` page, poll for a scoped token |
-| `0sec auth login --token <value>` | Manual credential path — persist a token directly |
-| `0sec auth login --host <url>` | Point at a self-hosted cloud host |
-| `0sec auth logout` | Delete `~/.0sec/cloud.env` and `~/.0cloud/credentials.json` |
-| `0sec auth status` | Verify cloud credentials against `GET /health` |
+| `0 auth login` | Open browser at the cloud host's `/cli-auth` page, poll for a scoped token |
+| `0 auth login --token <value>` | Manual credential path — persist a token directly |
+| `0 auth login --host <url>` | Point at a self-hosted cloud host |
+| `0 auth logout` | Delete `~/.0sec/cloud.env` and `~/.0cloud/credentials.json` |
+| `0 auth status` | Verify cloud credentials against `GET /health` |
 
 ### Credential storage
 
 Credentials persist to `~/.0sec/cloud.env` (mode `0600`) with the format:
 
 ```text
-# 0sec-cloud credentials. Managed by `0sec auth`.
 # DO NOT commit this file or share its contents.
 0SEC_CLOUD_HOST=https://cloud.0.security
 0SEC_CLOUD_TOKEN=scoped-token-here
@@ -225,7 +224,7 @@ removed. Cloud auth uses Bearer tokens.
 For self-hosted or recovery use, pass a token directly:
 
 ```bash
-0sec auth login --token "your-token" --host "https://your-host.example.com"
+0 auth login --token "your-token" --host "https://your-host.example.com"
 ```
 
 This skips the browser flow entirely and persists the token immediately.
@@ -251,13 +250,13 @@ The SARIF output is compatible with `github/codeql-action/upload-sarif@v4`.
 See [GitHub CI](/ci/github-action/) for a full workflow example.
 
 ```bash
-0sec review . --format sarif > results.sarif
+0 review . --format sarif > results.sarif
 ```
 
 ### PDF report
 
 ```bash
-0sec scan --target http://127.0.0.1:8080 --scope ./scope.json --format pdf
+0 scan --target http://127.0.0.1:8080 --scope ./scope.json --format pdf
 ```
 
 The PDF formatter lazily loads pdfkit so the bun-compiled binary never bundles
@@ -266,7 +265,7 @@ it. Output is US Letter format with severity-colored sections.
 ### HTML report
 
 ```bash
-0sec scan --target http://127.0.0.1:8080 --scope ./scope.json --format html
+0 scan --target http://127.0.0.1:8080 --scope ./scope.json --format html
 ```
 
 The HTML formatter produces a standalone page with severity bars, finding cards,
@@ -274,7 +273,7 @@ collapsed request/response evidence, and meta tags.
 
 ## Docker image
 
-The 0sec engine is published as a multi-architecture Docker image on GitHub
+The 0 engine is published as a multi-architecture Docker image on GitHub
 Container Registry:
 
 ```
@@ -339,7 +338,7 @@ docker build --build-arg INSTALL_SECLISTS=1 -t 0sec:full .
 
 ## Plugin system
 
-0sec supports two plugin mechanisms:
+0 supports two plugin mechanisms:
 
 - **Model-authored executable plugins** — TypeScript code submitted by the
   model at runtime, executed in isolated Docker containers or smolvm microVMs.
@@ -479,21 +478,21 @@ fetching. Entries use the unconfigured signature verifier and are marked
 The [author guide](/hackstore/)
 covers executable scaffolding, the manifest, and a local two-file installation
 in an isolated home. The installer writes `plugin.js` and `plugin.json` only.
-Use 0sec 0.17.0 or newer for direct plugin calls. The 0.16.3 binary has a
+Use 0 0.17.0 or newer for direct plugin calls. The 0.16.3 binary has a
 tool-registry bug in `plugin run`.
 
 #### Subcommands
 
 | Subcommand | Description |
 |------------|-------------|
-| `0sec plugin list` | List installed plugins |
-| `0sec plugin browse` | List the configured registry |
-| `0sec plugin search <query>` | Search the configured registry |
-| `0sec plugin install <id>` | Write plugin files to disk (does not execute) |
-| `0sec plugin enable <id>` | Record operator decision to permit the plugin |
-| `0sec plugin disable <id>` | Revoke enablement |
-| `0sec plugin info <id>` | Show plugin manifest and capabilities |
-| `0sec plugin run <id> <tool> [pairs...]` | Invoke a tool; name it explicitly before `key=value` arguments. Effectful calls require `--yes`. |
+| `0 plugin list` | List installed plugins |
+| `0 plugin browse` | List the configured registry |
+| `0 plugin search <query>` | Search the configured registry |
+| `0 plugin install <id>` | Write plugin files to disk (does not execute) |
+| `0 plugin enable <id>` | Record operator decision to permit the plugin |
+| `0 plugin disable <id>` | Revoke enablement |
+| `0 plugin info <id>` | Show plugin manifest and capabilities |
+| `0 plugin run <id> <tool> [pairs...]` | Invoke a tool; name it explicitly before `key=value` arguments. Effectful calls require `--yes`. |
 
 #### Security model
 
@@ -513,7 +512,7 @@ runs under the operator's account. Review code before enabling it. Omitting
 
 ## Disclose and evidence
 
-`0sec disclose` provides structured vulnerability disclosure tooling for
+`0 disclose` provides structured vulnerability disclosure tooling for
 findings generated during a scan.
 
 **Source:** `packages/cli/src/commands/disclose.ts`
@@ -522,10 +521,10 @@ findings generated during a scan.
 
 | Subcommand | Description |
 |------------|-------------|
-| `0sec disclose [findingId]` | Ad-hoc disclosure for a specific finding |
-| `0sec disclose evidence-pack <finding.json>` | Assemble a DRAFT vendor notification markdown (never sends) |
-| `0sec disclose track <findingId>` | Drive the disclosure tracking state machine |
-| `0sec disclose review <finding.json>` | Render a deterministic reproducibility manifest |
+| `0 disclose [findingId]` | Ad-hoc disclosure for a specific finding |
+| `0 disclose evidence-pack <finding.json>` | Assemble a DRAFT vendor notification markdown (never sends) |
+| `0 disclose track <findingId>` | Drive the disclosure tracking state machine |
+| `0 disclose review <finding.json>` | Render a deterministic reproducibility manifest |
 
 ### Evidence pack
 
@@ -534,7 +533,7 @@ what/where/impact/repro/remediation sections. It emits a mandatory
 `DRAFT — NOT SENT` banner.
 
 ```bash
-0sec disclose evidence-pack finding.json --target "lodash@4.17.21" --out notification.md
+0 disclose evidence-pack finding.json --target "lodash@4.17.21" --out notification.md
 ```
 
 Options:
@@ -550,10 +549,10 @@ The `track` subcommand drives a state machine through statuses defined in
 
 ```bash
 # Open a fresh draft record
-0sec disclose track finding-001 --out record.json
+0 disclose track finding-001 --out record.json
 
 # Transition to "sent" with vendor info
-0sec disclose track finding-001 \
+0 disclose track finding-001 \
   --record record.json \
   --to sent \
   --disclosed-to "Vendor Security Team" \
@@ -561,7 +560,7 @@ The `track` subcommand drives a state machine through statuses defined in
   --out record.json
 
 # Record CVE assignment
-0sec disclose track finding-001 \
+0 disclose track finding-001 \
   --record record.json \
   --to cve_assigned \
   --cve-id CVE-2025-12345 \
@@ -574,12 +573,12 @@ The `review` subcommand produces a deterministic, redacted manifest safe for
 human inspection. It never sends or publishes anything.
 
 ```bash
-0sec disclose review finding.json --target "lodash@4.17.21" --out manifest.json
+0 disclose review finding.json --target "lodash@4.17.21" --out manifest.json
 ```
 
 ## Orchestrate
 
-`0sec orchestrate` runs an autonomous work queue over a shared SQLite database.
+`0 orchestrate` runs an autonomous work queue over a shared SQLite database.
 
 **Source:** `packages/cli/src/commands/orchestrate.ts`
 
@@ -587,8 +586,8 @@ human inspection. It never sends or publishes anything.
 
 | Mode | Flag | Description |
 |------|------|-------------|
-| Worker | `0sec orchestrate --db-path ./scans.db` | Claim and execute one batch of runnable work items, then exit |
-| Watcher | `0sec orchestrate --db-path ./scans.db --watch` | Poll for new work items continuously |
+| Worker | `0 orchestrate --db-path ./scans.db` | Claim and execute one batch of runnable work items, then exit |
+| Watcher | `0 orchestrate --db-path ./scans.db --watch` | Poll for new work items continuously |
 
 ### Work item types
 
@@ -629,7 +628,7 @@ The orchestrator supports these target URL schemes:
 
 ## Verification engine
 
-`0sec verify` exposes deterministic replay and kernel reproducer workflows.
+`0 verify` exposes deterministic replay and kernel reproducer workflows.
 The selected mode controls prerequisites, result shape, and exit-code meanings.
 
 **Source:** `packages/cli/src/commands/verify.ts`
@@ -649,13 +648,13 @@ SDK runner type is not automatically a CLI option.
 
 ```bash
 # SARIF for code scanning
-0sec review . --format sarif > results.sarif
+0 review . --format sarif > results.sarif
 
 # HTML report
-0sec scan --target http://127.0.0.1:8080 --scope ./scope.json --format html
+0 scan --target http://127.0.0.1:8080 --scope ./scope.json --format html
 
 # PDF report
-0sec scan --target http://127.0.0.1:8080 --scope ./scope.json --format pdf
+0 scan --target http://127.0.0.1:8080 --scope ./scope.json --format pdf
 ```
 
 ### Report summary output
@@ -668,7 +667,7 @@ files are cleaned up. Redirecting stdout does not relocate that report.
 
 ## See also
 
-- [GitHub CI](/ci/github-action/) — running 0sec in CI pipelines
+- [GitHub CI](/ci/github-action/) — running 0 in CI pipelines
 - [Configuration](/configuration/) — runtime modes, scan modes, env vars
 - [API Keys](/api-keys/) — provider setup
 - [Scope & Authorization](/scope/) — scope JSON files and access control

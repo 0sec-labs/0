@@ -31,6 +31,8 @@
   --docs-shadow: #403D39;
   --docs-radius: 4px;
   --docs-control-shadow: 5px;
+  --docs-panel-border: 2px solid var(--docs-frame);
+  --docs-panel-shadow: 5px 5px 0 var(--docs-shadow);
 
   --sl-color-accent-low: #E6ECE7;
   --sl-color-accent: #527A78;
@@ -110,6 +112,7 @@
   --sl-content-width: 48rem;
   --sl-nav-height: 7.5rem;
   --sl-sidebar-width: 18rem;
+  --docs-toc-width: 13rem;
 }
 
 :root:not([data-has-sidebar]) {
@@ -129,7 +132,7 @@
 @media (min-width: 50rem) {
   :root[data-has-sidebar] {
     --sl-nav-height: 0rem;
-    --docs-sidebar-header-height: 8rem;
+    --docs-sidebar-header-height: 11rem;
   }
 
   :root[data-has-sidebar] header.header {
@@ -147,9 +150,24 @@
 
   :root[data-has-sidebar] .docs-header-main {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto auto;
+    grid-template-columns: minmax(0, 1fr) auto;
     align-content: center;
-    gap: 0.75rem 0.375rem;
+    gap: 0.75rem 1rem;
+  }
+
+  :root[data-has-sidebar] .docs-brand {
+    grid-column: 1 / -1;
+  }
+
+  :root[data-has-sidebar] .docs-header-social {
+    grid-column: 1;
+    grid-row: 3;
+  }
+
+  :root[data-has-sidebar] starlight-theme-select {
+    grid-column: 2;
+    grid-row: 3;
+    margin-inline-end: 0.5rem;
   }
 
   :root[data-has-sidebar] .docs-header-search {
@@ -157,9 +175,6 @@
     grid-row: 2;
   }
 
-  :root[data-has-sidebar] .site-title img {
-    width: 8rem;
-  }
 }
 
 header.header {
@@ -202,6 +217,17 @@ header.header {
 
 .docs-header-social {
   display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.docs-header-social a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  min-width: 2rem;
+  min-height: 2rem;
 }
 
 .docs-section-nav {
@@ -229,7 +255,7 @@ header.header {
 }
 
 site-search button[data-open-modal] {
-  border: 1.5px solid var(--docs-frame);
+  border: var(--docs-panel-border);
   border-radius: var(--docs-radius);
   background: var(--sl-color-bg);
   color: var(--sl-color-gray-2);
@@ -240,33 +266,203 @@ site-search button[data-open-modal]:hover {
   background: var(--docs-surface-hover);
 }
 
+site-search dialog {
+  border: var(--docs-panel-border);
+  background: var(--docs-surface);
+  box-shadow: var(--docs-panel-shadow);
+}
+
+@media (min-width: 50rem) {
+  site-search dialog {
+    border-radius: var(--docs-radius);
+  }
+}
+
+#starlight__search {
+  --pagefind-ui-border: var(--docs-frame);
+  --pagefind-ui-border-width: 1.5px;
+  --pagefind-ui-border-radius: var(--docs-radius);
+  --sl-search-corners: var(--docs-radius);
+}
+
+#starlight__search .pagefind-ui__result {
+  border: var(--docs-panel-border);
+  border-radius: var(--docs-radius);
+  background: var(--sl-color-bg);
+  box-shadow: var(--docs-panel-shadow);
+}
+
+
+nav[aria-label="Main"] .top-level {
+  padding: 0 0.375rem 0.5rem 0;
+}
+
+nav[aria-label="Main"] .top-level > li {
+  margin-top: 0;
+  border: var(--docs-panel-border);
+  border-radius: var(--docs-radius);
+  background: var(--sl-color-bg);
+  box-shadow: var(--docs-panel-shadow);
+}
+
+nav[aria-label="Main"] .top-level > li + li {
+  margin-top: 0.875rem;
+}
+
+nav[aria-label="Main"] .top-level > li:has(> a) {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+nav[aria-label="Main"] .top-level > li > a,
+nav[aria-label="Main"] .top-level > li > details > summary {
+  padding: 0.75rem;
+}
+
+nav[aria-label="Main"] .top-level > li > details[open] > summary {
+  border-bottom: var(--docs-panel-border);
+  background: var(--docs-surface);
+}
+
+nav[aria-label="Main"] .top-level > li > details > ul {
+  padding: 0.5rem;
+}
+
+nav[aria-label="Main"] ul ul li {
+  margin-inline-start: 0;
+  padding-inline-start: 0;
+  border-inline-start: 0;
+}
+
+nav[aria-label="Main"] ul ul li + li,
+.right-sidebar-panel li + li {
+  margin-top: 0.375rem;
+}
 
 nav[aria-label="Main"] a {
+  padding: 0.3125rem 0.5rem;
   border-radius: var(--docs-radius);
 }
 
+nav[aria-label="Main"] a,
+.right-sidebar-panel a {
+  border: 2px solid transparent;
+  transition: transform 130ms ease, box-shadow 130ms ease, background-color 130ms ease;
+}
+
 nav[aria-label="Main"] a[aria-current="page"],
-nav[aria-label="Main"] a[aria-current="page"]:hover {
+.right-sidebar-panel a[aria-current="true"] {
+  border-color: var(--docs-frame);
   color: var(--sl-color-white);
-  background: var(--sl-color-accent-low);
-  box-shadow: inset 3px 0 var(--docs-orange);
+  background: var(--docs-surface);
+  box-shadow: var(--docs-panel-shadow);
   font-weight: 650;
 }
 
-nav[aria-label="Main"] a:hover {
-  color: var(--sl-color-gray-1);
-  background: var(--sl-color-gray-6);
+@media (hover: hover) and (pointer: fine) {
+  nav[aria-label="Main"] a:hover,
+  .right-sidebar-panel a:hover {
+    border-color: var(--docs-frame);
+    color: var(--sl-color-white);
+    background: var(--docs-surface-hover);
+    box-shadow: 3px 3px 0 var(--docs-shadow);
+    transform: translate(2px, 2px);
+  }
 }
 
-nav[aria-label="Main"] .top-level > li:has(details) {
-  border-top: 1px solid var(--sl-color-hairline-shade);
-  padding-top: 0.75rem;
-  margin-top: 0.75rem;
+nav[aria-label="Main"] a:active,
+.right-sidebar-panel a:active {
+  border-color: var(--docs-frame);
+  transform: translate(5px, 5px);
+  box-shadow: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  nav[aria-label="Main"] a,
+  .right-sidebar-panel a {
+    transition: none;
+  }
+
+  nav[aria-label="Main"] a:is(:hover, :active),
+  .right-sidebar-panel a:is(:hover, :active) {
+    transform: none;
+  }
 }
 
 nav[aria-label="Main"] .large {
   font-size: var(--sl-text-sm);
   font-weight: 650;
+}
+
+@media (min-width: 72rem) {
+  .right-sidebar-container {
+    flex: 0 0 var(--docs-toc-width);
+    width: var(--docs-toc-width);
+    align-self: flex-start;
+    position: sticky;
+    top: 1rem;
+    padding-inline-end: 1rem;
+  }
+
+  .right-sidebar {
+    position: static;
+    width: auto;
+    height: auto;
+    max-height: calc(100vh - 2rem);
+    padding: 0 0.375rem 0.375rem 0;
+    border: 0;
+    overflow-y: auto;
+    scrollbar-width: thin;
+  }
+
+  .right-sidebar-panel {
+    padding: 0;
+  }
+
+  .right-sidebar-panel .sl-container {
+    width: 100%;
+    max-width: none;
+  }
+
+  :root[data-has-sidebar][data-has-toc] .main-pane {
+    width: calc(100% - var(--docs-toc-width));
+    min-width: 0;
+    --sl-content-margin-inline: auto;
+  }
+
+  .right-sidebar starlight-toc nav {
+    border: var(--docs-panel-border);
+    border-radius: var(--docs-radius);
+    background: var(--sl-color-bg);
+    box-shadow: var(--docs-panel-shadow);
+  }
+
+  .right-sidebar-panel h2 {
+    margin: 0;
+    padding: 0.75rem;
+    border-bottom: var(--docs-panel-border);
+    background: var(--docs-surface);
+    font-size: 0.8125rem;
+    font-weight: 750;
+  }
+
+  .right-sidebar starlight-toc nav > ul {
+    padding: 0.5rem;
+  }
+
+  .right-sidebar starlight-toc ul ul {
+    padding-inline-start: 0.625rem;
+  }
+
+  .right-sidebar-panel a {
+    padding: 0.25rem 0.375rem;
+    border-radius: var(--docs-radius);
+    font-size: 0.8125rem;
+    line-height: 1.4;
+    color: var(--sl-color-gray-2);
+  }
+
 }
 
 @media (max-width: 49.99rem) {
@@ -320,11 +516,33 @@ nav[aria-label="Main"] .large {
   font-family: var(--sl-font-mono);
 }
 
-/* Code blocks */
-pre {
-  border: 1px solid var(--docs-frame);
+/* Frame the code as printed evidence; retain syntax tokens and copy controls. */
+.expressive-code {
+  --ec-brdCol: var(--docs-frame);
+  --ec-brdWd: 2px;
+  --ec-brdRad: 2px;
+  --ec-codeBg: var(--sl-color-bg);
+  --ec-frm-edBg: var(--sl-color-bg);
+  --ec-frm-trmBg: var(--sl-color-bg);
+  --ec-frm-frameBoxShdCssVal: var(--docs-panel-shadow);
+  --ec-frm-edTabBarBg: var(--docs-surface);
+  --ec-frm-edTabBarBrdCol: var(--docs-frame);
+  --ec-frm-edTabBarBrdBtmCol: var(--docs-frame);
+  --ec-frm-edActTabBg: var(--docs-surface);
+  --ec-frm-edActTabFg: var(--sl-color-white);
+  --ec-frm-edActTabIndTopCol: var(--docs-orange);
+  --ec-frm-trmTtbBg: var(--docs-surface);
+  --ec-frm-trmTtbFg: var(--sl-color-white);
+  --ec-frm-trmTtbDotsFg: var(--docs-petrol);
+  --ec-frm-trmTtbDotsOpa: 1;
+  --ec-frm-trmTtbBrdBtmCol: var(--docs-frame);
+}
+
+.sl-markdown-content > pre {
+  border: var(--docs-panel-border);
   border-radius: var(--docs-radius);
-  background: var(--sl-color-black);
+  background: var(--sl-color-bg);
+  box-shadow: var(--docs-panel-shadow);
 }
 
 /* Headings */
@@ -347,6 +565,12 @@ pre {
 .sl-markdown-content table {
   font-size: var(--sl-text-sm);
   width: 100%;
+  border: var(--docs-panel-border);
+  border-radius: var(--docs-radius);
+  border-collapse: separate;
+  border-spacing: 0;
+  background: var(--sl-color-bg);
+  box-shadow: var(--docs-panel-shadow);
 }
 
 .sl-markdown-content th {
@@ -473,10 +697,10 @@ pre {
 .sl-link-card,
 .card {
   background: var(--docs-surface);
-  border: 1.5px solid var(--docs-frame);
+  border: var(--docs-panel-border);
   border-radius: var(--docs-radius);
   padding: 1.5rem;
-  box-shadow: 4px 4px 0 var(--docs-shadow);
+  box-shadow: var(--docs-panel-shadow);
 }
 
 .sl-link-card:hover {
@@ -524,11 +748,11 @@ pre {
 
 .docs-task-card {
   background: var(--docs-surface);
-  border: 1.5px solid var(--docs-frame);
+  border: var(--docs-panel-border);
   border-radius: var(--docs-radius);
   padding: 1rem 1.25rem;
   margin: 0;
-  box-shadow: 3px 3px 0 var(--docs-shadow);
+  box-shadow: var(--docs-panel-shadow);
 }
 
 .docs-task-card:hover {
@@ -566,16 +790,39 @@ pre {
   outline-offset: 2px;
 }
 
-/* Keep Starlight's semantic callout colors and code themes intact. */
+/* Callouts use the same paper frame, with semantic warnings kept distinct. */
 .starlight-aside {
+  border: var(--docs-panel-border);
+  border-inline-start: 4px solid var(--sl-color-asides-border);
   border-radius: var(--docs-radius);
+  background: var(--docs-surface);
+  box-shadow: var(--docs-panel-shadow);
+}
+
+.starlight-aside--note,
+.starlight-aside--tip {
+  --sl-color-asides-border: var(--docs-petrol);
+  --sl-color-asides-text-accent: var(--sl-color-text-accent);
+}
+
+mobile-starlight-toc .dropdown {
+  border: var(--docs-panel-border);
+  border-radius: var(--docs-radius);
+  background: var(--docs-surface);
+  box-shadow: var(--docs-panel-shadow);
+}
+
+mobile-starlight-toc .toggle {
+  border: var(--docs-panel-border);
+  border-radius: var(--docs-radius);
+  background: var(--docs-surface);
 }
 
 .pagination-links a {
-  border: 1.5px solid var(--docs-frame);
+  border: var(--docs-panel-border);
   border-radius: var(--docs-radius);
   background: var(--docs-surface);
-  box-shadow: 3px 3px 0 var(--docs-shadow);
+  box-shadow: var(--docs-panel-shadow);
 }
 
 .pagination-links a:hover {

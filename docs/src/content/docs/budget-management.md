@@ -1,6 +1,6 @@
 ---
 title: Budget Management
-description: How 0sec manages turn budgets, reflection checkpoints, and depth-based resource allocation across agent scans.
+description: How 0 manages turn budgets, reflection checkpoints, and depth-based resource allocation across agent scans.
 ---
 
 Use depth presets to set turn limits. Reflection checkpoints prompt the agent to review progress during a scan.
@@ -11,18 +11,21 @@ A turn is one LLM round-trip: the model responds (usually a tool call), the tool
 
 `--depth` sets the attack-stage budget:
 
-| Depth | Max turns | Typical wall time | Use case |
-|-------|-----------|-------------------|----------|
-| `quick` | 20 | ~1 min | CI, smoke tests, sanity checks |
-| `default` | 40 | ~3 min | Standard day-to-day scanning |
-| `deep` | 100 | ~10 min | Thorough assessments, pre-launch audits |
+| Depth | Max turns | Use case |
+|-------|-----------|----------|
+| `quick` | 20 | CI, smoke tests, sanity checks |
+| `default` | 40 | Standard day-to-day scanning |
+| `deep` | 100 | Longer assessments and pre-launch audits |
+
+Turn limits are not elapsed-time or token-cost guarantees. Model latency,
+tool execution and target behavior determine actual duration and spend.
 
 Discovery and verification stages use smaller fixed budgets since their objectives are narrower.
 
 <span id="why-40-turns"></span>
 ## Turn-limit rationale
 
-The 40-turn default follows MAPTA's reported results (76.9% on XBOW). In 0sec's observations, most successful exploits finish in 10–20 turns; failures at 40 rarely succeed at 60. Check model capability, source access, and browser availability before increasing the limit. Deep mode allows 100 turns for longer tasks.
+The 40-turn default follows MAPTA's reported results (76.9% on XBOW). In 0's observations, most successful exploits finish in 10–20 turns; failures at 40 rarely succeed at 60. Check model capability, source access, and browser availability before increasing the limit. Deep mode allows 100 turns for longer tasks.
 
 ## Reflection checkpoints
 
@@ -44,9 +47,9 @@ Scan state is checkpointed to SQLite every two turns. [Scan Workflows](/scan-wor
 
 ## Choosing a depth
 
-- **Quick (20)** — CI gates and smoke tests. Probes obvious misconfigs and common patterns; won't find multi-step chains.
+- **Quick (20)** — CI gates and smoke tests. Gives the agent less investigation budget; it is not a guarantee about which vulnerability classes it can find.
 - **Default (40)** — standard scanning. Recon, hypotheses, multiple vectors, follow-ups. Most scans should use this.
-- **Deep (100)** — longer assessments, at roughly 2.5× the default token budget. XBOW benchmarks use this preset.
+- **Deep (100)** — longer assessments, with 2.5× the default attack-stage turn limit. Actual token use varies. XBOW benchmarks use this preset.
 
 ## Non-determinism and retries
 

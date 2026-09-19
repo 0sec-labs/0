@@ -1,6 +1,6 @@
 ---
 title: Features
-description: Find the supported 0sec workflow for your target, with links to command contracts, configuration, and evidence limits.
+description: Find the supported 0 workflow for your target, with links to command contracts, configuration, and evidence limits.
 ---
 
 Choose a workflow by target, then follow its setup and authorization requirements.
@@ -107,6 +107,9 @@ results are not current-target guarantees.
 <span id="unified-soc-story"></span>
 ## Related products
 
-See [Integrations](/integrations/) for connected tools and
-[Roadmap](/roadmap/#0cloud) for managed 0cloud status. [0cloud](/getting-started/#hosted-models-draft) offers hosted model access and managed security work with separate setup and availability.
+See [Integrations](/integrations/) for connected tools.
+[Hosted inference](/getting-started/#hosted-models) leaves tools in your
+environment; [managed work](/getting-started/#managed-work-and-onboarding)
+requires separate scoping, access and terms. Neither is required to use the
+local open-source CLI with your own model connection.
 See [Commands](/commands/) for the full CLI reference.

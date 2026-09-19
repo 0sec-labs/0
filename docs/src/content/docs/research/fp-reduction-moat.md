@@ -1,11 +1,11 @@
 ---
 title: False-positive reduction
-description: Measured behavior of 0sec's 11-layer triage pipeline across benchmark slices, plus layer-by-layer implementation notes and references.
+description: Measured behavior of 0's 11-layer triage pipeline across benchmark slices, plus layer-by-layer implementation notes and references.
 ---
 
 Measured from the 21-profile ablation (2026-04-11) and follow-up reruns after EGATS was removed from default moat aliases. The measured effect is slice-dependent: strong on XBOW black-box, a precision/recall trade on XBOW white-box, and variance-sensitive on npm-bench at current sample size. See the [2026-04-11 ablation results log](/research/2026-04-11-ablation/) for full tables, [0sec#72](https://github.com/0sec-labs/0sec/issues/72) for run tracking, and [0sec#116](https://github.com/0sec-labs/0sec/issues/116) for the EGATS profile change.
 
-0sec's triage pipeline is a stack of independent filters, each tuned for a different failure mode. Every layer is open-source, toggleable via feature flags, and represented in benchmarked profiles.
+0's triage pipeline is a stack of independent filters, each tuned for a different failure mode. Every layer is open-source, toggleable via feature flags, and represented in benchmarked profiles.
 
 Related: [Finding Triage ML](/research/finding-triage-ml/) (design doc), [Triage Dataset](/research/triage-dataset/), [Feature Extractor](/research/feature-extractor/), [Architecture](/architecture/) (pipeline slot).
 
@@ -20,7 +20,7 @@ Published triage systems combine rules, reachability, neural models, and memory:
 | Snyk DeepCode AI | 84% MTTR reduction | Symbolic AI + multiple fine-tuned models in an ensemble. |
 | GitHub Security Lab taskflow-agent | ~30 real vulns surfaced (open-source reference) | GPT-4.1 with 7+ YAML subtasks per alert — the reference architecture for structured decomposition. |
 | VulnBERT (Guanni Qu, Pebblebed) | 92.2% recall / 1.2% FPR on kernel commits | Hybrid: CodeBERT + 51 handcrafted features fused via cross-attention. Ablation: features alone 76.8%/15.9%, CodeBERT alone 84.3%/4.2%, hybrid 92.2%/1.2%. |
-| 0sec triage stack | See the per-slice ablation below | Dataset, features, reachability, oracles, verification, memories, and debate with per-layer controls. |
+| 0 triage stack | See the per-slice ablation below | Dataset, features, reachability, oracles, verification, memories, and debate with per-layer controls. |
 
 ### Research papers we implemented directly
 
@@ -102,7 +102,7 @@ To figure out which moat layer causes the flag losses in white-box, each one was
 
 ## Data foundation
 
-0sec now has a reproducible training-data pipeline:
+0 now has a reproducible training-data pipeline:
 
 - [Triage Dataset](/research/triage-dataset/) — JSONL generation from XBOW,
   npm-bench, and verified local scans
@@ -140,7 +140,7 @@ flowchart TD
     style OUT fill:#10b981,stroke:#059669,color:#fff
 ```
 
-Each layer rejects or downgrades a fraction of the false positives that survived the previous layer. The numbers below are published figures for the reference technique — not a promise for any particular 0sec scan — but they show the shape of the stack.
+Each layer rejects or downgrades a fraction of the false positives that survived the previous layer. The numbers below are published figures for the reference technique — not a promise for any particular 0 scan — but they show the shape of the stack.
 
 | # | Layer | Module | Reference signal | Acts on |
 |---|-------|--------|-----------------------------------|---------|
@@ -219,4 +219,4 @@ These components use open-source dependencies:
 - [Feature Extractor](/research/feature-extractor/) — the 45-feature reference and group-by-group rationale.
 - [Agent Techniques](/research/agent-techniques/) — attack-phase techniques (early-stop, playbooks, EGATS, racing, handoff).
 - [Architecture](/architecture/) — how the triage stage fits into the overall plan-discover-attack-verify-report pipeline.
-- [Competitive Landscape](/research/competitive-landscape/) — how 0sec's stack compares to BoxPwnr, Shannon, KinoSec, and the academic agents.
+- [Competitive Landscape](/research/competitive-landscape/) — how 0's stack compares to BoxPwnr, Shannon, KinoSec, and the academic agents.

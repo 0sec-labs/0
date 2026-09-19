@@ -5,7 +5,7 @@ description: Source evolution, executable plugins, and the live self-evolving ha
 
 > Status: 2026-09-13. Living document.
 
-0sec retains codebase notes, evaluates source changes, and runs versioned
+0 retains codebase notes, evaluates source changes, and runs versioned
 executable plugins. The live-harness candidate extends these mechanisms to
 reasoning and presentation components during a session.
 
@@ -177,12 +177,12 @@ The default is `false`.
 ### Future-worker version pinning
 
 Every promoted version produces a content-addressed snapshot in the evolution
-store (`storePath`). The **`0sec evolve exec`** command pins and executes that
+store (`storePath`). The **`0 evolve exec`** command pins and executes that
 snapshot against arbitrary JSON input, with the stored backend's offline,
 credential-free isolation:
 
 ```bash
-0sec evolve exec --config ./evolution.json --run-id <id> --input '{"file": "src/main.ts"}'
+0 evolve exec --config ./evolution.json --run-id <id> --input '{"file": "src/main.ts"}'
 ```
 
 The command:
@@ -203,7 +203,7 @@ always offline — no provider credentials, no network, no engagement tokens.
 prompt-backed finders:
 
 ```bash
-0sec deep-review ./target-repo --evolution-config ./evolution.json
+0 deep-review ./target-repo --evolution-config ./evolution.json
 ```
 
 The evolution config must evaluate the same source-finder protocol used by the
@@ -264,7 +264,7 @@ After evaluation passes, a candidate enters canary:
 - Acceptance of successive candidates leaks a weak signal about a reused held-out set.
   This is not proof against adaptive overfitting over many generations. Operators
   should periodically supply fresh, independently curated cases to each lane.
-- **`0sec evolve rollback --store <path> --version <id>`** retires the
+- **`0 evolve rollback --store <path> --version <id>`** retires the
   specified version (must be the current active or canary version) and restores
   its parent. `--version` names the version to retire, not a desired historical
   destination. Rollback preserves the retired version's snapshot and receipt in
@@ -502,7 +502,7 @@ uses services for the agent loop, tools, model adapters, and session log.
 - This is a composability paper, not a benchmark demonstrating autonomous
   security-quality improvement or crash-safe, multi-day agent operation.
 
-The candidate integration pins `@deepseek-ai/cordis@4.0.2`, with 0sec generation,
+The candidate integration pins `@deepseek-ai/cordis@4.0.2`, with 0 generation,
 guest-bridge, accounting, and frontend contracts. Component cleanup and external
 effects require separate qualification.
 
@@ -518,15 +518,15 @@ Research informing evaluator-driven iteration:
 - [Darwin Gödel Machine (Zhang et al., 2025)](https://arxiv.org/abs/2505.22954)
   searches an archive of modified coding agents. Reported
   [objective hacking and fabricated logs](https://sakana.ai/dgm/) motivate
-  controller-produced receipts. 0sec has no equivalent open-ended archive search.
+  controller-produced receipts. 0 has no equivalent open-ended archive search.
 - [AlphaEvolve (Google DeepMind, 2025)](https://deepmind.google/blog/alphaevolve-a-gemini-powered-coding-agent-for-designing-advanced-algorithms/)
   pairs generated programs with automated evaluators. Cybersecurity gains require
   separate measurement.
 - [GEPA (Agrawal et al., 2025)](https://arxiv.org/abs/2507.19457) reflects on
-  execution trajectories and combines candidates. 0sec retains development
+  execution trajectories and combines candidates. 0 retains development
   feedback and source history; GEPA's Pareto search is unimplemented.
 - [The reusable holdout (Dwork et al., 2015)](https://doi.org/10.1126/science.aaa9375)
-  addresses adaptive evaluation-data reuse. 0sec's canaries measure repeatability
+  addresses adaptive evaluation-data reuse. 0's canaries measure repeatability
   on the configured corpus. Independent generalization and the paper's
   privacy-based mechanism remain outside this implementation.
 - [Hierarchical Self-Improvement (Zhou, 2026)](https://arxiv.org/abs/2608.08466)
@@ -548,7 +548,7 @@ Research informing evaluator-driven iteration:
   studies transformer depth and expressivity. It supplies no equivalent result
   for repeated API calls. Measure task outcomes, latency, and cost.
 
-0sec uses fixed acceptance criteria, independently labelled controls, restricted
+0 uses fixed acceptance criteria, independently labelled controls, restricted
 execution, and versioned rollout. Operators supply fresh evaluation cases.
 Automatic ground-truth curation, held-out rotation, and general security-quality
 gains remain unestablished.
@@ -564,7 +564,7 @@ Tracked implementation work:
 ## Autonomy and hot-reload boundaries
 
 These paths are distinct; an accepted source candidate is not automatically a
-replacement for the stock target-facing 0sec process.
+replacement for the stock target-facing 0 process.
 
 | Path | What changes | What remains fixed |
 | --- | --- | --- |
@@ -741,10 +741,11 @@ apply to the earlier candidate, independently of frontend and installation check
 
 ## CLI reference
 
-### 0sec evolve
+<span id="0sec-evolve"></span>
+### 0 evolve
 
 ```text
-0sec evolve                      Autonomous self-improvement
+0 evolve                      Autonomous self-improvement
   run          --config <path>   Run evolution: propose, evaluate, and optionally promote
                  [--watch]          source candidates. Watch mode iterates sequential passes;
                  [--json]           stops on any failed pass (cannot safely retry unmetered
@@ -792,12 +793,13 @@ apply to the earlier candidate, independently of frontend and installation check
 
 **Error codes:** 0 = success, 1 = user error, 2 = runtime error, 3 = interrupt.
 
-### 0sec lens-synth
+<span id="0sec-lens-synth"></span>
+### 0 lens-synth
 
 Finder-lens evolution remains a separate command — see [lens-synth help](/commands/#lens-synth).
 
 ```text
-0sec lens-synth                   Evolve appsec finder coverage from curated misses
+0 lens-synth                   Evolve appsec finder coverage from curated misses
   --miss-input <path>                Curated miss-input JSON ({ misses, corpus })
   --registry <path>                  Durable overlay path (~/.0sec/lenses/...)
   --max-register <n>                 Cap promoted champions per input revision
@@ -812,7 +814,7 @@ Finder-lens evolution remains a separate command — see [lens-synth help](/comm
 
 ## Config shape
 
-An evolution config is a JSON file passed to `0sec evolve run --config <path>`.
+An evolution config is a JSON file passed to `0 evolve run --config <path>`.
 Fields with defaults may be omitted.
 
 This small example exercises the lifecycle; it is **not a cybersecurity
@@ -830,7 +832,7 @@ console.log(JSON.stringify({ classification }));
 
 Save this as `evolution.json` **alongside**, not inside, `worker/`. Install
 `node:22-alpine` locally with Docker before running; evolution never pulls
-an image automatically. Configure the usual 0sec model credentials separately.
+an image automatically. Configure the usual 0 model credentials separately.
 
 ```json
 {
@@ -933,7 +935,7 @@ larger independently curated positive, held-out, and clean-control corpora.
 
 ```bash
 # One-off run with source access and auto-promotion
-0sec evolve run --config ./evolution.json \
+0 evolve run --config ./evolution.json \
   --allow-source-access \
   --auto-promote \
   --json
@@ -1052,7 +1054,7 @@ runner executes candidate code separately under this worker contract:
 
 ## Self-evolving finder lenses
 
-Finder-lens evolution (`0sec lens-synth`) works alongside the evolve system but
+Finder-lens evolution (`0 lens-synth`) works alongside the evolve system but
 remains a separate command. It evolves **additive appsec finder lenses** from
 curated misses into a user-owned registry. Promotions go to
 `~/.0sec/lenses/appsec-archetypes.json`, never the bundled registry. Each
@@ -1060,7 +1062,7 @@ promotion or retirement is recorded in the registry's hash-linked ledger.
 
 ### TUI automatic mode
 
-The OpenTUI can own the lens-synth watcher, so launching `0` or `0sec tui`
+The OpenTUI can own the lens-synth watcher, so launching `0` or `0 tui`
 continuously processes the curated inbox while the TUI remains open. It is
 deliberately disabled by default and requires two **Security** settings:
 
@@ -1071,7 +1073,7 @@ deliberately disabled by default and requires two **Security** settings:
 }
 ```
 
-Import with `0sec config import evolution.json --yes` or enable in the TUI.
+Import with `0 config import evolution.json --yes` or enable in the TUI.
 
 The chat status reports `evolve:auto`, `evolve:waiting input`,
 `evolve:promoted`, or `evolve:error`.
@@ -1127,8 +1129,8 @@ legacy, or different-scope claims are not automatically released. Stop the old
 worker before manually recovering those claims with:
 
 ```bash
-0sec evolve feedback status --json
-0sec evolve feedback release --id <observation-id> --claim-token <token>
+0 evolve feedback status --json
+0 evolve feedback release --id <observation-id> --claim-token <token>
 ```
 
 Queue and overlay writers fail promptly on lock contention. If a process dies
@@ -1209,7 +1211,7 @@ refreshes source after promotion; the `parentId` tracks the active baseline,
 ## External hosts
 
 DSH, Codex, and Claude Code are optional MCP clients. They may present a narrow
-0sec tool profile, but they don't own promotion, scope, evidence, or replay. See
+0 tool profile, but they don't own promotion, scope, evidence, or replay. See
 [Architecture](/architecture/#mcp-integration) and
 [Benchmark methodology](/methodology/).
 

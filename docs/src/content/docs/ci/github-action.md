@@ -1,9 +1,9 @@
 ---
-title: GitHub CI — run 0sec in CI
-description: Run 0sec scans, reviews, and audits as GitHub Actions steps via the container image or binary install.
+title: GitHub CI — run 0 in CI
+description: Run 0 scans, reviews, and audits as GitHub Actions steps via the container image or binary install.
 ---
 
-0sec runs in GitHub Actions through the published container image or a binary
+0 runs in GitHub Actions through the published container image or a binary
 install step. A dedicated composite action is planned (tracked at
 `packages/cli/src/__tests__/github-action-schema.test.ts`) but has not shipped.
 Invoke the CLI directly from a workflow step. Provider credentials go in as
@@ -16,7 +16,7 @@ The `ghcr.io/0sec-labs/0sec` image includes Node 24, FoxGuard, pentest tools
 
 ```yaml
 # .github/workflows/0sec.yml
-name: 0sec
+name: "0"
 on:
   pull_request:
     types: [opened, synchronize, reopened]
@@ -37,7 +37,7 @@ jobs:
           fetch-depth: 0    # needed for diff-aware review
       - name: Review changed code
         run: |
-          0sec review . \
+          0 review . \
             --diff-base "${{ github.event.pull_request.base.sha || github.event.before }}" \
             --changed-only \
             --format sarif > results.sarif
@@ -77,13 +77,13 @@ For smaller jobs or when the full container is unnecessary, install the binary
 and FoxGuard in the step:
 
 ```yaml
-- name: Install 0sec
+- name: Install 0
   run: |
     curl -fsSL https://raw.githubusercontent.com/0sec-labs/0sec/main/install.sh | bash
     echo "$HOME/.0sec/bin" >> "$GITHUB_PATH"
 
 - name: Run review
-  run: 0sec review . --format sarif > results.sarif
+  run: 0 review . --format sarif > results.sarif
   env:
     OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
 ```
@@ -156,7 +156,7 @@ See [API Keys](/api-keys/) for the full list and fallback order.
 ## Example: full diff-aware PR review
 
 ```yaml
-name: 0sec PR review
+name: 0 PR review
 on:
   pull_request:
     types: [opened, synchronize]
@@ -173,9 +173,9 @@ jobs:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
-      - name: 0sec review
+      - name: 0 review
         run: |
-          0sec review . \
+          0 review . \
             --diff-base "${{ github.event.pull_request.base.sha }}" \
             --changed-only \
             --depth quick \
@@ -203,7 +203,7 @@ jobs:
 ```yaml
 - name: Audit dependencies
   run: |
-    0sec audit lodash \
+    0 audit lodash \
       --ecosystem npm \
       --depth quick \
       --format sarif \
@@ -220,7 +220,7 @@ jobs:
 ```yaml
 - name: Scan staging environment
   run: |
-    0sec scan --target https://staging.example.com \
+    0 scan --target https://staging.example.com \
       --mode deep \
       --format sarif \
       --timeout 600000 \
@@ -231,7 +231,7 @@ jobs:
 
 ## This repository's dogfood lane
 
-0sec runs a diff-aware self-review against its own trusted `main` delta in
+0 runs a diff-aware self-review against its own trusted `main` delta in
 `.github/workflows/dogfood-review.yml`. The workflow starts only after
 `0sec: Main` succeeds on `main`; it never runs model-backed review against PR
 code or a fork.
@@ -250,7 +250,7 @@ It uses direct OpenAI `gpt-5.6-luna` through the Responses API, with a hard
 
 ```yaml
 # Excerpt from dogfood-review.yml
-- name: Review the merged delta with 0sec
+- name: Review the merged delta with 0
   run: |
     base="$(git rev-parse HEAD^)"
     "$REVIEWER" review . \
@@ -270,7 +270,7 @@ It uses direct OpenAI `gpt-5.6-luna` through the Responses API, with a hard
 |---------|------------|
 | **Provider key leakage** | Store as repository secret; pass via `env:` |
 | **Model cost in CI** | Use `--cost-ceiling` to cap spend |
-| **Fork PR execution** | 0sec does not run on fork PRs — see `public-pr.yml` policy |
+| **Fork PR execution** | 0 does not run on fork PRs — see `public-pr.yml` policy |
 | **Container privileges** | Image drops to `ubuntu` user; no root in workflow execution |
 | **SARIF exposure** | Code scanning results are visible per repo permissions |
 

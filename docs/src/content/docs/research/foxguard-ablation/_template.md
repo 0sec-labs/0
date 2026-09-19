@@ -44,7 +44,7 @@ Three slices, all reproducible locally via
 
 | Slice | Why this slice | Target |
 |---|---|---|
-| `self-scan` | TS/JS in the language families 0sec ships in. Catches regressions from our own dogfood. | 0sec repo itself. |
+| `self-scan` | TS/JS in the language families 0 ships in. Catches regressions from our own dogfood. | 0sec repo itself. |
 | `xbow-bb-wave` | PHP-heavy black-box wave. PHP/Java sink coverage in Foxguard's built-ins is the open question from 0sec#254. | `0ca/xbow-validation-benchmarks-patched` BB wave. |
 | `npm-bench-wave` | JS taint focus on a known-truth corpus. | First 9 packages of npm-bench (3 malicious, 3 vulnerable, 3 safe). |
 
@@ -143,7 +143,7 @@ new dated artifact and re-run the gate.
 
 This gate is the first proof point for the hybrid architecture described
 in [TypeScript/Rust Boundary](/research/typescript-rust-boundary/):
-0sec keeps orchestration in TypeScript, while deterministic engines
+0 keeps orchestration in TypeScript, while deterministic engines
 such as FoxGuard move to Rust behind stable JSON/SARIF contracts.
 
 ## Related issues

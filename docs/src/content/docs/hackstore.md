@@ -1,21 +1,21 @@
 ---
 title: Build a Hackstore extension
-description: Create, test, and publish tools for the 0sec agent.
+description: Create, test, and publish tools for the 0 agent.
 ---
 
-An extension adds tools the 0sec agent can call. It consists of a manifest and a
+An extension adds tools the 0 agent can call. It consists of a manifest and a
 self-contained JavaScript program using Node-compatible APIs. This guide takes a generated extension through a
 local run, then explains the runtime contract.
 
-Use 0sec 0.17.0 or newer for the authoring commands and direct `plugin run`
+Use 0 0.17.0 or newer for the authoring commands and direct `plugin run`
 workflow below. The 0.16.3 binary has a tool-registry bug in `plugin run`.
-Check `0sec --version` and command-specific `--help` before following this guide.
+Check `0 --version` and command-specific `--help` before following this guide.
 
 ## Create and validate
 
 ```sh
-0sec hackstore init my-extension
-0sec hackstore validate ./my-extension
+0 hackstore init my-extension
+0 hackstore validate ./my-extension
 ```
 
 The scaffold creates:
@@ -52,7 +52,7 @@ containing `my-extension`:
   set -eu
   umask 077
   source_dir="$(pwd)/my-extension"
-  cli="$(command -v 0sec)"
+  cli="$(command -v 0)"
   test_root="$(mktemp -d)"
   trap 'rm -rf "$test_root"' EXIT
   export HOME="$test_root/home"
@@ -207,13 +207,13 @@ Other protocol types support separate host-brokered workflows. Their presence in
 ## Installation and updates
 
 ```sh
-0sec plugin browse
-0sec plugin search foxguard
-0sec plugin install foxguard.scanner
-0sec plugin info foxguard.scanner
-0sec plugin enable foxguard.scanner
-0sec plugin run foxguard.scanner foxguard_scan --yes path=/absolute/path/to/project
-0sec plugin disable foxguard.scanner
+0 plugin browse
+0 plugin search foxguard
+0 plugin install foxguard.scanner
+0 plugin info foxguard.scanner
+0 plugin enable foxguard.scanner
+0 plugin run foxguard.scanner foxguard_scan --yes path=/absolute/path/to/project
+0 plugin disable foxguard.scanner
 ```
 
 Installation writes files without running code. Enablement records approval for

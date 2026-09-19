@@ -4,7 +4,7 @@ description: Benchmarking gpt-5.4, Kimi K2.5, Qwen3, DeepSeek, and free models f
 ---
 
 Historical benchmark observations. Prices and provider access describe these
-runs; they are not a current 0sec Cloud catalog or retail offer.
+runs; they are not a current 0 Cloud catalog or retail offer.
 
 <span id="model-comparison-xben-053-jinja-rce"></span>
 ## XBEN-053 (Jinja RCE)
@@ -43,5 +43,5 @@ This small sample supplies no general model ranking.
 
 Reported external results use different models and protocols: KinoSec with
 Claude Sonnet (92.3% black-box), Shannon with Claude Opus (96.15% white-box),
-and deadend-cli with Kimi K2.5 (78%). See [Benchmark](/benchmark/) for 0sec's
+and deadend-cli with Kimi K2.5 (78%). See [Benchmark](/benchmark/) for 0's
 retained-artifact results and comparison conditions.

@@ -3,7 +3,7 @@ title: Agent Techniques Reference
 description: Evidence-based techniques for improving autonomous pentesting agents, with implementation details and expected impact.
 ---
 
-Techniques evaluated for improving 0sec's autonomous pentesting agents. Each entry includes source evidence, expected impact, implementation status, and enough detail to ship it.
+Techniques evaluated for improving 0's autonomous pentesting agents. Each entry includes source evidence, expected impact, implementation status, and enough detail to ship it.
 
 ## Shipped Techniques
 
@@ -103,7 +103,7 @@ Techniques evaluated for improving 0sec's autonomous pentesting agents. Each ent
 
 **Source:** CurriculumPT; Cyber-AutoAgent's self-rewriting prompts (this is the simpler cousin).
 
-**Impact:** Measured on 0sec's XBOW runs, the XSS playbook alone cracked previously-unsolved XBEN-011 and XBEN-018.
+**Impact:** Measured on 0's XBOW runs, the XSS playbook alone cracked previously-unsolved XBEN-011 and XBEN-018.
 
 **Implementation:** `packages/core/src/agent/playbooks.ts` — exports `PLAYBOOKS` (keyed by vuln type), `detectPlaybooks(toolResultTexts)` (pattern matcher, caps at 3 playbooks to avoid prompt bloat), and `buildPlaybookInjection(types)`. Feature flag: `0SEC_FEATURE_DYNAMIC_PLAYBOOKS`.
 
@@ -115,7 +115,7 @@ Techniques evaluated for improving 0sec's autonomous pentesting agents. Each ent
 
 **Source:** MAPTA paper (arXiv:2508.20816); EGATS adapted from code-generation tree-search literature.
 
-**Impact:** Expected +5-9pp on targets with large attack surfaces. Generalises 0sec's early-stop mechanism: early-stop gates a single linear run, EGATS gates every branch.
+**Impact:** Expected +5-9pp on targets with large attack surfaces. Generalises 0's early-stop mechanism: early-stop gates a single linear run, EGATS gates every branch.
 
 **Implementation:** `packages/core/src/agent/egats.ts` — `AttackNode`, `EGATSConfig`, `scoreEvidence`, `hasFlag`, `runEGATS`, `runEGATSWithDefaults`, `summariseTree`. Feature flag: `0SEC_FEATURE_EGATS`.
 

@@ -1,11 +1,18 @@
 ---
 title: Finding Triage
-description: The multi-layer triage pipeline that sits between 0sec's research and verify agents — and what the 2026-04-11 ablation measured it doing.
+description: The multi-layer triage pipeline that sits between 0's research and verify agents — and what the 2026-04-11 ablation measured it doing.
 ---
 
-0sec runs a triage pipeline between the research agent and the blind verify agent. Every finding walks through a stack of independent filters; each can kill, downgrade, or boost it. Most are deterministic, zero-cost, and run before any verification token is spent.
+0 runs a triage pipeline between the research agent and the blind verify agent. Every finding walks through a stack of independent filters; each can kill, downgrade, or boost it. Most are deterministic, zero-cost, and run before any verification token is spent.
 
 > **2026-04-11 ablation results.** The stack strictly beats the no-triage baseline on XBOW black-box, is a Pareto tradeoff on white-box (2 flags at limit=50 for 63% fewer findings), and is a no-op on npm-bench. Layer 11 (EGATS) is the one broken layer and is opt-in only ([0sec#116](https://github.com/0sec-labs/0sec/issues/116)). Numbers: [FP Reduction Moat](/research/fp-reduction-moat/); narrative: [2026-04-11 ablation](/research/2026-04-11-ablation/).
+
+:::caution[Manual triage command availability]
+The pipeline below is separate from the manual `0 triage` command.
+Current root routing can reject that command before showing its help.
+See [the routing diagnostic](/troubleshooting/#triage-command-reports-an-ambiguous-target)
+before using the CLI memory examples.
+:::
 
 ## Pipeline overview
 
@@ -91,17 +98,18 @@ Dispatch by category with `verifyOracleByCategory(finding, target)`.
 
 Today it's a zero-dependency grep/pattern pass and deliberately conservative: when it can't make a confident call it returns `reachable: true` with low confidence so later stages still run. A tree-sitter interprocedural upgrade is planned.
 
-## 5. Multi-modal agreement (foxguard × 0sec)
+<span id="5-multi-modal-agreement-foxguard--0sec"></span>
+## 5. Multi-modal agreement (foxguard × 0)
 
-`triage/multi-modal.ts` — `0SEC_FEATURE_MULTIMODAL=1`. When both source and the [foxguard](https://github.com/0sec-labs/foxguard) binary are present, 0sec runs foxguard on the same code and cross-checks each finding against its SARIF:
+`triage/multi-modal.ts` — `0SEC_FEATURE_MULTIMODAL=1`. When both source and the [foxguard](https://github.com/0sec-labs/foxguard) binary are present, 0 runs foxguard on the same code and cross-checks each finding against its SARIF:
 
 - **Both fire on the same file/category** → auto-accept, high confidence.
-- **Only 0sec fires, foxguard scanned the file cleanly** → down-weight or auto-reject.
+- **Only 0 fires, foxguard scanned the file cleanly** → down-weight or auto-reject.
 - **foxguard didn't scan the file** → no signal.
 
 ```bash
 env 0SEC_FEATURE_MULTIMODAL=1 \
-  0sec scan --target https://example.com --scope ./scope.json --repo ./source
+  0 scan --target https://example.com --scope ./scope.json --repo ./source
 ```
 
 ## 6. PoV generation gate
@@ -127,20 +135,20 @@ Any step failure marks the finding a false positive.
 
 ## 9. Assistant memories
 
-`triage/memories.ts` stores false-positive context from human triage. Use `0sec triage mark-fp` and `0sec triage memory` to manage feedback. `0SEC_FEATURE_TRIAGE_MEMORIES` is not a current feature toggle. Memory context can inform verification; it is not independent reproduction evidence.
+`triage/memories.ts` stores false-positive context from human triage. Use `0 triage mark-fp` and `0 triage memory` to manage feedback. `0SEC_FEATURE_TRIAGE_MEMORIES` is not a current feature toggle. Memory context can inform verification; it is not independent reproduction evidence.
 
 Scope hierarchy: `global` (every scan), `package` (targets under a package prefix), `target` (exact URL or path). Relevance is a token-overlap heuristic today; an embedding ranker can replace `scoreMemory` without API changes.
 
 ```bash
 # Mark a finding FP and remember why
-0sec triage mark-fp <finding-id> --reason "test fixture, not prod"
+0 triage mark-fp <finding-id> --reason "test fixture, not prod"
 
 # Add a standalone memory
-0sec triage memory add --finding <id> --reason "sink is harmless helper" \
+0 triage memory add --finding <id> --reason "sink is harmless helper" \
   --scope package --scope-value my-pkg
 
 # List memories
-0sec triage memory list --scope target
+0 triage memory list --scope target
 ```
 
 ## 10. Adversarial debate
@@ -176,9 +184,9 @@ Its goal is partly served today by the **cross-family refuter** (`stages/hunt-cr
 `fp-moat` enables all off-by-default gates. Results vary by slice: improved XBOW black-box results, a 0–2 flag cost on white-box, and no change on npm-bench. The reported ~60% reduction in findings accompanied a roughly flat correct-flag count. Re-measure on your target before choosing the preset.
 
 ```bash
-0sec scan --features fp-moat --target https://example.com --scope ./scope.json
+0 scan --features fp-moat --target https://example.com --scope ./scope.json
 # or, for templated CI:
-env 0SEC_FEATURE_PRESET=fp-moat 0sec scan --target https://example.com --scope ./scope.json
+env 0SEC_FEATURE_PRESET=fp-moat 0 scan --target https://example.com --scope ./scope.json
 ```
 
 It expands to `REACHABILITY_GATE`, `MULTIMODAL`, `PUBLISHABILITY_GATE`, `POV_GATE`, `POC_GEN_STATIC`, and `CONSENSUS_VERIFY`. Membership lives in `packages/core/src/agent/feature-presets.ts` and is pinned by test.
@@ -186,7 +194,7 @@ It expands to `REACHABILITY_GATE`, `MULTIMODAL`, `PUBLISHABILITY_GATE`, `POV_GAT
 A flag you set yourself always wins, so you can ablate one layer:
 
 ```bash
-env 0SEC_FEATURE_POV_GATE=0 0sec scan --features fp-moat …
+env 0SEC_FEATURE_POV_GATE=0 0 scan --features fp-moat …
 ```
 
 The preset deliberately omits `LEARNED_ROUTER` and `DYNAMIC_TRIAGE` — those decide which layers to *skip* per finding, so enabling them alongside the moat would suppress the layers you're trying to measure.
@@ -197,7 +205,7 @@ The preset deliberately omits `LEARNED_ROUTER` and `DYNAMIC_TRIAGE` — those de
 Each layer records a verdict on the finding as it runs. `findings show` renders it:
 
 ```bash
-0sec findings show <id>
+0 findings show <id>
 ```
 
 ```

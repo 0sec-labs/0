@@ -39,7 +39,7 @@ Persisted discovery records and other workflow outputs have separate lifecycle r
 
 ### Agentic verification (with API key)
 
-With an API key, 0sec spins up a verification agent with its own tools: `send_prompt` (re-send payloads), `bash` (reproduction scripts), `save_finding` (confirm with fresh evidence), `done`.
+With an API key, 0 spins up a verification agent with its own tools: `send_prompt` (re-send payloads), `bash` (reproduction scripts), `save_finding` (confirm with fresh evidence), `done`.
 
 `buildVerifyAgentPrompt` builds a task list from all discovered findings — for each: template name, category, original payload and response (truncated to 500 chars). The agent works through the list, re-exploits each, and confirms or skips it.
 
@@ -61,7 +61,7 @@ Confirmed findings become `confirmed`; unverified candidates leave this stage's 
 
 ### Heuristic fallback (no API key)
 
-Without an API key, 0sec falls back to a statistical heuristic: did multiple payloads from the same attack template trigger a vulnerable response?
+Without an API key, 0 falls back to a statistical heuristic: did multiple payloads from the same attack template trigger a vulnerable response?
 
 - **2+ payloads succeeded** → confirmed (convergent evidence).
 - **Only 1 succeeded** → killed (likely noise).

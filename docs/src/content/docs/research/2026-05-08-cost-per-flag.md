@@ -26,7 +26,8 @@ Four candidate cost denominators:
 
 Report the number of configurations and attempts in best-of-N comparisons.
 
-## 0sec's number
+<span id="0secs-number"></span>
+## 0's number
 
 The recorded Azure gpt-5.4 cohort used up to three retries per challenge and a $5.00 ceiling:
 

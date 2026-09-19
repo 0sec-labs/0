@@ -1,6 +1,6 @@
 ---
 title: Desktop — development draft
-description: Contributor notes for the unreleased 0sec Desktop application and its local CLI sidecar.
+description: Contributor notes for the unreleased 0 Desktop application and its local CLI sidecar.
 draft: true
 pagefind: false
 ---
@@ -8,11 +8,11 @@ pagefind: false
 **Desktop remains in development.** These contributor notes cover source builds;
 public downloadable and signed releases remain unavailable.
 
-The 0sec desktop is an [Electron](https://www.electronjs.org/) application
+The 0 desktop is an [Electron](https://www.electronjs.org/) application
 (v42, Chromium-based) that provides a native windowed control plane for the
-0sec harness. Its dedicated React renderer lives in
+0 harness. Its dedicated React renderer lives in
 `packages/desktop/src/renderer/`, with its own `desktop.html` build entry.
-The application manages a **sidecar**: a compiled 0sec CLI process that
+The application manages a **sidecar**: a compiled 0 CLI process that
 handles all engine communication behind a security boundary.
 
 The renderer uses web technology. On macOS, native window controls, menus, a
@@ -63,7 +63,7 @@ is run from the desktop environment or launcher.
 ## Sidecar security boundary
 
 The desktop separates the renderer (web UI) from engine operations through a
-**sidecar**: the 0sec CLI binary itself, spawned as a child process.
+**sidecar**: the 0 CLI binary itself, spawned as a child process.
 
 ```
 ┌─────────────────────────────────────┐
@@ -83,7 +83,7 @@ The desktop separates the renderer (web UI) from engine operations through a
 └────────────────────┬──────────────┘
                      │ spawn (stdio: pipe)
 ┌────────────────────▼──────────────┐
-│ Sidecar (0sec CLI binary)         │
+│ Sidecar (0 CLI binary)            │
 │  - dashboard --no-open --host     │
 │    127.0.0.1 --port 0             │
 │  - stdout: 0SEC_DASHBOARD_READY   │
@@ -188,7 +188,7 @@ Chromium permission requests remain denied.
 | Default size | 1280 × 860 |
 | Minimum size | 900 × 600 |
 | Appearance | System light/dark; translucent native macOS sidebar, opaque conversation |
-| Title | `0sec` |
+| Title | Product name |
 | Show | Hidden until `ready-to-show` to avoid white flash |
 | Single-instance lock | Yes — a second launch focuses or recreates the existing application's window |
 

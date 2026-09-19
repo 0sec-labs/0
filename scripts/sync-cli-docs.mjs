@@ -11,11 +11,17 @@ const optionDescriptions = new Map([
   ["0sec scan|--require-scope", "Set 0SEC_REQUIRE_SCOPE for scope-aware execution paths. Ordinary live-target scan already refuses missing scope, independently of this flag."],
   ["0sec scan|--dry-run", "For --emit pr only: print proposed git/gh emission commands. The scan itself still executes."],
   ["0sec review|--dry-run", "For --emit pr only: print proposed git/gh emission commands. The source review itself still executes."],
+  ["0sec console|--mode", "Autonomy mode: standard, recon, copilot, yolo. YOLO accepts absolute public-network targets without a launch target; explicit restrictions and exclusions still apply."],
+  ["0sec console|--yolo", "Shortcut for --mode yolo. Omits per-action approval prompts; explicit restrictions and exclusions still apply."],
+  ["0sec service start|--cost-ceiling", "Requested USD ceiling sent to the managed service. Enforcement requires a qualified service implementation; this is not a local hard-stop guarantee."],
 ]);
 
 const escapeTable = (value) => String(value ?? "")
   .replaceAll("|", "\\|").replaceAll("\n", " ")
   .replaceAll("<", "&lt;").replaceAll(">", "&gt;");
+
+const docsDescription = (value) => String(value ?? "")
+  .replace(/(?<![\w./:@-])0sec(?![\w./:@-])/g, "0");
 
 function commandPath(command) {
   return command.parent ? `${commandPath(command.parent)} ${command.name()}` : command.name();
@@ -33,7 +39,7 @@ function optionTable(command) {
     const defaultValue = value === undefined ? "—"
       : `\`${escapeTable(typeof value === "string" ? value : JSON.stringify(value))}\``;
     const choices = option.argChoices ? ` Choices: ${escapeTable(option.argChoices.join(", "))}.` : "";
-    return `| \`${option.flags.replaceAll("|", "\\|")}\`${option.mandatory ? " **required**" : ""} | ${defaultValue} | ${escapeTable(description)}${choices} |`;
+    return `| \`${option.flags.replaceAll("|", "\\|")}\`${option.mandatory ? " **required**" : ""} | ${defaultValue} | ${escapeTable(docsDescription(description))}${choices} |`;
   });
   return ["| Option | Registered default | Description |", "| --- | --- | --- |", ...rows].join("\n") + "\n";
 }
@@ -41,7 +47,7 @@ function optionTable(command) {
 function argumentTable(command) {
   if (!command.registeredArguments.length) return "";
   return ["| Argument | Required | Description |", "| --- | --- | --- |",
-    ...command.registeredArguments.map((arg) => `| \`${escapeTable(arg.name())}\` | ${arg.required ? "Yes" : "No"} | ${escapeTable(arg.description)} |`),
+    ...command.registeredArguments.map((arg) => `| \`${escapeTable(arg.name())}\` | ${arg.required ? "Yes" : "No"} | ${escapeTable(docsDescription(arg.description))} |`),
   ].join("\n") + "\n";
 }
 
@@ -65,7 +71,7 @@ export function syncReference(text, program) {
     if (!heading) return part;
     const command = byHeading.get(heading);
     if (!command) {
-      if (/^```text\n0sec /m.test(part)) errors.push(`Removed or renamed command section: ${heading}`);
+      if (/^```text\n0 /m.test(part)) errors.push(`Removed or renamed command section: ${heading}`);
       return part;
     }
     if (seen.has(heading)) errors.push(`Duplicate command section: ${heading}`);
@@ -74,12 +80,12 @@ export function syncReference(text, program) {
       const name = arg.name() + (arg.variadic ? "..." : "");
       return arg.required ? `<${name}>` : `[${name}]`;
     });
-    const usage = [commandPath(command), ...(command.options.length ? ["[options]"] : []), ...args].join(" ");
-    if (!/^```text\n0sec [^\n]*\n```/m.test(part)) {
+    const usage = [commandPath(command).replace(/^0sec(?= |$)/, "0"), ...(command.options.length ? ["[options]"] : []), ...args].join(" ");
+    if (!/^```text\n0 [^\n]*\n```/m.test(part)) {
       errors.push(`Missing usage block: ${heading}`);
       return part;
     }
-    let section = part.replace(/^```text\n0sec [^\n]*\n```/m, () => `\`\`\`text\n${usage}\n\`\`\``);
+    let section = part.replace(/^```text\n0 [^\n]*\n```/m, () => `\`\`\`text\n${usage}\n\`\`\``);
     const additions = [];
     section = updateTable(section, "Argument", argumentTable(command), additions);
     section = updateTable(section, "Option", optionTable(command), additions);

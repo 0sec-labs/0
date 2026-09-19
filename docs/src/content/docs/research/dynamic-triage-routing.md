@@ -157,7 +157,7 @@ Plan: collect routing traces from the next ~10 benchmark dispatches (xbow-bench 
 ## How to enable
 
 ```bash
-env 0SEC_FEATURE_DYNAMIC_TRIAGE=1 0sec scan ./your-target
+env 0SEC_FEATURE_DYNAMIC_TRIAGE=1 0 scan ./your-target
 ```
 
 The routing decision for every finding is recorded in:

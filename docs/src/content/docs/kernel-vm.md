@@ -1,9 +1,9 @@
 ---
 title: Kernel VM Verification
-description: Build and configure the QEMU guest used by 0sec ingest --verify.
+description: Build and configure the QEMU guest used by 0 ingest --verify.
 ---
 
-`0sec ingest --verify` runs C reproducers inside a local QEMU guest and compares
+`0 ingest --verify` runs C reproducers inside a local QEMU guest and compares
 the guest `dmesg` against the imported kernel crash report. Without the VM,
 kernel verification is static-only.
 
@@ -62,7 +62,8 @@ $HOME/.0sec/kernel-vm/linux-6.8.12-kasan/
 Treat the output directory as a local cache; regenerate it when the Dockerfile,
 kernel version, or guest package list changes.
 
-## Configure 0sec
+<span id="configure-0sec"></span>
+## Configure 0
 
 Required values must be passed with `env`: `0SEC_*` names begin with a digit and
 cannot be exported by POSIX shells.
@@ -72,7 +73,7 @@ env \
   0SEC_KERNEL_QEMU=1 \
   0SEC_KERNEL_QEMU_KERNEL="$HOME/.0sec/kernel-vm/linux-6.8.12-kasan/bzImage" \
   0SEC_KERNEL_QEMU_DISK="$HOME/.0sec/kernel-vm/linux-6.8.12-kasan/rootfs.img" \
-  0sec ingest --verify ./crashes
+  0 ingest --verify ./crashes
 ```
 
 Recommended local defaults can be added to the same command:
@@ -87,7 +88,7 @@ env \
   0SEC_KERNEL_QEMU_BOOT_TIMEOUT_SEC=180 \
   0SEC_KERNEL_QEMU_TIMEOUT_SEC=60 \
   0SEC_KERNEL_QEMU_ARTIFACT_DIR="$HOME/.0sec/kernel-vm/runs" \
-  0sec ingest --verify ./crashes
+  0 ingest --verify ./crashes
 ```
 
 On Linux hosts with KVM, add `0SEC_KERNEL_QEMU_ACCEL=kvm` to that `env` invocation.
@@ -111,10 +112,10 @@ crashes/
 ```
 
 ```bash
-0sec ingest ./crashes --verify --output json
+0 ingest ./crashes --verify --output json
 ```
 
-For each C reproducer 0sec writes `repro.c` and `runner.sh` to a temp dir, boots
+For each C reproducer 0 writes `repro.c` and `runner.sh` to a temp dir, boots
 QEMU with a 9p share (`osecshare`), lets `/sbin/0sec-init` run
 `/mnt/0sec/runner.sh`, compiles and runs the reproducer under the timeout, and
 copies `compile.log`, `run.log`, `dmesg.log`, markers, and the serial log back

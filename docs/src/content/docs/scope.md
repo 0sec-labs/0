@@ -21,7 +21,7 @@ Save this as `scope.json`, replacing the example host with your authorized targe
 Then pass the file explicitly:
 
 ```bash
-0sec scan --target https://app.example.com --mode web \
+0 scan --target https://app.example.com --mode web \
   --scope ./scope.json --depth quick --cost-ceiling 2
 ```
 

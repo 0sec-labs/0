@@ -16,7 +16,7 @@ The extractor is intentionally cheap:
 - no network requests
 - no external scanners
 
-It is the handcrafted half of 0sec's VulnBERT-inspired hybrid direction.
+It is the handcrafted half of 0's VulnBERT-inspired hybrid direction.
 
 <span id="why-it-exists"></span>
 ## Feature selection
@@ -29,7 +29,7 @@ VulnBERT ablations on kernel commits:
 | CodeBERT alone | 84.3% | 4.2% |
 | Hybrid features + neural fusion | 92.2% | 1.2% |
 
-0sec uses the handcrafted layer today because it is deterministic,
+0 uses the handcrafted layer today because it is deterministic,
 explainable, and cheap enough to run before any paid verification.
 
 ## Group breakdown
