@@ -43,7 +43,35 @@ An explicit local transport is available independently of HTTPS URL parsing:
 Local source must be an ordinary repository directory, not a linked worktree or
 an alternate object store. HTTPS URLs cannot contain user information, query
 parameters, or fragments. Other protocols, redirects and ambient authentication
-are disabled. This release has no private-repository credential configuration.
+are disabled by default. Private HTTPS acquisition requires an explicit host
+credential selection; no ambient GitHub token or credential helper is consulted:
+
+```sh
+0sec-native source acquire \
+  --url https://github.com/example/private.git \
+  --ref refs/heads/main --output /absolute/new-private-capture \
+  --credential-env PRIVATE_GIT_TOKEN \
+  --credential-url https://github.com/example/private.git \
+  --credential-username x-access-token
+```
+
+Populate the named variable through your host's secret mechanism. Its value is a
+bounded ASCII token without whitespace. The explicit Basic-auth username cannot
+contain a colon or whitespace. The credential URL must exactly match the selected
+canonical HTTPS repository URL, with a literal, nonempty repository path; encoded
+separators, wildcard scope and trailing slashes are rejected. Local and npm
+acquisition do not accept these flags. The chosen Git installation is trusted
+host code and receives the secret in its fetch process environment; same-user
+process inspection is outside this isolation boundary.
+
+Only the fetch subprocess receives a URL-scoped Authorization header through
+Git's ephemeral configuration environment. The token does not enter argv, the
+URL, Git config files, receipts, or returned diagnostics. Redirects stay disabled;
+headers match only the selected repository path and its Git endpoint suffixes,
+not sibling repositories or another host. Other Git subprocesses receive no
+credential. Child stderr is discarded even on failure. Public acquisition and
+receipt identities are unchanged; credentials confer read access, not source
+trust or permission for remote writes.
 
 Acquisition uses a new isolated bare repository. Git receives an empty inherited
 environment with a private HOME, disabled system/global Git configuration,
@@ -105,3 +133,10 @@ traffic or real sandbox execution is part of these tests.
 Git's primary references describe [fetching explicit refs](https://git-scm.com/docs/git-fetch),
 [raw object reads](https://git-scm.com/docs/git-cat-file), and
 [tree listings](https://git-scm.com/docs/git-ls-tree).
+
+Private credential qualification uses the actual native CLI and an explicitly
+selected fixture Git transport. Real Git URL matching checks the repository
+endpoint, sibling and other-host scopes; fake child failures echo the fixture
+secret in both output streams to verify fixed diagnostics. The fixture replaces
+network fetch with an owned local repository. This proves the selection and
+subprocess contract, not interoperability with a live private Git service.

@@ -1,5 +1,7 @@
 //! Explicit Git acquisition into a new private directory. No checkout or hooks.
+mod credential;
 mod process;
+pub use credential::RepositoryCredential;
 use std::{
     collections::BTreeSet,
     path::{Component, Path, PathBuf},
@@ -27,11 +29,20 @@ pub async fn acquire_repository(
     request: RepositoryRequest,
     cancel: CancellationToken,
 ) -> Result<RepositoryReceipt, String> {
+    acquire_repository_with_credential(request, None, cancel).await
+}
+
+/// Resolve only an explicitly selected host credential; public acquisition remains anonymous.
+pub async fn acquire_repository_with_credential(
+    request: RepositoryRequest,
+    credential: Option<RepositoryCredential>,
+    cancel: CancellationToken,
+) -> Result<RepositoryReceipt, String> {
     let token = cancel.child_token();
     let _on_drop = token.clone().drop_guard();
     // Dropping the public future requests cancellation without dropping the
     // supervisor responsible for process-group teardown and private cleanup.
-    tokio::spawn(async move { acquire_owned(request, token).await })
+    tokio::spawn(async move { acquire_owned(request, credential, token).await })
         .await
         .map_err(|_| "repository acquisition supervisor failed".to_owned())?
 }
@@ -105,9 +116,10 @@ struct Git<'a> {
     private: &'a Path,
     deadline: Instant,
     cancel: &'a CancellationToken,
+    credential: Option<&'a credential::ResolvedCredential>,
 }
 impl Git<'_> {
-    async fn run(&self, args: &[&str], cap: usize) -> Result<Vec<u8>, String> {
+    async fn run(&self, args: &[&str], cap: usize, authenticate: bool) -> Result<Vec<u8>, String> {
         let mut command = vec!["--no-pager".into(), "--no-replace-objects".into()];
         for config in [
             "core.hooksPath=/dev/null",
@@ -145,13 +157,14 @@ impl Git<'_> {
             self.deadline,
             self.cancel,
             cap,
+            if authenticate { self.credential } else { None },
         )
         .await
     }
     async fn repo(&self, args: &[&str], cap: usize) -> Result<Vec<u8>, String> {
         let mut full = vec!["--git-dir=repository.git"];
         full.extend_from_slice(args);
-        self.run(&full, cap).await
+        self.run(&full, cap, args.first() == Some(&"fetch")).await
     }
 }
 struct Entry {
@@ -222,9 +235,11 @@ fn oid(bytes: Vec<u8>) -> Result<String, String> {
 
 async fn acquire_owned(
     request: RepositoryRequest,
+    credential: Option<RepositoryCredential>,
     cancel: CancellationToken,
 ) -> Result<RepositoryReceipt, String> {
     request.source.validate()?;
+    let credential = credential.map(|c| c.resolve(&request.source)).transpose()?;
     validate_ref(&request.reference)?;
     if !(1..=120_000).contains(&request.timeout_ms)
         || request.limits.max_files == 0
@@ -290,6 +305,7 @@ async fn acquire_owned(
         private: private.path(),
         deadline,
         cancel: &cancel,
+        credential: credential.as_ref(),
     };
     let result = async {
         git.run(
@@ -301,6 +317,7 @@ async fn acquire_owned(
                 "repository.git",
             ],
             4096,
+            false,
         )
         .await?;
         let remote = match &request.source {

@@ -3,6 +3,7 @@ use std::{path::Path, process::Stdio, time::Duration};
 use tokio::{io::AsyncReadExt, process::Command, time::Instant};
 use tokio_util::sync::CancellationToken;
 
+#[allow(clippy::too_many_arguments)]
 pub(super) async fn run(
     binary: &Path,
     args: &[String],
@@ -11,6 +12,7 @@ pub(super) async fn run(
     deadline: Instant,
     cancel: &CancellationToken,
     cap: usize,
+    credential: Option<&super::credential::ResolvedCredential>,
 ) -> Result<Vec<u8>, String> {
     run_inner(
         binary,
@@ -20,6 +22,7 @@ pub(super) async fn run(
         deadline,
         cancel,
         cap,
+        credential,
         crate::process::Group::kill,
     )
     .await
@@ -34,6 +37,7 @@ async fn run_inner(
     deadline: Instant,
     cancel: &CancellationToken,
     cap: usize,
+    credential: Option<&super::credential::ResolvedCredential>,
     mut kill: impl FnMut(&mut crate::process::Group) -> Result<(), String> + Send,
 ) -> Result<Vec<u8>, String> {
     super::check(cancel, deadline)?;
@@ -69,6 +73,12 @@ async fn run_inner(
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .kill_on_drop(true);
+    if let Some(credential) = credential {
+        command
+            .env("GIT_CONFIG_COUNT", "1")
+            .env("GIT_CONFIG_KEY_0", &credential.key)
+            .env("GIT_CONFIG_VALUE_0", &credential.header);
+    }
     command.as_std_mut().process_group(0);
     // prlimit execs Git in the same process identity. Limits propagate to
     // every helper without unsafe pre_exec code in the multithreaded host.
@@ -147,6 +157,7 @@ mod tests {
             Instant::now() + Duration::from_secs(3),
             &CancellationToken::new(),
             4096,
+            None,
             |group| {
                 attempts += 1;
                 // Terminate the real fixture but inject the kernel-error result.

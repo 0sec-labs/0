@@ -10,7 +10,7 @@ pub use archive::{capture_source_archive, stage_source_archive};
 #[cfg(target_os = "linux")]
 pub use npm::{NpmRequest, acquire_npm};
 #[cfg(target_os = "linux")]
-pub use repository::{RepositoryRequest, acquire_repository};
+pub use repository::{RepositoryCredential, RepositoryRequest, acquire_repository, acquire_repository_with_credential};
 mod interactive;
 mod process;
 pub use interactive::{InteractiveInput, InteractiveSender, interactive_input};

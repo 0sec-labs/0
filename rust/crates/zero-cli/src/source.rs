@@ -13,6 +13,13 @@ pub enum SourceCommand {
             conflicts_with_all = ["local_repository", "npm_package"]
         )]
         url: Option<String>,
+        /// Named environment token; requires an exact HTTPS repository scope and username.
+        #[arg(long, requires_all = ["url", "credential_url", "credential_username"])]
+        credential_env: Option<String>,
+        #[arg(long, requires = "credential_env")]
+        credential_url: Option<String>,
+        #[arg(long, requires = "credential_env")]
+        credential_username: Option<String>,
         /// Explicit local transport, independent from HTTPS URL acceptance.
         #[arg(long, required_unless_present_any = ["url", "npm_package"], conflicts_with_all = ["url", "npm_package"])]
         local_repository: Option<PathBuf>,
@@ -50,6 +57,9 @@ pub async fn run(command: &SourceCommand) -> Result<u8, Box<dyn Error>> {
         let SourceCommand::Acquire {
             url,
             local_repository,
+            credential_env,
+            credential_url,
+            credential_username,
             reference,
             npm_package,
             version,
@@ -104,6 +114,14 @@ pub async fn run(command: &SourceCommand) -> Result<u8, Box<dyn Error>> {
         } else {
             None
         };
+        let credential =
+            credential_env
+                .as_ref()
+                .map(|environment| zero_executor::RepositoryCredential {
+                    environment: environment.clone(),
+                    repository_url: credential_url.clone().unwrap_or_default(),
+                    username: credential_username.clone().unwrap_or_default(),
+                });
         let mut signals = crate::scan::Signals::new()?;
         let mut task = tokio::spawn(async move {
             if let Some(request) = npm {
@@ -111,9 +129,13 @@ pub async fn run(command: &SourceCommand) -> Result<u8, Box<dyn Error>> {
                     .await
                     .map(zero_protocol::source_acquisition::SourceReceipt::Npm)
             } else {
-                zero_executor::acquire_repository(git.ok_or("Git request absent")?, worker_cancel)
-                    .await
-                    .map(zero_protocol::source_acquisition::SourceReceipt::Git)
+                zero_executor::acquire_repository_with_credential(
+                    git.ok_or("Git request absent")?,
+                    credential,
+                    worker_cancel,
+                )
+                .await
+                .map(zero_protocol::source_acquisition::SourceReceipt::Git)
             }
         });
         let result = tokio::select! {
