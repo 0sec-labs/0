@@ -259,7 +259,14 @@ impl Store {
                         .plan
                         .protected_final
                         .iter()
-                        .flat_map(|p| &p.scenarios),
+                        .flat_map(|p| &p.scenarios)
+                        .chain(
+                            config
+                                .plan
+                                .protected_canary
+                                .iter()
+                                .flat_map(|p| &p.scenarios),
+                        ),
                 )
                 .any(|s| advisory.advisory_utf8.contains(&s.marker))
         {

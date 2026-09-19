@@ -55,6 +55,7 @@ impl CampaignPlan {
 pub enum CampaignLane {
     Development,
     Final,
+    Canary,
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
@@ -136,7 +137,7 @@ impl CampaignRunSpec {
                 .as_ref()
                 .is_some_and(|s| s.is_empty() || s.len() > 256)
             || (self.lane == CampaignLane::Development && self.exposure_id.is_some())
-            || (self.lane == CampaignLane::Final && self.exposure_id.is_none())
+            || (self.lane != CampaignLane::Development && self.exposure_id.is_none())
         {
             return Err(ValidationError(
                 "unsupported campaign run authority or identity".into(),

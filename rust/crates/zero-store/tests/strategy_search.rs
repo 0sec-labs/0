@@ -462,7 +462,33 @@ fn final_config() -> StrategySearchConfiguration {
 }
 #[test]
 fn final_seal_is_atomic_idempotent_and_blocks_later_development() {
-    let mut f = F::with_config(final_config());
+    sealed(false);
+}
+#[test]
+fn canary_seal_shares_account_is_atomic_and_requires_prior_final_completion() {
+    sealed(true);
+}
+fn sealed(canary: bool) {
+    let mut cfg = final_config();
+    if canary {
+        cfg.schema_version = 3;
+        cfg.plan.schema_version = 3;
+        cfg.plan.limits.runs = 24;
+        cfg.capture.authority.campaign_limits.runs = 24;
+        let mut policy = cfg.plan.protected_final.clone().unwrap();
+        for scenario in &mut policy.scenarios {
+            scenario.lane = CampaignLane::Canary;
+            scenario.id = format!("canary_{}", scenario.id);
+            scenario.family = format!("canary_{}", scenario.family);
+            scenario.marker = format!("CANARY_PRIVATE_MARKER_{}", scenario.positive);
+        }
+        cfg.capture
+            .authority
+            .accepted_suite_sha256
+            .push(hash(&search_final_suite_value(&policy)));
+        cfg.plan.protected_canary = Some(policy);
+    }
+    let mut f = F::with_config(cfg);
     let (p, o) = f.first();
     let advice = StrategyArtifact {
         schema_version: 1,
@@ -546,6 +572,32 @@ fn final_seal_is_atomic_idempotent_and_blocks_later_development() {
         .unwrap();
     assert!(!duplicate);
     assert_eq!(selected.schedule_start, 8);
+    if let Some(k) = &selected.canary {
+        assert_eq!(k.schedule_start, 16);
+        assert_eq!(k.run_count, 8);
+        assert_ne!(k.suite_sha256, selected.suite_sha256);
+        assert_eq!(
+            sql.query_row("SELECT count(*) FROM campaign_exposures", [], |r| r
+                .get::<_, u32>(0))
+                .unwrap(),
+            2
+        );
+        let raw:String=sql.query_row("SELECT record FROM campaign_runs WHERE campaign_id=?1 ORDER BY schedule_index LIMIT 1",[&f.c.id],|r|r.get(0)).unwrap();
+        let mut spec: CampaignRunSpec = serde_json::from_str::<CampaignRun>(&raw).unwrap().spec;
+        spec.lane = CampaignLane::Canary;
+        spec.schedule_index = k.schedule_start;
+        spec.suite_sha256 = k.suite_sha256.clone();
+        spec.evaluation_pair_sha256 = k.pair_sha256.clone();
+        spec.exposure_id = Some(k.exposure_id.clone());
+        assert!(
+            f.store
+                .create_search_final_run(&selected.id, "premature-canary", &spec, "owner")
+                .unwrap_err()
+                .to_string()
+                .contains("completed Final")
+        );
+        assert_eq!(f.store.campaign(&f.c.id).unwrap().usage.runs, 8);
+    }
     let mut budget = 64 * 1024 * 1024;
     f.store
         .search_evidence_preflight(&f.c.id, &mut budget)

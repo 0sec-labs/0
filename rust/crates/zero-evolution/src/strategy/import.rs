@@ -19,7 +19,7 @@ fn descriptor_head(bytes: &[u8]) -> Result<StrategyEvidenceDescriptor> {
     let v: Value = serde_json::from_slice(bytes)?;
     match v["schema_version"].as_u64() {
         Some(1) => Ok(serde_json::from_value(v)?),
-        Some(2) => Ok(search_head(&serde_json::from_value(v)?)),
+        Some(2 | 3) => Ok(search_head(&serde_json::from_value(v)?)),
         _ => Err(invalid("unsupported strategy evidence descriptor")),
     }
 }
@@ -48,12 +48,14 @@ fn usability(conn: &Connection, r: &StrategyImportReceipt) -> Result<StrategyEli
     }
     let e: Eligibility = read_json(conn, "eligibilities", &r.eligibility_sha256)?;
     let Some(Scope::Measured {
-        canary_required, ..
+        canary_required,
+        canary_suite_sha256,
+        ..
     }) = e.strategy_scope
     else {
         return Err(invalid("strategy measured scope absent"));
     };
-    Ok(if canary_required {
+    Ok(if canary_required && canary_suite_sha256.is_none() {
         StrategyEligibilityUsability::MissingActivationPrerequisite
     } else {
         StrategyEligibilityUsability::Current
@@ -103,9 +105,22 @@ fn record(conn: &Connection, command: &str) -> Result<Option<StrategyImportRecei
         || evaluation.candidate != r.candidate_generation
         || evaluation.baseline != r.baseline_generation
         || evaluation.decision != EvaluationDecision::Eligible
-        || !matches!(e.strategy_scope,Some(Scope::Measured{binding,evidence_sha256,report_sha256,..}) if *binding==descriptor.binding && evidence_sha256==evidence && report_sha256==r.report_sha256)
+        || !matches!(&e.strategy_scope,Some(Scope::Measured{binding,evidence_sha256,report_sha256,..}) if **binding==descriptor.binding && *evidence_sha256==evidence && *report_sha256==r.report_sha256)
     {
         return Err(invalid("strategy import scope/receipt differs"));
+    }
+    if let Some(Scope::Measured {
+        canary_suite_sha256,
+        ..
+    }) = &e.strategy_scope
+    {
+        validate_canary_scope(
+            conn,
+            &evidence,
+            &r.report_sha256,
+            canary_suite_sha256.as_deref(),
+            &parts(conn, &r.candidate_generation)?.2,
+        )?;
     }
     Ok(Some(r))
 }
@@ -192,7 +207,7 @@ impl Registry {
     where
         F: FnOnce(&dyn Fn(&str) -> Result<Vec<u8>>) -> Result<StrategySearchReport>,
     {
-        if descriptor.schema_version != 2 {
+        if !matches!(descriptor.schema_version, 2 | 3) {
             return Err(invalid("adaptive search descriptor version differs"));
         }
         self.import_measured(
@@ -221,7 +236,7 @@ impl Registry {
             return Ok(prior);
         }
         let request_digest = request_hash(request)?;
-        if !matches!(descriptor.schema_version, 1 | 2)
+        if !matches!(descriptor.schema_version, 1 | 2 | 3)
             || hash(encoded_descriptor.as_bytes()) != request.expected_evidence_sha256
             || descriptor.campaign_id != request.campaign_id
             || artifacts.len() > 4096
@@ -251,11 +266,15 @@ impl Registry {
         if let Some(prior) = prior(&tx, request)? {
             return Ok(prior);
         }
-        let used:bool=tx.query_row("SELECT EXISTS(SELECT 1 FROM strategy_imports WHERE suite_sha256=?1) OR EXISTS(SELECT 1 FROM eligibilities WHERE CASE WHEN length(CAST(json AS BLOB))<=1048576 AND json_valid(json) THEN json_extract(json,'$.strategy_scope.protected_suite_sha256') END=?1)",[&descriptor.suite_sha256],|r|r.get(0))?;
-        if used {
-            return Err(Error::Ineligible(
-                "protected strategy suite already imported in this registry".into(),
-            ));
+        for suite in std::iter::once(&descriptor.suite_sha256)
+            .chain(search.and_then(|d| d.canary_suite_sha256.as_ref()))
+        {
+            let used: bool = tx.query_row("SELECT EXISTS(SELECT 1 FROM strategy_imports WHERE suite_sha256=?1) OR EXISTS(SELECT 1 FROM eligibilities WHERE CASE WHEN length(CAST(json AS BLOB))<=1048576 AND json_valid(json) THEN json_extract(json,'$.strategy_scope.protected_suite_sha256')=?1 OR json_extract(json,'$.strategy_scope.canary_suite_sha256')=?1 ELSE 0 END)",[suite],|r|r.get(0))?;
+            if used {
+                return Err(Error::Ineligible(
+                    "protected strategy suite already imported in this registry".into(),
+                ));
+            }
         }
         validate_binding(&tx, &descriptor.binding, true)?;
         let (candidate, _, authority) = parts(&tx, &descriptor.binding.candidate_generation)?;
@@ -266,6 +285,14 @@ impl Registry {
             return Err(Error::Ineligible(
                 "strategy protected suite not authorized".into(),
             ));
+        }
+        if let Some(suite) = search.and_then(|d| d.canary_suite_sha256.as_ref()) {
+            if suite == &descriptor.suite_sha256 || !authority.accepted_suite_sha256.contains(suite)
+            {
+                return Err(Error::Ineligible(
+                    "canary corpus is not independent authorized policy".into(),
+                ));
+            }
         }
         for (id, bytes) in artifacts {
             tx.execute(
@@ -381,6 +408,7 @@ impl Registry {
                 evidence_sha256: request.expected_evidence_sha256.clone(),
                 report_sha256: descriptor.report_sha256.clone(),
                 canary_required: authority.canary_required,
+                canary_suite_sha256: search.and_then(|d| d.canary_suite_sha256.clone()),
                 protected_suite_sha256: descriptor.suite_sha256.clone(),
                 evaluation_pair_sha256: descriptor.pair_sha256.clone(),
                 retained_artifacts: artifacts
@@ -437,7 +465,7 @@ impl Registry {
     }
 }
 
-fn validate_search_report(
+pub(super) fn validate_search_report(
     r: &StrategySearchReport,
     d: &StrategySearchEvidenceDescriptor,
     a: &StrategyHostAuthority,
@@ -460,7 +488,8 @@ fn validate_search_report(
         r.disposition != zero_protocol::strategy::StrategyCaseDisposition::Observed
             || r.model_reserved_micro_usd != 0
     };
-    if r.schema_version != 2
+    if !matches!(r.schema_version, 2 | 3)
+        || r.schema_version != d.schema_version
         || r.qualification != "adaptive_search_fixture"
         || r.campaign_id != d.campaign_id
         || r.config_sha256 != d.config_sha256
@@ -503,5 +532,59 @@ fn validate_search_report(
             "complete adaptive search does not establish independently measured improvement".into(),
         ));
     }
+    match (
+        r.schema_version,
+        &s.canary,
+        &r.canary_measurement,
+        &d.canary_suite_sha256,
+    ) {
+        (2, None, None, None) => {}
+        (3, Some(k), Some(m), Some(suite)) => {
+            if &k.suite_sha256 != suite
+                || suite == &d.suite_sha256
+                || !a.accepted_suite_sha256.contains(suite)
+                || k.schedule_start != s.schedule_start + s.run_count
+                || m.decision != StrategyDecision::ImprovedForFixtureSuite
+                || m.cases.len() != k.run_count as usize
+                || m.matrix_sha256
+                    .as_ref()
+                    .is_none_or(|s| !zero_protocol::is_sha256(s))
+                || m.cases.iter().any(|r| {
+                    invalid_case(r) || r.lane != zero_protocol::campaign::CampaignLane::Canary
+                })
+            {
+                return Err(Error::Ineligible(
+                    "canary measurement or commitment incomplete".into(),
+                ));
+            }
+        }
+        _ => return Err(invalid("canary report version/commitment mismatch")),
+    }
     Ok(())
+}
+
+pub(super) fn validate_canary_scope(
+    conn: &Connection,
+    evidence: &str,
+    report: &str,
+    suite: Option<&str>,
+    authority: &StrategyHostAuthority,
+) -> Result<()> {
+    let value: Value = serde_json::from_slice(&bounded_artifact(conn, evidence, MAX_JSON_BYTES)?)?;
+    if suite.is_none() && value["schema_version"] != 3 {
+        return Ok(());
+    }
+    let descriptor: StrategySearchEvidenceDescriptor = serde_json::from_value(value)?;
+    if descriptor.schema_version != 3
+        || descriptor.canary_suite_sha256.as_deref() != suite
+        || suite.is_none()
+        || descriptor.report_sha256 != report
+    {
+        return Err(invalid(
+            "canary eligibility differs from retained source descriptor",
+        ));
+    }
+    let measurement: StrategySearchReport =
+        serde_json::from_slice(&bounded_artifact(conn, report, 4 * 1024 * 1024)?)?;
+    validate_search_report(&measurement, &descriptor, authority)
 }

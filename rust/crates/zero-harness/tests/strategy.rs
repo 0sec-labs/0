@@ -540,6 +540,7 @@ fn typed_full_search_import_checks_whole_account_and_retries_without_source() {
     // physical tests provide the full independently reconstructed source matrix.
     let report:StrategySearchReport=serde_json::from_value(json!({"schema_version":2,"campaign_id":"campaign","config_sha256":config,"qualification":"adaptive_search_fixture","proposals":[],"evaluations":[{"evaluation":{"id":"evaluation","campaign_id":"campaign","command_id":"pair","proposal_id":"proposal","candidate_generation":binding.candidate_generation,"candidate_sha256":binding.candidate_advisory_sha256,"baseline_sha256":binding.baseline_advisory_sha256,"evaluation_pair_sha256":digest(b"dev pair"),"config_sha256":config,"schedule_start":0,"run_count":1,"sequence":10},"cases":[case],"improved":true,"reasons":[]}],"usage":{"model_reserved_micro_usd":0,"model_charged_micro_usd":2,"model_calls":2,"http_requests":2,"http_request_body_bytes":0,"http_response_reserved_bytes":0,"http_response_charged_bytes":10,"experiments":0,"runs":2,"active_runs":0,"unknown_runs":0},"stop_reason":"model_selected_final","report_sha256":digest(b"internal checksum"),"selection":selection,"final_measurement":{"cases":[case],"decision":"improved_for_fixture_suite","reasons":[],"matrix_sha256":digest(b"final matrix")}})).unwrap();
     let descriptor = StrategySearchEvidenceDescriptor {
+        canary_suite_sha256: None,
         schema_version: 2,
         binding,
         campaign_id: "campaign".into(),

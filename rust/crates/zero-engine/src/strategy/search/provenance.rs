@@ -220,10 +220,43 @@ pub(super) fn report(store: &Store, id: &str) -> Result<StrategySearchReport, En
             &all_runs,
             &mut consumed,
             &mut budget,
+            false,
         )?)
     } else {
         None
     };
+    let canary_measurement =
+        if let Some(canary) = selection.as_ref().and_then(|s| s.canary_selection()) {
+            let selected = evaluations
+                .iter()
+                .find(|e| e.evaluation.id == canary.evaluation_id)
+                .ok_or_else(|| error("canary candidate absent"))?;
+            let measurement = final_selection::measure(
+                store,
+                &config,
+                &canary,
+                selected,
+                &proposals,
+                phase
+                    .as_ref()
+                    .ok_or_else(|| error("canary controller absent"))?,
+                &journal,
+                &all_runs,
+                &mut consumed,
+                &mut budget,
+                true,
+            )?;
+            if !measurement.cases.is_empty()
+                && final_measurement
+                    .as_ref()
+                    .is_none_or(|r| r.decision != StrategyDecision::ImprovedForFixtureSuite)
+            {
+                return Err(error("canary ran without independently improved Final"));
+            }
+            Some(measurement)
+        } else {
+            None
+        };
     if consumed.len() != all_runs.len() {
         return Err(error("search contains unbound evaluation runs"));
     }
@@ -244,6 +277,7 @@ pub(super) fn report(store: &Store, id: &str) -> Result<StrategySearchReport, En
         .into(),
         selection,
         final_measurement,
+        canary_measurement,
         proposals,
         evaluations,
         usage: snapshot.campaign.usage,

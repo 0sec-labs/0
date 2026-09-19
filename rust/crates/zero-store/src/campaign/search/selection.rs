@@ -75,8 +75,8 @@ pub(super) fn check_exposure(
                 .as_ref()
                 .ok_or_else(|| bad("selection without Final policy"))?;
             let exposed = read::exposure(conn, &c.id, &s.exposure_id)?;
-            if rows != 1
-                || events != 1
+            if rows != 1 + u64::from(s.canary.is_some())
+                || events != 1 + u64::from(s.canary.is_some())
                 || !captured(&s, cfg)
                 || s.suite_sha256 != hash(&search_final_suite_value(policy))?
                 || s.suite_sha256 != exposed.suite_sha256
@@ -85,6 +85,16 @@ pub(super) fn check_exposure(
                 || exposed.sequence >= s.sequence
             {
                 return Err(bad("selection exposure authority differs"));
+            }
+            if let Some(canary) = &s.canary {
+                let exposed = read::exposure(conn, &c.id, &canary.exposure_id)?;
+                if exposed.suite_sha256 != canary.suite_sha256
+                    || exposed.evaluation_pair_sha256 != canary.pair_sha256
+                    || exposed.finalist_sha256 != s.candidate_sha256
+                    || exposed.sequence >= s.sequence
+                {
+                    return Err(bad("canary exposure differs from sealed commitment"));
+                }
             }
         }
     }
@@ -210,6 +220,28 @@ fn validated(
     {
         return Err(bad("Final matrix authority differs"));
     }
+    match (&cfg.plan.protected_canary, &s.canary) {
+        (None, None) => {}
+        (Some(policy), Some(k)) => {
+            let suite = hash(&search_final_suite_value(policy))?;
+            let pair = hash(
+                &json!({"kind":"independent_canary","final_pair_sha256":s.final_pair_sha256,"suite_sha256":suite}),
+            )?;
+            if k.suite_sha256 != suite
+                || k.pair_sha256 != pair
+                || suite == s.suite_sha256
+                || k.exposure_id == s.exposure_id
+                || k.schedule_start != s.schedule_start + s.run_count
+                || k.run_count != policy.scenarios.len() as u32 * policy.repeats * 2
+                || k.schedule_start
+                    .checked_add(k.run_count)
+                    .is_none_or(|n| n > cfg.plan.limits.runs || n > 128)
+            {
+                return Err(bad("canary commitment differs from captured policy"));
+            }
+        }
+        _ => return Err(bad("canary policy/commitment mismatch")),
+    }
     matrix(conn, c, p, e, &s.development_matrix_sha256)?;
     Ok(())
 }
@@ -221,16 +253,44 @@ pub(super) fn validate_run(
     spec: &CampaignRunSpec,
 ) -> Result<()> {
     validated(conn, c, cfg, s)?;
+    let canary = spec.lane == CampaignLane::Canary;
+    let derived = if canary {
+        Some(
+            s.canary_selection()
+                .ok_or_else(|| bad("canary not committed"))?,
+        )
+    } else {
+        None
+    };
+    let s = derived.as_ref().unwrap_or(s);
+    if canary {
+        let selected = raw(conn, c)?.ok_or_else(|| bad("selection absent"))?;
+        let count: u32 = conn.query_row("SELECT count(*) FROM campaign_runs WHERE campaign_id=?1 AND schedule_index>=?2 AND schedule_index<?3", params![c.id,selected.schedule_start,selected.schedule_start+selected.run_count], |r| r.get(0))?;
+        // Full independent scoring is engine-owned; storage requires the entire
+        // prior schedule and its immutable completion before fresh canary roots.
+        let completed: bool = conn.query_row("SELECT EXISTS(SELECT 1 FROM events WHERE session_id=?1 AND kind='operation_detail' AND json_extract(payload,'$.kind')='strategy_search_final_completed')", [&c.journal_session_id], |r| r.get(0))?;
+        let usage = read::usage(conn, c)?;
+        if count != selected.run_count
+            || !completed
+            || usage.active_runs != 0
+            || usage.unknown_runs != 0
+            || usage.model_reserved_micro_usd != 0
+            || usage.http_response_reserved_bytes != 0
+        {
+            return Err(bad("canary requires completed Final matrix"));
+        }
+    }
     if spec.schedule_index < s.schedule_start
         || spec.schedule_index >= s.schedule_start + s.run_count
     {
         return Err(bad("sealed search forbids new Development work"));
     }
-    let policy = cfg
-        .plan
-        .protected_final
-        .as_ref()
-        .ok_or_else(|| bad("Final policy absent"))?;
+    let policy = if canary {
+        cfg.plan.protected_canary.as_ref()
+    } else {
+        cfg.plan.protected_final.as_ref()
+    }
+    .ok_or_else(|| bad("protected policy absent"))?;
     let n = spec.schedule_index - s.schedule_start;
     let per = policy.scenarios.len() as u32 * 2;
     let repeat = n / per;
@@ -262,7 +322,12 @@ pub(super) fn validate_run(
             .map_err(|e| bad(&e.to_string()))?,
     )
     .map_err(|e| bad(&e.to_string()))?;
-    if spec.lane != CampaignLane::Final
+    if spec.lane
+        != if canary {
+            CampaignLane::Canary
+        } else {
+            CampaignLane::Final
+        }
         || spec.exposure_id.as_deref() != Some(&s.exposure_id)
         || spec.repeat_index != repeat
         || spec.variant != variant
@@ -387,10 +452,27 @@ impl Store {
             run_count: policy.scenarios.len() as u32 * policy.repeats * 2,
             exposure_id: uuid::Uuid::new_v4().to_string(),
             sequence: 0,
+            canary: None,
         };
         s.final_pair_sha256 = hash(
             &json!({"config_sha256":s.config_sha256,"evaluation_id":e.id,"candidate_generation":e.candidate_generation,"candidate_sha256":e.candidate_sha256,"suite_sha256":s.suite_sha256,"binding":s.binding}),
         )?;
+        if let Some(policy) = &cfg.plan.protected_canary {
+            let suite = hash(&search_final_suite_value(policy))?;
+            let used: bool = tx.query_row("SELECT EXISTS(SELECT 1 FROM campaign_exposures WHERE suite_sha256=?1) OR EXISTS(SELECT 1 FROM events WHERE kind='campaign_exposed' AND json_extract(payload,'$.suite_sha256')=?1)", [&suite], |r| r.get(0))?;
+            if used {
+                return Err(bad("canary corpus already exposed"));
+            }
+            s.canary = Some(SearchCanaryCommitment {
+                pair_sha256: hash(
+                    &json!({"kind":"independent_canary","final_pair_sha256":s.final_pair_sha256,"suite_sha256":suite}),
+                )?,
+                suite_sha256: suite,
+                schedule_start: s.schedule_start + s.run_count,
+                run_count: policy.scenarios.len() as u32 * policy.repeats * 2,
+                exposure_id: uuid::Uuid::new_v4().to_string(),
+            });
+        }
         validated(&tx, &c, &cfg, &s)?;
         matrix(&tx, &c, p, e, development_matrix_sha256)?;
         let exposure = CampaignExposure {
@@ -420,6 +502,35 @@ impl Store {
             "campaign_exposed",
             &serde_json::to_value(&exposure)?,
         )?;
+        if let Some(k) = &s.canary {
+            let exposure = CampaignExposure {
+                id: k.exposure_id.clone(),
+                campaign_id: campaign.into(),
+                command_id: format!("search-canary:{campaign}"),
+                suite_sha256: k.suite_sha256.clone(),
+                evaluation_pair_sha256: k.pair_sha256.clone(),
+                finalist_sha256: s.candidate_sha256.clone(),
+                sequence: next(&tx, &c.journal_session_id)?,
+            };
+            tx.execute(
+                "INSERT INTO campaign_exposures VALUES(?1,?2,?3,?4,?5,?6,?7)",
+                params![
+                    exposure.id,
+                    campaign,
+                    exposure.command_id,
+                    exposure.suite_sha256,
+                    exposure.evaluation_pair_sha256,
+                    encode(&exposure)?,
+                    integer(exposure.sequence)?
+                ],
+            )?;
+            append(
+                &tx,
+                &c.journal_session_id,
+                "campaign_exposed",
+                &serde_json::to_value(&exposure)?,
+            )?;
+        }
         s.sequence = next(&tx, &c.journal_session_id)?;
         tx.execute(
             "INSERT INTO strategy_search_selections VALUES(?1,?2,?3,?4,?5,?6,?7)",

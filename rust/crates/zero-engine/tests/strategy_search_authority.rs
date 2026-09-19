@@ -34,6 +34,7 @@ fn plan(f: &Bound) -> StrategySearchPlan {
         expires_at_ms: f.setup.plan.expires_at_ms,
         minimum_development_gain: 1,
         protected_final: None,
+        protected_canary: None,
     }
 }
 

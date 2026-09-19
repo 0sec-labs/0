@@ -129,6 +129,9 @@ impl Engine {
         events: mpsc::Sender<ExecutionEvent>,
         progress: Option<mpsc::Sender<ExecutionEvent>>,
     ) -> Result<Reply, EngineError> {
+        if lane == CampaignLane::Canary {
+            return Err(error("Canary requires the sealed v3 search controller"));
+        }
         let (receiver, cancel) = {
             let mut control = lock(&self.shared.control)?;
             if control.closing {

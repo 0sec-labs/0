@@ -34,6 +34,8 @@ pub struct StrategySearchPlan {
     pub minimum_development_gain: u32,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub protected_final: Option<SearchFinalPolicy>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub protected_canary: Option<SearchFinalPolicy>,
 }
 fn invalid(s: &str) -> ValidationError {
     ValidationError(s.into())
@@ -45,8 +47,12 @@ impl StrategySearchPlan {
     pub fn validate(&self) -> Result<(), ValidationError> {
         let p = &self.proposer;
         if !matches!(
-            (self.schema_version, self.protected_final.is_some()),
-            (1, false) | (2, true)
+            (
+                self.schema_version,
+                self.protected_final.is_some(),
+                self.protected_canary.is_some()
+            ),
+            (1, false, false) | (2, true, false) | (3, true, true)
         ) || !text(&self.objective, 16384)
             || !text(&p.provider, 128)
             || !text(&p.model, 256)
@@ -124,6 +130,7 @@ impl StrategySearchPlan {
             let mut final_plan = self.clone();
             final_plan.schema_version = 1;
             final_plan.protected_final = None;
+            final_plan.protected_canary = None;
             final_plan.scenarios = final_policy.scenarios.clone();
             final_plan.repeats = final_policy.repeats;
             final_plan.minimum_development_gain = final_policy.minimum_gain;
@@ -155,6 +162,47 @@ impl StrategySearchPlan {
                         "protected corpus overlaps Development or public inputs",
                     ));
                 }
+            }
+        }
+        if let Some(canary) = &self.protected_canary {
+            let mut check = self.clone();
+            check.schema_version = 1;
+            check.protected_final = None;
+            check.protected_canary = None;
+            check.scenarios = canary.scenarios.clone();
+            check.repeats = canary.repeats;
+            check.minimum_development_gain = canary.minimum_gain;
+            for s in &mut check.scenarios {
+                if s.lane != CampaignLane::Canary {
+                    return Err(invalid("canary scenarios must have Canary lane"));
+                }
+                s.lane = CampaignLane::Development;
+            }
+            check.validate()?;
+            let prior: Vec<_> = self
+                .scenarios
+                .iter()
+                .chain(self.protected_final.iter().flat_map(|p| &p.scenarios))
+                .collect();
+            let slots = self.scenarios.len() as u32 * self.repeats * 2
+                + self
+                    .protected_final
+                    .as_ref()
+                    .map_or(0, |p| p.scenarios.len() as u32 * p.repeats * 2)
+                + canary.scenarios.len() as u32 * canary.repeats * 2;
+            if slots > self.limits.runs
+                || canary.scenarios.iter().any(|c| {
+                    prior.iter().any(|p| {
+                        p.id == c.id
+                            || p.family == c.family
+                            || p.marker.contains(&c.marker)
+                            || c.marker.contains(&p.marker)
+                    })
+                })
+            {
+                return Err(invalid(
+                    "canary corpus must be independent and fit original aggregate slots",
+                ));
             }
         }
         Ok(())
@@ -302,6 +350,8 @@ pub struct StrategySearchReport {
     pub selection: Option<SearchFinalSelection>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub final_measurement: Option<SearchFinalReport>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub canary_measurement: Option<SearchFinalReport>,
 }
 /// Fixed renderer exposes public objective/advisory and authenticated Development feedback only.
 pub fn render_search_proposal(
@@ -329,8 +379,11 @@ pub fn render_search_proposal(
         }],
         max_output_tokens: config.plan.proposer.max_output_tokens,
     };
-    if config.plan.schema_version == 2 {
+    if config.plan.schema_version >= 2 {
         request.instructions.push_str("\nYou may instead select one independently measured Development candidate by calling {\"action\":\"select_final\",\"evaluation_id\":\"...\",\"rationale\":\"...\"}. This irreversibly ends proposal and Development work and spends one protected Final exposure; stop does not select a candidate. Selection cannot certify success.");
+    }
+    if config.plan.schema_version == 3 {
+        request.instructions.push_str("\nSelection also commits a distinct host-owned canary corpus. Only an independently improved Final proceeds to fresh canary actors, under the same original account. Stop authorizes neither stage.");
     }
     Ok(request)
 }
@@ -366,6 +419,30 @@ pub struct SearchFinalSelection {
     pub run_count: u32,
     pub exposure_id: String,
     pub sequence: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub canary: Option<SearchCanaryCommitment>,
+}
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct SearchCanaryCommitment {
+    pub suite_sha256: String,
+    pub pair_sha256: String,
+    pub schedule_start: u32,
+    pub run_count: u32,
+    pub exposure_id: String,
+}
+impl SearchFinalSelection {
+    pub fn canary_selection(&self) -> Option<Self> {
+        let c = self.canary.as_ref()?;
+        let mut s = self.clone();
+        s.suite_sha256 = c.suite_sha256.clone();
+        s.final_pair_sha256 = c.pair_sha256.clone();
+        s.schedule_start = c.schedule_start;
+        s.run_count = c.run_count;
+        s.exposure_id = c.exposure_id.clone();
+        s.canary = None;
+        Some(s)
+    }
 }
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]

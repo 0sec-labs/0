@@ -48,6 +48,7 @@ pub(super) fn lane_name(lane: CampaignLane) -> &'static str {
     match lane {
         CampaignLane::Development => "development",
         CampaignLane::Final => "final",
+        CampaignLane::Canary => "canary",
     }
 }
 pub(super) fn phase_command(id: &str, lane: CampaignLane) -> String {

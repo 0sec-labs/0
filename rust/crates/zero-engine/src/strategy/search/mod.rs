@@ -62,6 +62,9 @@ fn scenarios(c: &StrategySearchConfiguration) -> Vec<StrategyScenario> {
     if let Some(p) = &c.plan.protected_final {
         all.extend(p.scenarios.clone());
     }
+    if let Some(p) = &c.plan.protected_canary {
+        all.extend(p.scenarios.clone());
+    }
     all
 }
 fn validate_advisory(

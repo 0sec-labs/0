@@ -227,6 +227,9 @@ impl StrategyPlan {
                     "private marker is reused across development and final lanes",
                 ));
             }
+            if c.lane == CampaignLane::Canary {
+                return Err(ValidationError("Canary requires search schema v3".into()));
+            }
             kinds[usize::from(c.lane == CampaignLane::Final)][usize::from(c.positive)] += 1;
         }
         if kinds.iter().flatten().any(|n| *n == 0)

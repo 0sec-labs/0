@@ -163,6 +163,26 @@ pub(super) fn score_protected_final(
         [0, minimum],
     )
 }
+pub(super) fn score_protected_canary(
+    scenarios: &[StrategyScenario],
+    repeats: u32,
+    minimum: u32,
+    rows: &[StrategyCaseResult],
+    complete: bool,
+) -> (StrategyDecision, Vec<String>) {
+    score_cases(
+        scenarios,
+        repeats,
+        rows,
+        &[CampaignLane::Canary],
+        if complete {
+            &[CampaignLane::Canary]
+        } else {
+            &[]
+        },
+        [minimum, 0],
+    )
+}
 fn score_cases(
     scenarios: &[StrategyScenario],
     repeats: u32,

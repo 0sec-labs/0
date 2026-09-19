@@ -17,6 +17,8 @@ pub(crate) enum Scope {
         evidence_sha256: String,
         report_sha256: String,
         canary_required: bool,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        canary_suite_sha256: Option<String>,
         retained_artifacts: std::collections::BTreeMap<String, u64>,
         protected_suite_sha256: String,
         evaluation_pair_sha256: String,
@@ -119,7 +121,7 @@ pub(crate) fn authorize(
     state: &RuntimeState,
     rollback: bool,
 ) -> Result<()> {
-    let (m, _, _) = parts(conn, generation)?;
+    let (m, _, authority) = parts(conn, generation)?;
     let scope = e
         .strategy_scope
         .as_ref()
@@ -158,6 +160,7 @@ pub(crate) fn authorize(
             evidence_sha256,
             report_sha256,
             canary_required,
+            canary_suite_sha256,
             retained_artifacts,
             protected_suite_sha256,
             evaluation_pair_sha256,
@@ -179,11 +182,18 @@ pub(crate) fn authorize(
             {
                 return Err(Error::Ineligible("strategy import witness differs".into()));
             }
+            import::validate_canary_scope(
+                conn,
+                evidence_sha256,
+                report_sha256,
+                canary_suite_sha256.as_deref(),
+                &authority,
+            )?;
             if !rollback {
                 validate_binding(conn, binding, true)?;
-                if *canary_required {
+                if *canary_required && canary_suite_sha256.is_none() {
                     return Err(Error::Ineligible(
-                        "independent canary prerequisite is not implemented".into(),
+                        "independent canary prerequisite is not satisfied".into(),
                     ));
                 }
             }

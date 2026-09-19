@@ -65,8 +65,8 @@ fn validate(data: &CampaignSnapshotData) -> Result<RecomputedStrategySearchEvide
         .ok_or_else(|| error("selected Development absent"))?;
     let usage = &report.usage;
     let limits = &c.plan.limits;
-    if c.plan.schema_version != 2
-        || report.schema_version != 2
+    if !matches!(c.plan.schema_version, 2 | 3)
+        || report.schema_version != c.plan.schema_version
         || report.stop_reason.as_deref() != Some("model_selected_final")
         || !development.improved
         || final_report.decision != StrategyDecision::ImprovedForFixtureSuite
@@ -104,6 +104,29 @@ fn validate(data: &CampaignSnapshotData) -> Result<RecomputedStrategySearchEvide
             "complete search does not establish independently measured bounded improvement",
         ));
     }
+    if c.plan.protected_canary.is_some() {
+        let measured = report
+            .canary_measurement
+            .as_ref()
+            .ok_or_else(|| error("canary measurement missing"))?;
+        let commitment = selection
+            .canary
+            .as_ref()
+            .ok_or_else(|| error("canary commitment missing"))?;
+        if measured.decision != StrategyDecision::ImprovedForFixtureSuite
+            || measured.matrix_sha256.is_none()
+            || measured.cases.len() != commitment.run_count as usize
+            || measured.cases.iter().any(|r| {
+                r.lane != CampaignLane::Canary
+                    || r.disposition != StrategyCaseDisposition::Observed
+                    || r.model_reserved_micro_usd != 0
+            })
+        {
+            return Err(error(
+                "independent canary has not established complete improvement",
+            ));
+        }
+    }
     let snapshot = frozen.campaign(data.campaign_id())?;
     let controller = frozen.get_operation_by_command(
         &snapshot.campaign.journal_session_id,
@@ -113,7 +136,7 @@ fn validate(data: &CampaignSnapshotData) -> Result<RecomputedStrategySearchEvide
         return Err(error("search controller did not complete"));
     }
     let descriptor = StrategySearchEvidenceDescriptor {
-        schema_version: 2,
+        schema_version: c.plan.schema_version,
         binding: selection.binding.clone(),
         campaign_id: data.campaign_id().into(),
         snapshot_sha256: data.digest().into(),
@@ -122,6 +145,7 @@ fn validate(data: &CampaignSnapshotData) -> Result<RecomputedStrategySearchEvide
         pair_sha256: selection.final_pair_sha256.clone(),
         config_sha256: report.config_sha256.clone(),
         selection_sha256: hash(&serde_json::to_value(selection)?)?,
+        canary_suite_sha256: selection.canary.as_ref().map(|k| k.suite_sha256.clone()),
     };
     let evidence_sha256 = hash(&serde_json::to_value(&descriptor)?)?;
     Ok(RecomputedStrategySearchEvidence {

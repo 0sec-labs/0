@@ -56,6 +56,40 @@ pub(super) fn validate_policy(c: &StrategySearchConfiguration) -> Result<(), Eng
             }
         }
     }
+    if let Some(canary) = &c.plan.protected_canary {
+        if !c
+            .capture
+            .authority
+            .accepted_suite_sha256
+            .contains(&hash(&search_final_suite_value(canary))?)
+            || canary.minimum_gain < c.capture.authority.minimum_final_gain
+        {
+            return Err(error("canary policy is not in captured host authority"));
+        }
+        for protected in &canary.scenarios {
+            if c.plan.objective.contains(&protected.marker)
+                || c.plan.proposer.instructions.contains(&protected.marker)
+            {
+                return Err(error("canary marker in proposer input"));
+            }
+            for prior in c.plan.scenarios.iter().chain(p.scenarios.iter()) {
+                for path in [
+                    "/",
+                    prior.resource_path.as_str(),
+                    prior.control_path.as_str(),
+                    "/unknown",
+                ] {
+                    if oracle::response(prior, path)
+                        .1
+                        .windows(protected.marker.len())
+                        .any(|b| b == protected.marker.as_bytes())
+                    {
+                        return Err(error("canary marker leaked by earlier fixture"));
+                    }
+                }
+            }
+        }
+    }
     Ok(())
 }
 pub(super) fn binding(
@@ -175,13 +209,24 @@ pub(super) fn measure(
     runs: &[CampaignRun],
     consumed: &mut std::collections::BTreeSet<String>,
     budget: &mut usize,
+    canary: bool,
 ) -> Result<SearchFinalReport, EngineError> {
     binding(c, &evaluation.evaluation, &selection.binding)?;
     if !evaluation.improved
         || selection.candidate_generation != evaluation.evaluation.candidate_generation
         || selection.candidate_sha256 != evaluation.evaluation.candidate_sha256
         || selection.baseline_sha256 != c.capture.advisory_sha256
-        || selection.suite_sha256 != suite(c)?
+        || selection.suite_sha256
+            != if canary {
+                hash(&search_final_suite_value(
+                    c.plan
+                        .protected_canary
+                        .as_ref()
+                        .ok_or_else(|| error("canary policy absent"))?,
+                ))?
+            } else {
+                suite(c)?
+            }
         || selection.development_matrix_sha256 != matrix(&evaluation.cases)?
     {
         return Err(error("Final selection Development proof differs"));
@@ -207,11 +252,12 @@ pub(super) fn measure(
         Some(SearchProposalOutput::Propose { advisory, .. }) => advisory,
         _ => return Err(error("selected advisory absent")),
     };
-    let policy = c
-        .plan
-        .protected_final
-        .as_ref()
-        .ok_or_else(|| error("Final policy absent"))?;
+    let policy = if canary {
+        c.plan.protected_canary.as_ref()
+    } else {
+        c.plan.protected_final.as_ref()
+    }
+    .ok_or_else(|| error("protected policy absent"))?;
     let schedule = render::schedule_cases(&policy.scenarios, policy.repeats);
     if selection.run_count != schedule.len() as u32 {
         return Err(error("Final schedule differs"));
@@ -237,7 +283,12 @@ pub(super) fn measure(
         )?;
         if !consumed.insert(run.id.clone())
             || spec.scenario_id != scenario.id
-            || spec.lane != CampaignLane::Final
+            || spec.lane
+                != if canary {
+                    CampaignLane::Canary
+                } else {
+                    CampaignLane::Final
+                }
             || spec.repeat_index != entry.repeat
             || spec.variant != entry.variant
             || spec.candidate_sha256 != selection.candidate_sha256
@@ -268,7 +319,12 @@ pub(super) fn measure(
         .filter(|e| {
             e.kind == "operation_detail"
                 && e.payload["operation_id"] == phase.id
-                && e.payload["kind"] == "strategy_search_final_completed"
+                && e.payload["kind"]
+                    == if canary {
+                        "strategy_search_canary_completed"
+                    } else {
+                        "strategy_search_final_completed"
+                    }
         })
         .collect();
     if completed.len() > 1 {
@@ -277,7 +333,11 @@ pub(super) fn measure(
     let digest = if let Some(event) = completed.first() {
         let attachments = store.operation_artifacts(&phase.id)?;
         let d = attachments
-            .get("search.final.matrix")
+            .get(if canary {
+                "search.canary.matrix"
+            } else {
+                "search.final.matrix"
+            })
             .ok_or_else(|| error("Final matrix artifact absent"))?;
         let bytes = store.artifact_bounded(d, 1024 * 1024, budget)?;
         if cases.len() != schedule.len()
@@ -291,7 +351,12 @@ pub(super) fn measure(
     } else {
         None
     };
-    let (decision, reasons) = oracle::score_protected_final(
+    let score = if canary {
+        oracle::score_protected_canary
+    } else {
+        oracle::score_protected_final
+    };
+    let (decision, reasons) = score(
         &policy.scenarios,
         policy.repeats,
         policy.minimum_gain,

@@ -61,7 +61,12 @@ fn config_validate(config: &StrategySearchConfiguration) -> Result<()> {
     {
         return Err(bad("search captured authority differs"));
     }
-    if let Some(policy) = &config.plan.protected_final {
+    for policy in config
+        .plan
+        .protected_final
+        .iter()
+        .chain(config.plan.protected_canary.iter())
+    {
         if policy.minimum_gain < config.capture.authority.minimum_final_gain
             || !config
                 .capture
@@ -92,7 +97,14 @@ fn config_validate(config: &StrategySearchConfiguration) -> Result<()> {
             .plan
             .protected_final
             .iter()
-            .flat_map(|p| &p.scenarios),
+            .flat_map(|p| &p.scenarios)
+            .chain(
+                config
+                    .plan
+                    .protected_canary
+                    .iter()
+                    .flat_map(|p| &p.scenarios),
+            ),
     ) {
         if config.capture.advisory.advisory_utf8.contains(&s.marker)
             || config

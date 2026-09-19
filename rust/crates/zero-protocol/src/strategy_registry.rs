@@ -289,4 +289,6 @@ pub struct StrategySearchEvidenceDescriptor {
     pub pair_sha256: String,
     pub config_sha256: String,
     pub selection_sha256: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub canary_suite_sha256: Option<String>,
 }

@@ -37,6 +37,20 @@ impl Bound {
         let suite = digest(&json!({"version":"local_web_marker_v1","scenarios":finals}));
         let policy=zero_http::normalize_policy(serde_json::from_value(json!({"schema_version":1,"base_url":"http://127.0.0.1:1/","in_scope":["127.0.0.1"],"out_of_scope":[],"denied_hosts":[],"allowed_path_prefixes":[],"denied_path_prefixes":[],"allowed_methods":["GET","POST"],"allowed_headers":[],"limits":{"timeout_ms":5000,"max_request_body_bytes":1048576,"max_response_wire_bytes":16777216,"max_response_decoded_bytes":16777216,"max_request_header_bytes":65536,"max_request_headers":128,"max_response_header_bytes":65536,"max_response_headers":128,"max_dns_answers":64,"max_dns_cname_depth":8,"max_dns_queries":16},"rate":{"default":{"requests_per_interval":100,"interval_ms":1000,"burst":20},"per_host":{},"jitter_ms":0},"budget":{"max_requests":20,"max_request_body_bytes":1048576,"max_response_decoded_bytes":67108864}})).unwrap()).unwrap();
         let authority:StrategyHostAuthority=serde_json::from_value(json!({"schema_version":1,"host":setup.plan.host,"provider_context":{"fixture":{"endpoint":http.url,"wire_api":"responses","rates":{"input":1000000,"cached_input":1000000,"output":1000000}}},"http_profile_name":"runtime","http_policy":policy,"campaign_limits":setup.plan.limits,"accepted_suite_sha256":[suite],"minimum_development_gain":1,"minimum_final_gain":1,"canary_required":false})).unwrap();
+        let mut authority = authority;
+        let mut canaries: Vec<_> = setup
+            .plan
+            .scenarios
+            .iter()
+            .filter(|s| s.lane == CampaignLane::Canary)
+            .collect();
+        if !canaries.is_empty() {
+            canaries.sort_by(|a, b| a.id.cmp(&b.id));
+            authority.accepted_suite_sha256.push(digest(
+                &json!({"version":"local_web_marker_v1","scenarios":canaries}),
+            ));
+            authority.canary_required = true;
+        }
         let grants = HostGrants::with_strategy(BTreeMap::new(), authority.clone()).unwrap();
         let registry = setup.dir.path().join("registry.db");
         let mut r = Registry::open(&registry, "v1", &json!({"host_state":1})).unwrap();

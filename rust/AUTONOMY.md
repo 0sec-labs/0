@@ -109,8 +109,9 @@ identities are explicit semantic versions, not binary attestations; changes to
 compiled evaluation semantics require a version change.
 
 This adapter supports snapshot-free HTTP actors and optional HTTP delegates;
-source/sandbox candidates, independent canaries,
-autonomous activation orchestration remain unfinished. Scanner, browser/auth/session, cloud, arbitrary source
+source/sandbox candidates, production-traffic canaries and
+autonomous activation orchestration remain unfinished. Independent local-fixture
+canaries are supported by schema 3 below. Scanner, browser/auth/session, cloud, arbitrary source
 self-rewriting and production release parity remain in [MIGRATION.md](MIGRATION.md).
 
 ## Captured runtime and measured eligibility
@@ -139,8 +140,9 @@ administered source databases; corpus governance remains host-owned.
 Import does not activate a candidate. The host Harness can activate measured
 eligibility under its frozen policy, and this path is tested with real paired
 fixture evidence and an actor running across the switch. A policy requiring canary
-evidence remains blocked until separately qualified evidence exists. Canary
-orchestration and the candidate activation CLI remain unfinished. Writable artifacts remain bounded advisory text, not host policy or code.
+evidence remains blocked until separately qualified evidence exists; schema 3
+provides that path for local fixtures. The candidate activation CLI and autonomous
+production orchestration remain unfinished. Writable artifacts remain bounded advisory text, not host policy or code.
 
 ## Autonomous advisory search
 
@@ -192,3 +194,38 @@ host authorization, limits, cancellation and verification authority remain fixed
 A completed submission is workflow completion, not independent security success.
 This authority boundary also applies to improved advisory strategies: a candidate
 cannot turn its own assertions into eligibility or verified findings.
+
+## Independent advisory canary under the original account
+
+Search schema 3 adds an optional `protected_canary` policy with distinct scenario
+IDs, families and private markers. The host freezes it with Development and Final
+before the first proposal. Schema 1 and 2 retain their original serialization and
+behavior. The existing explicit `select_final` action commits both protected
+corpora atomically and seals proposal generation. A model stop exposes neither.
+The commitments consume corpus freshness even if subsequent execution stops;
+commitment alone is never evidence that a case ran.
+
+After independently scored Final improvement, the same owning controller runs
+fresh baseline/candidate actors against the independent canary fixtures. The
+selected advisory, host policy, provider pins, original campaign allowance and
+absolute deadline remain unchanged. Canary actors receive their own public tasks
+and fresh observations, without prior Final responses. Known Final failure skips
+canary execution. Exhausted allowance, cancellation or uncertain effects cannot
+create another funded campaign or replay an uncertain request.
+
+The separate `canary_measurement` carries real case results and a retained matrix.
+Source export and portable reassessment reconstruct every proposal and all three
+measurement stages. A schema-3 eligibility import requires complete independent
+canary improvement and preserves the whole account. The registry retains both
+protected suite identities against reuse, including after import projection loss.
+Existing guarded Harness activation can satisfy a canary-required policy only
+with this retained source proof; import itself does not activate anything.
+Activation still checks the original baseline, state and epoch. Rollback retains
+its existing witnessed-generation rules.
+
+This is independent qualification for the frozen local marker fixtures, not a
+production traffic canary, general detection-quality result or autonomous code
+rewrite. Corpus authorship and cross-database independence remain host governance.
+The implementation is exercised by `zero-engine/tests/strategy_search_canary.rs`
+using actual loopback model/HTTP effects, source-deleted reassessment/import,
+activation/rollback, stop, cancellation, budget exhaustion and rejected leakage.

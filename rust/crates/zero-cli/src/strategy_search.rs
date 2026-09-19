@@ -189,10 +189,18 @@ fn render(reply: &Reply) -> Result<String, Box<dyn Error>> {
         Reply::StrategySearchReport { report } => {
             if !matches!(
                 (report.schema_version, report.qualification.as_str()),
-                (1, "development_only") | (2, "adaptive_search_fixture")
+                (1, "development_only") | (2 | 3, "adaptive_search_fixture")
             ) || (report.schema_version == 1
                 && (report.selection.is_some() || report.final_measurement.is_some()))
                 || (report.final_measurement.is_some() && report.selection.is_none())
+                || (report.schema_version < 3
+                    && (report.canary_measurement.is_some()
+                        || report
+                            .selection
+                            .as_ref()
+                            .is_some_and(|s| s.canary.is_some())))
+                || (report.canary_measurement.is_some()
+                    && report.selection.as_ref().is_none_or(|s| s.canary.is_none()))
             {
                 return Err("Unexpected strategy search qualification".into());
             }
@@ -256,7 +264,7 @@ fn render(reply: &Reply) -> Result<String, Box<dyn Error>> {
             for c in &report.evaluations {
                 candidate_text(&mut out, c)?;
             }
-            if report.schema_version == 2 {
+            if report.schema_version >= 2 {
                 if let Some(selection) = &report.selection {
                     writeln!(
                         out,
@@ -309,6 +317,49 @@ fn render(reply: &Reply) -> Result<String, Box<dyn Error>> {
                     out.push_str(
                         "Protected Final measurement unavailable; no completed outcome inferred.\n",
                     );
+                }
+                if report.schema_version == 3 {
+                    if let Some(commitment) =
+                        report.selection.as_ref().and_then(|s| s.canary.as_ref())
+                    {
+                        writeln!(
+                            out,
+                            "Independent canary commitment: suite {}; exposure {}; allocated run slots {} at {}",
+                            crate::console::terminal_text(&commitment.suite_sha256),
+                            crate::console::terminal_text(&commitment.exposure_id),
+                            commitment.run_count,
+                            commitment.schedule_start
+                        )?;
+                    } else {
+                        out.push_str("Independent canary: no retained commitment.\n");
+                    }
+                    if let Some(measured) = &report.canary_measurement {
+                        if measured
+                            .cases
+                            .iter()
+                            .any(|c| c.lane != zero_protocol::campaign::CampaignLane::Canary)
+                        {
+                            return Err("Canary measurement contains another lane".into());
+                        }
+                        writeln!(
+                            out,
+                            "Independent canary measurement: {:?}",
+                            measured.decision
+                        )?;
+                        crate::strategy::cases(&mut out, &measured.cases);
+                        for reason in &measured.reasons {
+                            writeln!(
+                                out,
+                                "Canary reason: {}",
+                                crate::console::terminal_text(reason)
+                            )?;
+                        }
+                    } else {
+                        out.push_str(
+                            "Independent canary measurement unavailable; no completion inferred.\n",
+                        );
+                    }
+                    out.push_str("Development, Final and canary use one original campaign account; exposure commitments do not prove execution.\n");
                 }
                 out.push_str("Full-history source evidence must be independently imported before measured eligibility; import never activates a candidate.\n");
             }
@@ -399,6 +450,24 @@ mod tests {
             matrix_sha256: None,
         });
         assert!(render(&Reply::StrategySearchReport { report }).is_err());
+    }
+
+    #[test]
+    fn v3_without_selection_does_not_claim_canary_completion() {
+        let mut r = report();
+        r.schema_version = 3;
+        r.qualification = "adaptive_search_fixture".into();
+        let text = render(&Reply::StrategySearchReport { report: r.clone() }).unwrap();
+        assert!(text.contains("no retained commitment"));
+        assert!(text.contains("no completion inferred"));
+        assert!(text.contains("one original campaign account"));
+        r.canary_measurement = Some(zero_protocol::strategy_search::SearchFinalReport {
+            cases: vec![],
+            decision: zero_protocol::strategy::StrategyDecision::ImprovedForFixtureSuite,
+            reasons: vec![],
+            matrix_sha256: None,
+        });
+        assert!(render(&Reply::StrategySearchReport { report: r }).is_err());
     }
 
     #[test]

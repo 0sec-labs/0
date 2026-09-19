@@ -426,6 +426,29 @@ async fn run(
                     active,
                 )
                 .await?;
+                if let Some(canary) = selection.canary_selection() {
+                    let report = provenance::report(&*lock(&shared.store)?, campaign)?;
+                    if report
+                        .final_measurement
+                        .as_ref()
+                        .is_some_and(|r| r.decision == StrategyDecision::ImprovedForFixtureSuite)
+                    {
+                        evaluate(
+                            shared,
+                            campaign,
+                            op,
+                            c,
+                            &evaluation,
+                            &advisory,
+                            Some(&canary),
+                            cancel,
+                            events.clone(),
+                            progress.clone(),
+                            active,
+                        )
+                        .await?;
+                    }
+                }
                 return Ok("model_selected_final".into());
             }
             SearchProposalOutput::Propose { advisory, .. } => {
@@ -494,12 +517,18 @@ async fn evaluate(
     progress: Option<mpsc::Sender<ExecutionEvent>>,
     active: &mut Active,
 ) -> Result<(), EngineError> {
+    let canary = selection.is_some_and(|s| {
+        c.plan.protected_canary.as_ref().is_some_and(|p| {
+            hash(&search_final_suite_value(p)).ok().as_ref() == Some(&s.suite_sha256)
+        })
+    });
     let (cases, repeats, start) = if let Some(selection) = selection {
-        let policy = c
-            .plan
-            .protected_final
-            .as_ref()
-            .ok_or_else(|| error("Final policy absent"))?;
+        let policy = if canary {
+            c.plan.protected_canary.as_ref()
+        } else {
+            c.plan.protected_final.as_ref()
+        }
+        .ok_or_else(|| error("protected policy absent"))?;
         (&policy.scenarios, policy.repeats, selection.schedule_start)
     } else {
         (&c.plan.scenarios, c.plan.repeats, evaluation.schedule_start)
@@ -627,11 +656,13 @@ async fn evaluate(
     let mut store = lock(&shared.store)?;
     let report = provenance::report(&store, campaign)?;
     let cases = if selection.is_some() {
-        &report
-            .final_measurement
-            .as_ref()
-            .ok_or_else(|| error("Final report absent"))?
-            .cases
+        &if canary {
+            report.canary_measurement.as_ref()
+        } else {
+            report.final_measurement.as_ref()
+        }
+        .ok_or_else(|| error("protected report absent"))?
+        .cases
     } else {
         &report
             .evaluations
@@ -641,7 +672,12 @@ async fn evaluate(
             .cases
     };
     let name = if selection.is_some() {
-        "search.final.matrix".into()
+        if canary {
+            "search.canary.matrix"
+        } else {
+            "search.final.matrix"
+        }
+        .into()
     } else {
         format!("search.matrix.{}", evaluation.id)
     };
@@ -655,7 +691,11 @@ async fn evaluate(
         store.append_operation_event(
             &op.id,
             &shared.owner,
-            "strategy_search_final_completed",
+            if canary {
+                "strategy_search_canary_completed"
+            } else {
+                "strategy_search_final_completed"
+            },
             &json!({"selection_id":selection.id,"matrix_sha256":digest}),
         )?;
     } else {

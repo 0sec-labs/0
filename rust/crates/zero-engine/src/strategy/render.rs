@@ -39,7 +39,11 @@ pub(super) fn schedule(plan: &StrategyPlan) -> Vec<Entry> {
 pub(super) fn schedule_cases(scenarios: &[StrategyScenario], repeats: u32) -> Vec<Entry> {
     let mut entries = vec![];
     // Complete development before any protected input exposure.
-    for lane in [CampaignLane::Development, CampaignLane::Final] {
+    for lane in [
+        CampaignLane::Development,
+        CampaignLane::Final,
+        CampaignLane::Canary,
+    ] {
         for repeat in 0..repeats {
             for (scenario, c) in scenarios.iter().enumerate().filter(|(_, c)| c.lane == lane) {
                 let order = if repeat % 2 == 0 {
