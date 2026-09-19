@@ -2751,6 +2751,7 @@ These commands use the configured Cloud host's `/api/scans` and
 They are separate from local `scan`, `secure` and hosted inference.
 
 Guide: [Managed work and onboarding](/getting-started/#managed-work-and-onboarding).
+For repository enrollment and recurring schedules, see [connect](#connect).
 
 Subcommands: [start](#service-start) · [status](#service-status) · [wait](#service-wait) · [cancel](#service-cancel) · [disconnect](#service-disconnect).
 
@@ -3021,106 +3022,6 @@ Guide: [Cloud authentication](/api-keys/).
 | `--format <fmt>` | `terminal` | Output format: terminal \| json |
 | `--publication-policy <policy>` | `off` | Publication policy: off \| manual \| auto. Default: off |
 | `--yes` | — | Skip interactive confirmation before scheduling |
-
-### service
-
-```text
-0sec service
-```
-
-Manage the lifecycle of managed cloud runs on an already-connected
-repository: enqueue, inspect, wait, cancel, and disconnect. `connect` creates
-the enrollment; `service` operates the resulting work. All subcommands require
-cloud credentials (`0sec auth login`) and emit JSON with `--json`.
-
-Subcommands: [start](#service-start) · [status](#service-status) · [wait](#service-wait) · [cancel](#service-cancel) · [disconnect](#service-disconnect).
-
-#### service start
-
-Enqueue a managed security scan on a repository. The repository must already
-be connected (see `connect`) and the caller's organization must have access.
-
-```text
-0sec service start [options]
-```
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--repo <url>` **required** | — | Repository URL to scan (e.g. https://github.com/org/repo) |
-| `--test-command <cmd>` **required** | — | Test command to verify repairs (e.g. "npm test") |
-| `--setup-command <cmd>` | — | Setup command to run before the test command (e.g. "npm ci") |
-| `--model <model>` | — | Model to use for the scan (default: service-configured) |
-| `--cost-ceiling <usd>` | — | Maximum cost in USD before the scan is auto-cancelled |
-| `--json` | — | Emit result as machine-readable JSON |
-
-#### service status
-
-Print the current status of a managed scan by id.
-
-```text
-0sec service status [options] <scan-id>
-```
-
-| Argument | Required | Description |
-| --- | --- | --- |
-| `scan-id` | Yes |  |
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--json` | — | Emit result as machine-readable JSON |
-
-#### service wait
-
-Poll until a managed scan reaches a terminal state
-(complete/failed/cancelled/cost_exceeded).
-
-```text
-0sec service wait [options] <scan-id>
-```
-
-| Argument | Required | Description |
-| --- | --- | --- |
-| `scan-id` | Yes |  |
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--interval <seconds>` | `5` | Polling interval in seconds (default 5) |
-| `--json` | — | Emit result as machine-readable JSON |
-
-#### service cancel
-
-Request cancellation of a pending or running managed scan.
-
-```text
-0sec service cancel [options] <scan-id>
-```
-
-| Argument | Required | Description |
-| --- | --- | --- |
-| `scan-id` | Yes |  |
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--json` | — | Emit result as machine-readable JSON |
-
-#### service disconnect
-
-Remove all scan schedules for a repository. Uses the current checkout's
-`origin` remote when no repository is given. Idempotent — a no-op when no
-schedule exists.
-
-```text
-0sec service disconnect [options] [repo]
-```
-
-| Argument | Required | Description |
-| --- | --- | --- |
-| `repo` | No |  |
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `-y, --yes` | — | Skip interactive confirmation |
-| `--json` | — | Emit result as machine-readable JSON |
 
 ## XBOW benchmark runner
 
