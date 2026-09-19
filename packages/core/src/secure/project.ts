@@ -284,11 +284,15 @@ function prepareSource(source: string, stateDir: string): ResolvedSource {
 
 // ── Investigation via pipeline ──────────────────────────────────────────────
 
+import { eventBus } from "../events/bus.js";
+
 interface InvestigationResult {
   findings: Finding[];
   costCeilingExceeded: boolean;
   researchFailed: boolean;
   error: string | null;
+  /** Investigation-phase model cost (USD), real metered usage or null. */
+  costUsd: number | null;
 }
 
 async function investigateSource(
@@ -324,23 +328,40 @@ async function investigateSource(
     }));
   }
 
+
+
+  let investigationCostUsd: number | null = null;
+  const costSink = {
+    emit(type: string, payload: Record<string, unknown>) {
+      if (type !== "scan_completed") return;
+      const cost = payload?.cost_usd;
+      if (typeof cost === "number" && Number.isFinite(cost) && cost >= 0) {
+        investigationCostUsd = cost;
+      }
+    },
+  };
+  const unsubscribeCost = eventBus.subscribe(costSink);
   let report;
   try {
     report = await runPipeline(opts);
   } catch (err) {
+    unsubscribeCost();
     return {
       findings: [],
       costCeilingExceeded: false,
       researchFailed: true,
+      costUsd: investigationCostUsd,
       error: `Investigation pipeline error: ${err instanceof Error ? err.message : String(err)}`,
     };
   }
+  unsubscribeCost();
 
   if (signal?.aborted) {
     return {
       findings: report.findings ?? [],
       costCeilingExceeded: false,
       researchFailed: true,
+      costUsd: investigationCostUsd,
       error: "Investigation cancelled by signal.",
     };
   }
@@ -349,8 +370,10 @@ async function investigateSource(
     findings: report.findings ?? [],
     costCeilingExceeded: report.costCeilingExceeded === true,
     researchFailed: report.researchFailed === true,
+    costUsd: investigationCostUsd,
     error: report.researchFailed ? "Pipeline research failed — findings may be partial." : null,
   };
+
 }
 
 // ── PR publication ──────────────────────────────────────────────────────────
@@ -800,6 +823,10 @@ export async function runSecureProject(
       }
 
       state.findings = investigation.findings;
+      if (investigation.costUsd != null) {
+        // Real metered investigation cost joins the repair-phase ledger.
+        state.costUsd += investigation.costUsd;
+      }
       if (investigation.costCeilingExceeded) {
         addError(state,
           "Investigation pipeline hit its cost ceiling; findings may be partial. " +
@@ -1100,6 +1127,7 @@ function buildResult(state: SecureProjectState): SecureProjectResult {
     repairs: allRepairs,
     errors: state.errors,
     pullRequests: state.pullRequests,
+    costUsd: state.costUsd,
   };
 }
 
@@ -1122,6 +1150,7 @@ function resultFromPhase(
     repairs: [],
     errors,
     pullRequests: [],
+    costUsd: 0,
   };
 }
 
