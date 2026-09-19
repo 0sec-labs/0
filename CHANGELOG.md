@@ -31,6 +31,8 @@ on the published npm package and the GitHub Release tag.
 
 ### Fixed
 
+- Initialize and upgrade local SQLite schemas in one transaction, avoiding
+  repeated durable commits on slow disks and rolling back interrupted upgrades.
 - Use Azure's DeepSeek V4.1 Flash rates for exact, mixed-case and versioned
   deployment names instead of the generic cost-estimation fallback. Direct
   DeepSeek API pricing is unchanged; this does not rewrite recorded spend.
