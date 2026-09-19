@@ -191,7 +191,7 @@ const headModel = Object.keys(ledger.perModel)[0] ?? "unknown";
 
 writeFileSync(join(outDir, "README.md"), `# 0sec — XBOW benchmark receipts
 
-Auditable per-challenge receipts for [0sec](https://0sec.ai)'s runs against the
+Auditable per-challenge receipts for [0sec](https://0.security)'s runs against the
 [XBOW validation benchmarks](https://github.com/${substrateRepo}), pinned to a single
 commit so the substrate is fixed and publicly clonable.
 
@@ -208,11 +208,11 @@ ${publicTier ? `
 > exploitation steps) are the engine's methodology, so this public repo ships them only
 > for a representative **sample** (${sampleIds.size} challenges spanning vuln classes).
 > The **complete trace set for all ${ledger.counts.aggregate} solves is available for audit under NDA**
-> — for design partners, investors, and journalists. Request access via https://0sec.ai.
+> — for design partners, investors, and journalists. Request access via https://0.security.
 ` : ""}
 > Why receipts in git and not a benchmark badge: benchmark evidence rots. Our original
 > run artifacts lived in expiring CI storage and were lost. Receipts committed to git
-> never expire. Read more: https://0sec.ai/blog/xbow-benchmark-methodology-and-verification/
+> never expire. Read more: https://0.security/blog/xbow-benchmark-methodology-and-verification/
 `);
 
 writeFileSync(join(outDir, "VERIFY.md"), `# How to audit these receipts
@@ -244,7 +244,7 @@ the target's own responses.
    transcript against challenge code anyone can clone and read.
 
 ## The seven questions, answered up front
-(from https://0sec.ai/blog/xbow-benchmark-methodology-and-verification/)
+(from https://0.security/blog/xbow-benchmark-methodology-and-verification/)
 
 1. **Substrate?** \`${substrateRepo}\` @ \`${substrateSha}\` (community-patched, dockerfile fixes only).
 2. **Fork commit?** Pinned above — clone and diff against upstream yourself.

@@ -423,7 +423,7 @@ Start a new development console from the built checkout:
 ./scripts/0dev.sh console
 ```
 
-The `0dev` launcher targets `https://dev.0sec.ai` and sets
+The `0dev` launcher targets `https://dev.0.security` and sets
 `0SEC_DEV_SOURCE_ROOT` to its checkout. Cloud login, reads and logout use
 `~/.0sec/dev/cloud.env`; production `~/.0sec/cloud.env` and private CLI
 `~/.0cloud/credentials.json` are not changed. Inherited Cloud tokens are ignored.

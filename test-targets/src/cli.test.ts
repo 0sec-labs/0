@@ -122,7 +122,7 @@ describe("CLI E2E", () => {
     );
     const output = result.stdout + result.stderr;
     expect(result.status).toBe(0);
-    expect(output).toContain("0sec.ai/r#");
+    expect(output).toContain("0.security/r#");
   }, 65_000);
 
   it("emits a machine-readable result line when requested on degraded api runs", () => {

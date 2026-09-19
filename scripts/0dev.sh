@@ -17,5 +17,5 @@ fi
 # An explicit empty token also prevents Bun's .env loader from restoring a
 # production token. Keep HOME and all non-Cloud provider settings unchanged.
 exec env 0SEC_DEV_SOURCE_ROOT="$DEV_ROOT" \
-  0SEC_CLOUD_HOST=https://dev.0sec.ai 0SEC_CLOUD_TOKEN= \
+  0SEC_CLOUD_HOST=https://dev.0.security 0SEC_CLOUD_TOKEN= \
   bun "$DEV_ENTRY" "$@"
