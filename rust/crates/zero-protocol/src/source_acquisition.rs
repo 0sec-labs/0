@@ -262,3 +262,86 @@ mod tests {
         assert!(receipt.validate().is_err());
     }
 }
+
+/// Explicit host-selected provenance. This is neither a repository signature nor
+/// proof that an arbitrary caller's Git object IDs were issued by an acquisition.
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct AcquisitionReceiptInput {
+    /// Absolute normalized host selector; consumers never discover or open it.
+    pub input_path: String,
+    pub receipt: RepositoryReceipt,
+}
+/// Compact retained provenance, derived only from the complete captured receipt.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct AcquisitionReceiptRef {
+    pub input_path: String,
+    pub receipt_sha256: String,
+    pub source: GitSource,
+    pub requested_ref: String,
+    pub commit_oid: String,
+    pub tree_oid: String,
+}
+pub const MAX_RECEIPT_BYTES: usize = 2 * 1024 * 1024;
+impl AcquisitionReceiptInput {
+    pub fn reference(&self) -> Result<AcquisitionReceiptRef, String> {
+        validate_absolute(&self.input_path)?;
+        if self.input_path == "/" {
+            return Err("acquisition receipt selector must name a file".into());
+        }
+        let bytes = self.receipt.canonical_bytes()?;
+        if bytes.len() > MAX_RECEIPT_BYTES {
+            return Err("acquisition receipt byte bound".into());
+        }
+        Ok(AcquisitionReceiptRef {
+            input_path: self.input_path.clone(),
+            receipt_sha256: format!("sha256:{:x}", Sha256::digest(bytes)),
+            source: self.receipt.source.clone(),
+            requested_ref: self.receipt.requested_ref.clone(),
+            commit_oid: self.receipt.commit_oid.clone(),
+            tree_oid: self.receipt.tree_oid.clone(),
+        })
+    }
+    /// Compare the original selected root and exact captured content identity.
+    /// Only the private execution location is allowed to differ from the receipt.
+    pub fn validate_capture(&self, pin: &SnapshotPin, original_root: &str) -> Result<(), String> {
+        self.reference()?;
+        if self.receipt.snapshot.root != original_root
+            || self.receipt.snapshot.id != pin.id
+            || self.receipt.snapshot.digest != pin.digest
+            || serde_json::to_value(&self.receipt.snapshot.files).map_err(|e| e.to_string())?
+                != serde_json::to_value(&pin.files).map_err(|e| e.to_string())?
+        {
+            return Err("acquisition receipt differs from captured root or source".into());
+        }
+        Ok(())
+    }
+    /// The archive carries real executable flags; SnapshotPin alone does not.
+    pub fn validate_archive(
+        &self,
+        manifest: &crate::source_archive::ArchiveManifest,
+    ) -> Result<(), String> {
+        self.reference()?;
+        let files = &self.receipt.snapshot.files;
+        if manifest.snapshot_sha256 != self.receipt.snapshot.digest
+            || manifest.files.len() != files.len()
+            || manifest
+                .files
+                .iter()
+                .zip(files)
+                .any(|(a, p)| a.path != p.path || a.sha256 != p.digest || a.bytes != p.bytes)
+            || manifest
+                .files
+                .iter()
+                .filter(|f| f.executable)
+                .map(|f| &f.path)
+                .ne(self.receipt.executable_paths.iter())
+        {
+            return Err(
+                "acquisition receipt differs from archived source or executable modes".into(),
+            );
+        }
+        Ok(())
+    }
+}

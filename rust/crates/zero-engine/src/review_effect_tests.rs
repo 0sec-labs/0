@@ -172,6 +172,7 @@ impl Fixture {
         root_payload["review_template"] = serde_json::to_value(&actor.template).unwrap();
         let admission = zero_store::ReviewAdmission {
             workspace_selection: None,
+            acquisition_receipt: None,
             review_id,
             session_id,
             root_operation_id,

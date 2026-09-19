@@ -611,6 +611,7 @@ pub(crate) fn archive_binding(
         snapshot: b.admission.snapshot,
         owner: owner.into(),
         preparation_sequence: sequence,
+        acquisition_receipt: b.admission.acquisition_receipt,
     })
 }
 

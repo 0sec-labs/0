@@ -11,11 +11,15 @@ fn bad(message: impl std::fmt::Display) -> Error {
     Error::Invalid(format!("source archive: {message}"))
 }
 fn witness(binding: &review::ArchiveBinding, manifest: &str) -> serde_json::Value {
-    json!({"schema_version":1,"review_id":binding.review.id,"command_id":binding.review.command_id,
+    let mut value = json!({"schema_version":1,"review_id":binding.review.id,"command_id":binding.review.command_id,
         "root_operation_id":binding.review.root_operation_id,
         "snapshot_sha256":binding.review.snapshot_sha256,
         "manifest_sha256":manifest,"owner":binding.owner,
-        "preparation_sequence":binding.preparation_sequence})
+        "preparation_sequence":binding.preparation_sequence});
+    if let Some(acquisition) = &binding.review.acquisition_receipt {
+        value["acquisition_receipt_sha256"] = json!(acquisition.receipt_sha256);
+    }
+    value
 }
 fn inference_before(conn: &Connection, record: &ReviewRecord, sequence: u64) -> Result<bool> {
     Ok(conn.query_row(
@@ -126,6 +130,9 @@ fn load_manifest(
     {
         return Err(bad("manifest differs from the captured snapshot"));
     }
+    if let Some(acquisition) = &binding.acquisition_receipt {
+        acquisition.validate_archive(&manifest).map_err(bad)?;
+    }
     Ok(Some((binding, manifest)))
 }
 fn load(conn: &Connection, record: &ReviewRecord) -> Result<Option<SourceArchive>> {
@@ -180,6 +187,11 @@ impl Store {
             .transaction_with_behavior(TransactionBehavior::Immediate)?;
         let binding = review::archive_binding(&tx, root, Some(owner), false)?;
         archive.validate_pin(&binding.snapshot).map_err(bad)?;
+        if let Some(acquisition) = &binding.acquisition_receipt {
+            acquisition
+                .validate_archive(&archive.manifest)
+                .map_err(bad)?;
+        }
         let bytes = archive.manifest.canonical_bytes().map_err(bad)?;
         let digest = format!("sha256:{:x}", Sha256::digest(&bytes));
         if let Some(prior) = load(&tx, &binding.review)? {

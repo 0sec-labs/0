@@ -115,6 +115,69 @@ async fn actual_acquisition_is_reviewable_and_retained_source_survives_repositor
     let profiles = d.path().join("reviews.json");
     std::fs::write(&providers,json!({"fixture":{"url":format!("http://{}/responses",listener.local_addr().unwrap()),"api_key_env":"SOURCE_FIXTURE_KEY","rates":{"input":1000000,"cached_input":0,"output":1000000},"timeout_ms":10000,"max_response_bytes":65536}}).to_string()).unwrap();
     std::fs::write(&profiles,json!({"local":{"schema_version":1,"provider":"fixture","model":"fixture","instructions":"Inspect source","question":"Review the committed function","execution":{"backend":{"type":"docker","image":format!("sha256:{}","a".repeat(64))},"timeout_ms":1000,"memory_mb":128,"cpus":1,"max_output_bytes":4096},"budget_limit":20,"currency":"units","reservation_per_turn":10,"max_turns":2,"max_hypotheses":2,"deadline_ms":30000}}).to_string()).unwrap();
+    // Every mismatched capture fails before Engine creates state or sends an inference.
+    use std::os::unix::fs::PermissionsExt;
+    let source_file = capture.join("source/app.rs");
+    for mismatch in 0..4 {
+        let rejected_state = d.path().join(format!("rejected-{mismatch}.db"));
+        let mut altered = receipt.clone();
+        match mismatch {
+            0 => std::fs::write(&source_file, b"changed source").unwrap(),
+            1 => std::fs::set_permissions(&source_file, std::fs::Permissions::from_mode(0o755))
+                .unwrap(),
+            2 => altered.snapshot.root = "/another/source".into(),
+            _ => {}
+        }
+        let mut bytes = altered.canonical_bytes().unwrap();
+        if mismatch == 3 {
+            bytes.push(b'\n');
+        }
+        std::fs::write(capture.join("receipt.json"), bytes).unwrap();
+        let rejected = tokio::time::timeout(
+            Duration::from_secs(10),
+            cli()
+                .arg("--state")
+                .arg(&rejected_state)
+                .arg("--providers")
+                .arg(&providers)
+                .arg("--review-profiles")
+                .arg(&profiles)
+                .arg("review")
+                .arg(capture.join("source"))
+                .arg("--acquisition-receipt")
+                .arg(capture.join("receipt.json"))
+                .args([
+                    "--profile",
+                    "local",
+                    "--command-id",
+                    "rejected",
+                    "--format",
+                    "json",
+                ])
+                .env("SOURCE_FIXTURE_KEY", "fixture-only")
+                .output(),
+        )
+        .await
+        .unwrap()
+        .unwrap();
+        assert!(!rejected.status.success(), "mismatch {mismatch} accepted");
+        assert!(
+            !rejected_state.exists(),
+            "mismatch {mismatch} opened Engine"
+        );
+        std::fs::write(&source_file, b"fn main() {}\n").unwrap();
+        std::fs::set_permissions(&source_file, std::fs::Permissions::from_mode(0o644)).unwrap();
+        std::fs::write(
+            capture.join("receipt.json"),
+            receipt.canonical_bytes().unwrap(),
+        )
+        .unwrap();
+    }
+    assert!(
+        tokio::time::timeout(Duration::from_millis(100), listener.accept())
+            .await
+            .is_err()
+    );
     let child = cli()
         .arg("--state")
         .arg(&state)
@@ -124,6 +187,8 @@ async fn actual_acquisition_is_reviewable_and_retained_source_survives_repositor
         .arg(&profiles)
         .arg("review")
         .arg(capture.join("source"))
+        .arg("--acquisition-receipt")
+        .arg(capture.join("receipt.json"))
         .args([
             "--profile",
             "local",
@@ -186,11 +251,70 @@ async fn actual_acquisition_is_reviewable_and_retained_source_survives_repositor
             .snapshot_sha256,
         receipt.snapshot.digest
     );
+    let provenance = store.review_acquisition_receipt(id).unwrap().unwrap();
+    assert_eq!(provenance.receipt.commit_oid, commit);
+    assert_eq!(
+        result["review"]["review"]["acquisition_receipt"]["commit_oid"],
+        commit
+    );
     drop(store);
+    std::fs::remove_file(capture.join("receipt.json")).unwrap();
     std::fs::remove_dir_all(&repo).unwrap();
     std::fs::remove_dir_all(capture.join("source")).unwrap();
     std::fs::remove_file(profiles).unwrap();
     std::fs::remove_file(providers).unwrap();
+    let retry = cli()
+        .arg("--state")
+        .arg(&state)
+        .arg("review")
+        .arg(capture.join("source"))
+        .arg("--acquisition-receipt")
+        .arg(capture.join("receipt.json"))
+        .args([
+            "--profile",
+            "local",
+            "--command-id",
+            "acquired-review",
+            "--format",
+            "json",
+        ])
+        .output()
+        .await
+        .unwrap();
+    assert!(
+        retry.status.success(),
+        "{}",
+        String::from_utf8_lossy(&retry.stderr)
+    );
+    let retry: Value = serde_json::from_slice(&retry.stdout).unwrap();
+    assert_eq!(retry["duplicate"], true);
+    for selector in [None, Some(capture.join("different.json"))] {
+        let mut command = cli();
+        command
+            .arg("--state")
+            .arg(&state)
+            .arg("review")
+            .arg(capture.join("source"))
+            .args([
+                "--profile",
+                "local",
+                "--command-id",
+                "acquired-review",
+                "--format",
+                "json",
+            ]);
+        if let Some(path) = selector {
+            command.arg("--acquisition-receipt").arg(path);
+        }
+        let conflict = command.output().await.unwrap();
+        assert!(!conflict.status.success());
+        assert!(String::from_utf8_lossy(&conflict.stderr).contains("identity conflicts"));
+    }
+    assert!(
+        tokio::time::timeout(Duration::from_millis(100), listener.accept())
+            .await
+            .is_err()
+    );
     let report = cli()
         .arg("--state")
         .arg(&state)
@@ -204,6 +328,10 @@ async fn actual_acquisition_is_reviewable_and_retained_source_survives_repositor
         String::from_utf8_lossy(&report.stderr)
     );
     let report: Value = serde_json::from_slice(&report.stdout).unwrap();
+    assert_eq!(
+        report["report"]["review"]["review"]["acquisition_receipt"]["commit_oid"],
+        commit
+    );
     assert_eq!(
         report["report"]["source"]["snapshot_sha256"],
         receipt.snapshot.digest

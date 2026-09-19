@@ -236,6 +236,8 @@ pub struct ReviewRecord {
     pub schema_version: u32,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub workspace_selection: Option<crate::workspace::WorkspaceSelectionReceipt>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub acquisition_receipt: Option<crate::source_acquisition::AcquisitionReceiptRef>,
     pub id: String,
     pub command_id: String,
     pub session_id: String,

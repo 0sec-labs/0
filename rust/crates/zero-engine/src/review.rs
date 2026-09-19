@@ -104,6 +104,7 @@ impl Engine {
         name: String,
         snapshot: SnapshotPin,
         workspace_selection: Option<zero_protocol::workspace::WorkspaceSelectionReceipt>,
+        acquisition_receipt: Option<zero_protocol::source_acquisition::AcquisitionReceiptInput>,
         events: mpsc::Sender<ExecutionEvent>,
         progress: Option<mpsc::Sender<ExecutionEvent>>,
     ) -> Result<Reply, EngineError> {
@@ -112,7 +113,15 @@ impl Engine {
             {
                 let store = lock(&self.shared.store)?;
                 if let Some(record) = store.review_by_command(&command)? {
-                    if record.input_path != input_path || record.profile_name != name {
+                    if record.input_path != input_path
+                        || record.profile_name != name
+                        || record.acquisition_receipt
+                            != acquisition_receipt
+                                .as_ref()
+                                .map(|a| a.reference())
+                                .transpose()
+                                .map_err(error)?
+                    {
                         return Err(error("review command reused with changed path or profile"));
                     }
                     return Ok(Reply::ReviewRun {
@@ -157,6 +166,7 @@ impl Engine {
             payload["review_template"] = serde_json::to_value(&actor.template)?;
             let admission = zero_store::ReviewAdmission {
                 workspace_selection,
+                acquisition_receipt,
                 review_id: id,
                 session_id: session,
                 controller_operation_id: controller,

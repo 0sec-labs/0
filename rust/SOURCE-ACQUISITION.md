@@ -71,15 +71,27 @@ The acquired source is usable with ordinary native review:
 ```sh
 0sec-native --state /absolute/state.db \
   --providers /absolute/providers.json --review-profiles /absolute/reviews.json \
-  review /absolute/new-capture/source --profile local --command-id review-1
+  review /absolute/new-capture/source --profile local --command-id review-1 \
+  --acquisition-receipt /absolute/new-capture/receipt.json
 ```
 
-Review retains the captured source through its existing archive contract. This
-first acquisition checkpoint **does not yet attach the Git receipt as typed
-review authority**. A review of the path must not be presented as proof that its
-files came from a remote without separately validating the acquisition receipt.
-The coordinated next phase will bind that receipt to review admission; no
-receipt is hidden inside or added to the repository's source tree.
+The explicit receipt is bound to the review's immutable intent, retained as a
+canonical artifact, and referenced in status/report metadata. The original
+absolute source root, every file digest and size, snapshot identity and executable
+paths must match the captured source. Archive retention checks the modes again
+before inference. Changed content, modes, or root fail before model execution.
+The receipt stays outside `source/`; review never discovers one implicitly.
+
+This is **host-selected provenance**, not a repository authenticity signature.
+A supplied receipt's commit/tree IDs are caller claims bound to the selected
+content; no network verification of those IDs takes place during review.
+
+Exact command retries compare the retained receipt selector before reading any
+source, provider configuration or receipt file. The same selector works after
+those files are deleted; omitting or changing it conflicts. Selectors are captured
+as normalized absolute paths and are labels, not authority to open a file later.
+The retained artifact and source archive remain available for independent reads.
+Reviews without this option preserve their existing intent and archive identities.
 
 Deterministic qualification uses real local fixture repositories, hostile Git
 configuration/filter fixtures, subprocess cancellation fixtures, and the actual

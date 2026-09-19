@@ -9,6 +9,7 @@ use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
 use zero_protocol::{SnapshotPin, campaign::CampaignProviderContext, review::*};
+mod acquisition;
 mod hooks;
 mod read;
 pub(crate) fn snapshot_source_record(conn: &Connection, key: &str) -> Result<ReviewRecord> {
@@ -21,6 +22,7 @@ pub(crate) struct ArchiveBinding {
     pub snapshot: SnapshotPin,
     pub owner: String,
     pub preparation_sequence: u64,
+    pub acquisition_receipt: Option<zero_protocol::source_acquisition::AcquisitionReceiptInput>,
 }
 const MAX_INTENT_BYTES: usize = 2 * 1024 * 1024;
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -37,6 +39,8 @@ pub struct ReviewAdmission {
     pub snapshot: SnapshotPin,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub workspace_selection: Option<zero_protocol::workspace::WorkspaceSelectionReceipt>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub acquisition_receipt: Option<zero_protocol::source_acquisition::AcquisitionReceiptInput>,
     pub root_payload: Value,
     pub provider_context: BTreeMap<String, CampaignProviderContext>,
 }
@@ -116,6 +120,16 @@ fn validate(a: &ReviewAdmission) -> Result<()> {
     integer(a.profile.budget_limit)?;
     if let Some(selection) = &a.workspace_selection {
         selection.validate_pin(&a.snapshot).map_err(bad)?;
+    }
+    if let Some(acquisition) = &a.acquisition_receipt {
+        acquisition
+            .validate_capture(
+                &a.snapshot,
+                a.workspace_selection
+                    .as_ref()
+                    .map_or(a.canonical_path.as_str(), |s| s.original_root.as_str()),
+            )
+            .map_err(bad)?;
     }
     let expected = a
         .profile
@@ -289,7 +303,15 @@ impl Store {
             .conn
             .transaction_with_behavior(TransactionBehavior::Immediate)?;
         if let Some(r) = read::by_command(&tx, command, &mut Reader::new())? {
-            if r.input_path != a.input_path || r.profile_name != a.profile_name {
+            if r.input_path != a.input_path
+                || r.profile_name != a.profile_name
+                || r.acquisition_receipt
+                    != a.acquisition_receipt
+                        .as_ref()
+                        .map(|r| r.reference())
+                        .transpose()
+                        .map_err(bad)?
+            {
                 return Err(bad("command reused with different path/profile"));
             }
             let b = read::bound(&tx, &r.id, &mut Reader::new())?;
@@ -357,6 +379,12 @@ impl Store {
             canonical_path: a.canonical_path.clone(),
             snapshot_sha256: a.snapshot.digest.clone(),
             workspace_selection: a.workspace_selection.clone(),
+            acquisition_receipt: a
+                .acquisition_receipt
+                .as_ref()
+                .map(|r| r.reference())
+                .transpose()
+                .map_err(bad)?,
             profile_name: a.profile_name.clone(),
             intent_sha256: digest.clone(),
             profile_sha256: hash(&a.profile)?,
@@ -390,6 +418,24 @@ impl Store {
             "operation_artifact",
             &json!({"operation_id":controller.id,"name":"review.intent","digest":digest,"bytes":bytes.len()}),
         )?;
+        if let Some(acquisition) = &a.acquisition_receipt {
+            let bytes = acquisition.receipt.canonical_bytes().map_err(bad)?;
+            let digest = acquisition.reference().map_err(bad)?.receipt_sha256;
+            tx.execute(
+                "INSERT OR IGNORE INTO artifacts(digest,bytes) VALUES(?1,?2)",
+                params![digest, bytes],
+            )?;
+            if crate::artifacts::read(&tx, &digest)? != bytes {
+                return Err(bad("acquisition receipt artifact collision"));
+            }
+            tx.execute("INSERT INTO operation_artifacts(operation_id,name,digest) VALUES(?1,'review.acquisition_receipt',?2)",params![controller.id,digest])?;
+            append(
+                &tx,
+                &a.session_id,
+                "operation_artifact",
+                &json!({"operation_id":controller.id,"name":"review.acquisition_receipt","digest":digest,"bytes":bytes.len()}),
+            )?;
+        }
         let binding: u64 = tx.query_row(
             "SELECT coalesce(max(sequence),0)+1 FROM events WHERE session_id=?1",
             [&a.session_id],

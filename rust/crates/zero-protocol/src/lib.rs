@@ -82,6 +82,8 @@ pub enum Command {
         snapshot: Box<SnapshotPin>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         workspace_selection: Option<workspace::WorkspaceSelectionReceipt>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        acquisition_receipt: Option<Box<source_acquisition::AcquisitionReceiptInput>>,
     },
     ReviewStatus {
         review_id: String,

@@ -76,6 +76,12 @@ pub(super) fn bound(conn: &Connection, key: &str, r: &mut Reader) -> Result<Boun
         || a.input_path != v.input_path
         || a.canonical_path != v.canonical_path
         || a.workspace_selection != v.workspace_selection
+        || a.acquisition_receipt
+            .as_ref()
+            .map(|a| a.reference())
+            .transpose()
+            .map_err(bad)?
+            != v.acquisition_receipt
         || a.snapshot.digest != v.snapshot_sha256
         || a.profile_name != v.profile_name
         || hash(&a.profile)? != v.profile_sha256
@@ -119,6 +125,7 @@ pub(super) fn bound(conn: &Connection, key: &str, r: &mut Reader) -> Result<Boun
     if !attached {
         return Err(bad("intent attachment missing"));
     }
+    super::acquisition::validate_retained(conn, &a, &v, r)?;
     let (reason,seq):(Option<String>,Option<u64>)=conn.query_row("SELECT CASE WHEN length(CAST(close_reason AS BLOB))<=16 THEN close_reason END,close_sequence FROM reviews WHERE id=?1",[key],|r|Ok((r.get(0)?,r.get(1)?)))?;
     let count: u64 = conn.query_row(
         "SELECT count(*) FROM events WHERE session_id=?1 AND kind='review_admission_closed'",

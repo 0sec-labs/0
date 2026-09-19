@@ -465,6 +465,7 @@ impl Engine {
                 profile,
                 snapshot,
                 workspace_selection,
+                acquisition_receipt,
             } => {
                 return self
                     .run_review(
@@ -473,6 +474,7 @@ impl Engine {
                         profile,
                         *snapshot,
                         workspace_selection,
+                        acquisition_receipt.map(|v| *v),
                         event_tx,
                         progress_tx,
                     )

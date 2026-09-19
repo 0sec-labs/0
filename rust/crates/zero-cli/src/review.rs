@@ -19,6 +19,7 @@ use zero_protocol::{
     agent::AgentStatus,
     review::{ReviewCloseReason, ReviewReport, ReviewSnapshot},
 };
+mod acquisition;
 mod repair;
 mod reproduce;
 
@@ -33,6 +34,9 @@ pub struct ReviewArgs {
     pub profile: Option<String>,
     #[arg(long)]
     pub command_id: Option<String>,
+    /// Explicit canonical acquisition receipt; retained as host-selected provenance.
+    #[arg(long)]
+    pub acquisition_receipt: Option<PathBuf>,
     #[arg(long, value_enum, default_value = "terminal")]
     pub format: Format,
     #[command(subcommand)]
@@ -144,13 +148,22 @@ pub async fn run(args: &crate::args::Args, options: &ReviewArgs) -> Result<u8, B
     {
         return Err("Invalid review profile name or command ID".into());
     }
+    let acquisition_selector = options
+        .acquisition_receipt
+        .as_deref()
+        .map(acquisition::selector)
+        .transpose()?;
     // The retained caller identity precedes all current source/configuration reads.
     if args.state.is_file() {
         if let Ok(store) = zero_store::Store::open_read_only(&args.state) {
             if let Some(record) = store.review_by_command(&command_id)? {
-                if record.input_path != input_path || record.profile_name != profile_name {
+                if record.input_path != input_path
+                    || record.profile_name != profile_name
+                    || record.acquisition_receipt.as_ref().map(|v| &v.input_path)
+                        != acquisition_selector.as_ref()
+                {
                     return Err(
-                        "Review command identity conflicts with retained path or profile".into(),
+                        "Review command identity conflicts with retained path, profile or acquisition receipt selector".into(),
                     );
                 }
                 drop(store);
@@ -206,10 +219,12 @@ pub async fn run(args: &crate::args::Args, options: &ReviewArgs) -> Result<u8, B
         snapshot,
         stage,
         receipt,
+        acquisition_receipt,
     } = match capture(
         PathBuf::from(&input_path),
         args.state.clone(),
         selection_mode,
+        acquisition_selector,
         deadline_ms,
         &mut signals,
     )
@@ -259,6 +274,7 @@ pub async fn run(args: &crate::args::Args, options: &ReviewArgs) -> Result<u8, B
             profile: profile_name,
             snapshot: Box::new(snapshot),
             workspace_selection: Some(receipt),
+            acquisition_receipt: acquisition_receipt.map(Box::new),
         },
         signals,
     )
@@ -293,6 +309,7 @@ struct CapturedSource {
     snapshot: SnapshotPin,
     stage: PreflightStage,
     receipt: WorkspaceSelectionReceipt,
+    acquisition_receipt: Option<zero_protocol::source_acquisition::AcquisitionReceiptInput>,
 }
 enum Capture {
     Pinned(Box<CapturedSource>),
@@ -302,6 +319,7 @@ async fn capture(
     path: PathBuf,
     state: PathBuf,
     mode: WorkspaceSelectionMode,
+    acquisition_selector: Option<String>,
     deadline_ms: u64,
     signals: &mut Signals,
 ) -> Result<Capture, Box<dyn Error>> {
@@ -322,6 +340,9 @@ async fn capture(
         let canonical = std::fs::canonicalize(&path)
             .map_err(|error| format!("Cannot resolve review source directory: {error}"))?;
         check()?;
+        let acquisition_receipt = acquisition_selector
+            .map(|selector| acquisition::load(selector, &canonical, &check))
+            .transpose()?;
         let policy = workspace_policy(&canonical, &state, mode, &check)?;
         let (staged, snapshot, receipt) = zero_executor::capture_workspace(
             &canonical,
@@ -333,11 +354,16 @@ async fn capture(
             &check,
         )?;
         let stage = PreflightStage(Some(staged));
+        if let Some(input) = &acquisition_receipt {
+            input.validate_capture(&snapshot, &receipt.original_root)?;
+            acquisition::validate_modes(input, &snapshot, &check)?;
+        }
         check()?;
         Ok::<_, String>(CapturedSource {
             snapshot,
             stage,
             receipt,
+            acquisition_receipt,
         })
     });
     tokio::select! {
@@ -812,6 +838,7 @@ mod tests {
                 dir.path().to_owned(),
                 dir.path().join(".0sec/state.db"),
                 WorkspaceSelectionMode::ExcludeNativeState,
+                None,
                 0,
                 &mut signals
             )
@@ -822,6 +849,7 @@ mod tests {
             dir.path().to_owned(),
             dir.path().join(".0sec/state.db"),
             WorkspaceSelectionMode::ExcludeNativeState,
+            None,
             1000,
             &mut signals,
         )
@@ -851,6 +879,7 @@ mod tests {
                 dir.path().to_owned(),
                 dir.path().join(".0sec/state.db"),
                 WorkspaceSelectionMode::ExcludeNativeState,
+                None,
                 1000,
                 &mut signals
             )
