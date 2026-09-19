@@ -14,7 +14,7 @@ production readiness. Production CLI routing remains TypeScript.
 | Repair and export | Native repair admission, two freshly materialized candidate matrices, independent report and archive-backed unified patch export are implemented. No original checkout is changed. Applying/retesting in a user workspace and PR automation remain open. See `crates/zero-cli/tests/support/review_repair.rs`, `crates/zero-engine/src/native_repair_export/tests.rs`. |
 | Interactive delegated investigation | Sessions, durable queues/steering/questions/approvals, delegation and native console/TUI primitives exist. Full shorthand, tool suite, persistent shell/workspace behavior and product UX parity remain incomplete. See `crates/zero-cli/src/args.rs`, `crates/zero-tui/README.md`. |
 | Providers and credentials | Multiple provider adapters, bounded credentials and Entra refresh exist. Complete legacy provider/login/process-provider coverage and live qualification remain incomplete. See `crates/zero-provider/README.md`. |
-| Sandbox and plugin execution | Pinned Docker/smolvm execution and language-neutral persistent worker transport exist. Engine worker integration is separately qualified on branch `rust-harness-parity-20260919` at `da71fceb`; it is not integrated by this repair checkpoint. Full plugin/MCP/tool breadth and real isolation qualification remain open. See `PLUGIN-WORKERS.md`. |
+| Sandbox and plugin execution | Pinned Docker/smolvm execution and language-neutral persistent worker transport exist. Actor-owned persistent workers and explicit CLI worker policy are integrated. Local opt-in Docker tests qualify Python worker reuse, Node execution and container isolation for the recorded images. Full plugin/MCP/tool breadth and broader platform/isolation qualification remain open. See `PLUGIN-WORKERS.md`. |
 | Self-improvement | Budgeted strategy generation, independent holdouts/canaries, eligibility and guarded activation exist for bounded advisory strategy artifacts. General autonomous harness-code evolution remains incomplete. See `AUTONOMY.md`. |
 | Managed cloud product | Native grant/result producer and cloud contract/persistence/admission/accounting helpers exist. Real configuration staging, launch, authenticated recoverable transport, polling and dashboard integration remain incomplete. See `NATIVE-WORKER-CONTRACT.md`; sibling cloud repo `docs/NATIVE-MANAGED-EXECUTION.md`. Cloud audit baseline was `38f598871`; no production promotion is claimed. |
 | Specialist security workflows | Most native recon, npm, AD/cloud-target auditing, kernel/binary, CVE/research, protocol/spec drift and disclosure equivalents remain missing. General agent/sandbox primitives do not complete these workflows. Compare `crates/zero-cli/src/args.rs` with `../packages/cli/src/commands/index.ts`. |
@@ -22,8 +22,8 @@ production readiness. Production CLI routing remains TypeScript.
 
 ## Next integration priorities
 
-1. Expose explicit persistent worker policy through CLI configuration and bind Git
-   acquisition provenance into review admission.
+1. Bind Git acquisition provenance into review admission and expand persistent
+   worker cancellation qualification.
 2. Connect existing managed-cloud components into an executable product workflow.
 3. Port remaining user-facing tools/providers and qualify state/distribution
    compatibility before production cutover.

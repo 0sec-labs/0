@@ -170,3 +170,47 @@ ZERO_TEST_PYTHON_IMAGE=sha256:YOUR_INSTALLED_IMAGE \
 ZERO_DOCKER_SMOKE_IMAGE=sha256:YOUR_INSTALLED_NODE_IMAGE \
   cargo +1.85 test --locked -p zero-executor --test docker_smoke -- --ignored
 ```
+
+## Native CLI configuration
+
+The explicit `--harness-config host.json` accepts an optional top-level `workers`
+map keyed by plugin ID. Add it to the same host configuration that already names
+an existing registry, expected engine artifact, plugin grants and launch profile:
+
+```json
+"workers": {
+  "my-python-plugin": {
+    "schema_version": 1,
+    "operations": [],
+    "max_calls": 8,
+    "max_callbacks": 16
+  }
+}
+```
+
+Set `launch.interpreter` to `["python3"]` and `launch.backend` to Docker with an
+already installed immutable image ID or `name@sha256:…` digest containing Python.
+The registry must already contain the verified plugin artifact and active graph;
+loading this file does not install, activate, download or execute a plugin.
+`workers` may contain at most four enabled plugins in the host policy. Callback
+operations also require matching host grants: `filesystem-read` for source
+operations and `network` for `http_request`. Each invocation is still narrowed by
+its tool's captured grants, actor authority and any applicable approval.
+
+Create a pinned session with `--harness-config host.json session create-pinned`.
+Use that session with `--harness-config host.json --providers providers.json agent
+--session SESSION --command-id COMMAND --request agent.json`. The explicit agent
+request selects the plugin through `plugin_tools`, for example
+`{"alias":"inspect_plugin","plugin":"my-python-plugin","tool":"inspect"}`.
+An empty `operations` list supports computation with no host callbacks. Source
+callbacks additionally require the agent's existing source authority, and HTTP
+callbacks require its named host HTTP profile; the worker policy supplies neither.
+
+Omitting `workers`, or supplying `{}`, preserves the original one-shot launch
+and captured identity, including its existing backend options. Standalone
+`plugin-call` remains one-shot even when a worker policy is configured. Unknown
+fields, unsupported operations, invalid limits, disabled/unknown plugin policies,
+ungranted callbacks and mutable/non-Docker worker launches are rejected. Native
+review, scan, reproduction and repair authority cannot be expanded by this map.
+A successful worker result remains untrusted data, not independently verified
+security evidence.

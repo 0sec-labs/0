@@ -16,11 +16,13 @@ struct Fixture {
 }
 impl Fixture {
     fn new(reply: &str) -> Self {
+        Self::with_script(reply, b"inert plugin fixture")
+    }
+    fn with_script(reply: &str, script: &[u8]) -> Self {
         let dir = TempDir::new().unwrap();
         let registry_path = dir.path().join("registry.db");
         let mut registry = Registry::open(&registry_path, "v1", &json!({})).unwrap();
         let engine = registry.put_artifact(b"fixtureengine").unwrap();
-        let script = b"inert plugin fixture";
         let artifact = registry.put_artifact(script).unwrap();
         let digest = artifact.strip_prefix("sha256:").unwrap().to_owned();
         let plugin = zero_plugin::Manifest {
@@ -263,3 +265,6 @@ fn untrusted_plugin_error_reply_has_nonzero_exit_and_persisted_outcome() {
     assert_eq!(reply["operation"]["status"], "failed");
     assert_eq!(reply["result"]["untrusted_reply"]["type"], "error");
 }
+
+#[path = "plugin/workers.rs"]
+mod workers;
