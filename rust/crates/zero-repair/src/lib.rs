@@ -54,6 +54,8 @@ impl Drop for Candidate {
 }
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
+    #[error("candidate preparation interrupted")]
+    Interrupted,
     #[error("invalid candidate request: {0}")]
     Invalid(&'static str),
     #[error("baseline staging or candidate pinning failed")]
@@ -198,9 +200,18 @@ pub fn expected_receipt(request: &MaterializeRequest) -> Result<CandidateReceipt
 /// Verify the entire pinned baseline, copy it into a private owned tree, and replace one file.
 /// Call off async runtime workers: snapshot traversal is synchronous and bounded by the manifest.
 pub fn materialize(request: &MaterializeRequest) -> Result<Candidate, Error> {
+    materialize_checked(request, &|| Ok(()))
+}
+
+/// Joined callers supply cancellation/deadline checks during bounded traversal.
+pub fn materialize_checked(
+    request: &MaterializeRequest,
+    check: &dyn Fn() -> Result<(), String>,
+) -> Result<Candidate, Error> {
+    check().map_err(|_| Error::Interrupted)?;
     let expected = expected_receipt(request)?;
-    let stage = zero_executor::stage_snapshot(&request.baseline, &|| Ok(()))
-        .map_err(|_| Error::Snapshot)?;
+    let stage =
+        zero_executor::stage_snapshot(&request.baseline, check).map_err(|_| Error::Snapshot)?;
     // Establish cleanup ownership immediately so every later error removes the private copy.
     let mut candidate = Candidate {
         stage: Some(stage),
@@ -208,56 +219,101 @@ pub fn materialize(request: &MaterializeRequest) -> Result<Candidate, Error> {
         replacement: request.replacement.clone(),
         receipt: expected,
     };
-    let root = candidate.stage.as_ref().ok_or(Error::Io)?.source();
-    let target = root.join(Path::new(&request.target));
-    // This tree was just created by anchored staging and has never been exposed to a guest.
-    let original = std::fs::read(&target).map_err(|_| Error::Io)?;
-    if hash(&original) != request.expected_preimage_sha256 {
-        return Err(Error::Invalid("staged preimage mismatch"));
-    }
-    if std::str::from_utf8(&original).is_err() || original.contains(&0) {
-        return Err(Error::Invalid("preimage is not UTF-8 source text"));
-    }
-    let permissions = std::fs::metadata(&target)
-        .map_err(|_| Error::Io)?
-        .permissions();
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        std::fs::set_permissions(
-            &target,
-            std::fs::Permissions::from_mode(permissions.mode() | 0o200),
+    let result = (|| {
+        check().map_err(|_| Error::Interrupted)?;
+        let root = candidate.stage.as_ref().ok_or(Error::Io)?.source();
+        let target = root.join(Path::new(&request.target));
+        // This tree was just created by anchored staging and has never been exposed to a guest.
+        let original = std::fs::read(&target).map_err(|_| Error::Io)?;
+        if hash(&original) != request.expected_preimage_sha256 {
+            return Err(Error::Invalid("staged preimage mismatch"));
+        }
+        if std::str::from_utf8(&original).is_err() || original.contains(&0) {
+            return Err(Error::Invalid("preimage is not UTF-8 source text"));
+        }
+        let permissions = std::fs::metadata(&target)
+            .map_err(|_| Error::Io)?
+            .permissions();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(
+                &target,
+                std::fs::Permissions::from_mode(permissions.mode() | 0o200),
+            )
+            .map_err(|_| Error::Io)?;
+        }
+        check().map_err(|_| Error::Interrupted)?;
+        std::fs::write(&target, request.replacement.as_bytes()).map_err(|_| Error::Io)?;
+        std::fs::set_permissions(&target, permissions).map_err(|_| Error::Io)?;
+        candidate.snapshot = zero_executor::pin_snapshot_checked(
+            &root,
+            zero_executor::SnapshotLimits {
+                max_files: MAX_SNAPSHOT_FILES,
+                max_bytes: MAX_SNAPSHOT_BYTES,
+            },
+            check,
         )
-        .map_err(|_| Error::Io)?;
+        .map_err(|_| Error::Snapshot)?;
+        if candidate.snapshot.files.len() != request.baseline.files.len()
+            || candidate.snapshot.files.iter().any(|f| {
+                request
+                    .baseline
+                    .files
+                    .iter()
+                    .find(|b| b.path == f.path)
+                    .is_none_or(|b| {
+                        if f.path == request.target {
+                            f.digest != candidate.receipt.replacement_sha256
+                                || f.bytes != candidate.receipt.replacement_bytes
+                        } else {
+                            f.digest != b.digest || f.bytes != b.bytes
+                        }
+                    })
+            })
+        {
+            return Err(Error::Invalid(
+                "candidate changed more than the authorized file",
+            ));
+        }
+        if candidate.receipt.candidate_snapshot_sha256 != candidate.snapshot.digest {
+            return Err(Error::Invalid(
+                "materialized candidate differs from expected receipt",
+            ));
+        }
+        check().map_err(|_| Error::Interrupted)?;
+        Ok(())
+    })();
+    match result {
+        Ok(()) => Ok(candidate),
+        Err(cause) => {
+            candidate.cleanup()?;
+            Err(cause)
+        }
     }
-    std::fs::write(&target, request.replacement.as_bytes()).map_err(|_| Error::Io)?;
-    std::fs::set_permissions(&target, permissions).map_err(|_| Error::Io)?;
-    candidate.snapshot = zero_executor::pin_snapshot(&root).map_err(|_| Error::Snapshot)?;
-    if candidate.snapshot.files.len() != request.baseline.files.len()
-        || candidate.snapshot.files.iter().any(|f| {
-            request
-                .baseline
-                .files
-                .iter()
-                .find(|b| b.path == f.path)
-                .is_none_or(|b| {
-                    if f.path == request.target {
-                        f.digest != candidate.receipt.replacement_sha256
-                            || f.bytes != candidate.receipt.replacement_bytes
-                    } else {
-                        f.digest != b.digest || f.bytes != b.bytes
-                    }
-                })
-        })
+}
+
+/// Reanchor only the physical root of an otherwise exact retained baseline.
+/// Policy, replacement, preimage and expected candidate receipt remain unchanged.
+pub fn reanchor_materialization(
+    request: &MaterializeRequest,
+    restored: &SnapshotPin,
+) -> Result<MaterializeRequest, Error> {
+    let expected = expected_receipt(request)?;
+    if !Path::new(&restored.root).is_absolute() {
+        return Err(Error::Invalid("restored root must be absolute"));
+    }
+    let mut original = request.baseline.clone();
+    original.root = restored.root.clone();
+    if serde_json::to_value(&original).map_err(|_| Error::Encoding)?
+        != serde_json::to_value(restored).map_err(|_| Error::Encoding)?
     {
-        return Err(Error::Invalid(
-            "candidate changed more than the authorized file",
-        ));
+        return Err(Error::Invalid("restored baseline differs beyond its root"));
     }
-    if candidate.receipt.candidate_snapshot_sha256 != candidate.snapshot.digest {
-        return Err(Error::Invalid(
-            "materialized candidate differs from expected receipt",
-        ));
+    let mut derived = request.clone();
+    derived.baseline = restored.clone();
+    if expected_receipt(&derived)? != expected {
+        return Err(Error::Invalid("reanchoring changed candidate authority"));
     }
-    Ok(candidate)
+    Ok(derived)
 }

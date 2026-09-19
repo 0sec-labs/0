@@ -235,3 +235,77 @@ fn expected_receipt_is_pure_and_matches_materialized_copy() {
     bad.protected_paths.push(bad.target.clone());
     assert!(expected_receipt(&bad).is_err());
 }
+
+#[test]
+fn reanchoring_preserves_every_authority_field_and_allows_deleted_original_source() {
+    let (dir, request) = fixture();
+    let stage = zero_executor::stage_snapshot(&request.baseline, &|| Ok(())).unwrap();
+    let mut restored = request.baseline.clone();
+    restored.root = stage.source().to_string_lossy().into_owned();
+    let derived = reanchor_materialization(&request, &restored).unwrap();
+    let mut expected = serde_json::to_value(&request).unwrap();
+    expected["baseline"]["root"] = serde_json::json!(restored.root);
+    assert_eq!(serde_json::to_value(&derived).unwrap(), expected);
+    assert_eq!(
+        expected_receipt(&request).unwrap(),
+        expected_receipt(&derived).unwrap()
+    );
+    for change in 0..7 {
+        let mut bad = restored.clone();
+        match change {
+            0 => bad.root = "relative".into(),
+            1 => bad.id.push_str("changed"),
+            2 => bad.digest = format!("sha256:{}", "0".repeat(64)),
+            3 => bad.files[0].bytes += 1,
+            4 => bad.files[0].digest = format!("sha256:{}", "0".repeat(64)),
+            5 => bad.files[0].path.push_str("changed"),
+            _ => {
+                bad.files.pop();
+            }
+        }
+        assert!(
+            reanchor_materialization(&request, &bad).is_err(),
+            "accepted mutation {change}"
+        );
+    }
+    dir.close().unwrap();
+    let candidate = materialize_checked(&derived, &|| Ok(())).unwrap();
+    assert_eq!(candidate.receipt(), &expected_receipt(&request).unwrap());
+    assert_eq!(
+        fs::read(Path::new(&candidate.snapshot().root).join(&request.target)).unwrap(),
+        request.replacement.as_bytes()
+    );
+    candidate.cleanup().unwrap();
+    stage.remove().unwrap();
+}
+
+#[test]
+fn cancellation_is_checked_through_staging_replacement_and_final_pinning() {
+    use std::cell::Cell;
+    let (_dir, request) = fixture();
+    let calls = Cell::new(0);
+    let candidate = materialize_checked(&request, &|| {
+        calls.set(calls.get() + 1);
+        Ok(())
+    })
+    .unwrap();
+    candidate.cleanup().unwrap();
+    assert!(calls.get() > 5);
+    for stop in 0..calls.get() {
+        let seen = Cell::new(0);
+        assert!(
+            materialize_checked(&request, &|| {
+                let current = seen.get();
+                seen.set(current + 1);
+                if current >= stop {
+                    Err("cancelled".into())
+                } else {
+                    Ok(())
+                }
+            })
+            .is_err(),
+            "ignored cancellation at {stop}"
+        );
+        unchanged(&request);
+    }
+}

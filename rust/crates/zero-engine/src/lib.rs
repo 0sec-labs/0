@@ -28,6 +28,7 @@ mod reproduction;
 pub use native_reproduction::{read_review_reproduction, read_review_reproduction_for_command};
 mod review;
 mod review_read;
+pub mod review_repair;
 pub mod review_reproduction;
 mod sandbox;
 mod scan;

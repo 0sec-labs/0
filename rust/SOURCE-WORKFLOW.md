@@ -325,3 +325,29 @@ establishes vulnerability reportability.
 
 Native review-to-repair linkage remains a subsequent integration step. Existing
 same-session reproduction and repair commands retain their current contracts.
+
+### Archive-backed repair preparation
+
+`ReviewRepairPlan` separately binds a retained native reproduction, exact logical
+baseline and materialization policy, replacement bytes, total deadline and an
+execution cap covering two complete fresh matrices. Preparation independently
+reassesses the baseline's observations and requires ObservedForPlan, original
+hypothesis citations for the target/preimage, and safe attack expectations already
+frozen before reproduction. The repair request cannot replace those expectations.
+
+`review_repair::prepare` restores the original archive without its checkout or
+provider configuration. Reanchoring changes only the materialization baseline's
+physical root; all snapshot metadata, path policy, preimage and replacement stay
+exact. Its retained binding hashes both authorizations, logical and execution
+baseline plans, derived materialization request and expected candidate receipt.
+The relation remains independently checkable after private trees are removed.
+`candidate_plan` derives the frozen safe attack expectations and preserves the
+legitimate controls and execution limits for an exact private candidate.
+
+`zero_repair::materialize_checked` supplies cooperative cancellation through
+staging, replacement and final bounded pinning. Failed preparation explicitly
+cleans its private candidate and reports uncertain cleanup. It never writes the
+original source tree. This preparation checkpoint does not authorize matrix
+execution or establish ValidatedCandidateForPlan: native repair still needs its
+own durable admission, preparation and phase gates, owned worker, CLI route and
+independently reassessed two-phase report before that workflow is complete.

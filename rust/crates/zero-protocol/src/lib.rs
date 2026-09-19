@@ -23,6 +23,7 @@ pub mod questions;
 pub mod queue;
 pub mod repair;
 pub mod review;
+pub mod review_repair;
 pub mod review_reproduction;
 pub mod sandbox;
 pub mod scan;

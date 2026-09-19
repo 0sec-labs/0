@@ -594,7 +594,7 @@ async fn archived_review_preparation_preserves_logical_plan_and_revalidates_offl
             "backend":{"type":"docker","image":format!("sha256:{}","a".repeat(64))},
             "limits":{"timeout_ms":1000,"memory_mb":128,"cpus":1,"max_output_bytes":4096},
             "repeats":2,"cases":[
-                {"id":"attack","mode":"attack","argv":["/bin/sh","z-tool.sh"],"stdin":null,"expected":{"exit_code":0,"stdout":"","stderr":""}},
+                {"id":"attack","mode":"attack","argv":["/bin/sh","z-tool.sh"],"stdin":null,"expected":{"exit_code":0,"stdout":"","stderr":""},"safe_expected":{"exit_code":0,"stdout":"c2FmZQo=","stderr":""}},
                 {"id":"control","mode":"legitimate_control","argv":["/bin/true"],"stdin":null,"expected":{"exit_code":0,"stdout":"","stderr":""}}
             ]
         }
@@ -1045,7 +1045,7 @@ async fn archived_review_preparation_preserves_logical_plan_and_revalidates_offl
     let (tx, _rx) = mpsc::channel(8);
     assert!(matches!(
         f.engine
-            .reproduce_review("native-engine".into(), authorization, tx)
+            .reproduce_review("native-engine".into(), authorization.clone(), tx)
             .await
             .unwrap(),
         Reply::SourceReproduction {
@@ -1065,6 +1065,102 @@ async fn archived_review_preparation_preserves_logical_plan_and_revalidates_offl
         budget_before
     );
     f.provider.assert_no_more_requests();
+    let store = lock(&f.engine.shared.store).unwrap();
+    let reproduction_id = store
+        .native_reproduction_by_command("native-engine")
+        .unwrap()
+        .unwrap()
+        .id;
+    let repair = zero_protocol::review_repair::ReviewRepairPlan {
+        schema_version: 1,
+        reproduction_id,
+        deadline_ms: 30000,
+        max_executions: 8,
+        materialize: zero_protocol::repair::MaterializeRequest {
+            baseline: authorization.plan.snapshot.clone(),
+            target: "app.rs".into(),
+            allowed_paths: vec!["app.rs".into()],
+            protected_paths: vec!["z-tool.sh".into()],
+            expected_preimage_sha256: authorization
+                .plan
+                .snapshot
+                .files
+                .iter()
+                .find(|f| f.path == "app.rs")
+                .unwrap()
+                .digest
+                .clone(),
+            replacement: "pub fn greeting() -> &'static str { \"safe\\n\" }\n".into(),
+        },
+    };
+    let mut too_few = repair.clone();
+    too_few.max_executions = 7;
+    assert!(review_repair::prepare(&store, &too_few, &|| Ok(())).is_err());
+    let mut wrong_target = repair.clone();
+    wrong_target.materialize.target = "z-tool.sh".into();
+    assert!(review_repair::prepare(&store, &wrong_target, &|| Ok(())).is_err());
+    assert!(review_repair::prepare(&store, &repair, &|| Err("cancelled".into())).is_err());
+    let prepared = review_repair::prepare(&store, &repair, &|| Ok(())).unwrap();
+    let derived = prepared.materialize_request().clone();
+    let execution_baseline = prepared.execution_baseline().clone();
+    let binding = prepared.binding().clone();
+    let first = zero_repair::materialize_checked(&derived, &|| Ok(())).unwrap();
+    let second = zero_repair::materialize_checked(&derived, &|| Ok(())).unwrap();
+    assert_ne!(first.snapshot().root, second.snapshot().root);
+    assert_eq!(first.receipt(), second.receipt());
+    assert_eq!(first.receipt(), prepared.expected_receipt());
+    let safe = prepared.candidate_plan(&first).unwrap();
+    assert_eq!(
+        serde_json::to_value(&safe.plan().cases[0].expected).unwrap(),
+        serde_json::to_value(&authorization.plan.cases[0].safe_expected).unwrap()
+    );
+    assert_eq!(
+        serde_json::to_value(&safe.plan().cases[1]).unwrap(),
+        serde_json::to_value(&authorization.plan.cases[1]).unwrap()
+    );
+    assert_eq!(
+        fs::read(Path::new(&first.snapshot().root).join("z-unread.bin")).unwrap(),
+        [0, 255, 1, 128]
+    );
+    assert_eq!(
+        fs::read(Path::new(&first.snapshot().root).join("app.rs")).unwrap(),
+        repair.materialize.replacement.as_bytes()
+    );
+    let stage_root = derived.baseline.root.clone();
+    first.cleanup().unwrap();
+    second.cleanup().unwrap();
+    prepared.remove().unwrap();
+    assert!(!Path::new(&stage_root).exists());
+    review_repair::validate_binding(&store, &repair, &execution_baseline, &derived, &binding)
+        .unwrap();
+    for (field, value) in serde_json::to_value(&binding).unwrap().as_object().unwrap() {
+        let mut changed = serde_json::to_value(&binding).unwrap();
+        changed[field] = if value.is_number() {
+            json!(99)
+        } else {
+            json!("forged")
+        };
+        let changed = serde_json::from_value(changed).unwrap();
+        assert!(
+            review_repair::validate_binding(
+                &store,
+                &repair,
+                &execution_baseline,
+                &derived,
+                &changed
+            )
+            .is_err(),
+            "accepted forged {field}"
+        );
+    }
+    let mut changed = repair.clone();
+    changed.deadline_ms += 1;
+    assert!(
+        review_repair::validate_binding(&store, &changed, &execution_baseline, &derived, &binding)
+            .is_err()
+    );
+    assert_eq!(fs::read(f.dir.path().join("calls.jsonl")).unwrap(), calls);
+    drop(store);
     f.engine.shutdown().await.unwrap();
 }
 
