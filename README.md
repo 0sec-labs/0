@@ -12,7 +12,7 @@
 </p>
 
 <p align="center">
-  <strong>We make software secure itself.</strong><br/>
+  <strong>We make software secure software.</strong><br/>
   Your self-improving, open-source cybersecurity team.
 </p>
 
