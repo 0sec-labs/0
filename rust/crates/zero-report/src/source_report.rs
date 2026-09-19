@@ -35,7 +35,7 @@ fn bounded_text(value: &str, limit: usize, field: &'static str) -> Result<()> {
     }
     Ok(())
 }
-fn validate(report: &SourceReport) -> Result<()> {
+pub(crate) fn validate(report: &SourceReport) -> Result<()> {
     if !matches!(report.schema_version, 1 | 2) || report.review.version != 1 {
         return Err(Error::Field("source report version"));
     }

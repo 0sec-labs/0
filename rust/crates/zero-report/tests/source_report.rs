@@ -454,3 +454,55 @@ fn sarif_preserves_evidence_without_promoting_claims_and_encodes_paths() {
         "not_established"
     );
 }
+
+#[test]
+fn review_sarif_binds_source_to_lifecycle_and_marks_absent_submission() {
+    use zero_protocol::review::ReviewReport;
+    let source = fixture();
+    let mut report: ReviewReport = serde_json::from_value(json!({
+        "schema_version":1,"security_conclusion":"not_established","source":source,
+        "review":{
+            "review":{"schema_version":1,"id":"review-id","command_id":"command", "session_id":"session-1",
+                "controller_operation_id":"controller","root_operation_id":"review-1",
+                "input_path":"/source","canonical_path":"/source","snapshot_sha256":digest('1'),
+                "profile_name":"local","intent_sha256":digest('7'),"profile_sha256":digest('8'),
+                "created_at_ms":1,"deadline_at_ms":100,"sequence":1},
+            "agent_result":null,"controller_status":"succeeded","root_status":"succeeded",
+            "close_reason":null,"budget":{"limit":100,"reserved":0,"charged":10},"currency":"units",
+            "observed_sequence":2,"observed_at_ms":50
+        }
+    })).unwrap();
+    let output = zero_report::render_review_sarif(&report).unwrap();
+    let value: Value = serde_json::from_str(&output).unwrap();
+    assert_eq!(
+        value["runs"][0]["properties"]["review"],
+        serde_json::to_value(&report.review).unwrap()
+    );
+    assert_eq!(
+        value["runs"][0]["properties"]["reportState"],
+        "source_submission"
+    );
+    for mismatch in 0..4 {
+        let mut invalid = report.clone();
+        match mismatch {
+            0 => invalid.source.as_mut().unwrap().session_id = "foreign".into(),
+            1 => invalid.source.as_mut().unwrap().operation_id = "foreign".into(),
+            2 => invalid.review.review.snapshot_sha256 = digest('9'),
+            _ => invalid.schema_version = 2,
+        }
+        assert!(zero_report::render_review_sarif(&invalid).is_err());
+    }
+    report.source = None;
+    report.review.close_reason = Some(zero_protocol::review::ReviewCloseReason::Cancelled);
+    report.review.budget.reserved = 20;
+    let output = zero_report::render_review_sarif(&report).unwrap();
+    let value: Value = serde_json::from_str(&output).unwrap();
+    let run = &value["runs"][0];
+    assert_eq!(run["results"], json!([]));
+    assert_eq!(run["properties"]["reportState"], "no_source_submission");
+    assert_eq!(run["properties"]["review"]["budget"]["reserved"], 20);
+    assert_eq!(run["properties"]["securityConclusion"], "not_established");
+    if let Some(path) = std::env::var_os("ZERO_REVIEW_SARIF_TEST_OUTPUT") {
+        std::fs::write(path, output).unwrap();
+    }
+}

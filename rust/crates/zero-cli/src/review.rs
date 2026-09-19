@@ -1,8 +1,8 @@
 //! Local source capture and private staging drain before engine ownership.
 //! Preparation has its own deadline: min(profile.deadline_ms, 60 seconds).
 //! The durable investigation deadline begins only at engine admission.
-use crate::scan::{Format, Signals};
-use clap::{Args, Subcommand};
+use crate::scan::Signals;
+use clap::{Args, Subcommand, ValueEnum};
 use std::{
     error::Error,
     path::{Path, PathBuf},
@@ -22,6 +22,26 @@ use zero_protocol::{
 mod acquisition;
 mod repair;
 mod reproduce;
+
+#[derive(Debug, Clone, Copy, ValueEnum)]
+pub enum Format {
+    Terminal,
+    Json,
+    #[value(alias = "md")]
+    Markdown,
+    Html,
+    Sarif,
+}
+impl From<crate::scan::Format> for Format {
+    fn from(value: crate::scan::Format) -> Self {
+        match value {
+            crate::scan::Format::Terminal => Self::Terminal,
+            crate::scan::Format::Json => Self::Json,
+            crate::scan::Format::Markdown => Self::Markdown,
+            crate::scan::Format::Html => Self::Html,
+        }
+    }
+}
 
 #[derive(Debug, Args)]
 #[command(args_conflicts_with_subcommands = true, subcommand_negates_reqs = true)]
@@ -103,7 +123,7 @@ pub enum ReviewCommand {
         #[arg(long, required_unless_present = "review", conflicts_with = "review")]
         command_id: Option<String>,
         #[arg(long, value_enum, default_value = "json")]
-        format: Format,
+        format: crate::scan::Format,
     },
     /// Render retained source claims, or an explicitly partial review report.
     Report {
@@ -551,10 +571,10 @@ async fn readonly(path: &Path, command: &ReviewCommand) -> Result<u8, Box<dyn Er
             let review =
                 tokio::task::spawn_blocking(move || zero_engine::read_review_status(&state, &id))
                     .await??;
-            if matches!(format, Format::Json) {
+            if matches!(format, crate::scan::Format::Json) {
                 crate::write_json(&Reply::ReviewStatus { review }, false).await?;
             } else {
-                output_text(&snapshot_text(&review), *format).await?;
+                output_text(&snapshot_text(&review), (*format).into()).await?;
             }
         }
         ReviewCommand::Report {
@@ -653,6 +673,9 @@ async fn output_report(report: &ReviewReport, format: Format) -> Result<(), Box<
             false,
         )
         .await;
+    }
+    if matches!(format, Format::Sarif) {
+        return write_output(&zero_report::render_review_sarif(report)?).await;
     }
     let header = snapshot_text(&report.review);
     let Some(source) = &report.source else {

@@ -3,6 +3,7 @@ mod html;
 mod markdown;
 mod source_report;
 mod source_sarif;
+pub use source_sarif::render_review_sarif;
 mod web_report;
 use serde_json::{Value, json};
 pub use source_report::{SourceReportFormat, render_source_report};

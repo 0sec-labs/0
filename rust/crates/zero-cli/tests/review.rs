@@ -451,6 +451,64 @@ async fn cited_local_review_retains_report_and_retries_without_source_or_configu
             assert_eq!(value["review"]["review"], snapshot["review"]);
         }
     }
+    let sarif_out = finish(
+        f.cli()
+            .env_remove("REVIEW_CLI_KEY")
+            .args([
+                "review",
+                "report",
+                "--command-id",
+                "cited-review",
+                "--format",
+                "sarif",
+            ])
+            .spawn()
+            .unwrap(),
+    )
+    .await;
+    assert!(
+        sarif_out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&sarif_out.stderr)
+    );
+    let sarif = decoded(&sarif_out);
+    let run = &sarif["runs"][0];
+    assert_eq!(run["properties"]["sourceReport"], report["source"]);
+    assert_eq!(run["properties"]["reportState"], "source_submission");
+    assert_eq!(run["properties"]["review"]["budget"], snapshot["budget"]);
+    assert_eq!(run["results"][0]["kind"], "review");
+    assert_eq!(run["results"][0]["level"], "note");
+    let sarif_retry = finish(
+        f.cli()
+            .env_remove("REVIEW_CLI_KEY")
+            .arg("review")
+            .arg(&f.source)
+            .args([
+                "--profile",
+                "local",
+                "--command-id",
+                "cited-review",
+                "--format",
+                "sarif",
+            ])
+            .spawn()
+            .unwrap(),
+    )
+    .await;
+    assert!(
+        sarif_retry.status.success(),
+        "{}",
+        String::from_utf8_lossy(&sarif_retry.stderr)
+    );
+    let sarif_retry = decoded(&sarif_retry);
+    assert_eq!(
+        sarif_retry["runs"][0]["properties"]["sourceReport"],
+        report["source"]
+    );
+    assert_eq!(
+        sarif_retry["runs"][0]["properties"]["review"]["budget"],
+        snapshot["budget"]
+    );
     for (path, profile) in [
         (f.source.with_extension("changed"), "local"),
         (f.source.clone(), "changed"),
@@ -547,6 +605,36 @@ async fn sigterm_drains_local_review_and_preserves_uncertain_model_hold() {
     assert_eq!(report["report"]["security_conclusion"], "not_established");
     assert!(report["report"]["source"].is_null());
     assert_eq!(report["report"]["review"]["budget"]["reserved"], 10);
+    let sarif_out = finish(
+        f.cli()
+            .env_remove("REVIEW_CLI_KEY")
+            .args([
+                "review",
+                "report",
+                "--command-id",
+                "held-review",
+                "--format",
+                "sarif",
+            ])
+            .spawn()
+            .unwrap(),
+    )
+    .await;
+    assert!(
+        sarif_out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&sarif_out.stderr)
+    );
+    let sarif = decoded(&sarif_out);
+    let run = &sarif["runs"][0];
+    assert_eq!(run["results"], json!([]));
+    assert!(run["properties"]["sourceReport"].is_null());
+    assert_eq!(run["properties"]["reportState"], "no_source_submission");
+    assert_eq!(run["properties"]["review"]["budget"]["reserved"], 10);
+    assert_eq!(run["properties"]["review"]["close_reason"], "cancelled");
+    assert_eq!(run["properties"]["securityConclusion"], "not_established");
+    assert!(run.get("invocations").is_none());
+
     assert_eq!(
         std::fs::read_to_string(f.source.join("app.rs")).unwrap(),
         SOURCE

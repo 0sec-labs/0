@@ -17,7 +17,11 @@ fn relative_uri(path: &str) -> String {
 }
 
 pub(crate) fn render(report: &SourceReport) -> Result<String> {
-    let results: Vec<Value> = report.review.hypotheses.iter().map(|hypothesis| {
+    bounded_pretty(&document(Some(report)), 4 * MAX_REPORT_BYTES)
+}
+
+fn document(report: Option<&SourceReport>) -> Value {
+    let results: Vec<Value> = report.into_iter().flat_map(|report| report.review.hypotheses.iter().map(move |hypothesis| (report, hypothesis))).map(|(report, hypothesis)| {
         let locations: Vec<Value> = hypothesis.claim.citations.iter().map(|citation| json!({
             "physicalLocation": {
                 "artifactLocation": {"uri": relative_uri(&citation.path)},
@@ -40,7 +44,7 @@ pub(crate) fn render(report: &SourceReport) -> Result<String> {
             }
         })
     }).collect();
-    let value = json!({
+    json!({
         "$schema": "https://docs.oasis-open.org/sarif/sarif/v2.1.0/errata01/os/schemas/sarif-schema-2.1.0.json",
         "version": "2.1.0",
         "runs": [{
@@ -59,6 +63,37 @@ pub(crate) fn render(report: &SourceReport) -> Result<String> {
                 "sourceReport": report
             }
         }]
+    })
+}
+
+/// Present a retained point-in-time review. Caller authenticates journal provenance;
+/// this renderer checks report structure and source/lifecycle identity only.
+pub fn render_review_sarif(report: &zero_protocol::review::ReviewReport) -> Result<String> {
+    let record = &report.review.review;
+    if report.schema_version != 1
+        || record.schema_version != 1
+        || !zero_protocol::is_sha256(&record.snapshot_sha256)
+    {
+        return Err(crate::Error::Field("review report identity"));
+    }
+    if let Some(source) = &report.source {
+        crate::source_report::validate(source)?;
+        if source.session_id != record.session_id
+            || source.operation_id != record.root_operation_id
+            || source.snapshot_sha256 != record.snapshot_sha256
+        {
+            return Err(crate::Error::Field("review source identity"));
+        }
+    }
+    let mut value = document(report.source.as_ref());
+    let properties = &mut value["runs"][0]["properties"];
+    properties["review"] = serde_json::to_value(&report.review).map_err(|_| crate::Error::Json)?;
+    properties["securityConclusion"] =
+        serde_json::to_value(report.security_conclusion).map_err(|_| crate::Error::Json)?;
+    properties["reportState"] = json!(if report.source.is_some() {
+        "source_submission"
+    } else {
+        "no_source_submission"
     });
     bounded_pretty(&value, 4 * MAX_REPORT_BYTES)
 }

@@ -430,3 +430,15 @@ arguments before executing the real Docker binary; no container image is pulled.
 The test also checks the explicit shell entrypoint for this image. Other images,
 platforms, smolvm native archive repair and production rollout remain separate
 qualification gates.
+
+### SARIF from native review
+
+`review <path> --profile <name> --format sarif` and
+`review report --command-id <id> --format sarif` emit SARIF 2.1.0.
+Retained report reads and exact retries do not require the original source,
+provider credentials or configuration. The export preserves the point-in-time
+lifecycle and accounting view in run properties, together with the typed source
+report when a structured submission exists. `reportState` is `source_submission`
+or `no_source_submission`; an empty submitted hypothesis list and a cancelled
+review without a submission remain distinguishable. Neither establishes safety.
+`review show` remains a lifecycle-only terminal/JSON/Markdown/HTML view.
