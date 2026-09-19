@@ -43,3 +43,34 @@ Directory locks serialize cooperating apply/recovery commands. They cannot stop
 unrelated editors from writing; identity checks detect races and retained data
 supports recovery. The host account and journal are trusted; this is not an
 isolation boundary against a malicious process with the same filesystem access.
+
+## Apply an independently assessed retained repair
+
+The native repair workflow can publish the same checked archive format:
+
+```sh
+0sec-native --state state.db review repair-export --repair REPAIR_ID \
+  --output-dir /private/new-repair-bundle
+0sec-native workspace-apply preview --bundle /private/new-repair-bundle --root /work/project
+0sec-native workspace-apply run --bundle /private/new-repair-bundle --root /work/project \
+  --journal /work/project/.0sec-repair-application
+```
+
+`--command-id` may select the retained repair instead of `--repair`. Omitting
+`--output-dir` preserves unified-patch output on stdout. Bundle export first
+independently reconstructs the original repair assessment, both fresh validation
+matrices, the exact authorized replacement and the complete archived baseline.
+Missing or corrupted evidence rejects export. The original checkout, provider
+configuration and executor are unnecessary for publication. Existing output
+directories are never replaced.
+
+The candidate archive changes exactly the authorized target and preserves every
+other archived file and executable mode. The bundle retains the frozen-plan
+assessment as evidence, while its application assessment remains `unverified`.
+Passing those expectations does not certify vulnerability validity, general
+repair safety or deployment readiness. Applying to a checkout does not rerun
+the original tests there. The separate explicit application command rechecks
+baseline file identities and content and uses the same retained-original rollback
+path described above. The older `source-repair-export` compatibility command
+continues to emit unified patches; this archive option belongs to native
+`review repair-export`.

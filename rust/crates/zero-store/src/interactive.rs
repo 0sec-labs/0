@@ -166,6 +166,7 @@ impl Store {
         if prior.len() >= 1024 {
             return Err(bad("effect limit"));
         }
+        let mut generations = std::collections::BTreeMap::new();
         let mut sessions = std::collections::BTreeSet::new();
         let mut closed = std::collections::BTreeSet::new();
         let mut writes = 0u32;
@@ -177,7 +178,14 @@ impl Store {
             }
             let old: InteractiveCall = serde_json::from_value(v["call"].clone())?;
             match old {
-                InteractiveCall::Create { .. } => {
+                InteractiveCall::Create {
+                    expected_generation,
+                    ..
+                } => {
+                    generations.insert(
+                        v["handle"].as_str().unwrap_or("").to_owned(),
+                        expected_generation,
+                    );
                     sessions.insert(
                         v["handle"]
                             .as_str()
@@ -215,6 +223,37 @@ impl Store {
                 }
             }
         }
+        if matches!(
+            call,
+            InteractiveCall::Create { .. } | InteractiveCall::Write { .. }
+        ) {
+            let generation = match call {
+                InteractiveCall::Create {
+                    expected_generation,
+                    ..
+                } => expected_generation.as_deref(),
+                _ => generations.get(handle).and_then(|v| v.as_deref()),
+            };
+            if request.workspace_policy.is_some() {
+                let workspace = crate::workspace_edit::load(&tx, actor_id)?;
+                if generation
+                    != Some(
+                        zero_workspace::generation(&workspace.current)
+                            .map_err(|_| bad("workspace generation"))?
+                            .as_str(),
+                    )
+                {
+                    return Err(bad(
+                        "workspace generation stale or absent; close and recreate session",
+                    ));
+                }
+                if capture.deadline_at_ms != workspace.capture.deadline_at_ms {
+                    return Err(bad("workspace deadline differs"));
+                }
+            } else if generation.is_some() {
+                return Err(bad("generation requires workspace policy"));
+            }
+        }
         if let InteractiveCall::Write { data_base64, .. } = call {
             let n = zero_protocol::interactive::decode_input(data_base64)
                 .map_err(|_| bad("frame"))?
@@ -223,11 +262,20 @@ impl Store {
                 return Err(bad("write allowance exhausted"));
             }
         }
+        let effect_at_ms: u64 = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_err(|_| bad("clock"))?
+            .as_millis()
+            .try_into()
+            .map_err(|_| bad("clock overflow"))?;
+        if effect_at_ms >= capture.deadline_at_ms {
+            return Err(bad("original deadline elapsed before claim"));
+        }
         append(
             &tx,
             &actor.session_id,
             "interactive_effect",
-            &json!({"actor":actor.id,"inference":origin_id,"turn":turn,"index":index,"call_id":call_id,"handle":handle,"call":call}),
+            &json!({"actor":actor.id,"inference":origin_id,"turn":turn,"index":index,"call_id":call_id,"handle":handle,"call":call,"at_ms":effect_at_ms,"owner":owner}),
         )?;
         tx.commit()?;
         Ok(())

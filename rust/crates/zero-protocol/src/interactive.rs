@@ -35,7 +35,10 @@ impl InteractivePolicy {
         self.validate()?;
         let execution = request.snapshot_request()?;
         if !matches!(&execution.backend,SandboxBackend::Docker{image} if crate::is_sha256(image))
-            || request.workspace_policy.is_some()
+            || request
+                .workspace_policy
+                .as_ref()
+                .is_some_and(|p| p.deadline_ms != self.deadline_ms)
             || request.http_profile.is_some()
             || request.delegation_policy.is_some()
             || request.tool_approval_policy.is_some()
@@ -80,6 +83,8 @@ impl InteractiveCapture {
 pub enum InteractiveCall {
     Create {
         argv: Vec<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        expected_generation: Option<String>,
     },
     Write {
         session_id: String,
@@ -123,6 +128,15 @@ impl InteractiveCall {
                 return Err("invalid interactive session handle".into());
             }
         }
+        if let Self::Create {
+            expected_generation: Some(generation),
+            ..
+        } = &call
+        {
+            if !crate::is_sha256(generation) {
+                return Err("interactive expected generation invalid".into());
+            }
+        }
         match &call {
             Self::Write { data_base64, .. } => {
                 decode_input(data_base64)?;
@@ -132,7 +146,7 @@ impl InteractiveCall {
             } if *max_bytes == 0 || *max_bytes > policy.max_read_bytes || *wait_ms > 1000 => {
                 return Err("interactive read bounds".into());
             }
-            Self::Create { argv }
+            Self::Create { argv, .. }
                 if argv.is_empty()
                     || argv.len() > 128
                     || argv.iter().any(|v| v.contains('\0') || v.len() > 8192) =>
@@ -210,4 +224,61 @@ pub struct InteractiveSession {
     pub operation: crate::Operation,
     pub request: SandboxRequest,
     pub result: Option<InteractiveResult>,
+}
+
+/// Workspace sessions always name the retained generation; legacy snapshots keep
+/// the unchanged creation schema and request identity.
+pub fn workspace_definitions(policy: &InteractivePolicy) -> Vec<ToolDefinition> {
+    let mut tools = definitions(policy);
+    let create = &mut tools[0];
+    create.description = "Start an offline pipe session from the exact current private workspace generation. Guest changes never become source edits. Close and recreate after source edits.".into();
+    create.parameters["properties"]["expected_generation"] = json!({"type":"string"});
+    create.parameters["required"] = json!(["argv", "expected_generation"]);
+    tools
+}
+
+#[cfg(test)]
+mod generation_tests {
+    use super::*;
+    #[test]
+    fn generation_extension_preserves_legacy_arguments_and_requires_valid_identity() {
+        let policy = InteractivePolicy {
+            max_sessions: 1,
+            max_writes: 1,
+            max_input_bytes: 100,
+            max_read_bytes: 100,
+            deadline_ms: 1000,
+        };
+        let legacy = json!({"argv":["cat"]});
+        assert_eq!(
+            InteractiveCall::parse("interactive_create", &legacy, &policy)
+                .unwrap()
+                .arguments(),
+            legacy
+        );
+        assert_eq!(
+            definitions(&policy)[0].parameters["required"],
+            json!(["argv"])
+        );
+        assert_eq!(
+            workspace_definitions(&policy)[0].parameters["required"],
+            json!(["argv", "expected_generation"])
+        );
+        assert!(
+            InteractiveCall::parse(
+                "interactive_create",
+                &json!({"argv":["cat"],"expected_generation":"not-a-generation"}),
+                &policy
+            )
+            .is_err()
+        );
+        let current =
+            json!({"argv":["cat"],"expected_generation":format!("sha256:{}","a".repeat(64))});
+        assert_eq!(
+            InteractiveCall::parse("interactive_create", &current, &policy)
+                .unwrap()
+                .arguments(),
+            current
+        );
+    }
 }

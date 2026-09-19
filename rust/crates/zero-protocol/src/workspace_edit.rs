@@ -56,7 +56,10 @@ impl WorkspacePolicy {
             || execution.max_output_bytes > 65536
             || execution.stdin.is_some()
             || execution.build_argv.is_some()
-            || request.interactive_policy.is_some()
+            || request
+                .interactive_policy
+                .as_ref()
+                .is_some_and(|p| p.deadline_ms != self.deadline_ms)
             || request.http_profile.is_some()
             || !request.plugin_tools.is_empty()
             || request.delegation_policy.is_some()
@@ -69,7 +72,7 @@ impl WorkspacePolicy {
             || request.web_experiment_policy.is_some()
             || request.web_submission_max_hypotheses.is_some()
         {
-            return Err(ValidationError("workspace editing requires standalone pinned offline Docker authority without other capabilities or continuation".into()));
+            return Err(ValidationError("workspace editing requires pinned offline Docker authority with only optional equal-deadline interactive sessions or continuation".into()));
         }
         Ok(())
     }

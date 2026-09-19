@@ -8,6 +8,7 @@ mod campaign;
 mod campaign_snapshot;
 mod interactive;
 mod workspace_edit;
+mod workspace_interactive;
 pub use campaign_snapshot::CampaignSnapshotData;
 pub use workspace_edit::{WorkspaceInvocation, WorkspaceState};
 mod discovery;

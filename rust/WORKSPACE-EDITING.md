@@ -85,7 +85,7 @@ model calls and checks content, modes, generation chain, budget history and
 exact test-source identity. No new database schema or mutable workspace table
 is required.
 
-HTTP, plugins, delegation, operator approval/questions, interactive pipe sessions,
+HTTP, plugins, delegation, operator approval/questions,
 source-review tools, scan/review/campaign controllers and conversation
 continuation cannot be combined with this capability. The actor does not export
 resumable checkpoints containing mutable workspace authority. All test staging
@@ -123,3 +123,47 @@ usage overage, duplicate/forged/wrong-owner effects, deadline with uncertain
 guest cleanup, and missing retained changed-content evidence. Tests demonstrate
 this bounded private edit lifecycle; they do not certify arbitrary model changes
 or establish production readiness.
+
+## Interactive sessions from edited generations
+
+An actor may now explicitly combine `workspace_policy` and `interactive_policy`.
+Both policies must specify the same `deadline_ms`; their captures share the
+original creation time. All other incompatible capabilities remain rejected.
+The existing interactive limits still apply: at most four sessions, 128 writes,
+1 MiB cumulative input, 16 KiB input frames and 64 KiB read pages. Session count
+is bounded independently of `max_test_runs` for one-shot workspace executions.
+
+With this combination, `interactive_create` requires `expected_generation` as
+well as `argv`. It stages that exact current archive into an owned private copy,
+then commits a second one-use launch witness immediately before dispatch. The
+Store checks current actor ownership, engine epoch, original deadline/account,
+settled model invocation, original claim, source generation and complete
+execution request at this frontier. Staging does not extend the deadline.
+
+A session keeps its creation generation across turns. `interactive_write` is
+rejected after source edits revoke that generation; `interactive_read` and
+`interactive_close` remain available. Close and recreate the session to use the
+new generation. Stale creation and write requests return a rejection without
+launching or forwarding bytes. Guest filesystem changes are never imported into
+logical edits or exports. Existing standalone snapshot interactive requests keep
+their creation schema and request identity.
+
+Reads carry the session generation. Write acknowledgment still means forwarding
+to the launcher, not guest consumption. Close/final cleanup joins processes;
+owned archive stages are removed after all session cleanup has joined. Exported
+`tests` may include `kind: workspace_interactive` observations containing the
+creation generation, exact launch request/witness, authenticated model claims
+and retained result. Their assessment remains `unverified`. Independent reading
+checks generation at each create/write, inference settlement before claims,
+claim-before-launch and launch-before-session effects, original budget/deadline,
+and retained result identity. A missing launch/result remains uncertain rather
+than becoming success evidence.
+
+Qualification includes a physical persistent-process fixture and an actual local
+Docker run: two inputs across separate model turns observe the edited source and
+increment the same process counter; an edit revokes subsequent writes; a new
+session observes the final source; guest mutation of another file is absent from
+export. Tests also cover epoch/deadline revocation while staging is paused,
+one-use launch, wrong owner, altered launch provenance, missing launch witness,
+and cancellation while a provider response is outstanding. These remain pipe
+sessions rather than terminal-emulation/PTY support.

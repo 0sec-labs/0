@@ -289,6 +289,16 @@ async fn actual_docker_native_review_archive_reproduction_repair_and_export() {
         std::fs::read_to_string(applied.join("app.rs")).unwrap(),
         REPLACEMENT
     );
+    #[cfg(target_os = "linux")]
+    review_repair::checked_bundle_roundtrip(
+        &f,
+        "--command-id",
+        "docker-repair",
+        &checkout,
+        BASELINE.as_bytes(),
+        REPLACEMENT.as_bytes(),
+    )
+    .await;
     assert_eq!(
         zero_executor::pin_snapshot(&checkout).unwrap().digest,
         pristine.digest

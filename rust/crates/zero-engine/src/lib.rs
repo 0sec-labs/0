@@ -24,7 +24,9 @@ mod lifecycle;
 mod model_progress;
 mod native_repair;
 mod native_repair_export;
-pub use native_repair_export::read_review_repair_patch;
+pub use native_repair_export::{
+    RepairArchiveExport, read_review_repair_bundle, read_review_repair_patch,
+};
 mod native_reproduction;
 mod plugin;
 mod plugin_workers;

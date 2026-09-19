@@ -69,6 +69,9 @@ pub enum ReviewCommand {
         repair: Option<String>,
         #[arg(long, required_unless_present = "repair", conflicts_with = "repair")]
         command_id: Option<String>,
+        /// Publish a new checked archive bundle for explicit workspace-apply.
+        #[arg(long)]
+        output_dir: Option<PathBuf>,
     },
     /// Execute a separately host-authorized frozen reproduction from retained source.
     Reproduce(reproduce::ReproduceArgs),
@@ -510,8 +513,18 @@ async fn readonly(path: &Path, command: &ReviewCommand) -> Result<u8, Box<dyn Er
             return repair::inspect(&state, repair.as_deref(), command_id.as_deref(), *format)
                 .await;
         }
-        ReviewCommand::RepairExport { repair, command_id } => {
-            return repair::export(&state, repair.as_deref(), command_id.as_deref()).await;
+        ReviewCommand::RepairExport {
+            repair,
+            command_id,
+            output_dir,
+        } => {
+            return repair::export(
+                &state,
+                repair.as_deref(),
+                command_id.as_deref(),
+                output_dir.as_deref(),
+            )
+            .await;
         }
         ReviewCommand::Reproduce(_) => {
             return Err("Reproduction requires the owned execution route".into());

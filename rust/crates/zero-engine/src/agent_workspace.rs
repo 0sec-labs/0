@@ -6,6 +6,9 @@ pub(super) struct Stages {
     stages: Vec<zero_executor::StagedSnapshot>,
 }
 impl Stages {
+    pub fn retain(&mut self, stage: zero_executor::StagedSnapshot) {
+        self.stages.push(stage);
+    }
     pub async fn drain(&mut self) -> Result<(), EngineError> {
         let stages = std::mem::take(&mut self.stages);
         tokio::task::spawn_blocking(move || {

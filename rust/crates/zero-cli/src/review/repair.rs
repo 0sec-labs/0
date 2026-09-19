@@ -166,10 +166,32 @@ pub(super) async fn export(
     state: &std::path::Path,
     repair: Option<&str>,
     command: Option<&str>,
+    output_dir: Option<&std::path::Path>,
 ) -> Result<u8, Box<dyn Error>> {
     let state = state.to_owned();
     let repair = repair.map(str::to_owned);
     let command = command.map(str::to_owned);
+    if let Some(output) = output_dir {
+        let output = output.to_owned();
+        let mut worker =
+            tokio::task::spawn_blocking(move || -> Result<serde_json::Value, String> {
+                let key = resolve(&state, repair, command)?;
+                let retained = zero_engine::read_review_repair_bundle(&state, &key)
+                    .map_err(|e| e.to_string())?;
+                crate::archive_export::publish(
+                    &output,
+                    &retained.baseline,
+                    &retained.current,
+                    &retained.bundle,
+                )
+            });
+        let (receipt, interrupted) = tokio::select! {
+            result=&mut worker => (result?.map_err(std::io::Error::other)?,false),
+            _=crate::server::shutdown_signal()=> (worker.await?.map_err(std::io::Error::other)?,true),
+        };
+        crate::write_json(&receipt, false).await?;
+        return Ok(if interrupted { 130 } else { 0 });
+    }
     let patch = tokio::task::spawn_blocking(move || -> Result<String, String> {
         let key = resolve(&state, repair, command)?;
         zero_engine::read_review_repair_patch(&state, &key).map_err(|e| e.to_string())

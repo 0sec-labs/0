@@ -60,7 +60,12 @@ fn actor(
     crate::campaign::forbid_input(c, &actor.session_id)?;
     Ok((actor, request, policy, capture))
 }
-fn owned(c: &Connection, actor: &Operation, owner: &str, capture: &WorkspaceCapture) -> Result<()> {
+pub(super) fn owned(
+    c: &Connection,
+    actor: &Operation,
+    owner: &str,
+    capture: &WorkspaceCapture,
+) -> Result<()> {
     let epoch: String = c.query_row(
         "SELECT owner FROM engine_epoch WHERE singleton=1",
         [],
@@ -96,7 +101,7 @@ fn retain(tx: &Transaction<'_>, archive: &SourceArchive) -> Result<String> {
     }
     Ok(hash)
 }
-fn archive(c: &Connection, hash: &str) -> Result<SourceArchive> {
+pub(super) fn archive(c: &Connection, hash: &str) -> Result<SourceArchive> {
     let manifest: ArchiveManifest = serde_json::from_slice(&artifacts::read(c, hash)?)?;
     manifest.validate().map_err(bad)?;
     let mut blobs = BTreeMap::new();
@@ -211,7 +216,7 @@ fn invocation(
     }
     WorkspaceCall::parse(name, args).map_err(bad)
 }
-fn prefix_budget(
+pub(super) fn prefix_budget(
     c: &Connection,
     session: &str,
     before: u64,
@@ -274,7 +279,7 @@ fn prefix_budget(
     }
     Ok(())
 }
-fn load(c: &Connection, key: &str) -> Result<WorkspaceState> {
+pub(super) fn load(c: &Connection, key: &str) -> Result<WorkspaceState> {
     let mut reader = workflow::Reader {
         remaining: 256 * 1024 * 1024,
     };

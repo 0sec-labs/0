@@ -14,6 +14,32 @@ pub(crate) fn assert_retained_provenance(state: &Path, key: &str) {
         .unwrap()
         .unwrap();
     let patch = read_review_repair_patch(state, key).unwrap();
+    let bundle = read_review_repair_bundle(state, key).unwrap();
+    assert_eq!(bundle.baseline.manifest, archive.manifest);
+    assert_eq!(bundle.bundle["assessment"], "unverified");
+    assert_eq!(bundle.bundle["host_apply"], "not_performed");
+    assert_eq!(bundle.bundle["changes"].as_array().unwrap().len(), 1);
+    for f in &archive.manifest.files {
+        let actual = zero_workspace::bytes(&bundle.current, &f.path).unwrap();
+        let expected = if f.path == authorization.materialize.target {
+            authorization.materialize.replacement.as_bytes().to_vec()
+        } else {
+            zero_workspace::bytes(&archive, &f.path).unwrap()
+        };
+        assert_eq!(actual, expected);
+        assert_eq!(
+            bundle
+                .current
+                .manifest
+                .files
+                .iter()
+                .find(|n| n.path == f.path)
+                .unwrap()
+                .executable,
+            f.executable
+        );
+    }
+
     assert!(patch.starts_with(&format!(
         "--- a/{}\t\n+++ b/{}\t\n",
         authorization.materialize.target, authorization.materialize.target
@@ -75,6 +101,7 @@ pub(crate) fn assert_retained_provenance(state: &Path, key: &str) {
             "missing {missing}"
         );
         assert!(read_review_repair_patch(&path, key).is_err());
+        assert!(read_review_repair_bundle(&path, key).is_err());
     }
     let dir = tempfile::tempdir().unwrap();
     let path = copy(state, dir.path());
@@ -102,6 +129,7 @@ pub(crate) fn assert_retained_provenance(state: &Path, key: &str) {
         drop(connection);
         assert!(crate::native_repair::read_review_repair(&path, key).is_ok());
         assert!(read_review_repair_patch(&path, key).is_err());
+        assert!(read_review_repair_bundle(&path, key).is_err());
     }
 }
 fn copy(state: &Path, directory: &Path) -> std::path::PathBuf {

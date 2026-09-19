@@ -445,7 +445,9 @@ pub(super) fn prepare_actor(
             })?;
     }
     if let Some(policy) = &request.workspace_policy {
-        let created_at_ms = agent_interactive::now()?;
+        let created_at_ms = payload["interactive_capture"]["created_at_ms"]
+            .as_u64()
+            .unwrap_or(agent_interactive::now()?);
         payload["workspace_capture"] =
             serde_json::to_value(zero_protocol::workspace_edit::WorkspaceCapture {
                 created_at_ms,
@@ -695,9 +697,11 @@ fn model_request(
         model.tools = zero_protocol::workspace_edit::definitions();
     }
     if let Some(policy) = &request.interactive_policy {
-        model
-            .tools
-            .extend(zero_protocol::interactive::definitions(policy));
+        model.tools.extend(if request.workspace_policy.is_some() {
+            zero_protocol::interactive::workspace_definitions(policy)
+        } else {
+            zero_protocol::interactive::definitions(policy)
+        });
     }
     if let Some(plugins) = plugins {
         model.tools.extend(plugins.tools.clone());
@@ -1123,7 +1127,16 @@ async fn run_rounds(
             if name.starts_with("interactive_") && request.interactive_policy.is_some() {
                 match interactive
                     .call(
-                        shared, parent, &request, turn, index, &id, &name, &arguments, &cancel,
+                        shared,
+                        parent,
+                        &request,
+                        turn,
+                        index,
+                        &id,
+                        &name,
+                        &arguments,
+                        &cancel,
+                        workspace_stages,
                     )
                     .await
                 {

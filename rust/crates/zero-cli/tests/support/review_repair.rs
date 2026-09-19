@@ -111,6 +111,91 @@ fn assert_success(out: &Output) -> Value {
     decoded(out)
 }
 
+/// Exercise the exported archive through the public offline host CLI, without
+/// opening Engine state or consulting source/provider/backend configuration.
+#[cfg(target_os = "linux")]
+pub(super) async fn checked_bundle_roundtrip(
+    f: &Fixture,
+    selector: &str,
+    id: &str,
+    checkout: &std::path::Path,
+    before: &[u8],
+    after: &[u8],
+) {
+    let bundle = f._dir.path().join("checked-repair-bundle");
+    let mut export = inspect(f, "repair-export", selector, id);
+    export.arg("--output-dir").arg(&bundle);
+    assert_success(&finish(export.spawn().unwrap()).await);
+    let manifest = std::fs::read(bundle.join("bundle.json")).unwrap();
+    let value: Value = serde_json::from_slice(&manifest).unwrap();
+    assert_eq!(value["schema_version"], 1);
+    assert_eq!(value["assessment"], "unverified");
+    assert_eq!(value["host_apply"], "not_performed");
+    // A repeated publication must not replace an existing destination.
+    let sentinel = bundle.join("user-note");
+    std::fs::write(&sentinel, b"preserve export destination").unwrap();
+    let mut collision = inspect(f, "repair-export", selector, id);
+    collision.arg("--output-dir").arg(&bundle);
+    let denied = finish(collision.spawn().unwrap()).await;
+    assert_eq!(denied.status.code(), Some(2));
+    assert!(denied.stdout.is_empty());
+    assert_eq!(std::fs::read(bundle.join("bundle.json")).unwrap(), manifest);
+    assert_eq!(
+        std::fs::read(&sentinel).unwrap(),
+        b"preserve export destination"
+    );
+    std::fs::remove_file(sentinel).unwrap();
+    let untouched = checkout.join("unrelated-user-work.txt");
+    std::fs::write(&untouched, b"local unsaved work").unwrap();
+    let state = f._dir.path().join("host-apply-must-not-open.db");
+    let journal = f._dir.path().join("repair-apply-journal");
+    let host = |route: &str| {
+        let mut c = Command::new(env!("CARGO_BIN_EXE_0sec-native"));
+        c.arg("--state")
+            .arg(&state)
+            .args(["--providers", "/absent", "workspace-apply", route])
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .kill_on_drop(true);
+        c
+    };
+    let mut preview = host("preview");
+    preview
+        .arg("--bundle")
+        .arg(&bundle)
+        .arg("--root")
+        .arg(checkout);
+    assert_success(&finish(preview.spawn().unwrap()).await);
+    assert_eq!(std::fs::read(checkout.join("app.rs")).unwrap(), before);
+    assert!(!journal.exists());
+    let mut apply = host("run");
+    apply
+        .arg("--bundle")
+        .arg(&bundle)
+        .arg("--root")
+        .arg(checkout)
+        .arg("--journal")
+        .arg(&journal);
+    assert_eq!(
+        assert_success(&finish(apply.spawn().unwrap()).await)["phase"],
+        "completed"
+    );
+    assert_eq!(std::fs::read(checkout.join("app.rs")).unwrap(), after);
+    assert_eq!(std::fs::read(&untouched).unwrap(), b"local unsaved work");
+    // Recovery is independent of the exported bundle as well as original source.
+    std::fs::remove_dir_all(&bundle).unwrap();
+    let mut rollback = host("rollback");
+    rollback.arg("--journal").arg(&journal);
+    assert_eq!(
+        assert_success(&finish(rollback.spawn().unwrap()).await)["phase"],
+        "rolled_back"
+    );
+    assert_eq!(std::fs::read(checkout.join("app.rs")).unwrap(), before);
+    assert_eq!(std::fs::read(&untouched).unwrap(), b"local unsaved work");
+    assert!(!state.exists());
+    std::fs::remove_file(untouched).unwrap();
+}
+
 #[tokio::test]
 async fn native_repair_offline_retry_report_and_independently_validated_patch() {
     let (f, plan) = setup().await;
@@ -190,6 +275,21 @@ async fn native_repair_offline_retry_report_and_independently_validated_patch() 
             REPLACEMENT.as_bytes()
         );
     }
+    #[cfg(target_os = "linux")]
+    {
+        let checkout = f._dir.path().join("checked-host-checkout");
+        std::fs::create_dir(&checkout).unwrap();
+        std::fs::write(checkout.join("app.rs"), SOURCE).unwrap();
+        checked_bundle_roundtrip(
+            &f,
+            "--repair",
+            id,
+            &checkout,
+            SOURCE.as_bytes(),
+            REPLACEMENT.as_bytes(),
+        )
+        .await;
+    }
     // Corrupted exact retained case bytes must reject both report and export,
     // even though the parent outcome still claims a validated candidate.
     let damaged = f._dir.path().join("damaged-repair.db");
@@ -218,6 +318,33 @@ dst.commit(); dst.close()
         assert!(
             denied.stdout.is_empty(),
             "corrupt evidence must not publish success or patch bytes"
+        );
+    }
+    for missing in [false, true] {
+        if missing {
+            let removed = std::process::Command::new("python3").arg("-c").arg(
+                "import sqlite3,sys; db=sqlite3.connect(sys.argv[1]); db.execute(\"delete from operation_artifacts where name='reproduction.evidence'\"); db.commit()"
+            ).arg(&damaged).output().unwrap();
+            assert!(removed.status.success());
+        }
+        let bundle = f._dir.path().join(if missing {
+            "missing-evidence-bundle"
+        } else {
+            "corrupt-evidence-bundle"
+        });
+        let mut c = Command::new(env!("CARGO_BIN_EXE_0sec-native"));
+        c.arg("--state")
+            .arg(&damaged)
+            .args(["review", "repair-export", "--repair", id, "--output-dir"])
+            .arg(&bundle)
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped());
+        let denied = finish(c.spawn().unwrap()).await;
+        assert_eq!(denied.status.code(), Some(2));
+        assert!(denied.stdout.is_empty());
+        assert!(
+            !bundle.exists(),
+            "invalid evidence must not publish a bundle directory"
         );
     }
     let mut terminal = inspect(&f, "repair-report", "--repair", id);

@@ -4,6 +4,7 @@ use std::collections::BTreeMap;
 use zero_protocol::interactive::{InteractiveCall, InteractiveCapture, InteractivePage};
 use zero_protocol::sandbox::{SandboxCleanup, SandboxEvent, SandboxResult};
 struct Session {
+    generation: Option<String>,
     sender: Option<zero_executor::InteractiveSender>,
     cancel: CancellationToken,
     output: Arc<Mutex<Vec<u8>>>,
@@ -35,6 +36,7 @@ impl Sessions {
         name: &str,
         args: &serde_json::Value,
         cancel: &CancellationToken,
+        stages: &mut agent_workspace::Stages,
     ) -> Result<serde_json::Value, EngineError> {
         let policy = request
             .interactive_policy
@@ -45,6 +47,27 @@ impl Sessions {
             .session_id()
             .map(str::to_owned)
             .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+        if request.workspace_policy.is_some() {
+            let current = lock(&shared.store)?.workspace_state(parent)?;
+            let generation =
+                zero_workspace::generation(&current.current).map_err(EngineError::State)?;
+            let selected = match &call {
+                InteractiveCall::Create {
+                    expected_generation,
+                    ..
+                } => expected_generation.as_deref(),
+                InteractiveCall::Write { .. } => self
+                    .sessions
+                    .get(&handle)
+                    .and_then(|s| s.generation.as_deref()),
+                _ => Some(generation.as_str()),
+            };
+            if selected != Some(generation.as_str()) {
+                return Ok(
+                    serde_json::json!({"rejected":"workspace generation stale or absent; close and recreate session","generation":generation}),
+                );
+            }
+        }
         if cancel.is_cancelled() {
             return Err(EngineError::State("interactive actor cancelled".into()));
         }
@@ -61,7 +84,10 @@ impl Sessions {
             .filter(|n| *n > 0)
             .ok_or_else(|| EngineError::State("interactive deadline elapsed after claim".into()))?;
         match call {
-            InteractiveCall::Create { argv } => {
+            InteractiveCall::Create {
+                argv,
+                expected_generation,
+            } => {
                 let mut execution = request
                     .snapshot_request()
                     .map_err(|e| EngineError::State(e.to_string()))?;
@@ -71,6 +97,41 @@ impl Sessions {
                 execution
                     .validate()
                     .map_err(|e| EngineError::State(e.to_string()))?;
+                if expected_generation.is_some() {
+                    let archive = lock(&shared.store)?.workspace_state(parent)?.current;
+                    let token = cancel.clone();
+                    let deadline = capture.deadline_at_ms;
+                    #[cfg(all(test, target_os = "linux"))]
+                    let stage_session = lock(&shared.store)?.get_operation(parent)?.session_id;
+                    let (stage, pin) = tokio::task::spawn_blocking(move || {
+                        #[cfg(all(test, target_os = "linux"))]
+                        crate::workspace_dispatch_tests::pause_staging(&stage_session);
+                        zero_executor::stage_source_archive(&archive, &|| {
+                            if token.is_cancelled() || now().map_err(|e| e.to_string())? >= deadline
+                            {
+                                Err("workspace interactive staging cancelled or expired".into())
+                            } else {
+                                Ok(())
+                            }
+                        })
+                    })
+                    .await
+                    .map_err(|e| EngineError::State(e.to_string()))?
+                    .map_err(EngineError::State)?;
+                    stages.retain(stage);
+                    execution.snapshot = pin;
+                    if cancel.is_cancelled() {
+                        return Err(EngineError::State(
+                            "workspace interactive creation cancelled".into(),
+                        ));
+                    }
+                    lock(&shared.store)?.begin_workspace_interactive_dispatch(
+                        parent,
+                        &shared.owner,
+                        &handle,
+                        &execution,
+                    )?;
+                }
                 // Preserve both independently capped streams without dropping their interleaved bytes.
                 let cap = execution.max_output_bytes * 2;
                 let output = Arc::new(Mutex::new(Vec::new()));
@@ -102,6 +163,7 @@ impl Sessions {
                 self.sessions.insert(
                     handle.clone(),
                     Session {
+                        generation: expected_generation.clone(),
                         sender: Some(sender),
                         cancel: token,
                         output,
@@ -110,7 +172,7 @@ impl Sessions {
                     },
                 );
                 Ok(
-                    serde_json::json!({"session_id":handle,"deadline_at_ms":capture.deadline_at_ms,"status":"starting"}),
+                    serde_json::json!({"session_id":handle,"deadline_at_ms":capture.deadline_at_ms,"status":"starting","generation":expected_generation}),
                 )
             }
             InteractiveCall::Write { data_base64, .. } => {
@@ -129,7 +191,7 @@ impl Sessions {
                     return Err(EngineError::State(error));
                 }
                 Ok(
-                    serde_json::json!({"session_id":handle,"forwarded_to_launcher":true,"guest_consumption":"unknown"}),
+                    serde_json::json!({"session_id":handle,"generation":state.generation,"forwarded_to_launcher":true,"guest_consumption":"unknown"}),
                 )
             }
             InteractiveCall::Read {
@@ -153,7 +215,7 @@ impl Sessions {
                         EngineError::State("interactive cursor beyond captured bytes".into())
                     })?;
                 let end = output.len().min(start + max_bytes as usize);
-                Ok(serde_json::to_value(InteractivePage {
+                let mut page = serde_json::to_value(InteractivePage {
                     session_id: handle,
                     after,
                     next_after: end as u64,
@@ -161,7 +223,11 @@ impl Sessions {
                     available_bytes: output.len() as u64,
                     finished: state.result.is_some()
                         || state.task.as_ref().is_some_and(|t| t.is_finished()),
-                })?)
+                })?;
+                if let Some(generation) = &state.generation {
+                    page["generation"] = serde_json::json!(generation);
+                }
+                Ok(page)
             }
             InteractiveCall::Close { .. } => {
                 let state = self
@@ -174,7 +240,7 @@ impl Sessions {
                     .as_ref()
                     .ok_or_else(|| EngineError::State("interactive close result missing".into()))?;
                 Ok(
-                    serde_json::json!({"session_id":handle,"status":result.status,"exit_code":result.exit_code,"cleanup":result.cleanup,"error":result.error}),
+                    serde_json::json!({"session_id":handle,"generation":state.generation,"status":result.status,"exit_code":result.exit_code,"cleanup":result.cleanup,"error":result.error}),
                 )
             }
         }

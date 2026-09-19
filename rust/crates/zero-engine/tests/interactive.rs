@@ -567,6 +567,7 @@ async fn durable_marker_rejects_duplicate_forged_and_wrong_owner_calls_then_shut
         .unwrap();
     let handle = marker.payload["handle"].as_str().unwrap();
     let create = zero_protocol::interactive::InteractiveCall::Create {
+        expected_generation: None,
         argv: vec!["cat".into()],
     };
     let duplicate = store
@@ -590,6 +591,7 @@ async fn durable_marker_rejects_duplicate_forged_and_wrong_owner_calls_then_shut
             .is_err()
     );
     let forged = zero_protocol::interactive::InteractiveCall::Create {
+        expected_generation: None,
         argv: vec!["other".into()],
     };
     assert!(

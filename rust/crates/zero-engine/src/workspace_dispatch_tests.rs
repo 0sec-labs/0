@@ -73,6 +73,11 @@ impl Http {
                             "write_file",
                             json!({"path":"file.txt","expected_generation":generation,"content":"edited"}),
                         )
+                    } else if action == "interactive" {
+                        (
+                            "interactive_create",
+                            json!({"expected_generation":generation,"argv":["fixture"]}),
+                        )
                     } else {
                         (
                             "execute_workspace",
@@ -353,6 +358,7 @@ impl Pause {
         self.wake.notify_all();
     }
 }
+static STAGING_TEST_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 static STAGE_PAUSE: Mutex<Option<(String, Arc<Pause>)>> = Mutex::new(None);
 pub(crate) fn pause_staging(session: &str) {
     let pause = STAGE_PAUSE
@@ -378,6 +384,7 @@ impl Drop for Release {
 }
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn epoch_takeover_while_staging_prevents_guest_launch_and_retry() {
+    let _serial = STAGING_TEST_LOCK.lock().await;
     let mut setup = Setup::new("echo");
     enable(&mut setup, 10000);
     let http = Http::new(vec![list(), "workspace:execute".into(), answer()], false).await;
@@ -450,4 +457,191 @@ async fn epoch_takeover_while_staging_prevents_guest_launch_and_retry() {
     );
     assert!(setup.docker_calls().is_empty());
     assert_eq!(http.count(), 2);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn workspace_interactive_staging_revocation_and_deadline_never_launch() {
+    let _serial = STAGING_TEST_LOCK.lock().await;
+    for cause in ["epoch", "deadline"] {
+        let mut setup = Setup::new("echo");
+        let deadline = if cause == "deadline" { 1000 } else { 10000 };
+        enable(&mut setup, deadline);
+        setup.request.interactive_policy = Some(zero_protocol::interactive::InteractivePolicy {
+            max_sessions: 1,
+            max_writes: 2,
+            max_input_bytes: 1024,
+            max_read_bytes: 1024,
+            deadline_ms: deadline,
+        });
+        let http = Http::new(
+            vec![list(), "workspace:interactive".into(), answer()],
+            false,
+        )
+        .await;
+        let engine = Arc::new(setup.engine());
+        http.configure(&engine);
+        let session = session(&engine, 100).await;
+        let command = setup.command(&session);
+        let pause = Arc::new(Pause {
+            ready: Notify::new(),
+            released: Mutex::new(false),
+            wake: std::sync::Condvar::new(),
+        });
+        *STAGE_PAUSE.lock().unwrap() = Some((session.clone(), pause.clone()));
+        let _release = Release(pause.clone());
+        let worker = engine.clone();
+        let request = command.clone();
+        let running = tokio::spawn(async move { call(&worker, request).await });
+        tokio::time::timeout(Duration::from_secs(8), pause.ready.notified())
+            .await
+            .unwrap();
+        if cause == "epoch" {
+            zero_store::Store::open(setup.dir.path().join("native.sqlite"))
+                .unwrap()
+                .claim_engine_epoch("replacement-owner")
+                .unwrap();
+        } else {
+            tokio::time::sleep(Duration::from_millis(deadline + 100)).await;
+        }
+        pause.release();
+        let _ = running.await.unwrap();
+        assert!(setup.docker_calls().is_empty(), "{cause}");
+        let store = zero_store::Store::open(setup.dir.path().join("native.sqlite")).unwrap();
+        let actor = store
+            .get_operation_by_command(&session, "parent-command")
+            .unwrap();
+        let sessions = store.workspace_interactive_sessions(&actor.id).unwrap();
+        assert_eq!(sessions.len(), 1);
+        assert_eq!(sessions[0]["status"], "unknown");
+        drop(engine);
+        let replacement = setup.engine();
+        http.configure(&replacement);
+        assert!(matches!(
+            call(&replacement, command).await,
+            Reply::Agent {
+                duplicate: true,
+                ..
+            }
+        ));
+        assert_eq!(http.count(), 2);
+        assert!(setup.docker_calls().is_empty());
+    }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn workspace_interactive_launch_is_one_use_and_inspection_rejects_tampering() {
+    let mut setup = Setup::new("interactive");
+    enable(&mut setup, 10000);
+    setup.request.interactive_policy = Some(zero_protocol::interactive::InteractivePolicy {
+        max_sessions: 1,
+        max_writes: 2,
+        max_input_bytes: 1024,
+        max_read_bytes: 1024,
+        deadline_ms: 10000,
+    });
+    let http = Http::new(
+        vec![
+            list(),
+            "workspace:interactive".into(),
+            "interactive:write".into(),
+            ": hold\n\n".into(),
+        ],
+        false,
+    )
+    .await;
+    let engine = Arc::new(setup.engine());
+    http.configure(&engine);
+    let session = session(&engine, 100).await;
+    let command = setup.command(&session);
+    let worker = engine.clone();
+    let running = tokio::spawn(async move { call(&worker, command).await });
+    tokio::time::timeout(Duration::from_secs(8), async {
+        while http.count() < 4 {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .unwrap();
+    let mut store = zero_store::Store::open(setup.dir.path().join("native.sqlite")).unwrap();
+    let actor = store
+        .get_operation_by_command(&session, "parent-command")
+        .unwrap();
+    let sessions = store.workspace_interactive_sessions(&actor.id).unwrap();
+    assert_eq!(sessions.len(), 1);
+    let handle = sessions[0]["handle"].as_str().unwrap();
+    let execution = serde_json::from_value(sessions[0]["request"].clone()).unwrap();
+    assert!(
+        store
+            .begin_workspace_interactive_dispatch(
+                &actor.id,
+                actor.owner.as_deref().unwrap(),
+                handle,
+                &execution
+            )
+            .unwrap_err()
+            .to_string()
+            .contains("already started")
+    );
+    assert!(
+        store
+            .begin_workspace_interactive_dispatch(&actor.id, "wrong-owner", handle, &execution)
+            .is_err()
+    );
+    let db = rusqlite::Connection::open(setup.dir.path().join("native.sqlite")).unwrap();
+    let (seq, raw): (u64, String) = db
+        .query_row(
+            "SELECT sequence,payload FROM events WHERE kind='workspace_interactive_started'",
+            [],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .unwrap();
+    let mut forged: Value = serde_json::from_str(&raw).unwrap();
+    forged["request"]["argv"] = json!(["forged"]);
+    db.execute(
+        "UPDATE events SET payload=?1 WHERE sequence=?2",
+        rusqlite::params![forged.to_string(), seq],
+    )
+    .unwrap();
+    assert!(store.workspace_interactive_sessions(&actor.id).is_err());
+    db.execute(
+        "UPDATE events SET payload=?1 WHERE sequence=?2",
+        rusqlite::params![raw, seq],
+    )
+    .unwrap();
+    engine.shutdown().await.unwrap();
+    let _ = running.await.unwrap();
+    assert!(!store.workspace_interactive_sessions(&actor.id).unwrap()[0]["result"].is_null());
+    let write_seq:u64=db.query_row("SELECT sequence FROM events WHERE kind='interactive_effect' AND json_extract(payload,'$.call.action')='write'",[],|r|r.get(0)).unwrap();
+    let late_seq: u64 = db
+        .query_row("SELECT max(sequence)+100 FROM events", [], |r| r.get(0))
+        .unwrap();
+    db.execute(
+        "UPDATE events SET sequence=?1 WHERE sequence=?2",
+        rusqlite::params![late_seq, write_seq],
+    )
+    .unwrap();
+    assert!(
+        store.workspace_interactive_sessions(&actor.id).is_err(),
+        "a settled write moved after actor termination must reject"
+    );
+    db.execute(
+        "UPDATE events SET sequence=?1 WHERE sequence=?2",
+        rusqlite::params![write_seq, late_seq],
+    )
+    .unwrap();
+    db.execute(
+        "UPDATE events SET kind='hidden_start' WHERE sequence=?1",
+        [seq],
+    )
+    .unwrap();
+    assert!(store.workspace_interactive_sessions(&actor.id).is_err());
+    db.execute(
+        "UPDATE events SET kind='workspace_interactive_started' WHERE sequence=?1",
+        [seq],
+    )
+    .unwrap();
+    assert_eq!(
+        store.workspace_interactive_sessions(&actor.id).unwrap()[0]["assessment"],
+        "unverified"
+    );
 }
