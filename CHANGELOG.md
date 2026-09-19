@@ -12,6 +12,13 @@ on the published npm package and the GitHub Release tag.
 
 ## [Unreleased]
 
+### Added
+
+- Opt-in Jev assistance for bounded read-only browser exploration, memory
+  ranking, duplicate assessment, and red-team feedback. Evaluations remain
+  advisory; managed requests use a separate scan capability, and credentials
+  alone never enable the feature.
+
 ### Changed
 
 - Cloud balance and connection views consume the versioned credit account with
