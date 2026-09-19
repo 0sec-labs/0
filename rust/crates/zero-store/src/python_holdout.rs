@@ -65,15 +65,21 @@ fn validate(claim: &PythonHoldoutClaim) -> Result<()> {
     }
     Ok(())
 }
-fn retained(conn: &Connection, claim: &PythonHoldoutClaim) -> Result<u64> {
-    crate::admission_closure::validate(conn, &claim.session_id)?;
-    let size: usize = conn.query_row("SELECT length(CAST(payload AS BLOB))+coalesce(length(CAST(outcome AS BLOB)),0) FROM operations WHERE id=?1", [&claim.operation_id], |r|r.get(0))?;
+fn settled_inference(
+    conn: &Connection,
+    session: &str,
+    command: &str,
+    operation_id: &str,
+    request_sha: &str,
+) -> Result<(zero_protocol::session::Operation, u64)> {
+    crate::admission_closure::validate(conn, &session)?;
+    let size: usize = conn.query_row("SELECT length(CAST(payload AS BLOB))+coalesce(length(CAST(outcome AS BLOB)),0) FROM operations WHERE id=?1", [&operation_id], |r|r.get(0))?;
     if size > 2 * 1024 * 1024 {
         return Err(invalid("Python proposal operation exceeds bound"));
     }
-    let operation = crate::operations::operation(conn, &claim.operation_id)?;
-    if operation.session_id != claim.session_id
-        || operation.command_id != claim.command_id
+    let operation = crate::operations::operation(conn, &operation_id)?;
+    if operation.session_id != session
+        || operation.command_id != command
         || operation.status != OperationStatus::Succeeded
     {
         return Err(invalid(
@@ -83,15 +89,13 @@ fn retained(conn: &Connection, claim: &PythonHoldoutClaim) -> Result<u64> {
     if !matches!(
         operation.payload["kind"].as_str(),
         Some("responses_inference" | "chat_inference" | "anthropic_inference" | "google_inference")
-    ) || hash(&serde_json::to_vec(&operation.payload["request"])?) != claim.request_sha256
+    ) || hash(&serde_json::to_vec(&operation.payload["request"])?) != request_sha
     {
         return Err(invalid("Python proposal retained request differs"));
     }
     let mut witnesses=conn.prepare("SELECT CASE WHEN length(CAST(payload AS BLOB))<=2097152 THEN payload END FROM events WHERE session_id=?1 AND kind='operation_settled' AND json_extract(payload,'$.id')=?2 LIMIT 2")?;
     let rows = witnesses
-        .query_map(params![claim.session_id, claim.operation_id], |r| {
-            r.get::<_, String>(0)
-        })?
+        .query_map(params![session, operation_id], |r| r.get::<_, String>(0))?
         .collect::<std::result::Result<Vec<_>, _>>()?;
     if rows.len() != 1
         || serde_json::from_str::<zero_protocol::session::Operation>(&rows[0])? != operation
@@ -101,6 +105,7 @@ fn retained(conn: &Connection, claim: &PythonHoldoutClaim) -> Result<u64> {
     let completion: Completion = serde_json::from_value(
         operation
             .outcome
+            .clone()
             .ok_or_else(|| invalid("proposal outcome missing"))?,
     )?;
     if completion.status != CompletionStatus::Completed
@@ -109,6 +114,38 @@ fn retained(conn: &Connection, claim: &PythonHoldoutClaim) -> Result<u64> {
     {
         return Err(invalid("Python proposal requires completed final usage"));
     }
+    let rates: Rates = serde_json::from_value(operation.payload["rates"].clone())?;
+    let charge = completion
+        .usage
+        .as_ref()
+        .and_then(|u| rates.charge(u))
+        .ok_or_else(|| invalid("Python proposal usage is not usable"))?;
+    let settled: Option<u64> = conn.query_row(
+        "SELECT charged FROM reservations WHERE session_id=?1 AND id=?2",
+        params![session, operation_id],
+        |r| r.get(0),
+    )?;
+    let witnesses:u64=conn.query_row("SELECT count(*) FROM events WHERE session_id=?1 AND kind='budget_settled' AND json_extract(payload,'$.reservation_id')=?2 AND json_extract(payload,'$.charged')=?3",params![session,operation_id,charge],|r|r.get(0))?;
+    if witnesses != 1 || settled != Some(charge) {
+        return Err(invalid(
+            "Python proposal accounting is unsettled or changed",
+        ));
+    }
+    Ok((operation, charge))
+}
+fn retained(conn: &Connection, claim: &PythonHoldoutClaim) -> Result<u64> {
+    let (operation, charge) = settled_inference(
+        conn,
+        &claim.session_id,
+        &claim.command_id,
+        &claim.operation_id,
+        &claim.request_sha256,
+    )?;
+    let completion: Completion = serde_json::from_value(
+        operation
+            .outcome
+            .ok_or_else(|| invalid("proposal outcome missing"))?,
+    )?;
     let calls: Vec<_> = completion
         .content
         .iter()
@@ -146,23 +183,6 @@ fn retained(conn: &Connection, claim: &PythonHoldoutClaim) -> Result<u64> {
         || hash(source.as_bytes()) != claim.source_sha256
     {
         return Err(invalid("Python proposal source-only identity differs"));
-    }
-    let rates: Rates = serde_json::from_value(operation.payload["rates"].clone())?;
-    let charge = completion
-        .usage
-        .as_ref()
-        .and_then(|u| rates.charge(u))
-        .ok_or_else(|| invalid("Python proposal usage is not usable"))?;
-    let settled: Option<u64> = conn.query_row(
-        "SELECT charged FROM reservations WHERE session_id=?1 AND id=?2",
-        params![claim.session_id, claim.operation_id],
-        |r| r.get(0),
-    )?;
-    let witnesses:u64=conn.query_row("SELECT count(*) FROM events WHERE session_id=?1 AND kind='budget_settled' AND json_extract(payload,'$.reservation_id')=?2 AND json_extract(payload,'$.charged')=?3",params![claim.session_id,claim.operation_id,charge],|r|r.get(0))?;
-    if witnesses != 1 || settled != Some(charge) {
-        return Err(invalid(
-            "Python proposal accounting is unsettled or changed",
-        ));
     }
     Ok(charge)
 }
@@ -303,5 +323,83 @@ impl Store {
             existing(&tx, claim)?.ok_or_else(|| invalid("Python holdout witness absent"))?;
         tx.commit()?;
         Ok(VerifiedPythonHoldout(receipt))
+    }
+}
+
+/// Original-account witness for Development-only search experiments.
+/// It carries no private-suite or production activation permission.
+pub struct VerifiedPythonSearchInference {
+    operation: zero_protocol::session::Operation,
+    charge: u64,
+    budget: BudgetSnapshot,
+}
+impl VerifiedPythonSearchInference {
+    pub fn operation(&self) -> &zero_protocol::session::Operation {
+        &self.operation
+    }
+    pub fn charge(&self) -> u64 {
+        self.charge
+    }
+    pub fn budget(&self) -> &BudgetSnapshot {
+        &self.budget
+    }
+}
+impl Store {
+    pub fn verify_python_search_inference(
+        &self,
+        owner: &str,
+        session: &str,
+        command: &str,
+        operation_id: &str,
+        request_sha: &str,
+    ) -> Result<VerifiedPythonSearchInference> {
+        if [session, command, operation_id]
+            .iter()
+            .any(|v| v.is_empty() || v.len() > 256)
+            || !zero_protocol::is_sha256(request_sha)
+        {
+            return Err(invalid("Python search identity bound"));
+        }
+        let tx = self.conn.unchecked_transaction()?;
+        let epoch: String = tx.query_row(
+            "SELECT owner FROM engine_epoch WHERE singleton=1",
+            [],
+            |r| r.get(0),
+        )?;
+        if epoch != owner {
+            return Err(invalid("Python search owner is not current engine epoch"));
+        }
+        crate::campaign::forbid_input(&tx, session)?;
+        crate::scan::forbid_input(&tx, session)?;
+        crate::review::forbid_input(&tx, session)?;
+        crate::strategy_session::forbid_queue(&tx, session)?;
+        let (operation, charge) =
+            settled_inference(&tx, session, command, operation_id, request_sha)?;
+        let budget = crate::budget::snapshot(&tx, session)?;
+        if budget.reserved != 0 || budget.charged > budget.limit {
+            return Err(Error::BudgetExceeded);
+        }
+        tx.commit()?;
+        Ok(VerifiedPythonSearchInference {
+            operation,
+            charge,
+            budget,
+        })
+    }
+}
+
+impl Store {
+    /// Read-only original inference/accounting proof. This returns no execution capability.
+    pub fn inspect_python_search_inference(
+        &self,
+        session: &str,
+        command: &str,
+        operation_id: &str,
+        request_sha: &str,
+    ) -> Result<u64> {
+        let tx = self.conn.unchecked_transaction()?;
+        let (_, charge) = settled_inference(&tx, session, command, operation_id, request_sha)?;
+        tx.commit()?;
+        Ok(charge)
     }
 }

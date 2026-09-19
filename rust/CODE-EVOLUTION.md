@@ -98,3 +98,6 @@ regressions and both explicitly selected real Docker tests using installed image
 The Docker runs covered the public evaluation API and physical CLI with a loopback
 model response, twelve paired attempts each. Rust 1.85 with `--locked` was used;
 no image pull, paid model call or production registry activation occurred.
+
+For bounded model-directed Development experiments before final selection, see
+[Python search](PYTHON-SEARCH.md). The one-shot command above is unchanged.

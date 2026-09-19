@@ -194,10 +194,27 @@ impl Fixture {
         self.dir.path().join("proposal")
     }
     pub fn infer(&mut self, request: &ResponsesRequest, source: &str) -> Operation {
+        let command = self.context.command_id.clone();
+        self.infer_tool(
+            request,
+            &command,
+            "submit_python_candidate",
+            json!({"action":"propose","source_utf8":source,"rationale":"Preserve input value"}),
+            3,
+        )
+    }
+    pub fn infer_tool(
+        &mut self,
+        request: &ResponsesRequest,
+        command: &str,
+        name: &str,
+        arguments: serde_json::Value,
+        charge: u64,
+    ) -> Operation {
         let payload = json!({"kind":"responses_inference","provider":"fixture","request":request,"reservation":10,"rates":{"input":1000000,"cached_input":0,"output":1000000}});
         let op = self
             .store
-            .admit_command(&self.context.session_id, &self.context.command_id, &payload)
+            .admit_command(&self.context.session_id, command, &payload)
             .unwrap()
             .operation;
         self.store.begin_operation(&op.id, "fixture-owner").unwrap();
@@ -205,18 +222,18 @@ impl Fixture {
             .reserve_budget(&self.context.session_id, &op.id, 10)
             .unwrap();
         self.store
-            .settle_budget(&self.context.session_id, &op.id, 3)
+            .settle_budget(&self.context.session_id, &op.id, charge)
             .unwrap();
         let completion = Completion {
             status: CompletionStatus::Completed,
             response_id: None,
             content: vec![Content::ToolCall {
                 id: "fixture-call".into(),
-                name: "submit_python_candidate".into(),
-                arguments: json!({"action":"propose","source_utf8":source,"rationale":"Preserve input value"}),
+                name: name.into(),
+                arguments,
             }],
             usage: Some(Usage {
-                input_tokens: 2,
+                input_tokens: charge.saturating_sub(1),
                 output_tokens: 1,
                 cached_input_tokens: 0,
             }),

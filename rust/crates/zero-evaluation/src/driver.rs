@@ -4,9 +4,9 @@ use tokio_util::sync::CancellationToken;
 use zero_evolution::{PreparedState, Registry};
 use zero_harness::{GenerationPin, Harness, HostGrants};
 use zero_plugin_runner::{Runner, UntrustedReply};
-struct Instance {
-    harness: Harness,
-    pin: GenerationPin,
+pub(crate) struct Instance {
+    pub(crate) harness: Harness,
+    pub(crate) pin: GenerationPin,
 }
 /// Same-user host is trusted. Private files protect the oracle from guests, not
 /// a malicious controller/user with access to the host account.
@@ -250,16 +250,35 @@ fn instance(
     } else {
         &ledger.plan.candidate
     };
+    instance_for(
+        &ledger.root,
+        source,
+        grants,
+        generation,
+        &ledger.plan.engine_artifact,
+        &ledger.plan.evaluator_artifact,
+        index,
+    )
+}
+pub(crate) fn instance_for(
+    root: &Path,
+    source: &Registry,
+    grants: &HostGrants,
+    generation: &str,
+    engine_artifact: &str,
+    evaluator_artifact: &str,
+    index: usize,
+) -> Result<Instance> {
     let manifest = source.generation(generation)?;
     let mut target = Registry::open(
-        ledger.root.join(format!("variant-{index}.sqlite")),
+        root.join(format!("variant-{index}.sqlite")),
         &manifest.state_schema,
         &serde_json::json!({"evaluation_only":true}),
     )?;
     let mut artifacts = BTreeSet::from([
         manifest.engine_artifact.clone(),
         manifest.policy_artifact.clone(),
-        ledger.plan.evaluator_artifact.clone(),
+        evaluator_artifact.to_owned(),
     ]);
     for (component, id) in &manifest.components {
         if !component.starts_with("plugin:") {
@@ -282,14 +301,14 @@ fn instance(
             return Err(invalid("artifact identity drift"));
         }
     }
-    if target.register_generation(&manifest)? != *generation {
+    if target.register_generation(&manifest)? != generation {
         return Err(invalid("generation identity drift"));
     }
     let eligibility = target.authorize_baseline(
         generation,
         "unmeasured evaluation-only private bootstrap; never production eligibility",
     )?;
-    let mut harness = Harness::new(target, ledger.plan.engine_artifact.clone());
+    let mut harness = Harness::new(target, engine_artifact.to_owned());
     let switch = harness.prepare_activation(
         generation,
         &eligibility,

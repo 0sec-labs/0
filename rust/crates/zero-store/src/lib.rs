@@ -20,6 +20,7 @@ mod operations;
 mod plugin_worker;
 mod python_holdout;
 pub use native_reproduction::{AdmittedNativeReproduction, NativeReproductionAdmission};
+pub use python_holdout::VerifiedPythonSearchInference;
 pub use python_holdout::{PythonHoldoutClaim, PythonHoldoutReceipt, VerifiedPythonHoldout};
 mod questions;
 mod queue;

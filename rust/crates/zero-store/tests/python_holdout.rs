@@ -205,3 +205,35 @@ fn missing_admission_settlement_or_accounting_witness_cannot_authorize_execution
         );
     }
 }
+
+#[test]
+fn development_search_witness_requires_current_owner_exact_inference_and_accounting() {
+    let mut f = Fixture::new(100);
+    let claim = f.proposal("experiment", true, true);
+    let verify = |store: &Store, owner: &str, request: &str| {
+        store.verify_python_search_inference(
+            owner,
+            &claim.session_id,
+            &claim.command_id,
+            &claim.operation_id,
+            request,
+        )
+    };
+    assert!(verify(&f.store, "stale-owner", &claim.request_sha256).is_err());
+    assert!(verify(&f.store, "owner", &hash(b"other request")).is_err());
+    let witness = verify(&f.store, "owner", &claim.request_sha256).unwrap();
+    assert_eq!(witness.operation().id, claim.operation_id);
+    assert_eq!(witness.charge(), 2);
+    assert_eq!(witness.budget().reserved, 0);
+    assert!(
+        !f.store
+            .events(&f.session, 0, 100)
+            .unwrap()
+            .iter()
+            .any(|e| e.kind == "python_holdout_exposed")
+    );
+    let conn = rusqlite::Connection::open(f.dir.path().join("state.sqlite")).unwrap();
+    conn.execute("DELETE FROM events WHERE kind='budget_settled'", [])
+        .unwrap();
+    assert!(verify(&f.store, "owner", &claim.request_sha256).is_err());
+}

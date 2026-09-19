@@ -1,4 +1,6 @@
 //! One host-authorized model proposal followed by offline Python fixture measurement.
+#[path = "python_search.rs"]
+mod python_search;
 use clap::Subcommand;
 use serde::Deserialize;
 use std::{
@@ -19,6 +21,11 @@ use zero_plugin::{Capability, HostPolicy};
 use zero_protocol::{Command, Reply};
 #[derive(Debug, Subcommand)]
 pub enum CodeEvolutionCommand {
+    /// Iterate public Development experiments, then independently evaluate one selected source.
+    Search {
+        #[command(subcommand)]
+        command: python_search::SearchCommand,
+    },
     /// Generate one bounded Python plugin candidate and independently evaluate it; no promotion.
     Run {
         #[arg(long)]
@@ -137,6 +144,9 @@ pub async fn run(
     args: &crate::args::Args,
     command: &CodeEvolutionCommand,
 ) -> Result<bool, Box<dyn Error>> {
+    if let CodeEvolutionCommand::Search { command } = command {
+        return python_search::run(args, command).await;
+    }
     if let CodeEvolutionCommand::Status { directory } = command {
         let report = PythonProposal::inspect(directory)?;
         crate::write_json(&report, false).await?;

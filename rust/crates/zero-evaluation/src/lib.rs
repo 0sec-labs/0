@@ -1,4 +1,8 @@
-//! Controller-owned offline fixture evaluation. No production activation authority.
+mod python_search;
+pub use python_search::{
+    DevelopmentFeedback, PythonSearch, PythonSearchInspection, PythonSearchPlan, SearchStep,
+};
+// Controller-owned offline fixture evaluation. No production activation authority.
 mod code_proposal;
 mod driver;
 pub use code_proposal::{
