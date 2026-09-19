@@ -119,13 +119,37 @@ Set `0SEC_JEV_FEATURES` to the selected comma-separated features: `browser`,
 After configuring the provider credential:
 
 ```bash
-env 0SEC_JEV_FEATURES=memory,dedupe 0sec review ./repo
+env 0SEC_JEV_FEATURES=memory,dedupe \
+  0 scan --mode web --target https://app.example.test --scope ./scope.json
 ```
 
 Assistance sends selected observations to the evaluator. Browser assistance
 hands forms, authentication, writes, and ambiguous decisions back to the main
 agent. Unavailable evaluations retain the existing decision path rather than
 inventing a result.
+
+The four wired paths have different effects:
+
+- **Browser:** `browser` action `assist` follows captured links only when the
+  exact URL is operator-approved and in scope, the page is unchanged, and the
+  selection probability is at least `0.95`. It returns a handoff, not a finding.
+- **Memory:** ranks prior human-review context; the verifier still has to assess
+  current evidence. Prepared feedback remains scan-local.
+- **Dedupe:** can add canonical/cluster mappings for high-confidence
+  exact-location, same-defect, same-fix pairs. Original evidence is retained;
+  ambiguous pairs use the existing model dedupe path.
+- **Redteam:** records advisory attempt labels and evaluator usage. Regex/LLM
+  judges, or the separate action oracle in agent assurance, retain the verdict.
+
+Invalid feature names, missing credentials and invalid budgets are configuration
+errors, not a promise of silent fallback. Request failures have no automatic
+retry or substitute chat-model fallback. Evaluator usage is separate from
+main-model usage; the cost ceiling reserves estimated request cost and is not a
+whole-engagement accounting limit.
+
+The shared evaluator API also recognizes `kernel` and a kernel-only
+`classifier` provider. That configuration support alone does not wire an
+automatic kernel prepass into the assessment commands described here.
 
 Managed workers receive a separate scan-bound capability and endpoint from
 0cloud. Installing this engine does not enable the hosted service, establish

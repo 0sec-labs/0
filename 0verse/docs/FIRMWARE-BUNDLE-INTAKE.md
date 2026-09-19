@@ -41,6 +41,13 @@ Verified analysis artifacts can next enter the deterministic
 the artifact identity before deriving structure; bundle loading itself never
 interprets firmware bytes.
 
+These Python APIs accept generic acquisition bundles. The user-facing
+`0verse scout inspect <bundle>` and `scout report <bundle>` commands are narrower:
+they additionally require sealed Scout capture, transaction, and session
+artifacts that pass [evidence replay](FIRMWARE-SCOUT-EVIDENCE-REPLAY.md).
+A valid firmware-only acquisition bundle is not automatically a replayable
+Scout session. None of these entrypoints extracts firmware from a live device.
+
 `AcquisitionBundle.root` and `manifest_path` are absolute canonical paths. Artifact
 paths are absolute, normalized beneath that root, and may intentionally be absent.
 `AcquisitionBundle.artifacts` preserves manifest order. Validation itself runs in

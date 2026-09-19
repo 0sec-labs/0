@@ -1,9 +1,13 @@
 ---
 title: Finding Triage
-description: The multi-layer triage pipeline that sits between 0's research and verify agents — and what the 2026-04-11 ablation measured it doing.
+description: Workflow-specific triage gates, optional verification, memory context and recorded provenance.
 ---
 
-0 runs a triage pipeline between the research agent and the blind verify agent. Every finding walks through a stack of independent filters; each can kill, downgrade, or boost it. Most are deterministic, zero-cost, and run before any verification token is spent.
+The agentic scanner applies triage between finding generation and its verifier.
+This is not one mandatory eleven-step chain shared by every command: gates
+depend on feature settings, source availability, category, runtime and routing.
+Some make network requests or model calls. A gate's `accepted` label is not a
+universal reproduction or disclosure verdict.
 
 > **2026-04-11 ablation results.** The stack strictly beats the no-triage baseline on XBOW black-box, is a Pareto tradeoff on white-box (2 flags at limit=50 for 63% fewer findings), and is a no-op on npm-bench. Layer 11 (EGATS) is the one broken layer and is opt-in only ([0sec#116](https://github.com/0sec-labs/0sec/issues/116)). Numbers: [FP Reduction Moat](/research/fp-reduction-moat/); narrative: [2026-04-11 ablation](/research/2026-04-11-ablation/).
 
@@ -18,83 +22,81 @@ before using the CLI memory examples.
 
 ```mermaid
 flowchart TD
-    RA[Research agent] --> F[Raw finding]
-    F --> S1{1. Holding-it-wrong?}
-    S1 -->|library misuse| D1[Downgrade to info]
-    S1 -->|ok| S2[2. Feature extractor]
-    S2 --> S3{3. Per-class oracle?}
-    S3 -->|exploit proven| ACC[Auto-accept]
-    S3 -->|no oracle| S4{4. Reachable?}
-    S4 -->|dead code| R1[Suppressed]
-    S4 -->|reachable| S5{5. foxguard agrees?}
-    S5 -->|clean on file| R2[Down-weighted / rejected]
-    S5 -->|agree or unknown| S6{6. PoV builds?}
-    S6 -->|no working PoC| D2[Downgrade to info]
-    S6 -->|PoC works| S7[7. Structured 4-step verify]
-    S7 -->|step fails| R3[Rejected as FP]
-    S7 --> S8[8. Self-consistency vote]
-    S8 -->|minority| R4[Rejected]
-    S8 -->|majority| S9{9. Memory match?}
-    S9 -->|strong FP match| R5[Auto-rejected]
-    S9 -->|no match| S10{10. Adversarial debate? — planned}
-    S10 -->|judge rejects| R6[Rejected as FP]
-    S10 -->|judge confirms| S11[11. EGATS tree search]
-    S11 --> CF[Confirmed finding]
-    ACC --> CF
-
-    style RA fill:#1a1a2e,stroke:#e94560,color:#fff
-    style F fill:#16213e,stroke:#e94560,color:#fff
-    style CF fill:#10b981,stroke:#059669,color:#fff
-    style ACC fill:#10b981,stroke:#059669,color:#fff
-    style D1 fill:#64748b,stroke:#334155,color:#fff
-    style D2 fill:#64748b,stroke:#334155,color:#fff
-    style R1 fill:#ef4444,stroke:#991b1b,color:#fff
-    style R2 fill:#ef4444,stroke:#991b1b,color:#fff
-    style R3 fill:#ef4444,stroke:#991b1b,color:#fff
-    style R4 fill:#ef4444,stroke:#991b1b,color:#fff
-    style R5 fill:#ef4444,stroke:#991b1b,color:#fff
-    style R6 fill:#ef4444,stroke:#991b1b,color:#fff
-    style S1 fill:#533483,stroke:#e94560,color:#fff
-    style S2 fill:#533483,stroke:#e94560,color:#fff
-    style S3 fill:#533483,stroke:#e94560,color:#fff
-    style S4 fill:#533483,stroke:#e94560,color:#fff
-    style S5 fill:#533483,stroke:#e94560,color:#fff
-    style S6 fill:#533483,stroke:#e94560,color:#fff
-    style S7 fill:#533483,stroke:#e94560,color:#fff
-    style S8 fill:#533483,stroke:#e94560,color:#fff
-    style S9 fill:#533483,stroke:#e94560,color:#fff
-    style S10 fill:#533483,stroke:#e94560,color:#fff
-    style S11 fill:#533483,stroke:#e94560,color:#fff
+    F[Raw finding] --> H[Holding-it-wrong and evidence checks]
+    H --> G[Applicable source and publishability gates]
+    G --> O[Category oracle or reused inline observation]
+    O --> P[Optional PoV and static PoC generation]
+    P --> C[Optional structured consensus]
+    C --> V[Tool-using verification]
+    M[Prior human-review context] -. advisory .-> V
+    V --> R[Report with evidence and provenance]
+    H --> S[Suppressible finding rejected]
+    G --> S
+    C --> S
 ```
 
-Each stage is configurable via env vars and lives under `packages/core/src/triage/`.
+The numbered sections below are a capability inventory, not execution order.
+Modules live under `packages/core/src/triage/`; the agentic-scan wiring is in
+`packages/core/src/agentic-scanner.ts`. EGATS is discovery orchestration, not a
+final triage stage. The feature extractor is telemetry/input to gates, not a
+proof step.
+
+**Suppression is guarded.** Heuristic rejection paths consult
+`isDisclosureWorthy`: protected high-impact/high-severity findings can be held
+for further verification instead of dropped. That protection is not confirmation.
+An error, unknown result or missing execution record must not be read as proof
+that the system is safe.
 
 ## 1. Holding-it-wrong filter
 
-`triage/holding-it-wrong.ts` — always on. Kills findings where the "vulnerability" is the documented behavior of the sink: `fs.writeFile` as arbitrary file write, `vm.compileFunction` as code execution, `toFunction(cb)` as callback injection. Downgrades to `info` and skips downstream verification.
+`triage/holding-it-wrong.ts` detects documented sink behavior mistaken for a
+vulnerability, such as treating a file-writing API as arbitrary file write.
+Enforcement defaults on but `0SEC_FEATURE_HOLDING_IT_WRONG=0` disables it.
+Suppressible matches become `info` / `false-positive` and skip later verification;
+protected findings continue with an explanatory note. Feature extraction still
+runs for telemetry even when enforcement is off.
 
 ## 2. 45-feature extractor
 
-`triage/feature-extractor.ts` — always available. Builds a 45-element numeric vector per finding: response shape (status, size, reflection, error markers), payload signals (encoding, sink class, parameter location), and category priors. Handcrafted features alone hit ~77% recall / 16% FPR, and the vector feeds into neural embeddings for downstream ML. See `FEATURE_NAMES` for the full list, or [Feature Extractor](/research/feature-extractor/) and [Triage Dataset](/research/triage-dataset/).
+`triage/feature-extractor.ts` builds a 45-element numeric vector from response,
+payload, evidence and category signals. The agentic scanner records it as
+`triage_features`; the default-on evidence gate can suppress findings with
+`evidence_completeness <= 0.5`, subject to the same protection against heuristic
+auto-suppression. Disable enforcement with `0SEC_FEATURE_EVIDENCE_GATE=0`.
+The ~77% recall / 16% FPR figure is a historical feature-extractor measurement,
+not current-target accuracy. See [Feature Extractor](/research/feature-extractor/)
+and [Triage Dataset](/research/triage-dataset/).
 
 ## 3. Per-class oracles
 
-`triage/oracles.ts` — always on for supported categories. Deterministic, category-specific verification. If the oracle proves the exploit, accept with no LLM call.
+`triage/oracles.ts` dispatches category-specific checks by default on this path,
+unless routing excludes them. A successful inline check can be reused rather
+than rerun. Unsupported categories fall through; missing tools, auth or reachable
+callback infrastructure can prevent a useful result.
 
 | Category | Oracle | Proof |
 |----------|--------|-------|
-| SQLi | `verifySqli` | SQL error signatures + timing delta under sleep payloads |
-| Reflected XSS | `verifyReflectedXss` | Unique token reflected in an executable context |
-| SSRF | `verifySsrf` | Out-of-band callback (spins a local listener) |
-| RCE | `verifyRce` | Command output round-trips through the response |
-| Path traversal | `verifyPathTraversal` | `/etc/passwd` signature (or Windows equivalent) |
-| IDOR | `verifyIdor` | Differential response across identities |
+| SQLi | `verifySqli` | At least two of boolean response-length difference, timing delta and SQL error signatures |
+| Reflected XSS | `verifyReflectedXss` | Playwright captures the unique token in a dialog; HTML reflection alone is not confirmation |
+| SSRF | `verifySsrf` | Nonce-matched request to a temporary local collector; the target must be able to reach it |
+| RCE | `verifyRce` | Probe command output observed in the response |
+| Path traversal | `verifyPathTraversal` | Linux `/etc/passwd` signature from traversal probes; no Windows equivalent in this oracle |
+| IDOR-like information disclosure | `verifyIdor` | Numeric-ID mutation returns distinct nonempty 200 responses; does **not** establish ownership across identities |
 
-Dispatch by category with `verifyOracleByCategory(finding, target)`.
+Dispatch uses `verifyOracleByCategory(finding, target)`. Its `verified` bit is
+category-specific: IDOR's response-difference heuristic is weaker than a browser
+execution or callback capture. The scanner may stamp accepted/confidence state;
+inspect the oracle evidence rather than treating that stamp as uniform proof.
+Known-category non-confirmation can downgrade severity to `low`; thrown errors
+are recorded and do not abort the scan. Test authorization boundaries with known
+identities before disclosing IDOR.
 
 ## 4. Reachability gate
 
-`triage/reachability.ts` — `0SEC_FEATURE_REACHABILITY_GATE=1`. When source is available, walks imports, route mounts, and framework entry points to check whether the sink is reachable from an HTTP handler, CLI main, or user-facing API. Dead code and test-only paths are suppressed before LLM tokens are spent.
+`triage/reachability.ts` — `0SEC_FEATURE_REACHABILITY_GATE=1`. With source
+available, a conservative pattern pass inspects paths, entry points and imports.
+High-confidence unreachable findings can be suppressed subject to the disclosure
+guard. This is not an exhaustive interprocedural proof of reachability.
 
 Today it's a zero-dependency grep/pattern pass and deliberately conservative: when it can't make a confident call it returns `reachable: true` with low confidence so later stages still run. A tree-sitter interprocedural upgrade is planned.
 
@@ -103,9 +105,13 @@ Today it's a zero-dependency grep/pattern pass and deliberately conservative: wh
 
 `triage/multi-modal.ts` — `0SEC_FEATURE_MULTIMODAL=1`. When both source and the [foxguard](https://github.com/0sec-labs/foxguard) binary are present, 0 runs foxguard on the same code and cross-checks each finding against its SARIF:
 
-- **Both fire on the same file/category** → auto-accept, high confidence.
-- **Only 0 fires, foxguard scanned the file cleanly** → down-weight or auto-reject.
-- **foxguard didn't scan the file** → no signal.
+- **Both fire** → prioritize verification; only sufficiently strong agreement
+  and evidence completeness take the fused auto-accept branch.
+- **Only 0 fires** → not refutation by itself. Low agreement confidence **and**
+  incomplete evidence can trigger guarded suppression.
+- **Missing tool, scan failure or uncovered file** → no independent corroboration.
+
+Even a fused auto-accept label is a triage decision, not a fresh exploit replay.
 
 ```bash
 env 0SEC_FEATURE_MULTIMODAL=1 \
@@ -114,30 +120,55 @@ env 0SEC_FEATURE_MULTIMODAL=1 \
 
 ## 6. PoV generation gate
 
-`triage/pov-gate.ts` — `0SEC_FEATURE_POV_GATE=1`. Based on *All You Need Is A Fuzzing Brain* (arXiv:2509.07225), this gate lowers confidence when the agent cannot produce a working PoC within its turn budget.
+`triage/pov-gate.ts` — `0SEC_FEATURE_POV_GATE=1`. The agentic path requires a
+usable runtime, a finding not already accepted, and routing permission. It uses
+category-specific oracles (reusing an upstream result when available) or a
+bounded PoC-generation path.
 
-A scoped agent builds an exploit and checks category-specific evidence. `hasPov: true` boosts confidence and attaches the artifact; `hasPov: false` downgrades to `info` and sets `triageNote = "no_pov"`.
+`hasPov: true` attaches evidence and boosts confidence. A conclusive negative can
+downgrade to `info`; **inconclusive** results such as unavailable browser/OAST
+infrastructure are annotated without treating the missing proof as a false
+positive. Generation of a script is not itself proof that it executed.
 
 ## 7. Structured 4-step verify pipeline
 
-`triage/structured-verify.ts` — default when a runtime is available. The single-shot blind verify is split into four focused subtasks, each with category-specific prompts:
+`triage/structured-verify.ts` assesses four questions:
 
-1. **Reachability** — can external input trigger the vuln?
-2. **Payload validation** — does the PoC demonstrate the claim?
-3. **Impact assessment** — what's the real-world impact?
-4. **Exploit confirmation** — reproduce with only the PoC and target path.
+1. Reachability.
+2. Payload validity.
+3. Impact.
+4. Exploit confirmation.
 
-Any step failure marks the finding a false positive.
+Despite the final step's name, each step is a model call with **no tools**.
+All steps must return a passing JSON verdict; failure or malformed output
+short-circuits to `rejected`. This is evidence assessment, not independent
+runtime reproduction. The agentic scanner does not run a standalone four-step
+pass by default; it invokes this module for optional consensus before the
+tool-using verifier.
 
 ## 8. Self-consistency voting
 
-`0SEC_FEATURE_CONSENSUS_VERIFY=1`. Runs structured verify N times (different seeds) and takes the majority vote via `runSelfConsistencyVerify`. Trades tokens for confidence on ambiguous findings.
+`0SEC_FEATURE_CONSENSUS_VERIFY=1`. The agentic scanner calls `verify` with three
+parallel structured passes per candidate. The SDK defaults to a single pass
+unless `votes` is supplied. Early resolution can return a majority before all
+calls settle; it does not guarantee cancellation of their model costs.
+No per-run seed is set by this implementation. Rejected votes are subject to
+the disclosure guard; errors fall through to agentic verification.
 
 ## 9. Assistant memories
 
 `triage/memories.ts` stores false-positive context from human triage. Use `0 triage mark-fp` and `0 triage memory` to manage feedback. `0SEC_FEATURE_TRIAGE_MEMORIES` is not a current feature toggle. Memory context can inform verification; it is not independent reproduction evidence.
 
-Scope hierarchy: `global` (every scan), `package` (targets under a package prefix), `target` (exact URL or path). Relevance is a token-overlap heuristic today; an embedding ranker can replace `scoreMemory` without API changes.
+Scope matching is exact: `global`, inferred `package` identity, or `target`
+URL/path, within the finding's category. Default ranking uses token overlap.
+Opt-in Jev memory assistance reranks up to twelve shortlisted memories and falls
+back to token ranking when unavailable; it never auto-rejects a finding.
+
+On the native agentic-scan verification path, `createScanMemoryStore` is wired
+when `0SEC_TRIAGE_FEEDBACK` or Jev `memory` configuration is present. Prepared
+feedback is scan-local context, not imported into the global memory database.
+A historical memory in another database is not automatically available to every
+new run. See [advisory evaluation settings](/features/#advisory-evaluations).
 
 ```bash
 # Mark a finding FP and remember why
@@ -155,11 +186,19 @@ Scope hierarchy: `global` (every scan), `package` (targets under a package prefi
 
 **Planned — not implemented.** There is no `triage/adversarial.ts` module and no `0SEC_FEATURE_DEBATE` flag in the engine. The intent: a prosecutor (finding is real) and a defender (it's an FP) argue from fresh contexts, and a skeptical judge picks the winner — each seeing only the other's written arguments, never the research agent's chain of thought. The design follows the open-source read of Anthropic's debate paper (arXiv:2402.06782); the point is to keep the two agents' errors independent.
 
-Its goal is partly served today by the **cross-family refuter** (`stages/hunt-cross-family.ts`, on by default on the hunt path), which forces the refute pass onto a different model family than the finder.
+Its goal is partly served by the hunt **cross-family refuter**
+(`stages/hunt-cross-family.ts`). Its model-family selection is specific to that
+workflow and available model routes; it is not a guarantee that every scan's
+finder and verifier use different model families.
 
 ## 11. EGATS — Evidence-Gated Attack Tree Search
 
-`--egats` or `0SEC_FEATURE_EGATS=1`. Beam-search over an explicit hypothesis tree: the agent proposes attack branches with required evidence and only expands branches where prior evidence is observed; dead hypotheses are pruned. Highest variance in the pipeline — use it for breadth (unknown-class vulns), not depth on a known lead. Removed from the default aliases after the ablation ([0sec#116](https://github.com/0sec-labs/0sec/issues/116)).
+`scan --egats` opts into beam-search discovery on the native agentic path.
+It expands an explicit hypothesis tree and uses observed evidence to score
+branches. It is not a downstream verification stage or part of `fp-moat`.
+The historical ablation found a regression on its hard-challenge slice
+([0sec#116](https://github.com/0sec-labs/0sec/issues/116)); it is not a universal
+performance recommendation.
 
 ## Configuration cheat-sheet
 
@@ -176,12 +215,20 @@ Its goal is partly served today by the **cross-family refuter** (`stages/hunt-cr
 | `0SEC_FEATURE_LEARNED_ROUTER` | off | router |
 | `0SEC_FEATURE_DYNAMIC_TRIAGE` | off | router |
 
-`0SEC_FEATURE_TRIAGE_MEMORIES`, `_DEBATE`, and `_EGATS` were in earlier versions of this table but no longer exist as separate toggles — `egats` was removed from the default aliases after the ablation ([0sec#116](https://github.com/0sec-labs/0sec/issues/116)). See [Features](/features/) for the full env-var inventory.
+`0SEC_FEATURE_TRIAGE_MEMORIES`, `0SEC_FEATURE_DEBATE`, and
+`0SEC_FEATURE_EGATS` are not current toggles. EGATS is selected by `--egats` /
+`config.egats`, not an environment flag. See [Configuration](/configuration/)
+for feature settings and [Features](/features/#advisory-evaluations) for the
+separate Jev controls.
 
 <span id="enabling-the-whole-moat-at-once"></span>
 ## Full gate preset
 
-`fp-moat` enables all off-by-default gates. Results vary by slice: improved XBOW black-box results, a 0–2 flag cost on white-box, and no change on npm-bench. The reported ~60% reduction in findings accompanied a roughly flat correct-flag count. Re-measure on your target before choosing the preset.
+`fp-moat` enables the six gates listed below, not every optional feature.
+Historical results vary by slice: improved XBOW black-box results, a 0–2 flag
+cost on white-box, and no change on npm-bench. The reported ~60% reduction in
+findings accompanied a roughly flat correct-flag count. Re-measure on your target
+before choosing the preset; enabled gates can still skip missing prerequisites.
 
 ```bash
 0 scan --features fp-moat --target https://example.com --scope ./scope.json
@@ -221,7 +268,20 @@ Each layer records a verdict on the finding as it runs. `findings show` renders 
 
 - Verdicts stored on each finding determine the displayed provenance. Changing shell flags leaves historical results unchanged.
 - `skipped` ≠ `unrecorded`. `skipped` means the layer recorded that it stood down (with the flag or missing precondition named); `unrecorded` means no verdict exists at all.
-- Three layers are permanently `unrecorded`: `structured_verify`, `consensus`, and `kernel_oracle` emit no verdict, so their execution can't be observed. They're listed in `UNINSTRUMENTED_LAYERS` and reported with an explicit reason, not quietly counted as skipped. Until that changes, they can't back an FP-moat claim.
+- `structured_verify`, `consensus`, and `kernel_oracle` are currently listed in
+  `UNINSTRUMENTED_LAYERS`: they do not emit `LayerVerdict` records. Separate
+  events (such as `consensus_verify`) may exist, but this provenance summary
+  cannot infer execution from them. They are not silently counted as skipped.
+
+### Duplicate assessment is separate
+
+Optional semantic dedupe runs in report post-processing and retains original
+evidence with additive canonical/cluster mappings. Jev `dedupe` enables a bounded
+fast path for exact-location/category pairs only: same location, defect and fix
+must each score at least `0.98`, and insufficient evidence at most `0.02`.
+Competing anchors are ambiguous. Remaining pairs use the existing generative
+dedupe path. Neither grouping nor incremental ranking is a vulnerability
+verification or an ecosystem novelty receipt.
 
 ## Further reading
 

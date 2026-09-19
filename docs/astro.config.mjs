@@ -39,7 +39,7 @@ export default defineConfig({
         { tag: "link", attrs: { rel: "preconnect", href: "https://0.security", crossorigin: "anonymous" } },
       ],
       description:
-        "Your self-improving, open-source cybersecurity team. Install 0, connect a model, and investigate authorized targets. Research Preview.",
+        "Your multi-model, open-source cybersecurity team. Install 0, connect your models, hack & fix your systems. Research Preview.",
       logo: {
         dark: "./src/assets/0-wordmark-dark.svg",
         light: "./src/assets/0-wordmark-light.svg",

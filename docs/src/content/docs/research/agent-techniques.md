@@ -3,7 +3,17 @@ title: Agent Techniques Reference
 description: Evidence-based techniques for improving autonomous pentesting agents, with implementation details and expected impact.
 ---
 
-Techniques evaluated for improving 0's autonomous pentesting agents. Each entry includes source evidence, expected impact, implementation status, and enough detail to ship it.
+This reference mixes historical experiments, implementation notes, and research
+proposals. Quantitative “Impact” estimates below are retained research claims,
+not measured effects on the current release. The April ablation found
+slice-dependent regressions, including EGATS; see [the dated results](/research/2026-04-11-ablation/).
+
+Current controls: early-stop retry defaults **off** (`0SEC_FEATURE_EARLY_STOP`);
+dynamic playbooks and external memory also default off. Loop detection,
+compaction, script templates and progress handoff default on. EGATS and strategy
+racing are explicit scan configurations, not automatically selected optimal
+model strategies. Refer to `agent/features.ts` and the command's help for the
+selected release.
 
 ## Shipped Techniques
 
@@ -21,6 +31,9 @@ Techniques evaluated for improving 0's autonomous pentesting agents. Each entry 
 - Only fires for `role === "attack"` with `maxTurns >= 10` (below that, overhead is not worth it).
 - The retry system prompt includes `attemptSummary` so the second attempt knows what already failed.
 - `retryCount: 1` disables early-stop on the second attempt to avoid infinite retry chains.
+- Enable explicitly for matched benchmark experiments. Lack of a saved finding
+  halfway through a source audit does not establish lack of progress; this is
+  why the default is off.
 
 ---
 
@@ -73,27 +86,31 @@ Techniques evaluated for improving 0's autonomous pentesting agents. Each entry 
 
 ### 4. Context Compaction (LLM-based, multi-recompaction)
 
-**What:** When input tokens exceed the threshold, summarize the middle of the conversation via a single LLM call to a structured "findings / credentials / endpoints / failed approaches" format, then splice the summary back into the conversation in place of the middle messages. The system prompt / initial message and the last 8 messages are preserved verbatim; messages containing critical patterns (credentials, flags, findings) are also pinned verbatim. Unlike the original regex-only version, the current implementation uses an LLM for the summary and allows **multiple recompactions** during a single run — the `contextCompacted` flag has been replaced with a compaction counter so long sessions stay under the limit.
+**What:** Summarize the middle of the conversation while preserving the first
+message and, by default, the last **10** messages. The scan loop defaults to a
+77,000-token trigger and 30,000-token regrowth threshold, configurable with
+`0SEC_COMPACTION_THRESHOLD` and `0SEC_COMPACTION_REGROW`; these are not derived
+automatically from the selected model's context window. Recompaction can happen
+multiple times. It reduces context, not consumed turns or accumulated cost.
 
 **Source:** BoxPwnr (60% context threshold triggers compaction); CHAP paper (NDSS 2026) documenting context window degradation in long agent sessions.
 
 **Impact:** Prevents context window overflow that causes hallucinations and instruction-following degradation in turns 20+. BoxPwnr attributes part of their 97.1% XBOW score to this technique.
 
-**Implementation:** `packages/core/src/agent/native-loop.ts` -- the `compactMessages()` function and supporting helpers.
-
-| Component | Purpose |
-|-----------|---------|
-| `CRITICAL_PATTERNS` | 14 regexes matching credentials, flags, tokens, keys, secrets |
-| `SUMMARY_EXTRACT_PATTERNS` | 13 regexes extracting URLs, IPs, HTTP status codes, file paths, error keywords |
-| `isCriticalMessage()` | Tests a message against all critical patterns |
-| `extractKeyFindings()` | Scans all middle messages, extracts matching lines, deduplicates, caps at 80 entries |
-| `compactMessages()` | Rebuilds conversation: first message + assistant ack + summary + critical messages + tail 8 |
+**Implementation:** `packages/core/src/agent/native-loop.ts`:
+`compactMessagesWithLLM()` returns `{ messages, summaryText, degraded }`.
+The summarizer is a model call without tools. Failed/too-short summaries fall
+back to regex extraction (`degraded: true`), not an assumption that nothing
+important happened. `extractKeyFindings()` supplements the summary; the
+separate `preserveCriticalMessages` feature controls verbatim critical context.
 
 **Key details:**
 - Multiple recompactions allowed per session (counter-based, not the old one-shot flag) so long sessions stay under the token budget.
 - Role alternation is maintained after compaction (user/assistant/user/...) to satisfy the API contract.
 - Compaction inserts the summary as a user message. Its claims still require verification.
-- `save_finding` calls in the compacted middle are preserved verbatim.
+- Critical-message preservation is bounded and feature-gated, not a guarantee
+  that every `save_finding` invocation survives verbatim. Persist findings and
+  inspect the underlying evidence rather than treating a summary as a receipt.
 
 ---
 
@@ -117,7 +134,9 @@ Techniques evaluated for improving 0's autonomous pentesting agents. Each entry 
 
 **Impact:** Expected +5-9pp on targets with large attack surfaces. Generalises 0's early-stop mechanism: early-stop gates a single linear run, EGATS gates every branch.
 
-**Implementation:** `packages/core/src/agent/egats.ts` — `AttackNode`, `EGATSConfig`, `scoreEvidence`, `hasFlag`, `runEGATS`, `runEGATSWithDefaults`, `summariseTree`. Feature flag: `0SEC_FEATURE_EGATS`.
+**Implementation:** `packages/core/src/agent/egats.ts`; the native scanner selects
+it when `config.egats` is enabled. Do not use the historical
+`0SEC_FEATURE_EGATS` name as a current activation contract.
 
 ---
 
@@ -142,6 +161,20 @@ Techniques evaluated for improving 0's autonomous pentesting agents. Each entry 
 **Impact:** Observed conversion of roughly 20% of retries into successes.
 
 **Implementation:** Progress extraction lives in `packages/core/src/agent/native-loop.ts`; injection happens in `packages/core/src/agentic-scanner.ts` when building the retry prompt. Feature flag: `0SEC_FEATURE_PROGRESS_HANDOFF`.
+
+---
+
+### External Working Memory — implemented, opt-in
+
+The native loop substitutes `{{EXTERNAL_MEMORY_PATH}}` with a scan-specific
+`/tmp/0sec-state-<scan-id>.json`, rather than a shared `/tmp/plan.json`.
+`0SEC_FEATURE_EXTERNAL_MEMORY=1` enables the external-memory path; it defaults
+off. This is distinct from structured plan/loot state and durable journal data.
+An agent-authored file is working context, not trusted evidence.
+
+The original proposal cited TermiAgent's -67% ablation and estimated +10–15pp
+on credential-heavy challenges. Those figures are not measured current 0 gains.
+Implementation: `packages/core/src/agent/native-loop.ts`.
 
 ---
 
@@ -201,24 +234,6 @@ Techniques evaluated for improving 0's autonomous pentesting agents. Each entry 
 
 ---
 
-### External Working Memory
-
-**What:** The agent writes its plan, discovered credentials, and current state to `/tmp/plan.json` via bash commands. At reflection checkpoints (every 5-10 turns), the file is read back and injected into the conversation. This prevents the "credential forgetting" problem where the agent discovers a password early, then fails to use it 15 turns later because it has scrolled out of the effective context window.
-
-**Source:** TermiAgent. Their ablation shows -67% success rate without external working memory.
-
-**Impact:** Expected +10-15pp on challenges requiring multi-step exploitation with credentials or session tokens.
-
-**Implementation sketch:**
-- Add to `shellPentestPrompt`: "After discovering ANY credential, endpoint, or important finding, write it to /tmp/plan.json using bash. Format: `echo '{\"creds\": [...], \"endpoints\": [...], \"plan\": \"...\"}' > /tmp/plan.json`"
-- In `native-loop.ts`, at every 5th turn, inject a user message: "Review your working memory. Run: `cat /tmp/plan.json` and update your plan based on current progress."
-- The agent naturally maintains this file through bash -- no new tools or infrastructure needed.
-- Alternative (lower-effort): at reflection checkpoints, automatically run `cat /tmp/plan.json` via the tool executor and inject the result. This ensures the memory is always refreshed even if the agent forgets to read it.
-
-**Location:** `packages/core/src/agent/prompts.ts` (prompt addition), `packages/core/src/agent/native-loop.ts` (reflection checkpoint injection). **Difficulty:** Low. Leverages existing bash tool.
-
----
-
 ### RAG from Prior Solves
 
 **What:** Build a patterns database from successful exploit runs. When starting a new challenge, match the target's characteristics (tech stack, response patterns, endpoint structure) against prior solutions using keyword overlap. Inject the top 3 matching prior solutions as hints in the system prompt.
@@ -250,20 +265,21 @@ Techniques evaluated for improving 0's autonomous pentesting agents. Each entry 
 
 ## Summary Table
 
-| Technique | Status | Expected Impact | Primary File |
+| Technique | Status | Historical estimate / rationale (not current measured gain) | Primary File |
 |-----------|--------|----------------|--------------|
 | Early-Stop + Retry | Shipped | +15-20% recovery | `native-loop.ts`, `agentic-scanner.ts` |
 | Exploit Script Templates | Shipped | Blind SQLi: 0% to solvable | `prompts.ts` |
 | Loop/Oscillation Detection | Shipped | +5% (saves 3-8 turns) | `native-loop.ts` |
 | Context Compaction (LLM-based, multi-recompaction) | Shipped | Prevents 20+ turn degradation | `native-loop.ts` |
-| Dynamic Playbooks (13 playbooks) | Shipped | Cracks XSS/SSTI/IDOR classes | `agent/playbooks.ts` |
+| Dynamic Playbooks | Shipped, opt-in | Historical class-specific observations above | `agent/playbooks.ts` |
 | EGATS Attack Tree Search | Shipped | +5-9pp | `agent/egats.ts` |
 | Best-of-N Strategy Racing | Shipped | +5-8 flags (3x cost) | `racing.ts` |
 | Progress Handoff | Shipped | ~20% retry conversion | `native-loop.ts`, `agentic-scanner.ts` |
 | Context Relay | Not impl | +5-10% on long scans | `native-loop.ts` |
 | Evidence-Gated Branching (prompt-level) | Not impl | +5-8pp | `prompts.ts` |
 | Self-Rewriting Prompts | Not impl | +10-15pp (long sessions) | `native-loop.ts` |
-| External Working Memory | Not impl | +10-15pp | `prompts.ts`, `native-loop.ts` |
+| External Working Memory | Shipped, opt-in | Unmeasured on current release | `prompts.ts`, `native-loop.ts` |
 | RAG from Prior Solves | Not impl | +5-10pp | New: `patterns-db.ts` |
 
-**Recommended next steps** (highest impact per effort): External Working Memory > Evidence-Gated Branching > Context Relay > Self-Rewriting > RAG.
+Choose further experiments from measured failures; the proposal ordering and
+expected-impact estimates are not a current release roadmap.

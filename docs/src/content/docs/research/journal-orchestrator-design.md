@@ -4,6 +4,11 @@ description: Historical design for an execution journal, specialist dispatch, re
 ---
 
 > Historical proposal tracked in [0sec#224](https://github.com/0sec-labs/0sec/issues/224). The commands and recovery behavior below describe the design.
+> `0SEC_FEATURE_JOURNAL_LOOP`, `scan --resume`, `--branch`, and `run gc`
+> below are proposal vocabulary, not current command instructions. The referenced
+> journal-ablation workflow is absent from this checkout. Journal primitives
+> alone do not establish a wired alternate loop or durable recovery semantics;
+> use the current [command reference](/commands/) for supported resume operations.
 
 <span id="the-problem-in-one-paragraph"></span>
 ## Motivation

@@ -199,7 +199,7 @@ describe("development Cloud authentication", () => {
     writeFileSync(privatePath, '{"token":"private-production-token"}', { mode: 0o600 });
     const privateBytes = readFileSync(privatePath);
     vi.stubEnv("0SEC_DEV_SOURCE_ROOT", "/fixture/engine");
-    vi.stubEnv("0SEC_CLOUD_HOST", "https://dev.0sec.ai");
+    vi.stubEnv("0SEC_CLOUD_HOST", "https://dev.0.security");
     vi.stubEnv("0SEC_CLOUD_TOKEN", undefined);
     const opened: string[] = [];
     const polled: string[] = [];
@@ -216,8 +216,8 @@ describe("development Cloud authentication", () => {
         },
       });
       expect(process.exitCode).toBe(0);
-      expect(opened.map((url) => new URL(url).origin)).toEqual(["https://dev.0sec.ai"]);
-      expect(polled.map((url) => new URL(url).origin)).toEqual(["https://dev.0sec.ai"]);
+      expect(opened.map((url) => new URL(url).origin)).toEqual(["https://dev.0.security"]);
+      expect(polled.map((url) => new URL(url).origin)).toEqual(["https://dev.0.security"]);
       const devPath = join(home, ".0sec", "dev", "cloud.env");
       expect(readFileSync(devPath, "utf8")).toContain(`0SEC_CLOUD_TOKEN=${SECRET}`);
       expect(statSync(devPath).mode & 0o777).toBe(0o600);

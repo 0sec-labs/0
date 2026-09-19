@@ -43,8 +43,9 @@ recommended setting for ordinary live-target audits.
 
 The **system prompt** defines the role, available tools, and target approach:
 
-- `shellPentestPrompt` (web) — gives `bash`, `save_finding`, `done` and tells
-  the agent to probe with curl/python3/CLI tools. No structured HTTP tools.
+- `shellPentestPrompt` (web) — emphasizes `bash`, `save_finding` and `done`,
+  with curl/python3/CLI probing. The caller can still expose structured network
+  tools; a prompt's preferred approach is not the executor's complete tool list.
 - `discoveryPrompt` / `attackPrompt` (LLM/AI) — probing endpoints, extracting
   system prompts, testing jailbreaks.
 - `researchPrompt` (source) — map the codebase, trace input → sink, write PoCs.
@@ -60,7 +61,7 @@ the budget consumed:
 
 | Budget used | Prompt |
 |---|---|
-| < 30% | "Use your tools. Start sending requests." |
+| < 30% | Role-specific nudge: interact with the target, or use scoped source tools for review/audit |
 | 30-50% | "Summarize what you learned. Top hypothesis?" |
 | 50-70% | "HALFWAY. List every approach tried. Most promising untested vector?" |
 | 70-85% | "URGENCY. If the current approach isn't working, SWITCH NOW." |
@@ -85,8 +86,31 @@ Other tools by mode: `http_request`/`submit_form` (structured HTTP),
 `send_prompt` (LLM), `read_file`/`run_command` (source), `crawl` (spidering),
 `browser` (Playwright). `spawn_agent` creates one sub-agent with fresh context
 to dig into a specific vuln; `spawn_agents` launches a bounded batch of such
-sub-agents that run **concurrently**, each with its own turn budget. Sub-agents
-can't spawn their own sub-agents.
+sub-agents with bounded concurrency and their own turn budgets. Their successful
+findings merge into the parent after the batch joins. Child errors do not erase
+sibling results. Sub-agents cannot recursively fan out through these tools;
+separate contexts do not mean isolated host filesystems or independent providers.
+
+### Advisory browser exploration
+
+When Jev `browser` assistance is explicitly enabled, `browser` action `observe`
+exposes a compact link snapshot and `assist` can follow a bounded sequence of
+operator-approved read-only URLs. It requires scope and the exact URL allowlist;
+the evaluator cannot invent actions, approve a write, fill forms, handle MFA or
+confirm a vulnerability. Changed pages, uncertain choices and unavailable
+evaluation return a handoff to the main agent. See
+[Features](/features/#advisory-evaluations) for setup and data-egress limits.
+
+### Model roles and completion signals
+
+The workflow selects the main runtime; child role-model overrides remain subject
+to that runtime's supported route and single-model policy. A fresh child
+context is not an automatic switch of provider credentials.
+
+Tool completion and task success are different signals. A child lifecycle
+`completed` event means its loop returned normally, which can include reaching a
+turn budget; inspect its findings and result rather than treating that event as
+verified exploit success.
 
 ## How it decides
 
@@ -122,9 +146,10 @@ Common patterns:
   access failures before increasing the budget.
 - **Provider errors or empty responses** — check the reported provider/model,
   credentials, availability, and rate limits; see [Troubleshooting](/troubleshooting/).
-- **Exits too early** — the loop requires at least 4 turns (or `maxTurns` if
-  smaller) before a text-only exit. Finishing in 2-3 turns means a premature
-  `done`.
+- **Exits too early** — text-only completion requires at least
+  `min(4, maxTurns)` turns, nonempty text and `end_turn`. An accepted `done`
+  can finish sooner; errors, cancellation and limits can also stop the loop.
+  Do not infer a premature `done` from turn count alone.
 - **No findings saved** — the agent may be finding vulns but not calling
   `save_finding`. Check verbose output.
 

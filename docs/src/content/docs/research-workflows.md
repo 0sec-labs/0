@@ -17,7 +17,7 @@ Before disclosure, inspect its verifier result, execution origin, and retained a
 | Spec vs implementation drift | `specdrift` | No (`--spec`) | Spec text + source tree | Invariant mappings / drift hypotheses |
 | HTTP protocol conformance | `protocol-check` | No (`--spec` + `--impl`) | Live HTTP target | Confirmed/refuted divergences |
 | Memory-safety fuzz | `memsafety` | No | Source tree (git URL or path) | Reproduced mem-corruption findings |
-| Kernel advisory variant | `kernel variant-hunt` | Advisory URL | Kernel tree | Foxguard-gated variant candidates |
+| Kernel advisory variant | `kernel variant-hunt` | Optional advisory URL/file | Kernel tree or supplied SARIF | FoxGuard static variant candidates |
 | Syzbot LPE mining | `kernel syzbot-mine` | No | syzbot | Ranked exploitability candidates |
 | Syzkaller weights | `kernel weights` | No | kernelCTF target | LLM-derived `choice_weights.json` |
 | XNU IOKit fuzzing | `xnu-fuzz` | No (kext) | Kext Mach-O | Target model / gate-passing inputs |
@@ -29,6 +29,7 @@ Before disclosure, inspect its verifier result, execution origin, and retained a
 | Research pipeline | `research pipeline` | No | URL/path/repo/package | Evidence-backed findings |
 | Research mobile | `research mobile` | No | APK/IPA | Passive indicators |
 | Research Linux kernel | `research linux` | Reproducer + finding | Kernel tree | N-boot verified evidence |
+| External kernel boot matrix | `research linux-matrix` | Matrix + finding | Retained boot logs | Validated, hashed imported evidence (no boots) |
 
 ## Evidence tiers
 
@@ -39,6 +40,25 @@ The shared research plane uses `candidate`, `observed`, and `reproduced`;
 native commands define their own result fields. See
 [Verification Results](/verification-result/) for replay contracts and
 [Kernel VM Verification](/kernel-vm/) for privilege and provenance limits.
+
+### Model diversity is not automatic optimal routing
+
+`deep-review` defaults to one provider model and one attempt; `--models` adds
+finder runs for every candidate × lens × model × attempt. Start with a bounded
+candidate set and cost ceiling before increasing these multipliers:
+
+```bash
+0 deep-review ./target-repo --max-candidates 8 \
+  --models YOUR_MODEL_A,YOUR_MODEL_B --attempts 1 --cost-ceiling 5
+```
+
+Configure access to each selected model first. Hunt's cross-family refuter tries
+to use a family different from all known finder families; absent credentials,
+unknown families, or a failed alternate call can retain/fall back to same-family
+refutation. Inspect the recorded pairing/degradation status rather than assuming
+independence. This is a role-selection policy, not a learned optimal-model router
+or proof that a finding was dynamically reproduced. Local tools and VM execution
+remain local even when model calls use a hosted transport.
 
 ## Input and artifact contracts
 
@@ -135,7 +155,7 @@ for variants, and passes candidate findings through an adversarial skeptic.
 | `--reachable-only` | env `HUNT_REACHABLE_ONLY` | Restrict to kernelCTF-reachable paths |
 | `--reachable-prefer` | env `HUNT_REACHABLE_PREFER` | Sort reachable first, drop none |
 | `--no-verify` | — | Skip skeptic gate (triage only, never disclosure) |
-| `--novelty` | — | Require lore.kernel.org duplicate suppression |
+| `--novelty` | — | Check lore.kernel.org duplicate evidence; use `--novelty-required` to abort when that evidence is unavailable |
 | `--methodology` | — | kernel-LPE methodology preset |
 
 **Lens flags:**
@@ -242,11 +262,11 @@ classifier → refined invariant engine → adversarial verify → ranked report
   --dynamic-witness \
   --witness-candidates 5
 
-# Scheduler mode: write dated reports to a directory
+# One run with explicit report paths (schedule repeated invocations externally)
 0 recency-hunt \
   --tree /root/linux-next \
   --hours 24 \
-  --report-dir /var/reports/recency
+  --output ./recency-report.json --md ./recency-report.md
 ```
 
 ### Key flags
@@ -261,7 +281,7 @@ classifier → refined invariant engine → adversarial verify → ranked report
 | `--max-hunt-files <N>` | 25 | Cap files run through the engine |
 | `--detectors <list>` | `dataflow,refcount,race` | Detectors per semantic file. `dual-view` is opt-in |
 | `--dynamic-witness` | Off | KASAN VM boot oracle (implies `dual-view`). Expensive |
-| `--report-dir <dir>` | — | Write dated YYYY-MM-DD.{json,md} reports |
+| `--output <path>` / `--md <path>` | stdout / none | Write JSON / optional Markdown report; repeated runs require an external scheduler |
 | `--remine-assumptions` | Off | Force fresh assumption mine each run |
 
 **Detector types:**
@@ -555,14 +575,14 @@ See [Commands — kernel](/commands/#kernel).
 ## XNU IOKit fuzzer (`xnu-fuzz`)
 
 Three-part workflow for IOKit user-client fuzzing on macOS. Operates
-offline (model + generate locally); the VM run lane requires an Apple Silicon
-macOS VM.
+offline (model + generate locally); `harness-plan` describes prerequisites for
+an Apple Silicon macOS VM but does not launch it.
 
 ### `enumerate` — kext → target model
 
 ```bash
 0 xnu-fuzz enumerate \
-  --kext ./IOSurface.kext \
+  --kext ./IOSurface.macho \
   --bundle com.apple.iokit.IOSurface \
   --out target-model.json
 ```

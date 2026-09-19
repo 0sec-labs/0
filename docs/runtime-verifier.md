@@ -2,127 +2,116 @@
 
 ## Status
 
-`HuntScanOptions.runtimeVerify` is wired as an opt-in terminal gate after the
-skeptic/prover and optional exploitability gates. The E2B provisioner remains a
-skeleton: without an injected verifier, it reports an honest no-op/error rather
-than fabricating runtime evidence.
+`HuntScanOptions.runtimeVerify` is a shipped **injectable terminal gate**, not a
+working E2B provisioner. `runHuntScan` composes it after `verify` and optional
+`exploitability`. With no prior `verify` gate, it records a warning and skips
+runtime verification.
+
+`packages/core/src/stages/runtime-verify.ts` exports `makeRuntimeVerifier`, a
+skeleton adapter. Setting `E2B_API_KEY` does not make it provision or boot a
+target. Its default verifier returns `error` with reason `E2B driver not yet
+implemented`. Do not use this factory's pass-through `confirmed: true` as proof
+that a runtime exploit succeeded.
 
 ## Motivation
 
 The cloudflare-os campaign (2026-08-05) demonstrated a sharp quality jump when
-findings were PoC'd against a live target instead of only being
-source-reviewed. Static-only scans produce unverifiable candidates: the source
-says the bug should trigger, but no runtime confirmation exists. The runtime
-verifier stage closes that gap.
-
-Per the postmortem pipeline:
+findings were PoC'd against a live target instead of only being source-reviewed.
+That historical motivation remains distinct from the implementation status.
+The intended pipeline was:
 
 ```
 target → threat-model planner → per-lane finders → adversarial refuter
        → deployment-context filter → RUNTIME VERIFIER → report assembler
 ```
 
-The runtime verifier runs **after the adversarial refuter**, **before the
-report assembler**, and **only for targets the engine can self-host** (i.e.
-targets whose `quickstart` or equivalent brings up the service on a known
-port).
+A source-backed candidate still needs a real executor, a target setup contract,
+and exploit-specific observations before it can become runtime evidence.
 
 ## When it runs
 
-- Only after the finding has survived the skeptic+prover gate (confirmed).
-- Only for targets tagged as `selfHostable` in the target descriptor (never
-  for third-party / production targets that the engine should not reach).
-- Only when `E2B_API_KEY` is set in the environment. Without it, the stage is
-  a silent no-op.
-
-The stage is **never blocking**: a sandbox failure, a setup error, or a
-verifier that hangs or errors out only **downgrades confidence** on the
-finding — it does not drop it from the report, does not raise an exception,
-and does not abort the scan.
+- An SDK caller explicitly supplies `runtimeVerify`; it is not an automatic
+  stage of every hunt or scan.
+- The composed gate only receives findings that survived earlier gates.
+- The **factory** checks `E2B_API_KEY` and passes through without calling its
+  injected verifier when the key is absent. A separately injected `HuntVerifier`
+  is not required to use this factory or E2B.
+- `selfHostable` eligibility is a **caller responsibility/design requirement**,
+  not an enforced target-descriptor field in this factory.
 
 ## What it does
 
-For each confirmed, self-hostable finding with a `poc_plan` (structured or
-prose description of how to demonstrate the bug against a running target):
+Today's factory passes the finding, `finding.evidence.analysis` as `pocPlan`,
+and an **empty string** as `endpoint` to `opts.verify`. It does not provision a
+sandbox, launch a service, discover a port, enforce a verifier deadline, persist
+transcripts, or tear down infrastructure.
 
-1. **Provision** an E2B sandbox from the target's declared quickstart image
-   (the 0sec Docker image or equivalent).
-2. **Stand up** the target service inside the sandbox using its declared
-   startup sequence (e.g. `docker compose up`, `pnpm run-local`, a script).
-3. **Discover** the live endpoint (sandbox hostname + mapped port).
-4. **Hand a verifier agent** the finding + poc_plan + live endpoint URL.
-5. **Collect** the verifier's result: `PASS` (PoC produced evidence of
-   exploitation), `FAIL` (PoC did not reproduce), `ERROR` (sandbox or agent
-   failure).
-6. **Capture** the full verifier transcript as verification evidence.
-7. **Tear down** the sandbox.
+A real integration must supply those behaviors and enforce authorization and
+isolation itself. In particular, a temporary directory, an E2B credential and a
+model's `pass` verdict are not evidence of a sandbox boundary.
 
 ### Verifier input/output contract
 
 ```typescript
 interface RuntimeVerifierInput {
   finding: Finding;
-  /** The finding's poc_plan — structured or prose steps for reproducing the
-   *  bug against a running target instance. */
   pocPlan: string;
-  /** The live target endpoint after sandbox provisioning, e.g.
-   *  "https://e2b-sandbox-abc123:8080" */
   endpoint: string;
 }
 
 interface RuntimeVerdict {
   outcome: "pass" | "fail" | "error";
-  confidence: number; // 0.0–1.0
-  /** Verbatim transcript of the verifier agent's interaction with the target,
-   *  including any output, screenshots, or error logs. */
+  confidence: number;
   transcript: string;
-  /** Human-readable explanation of the verdict. */
   reason: string;
 }
 ```
 
+These are the callback types, not the deterministic `VerificationResult`
+schema. The factory converts the callback result to `{ confirmed, reason }`;
+it does not attach `transcript` or mutate `finding.confidence`.
+
 ## Failure posture
 
-| Condition | Effect on finding |
-|---|---|
-| E2B_API_KEY unset | No-op (finding passes through with original confidence) |
-| Sandbox provisioning fails | Finding confidence NOT downgraded; warning logged |
-| Target startup fails | Confidence downgraded (unreproducible); warning logged |
-| Verifier agent errors | Confidence downgraded; error transcript attached |
-| Verifier returns FAIL | Confidence downgraded; transcript attached |
-| Verifier returns PASS | Finding promoted; evidence enriched with transcript |
-| Per-scan cost cap hit | Verifier skipped for remaining findings; warning logged |
+| Condition in `makeRuntimeVerifier` | Current result |
+| --- | --- |
+| `E2B_API_KEY` unset | `confirmed: true`, explicit no-op reason; callback not invoked |
+| Budget initialized at zero or below | `confirmed: true`, cost-cap skip reason |
+| Default callback | `confirmed: true`, `ERROR` reason naming the absent E2B driver |
+| Callback returns `pass` | `confirmed: true`, `PASS` reason with callback confidence |
+| Callback returns `fail` or `error` | `confirmed: true`, `FAIL`/`ERROR` reason; no numeric downgrade |
+| Callback throws | `confirmed: true`, exception text in reason |
+| Callback hangs | No implemented timeout in this factory |
+
+The skeleton never rejects a finding. This does **not** constrain an arbitrary
+`runtimeVerify: HuntVerifier` supplied by a caller: that gate can return
+`confirmed: false` and reject through normal `composeGate` semantics.
 
 ## Cost guardrails
 
-- A per-scan cost cap (env var `RUNTIME_VERIFY_COST_CAP`, default $5) limits
-  total E2B provisioned time during one scan. When the cap is reached,
-  remaining findings skip the verifier with a single log line.
-- Each sandbox has a hard timeout (env var `RUNTIME_VERIFY_SANDBOX_TIMEOUT`,
-  default 120s). Past this, the sandbox is destroyed and the finding's
-  verifier attempt is recorded as `error`.
-- The verifier agent itself has a timeout (env var
-  `RUNTIME_VERIFY_AGENT_TIMEOUT`, default 60s).
+`RUNTIME_VERIFY_COST_CAP` parses a positive dollar amount (default `$5`). The
+factory initializes its closure budget to `opts.budgetCents` when supplied,
+otherwise `max(50, floor(capInCents / 10))`. **No cost is deducted** in the
+skeleton, so this is not an enforced per-scan spend limit.
+
+The proposed `RUNTIME_VERIFY_SANDBOX_TIMEOUT` (120 seconds) and
+`RUNTIME_VERIFY_AGENT_TIMEOUT` (60 seconds) are not read by this implementation.
+They are design proposals, not working configuration knobs.
 
 ## Safety
 
-- Only targets tagged `selfHostable` in their target descriptor are eligible.
-- The engine never provisions a sandbox against a target pointing at
-  third-party infrastructure (production, staging, CI — any non-local URL).
-- The sandbox runs the 0sec Docker image, which has no host network access
-  beyond the E2B gateway.
-- No scan output written from inside the sandbox is trusted by the engine:
-  transcripts are evidence, not commands.
+A future or caller-supplied provisioner must establish self-hostability,
+authorized target egress, credential isolation, resource limits, cancellation,
+and teardown before executing a PoC. There is no shipped E2B image/network
+isolation guarantee in this stage. Transcripts must be treated as untrusted
+evidence, never as commands for the controller.
 
 ## Wiring
 
-The runtime verifier fits into the existing stage architecture at two seams:
+<span id="seam-a-composegate-recommended-for-mvp"></span>
+### Seam A: composeGate
 
-### Seam A: composeGate (recommended for MVP)
-
-`HuntScanOptions` now exposes an optional `runtimeVerify?: HuntVerifier`.
-`runHuntScan` composes it after `verify` and `exploitability`; it is skipped
-with a warning when no prior confirmation gate exists:
+The implemented integration in `packages/core/src/stages/hunt-scan.ts` is:
 
 ```typescript
 let verify = opts.verify;
@@ -130,48 +119,30 @@ if (opts.exploitability && verify) verify = composeGate(verify, opts.exploitabil
 if (opts.runtimeVerify && verify) verify = composeGate(verify, opts.runtimeVerify);
 ```
 
-This places the runtime verifier as the **terminal gate stage** — it only runs
-on findings that survived the skeptic+prover gate (and the exploitability
-gate, if wired). The same `composeGate` short-circuit behavior applies: if an
-earlier gate rejects the finding, the runtime verifier never sees it.
+The actual implementation also records a warning when runtime verification was
+requested without `verify`. Earlier rejection short-circuits later gates.
 
 ### Seam B: VerifyLens (for multi-lens quorum)
 
-Add a `RuntimeVerifyLens` type:
-
-```typescript
-interface RuntimeVerifyLens extends VerifyLens {
-  type: "runtime";
-  /** The finding's poc_plan steps for the verifier agent. */
-  pocPlan: string;
-  /** Which self-hostable target to stand up. */
-  targetDescriptor: string;
-}
-```
-
-A `makeMultiLensVerifier` that includes a runtime lens would run the
-adversarial refute AND the sandbox PoC in parallel, requiring all lenses to
-survive. This is architecturally cleaner but needs the E2B client at lens
-construction time.
+A runtime lens participating in a multi-lens quorum remains a design option,
+not the implemented runtime integration. It would require an executor and
+target descriptor at lens construction and explicit rules for infrastructure
+failure versus a negative reproduction.
 
 ### Chosen seam
 
-`runHuntScan` now implements **Seam A**. The option is injectable for a real
-customer runtime verifier or test harness, while `makeRuntimeVerifier` retains
-its E2B guardrails and does not claim that an E2B driver exists.
+`runHuntScan` implements Seam A. Integrators can supply a real verifier without
+claiming that the built-in skeleton has acquired a working E2B driver.
 
 ## Dependencies
 
-- `@e2b/sdk` (or equivalent E2B client) — not yet added to `package.json`;
-  the skeleton is a no-op without `E2B_API_KEY` and imports nothing from E2B.
-- The target's quickstart/startup descriptor — TBD per target type.
+A working E2B provisioner, target startup descriptor and evidence persistence
+are still required for the proposed managed-sandbox workflow. The skeleton
+imports no E2B client.
 
 ## Future work
 
-- Full E2B driver (`E2bSandboxProvisioner` class).
-- Verifier agent prompt and handoff protocol.
-- `selfHostable` target descriptor field.
-- `poc_plan` structured field on `Finding` (currently prose in
-  `evidence.analysis`).
-- Per-target startup scripts baked into the 0sec Docker image.
-- Integration test against a real E2B sandbox.
+The original design still calls for an E2B driver, verifier handoff protocol,
+self-hostable target descriptors, a structured PoC plan, target startup scripts,
+measured cost accounting, hard timeouts, transcript retention and a real sandbox
+integration exercise. These are not claims of shipped behavior or new runs.

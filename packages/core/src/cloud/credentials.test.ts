@@ -54,12 +54,12 @@ describe("loadCloudCredentials", () => {
 
   it("keeps development and production saved credentials separate", () => {
     const home = makeFakeHome("0SEC_CLOUD_TOKEN=production-token\n0SEC_CLOUD_HOST=https://cloud.0.security\n");
-    const env = { "0SEC_DEV_SOURCE_ROOT": "/fixture/engine", "0SEC_CLOUD_HOST": "https://dev.0sec.ai" };
+    const env = { "0SEC_DEV_SOURCE_ROOT": "/fixture/engine", "0SEC_CLOUD_HOST": "https://dev.0.security" };
     expect(() => loadCloudCredentials({ env, homeDir: home })).toThrow(CloudAuthMissingError);
     mkdirSync(join(home, ".0sec", "dev"), { mode: 0o700 });
     writeFileSync(join(home, ".0sec", "dev", "cloud.env"), "0SEC_CLOUD_TOKEN=dev-token\n", { mode: 0o600 });
     expect(loadCloudCredentials({ env, homeDir: home })).toEqual({
-      host: "https://dev.0sec.ai", token: "dev-token", source: "file",
+      host: "https://dev.0.security", token: "dev-token", source: "file",
     });
     expect(loadCloudCredentials({ env: {}, homeDir: home })).toEqual({
       host: "https://cloud.0.security", token: "production-token", source: "file",

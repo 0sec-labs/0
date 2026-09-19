@@ -1,5 +1,11 @@
 # 0verse ground-truth evaluation — does it find REAL bugs without crying wolf?
 
+> **Historical campaign record.** Preserve the measured tables and their
+> target/model/budget limitations. “Now,” “headline,” and reproduction host
+> aliases below refer to this campaign, not the current checkout's qualification.
+> A new run needs separately installed engines, authorized execution, and
+> provider credentials; see [INTEGRATION.md](INTEGRATION.md).
+
 > **The credibility instrument.** Everything else measures 0verse against *itself*
 > (ablations, baselines). This measures it against **ground truth**: real bugs with
 > KNOWN locations + fix commits, scored for **reach** / **recall** (did it surface

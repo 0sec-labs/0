@@ -3,13 +3,30 @@ title: Build a Hackstore extension
 description: Create, test, and publish tools for the 0 agent.
 ---
 
-An extension adds tools the 0 agent can call. It consists of a manifest and a
-self-contained JavaScript program using Node-compatible APIs. This guide takes a generated extension through a
-local run, then explains the runtime contract.
+A Hackstore extension adds tools the 0 agent can call. It consists of a manifest
+and a self-contained JavaScript program using Node-compatible APIs. This guide
+takes a generated extension through a local run, then explains the runtime
+contract.
+
+This is the **operator-installed, local child-process** plugin path, not the
+model's sandboxed TypeScript `self_extend` path. Hackstore tools do not receive
+the executable-plugin `sdk.callTool` / `sdk.callModel` broker, cannot register
+authorization hooks, and are not automatically evaluated for improvement.
+For model-authored tools and their separate version store, see
+[Integrations](/integrations/#model-authored-executable-plugins-self-extension).
 
 Use 0 0.17.0 or newer for the authoring commands and direct `plugin run`
 workflow below. The 0.16.3 binary has a tool-registry bug in `plugin run`.
 Check `0 --version` and command-specific `--help` before following this guide.
+
+The implementation references for this guide are
+[`hackstore.ts`](https://github.com/0sec-labs/0sec/blob/main/packages/cli/src/commands/hackstore.ts)
+(scaffolding/validation),
+[`plugin.ts`](https://github.com/0sec-labs/0sec/blob/main/packages/cli/src/commands/plugin.ts)
+(installation/approval/direct calls), and
+[`loader.ts`](https://github.com/0sec-labs/0sec/blob/main/packages/core/src/plugins/loader.ts)
+(spawn/handshake/dispatch). Check the help for your installed release rather
+than assuming an SDK method has a matching CLI command.
 
 ## Create and validate
 
@@ -78,10 +95,24 @@ markers and truncate long results before returning them to the model.
 Name the tool explicitly when passing `key=value` arguments. Otherwise the first
 pair is parsed as the optional tool name. For structured arguments use
 `--json '{"input":"hello"}'`. Pairs override matching keys in `--json`.
+Pairs are always strings (`count=3` yields `"3"`); use `--json` for numbers,
+booleans, arrays or nested objects.
 
 Tools classified as effectful require `--yes` for a direct CLI call. The plugin
 has already been loaded by that point; declining the call does not mean no plugin
 code has executed. Only enable code you trust.
+
+After the successful call, exercise a real failure too:
+
+```sh
+0 plugin run my-extension sha256 --json '{"input":3}'
+```
+
+Run this inside the temporary-home block above, before its closing `)`, if you
+want to keep the installation isolated. It should exit nonzero with `input must
+be a string` from the plugin. The block's `set -e` then exits and runs its cleanup
+trap. When replacing the scaffold, also test a failing external dependency
+through the real loader; manifest validation alone cannot catch those failures.
 
 ## Implement your tool
 
@@ -150,14 +181,22 @@ Declare what the tool actually does, including any program it launches.
 For combined capabilities, flags are combined: `network` or `process-exec` makes
 a tool network-capable; either filesystem capability requires local scope; a
 tool is read-only only if all capabilities are `compute`, `model-call`, or
-`filesystem-read`. Scan workflows use these flags in their authorization checks.
-Direct `plugin run` uses the separate `--yes` check described above.
+`filesystem-read`. Console sessions with a supplied plugin host use these flags
+in their authorization checks. Direct `plugin run` uses only the separate
+enablement and `--yes` checks described above; it has no scope-file argument.
 
 Declarations are not operating-system restrictions. The plugin runs under your
 user account with an allowlisted environment. It can still access resources your
 account can access. The host does not verify that code obeys its declarations,
 and a child process is not a security sandbox. A capability does not provide a
 credential, a paid model allowance, or an internal API handle.
+
+Provider keys and the target-auth environment block are not forwarded by the
+loader. A `model-call` declaration does not make a provider available, and
+`findings-write` does not grant direct access to the scan database. If you need
+authorized host services rather than a standalone local process, use the
+separate self-extension broker contract. Never design a registry plugin around
+reading credentials from the operator's home directory.
 
 ## Wire protocol
 
@@ -217,13 +256,48 @@ Other protocol types support separate host-brokered workflows. Their presence in
 ```
 
 Installation writes files without running code. Enablement records approval for
-the current project without starting the plugin. Loading during a scan or a
-direct run starts the child. Disabling removes project approval but keeps files.
+the current project without starting the plugin. Direct `plugin run`, or loading
+an approved plugin for an OpenTUI chat, starts the child. Disabling removes
+project approval but keeps files.
 
 Installed files live under `~/.0sec/plugins/<id>/`. Project approval records live
 under `~/.0sec/plugin-enablement/`, keyed by the resolved project path. A changed
 aggregate capability set requires renewed approval. Version-only changes with
 the same capabilities do not by themselves invalidate that approval.
+
+### Use an installed tool in a chat
+
+Enable it from the project where you intend to use it, then start `0 tui` from
+that directory. The OpenTUI loads approved marketplace tools into a host pinned
+to each chat. Ask the agent for the declared tool (`foxguard_scan`, for example),
+not the registry ID (`foxguard.scanner`).
+
+If you install, enable, disable, or replace a plugin while the TUI is open,
+refresh through the marketplace and start a new chat. Existing chats keep their
+leased host until cleanup; disablement does not retroactively kill that running
+code. Close the old chats when revocation must take effect immediately. This
+host ownership is implemented in
+[`session-plugin-host.ts`](https://github.com/0sec-labs/0sec/blob/main/packages/cli/src/tui/session-plugin-host.ts).
+Other CLI workflows do not automatically acquire this TUI host.
+
+### Update deliberately
+
+There is no separate `plugin update` or `plugin uninstall` subcommand. Running
+`0 plugin install <id>` again writes the entry currently supplied by your
+configured registry, including over an existing installation. Inspect the code
+and `0 plugin info <id>` before using it. Same-capability updates do not require
+renewed approval, so capability approval is not approval of exact source bytes.
+An already-running chat is not updated merely because files on disk changed.
+
+For the published FoxGuard adapter, install the standalone `foxguard` executable
+first. Hackstore does not install it for you. The adapter requires an absolute
+path, accepts an optional `severity`, and bounds scans to 25 seconds and 8 MiB
+of scanner stdout. Its results can omit findings to fit the plugin result limit;
+inspect `omittedFindings` and truncation rather than assuming a complete report.
+Larger paths should be scanned in smaller parts or with the standalone scanner.
+See the [adapter source](https://github.com/0sec-labs/hackstore/blob/main/extensions/foxguard/plugin.js)
+and the [current registry](https://raw.githubusercontent.com/0sec-labs/hackstore/main/index.json)
+for the version you are installing.
 
 The default registry is
 <https://raw.githubusercontent.com/0sec-labs/hackstore/main/index.json>.

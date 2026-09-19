@@ -49,7 +49,7 @@ The desktop resolves assets from `packages/dashboard/dist/` (development) or
 
 | Variable | Role |
 |----------|------|
-| `OSEC_DESKTOP_ROOT` | Monorepo root path for resolving workspace layout in development (default: search upward from `cwd` for `pnpm-workspace.yaml`) |
+| `OSEC_DESKTOP_ROOT` | Monorepo root path for resolving workspace layout in development (the desktop otherwise searches upward from its main module for `pnpm-workspace.yaml`) |
 | `OSEC_DESKTOP_DEBUG_PORT` | Bind Chromium DevTools to `127.0.0.1:<port>` for development builds only (integer, 1024–65535). Remote inspection reaches this port through an SSH tunnel only. |
 | `BUN_PATH` | Custom `bun` binary path for the development sidecar (default: `"bun"` on `PATH`) |
 
@@ -109,7 +109,8 @@ The desktop separates the renderer (web UI) from engine operations through a
 
 In development, the sidecar runs through the local `bun` CLI entrypoint
 (`packages/cli/dist/index.js`). In packaged builds, it runs the pre-bundled
-binary from `resources/sidecars/<platform-arch>`.
+binary from `process.resourcesPath/sidecars/0sec-<platform>-<arch>`
+(Windows uses `0sec-windows-<arch>.exe`).
 
 On macOS, closing the last window leaves the application and sidecar running.
 Dock activation or **New Session** recreates the window without starting another
@@ -238,6 +239,9 @@ sessions or toggle the sidebar twice.
 
 ### Local candidate checks
 
+These are retained observations from a local browser candidate, **not**
+qualification of the current Electron package or a supported release matrix.
+
 The compiled dashboard browser candidate uses `ConsoleSession.harness` and its
 shared catalog for live views, commands, settings, and workspace trust.
 Host ESM trust requires separate acknowledgement from self-extension.
@@ -252,12 +256,14 @@ delivered disposal callbacks were idempotent; callback delivery during automatic
 frame removal remains best effort.
 
 Cloud sign-in, in-renderer API-key entry, and provider/model pickers remain
-unimplemented. Provider authentication, hosted payment/inference, native
-installation, and release qualification remain pending.
+unimplemented. The current renderer does wire Codex device sign-in through the
+local sidecar; that is provider authentication, not a 0cloud login or hosted
+execution. Hosted payment/inference, native installation, and release
+qualification were not established by these candidate checks.
 
 ## Platforms and build requirements
 
-### Supported architectures
+### Configured packaging targets
 
 | Platform | Architectures | Package artifacts |
 |----------|---------------|-------------------|
@@ -265,37 +271,52 @@ installation, and release qualification remain pending.
 | macOS (Darwin) | x64, arm64 | `.dmg`, `.zip` |
 | Windows | x64, arm64 | NSIS installer, `.zip` |
 
+These are the platforms and filenames accepted by the source packaging code,
+not a claim that signed downloadable releases or runtime qualification exist
+for every row. Resource preparation selects **the host's** platform and
+architecture; `package:mac` or `package:win` alone is not a cross-compilation
+pipeline.
+
 ### Building a package
 
-Prerequisites: Node.js 24+, pnpm 9+, Bun (for sidecar compilation).
+Prerequisites: Node.js 24+, pnpm 9.15.9, Bun 1.3.14, and the native packaging
+dependencies for the host OS. Run from the repository root on the target
+platform/architecture.
 
 ```bash
 # Build all workspace packages
 pnpm install --frozen-lockfile
 pnpm build
 
-# Compile the sidecar binary matching your platform
+# Compile the host sidecar (this example must run on Linux x64).
+# pnpm build above also builds the dashboard required by this script.
 bash scripts/bun-compile.sh "" "dist-bin/0sec-linux-x64"
-
-# Build the dashboard
-pnpm --filter @0sec/dashboard build
 
 # Package the desktop (Linux example)
 pnpm --filter @0sec/desktop package:linux
 ```
 
 The sidecar binary filename pattern is `0sec-<platform>-<arch>` (Linux/macOS)
-or `0sec-windows-<arch>.exe` (Windows). The example above targets Linux x64.
-On macOS, use `0sec-darwin-arm64` or `0sec-darwin-x64` as the output path.
+or `0sec-windows-<arch>.exe` (Windows). The example above is for a Linux x64
+host: the empty first argument means **compile for the host**, not "target the
+platform named in the output file." On Apple Silicon, use
+`dist-bin/0sec-darwin-arm64` and `package:mac`; on Intel macOS use
+`dist-bin/0sec-darwin-x64`. Windows requires a compatible shell for
+`bun-compile.sh` and the matching `0sec-windows-<arch>.exe` output.
+
+Although the Bun compiler accepts an explicit cross-target, desktop resource
+preparation currently copies only the host-matching sidecar. Build/package on
+the matching OS and architecture rather than relabeling a binary. Packages are
+written under `packages/desktop/release/` with publication disabled.
 
 The `package:*` scripts (`package:linux`, `package:mac`, `package:win`) run
 `prepare-desktop-resources.mjs` before invoking electron-builder:
 
-1. Removes any existing `resources/` directory.
-2. Copies the built dashboard from `packages/dashboard/dist` to
-   `resources/dashboard`. Asserts `index.html` exists.
-3. Creates `resources/sidecars/` and copies the compiled CLI binary there
-   (asserted to exist at the expected platform name).
+1. Validates that the built dashboard's `index.html` and the host-matching
+   `dist-bin/0sec-*` sidecar exist.
+2. Removes the desktop package's existing `resources/` directory.
+3. Copies `packages/dashboard/dist` to `resources/dashboard` and the compiled
+   sidecar to `resources/sidecars/`, marking it executable.
 4. electron-builder bundles both as `extraResources` into the release package.
 
 The resulting package contains the Electron runtime + app code (in ASAR
@@ -315,7 +336,7 @@ archive), the dashboard web UI, and the sidecar binary.
 | Build mode | Dashboard assets | Sidecar binary |
 |------------|------------------|----------------|
 | Development | `packages/dashboard/dist/` | Bun entrypoint at `packages/cli/dist/index.js` (run through `bun`) |
-| Packaged (`app.isPackaged === true`) | `process.resourcesPath/dashboard/` | `process.resourcesPath/sidecars/0sec-<platform>-<arch>` |
+| Packaged (`app.isPackaged === true`) | `process.resourcesPath/dashboard/` | `process.resourcesPath/sidecars/0sec-<platform>-<arch>` (`0sec-windows-<arch>.exe` on Windows) |
 
 Both are validated at launch — the application exits with an error dialog if
 either is missing.

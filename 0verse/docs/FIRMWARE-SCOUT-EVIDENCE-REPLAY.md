@@ -5,6 +5,25 @@ implementation, [`zeroverse.scout_evidence`](../src/zeroverse/scout_evidence.py)
 imports no CAN, ISO-TP, serial, or vendor adapter and exposes no send operation.
 Issue `#78` adds its separate optional receive-only SocketCAN adapter.
 
+## Hardware-free command line
+
+Run from `0verse/` in the locked Python environment:
+
+```sh
+uv run --frozen 0verse scout capture --fixture standard --output ./scout-example
+uv run --frozen 0verse scout inspect ./scout-example
+uv run --frozen 0verse scout report ./scout-example --format json
+uv run --frozen 0verse scout report ./scout-example --format md
+```
+
+`capture` refuses an existing output directory. This is the virtual fixture,
+not a physical-device capture. `inspect`/`report` first validate the complete
+bundle and replay evidence; malformed or incomplete inputs fail with exit `2`
+and no successful report. Reports separate `observed`, `inferences`, and
+`unknowns`; no verified firmware yields `no-verified-firmware-artifacts`, not an
+invented firmware image. Device identifier values are omitted from the report,
+but inspection strings and other retained evidence still require export review.
+
 ## Passive workflow
 
 ```text

@@ -12,6 +12,12 @@ draft: true
 > [`2026-05-22-baseline.md`](./2026-05-22-baseline.md), filled with
 > `<pending>` markers and committed alongside the harness so the validation
 > gate has a starting point.
+>
+> **Current harness boundary:** the script invokes `0 review <local-tree>
+> --format json` for all three slice names. `xbow-bb-wave` is a historical label:
+> this wrapper does not boot XBOW services, run a black-box attack, or grade flags.
+> `npm-bench-wave` reviews the supplied unpacked tree; it does not select or grade
+> nine packages itself. Prepare and record the exact input slice before use.
 
 <span id="why"></span>
 ## Experiment rationale
@@ -45,8 +51,8 @@ Three slices, all reproducible locally via
 | Slice | Why this slice | Target |
 |---|---|---|
 | `self-scan` | TS/JS in the language families 0 ships in. Catches regressions from our own dogfood. | 0sec repo itself. |
-| `xbow-bb-wave` | PHP-heavy black-box wave. PHP/Java sink coverage in Foxguard's built-ins is the open question from 0sec#254. | `0ca/xbow-validation-benchmarks-patched` BB wave. |
-| `npm-bench-wave` | JS taint focus on a known-truth corpus. | First 9 packages of npm-bench (3 malicious, 3 vulnerable, 3 safe). |
+| `xbow-bb-wave` | PHP-heavy source review; name retained from the proposal, not a black-box flag benchmark. | Prepared local XBOW source slice passed with `--xbow-path`. |
+| `npm-bench-wave` | JS source-review comparison; prepare the intended package subset yourself. | Unpacked source directory passed with `--npm-bench-cache`. |
 
 The sample sizes are small. This is a validation gate. If the gate
 passes, we run the full ablation matrix and publish numbers like the
@@ -58,8 +64,8 @@ Per slice, per static-analyzer (`semgrep` and `foxguard`):
 
 | Metric | Captured by | Why it matters |
 |---|---|---|
-| Total findings | `report.semgrepFindings` (count) | Crude noise indicator. |
-| Confirmed findings | `report.findings.filter(status='confirmed').length` | The actual triage value — what survives the agent verify wave. |
+| Total findings | `report.findings.length` | Report volume, not the raw static scanner count. |
+| Confirmed findings | `report.findings` with `confirmed` or `verified` status | Stored review status; inspect evidence before calling it dynamic reproduction. |
 | Wall time | Harness `Date.now()` deltas | Promotion gate input. |
 | FP rate (sampled) | Hand-labelled `perFindingForLabel[].label` | Labelled precision rate. Operator reviews each row and sets `label` to `true-positive`, `false-positive`, or `needs-context`. |
 

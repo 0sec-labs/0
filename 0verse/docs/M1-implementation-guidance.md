@@ -1,5 +1,13 @@
 # 0verse M1 Vertical-Slice — Engineering Guidance
 
+> **Archived M1 planning guidance.** This document preserves the original
+> milestone's proposals, not current operator instructions. In particular,
+> `ssh sandbox` is a historical lab alias, not a provisioned service; native
+> execution now requires an explicit executor. Unknown/timeout symbolic results
+> must not be treated as UNSAT merely because the planning language below says
+> to reject unsatisfied hypotheses. See [INTEGRATION.md](INTEGRATION.md) and
+> [RESULT-CONTRACT.md](RESULT-CONTRACT.md) for the current fail-closed boundaries.
+
 PoV-is-the-unit-of-truth. The whole doc optimizes for one outcome: a deterministic crashing input, replayed natively, on a real binary. Everything that doesn't serve that is M2.
 
 ---

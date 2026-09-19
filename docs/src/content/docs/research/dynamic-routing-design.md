@@ -4,6 +4,11 @@ description: Learned layer selection, training objectives, model tradeoffs, and 
 ---
 
 > Historical design and April 2026 results, tracked in [0sec#113](https://github.com/0sec-labs/0sec/issues/113). See [rule-based v0](/research/dynamic-triage-routing/) for the implementation record.
+> The original 45-feature proposal below predates the current 55-feature
+> extractor. Keep feature revisions aligned when reusing its datasets.
+> Current hand-coded TP/FP scoring and rule-based layer selection are separate,
+> default-off mechanisms; the trained artifacts do not imply a deployed learned
+> layer-selector or optimal routing among LLM providers.
 
 <span id="the-problem-in-one-paragraph"></span>
 ## Motivation
@@ -204,7 +209,7 @@ And a recall metric: **per-category recall breakdown**. No category should lose 
 - [FP Reduction Moat](/research/fp-reduction-moat/) — the static triage stack this design replaces
 - [Finding Triage ML](/research/finding-triage-ml/) — the original hybrid ML design doc, this page supersedes its routing section
 - [Triage Dataset](/research/triage-dataset/) — the JSONL schema the router trains on
-- [Feature Extractor](/research/feature-extractor/) — the 45 handcrafted features
+- [Feature Extractor](/research/feature-extractor/) — the current 55-feature reference (45 in the original proposal)
 - [0sec#72](https://github.com/0sec-labs/0sec/issues/72) — the ablation data, with run IDs and per-comment result tables
 - [0sec#112](https://github.com/0sec-labs/0sec/issues/112) — per-finding `layerVerdicts` telemetry (prerequisite, shipped 2026-04-11)
 - [0sec#113](https://github.com/0sec-labs/0sec/issues/113) — this tracking issue

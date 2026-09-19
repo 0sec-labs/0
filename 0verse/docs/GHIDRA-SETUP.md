@@ -16,23 +16,32 @@ below for why that mattered more than it sounds.
 
 ## Install
 
-Inside the Docker image (`ghcr.io/0sec-labs/0verse`) both halves are already
-present and nothing here applies. On a bare host:
+The locally built `0verse:local` Docker image includes both halves and JDK 21.
+Do not assume a public image registry is available. On a bare host, use Python
+3.11+, `uv`, and **JDK 21**, and run the commands below from the repository's
+`0verse/` directory:
 
 ```sh
-# 1. Ghidra (once). Version must match the pyghidra pin below.
+# 1. Download and unpack Ghidra 12.1.2 from its official release.
+# Point this at the unpacked installation (not its support/ subdirectory).
 export GHIDRA_INSTALL_DIR=/opt/ghidra
 
 # 2. The bridge, from the lock:
 uv sync --frozen --extra dev --extra ghidra
 ```
 
-Verify before trusting any result — an empty list here means Ghidra will not run:
+Verify before trusting any result — the list must contain `ghidra`, not merely
+another available fallback:
 
 ```sh
-uv run --frozen python -c \
+uv run --frozen --extra ghidra python -c \
   "from zeroverse.backends import contract; print(contract.available_backends())"
 ```
+
+Install releases from
+[Ghidra's official repository](https://github.com/NationalSecurityAgency/ghidra/releases).
+The in-tree Dockerfile pins Ghidra 12.1.2 and `linux/amd64`; on Apple Silicon it
+requires container emulation. This does not establish native ARM Ghidra support.
 
 ## The version pin, and why it is exact
 

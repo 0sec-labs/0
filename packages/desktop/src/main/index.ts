@@ -36,7 +36,7 @@ if (!app.isPackaged && developmentDebugPort !== undefined) {
 // Resolve it before renaming so explicit user-data-dir overrides also survive.
 app.name = "0sec";
 const userDataPath = app.getPath("userData");
-app.name = "0security";
+app.name = "0.security";
 app.setPath("userData", userDataPath);
 
 let mainWindow: BrowserWindow | null = null;
@@ -90,7 +90,7 @@ function createWindow(): BrowserWindow {
     minHeight: 600,
     show: false,
     backgroundColor: nativeTheme.shouldUseDarkColors ? "#161615" : "#f5f5f3",
-    title: "0security",
+    title: "0.security",
     webPreferences: {
       contextIsolation: true,
       sandbox: true,
@@ -138,7 +138,7 @@ async function showMainWindow(): Promise<BrowserWindow | null> {
 
 function showWindowError(error: unknown): void {
   if (!isQuitting) {
-    dialog.showErrorBox("0security could not open", error instanceof Error ? error.message : String(error));
+    dialog.showErrorBox("0.security could not open", error instanceof Error ? error.message : String(error));
   }
 }
 
@@ -252,7 +252,7 @@ function installApplicationMenu(): void {
     {
       role: "help",
       submenu: [
-        { label: "0security Documentation", click: () => { void shell.openExternal("https://docs.0.security"); } },
+        { label: "0.security Documentation", click: () => { void shell.openExternal("https://docs.0.security"); } },
       ],
     },
   ];
@@ -366,7 +366,7 @@ if (!app.requestSingleInstanceLock()) {
   }).catch((error: unknown) => {
     if (isQuitting) return;
     const message = error instanceof Error ? error.message : String(error);
-    dialog.showErrorBox("0security could not start", message);
+    dialog.showErrorBox("0.security could not start", message);
     void stopApplication().finally(() => app.exit(1));
   });
 

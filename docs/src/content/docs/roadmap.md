@@ -10,19 +10,29 @@ Use these guides for current instructions. The dated plans below preserve earlie
 | Area | Current entry point | Remaining boundary |
 | --- | --- | --- |
 | Interactive work | [Console](/console/) | The terminal interface for running scans and reviewing findings. |
+| Multi-model work | [Configuration](/configuration/) and [API Keys](/api-keys/) | Role assignments must use models supported by the selected provider or gateway; child agents do not automatically switch provider accounts. |
+| Find, verify, and repair | [Scan Workflows](/scan-workflows/) and [`secure`](/commands/#secure) | Reproduction, repair verification, publication, and overall completion are separate outcomes. Local repair executes with the worker's permissions. |
 | Saved scan continuation | [Scan Workflows](/scan-workflows/) | Resume routing and available state vary by producer; it is not universal recovery for every command. |
 | Findings and triage | [Commands](/commands/#findings) and [Finding Triage](/triage/) | Triage state is not proof that a vulnerability was reproduced or fixed. |
 | Diff-aware review and CI | [Integrations](/integrations/) and [GitHub CI](/ci/github-action/) | Local/scripted CI support does not imply a published composite action. |
 | Deterministic verification | [Verification Results](/verification-result/) | Replay requires executable inputs and valid setup; it does not cover every candidate automatically. |
 | Research adapters | [Research Workflows](/research-workflows/) | Imported evidence is distinct from execution performed by 0. |
+| Extensions and improvement | [Hackstore](/hackstore/) and [Improvement Plane](/improvement-plane/) | Installation, enablement, execution approval, evaluation, and promotion are distinct steps. |
+| Optional Jev assistance | [Capabilities](/features/) | Opt-in advisory assistance has separate configuration and budgets; it is not a verification oracle. |
 
 
 ## 0cloud
 
-**0cloud remains in development.** The complete self-serve managed onboarding
-path is not yet qualified. [Contact the team](https://0.security/contact/?intent=contact)
-to discuss managed work; access, scope, budget and deliverables must be agreed
-separately. Proposed onboarding examples are not a connected setup flow.
+0cloud has implemented CLI and server integration for authentication, enrollment,
+managed scans, and schedules. A public sign-in page or implemented endpoint does
+not establish account entitlement, a compatible deployed version, or qualified
+end-to-end operation. The complete self-serve managed path has not been qualified
+by this documentation audit. [Contact the team](https://0.security/contact/?intent=contact)
+to agree access, scope, spend, and deliverables.
+
+Before automating managed work, read the concrete client/server compatibility
+limits in [`connect`](/commands/#connect) and [`service`](/commands/#service),
+especially repository schedule filtering and remote cost-ceiling enforcement.
 
 [Hosted inference](/getting-started/#hosted-models) has its own availability
 and account-compatibility boundary. Signing in does not establish hosted spend,
@@ -39,12 +49,15 @@ documented flags.
 
 Priorities: reliable execution, usable evidence, and orchestration.
 
-Retained artifact-backed XBOW aggregate: 103/104 = 99.0% (only XBEN-030
-unsolved in any mode). Load-bearing gpt-5.4 black-box cohort: 93/95 = 97.9%.
-First scored full Cybench run: 36/40 = 90.0% single-config, single-shot. (The
-older mixed local+CI publication line is documented separately.) Next-quarter
-work targets making that capability routine: for one developer, for a CI
-pipeline gating PRs, and for a security team running a continuous campaign.
+## Retained research checkpoints
+
+The retained XBOW aggregate is 103/104 = 99.0%; the retained gpt-5.4 cohort is
+93/95 = 97.9%. Consolidation pools retained attempts and modes, so the latter
+must not be presented as an isolated black-box or single-shot result.
+The first scored full Cybench record is 36/40 = 90.0%.
+See [Benchmarks](/benchmark/) and [Methodology](/methodology/) for denominators,
+retry policies, evidence retention, and the separate older publication lines.
+These measurements are historical results, not a current product acceptance test.
 
 ## August 2026 product-discovery checkpoint
 
@@ -111,7 +124,12 @@ Trust-track implications:
 
 See [TypeScript/Rust Boundary](/research/typescript-rust-boundary/).
 
-## Implemented, pending release
+<span id="implemented-pending-release"></span>
+## Source implementation checkpoints
+
+These entry points exist in the source checkout. Check your installed CLI's
+help and the linked guides for availability, configuration, and execution limits;
+this section does not infer release status from source presence.
 
 - **Isolated improvement workers and promotion canaries.** The `0 evolve`
   CLI provides config-driven source candidate
@@ -120,7 +138,7 @@ See [TypeScript/Rust Boundary](/research/typescript-rust-boundary/).
   containers, content-addressed immutable snapshots, pure-function promotion
   gates, canary trials, rollback, and hash-chained registries with atomic
   artifact publication. Configured `autoPromote` controls promotion autonomy.
-  Candidates execute as sandboxed versioned workers.
+  Execution isolation depends on the selected worker backend and its deployment.
   [Improvement Plane](/improvement-plane/).
 - **Operational feedback curation.** `0 evolve feedback capture/approve/status/release`
   for evidence-backed observations with operator-curated `ValidationFixture`
@@ -132,19 +150,21 @@ See [TypeScript/Rust Boundary](/research/typescript-rust-boundary/).
 - `0 lens-synth --status` and `--rollback` for inspecting and retiring
   promoted overlay lenses.
 
-## Recently shipped (April 2026)
+<span id="recently-shipped-april-2026"></span>
+## April 2026 implementation record
 
-- **Retained artifact-backed XBOW aggregate at 103/104.** Only XBEN-030 remains
-  unsolved in any mode. The load-bearing black-box claim is the gpt-5.4 cohort at
-  93/95 = 97.9%; the retained-aggregate black-box count is rotation-volatile
-  because GitHub Actions keeps a 90-day artifact window.
+- **Retained artifact-backed XBOW aggregate at 103/104.** The retained
+  gpt-5.4 cohort is 93/95 = 97.9%, not an independently established single-shot
+  black-box result. Consolidation pools retained attempts and modes; artifact
+  rotation can change which supporting runs remain available.
 - **First scored full Cybench run at 36/40 = 90.0%.** Single-config (Azure
-  gpt-5.4), single-shot, 3 retries per challenge, 358 attack turns, ~$14.89.
+  gpt-5.4), with the recorded allowance of 3 retries per challenge, 358 attack turns, ~$14.89.
   Supersedes the older 8/10 subset.
 - **Historical public XBOW line tracked separately** — 90/104 black-box, 95/104
   aggregate after purging unsupported claim residue.
-- **Cost ceiling enforcement** — scans abort cleanly when a per-run USD budget is
-  exceeded.
+- **Estimated-cost guards** — native scan loops retain partial findings and
+  stop when an observed ceiling trips. In-flight work can overshoot; see
+  [Budget Management](/budget-management/) for current coverage and limitations.
 - **Direct OSV advisory lookup** in the npm audit pipeline — no more relying on
   `npm audit` alone.
 - **Phase 4 pre-recon CVE check** for white-box mode — fingerprints the stack
@@ -154,12 +174,15 @@ See [TypeScript/Rust Boundary](/research/typescript-rust-boundary/).
 - **Phase B malicious-package detection** in the audit pipeline.
 - **Orchestrator handshake (Phase 1)** — OSS-engine findings can be normalised and
   ingested by an orchestrator that tracks scan jobs end-to-end.
-- **A/B sweep cadence** — overnight feature-combination sweeps are now the default
-  way improvements get tested.
+- **A/B sweep cadence** — historical overnight feature-combination sweeps.
+  Consult [Research Workflows](/research-workflows/) for current entry points
+  rather than assuming an older workflow still exists.
 
-## Now
+<span id="now"></span>
+## Historical near-term priorities
 
-Historical priorities; implemented portions are identified below.
+The following goals preserve earlier planning context, not current delivery
+commitments. Implemented portions are identified explicitly.
 
 ### 1. Anti-honeypot / decoy-flag heuristic
 
@@ -216,7 +239,8 @@ triage filtering, and lifecycle inspection. The CLI's human triage values are
 The broader suppression-expiry, comments, and cross-run workflow described
 here remains a design goal unless documented by a current command.
 
-## Next
+<span id="next"></span>
+## Historical next-step proposals
 
 ### 5. Diff-aware PR scanning
 
@@ -255,7 +279,8 @@ control plane, working the review inbox, and inspecting runtime failures.
 Desktop is in development; see [Roadmap](/roadmap/#desktop) for current
 status. Use [Console](/console/) for the released terminal interface.
 
-## Later
+<span id="later"></span>
+## Longer-term proposals
 
 ### 9. Policy packs and organisation presets
 
@@ -269,8 +294,10 @@ alerts; "what changed since last green run."
 
 ### 11. Distributed workers / remote execution
 
-Remote queue workers; large campaign execution; shared artifact store; eventually
-a hosted control plane if adoption justifies it.
+The historical proposal covered remote queue workers, campaign execution, and
+a shared artifact store. A hosted control plane is no longer merely hypothetical:
+current managed-service implementation and qualification boundaries are described
+under [0cloud](#0cloud). Broader campaign behavior remains a separate question.
 
 <span id="non-goals-right-now"></span>
 <span id="product-direction"></span>

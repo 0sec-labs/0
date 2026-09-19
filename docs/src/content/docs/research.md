@@ -3,10 +3,12 @@ title: Research
 description: Design decisions, experiments, and technical rationale behind the 0 engine.
 ---
 
-Design decisions, experiments, and technical rationale for the 0 engine. Real
-disclosed CVEs at [0](https://0.security). Most experiments run against
-the [XBOW benchmark](https://github.com/xbow-engineering/validation-benchmarks)
-(104 Docker CTF challenges) as a reproducible harness.
+Design decisions, experiments, and technical rationale for the 0 engine.
+The [public research index](https://0.security/research/) links investigation and
+disclosure records; those records make target-specific claims, not universal
+reproduction or production-readiness guarantees. Many early experiments used the
+[XBOW benchmark](https://github.com/xbow-engineering/validation-benchmarks)
+(104 Docker CTF challenges).
 
 For benchmark scores, methodology, and competitor comparisons, see
 [Benchmarks](/benchmark/). For mechanism docs (agent loop, triage, verification),
@@ -17,6 +19,12 @@ specification checks, fuzzing, kernel evidence, binary analysis, and the
 distinction between live execution and imported evidence), start with
 [Research Workflows](/research-workflows/). The pages below
 document design rationale and experiment history.
+
+Read each page's status before applying it: a dated run is empirical evidence for
+that configuration, a blank ablation template contains no results, and a proposal
+is not a shipped workflow. Benchmark figures here remain dated snapshots.
+Multi-model research informs explicit configuration and role diversity; it does
+not establish automatic optimal discovery/verification/fix model routing.
 
 ## Essays & rationale
 
@@ -111,7 +119,8 @@ How benchmark runs and verified findings are converted into labeled JSONL for tr
 
 ### [Feature Extractor](/research/feature-extractor/)
 
-The 45 handcrafted features exposed by `extractFeatures()` and how they fit into the hybrid triage direction.
+The current 55 handcrafted features exposed by `extractFeatures()` (45 original
+web/finding features plus 10 kernel-crash features) and their heuristic limits.
 
 ### [Journal + Orchestrator Design](/research/journal-orchestrator-design/)
 

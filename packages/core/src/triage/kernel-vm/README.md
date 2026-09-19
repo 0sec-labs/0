@@ -1,4 +1,4 @@
-# 0sec Kernel VM — KASAN-enabled crash reproducer
+# 0 Kernel VM — KASAN-enabled crash reproducer
 
 Build recipe for the KASAN-enabled Linux kernel + root filesystem used by
 automated kernel crash validation.
@@ -6,6 +6,8 @@ automated kernel crash validation.
 ## Quick start
 
 ```bash
+# From the repository root
+cd packages/core/src/triage/kernel-vm
 # Build (15-30 min, requires Docker)
 ./build.sh ./out
 
@@ -15,22 +17,32 @@ env \
   0SEC_KERNEL_QEMU=1 \
   0SEC_KERNEL_QEMU_KERNEL=./out/bzImage \
   0SEC_KERNEL_QEMU_DISK=./out/rootfs.img \
-  0sec ingest --verify /path/to/crash-reports/
+  0SEC_KERNEL_QEMU_CONFIG=./out/kernel.config \
+  0SEC_KERNEL_QEMU_EXPECTED_RELEASE=6.8.12 \
+  0 ingest --verify /path/to/crash-reports/
 
 # Run a standalone C reproducer through the same VM oracle
-0sec ingest --reproducer ./poc.c --kernel-tree ~/src/linux --config kasan --output json
+0 ingest --reproducer ./poc.c --kernel-tree ~/src/linux --kernel-config kasan --output json
 
 # Raw .syz programs require syz-execprog in the guest image
-0sec ingest --syz ./program.syz --kernel-tree ~/src/linux --config kasan --output json
+0 ingest --syz ./program.syz --kernel-tree ~/src/linux --kernel-config kasan --output json
 ```
+
+The `env` settings apply only to that invocation. Standalone tree builds use
+`~/.0sec/kernel-cache` by default, with `kasan`, `kcsan`, or `plain` profiles.
+Prebuilt kernel/disk environment overrides bypass building unless forced;
+their expected release must match the actual image, including local suffixes.
+The stock rootfs does not include `syz-execprog`, so provision it before using
+the raw `.syz` lane. A successful crash reproduction does not establish novelty,
+unprivileged reachability, or root escalation.
 
 ## What's included
 
 **Kernel** (bzImage):
-- Linux 6.8.12 with KASAN (generic, inline, stack, vmalloc)
-- UBSAN (bounds, shift, div-zero, bool, enum, alignment)
-- KCSAN (data race detection)
-- PROVE_LOCKING, DEBUG_ATOMIC_SLEEP, RCU stall detection
+- Linux 6.8.12; the recipe requests KASAN, UBSAN, KCSAN and lock/RCU debugging
+- The exported `kernel.config` is authoritative after `olddefconfig`; requested
+  options are not a guarantee of simultaneous sanitizer support. Source-tree
+  builds provide separate `kasan` and `kcsan` profiles.
 - Subsystem support: NFS/NFSd, bluetooth, WiFi (mac80211), SCTP, 9P, ext4
 - nokaslr for reproducible crash addresses
 - virtio drivers for QEMU
@@ -44,12 +56,12 @@ env \
   itself does not use SSH.
 
 The repository does not commit prebuilt images. Build them locally with
-`./build.sh`, or use `.github/workflows/kernel-validator-e2e.yml` as the CI
-reference that builds and caches the same artifacts.
+`./build.sh`. The historical GitHub Actions validator workflow is no longer
+present; manual maintainer scripts remain under `scripts/kernel-validator-*`.
 
 ## Guest contract
 
-The 0sec verifier boots QEMU with the kernel image, disk image, and a 9p host
+The 0 verifier boots QEMU with the kernel image, disk image, and a 9p host
 share. A compatible guest must:
 
 - boot as x86_64 under `qemu-system-x86_64`
@@ -64,11 +76,13 @@ The default kernel command line is:
 console=ttyS0 root=/dev/vda rw nokaslr panic=-1 init=/sbin/0sec-init
 ```
 
-## CI
+## Maintainer smoke scripts
 
-The real GitHub Actions E2E lane lives in `.github/workflows/kernel-validator-e2e.yml`.
-It builds the VM artifacts, boots QEMU, and runs `ingest --verify` against a real
-syzbot crash/reproducer pair while uploading the VM logs and runner outputs as artifacts.
+From the repository root, `scripts/kernel-validator-e2e.sh` uses a built CLI,
+downloads a syzbot crash/reproducer pair, and executes with the VM configuration
+above. `node scripts/kernel-validator-batch.mjs --help` describes the batch corpus
+runner. Neither provisions the VM images. These are execution scripts, not
+current scheduled CI lanes; a dry-run/skipped result is not a verified crash.
 
 ## Environment variables
 
@@ -77,6 +91,8 @@ syzbot crash/reproducer pair while uploading the VM logs and runner outputs as a
 | `0SEC_KERNEL_QEMU` | - | Set to `1` to enable |
 | `0SEC_KERNEL_QEMU_KERNEL` | - | Path to bzImage |
 | `0SEC_KERNEL_QEMU_DISK` | - | Path to rootfs.img |
+| `0SEC_KERNEL_QEMU_CONFIG` | - | Build config required for direct execution receipt binding |
+| `0SEC_KERNEL_QEMU_EXPECTED_RELEASE` | - | Exact built kernel release required for direct/prebuilt execution |
 | `0SEC_KERNEL_QEMU_MEMORY_MB` | `2048` | VM memory |
 | `0SEC_KERNEL_QEMU_SMP` | `2` | CPU cores |
 | `0SEC_KERNEL_QEMU_TIMEOUT_SEC` | `60` | Reproducer timeout |
@@ -84,4 +100,4 @@ syzbot crash/reproducer pair while uploading the VM logs and runner outputs as a
 | `0SEC_KERNEL_QEMU_ACCEL` | - | QEMU accelerator (e.g. `kvm`) |
 | `0SEC_KERNEL_QEMU_SHARE_TAG` | `osecshare` | 9p mount tag used by the guest boot script |
 | `0SEC_KERNEL_QEMU_ARTIFACT_DIR` | - | Preserve VM run artifacts (serial log, compile log, dmesg, runner outputs) instead of deleting the temp directory |
-| `0SEC_KERNEL_BUILD_CACHE` | `~/.cache/0sec/kernel-vm` | Cache directory for `--kernel-tree` VM builds |
+| `0SEC_KERNEL_BUILD_CACHE` | `~/.0sec/kernel-cache` | Cache directory for `--kernel-tree` VM builds |

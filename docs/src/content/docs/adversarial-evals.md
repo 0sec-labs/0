@@ -7,21 +7,44 @@ description: Attack-driven evaluation of AI systems, with scoped execution and r
 
 ## What's shipped
 
-The benchmark package ships concrete adversarial-eval harnesses:
+Three distinct implementations answer different questions:
 
-- **Tool misuse**: attacker-controlled tool parameters (`packages/benchmark/src/adversarial-tool-misuse-*`).
-- **Indirect prompt injection**: untrusted tool output (`packages/benchmark/src/adversarial-indirect-prompt-injection-*`).
+| Path | What it evaluates | What a success means |
+| --- | --- | --- |
+| `@0sec/benchmark` adversarial harnesses | Synthetic MCP tool misuse, indirect injection and persistence cases | The scanner detected the expected finding categories in a controlled fixture |
+| `@0sec/llm-redteam` campaigns | Generated indirect-injection payloads against mock or OpenAI-compatible chat targets | The configured regex/LLM judge matched a behavior's success criterion |
+| `0 agent-assure` | A customer-owned agent adapter, its MCP inventory and an independent state observer | A complete observer result reports the prohibited action as observed or not observed |
 
-`agent-assure` drives an agent endpoint, an MCP endpoint, and an oracle under a scoped policy, then writes a replayable evidence bundle.
+These are not interchangeable scores. A synthetic detection pass is not proof
+that an arbitrary production agent is secure, and a matched transcript is not
+proof that an external action executed.
 
-For endpoint prerequisites, scope, invocation, and result meanings, see [Agent-action assurance](/research-workflows/#agent-action-assurance-agent-assure). All three endpoints must be authorized; an observed prohibited action and an inconclusive run are different outcomes.
+The benchmark package has scripts for local fixtures:
 
-The synthetic, deterministic harnesses provide repeatable checks for agent-control failures.
+```bash
+pnpm --filter @0sec/benchmark adversarial-tool-misuse --json
+pnpm --filter @0sec/benchmark adversarial-indirect-prompt-injection --json
+pnpm --filter @0sec/benchmark adversarial-persistence --json
+```
+
+Use a prepared repository development environment. These runners start local
+fixture servers and exercise `runMcpSecurityChecks`; they do not call a real
+frontier model. Tool-misuse and indirect-injection `passed` means expected
+categories were returned. Persistence also requires a prompt-injection finding
+on its synthetic later-read surface (`replayCompromised`).
+
+For live agent-action prerequisites, scope, invocation and result meanings, see
+[Agent-action assurance](/research-workflows/#agent-action-assurance-agent-assure).
+All three endpoints must be authorized and must implement the required adapter
+contracts. The bundle binds target/policy/model/tool versions and evidence hashes;
+it is not a recording that can execute itself against an arbitrary target.
 
 <span id="why-it-matters"></span>
 ## Evaluation goals
 
-Measure whether attacks trigger unsafe or unauthorized behavior.
+Choose an explicit attack objective and observable success criterion before the
+run. Record failed and incomplete attempts as well as breaks, so a missing
+observation is not reported as a successful defense.
 
 ## Target classes
 
@@ -33,19 +56,45 @@ Measure whether attacks trigger unsafe or unauthorized behavior.
 <span id="what-makes-it-different-from-generic-evals"></span>
 ## Verification
 
-- Confirm failures through demonstrable re-exploitation.
-- Repeat attacks to measure recurrence.
-- Check security and control boundaries.
+- For action claims, use a state observer rather than model text alone.
+  `agent-assure` returns `inconclusive` while the observer remains incomplete,
+  even if it has provisionally reported `observed: true`; endpoint errors are
+  `error`, not a negative observation.
+- A completed `not_observed` applies to the tested scenario and observation
+  window, not every possible attack.
+- Repeat independently to measure recurrence. Red-team campaigns stop retrying
+  a model/behavior pair after its first break, so their unique-break count is
+  **not** a recurrence rate.
+- Retests can bind a prior manifest with `--baseline`; inspect configuration
+  changes rather than comparing unlike target versions.
+
+### Jev advisory feedback
+
+The integrated IPI audit can opt into Jev `redteam` feedback. It reports
+`explicit-refusal`, `partial-compliance`, `attempted-prohibited` or `ambiguous`
+with probability and evaluator usage. Feedback does not change `broken`;
+unavailable evaluations remain advisory and cannot erase independent evidence.
+The current iterative campaign uses a fixed escalation candidate set, not an
+adaptive strategy chosen by those labels.
+
+The standalone red-team CLI does not wire the evaluator from environment
+variables; use the package's feedback hook or the integrated core audit.
+See [Features](/features/#advisory-evaluations) for opt-in data egress and budgets.
 
 <span id="building-on-the-wedge"></span>
 ## Planned extensions
 
-A dedicated adversarial-eval mode needs an AI-system target model, a report format covering evidence and recurrence, and attack-specific success criteria.
+These concrete harnesses do not constitute one generic adversarial-eval command
+covering every target class. Broader target adapters, recurring managed campaigns
+and unified recurrence reporting remain separate work.
 
 <span id="report-differences-from-a-pentest"></span>
 ## Report fields
 
-A vuln report covers exploitability and severity. An adversarial-eval report should also capture:
+The shipped fixture reports include per-case finding categories, pass/fail and
+duration. Campaign results include unique breaks and per-attempt reports.
+Agent-action bundles include versioned target metadata, oracle outcome,
+redaction and hashed artifacts. A broader adversarial-eval report should also capture:
 
 - target class and environment
 - attack objective
@@ -56,4 +105,9 @@ A vuln report covers exploitability and severity. An adversarial-eval report sho
 <span id="relationship-to-0sec-cloud"></span>
 ## Product scope
 
-Run local evaluations through `0`. Managed testing belongs to **0cloud**; recurring adversarial evaluation remains planned. **0cloud** offers hosted model access and end-to-end managed security work. These products have separate access and billing.
+Use the local harness and your configured model connections for these workflows.
+Hosted model transport still leaves tools in the chosen execution environment;
+managed execution requires separately scoped access and terms. The website's
+find/verify/fix product organization does not establish that every path performs
+universal reproduction or that recurring managed evaluation is qualified by this
+repository. See [Features](/features/#related-products) and [Roadmap](/roadmap/).
