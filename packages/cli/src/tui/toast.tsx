@@ -1,12 +1,12 @@
 /** @jsxImportSource @opentui/react */
 /**
- * The transient toast — a small rounded pill that appears, holds for ~1.5s,
+ * The transient toast — a small borderless pill that appears, holds for ~1.5s,
  * and fades out, driven entirely by the pure envelope in `toast-logic.ts`.
  *
- * It wears the same chrome as the rest of the redesigned surfaces: a rounded
- * outline (`borderStyle="rounded"`, as the dialogs and cards use), a `surface`
- * ground, and — when the caller states one — a severity tone that colours the
- * outline and adds the matching status glyph from the shared vocabulary
+ * It wears the same chrome as the rest of the redesigned surfaces: no drawn
+ * outline, a raised `PANEL_ALT` ground that reads as a distinct layer through
+ * color contrast alone, and — when the caller states one — a severity tone that
+ * colours the leading status glyph from the shared vocabulary
  * (`✓` success, `!` warning, `×` error). A caller that states no tone gets a
  * neutral pill; the component never infers a severity from the message text.
  *
@@ -70,7 +70,8 @@ export interface ToastProps {
 
 /** Longest message we will render inside the pill, before the outer clamp. */
 const DEFAULT_MAX_WIDTH = 40;
-/** Border (2) + horizontal padding (2). */
+/** Two cells of horizontal padding each side — the pill is borderless and reads
+ * as a raised layer through its background contrast, not a drawn outline. */
 const CHROME_CELLS = 4;
 /** Leading glyph (1) + its gap (1), spent only when a tone was stated. */
 const GLYPH_CELLS = 2;
@@ -145,11 +146,9 @@ export function Toast({
       flexShrink={0}
       flexGrow={0}
       minWidth={0}
-      border
-      borderStyle="rounded"
-      borderColor={chrome}
-      backgroundColor={theme.surface}
-      paddingX={1}
+      backgroundColor={theme.PANEL_ALT}
+      paddingX={2}
+      paddingY={1}
       zIndex={zIndex}
     >
       <box flexDirection="row" width={innerWidth} height={1} flexShrink={0} minWidth={0}>

@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════════════════════════
-   0sec Desktop — Design Tokens & Component Styles
+   0security Desktop — Design Tokens & Component Styles
    ═══════════════════════════════════════════════════════════════════════════ */
 
 /* ── Reset ───────────────────────────────────────────────────────────────── */
@@ -28,8 +28,8 @@ body,
   --faint: #c0c0be;
   --hover: #eaeae8;
   --selected: #d4d4d2;
-  --accent: #0059b3;
-  --accent-fg: #ffffff;
+  --accent: #FD802E;
+  --accent-fg: #1A1815;
   --danger: #d13838;
   --danger-bg: #fef2f2;
 
@@ -71,8 +71,8 @@ body,
   --faint: #8a8a86;
   --hover: #282827;
   --selected: #333332;
-  --accent: #4d9eff;
-  --accent-fg: #ffffff;
+  --accent: #FD802E;
+  --accent-fg: #1A1815;
   --danger: #e54848;
   --danger-bg: #2d1515;
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.12);

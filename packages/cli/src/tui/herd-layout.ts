@@ -1037,12 +1037,12 @@ export function herdDialogMeta(shown: number, total: number): string {
 export const HERD_EMPTY_TEXT = "no other agents in this project";
 
 export function herdFooterHint(): string {
-  return ["↑/↓ move", "enter focus", "s search", "m message", "esc back", "ctrl+c exit"].join(" · ");
+  return ["[↑↓] move", "[⏎] focus", "[s] search", "[m] message", "[esc] back", "[⌃C] exit"].join(" · ");
 }
 
 /** The footer hint while the steering composer is open. */
 export function herdComposerFooterHint(): string {
-  return ["enter send", "esc cancel", "ctrl+c exit"].join(" · ");
+  return ["[⏎] send", "[esc] cancel", "[⌃C] exit"].join(" · ");
 }
 
 /**
@@ -1051,7 +1051,7 @@ export function herdComposerFooterHint(): string {
  * type to message the focused subagent.
  */
 export function chatFocusFooterHint(): string {
-  return ["type to message", "esc/← back to main", "↑/↓ scroll", "ctrl+c exit"].join(" · ");
+  return ["type to message", "[esc]/[←] back to main", "[↑↓] scroll", "[⌃C] exit"].join(" · ");
 }
 
 /**
@@ -1757,7 +1757,7 @@ export function computeHerdFocusLayout({
 
 /** Footer hint while a subagent is focused (navigation, not composing). */
 export function herdFocusFooterHint(): string {
-  return ["↑/↓ scroll", "m steer", "esc back to list", "ctrl+c exit"].join(" · ");
+  return ["[↑↓] scroll", "[m] steer", "[esc] back to list", "[⌃C] exit"].join(" · ");
 }
 
 /** Title for the transcript pane: `LIVE 12` (entry count) or `LIVE`. */

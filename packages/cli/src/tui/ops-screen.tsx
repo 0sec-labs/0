@@ -327,7 +327,7 @@ export function OpsScreen({ dbPath, refreshMs, onExit, shell }: { dbPath?: strin
         <Cells width={width} fg={error ? theme.ERROR : snapshot.incidents.length > 0 ? theme.ERROR : theme.MUTED}>
           {error ?? opsCounts}
         </Cells>
-        <FooterBar hint={opsFiltering ? "type to filter · enter keep · esc clear" : "↑↓ move · / filter · esc back · ctrl+p commands · ctrl+c exit"} />
+        <FooterBar hint={opsFiltering ? "type to filter · [⏎] keep · [esc] clear" : "[↑↓] move · [/] filter · [esc] back · [⌃P] commands · [⌃C] exit"} />
       </box>
     </ShellFrame>
   );

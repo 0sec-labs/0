@@ -33,6 +33,7 @@ import { HistoryScreen } from "./history-screen.js";
 import { FindingsScreen } from "./findings-screen.js";
 import { ReplayScreen } from "./replay-screen.js";
 import { PanePalette } from "./command-palette.js";
+import { PopupStackProvider } from "./popup-stack.js";
 import type { FindingsScreenOptions } from "./findings-data.js";
 import { DialogSurface, useSurfaceDimensions } from "./dialog-surface.js";
 import { ShutdownDialog } from "./shutdown-dialog.js";
@@ -64,6 +65,7 @@ import { UsageScreen } from "./usage-screen.js";
 import { FindingDetailScreen } from "./finding-detail-screen.js";
 import { copyToClipboard, defaultSpawn, defaultWhich } from "./clipboard.js";
 import { createSessionCloseGate } from "./session-close-gate.js";
+import { reportHerdrSession, reportHerdrSessionClose } from "../herdr-state.js";
 import { installTuiOutputGuard } from "./output-guard.js";
 import {
   createTuiLensEvolutionController,
@@ -168,11 +170,11 @@ function SettingsRoute({ onExit, shell }: { onExit: () => void; shell?: ShellNav
           {shell ? (
             <box flexDirection="row">
               <text fg={theme.ACCENT} onMouseDown={() => shell.openHarness()}>
-                Live harness · ctrl+g
+                Live harness · [⌃G]
               </text>
               <text fg={theme.MUTED}>{"   "}</text>
               <text fg={theme.ACCENT} onMouseDown={() => shell.openKeybindings()}>
-                Keybindings · ctrl+k
+                Keybindings · [⌃K]
               </text>
             </box>
           ) : null}
@@ -607,6 +609,14 @@ function ConsoleApp({
   const records = workspace.records;
   const selectedId = workspace.selectedId;
   const selectedRecord = workspace.selected;
+  // Link the herdr pane to the selected audit's agent session so herdr can tie
+  // the pane to a 0sec session (its lifecycle signal). Re-links whenever the
+  // selected session changes (a new/resumed audit). No-op off-herdr, fail-soft.
+  const selectedScanId = selectedRecord?.session?.scanId;
+  useEffect(() => {
+    if (!selectedScanId) return;
+    reportHerdrSession({ sessionId: selectedScanId });
+  }, [selectedScanId]);
   const [workspaceRoot] = useState(() => process.cwd());
   const [shellError, setShellError] = useState<string | null>(null);
   const [closingAll, setClosingAll] = useState(false);
@@ -630,6 +640,9 @@ function ConsoleApp({
     if (exitRequested.current) return;
     exitRequested.current = true;
     setClosingAll(true);
+    // Release this pane's herdr agent slot on the way out so the sidebar stops
+    // showing 0sec's stale state/topic. Fire-and-forget and fail-soft.
+    reportHerdrSessionClose();
     appendTuiEvent({ kind: "shutdown", stage: "requested", audits: creations.current.size });
     for (const gate of legacyLaunches.current.keys()) gate.close();
     const sessionClosures = routes.filter((route) => route.type === "session")
@@ -686,7 +699,7 @@ function ConsoleApp({
       const promptExit = setTimeout(() => {
         appendTuiEvent({ kind: "shutdown", stage: "prompt-exit" });
         process.exit(0);
-      }, 400);
+      }, 250);
       if (typeof promptExit.unref === "function") promptExit.unref();
     }).catch((error) => {
       // Even an unexpected error in the shutdown chain must not strand the
@@ -1360,6 +1373,11 @@ function ConsoleApp({
       stagePrompt={stageHarnessPrompt}
     >
     <box flexDirection="column" width="100%" height="100%">
+    {/* The visual popup stack lives inside the full-screen box (like the
+        shutdown dialog), so pushed sub-popups (levels ≥1) render ABOVE the
+        level-0 route/DialogSurface with a sized parent for their absolute
+        layout, and only the topmost one is interactive. Route stack = level 0. */}
+    <PopupStackProvider>
       {pluginError ? <text fg={theme.ERROR} wrapMode="word">{pluginError}</text> : null}
       {shellError ? <text fg={theme.ERROR} wrapMode="word">{shellError}</text> : null}
       {closingAll ? (
@@ -1390,13 +1408,14 @@ function ConsoleApp({
           </DialogSurface>
         ) : null}
       </box>
+    </PopupStackProvider>
     </box>
     </HarnessProvider>
     </AppContext.Provider>
   );
 }
 
-function UnifiedApp({
+export function UnifiedApp({
   mode,
   lensEvolution,
 }: {

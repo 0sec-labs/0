@@ -159,6 +159,14 @@ export function resolveContextLimit(
 ): ContextLimit | null {
   if (!identity.modelId || !identity.providerId) return null;
 
+  // The published window for the running model's FAMILY — an honest, documented
+  // last resort so the meter reads a real figure instead of a dead
+  // "unavailable" for a model whose window is public knowledge.
+  const familyFallback = (): ContextLimit | null => {
+    const family = knownFamilyWindow(identity.modelId as string);
+    return family === null ? null : { tokens: family, source: "known-family" };
+  };
+
   if (identity.hosted) {
     // The runtime must actually say "hosted". A hosted audit whose runtime
     // reports some other discriminator is a state this function does not
@@ -166,16 +174,24 @@ export function resolveContextLimit(
     // hosted/BYOK split exists to prevent.
     if (identity.providerId !== HOSTED_PROVIDER_ID) return null;
     const catalog = opts.hostedCatalog;
-    if (!catalog || catalog.length === 0) return null;
-    // Key on the public route id alone — see the note above on why the two
-    // `provider` fields cannot be compared — but only once it is proven
-    // unique. `find` would silently take the first of a duplicate pair.
-    const matches = catalog.filter((model) => model.id === identity.modelId);
-    if (matches.length !== 1) return null;
-    const row = matches[0]!;
-    // The running route's context window must come from this catalog row.
-    const tokens = positiveTokens(row.contextTokens);
-    return tokens === null ? null : { tokens, source: "hosted-catalog" };
+    // Prefer the live account-scoped catalog's own number when it carries this
+    // exact, unambiguous route id — that is the authoritative window.
+    if (catalog && catalog.length > 0) {
+      // Key on the public route id alone — see the note above on why the two
+      // `provider` fields cannot be compared — but only once it is proven
+      // unique. `find` would silently take the first of a duplicate pair.
+      const matches = catalog.filter((model) => model.id === identity.modelId);
+      if (matches.length === 1) {
+        const tokens = positiveTokens(matches[0]!.contextTokens);
+        if (tokens !== null) return { tokens, source: "hosted-catalog" };
+      }
+    }
+    // The catalog has not loaded, is stale, is ambiguous, or carries no usable
+    // window for this route. Rather than a dead "unavailable" meter, fall back
+    // to the model family's published window (clearly labelled `known-family`);
+    // the operator gets an honest capacity reading, refined to the exact
+    // account-scoped number the moment the catalog resolves.
+    return familyFallback();
   }
 
   // A known BYOK caveat, recorded rather than worked around: the synced
@@ -194,7 +210,6 @@ export function resolveContextLimit(
   // The catalog does not carry this model (or carries no usable window for it).
   // Fall back to the model family's published window rather than reporting
   // "unavailable" for a model whose window is publicly known.
-  const family = knownFamilyWindow(identity.modelId);
-  return family === null ? null : { tokens: family, source: "known-family" };
+  return familyFallback();
 }
 

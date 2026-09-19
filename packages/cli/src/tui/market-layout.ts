@@ -1051,20 +1051,20 @@ export function marketFooterHint(
 ): string {
   if (mode === "filter") return [
     "type to filter",
-    action !== "none" ? `enter ${actionVerb(action)}` : "",
-    "esc clear filter",
-    "backspace delete",
+    action !== "none" ? `[⏎] ${actionVerb(action)}` : "",
+    "[esc] clear filter",
+    "[⌫] delete",
   ].filter(Boolean).join(" · ");
   if (mode === "confirm") {
     const verb = actionVerb(action) || "install";
-    return `y ${verb} · n/esc cancel`;
+    return `[y] ${verb} · [n]/[esc] cancel`;
   }
   return [
-    "up/down move",
-    action !== "none" ? `enter ${actionVerb(action)}` : "",
-    "/ filter",
-    hasFilter ? "esc clear filter" : "esc back",
-    "ctrl+c exit",
+    "[↑↓] move",
+    action !== "none" ? `[⏎] ${actionVerb(action)}` : "",
+    "[/] filter",
+    hasFilter ? "[esc] clear filter" : "[esc] back",
+    "[⌃C] exit",
   ].filter(Boolean).join(" · ");
 }
 

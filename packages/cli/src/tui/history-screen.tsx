@@ -338,7 +338,7 @@ export function HistoryScreen({ dbPath, limit, onResolve, onExit, shell }: { dbP
         <Cells width={width} fg={error ? theme.ERROR : theme.MUTED}>
           {historyStatusLine}
         </Cells>
-        <FooterBar hint={historyFiltering ? "type to filter · enter keep · esc clear" : "↑↓ move · r replay · / filter · esc back · ctrl+p commands · ctrl+c exit"} />
+        <FooterBar hint={historyFiltering ? "type to filter · [⏎] keep · [esc] clear" : "[↑↓] move · [r] replay · [/] filter · [esc] back · [⌃P] commands · [⌃C] exit"} />
       </box>
     </ShellFrame>
   );

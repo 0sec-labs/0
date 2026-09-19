@@ -678,10 +678,10 @@ export function findingDetailFooterHint({
   canStatus = false,
 }: FindingFooterHintInput = {}): string {
   const parts: string[] = [];
-  if (canInvestigate) parts.push("i investigate");
-  if (canPlanFix) parts.push("f plan fix");
-  if (canCopy) parts.push("c copy report");
-  if (canStatus) parts.push("v verify", "d dismiss");
-  parts.push("↑/↓ scroll", "esc back", "ctrl+c exit");
+  if (canInvestigate) parts.push("[i] investigate");
+  if (canPlanFix) parts.push("[f] plan fix");
+  if (canCopy) parts.push("[c] copy report");
+  if (canStatus) parts.push("[v] verify", "[d] dismiss");
+  parts.push("[↑↓] scroll", "[esc] back", "[⌃C] exit");
   return parts.join(" · ");
 }

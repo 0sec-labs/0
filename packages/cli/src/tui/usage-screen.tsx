@@ -126,10 +126,9 @@ function Pane({
       flexShrink={0}
       flexGrow={0}
       minWidth={0}
-      border={bordered || undefined}
-      borderColor={bordered ? theme.BORDER : undefined}
       backgroundColor={bordered ? theme.PANEL : undefined}
-      paddingX={bordered ? 1 : undefined}
+      paddingX={bordered ? 2 : undefined}
+      paddingY={bordered ? 1 : undefined}
     >
       {children}
     </box>
@@ -284,5 +283,5 @@ export function UsageScreen({ frame, usage, onBack, onExit }: UsageScreenProps) 
     </box>
   );
 
-  return <>{frame({ body, hint: `${maxOffset > 0 ? "↑↓ scroll · " : ""}${usageFooterHint()}` })}</>;
+  return <>{frame({ body, hint: `${maxOffset > 0 ? "[↑↓] scroll · " : ""}${usageFooterHint()}` })}</>;
 }

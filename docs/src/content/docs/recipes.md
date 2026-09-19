@@ -12,7 +12,7 @@ Seed reconnaissance with endpoints, parameters, and authentication requirements
 from an OpenAPI 3.x or Swagger 2.0 document.
 
 ```bash
-0sec scan \
+0 scan \
   --target https://api.example.com \
   --api-spec ./openapi.yaml \
   --mode web \
@@ -35,7 +35,7 @@ without running the `wpscan` CLI or sending generic scanner traffic.
 
 ```bash
 env 0SEC_FEATURE_DYNAMIC_PLAYBOOKS=1 \
-  0sec scan \
+  0 scan \
   --target https://blog.example.com \
   --mode web \
   --depth deep \
@@ -50,7 +50,7 @@ HackerOne/Bugcrowd targets unless the policy permits generic scanners.
 
 ```bash
 env 0SEC_FEATURE_DYNAMIC_PLAYBOOKS=1 \
-  0sec scan \
+  0 scan \
   --target https://blog.example.com \
   --mode web \
   --depth deep \
@@ -62,16 +62,16 @@ env 0SEC_FEATURE_DYNAMIC_PLAYBOOKS=1 \
 
 ```bash
 # Latest npm version
-0sec audit express
+0 audit express
 
 # Pin a version
-0sec audit express --package-version 4.18.2
+0 audit express --package-version 4.18.2
 
 # PyPI package
-0sec audit requests --ecosystem pypi
+0 audit requests --ecosystem pypi
 
 # Deep audit with the Claude Code CLI
-0sec audit left-pad --depth deep --runtime claude
+0 audit left-pad --depth deep --runtime claude
 ```
 
 The pipeline acquires package material in a temporary directory for static,
@@ -83,7 +83,7 @@ subsequent investigation may invoke execution tools.
 Use the C-library workflow to collect userspace C/C++ sanitizer evidence.
 
 ```bash
-0sec review \
+0 review \
   --target c-library \
   ./libfoo \
   --depth deep \
@@ -109,14 +109,14 @@ config skips the slow rebuild and logs `[kernel-cache] hit`.
 
 ```bash
 # Run a syzkaller .syz program against a freshly built kasan kernel
-0sec ingest \
+0 ingest \
   --syz ./program.syz \
   --kernel-tree ~/src/linux \
   --kernel-config kasan \
   --output json
 
 # Run a C reproducer with a custom config name and an explicit signature
-0sec ingest \
+0 ingest \
   --reproducer ./poc.c \
   --kernel-tree ~/src/linux \
   --kernel-config defconfig+kasan \
@@ -143,7 +143,7 @@ env \
   0SEC_FEATURE_REACHABILITY_GATE=1 \
   0SEC_FEATURE_POV_GATE=1 \
   0SEC_FEATURE_MULTIMODAL=1 \
-  0sec scan \
+  0 scan \
   --target https://example.com \
   --mode web \
   --depth deep \
@@ -159,7 +159,7 @@ For benchmark/CTF experiments, race five strategies. Parallel attempts consume
 separate work budgets; inspect their combined cost and evidence.
 
 ```bash
-0sec scan \
+0 scan \
   --target https://hard-target.example.com \
   --mode web \
   --race \
@@ -174,7 +174,7 @@ Push every confirmed finding to a GitHub repo as a labelled issue with evidence 
 ```bash
 export GITHUB_TOKEN="ghp_..."
 
-0sec scan \
+0 scan \
   --target https://example.com \
   --mode web \
   --scope ./scope.json \
@@ -188,7 +188,7 @@ category (`cat:xss`, …) so you can triage from the GitHub UI.
 
 ```bash
 # HTML (auto-opens in browser and saves to a temp file)
-0sec scan \
+0 scan \
   --target https://example.com \
   --mode web \
   --depth deep \
@@ -196,7 +196,7 @@ category (`cat:xss`, …) so you can triage from the GitHub UI.
   --scope ./scope.json
 
 # Markdown (printed to stdout; redirect to a file)
-0sec scan \
+0 scan \
   --target https://example.com \
   --mode web \
   --depth deep \
@@ -204,7 +204,7 @@ category (`cat:xss`, …) so you can triage from the GitHub UI.
   --scope ./scope.json > example-pentest.md
 
 # PDF (auto-opens in your default viewer and saves to a temp file)
-0sec scan \
+0 scan \
   --target https://example.com \
   --mode web \
   --depth deep \
@@ -219,7 +219,7 @@ Each report has an executive summary, severity breakdown, per-finding evidence
 
 ```bash
 # Inline
-0sec scan \
+0 scan \
   --target https://api.example.com \
   --api-spec ./openapi.yaml \
   --auth '{"type":"bearer","token":"eyJhbGciOi..."}' \
@@ -230,7 +230,7 @@ cat > auth.json <<'EOF'
 {"type":"bearer","token":"eyJhbGciOi..."}
 EOF
 
-0sec scan \
+0 scan \
   --target https://api.example.com \
   --api-spec ./openapi.yaml \
   --auth ./auth.json \
@@ -252,20 +252,20 @@ Other auth types:
 
 ## Track learned false positives across runs
 
-Mark noisy findings as false positives and 0sec remembers the pattern next time.
+Mark noisy findings as false positives and 0 remembers the pattern next time.
 
 ```bash
 # Mark a single finding as FP (auto-creates a memory)
-0sec triage mark-fp NF-042 --reason "test fixture echo endpoint, not reachable in prod"
+0 triage mark-fp NF-042 --reason "test fixture echo endpoint, not reachable in prod"
 
 # Add a memory from an existing finding without suppressing it
-0sec triage memory add --finding NF-017 --reason "intentional CORS config for public API"
+0 triage memory add --finding NF-017 --reason "intentional CORS config for public API"
 
-# List what 0sec has learned
-0sec triage memory list
+# List what 0 has learned
+0 triage memory list
 
 # Remove a memory that's no longer accurate
-0sec triage memory remove <memory-id>
+0 triage memory remove <memory-id>
 ```
 
 Triage memories run as part of the default triage pipeline (layer 9). No separate feature flag is needed — memories are stored in the database and injected into the verify prompt automatically on matching scans.

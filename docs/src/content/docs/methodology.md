@@ -3,7 +3,7 @@ title: Benchmark methodology
 description: XBOW attempt rates, confidence intervals, configuration disclosure, and cost measurement.
 ---
 
-XBOW scores depend on the fork, model, turn cap, feature settings, retry protocol, and aggregation method. Published vulnerability disclosures are listed separately at [0.security](https://0.security).
+XBOW scores depend on the fork, model, turn cap, feature settings, retry protocol, and aggregation method. Published vulnerability disclosures are listed separately at [0](https://0.security).
 
 <span id="a-single-solve-is-an-anecdote"></span>
 ## Repeated attempts
@@ -16,7 +16,7 @@ Run a challenge 10 times under one configuration and it solves on run #3 only. E
 
 1. **Single-shot** — run once and report pass/fail. Results vary between runs.
 2. **Best-of-N aggregate** — count the challenge as solved if any attempt succeeds. Both 1/10 and 10/10 count as solved. The published XBOW protocol permits this method.
-3. **Per-attempt rate with Wilson CI** — report `passes / N` with a 95% Wilson score interval. One success in ten attempts gives 10%, with CI roughly `[0.018, 0.404]`. The interval shows the uncertainty at this sample size. 0sec uses this method internally.
+3. **Per-attempt rate with Wilson CI** — report `passes / N` with a 95% Wilson score interval. One success in ten attempts gives 10%, with CI roughly `[0.018, 0.404]`. The interval shows the uncertainty at this sample size. 0 uses this method internally.
 
 <span id="why-wilson-not-wald"></span>
 ### Interval choice
@@ -40,14 +40,15 @@ For runs across multiple models, solvers, or prompts:
 - **Single-config** reports one setup, once per challenge.
 - **Aggregate** counts a challenge as solved if any configuration succeeds and sums their costs.
 
-Compare results using the same aggregation method. 0sec's headline is the **per-model gpt-5.4 cohort (93/95 = 97.9%)**, a single-config, single-shot rate. The wider retained-artifact aggregate is reported separately in [Benchmark](/benchmark/).
+Compare results using the same aggregation method. 0's headline is the **per-model gpt-5.4 cohort (93/95 = 97.9%)**, a single-config, single-shot rate. The wider retained-artifact aggregate is reported separately in [Benchmark](/benchmark/).
 
 <span id="flag-is-a-first-class-axis"></span>
 ## Cost per flag
 
 Report `$/flag` alongside solve rate. The gpt-5.4 XBOW cohort costs $5.20 per flag at $0.48 per run. Aggregate comparisons must include the cost of every configuration.
 
-## What 0sec publishes with every number
+<span id="what-0sec-publishes-with-every-number"></span>
+## What 0 publishes with every number
 
 Every XBOW result ships with the substrate needed to reproduce it:
 
@@ -77,7 +78,7 @@ Or trigger `XBOW Benchmark` in GitHub Actions with `repeat: 10`. Each run emits 
 
 ## Related
 
-- **[0.security](https://0.security)**
+- **[0](https://0.security)**
 - [Benchmark](/benchmark/) — the compact score view and caveats
 - [XBOW Analysis](/research/xbow-analysis/) — how the XBOW score is built and its limits
 - [Competitive Landscape](/research/competitive-landscape/) — where other agents sit

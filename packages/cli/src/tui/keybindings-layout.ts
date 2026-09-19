@@ -291,7 +291,7 @@ export function shortcutsTitle(): string {
 
 /** The footer hint: a read-only palette — search, move, leave. */
 export function shortcutsFooterHint(): string {
-  return ["type to search", "↑/↓ move", "ctrl+u clear", "esc back", "ctrl+c exit"].join(" · ");
+  return ["type to search", "[↑↓] move", "[⌃U] clear", "[esc] back", "[⌃C] exit"].join(" · ");
 }
 
 // ===========================================================================
@@ -652,15 +652,15 @@ export function rebindableRowIndices(rows: readonly KeybindingEditorRow[]): numb
  */
 export function keybindingsEditorFooterHint(capturing: boolean): string {
   return capturing
-    ? ["press a chord to bind", "esc cancel"].join(" · ")
+    ? ["press a chord to bind", "[esc] cancel"].join(" · ")
     : [
         "type to search",
-        "↑/↓ move",
-        "enter rebind",
-        "ctrl+r reset",
-        "ctrl+shift+r reset all",
-        "esc back",
-        "ctrl+c exit",
+        "[↑↓] move",
+        "[⏎] rebind",
+        "[⌃R] reset",
+        "[⌃⇧R] reset all",
+        "[esc] back",
+        "[⌃C] exit",
       ].join(" · ");
 }
 

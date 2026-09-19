@@ -208,6 +208,24 @@ export function formatElapsed(elapsedMs: number): string {
   return `${hours}h${String(minutes % 60).padStart(2, "0")}m`;
 }
 
+/**
+ * A spaced, "clock"-style elapsed for a prominent live indicator — the wording
+ * oh-my-pi's working line uses ("1m 12s") rather than the tight
+ * {@link formatElapsed} pill form ("1m12s"). Same honest, unpadded seconds and
+ * same clamped range; only the presentation differs, so a caller picks the form
+ * that fits its surface without a second source of truth for the arithmetic.
+ *
+ * `9s` -> `59s` -> `1m 12s` -> `59m 59s` -> `1h 04m` -> `99h 59m`.
+ */
+export function formatElapsedClock(elapsedMs: number): string {
+  const total = Math.floor(normalizeElapsed(elapsedMs) / 1000);
+  if (total < 60) return `${total}s`;
+  const minutes = Math.floor(total / 60);
+  if (minutes < 60) return `${minutes}m ${String(total % 60).padStart(2, "0")}s`;
+  const hours = Math.floor(minutes / 60);
+  return `${hours}h ${String(minutes % 60).padStart(2, "0")}m`;
+}
+
 /** Milliseconds the caller should wait between repaints for this kind. */
 export function frameIntervalMs(kind: AnimationKind): number {
   return specFor(kind).intervalMs;

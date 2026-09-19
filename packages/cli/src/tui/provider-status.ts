@@ -98,9 +98,14 @@ const PROVIDER_DEFS: readonly Omit<ProviderInfo, "auth">[] = [
   {
     id: "openrouter",
     label: "OpenRouter",
-    methods: ["api-key"],
+    // OAuth (PKCE browser sign-in) is preferred; a pasted OPENROUTER_API_KEY
+    // remains a secondary path. The browser flow provisions a durable
+    // `sk-or-...` key and stores it as an api_key record written to
+    // OPENROUTER_API_KEY (envVars[0], which llm-api already reads), so — unlike
+    // the xai/kimi device flows — the credential is a key, not OAuth tokens.
+    methods: ["oauth", "api-key"],
     envVars: ["OPENROUTER_API_KEY"],
-    hint: "set OPENROUTER_API_KEY=sk-or-... from openrouter.ai/keys",
+    hint: "sign in with your OpenRouter account, or set OPENROUTER_API_KEY=sk-or-... from openrouter.ai/keys",
   },
   {
     id: "azure",
@@ -130,9 +135,13 @@ const PROVIDER_DEFS: readonly Omit<ProviderInfo, "auth">[] = [
   {
     id: "kimi",
     label: "Moonshot Kimi",
-    methods: ["api-key"],
-    envVars: ["KIMI_API_KEY"],
-    hint: "set KIMI_API_KEY from your Kimi coding plan (endpoint override: KIMI_BASE_URL)",
+    // OAuth (device sign-in) is preferred; a pasted KIMI_API_KEY remains a
+    // secondary path. The OAuth access token is written to KIMI_API_KEY as a
+    // Bearer (llm-api.ts reads it there, no change needed), and the refresh
+    // token to the 0sec-owned var so the store can round-trip it.
+    methods: ["oauth", "api-key"],
+    envVars: ["KIMI_API_KEY", "0SEC_KIMI_OAUTH_REFRESH_TOKEN"],
+    hint: "sign in with your Kimi account, or set KIMI_API_KEY from your Kimi coding plan (endpoint override: KIMI_BASE_URL)",
   },
   {
     id: "qwen",
@@ -144,9 +153,13 @@ const PROVIDER_DEFS: readonly Omit<ProviderInfo, "auth">[] = [
   {
     id: "xai",
     label: "xAI Grok",
-    methods: ["api-key"],
-    envVars: ["XAI_API_KEY"],
-    hint: "set XAI_API_KEY from console.x.ai (endpoint override: XAI_BASE_URL)",
+    // OAuth (device sign-in) is preferred; a pasted XAI_API_KEY remains a
+    // secondary path. The OAuth access token is written to XAI_API_KEY as a
+    // Bearer (llm-api.ts reads it there, no change needed), and the refresh
+    // token to the 0sec-owned var so the store can round-trip it.
+    methods: ["oauth", "api-key"],
+    envVars: ["XAI_API_KEY", "0SEC_XAI_OAUTH_REFRESH_TOKEN"],
+    hint: "sign in with your xAI account, or set XAI_API_KEY from console.x.ai (endpoint override: XAI_BASE_URL)",
   },
   {
     id: "opencode",
@@ -154,6 +167,29 @@ const PROVIDER_DEFS: readonly Omit<ProviderInfo, "auth">[] = [
     methods: ["api-key"],
     envVars: ["OPENCODE_API_KEY"],
     hint: "set OPENCODE_API_KEY from opencode.ai/auth (endpoint override: OPENCODE_BASE_URL)",
+  },
+  {
+    id: "copilot",
+    label: "GitHub Copilot",
+    // OAuth only (device-code sign-in). The GitHub device-flow access token is
+    // written to 0SEC_COPILOT_GITHUB_TOKEN (envVars[0]) and sent directly as a
+    // Bearer to api.githubcopilot.com — no secondary exchange, no refresh, so
+    // there is no refresh-token env var.
+    methods: ["oauth"],
+    envVars: ["0SEC_COPILOT_GITHUB_TOKEN"],
+    hint: "sign in with your GitHub Copilot account (device sign-in), or set 0SEC_COPILOT_GITHUB_TOKEN=... (endpoint override: COPILOT_BASE_URL)",
+  },
+  {
+    id: "google",
+    label: "Google Gemini (Code Assist)",
+    // OAuth only (PKCE browser sign-in — the Gemini CLI flow). The minted
+    // access token is written to 0SEC_GEMINI_ACCESS_TOKEN (envVars[0]) and the
+    // refresh token to 0SEC_GEMINI_OAUTH_REFRESH_TOKEN (the /REFRESH/i var); the
+    // runtime refreshes on demand against oauth2.googleapis.com. There is no
+    // pasted-key equivalent — Code Assist authenticates only via OAuth.
+    methods: ["oauth"],
+    envVars: ["0SEC_GEMINI_ACCESS_TOKEN", "0SEC_GEMINI_OAUTH_REFRESH_TOKEN"],
+    hint: "sign in with your Google account (browser sign-in), or set 0SEC_GEMINI_OAUTH_REFRESH_TOKEN=... for Gemini Code Assist (project override: GOOGLE_CLOUD_PROJECT / 0SEC_GEMINI_PROJECT)",
   },
   {
     id: "anthropic",
@@ -224,12 +260,12 @@ export function providerStates(env: Record<string, string | undefined>): Provide
 }
 
 /**
- * Whether 0sec Cloud credentials are configured for this environment.
+ * Whether 0cloud credentials are configured for this environment.
  *
- * The BYOK providers above authenticate one upstream vendor each; 0sec Cloud is
+ * The BYOK providers above authenticate one upstream vendor each; 0cloud is
  * a different axis — a single Bearer token that reaches every route the account
  * can address, provider keys held service-side. When it is present the `/model`
- * picker can offer those routes as an extra "0sec Cloud" group alongside the
+ * picker can offer those routes as an extra "0cloud" group alongside the
  * BYOK rows, so this reports only "is a cloud token configured", never which
  * models it reaches (that is a live catalogue read, and its failure must not
  * hide the BYOK list).

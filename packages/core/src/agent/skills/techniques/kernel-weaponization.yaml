@@ -1,0 +1,53 @@
+id: kernel-weaponization
+name: "Kernel Exploit Weaponization"
+description: "When to reach for the `weaponize_kernel` engine: drive the kernel-exploit weaponization ladder (the --climb ladder) that turns a kernel bug into a working primitive INSIDE A DISPOSABLE KERNEL VM. Highest-caution capability: deny-by-default behind an explicit feature flag AND an engagement scope AND a check that kernel-VM artifacts are present. It only ever runs in a throwaway VM — never against a live host."
+version: 1
+applicable_roles:
+  - attack
+tags:
+  - kernel
+  - weaponization
+  - exploit
+  - privilege-escalation
+  - disposable-vm
+  - climb-ladder
+triggers:
+  - "weaponize"
+  - "kernel (exploit|bug|primitive|panic|oops)"
+  - "(privilege|priv).?esc(alation)? (in|of) (the )?kernel"
+  - "climb (ladder|the)"
+  - "koops|kasan|use.?after.?free"
+estimated_tokens: 700
+content: |
+  ## Kernel exploit weaponization (disposable VM only)
+
+  `weaponize_kernel` runs the kernel-exploit weaponization ladder: it takes a
+  candidate kernel bug and climbs from a crash/oops toward a controllable
+  primitive (leak → write → control flow → privilege escalation), iterating in
+  a bounded loop.
+
+  ### It only runs in a disposable kernel VM
+  This engine builds and executes exploit code against a KERNEL. It NEVER runs
+  against a live host or the operator's machine — only inside a throwaway
+  kernel VM that is discarded afterward. This is not optional; it is how the
+  capability is safe to offer at all.
+
+  ### Deny-by-default gating (three layers)
+  1. An explicit feature flag (`0SEC_FEATURE_KERNEL_WEAPONIZE=1`) — off by
+     default.
+  2. An active engagement scope.
+  3. Kernel-VM artifacts must be PRESENT. When the VM image / kernel assets are
+     absent the tool refuses rather than pretending to run — there is nowhere
+     safe to execute, so it denies.
+  If any layer is missing the tool is not available; that is the intended,
+  correct behaviour, not a bug to work around.
+
+  ### How to drive it
+  - Provide the crash/bug input the ladder starts from (the candidate finding /
+    reproducer) and let the ladder climb. Bound the iteration; treat each rung
+    as a checkpoint.
+
+  ### Reading the result
+  - Success means a primitive was demonstrated INSIDE THE VM. That is a
+    reproduced kernel finding, not a deployed exploit. Report the primitive and
+    the reproduction environment; never point this at production.

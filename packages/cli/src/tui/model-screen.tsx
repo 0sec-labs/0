@@ -42,15 +42,14 @@
  *
  * Only what the authoritative catalogue reported. Every id on screen comes out
  * of `buildFullModelCatalog` (BYOK) or `buildHostedModelCatalog` (hosted) —
- * there is no hand-written model list anywhere in this file. Price comes from
- * the pricing table or the hosted catalogue's own `pricing` block and reads
- * "not published" / "unknown" when neither carried one. The BYOK context
+ * there is no hand-written model list anywhere in this file. BYOK prices come
+ * from the pricing table. Cloud rows show model identity and capabilities,
+ * without supplier routing or cost metadata. The BYOK context
  * window comes from the synced Models.dev cache (`contextTokens`), keyed on
  * provider AND id together, and the hosted one from the service's own
  * `context_length`; both read "unknown" when absent. Nothing is derived from a
- * sibling model, a vendor default, or the model's name, and there is no "free"
- * or "optimized" claim this file authors: `free` is a catalogue stating both
- * rates are zero.
+ * sibling model, a vendor default, or the model's name. Only BYOK rows can
+ * show `free`, when their catalogue states both rates are zero.
  *
  * The hosted catalogue carries no availability, readiness or entitlement
  * signal — canonical `InferenceModel` has none — so this screen makes no such
@@ -58,7 +57,7 @@
  * is labelled qualified, ready, healthy or funded, and no row is drawn as
  * disabled on a fact nobody reported.
  *
- * Every write is an explicit operator action staged for the next audit: the
+ * Every write is an explicit operator action applied to the current audit: the
  * base model, one role's assignment, or the single-model policy. Loading,
  * highlighting, filtering and background refreshing never call those callbacks,
  * and no model is ever selected for the operator.
@@ -102,6 +101,7 @@
  */
 
 import React, { useEffect, useMemo, useRef, useState, type SetStateAction } from "react";
+import { sleekScrollbar } from "./scrollbar.js";
 import { useKeyboard, usePaste } from "@opentui/react";
 import { decodePasteBytes, TextAttributes } from "@opentui/core";
 
@@ -131,7 +131,6 @@ import {
   modelDialogTitle,
   modelFooterHint,
   modelTargetLine,
-  singleModelLine,
   buildModelRows,
   type ModelCatalogScope,
   type ModelDetailLine,
@@ -196,17 +195,17 @@ export interface ModelScreenProps {
    * Never invented — the router reports what the runtime says.
    */
   providerId?: string;
-  /** Per-role model assignments already staged for the next audit. */
+  /** Per-role model assignments applied to the current audit. */
   agentModels?: Readonly<Record<string, string>>;
-  /** Whether the next audit is pinned to one model for every role. */
+  /** Whether the audit is pinned to one model for every role. */
   singleModel?: boolean;
   /**
-   * Stage the full merged role map for the next audit. Optional: when the
+   * Apply the full merged role map to the current audit. Optional: when the
    * router does not supply it there is no role targeting at all — no Ctrl+←/→,
    * no Ctrl+Backspace, no target row and no footer mention of either.
    */
   onAgentModelsChange?: (models: Readonly<Record<string, string>>) => void;
-  /** Stage the single-model policy. Optional on the same terms as above. */
+  /** Apply the single-model policy. Optional on the same terms as above. */
   onSingleModelChange?: (enabled: boolean) => void;
   /** Enter on a model row. The router decides what "select" means. */
   onSelect: (id: string) => void;
@@ -272,8 +271,8 @@ export function ModelScreen({
 
   // A hosted *runtime* (`providerId === "hosted"`) still gets the pure hosted
   // catalogue with no BYOK fallback — that lane is unchanged. What is new is the
-  // BYOK lane: when 0sec Cloud credentials exist, the account can reach every
-  // route the cloud lists, so those are folded in as an extra "0sec Cloud"
+  // BYOK lane: when 0cloud credentials exist, the account can reach every
+  // route the cloud lists, so those are folded in as an extra "0cloud"
   // group alongside the BYOK rows rather than being hidden until the runtime
   // itself is hosted. The old "two catalogues, never mixed" rule held because a
   // hosted id's numbers must never be borrowed from a public Models.dev row of
@@ -282,7 +281,7 @@ export function ModelScreen({
   // number — this only lets both authoritative catalogues appear at once.
   const isHosted = providerId === HOSTED_PROVIDER_ID;
   const isByok = !isHosted;
-  // 0sec Cloud credentials present → the BYOK lane merges the cloud catalogue.
+  // 0cloud credentials present → the BYOK lane merges the cloud catalogue.
   // Read once per mount for the same reason provider credentials are: they are
   // process/file-level and cannot change under a screen with no way to set them.
   const cloudCreds = useMemo(() => cloudConfigured(env ?? process.env), [env]);
@@ -437,26 +436,18 @@ export function ModelScreen({
     () => buildModelRows({ catalog: scopedCatalog, states, filter, activeModel }),
     [scopedCatalog, states, filter, activeModel],
   );
-  // The hosted list has no provider-credential story to group by — the account
-  // holds the keys — so it groups by upstream vendor and filters over the
-  // fields the service actually published. The `prefix` names the group: the
-  // pure hosted lane calls it "Hosted", the BYOK merge calls it "0sec Cloud" so
-  // its routes read as one extra group beside the credential-grouped BYOK rows.
+  // Cloud rows share a customer-facing group and search only public model IDs.
+  // Supplier routing and cost fields remain outside this presentation.
   const hostedItems = (query: string, prefix: string): DialogItem[] => {
     const terms = query.toLowerCase().trim().split(/\s+/).filter(Boolean);
     return hostedCatalog
       .filter((model) =>
-        terms.every((term) =>
-          `${model.id} ${model.provider} ${model.catalog.upstream_model}`
-            .toLowerCase()
-            .includes(term),
-        ),
+        terms.every((term) => model.id.toLowerCase().includes(term)),
       )
       .map((model) => ({
         id: model.id,
         label: model.id,
-        meta: model.price,
-        category: `${prefix} · ${model.provider}`,
+        category: prefix,
         current: model.id === activeModel,
       }));
   };
@@ -466,13 +457,13 @@ export function ModelScreen({
   );
   const byokItems = useMemo(() => modelDialogItems(modelOnlyRows), [modelOnlyRows]);
   // Pure hosted → the hosted catalogue only. BYOK → the credential-grouped BYOK
-  // rows, with the 0sec Cloud group appended when cloud creds exist. Appending
+  // rows, with the 0cloud group appended when cloud creds exist. Appending
   // (rather than prepending) leaves the operator's chosen BYOK ordering untouched
-  // and reads as "…and these are also reachable through 0sec Cloud".
+  // and reads as "…and these are also reachable through 0cloud".
   const items = isHosted
     ? hostedItems(filter, "Hosted")
     : mergeCloud
-      ? [...byokItems, ...hostedItems(filter, "0sec Cloud")]
+      ? [...byokItems, ...hostedItems(filter, "0cloud")]
       : byokItems;
   const hostedById = useMemo(
     () => new Map(hostedCatalog.map((model) => [model.id, model])),
@@ -516,47 +507,40 @@ export function ModelScreen({
   // Every width and row count comes off the layout module, from the surface
   // box the dialog handed down — never from `useTerminalDimensions` and never
   // computed here (PRIMITIVES.md: Yoga shrinks siblings rather than clipping).
-  // ── Meta lines (above the list), in priority order:
-  //   1. the focus line — which target the next Enter assigns, and its model;
-  //   2. the single-model policy — stated loudly when on, because it makes every
-  //      role pick inert;
-  //   3. the agent roster — every target and the model it resolves to, so the
-  //      whole per-agent mapping is visible without cycling the target blindly;
-  //   4. the curated/all slice (BYOK only).
-  // The layout hands out as many rows as height allows (never starving the
-  // list), and the slice below keeps the highest-priority lines. Each line that
-  // names a key is present only when that key is bound. Built here, before the
-  // layout, so the layout can size the list against the real demand — the width
-  // it wraps to (`dialogContentWidth`) is the same the layout will report.
+  // ── Meta lines (above the list), deliberately kept to at most one by default.
+  // The header used to carry six-plus lines — a focus line with key hints, a
+  // single-model policy line, the full per-agent roster (which wraps to several
+  // rows) and a curated/all count — and that dense block stole the rows the
+  // picker list needs. So now:
+  //   • ONE compact context line, only while role targeting is wired: the
+  //     target and the model it resolves to, with the single-model note folded
+  //     in. No key hints — those live in the footer.
+  //   • The full agent roster is NOT drawn by default. It is revealed only while
+  //     the operator is actively targeting a specific role, which is the one
+  //     moment the whole per-role mapping matters (so "select each" is visible).
+  //   • No single-model line and no curated/all line: the title already names
+  //     curated/all and its count, and the footer already names Tab and Ctrl+S.
+  // Built here, before the layout, so the layout can size the list against the
+  // real demand — the width it wraps to (`dialogContentWidth`) is the same the
+  // layout will report.
   const metaContentWidth = dialogContentWidth(width, inDialog);
-  const byokVisible = modelRows.reduce((n, r) => (r.kind === "model" ? n + 1 : n), 0);
   const metaLines: { text: string; fg: string }[] = [];
   if (rolesLive) {
     metaLines.push({
-      text: `${modelTargetLine(role, activeModel, role !== null && agentModels?.[role] !== undefined, symbols, singleModel)} · Ctrl+←/→ target · Enter assign`,
-      fg: theme.ACCENT,
+      text: modelTargetLine(role, activeModel, role !== null && agentModels?.[role] !== undefined, symbols, singleModel),
+      fg: singleModel && role !== null ? theme.WARNING : theme.ACCENT,
     });
-  }
-  if (singleModelLive) {
-    metaLines.push({
-      text: `${singleModelLine(singleModel)} · Ctrl+S toggle`,
-      fg: singleModel ? theme.WARNING : theme.MUTED,
-    });
-  }
-  if (rolesLive) {
-    for (const line of agentRosterLines(
-      { roles, parentModel: currentModel, agentModels, activeRole: role, singleModel },
-      metaContentWidth,
-      symbols,
-    )) {
-      metaLines.push({ text: line.text, fg: line.tone === "warn" ? theme.WARNING : theme.MUTED });
+    // Reveal the full roster only while a specific role is targeted; the parent
+    // (base) view stays at the single context line above.
+    if (role !== null) {
+      for (const line of agentRosterLines(
+        { roles, parentModel: currentModel, agentModels, activeRole: role, singleModel },
+        metaContentWidth,
+        symbols,
+      )) {
+        metaLines.push({ text: line.text, fg: line.tone === "warn" ? theme.WARNING : theme.MUTED });
+      }
     }
-  }
-  if (isByok) {
-    metaLines.push({
-      text: `${showAll ? "All models" : "Curated models"} · ${byokVisible} of ${scopedCatalog.length} · Tab ${showAll ? "curated" : "all models"}${refreshing ? " · refreshing…" : ""}`,
-      fg: theme.ACCENT,
-    });
   }
 
   const layout = computeModelDialogLayout({ width, height, totalRows, inDialog, metaLineCount: metaLines.length });
@@ -577,10 +561,10 @@ export function ModelScreen({
   // note" rather than an empty picker.
   const cloudStatus = mergeCloud
     ? hostedError
-      ? `${symbols.warning} 0sec Cloud offline: ${hostedError} · Ctrl+R retry`
+      ? `${symbols.warning} 0cloud offline: ${hostedError} · Ctrl+R retry`
       : hostedSnapshot
-        ? `0sec Cloud · ${hostedCatalog.length} route${hostedCatalog.length === 1 ? "" : "s"}`
-        : "0sec Cloud · loading…"
+        ? `0cloud · ${hostedCatalog.length} route${hostedCatalog.length === 1 ? "" : "s"}`
+        : "0cloud · loading…"
     : null;
   // A hosted error is only fatal on the *pure* hosted lane, where there is no
   // other list to fall back to. In the merge it is just the cloud suffix above.
@@ -619,7 +603,7 @@ export function ModelScreen({
         filter: filterRef.current,
         activeModel,
       }));
-    return mergeCloud ? [...byok, ...hostedItems(filterRef.current, "0sec Cloud")] : byok;
+    return mergeCloud ? [...byok, ...hostedItems(filterRef.current, "0cloud")] : byok;
   };
   const highlight = (index: number) => {
     const item = currentItems()[index];
@@ -669,7 +653,7 @@ export function ModelScreen({
     }
     if (singleModelLive && key.ctrl && key.name === "s") {
       onSingleModelChange?.(!singleModel);
-      setNotice("Single-model policy staged for the next audit; the running audit is unchanged.");
+      setNotice("Single-model policy applied to this audit.");
       return;
     }
     // Ctrl+R re-reads the live hosted catalogue — on the pure hosted lane, and
@@ -682,7 +666,7 @@ export function ModelScreen({
       const next = { ...agentModels };
       delete next[role];
       onAgentModelsChange?.(next);
-      setNotice(`${role} will inherit the parent model in the next audit.`);
+      setNotice(`${role} now inherits the parent model.`);
       return;
     }
     if (key.ctrl || key.meta || key.option) return;
@@ -707,7 +691,7 @@ export function ModelScreen({
       if (role !== null && rolesLive) {
         onAgentModelsChange?.({ ...agentModels, [role]: activeItem.id });
         setNotice(
-          `${role}: ${activeItem.id} staged for the next audit${singleModel ? "; single-model mode still takes precedence" : ""}.`,
+          `${role}: ${activeItem.id} applied${singleModel ? "; single-model mode still takes precedence" : ""}.`,
         );
         return;
       }
@@ -738,12 +722,9 @@ export function ModelScreen({
 
     const compact = pane.height < 12;
 
-    // A hosted/cloud row (pure hosted lane, or a "0sec Cloud" row in the merged
-    // BYOK lane) is detailed from the service's OWN catalogue; a BYOK row falls
-    // through to the priced/synced detail below. Dispatching on membership in
-    // the hosted catalogue rather than on `isHosted` is what lets both kinds of
-    // row sit in one list and each keep its authoritative detail.
-    const hosted = hostedById.get(item.id);
+    // Item identity keeps a same-ID BYOK model on its own pricing/detail path.
+    const row = rowByItem.get(item);
+    const hosted = row ? undefined : hostedById.get(item.id);
     if (hosted) {
       // Every string below is the hosted service's own report of this model.
       const details = hostedModelDetails(hosted);
@@ -752,15 +733,10 @@ export function ModelScreen({
           1,
           0,
           `Role advice: ${role} inherits the parent unless you explicitly assign a model.`,
-          `Enter stages this exact model for ${role}; Ctrl+Backspace restores inheritance. The running audit is unchanged.`,
+          `Enter applies this exact model to ${role}; Ctrl+Backspace restores inheritance.`,
         );
       }
-      // The hosted report is the account's own description of the route, and
-      // all of it was reachable before this dialog existed. Clipping it away
-      // would delete catalogue metadata rather than fit it, so the pane keeps
-      // its scrollbox: the box is still bounded to `pane`, but the overflow
-      // scrolls instead of vanishing. The inner column gives up one cell for
-      // the scrollbar.
+      // Keep customer capabilities and role controls scrollable in a bounded pane.
       const inner = Math.max(1, pane.width - 1);
       const lines = hostedDetailLines(details, inner, compact);
       return (
@@ -770,16 +746,7 @@ export function ModelScreen({
           height={pane.height}
           flexShrink={0}
           scrollX={false}
-          verticalScrollbarOptions={{
-            trackOptions: {
-              backgroundColor: theme.PANEL,
-              foregroundColor: theme.MUTED,
-            },
-            arrowOptions: {
-              foregroundColor: theme.MUTED,
-              backgroundColor: theme.PANEL,
-            },
-          }}
+          verticalScrollbarOptions={sleekScrollbar(theme)}
         >
           <box width={inner} flexDirection="column" flexShrink={0} minWidth={0}>
             {lines.map((line, index) => (
@@ -800,7 +767,6 @@ export function ModelScreen({
     // The BYOK pane is short and bounded — id, provider, price, context, the
     // credential story — and is clipped with a visible marker rather than
     // scrolled. Nothing that was reachable before is dropped.
-    const row = rowByItem.get(item);
     const contextTokens = row?.kind === "model"
       ? contextWindowFor(contextIndex, row.model.provider, row.model.id)
       : null;
@@ -843,14 +809,14 @@ export function ModelScreen({
     : isByok
       ? modelFooterHint(mode, filter.length > 0)
       : [
-        "↑↓ model",
-        role !== null && rolesLive ? "enter stage" : "enter select",
-        rolesLive ? "ctrl+←/→ target" : undefined,
-        rolesLive && role !== null ? "ctrl+backspace inherit" : undefined,
-        singleModelLive ? "ctrl+s single" : undefined,
-        "ctrl+r reload",
-        filter.length > 0 ? "ctrl+u clear" : "type to filter",
-        filter.length > 0 ? "esc clear" : "esc back",
+        "[↑↓] model",
+        role !== null && rolesLive ? "[⏎] apply" : "[⏎] select",
+        rolesLive ? "[⌃←→] target" : undefined,
+        rolesLive && role !== null ? "[⌃⌫] inherit" : undefined,
+        singleModelLive ? "[⌃S] single" : undefined,
+        "[⌃R] reload",
+        filter.length > 0 ? "[⌃U] clear" : "type to filter",
+        filter.length > 0 ? "[esc] clear" : "[esc] back",
       ]
         .filter((part): part is string => part !== undefined)
         .join(" · ");
@@ -894,16 +860,7 @@ export function ModelScreen({
           height={listRows}
           flexShrink={0}
           scrollX={false}
-          verticalScrollbarOptions={{
-            trackOptions: {
-              backgroundColor: theme.PANEL,
-              foregroundColor: theme.MUTED,
-            },
-            arrowOptions: {
-              foregroundColor: theme.MUTED,
-              backgroundColor: theme.PANEL,
-            },
-          }}
+          verticalScrollbarOptions={sleekScrollbar(theme)}
         >
           <box width={messageWidth} flexDirection="column" flexShrink={0} minWidth={0}>
             {messageLines.map((line, index) => (
@@ -924,6 +881,7 @@ export function ModelScreen({
           isCurrent={(item) => item.current === true}
           renderDetail={renderDetail}
           onActivateRow={highlight}
+          onHoverRow={highlight}
           onScroll={move}
           emptyText={isHosted
             ? refreshing

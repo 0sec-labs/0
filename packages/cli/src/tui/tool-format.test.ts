@@ -5,6 +5,9 @@ import {
   formatToolResult,
   toolResultDetail,
   projectToolPreview,
+  capOutputLines,
+  moreLinesAffordance,
+  COLLAPSED_OUTPUT_LINES,
   MAX_SUMMARY_CHARS,
   type ToolCallLike,
   type ToolResultLike,
@@ -355,6 +358,24 @@ describe("secrets discipline — credential-bearing keys are redacted", () => {
     const out = formatToolArgs({ name: "mystery", arguments: { path: "src/a.ts" } });
     expect(out).not.toContain("[redacted]");
   });
+
+  // Operator waiver: session_id is a non-secret conversation id and must render.
+  for (const key of ["session_id", "sessionId", "x-session-id"]) {
+    it(`shows non-secret "${key}" in the clear`, () => {
+      const out = formatToolArgs({ name: "read_conversation", arguments: { [key]: "conv-abc-123", offset: 30 } });
+      expect(out).toContain("conv-abc-123");
+      expect(out).not.toContain("[redacted]");
+    });
+  }
+
+  // …but a session *token/secret/key* is still a credential and stays masked.
+  for (const key of ["session_token", "session_secret", "session_key", "session"]) {
+    it(`still redacts credential-shaped "${key}"`, () => {
+      const out = formatToolArgs({ name: "mystery", arguments: { [key]: "s3cr3t-value-123" } });
+      expect(out).toContain("[redacted]");
+      expect(out).not.toContain("s3cr3t-value-123");
+    });
+  }
 });
 
 describe("totality — malformed input never throws and stays bounded", () => {
@@ -520,5 +541,61 @@ describe("actual tool output previews — undefined vs null", () => {
     expect(text).toContain("├─ name: run.sh");
     expect(text).toContain("└─ mode: null");
     expect(text).not.toContain("├─ mode: null");
+  });
+});
+
+describe("capOutputLines — OMP-style head window", () => {
+  const lines = Array.from({ length: 50 }, (_, i) => `line ${i + 1}`);
+
+  it("collapsed shows the first N lines and reports the remainder", () => {
+    const win = capOutputLines(lines, COLLAPSED_OUTPUT_LINES);
+    expect(win.visible.length).toBe(COLLAPSED_OUTPUT_LINES);
+    expect(win.visible[0]).toBe("line 1");
+    expect(win.visible.at(-1)).toBe(`line ${COLLAPSED_OUTPUT_LINES}`);
+    expect(win.hidden).toBe(50 - COLLAPSED_OUTPUT_LINES);
+  });
+
+  it("keeps the head, not the tail (matches OMP's default renderer)", () => {
+    const win = capOutputLines(lines, 3);
+    expect([...win.visible]).toEqual(["line 1", "line 2", "line 3"]);
+  });
+
+  it("hides nothing when the body already fits the cap", () => {
+    const short = ["a", "b", "c"];
+    const win = capOutputLines(short, COLLAPSED_OUTPUT_LINES);
+    expect(win.visible).toBe(short);
+    expect(win.hidden).toBe(0);
+  });
+
+  it("expanded reveals the full retained body", () => {
+    const win = capOutputLines(lines, 128);
+    expect(win.visible.length).toBe(50);
+    expect(win.hidden).toBe(0);
+  });
+
+  it("is total over a degenerate cap", () => {
+    expect(capOutputLines(lines, Number.NaN).hidden).toBe(50);
+    expect(capOutputLines(lines, -5).visible.length).toBe(0);
+    expect(capOutputLines([], 10)).toEqual({ visible: [], hidden: 0 });
+  });
+});
+
+describe("moreLinesAffordance — the '… N more lines' expander", () => {
+  it("renders the OMP wording with a bracketed key legend", () => {
+    expect(moreLinesAffordance(47, "[⌃R] to expand")).toBe("… 47 more lines · [⌃R] to expand");
+  });
+
+  it("singularises a lone hidden line", () => {
+    expect(moreLinesAffordance(1, "[⌃R] to expand")).toBe("… 1 more line · [⌃R] to expand");
+  });
+
+  it("omits the hint when none is supplied", () => {
+    expect(moreLinesAffordance(3)).toBe("… 3 more lines");
+  });
+
+  it("returns empty when nothing is hidden", () => {
+    expect(moreLinesAffordance(0, "[⌃R] to expand")).toBe("");
+    expect(moreLinesAffordance(-2)).toBe("");
+    expect(moreLinesAffordance(Number.NaN)).toBe("");
   });
 });

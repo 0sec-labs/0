@@ -31,7 +31,7 @@ export default defineConfig({
   },
   integrations: [
     starlight({
-      title: "0sec",
+      title: "0",
       favicon: "/favicon.svg",
       head: [
         { tag: "link", attrs: { rel: "icon", href: "/favicon.ico", sizes: "32x32" } },
@@ -39,11 +39,11 @@ export default defineConfig({
         { tag: "link", attrs: { rel: "preconnect", href: "https://0.security", crossorigin: "anonymous" } },
       ],
       description:
-        "Your self-improving cybersecurity team. The cyber reasoning system harness and CLI. Research Preview.",
+        "Your self-improving, open-source cybersecurity team. Install 0, connect a model, and investigate authorized targets. Research Preview.",
       logo: {
-        dark: "./src/assets/0sec-aperture-white.svg",
-        light: "./src/assets/0sec-aperture-dark.svg",
-        alt: "0sec",
+        dark: "./src/assets/0-wordmark-dark.svg",
+        light: "./src/assets/0-wordmark-light.svg",
+        alt: "0.security",
         replacesTitle: true,
       },
       social: [
@@ -86,12 +86,14 @@ export default defineConfig({
           ],
         },
         {
-          label: "0sec Cloud",
+          label: "0cloud",
           items: [
-            { label: "Setup", link: "/getting-started/#hosted-models-draft" },
-            { label: "Access & credentials", link: "/api-keys/#hosted-inference-draft" },
-            { label: "Billing", link: "/api-keys/#charging-and-interrupted-requests" },
-            { label: "Models", link: "/configuration/#hosted-configuration-draft" },
+            { label: "Hosted inference setup", link: "/getting-started/#hosted-models" },
+            { label: "Access & credentials", link: "/api-keys/#hosted-inference" },
+            { label: "Accounting & errors", link: "/api-keys/#charging-and-interrupted-requests" },
+            { label: "Models", link: "/configuration/#hosted-configuration" },
+            { label: "Managed work & onboarding", link: "/getting-started/#managed-work-and-onboarding" },
+            { label: "Availability", link: "/roadmap/#0cloud" },
           ],
         },
         {

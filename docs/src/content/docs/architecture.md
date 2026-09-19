@@ -3,7 +3,7 @@ title: Architecture
 description: "One harness, two evidence engines, and one rule: reproduce before trusting."
 ---
 
-0sec is an open cybersecurity harness built on one rule: **reproduce before
+0 is an open cybersecurity harness built on one rule: **reproduce before
 trusting.**
 
 For practical setup, start with [Scan Workflows](/scan-workflows/),
@@ -12,7 +12,7 @@ This page describes the engine's structure.
 
 Two engines produce evidence:
 
-- **0sec** runs the agentic hunt against source and live targets — repos,
+- **0** runs the agentic hunt against source and live targets — repos,
   packages, web apps, AI endpoints, MCP servers. Agents explore in parallel
   and chain exploits together.
 - **0verse** produces evidence for compiled programs when no source is
@@ -103,7 +103,7 @@ is a separate contract, not the schema for every research envelope.
 
 `0verse` is an in-repo Python evidence producer (the `0verse/` directory), not
 an `@0sec/*` package. It handles compiled-program evidence with its own Ghidra,
-angr, AFL++, PoV, and notary contracts. 0sec consumes only explicit, versioned
+angr, AFL++, PoV, and notary contracts. 0 consumes only explicit, versioned
 interfaces — the opt-in `0verse` binary/NDJSON contract and verified external
 receipts. It never bundles 0verse into `@0sec/*`, schedules it as a generic
 scan worker, or promotes a hypothesis without the matching proof gate.
@@ -121,12 +121,12 @@ schema. Managed storage and access are outside this repository.
 Two import paths handle kernel proofs the generic VM runner can't safely
 rebuild:
 
-- `0sec research linux-matrix` imports externally executed boots. The versioned
+- `0 research linux-matrix` imports externally executed boots. The versioned
   manifest binds build IDs, literal crash/completion oracles, per-boot markers,
-  thresholds, and log paths; 0sec hashes the manifest, every log, and its
-  verdict. The envelope says `executionOrigin: external` and never claims 0sec
+  thresholds, and log paths; 0 hashes the manifest, every log, and its
+  verdict. The envelope says `executionOrigin: external` and never claims 0
   ran the boots.
-- `0sec research linux` runs natively, bound to a required literal crash oracle
+- `0 research linux` runs natively, bound to a required literal crash oracle
   (`--expected-signature`). A different KASAN/oops/GPF is recorded but can't
   satisfy the N-boot gate. Each boot contributes its own hashed dmesg artifact,
   so a 2-of-3 claim carries the full three-boot audit trail.
@@ -141,7 +141,7 @@ triage and blind validation before they reach a report.
 ```mermaid
 flowchart TB
     subgraph Entry[Entry points]
-        CLI[0sec]
+        CLI[0]
         API[Node SDK / CI]
     end
 
@@ -299,16 +299,19 @@ production**. Its parent-session SDK path connects plugin model calls through
 `invokePluginModel` to the parent `runtime.executeNative`; executable-plugin
 candidate generation uses the same broker and configured `costModel`.
 When the parent uses hosted inference, those calls consume the organization's
-inference wallet. Self-evolution does not carry a free inference allowance.
+hosted allowance or credit according to its service account. Self-evolution
+does not carry a free inference allowance.
 
-`runOneSubagent` and `runPersistentLoopOnce` create fresh `LlmApiRuntime`
-instances without an explicit model. Their route must be checked independently.
+Subagents fork through the parent runtime's child-inference factory. They
+inherit its resolved account and route; the configured role-model and
+single-model policy controls child selection.
 Workspace-trusted ESM can use external clients outside SDK accounting.
 
-Customer pricing uses an immutable catalog token-rate snapshot. Orca receipts
-verify usage and supplier cost. Inference credit is separate from review,
-compute, and engagement accounting. Hosted lifecycle end-to-end qualification
-and security-performance measurements remain pending.
+Hosted request admission and settlement belong to the service; local token-cost
+estimates do not establish remaining spend or commercial terms. Inference is
+separate from review, compute and engagement accounting. See
+[hosted account interpretation](/api-keys/#hosted-inference). Hosted lifecycle
+end-to-end qualification and security-performance measurements remain pending.
 
 ## Presentation contract
 
@@ -355,7 +358,7 @@ options are documented in [Configuration](/configuration/).
 
 ## Runtime adapters
 
-0sec decouples the pipeline from the LLM backend. Each adapter implements one
+0 decouples the pipeline from the LLM backend. Each adapter implements one
 interface over a different provider:
 
 | Adapter | Backend | How |
@@ -377,7 +380,7 @@ The LLM adapter above is not an execution sandbox. Keep three separate choices:
 
 | Layer | Responsibility | Current choice |
 |---|---|---|
-| Controller | Provider authentication, scope, budgets, approvals, evidence and version selection | 0sec's TypeScript harness |
+| Controller | Provider authentication, scope, budgets, approvals, evidence and version selection | 0's TypeScript harness |
 | Toolbox artifact | Filesystem containing tools, runtimes and dependencies | OCI image, provisioned before execution |
 | Execution engine | Host/guest boundary, mounts, networking, resource limits and teardown | Docker or opt-in local smolvm for evolution workers |
 
@@ -388,7 +391,7 @@ archive avoids a registry or Docker daemon during smolvm execution.
 
 [Upstream smolvm](https://github.com/smol-machines/smolvm) also supports unpacked
 root filesystems, Smolfiles and packed `.smolmachine` artifacts. Those are viable
-upstream provisioning options, not additional formats qualified by 0sec's
+upstream provisioning options, not additional formats qualified by 0's
 current archive-pinning adapter. A hand-maintained mutable VM is not a substitute
 for an immutable, reproducible worker artifact.
 
@@ -397,7 +400,7 @@ for an immutable, reproducible worker artifact.
 - **Small runtime image:** useful for bounded Node source-evolution fixtures.
   It is not the pentest toolbox.
 - **Toolbox image:** the Dockerfile's `toolbox` target contains the declared
-  static-analysis, web-testing and identity tools without the 0sec application.
+  static-analysis, web-testing and identity tools without the 0 application.
 - **Distribution image:** the `runtime` target adds the bundled CLI to that same
   toolbox. This remains the default Dockerfile output.
 
@@ -442,7 +445,7 @@ changing languages improves security findings or model reasoning.
 
 The current [TypeScript Codex SDK](https://github.com/openai/codex/tree/main/sdk/typescript)
 still provides a TypeScript integration surface by spawning the native CLI and
-exchanging JSONL events. The useful lesson for 0sec is a stable protocol boundary
+exchanging JSONL events. The useful lesson for 0 is a stable protocol boundary
 between clients, orchestration and execution—not that every component must be
 rewritten together.
 
@@ -458,19 +461,19 @@ controller CPU, worker preparation, cancellation latency and sustained output
 handling. Separate provider wait time and image import from controller overhead.
 Require behavior parity for scope, credentials, sessions, evidence and rollback,
 then demonstrate a measured improvement or a concrete OS capability the current
-implementation lacks. No 0sec-versus-Rust performance benchmark has established
+implementation lacks. No 0-versus-Rust performance benchmark has established
 that a full harness rewrite is currently warranted.
 
 ## MCP integration
 
-0sec speaks MCP three ways:
+0 speaks MCP three ways:
 
 - **As a client** — `McpRuntime` connects to MCP servers and uses their tools as
   the LLM backend.
-- **As a server** — `0sec mcp-server` exposes a scoped subset of tools over
+- **As a server** — `0 mcp-server` exposes a scoped subset of tools over
   stdio to an external host. `--tools` is an allowlist, not a capability grant:
-  every exposed tool still runs through 0sec's execution and engagement guards,
-  and 0sec keeps ownership of scope, rate limiting, persistence, and verifier
+  every exposed tool still runs through 0's execution and engagement guards,
+  and 0 keeps ownership of scope, rate limiting, persistence, and verifier
   state. External hosts (DSH, Codex, Claude Code) are optional clients; they
   don't replace the native scan loop. See
   [Improvement Plane](/improvement-plane/) for the separate future-worker
@@ -479,7 +482,7 @@ that a full harness rewrite is currently warranted.
   abuse, and permission escalation.
 
 ```bash
-0sec mcp-server \
+0 mcp-server \
   --target https://example.com \
   --scan-id engagement-001 \
   --scope ./scope.json \
@@ -490,7 +493,7 @@ that a full harness rewrite is currently warranted.
 
 Two execution surfaces, one public documentation home:
 
-- **0sec CLI** — local runs, CI, replay, exports, and console.
+- **0 CLI** — local runs, CI, replay, exports, and console.
 - **Managed control plane** — a separately operated engagement layer (not in
   this repo) that is still in development. See [Roadmap](/roadmap/#0cloud) for
   status.

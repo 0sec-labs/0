@@ -218,14 +218,17 @@ describe("credentialEnvPatch", () => {
     expect(credentialEnvPatch({ "chatgpt-codex": "oauth-secret" }, {})).toEqual({});
   });
 
-  it("covers every API-key provider in the table", () => {
+  it("covers every provider that accepts an API key", () => {
     const creds: StoredCredentials = Object.fromEntries(
       PROVIDERS.map((info) => [info.id, `secret-for-${info.id}`]),
     );
     const patch = credentialEnvPatch(creds, {});
 
+    // A provider is reachable through the flat key store when it accepts an
+    // API key at all — including xai/kimi, which prefer OAuth but keep a key as
+    // a secondary method. Only an OAuth-only provider (chatgpt-codex) is out.
     expect(Object.keys(patch).sort()).toEqual(
-      PROVIDERS.filter((info) => info.auth === "api-key").map((info) => info.envVars[0]).sort(),
+      PROVIDERS.filter((info) => info.methods.includes("api-key")).map((info) => info.envVars[0]).sort(),
     );
   });
 
@@ -284,6 +287,8 @@ describe("credentialEnvPatch", () => {
 
   it("reads only the passed environment, never process.env", () => {
     const previous = process.env.ANTHROPIC_API_KEY;
+    // Synthetic ambient value tests environment isolation, not authentication.
+    // foxguard: ignore[js/no-hardcoded-secret]
     process.env.ANTHROPIC_API_KEY = "sk-ant-ambient";
     try {
       expect(credentialEnvPatch({ anthropic: "sk-ant-stored" }, {})).toEqual({
@@ -314,6 +319,8 @@ describe("redactSecret", () => {
   });
 
   it("shows only a tail for a mid-length secret", () => {
+    // Alphabet fixture tests masking boundaries; not an issued credential.
+    // foxguard: ignore[js/no-hardcoded-secret]
     const secret = "abcdefghijklmno";
     const redacted = redactSecret(secret);
 
@@ -573,7 +580,7 @@ describe("account transforms (add / active / remove / logout)", () => {
   });
 
   it("throws on an unknown provider or an unsupported record kind, never leaking the secret", () => {
-    expect(() => addAccount(empty(), "google", { kind: "api_key", secret: "top-secret" })).toThrow(/unknown provider/);
+    expect(() => addAccount(empty(), "meta", { kind: "api_key", secret: "top-secret" })).toThrow(/unknown provider/);
     try {
       addAccount(empty(), "anthropic", { kind: "oauth", tokens: { accessToken: "top-secret" } });
       throw new Error("expected addAccount to throw");
@@ -635,6 +642,8 @@ describe("accountEnvPatch", () => {
 
   it("does not mutate its inputs and never reads process.env", () => {
     const previous = process.env.ANTHROPIC_API_KEY;
+    // Synthetic ambient value tests environment isolation, not authentication.
+    // foxguard: ignore[js/no-hardcoded-secret]
     process.env.ANTHROPIC_API_KEY = "sk-ambient";
     try {
       const store = addAccount(empty(), "anthropic", { kind: "api_key", secret: "sk-stored" }).store;

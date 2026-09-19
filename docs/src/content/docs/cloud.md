@@ -7,7 +7,7 @@ pagefind: false
 
 **0cloud remains in development.** These unpublished contributor notes cover planned managed testing.
 
-The public documentation currently covers the [0sec CLI](/getting-started/).
+The public documentation currently covers the [0 CLI](/getting-started/).
 The product's release status belongs in the [roadmap](/roadmap/#0cloud).
 
 ## Draft material

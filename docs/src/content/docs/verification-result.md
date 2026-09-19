@@ -111,7 +111,7 @@ The CLI cleans temporary sandboxes by default. Use `--retain-artifacts` or `--ar
 The `cli-path-traversal` fixture starts a malicious local API, creates a sandboxed export directory, and runs the real CLI argv from `--fixture-command`.
 
 ```bash
-0sec verify --fixture cli-path-traversal \
+0 verify --fixture cli-path-traversal \
   --fixture-command '["paperclip","company","export","--api","{{apiUrl}}","--output","{{exportDir}}"]' \
   --retain-artifacts
 ```

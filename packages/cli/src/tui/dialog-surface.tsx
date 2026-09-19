@@ -1,57 +1,33 @@
 /** @jsxImportSource @opentui/react */
-import React, { createContext, useContext, useMemo, useRef } from "react";
-import { RGBA } from "@opentui/core";
-import { useRenderer, useTerminalDimensions } from "@opentui/react";
-import { useTheme } from "./theme-context.js";
+import React from "react";
 
-interface SurfaceDimensions { width: number; height: number }
-const SurfaceContext = createContext<SurfaceDimensions | null>(null);
+import { Popup } from "./popup.js";
 
-/** Screen layout uses its containing dialog, not the terminal behind it. */
-export function useSurfaceDimensions(): SurfaceDimensions {
-  const surface = useContext(SurfaceContext);
-  const terminal = useTerminalDimensions();
-  return surface ?? terminal;
-}
+// Back-compat surface: the layout context and its hooks now live with the popup
+// primitive that provides them, and are re-exported here UNCHANGED so the 15+
+// screens that `import { useSurfaceDimensions, useDialogSurface } from
+// "./dialog-surface.js"` keep working with zero changes. It is the same context
+// object either way, so `useDialogSurface()` still reports true inside a
+// `DialogSurface` exactly as before.
+export { SurfaceContext, useSurfaceDimensions, useDialogSurface } from "./popup.js";
+export type { SurfaceDimensions } from "./popup.js";
 
-export function useDialogSurface(): boolean {
-  return useContext(SurfaceContext) !== null;
-}
-
-/** Presentation only: the existing route stack owns navigation and cancellation. */
+/**
+ * Presentation only: the existing route stack owns navigation and cancellation.
+ *
+ * Now a thin wrapper over the shared {@link Popup} `modal` variant — the centred,
+ * upper-third box, its `SurfaceContext`, its dim scrim and its selection-aware
+ * click-outside dismiss are all provided there. Geometry and behaviour are
+ * unchanged.
+ */
 export function DialogSurface({ children, onDismiss, size = "large" }: {
   children: React.ReactNode;
   onDismiss?: () => void;
   size?: "small" | "medium" | "large";
 }) {
-  const terminal = useTerminalDimensions();
-  const theme = useTheme();
-  const renderer = useRenderer();
-  const backdropPress = useRef(false);
-  const panelWidth = Math.max(1, Math.min(size === "small" ? 64 : size === "medium" ? 92 : 120, terminal.width - (terminal.width > 4 ? 4 : 0)));
-  const panelHeight = Math.max(1, Math.min(44, terminal.height - (terminal.height > 10 ? 4 : 0)));
-  const border = panelWidth > 4 && panelHeight > 4;
-  const dimensions = useMemo(() => ({
-    width: Math.max(1, panelWidth - (border ? 2 : 0)),
-    height: Math.max(1, panelHeight - (border ? 2 : 0)),
-  }), [panelWidth, panelHeight, border]);
   return (
-    <box position="absolute" top={0} left={0} width="100%" height="100%" zIndex={100}
-      backgroundColor={RGBA.fromInts(0, 0, 0, 150)}
-      onMouseDown={() => { backdropPress.current = !renderer.getSelection()?.getSelectedText(); }}
-      onMouseUp={() => {
-        const dismiss = backdropPress.current && !renderer.getSelection()?.getSelectedText();
-        backdropPress.current = false;
-        if (dismiss) onDismiss?.();
-      }}>
-      <box position="absolute" left={Math.max(0, Math.floor((terminal.width - panelWidth) / 2))}
-        top={Math.max(0, Math.floor((terminal.height - panelHeight) / 3))}
-        width={panelWidth} height={panelHeight} flexDirection="column" overflow="hidden"
-        border={border} borderStyle="rounded" borderColor={theme.BORDER} backgroundColor={theme.PANEL}
-        onMouseDown={(event) => { backdropPress.current = false; event.stopPropagation(); }}
-        onMouseUp={(event) => { backdropPress.current = false; event.stopPropagation(); }}>
-        <SurfaceContext.Provider value={dimensions}>{children}</SurfaceContext.Provider>
-      </box>
-    </box>
+    <Popup variant="modal" size={size} zIndex={100} onClose={onDismiss}>
+      {children}
+    </Popup>
   );
 }

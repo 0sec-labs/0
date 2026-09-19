@@ -1,6 +1,6 @@
 ---
 title: Triage Dataset
-description: How 0sec turns benchmark runs and verified findings into labeled JSONL for triage-model training.
+description: How 0 turns benchmark runs and verified findings into labeled JSONL for triage-model training.
 ---
 
 `packages/benchmark/src/triage-data-collector.ts` converts benchmark artifacts
@@ -19,7 +19,7 @@ The collector supports four input surfaces:
 |------|------|---------------------|
 | XBOW / Cybench-style results JSON | `--results <file>` | Flag extraction |
 | npm-bench results JSON | `--npm-bench <file>` | Package verdict |
-| 0sec SQLite DB | `--db <file>` | Blind verify status |
+| 0 SQLite DB | `--db <file>` | Blind verify status |
 | Directory of scan DBs | `--scan-dir <dir>` | Blind verify status |
 
 If you run the collector with no explicit `--results` or `--npm-bench`

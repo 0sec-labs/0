@@ -81,9 +81,15 @@ export function credentialsFilePath(homeDir?: string): string {
   return join(homeStateDir(homeDir), CREDENTIALS_FILENAME);
 }
 
-/** API-key providers the generic key store is allowed to persist. */
+/**
+ * Providers the generic flat key store is allowed to persist. Keyed off
+ * `methods` (not the scalar `auth`), so a provider that leads with OAuth but
+ * still ACCEPTS an API key — e.g. xai/kimi are `["oauth","api-key"]` — keeps
+ * its api-key round-trip through the flat store. Using `auth === "api-key"`
+ * here would silently drop those providers' pasted keys on the next save.
+ */
 const STORABLE_PROVIDER_IDS = new Set(
-  PROVIDERS.filter((provider) => provider.auth === "api-key").map((provider) => provider.id),
+  PROVIDERS.filter((provider) => provider.methods.includes("api-key")).map((provider) => provider.id),
 );
 
 /**

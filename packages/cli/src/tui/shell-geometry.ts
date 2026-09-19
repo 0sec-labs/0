@@ -27,8 +27,9 @@ const OVERLAY_TOP_RATIO = 0.12;
 
 /**
  * Rows ShellFrame spends before a screen's own content: one row of top
- * padding, the bordered header (two border rows, its content rows and a
- * bottom margin) and FooterBar's single row. Screens that render a
+ * padding, the single-row colored HeaderBar strip and its bottom margin
+ * (no divider row, no leading rail anymore — two rows fewer than the old
+ * title + gap + divider + margin stack), and FooterBar's single row. Screens that render a
  * bordered list need this to know how many rows they may actually claim —
  * a box that asks for more is shrunk by Yoga and then draws its own bottom
  * border straight through its last row.
@@ -36,7 +37,7 @@ const OVERLAY_TOP_RATIO = 0.12;
 export function getShellChromeHeight(terminalWidth: number): number {
   const headerContentWidth = terminalWidth - SHELL_HORIZONTAL_PADDING * 2 - PANEL_HORIZONTAL_CHROME;
   const headerContentRows = headerContentWidth < HEADER_COMPACT_WIDTH ? 4 : 2;
-  return 1 + (headerContentRows + 3) + 1;
+  return 1 + (headerContentRows + 1) + 1;
 }
 
 /** Rows an overlay may fill between its title row and its footer row. */

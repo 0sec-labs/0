@@ -132,8 +132,8 @@ describe("default theme", () => {
   });
 
   it("is the fallback", () => {
-    expect(DEFAULT_THEME_NAME).toBe("oh-my-pi");
-    expect(getTheme(DEFAULT_THEME_NAME)).toBe(THEMES["oh-my-pi"].palette);
+    expect(DEFAULT_THEME_NAME).toBe("0sec");
+    expect(getTheme(DEFAULT_THEME_NAME)).toBe(THEMES["0sec"].palette);
   });
 
   it("reproduces severityTone's mapping", () => {
@@ -303,6 +303,7 @@ describe("contrast sweep", () => {
       }),
     );
     expect(worst).toEqual({
+      "0sec": 4.93,
       dark: 4.32,
       light: 5.24,
       "high-contrast": 7.75,
@@ -312,8 +313,8 @@ describe("contrast sweep", () => {
       paper: 5.16,
       "mono-dim": 4.5,
       swiss: 5.74,
-      opencode: 5.01,
-      "oh-my-pi": 5.6,
+      "golden-gate": 5.01,
+      "blue-team": 5.6,
     });
   });
 });
@@ -421,6 +422,7 @@ describe("semantic colours survive colour blindness", () => {
       allThemes().map(({ name, palette }) => [name, Number(semanticSeparation(palette).toFixed(3))]),
     );
     expect(achieved).toEqual({
+      "0sec": 1.175,
       dark: 1.188,
       light: 1.254,
       "high-contrast": 1.319,
@@ -430,13 +432,13 @@ describe("semantic colours survive colour blindness", () => {
       paper: 1.162,
       "mono-dim": 1.165,
       swiss: 1.21,
-      opencode: 1.156,
-      "oh-my-pi": 1.328,
+      "golden-gate": 1.156,
+      "blue-team": 1.328,
     });
-    // Every theme clears the floor; opencode is the tightest of the set (its
+    // Every theme clears the floor; golden-gate is the tightest of the set (its
     // semantic hues are distinguished by colour rather than luminance, the
     // OpenCode palette's own trade-off), just above paper.
-    expect(Math.min(...Object.values(achieved))).toBe(achieved.opencode);
+    expect(Math.min(...Object.values(achieved))).toBe(achieved["golden-gate"]);
     expect(Math.min(...Object.values(achieved))).toBeGreaterThanOrEqual(MIN_SEMANTIC_CONTRAST);
   });
 });
@@ -1080,5 +1082,34 @@ describe("syntax / diff sub-palette (additive optional group)", () => {
     const degraded = degradePalette(THEMES.slate.palette, "ansi16") as Record<string, string>;
     expect(degraded.syntaxKeyword).toBeDefined();
     expect(degraded.syntaxKeyword).toMatch(/^#[0-9A-F]{6}$/);
+  });
+
+  it("gives the 0sec theme a genuinely polychrome code palette (OMP hues, not an orange wash)", () => {
+    const p = THEMES["0sec"].palette;
+    const c = resolveSyntaxColors(p);
+    // keyword / string / function / type / number must all differ from one
+    // another AND from the orange brand PRIMARY — i.e. real syntax colouring,
+    // not orange-on-orange.
+    const hues = [c.keyword, c.string, c.function, c.type, c.number];
+    expect(new Set(hues).size).toBe(hues.length);
+    for (const h of hues) expect(h).not.toBe(p.PRIMARY);
+    // Every 0sec syntax token clears AA (4.5:1) on the PANEL it renders on.
+    for (const token of SYNTAX_TOKENS) {
+      const hex = (p as Record<string, string>)[token];
+      if (!hex) continue;
+      expect(contrastRatio(hex, p.PANEL), `${token} on PANEL`).toBeGreaterThanOrEqual(MIN_TEXT_CONTRAST);
+    }
+  });
+});
+
+describe("theme aliases", () => {
+  it("resolves the legacy 'opencode' id to the renamed 'golden-gate' palette", () => {
+    expect(getTheme("opencode")).toBe(THEMES["golden-gate"].palette);
+    expect(getThemeEntry("opencode").name).toBe("golden-gate");
+  });
+
+  it("resolves every legacy theme id to its renamed palette", () => {
+    expect(getThemeEntry("golden").name).toBe("golden-gate");
+    expect(getThemeEntry("oh-my-pi").name).toBe("blue-team");
   });
 });

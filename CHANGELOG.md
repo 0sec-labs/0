@@ -1,98 +1,199 @@
 # Changelog
 
-All notable changes to 0sec (the open-source CLI + agent harness) are tracked
+All notable changes to 0security (the open-source CLI + agent harness) are tracked
 here. The history before v0.11.0 lives in the git log and on the GitHub
 Releases page; this file starts the human-readable summary from v0.11.0
 onwards. Entries before v0.13.0 predate the pwnkit → 0sec rename and keep the
 old product name as written.
 
 The format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
-and 0sec adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
+and 0security adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 on the published npm package and the GitHub Release tag.
 
 ## [Unreleased]
 
 ### Added
 
-- Add explicit Unicode, Nerd Font, and ASCII symbol choices to migrated operator
-  dialogs and sidebar components, with Unicode as the default. This migration
-  does not yet cover all chat, transcript, approval, and composer glyphs.
-- Add opt-in development-engine replacement between turns, preserving the live
-  conversation, scope decisions, task state and accounting. Failed candidates
-  retain the active engine. This trusted host-code path is separate from
-  sandboxed self-extension and does not reload the terminal shell or injected clients.
+- Opt-in Jev assistance for bounded read-only browser exploration, memory
+  ranking, duplicate assessment, and red-team feedback. Evaluations remain
+  advisory; managed requests use a separate scan capability, and credentials
+  alone never enable the feature.
 
 ### Changed
 
-- Default automatic updates on for profiles without an explicit update policy,
-  including existing profiles with that setting unset. Eligible startup checks
-  may download and install remote code. Explicit `off` and `notify` preferences,
-  project-setting restrictions, and existing updater safety checks remain intact.
+- Cloud balance and connection views consume the versioned credit account with
+  exact credit amounts, separate free/subscription/prepaid states, and no inferred
+  totals or zero balances for unavailable data. Cloud model views expose public
+  IDs and capabilities without supplier prices or routing metadata; BYOK pricing
+  remains unchanged.
+- `0dev` defaults to the development Cloud host and stores Cloud credentials
+  separately, without changing normal `0sec` credentials or BYOK configuration.
 
 ### Fixed
 
-- Fix `plugin run` to read the name-keyed built-in tool registry instead of
-  treating it as an array. Approval-denied output now distinguishes loading
-  plugin code from invoking its tool.
-- Generate a runnable SHA-256 `plugin.js` from `hackstore init`, reading the
-  installed manifest instead of duplicating it in code. Include local testing
-  instructions and reject invalid tool arguments explicitly.
+- Initialize and upgrade local SQLite schemas in one transaction, avoiding
+  repeated durable commits on slow disks and rolling back interrupted upgrades.
+- Use Azure's DeepSeek V4.1 Flash rates for exact, mixed-case and versioned
+  deployment names instead of the generic cost-estimation fallback. Direct
+  DeepSeek API pricing is unchanged; this does not rewrite recorded spend.
 
-- Search the full BYOK model catalog from the curated picker and navigate models
-  with duplicate IDs across providers without mixing their detail panes.
-  Preserve hosted model pins and role-selection controls.
-- Re-anchor existing Foxguard baseline entries after line-only shifts,
-  without adding suppressed findings or changing the security policy.
-- Keep unlimited turn budgets out of finite-JSON harness checkpoints without
-  weakening snapshot validation.
-- Preserve contained source-file aliases in immutable engine generations and
-  reject directory aliases or links outside the selected Core source.
-- Terminate sandbox controller process groups on cancellation, deadlines and
-  output overflow. Reuse already-approved Docker group access without host
-  execution fallback or privilege elevation.
-- Validate browser arguments and initial URL scope before acquiring a backend.
-- Show shared batch instructions and worker briefs in bounded, expandable Task
-  cards without hiding the tool result. Pass shared instructions to every
-  `spawn_agents` child alongside its own task.
-- Present operator screens as bounded, responsive dialogs while keeping the
-  current audit and draft mounted. Use consistent icons and palette colors.
-- Keep sidebar backgrounds and padding continuous, show live plan progress,
-  and theme transcript scrollbars without resetting their position.
-- Preserve filter text, selection, and permission-mode changes across keyboard
-  bursts. Pin marketplace confirmations and worker steering drafts to the
-  exact selected item or worker rather than a later roster or registry state.
-- Show tool activity above the composer and loading below full-width rules.
-  Render expandable tool and image cards with reported outcomes and dimensions,
-  and use audit objective events for titles without inventing context usage.
-- Keep phase-aware plan trees and rounded You/0sec transcript cards, with
-  bounded, redacted code and diff previews shared by tool result cards.
-- Keep each live audit's conversation, draft, runtime, and mailbox independent.
-  `/new` opens another audit; closing waits for cleanup and permits an explicit retry.
-  Keep generated worker addresses within the mailbox identity limit for UUID audit IDs.
-- Report context occupancy from planner input only; plugin usage still updates
-  turn budgets. Missing samples, unknown limits, and worker focus stay unknown.
-  The bottom bar shows `Context usage unavailable` without fallback input or limit numbers.
-- Drain owned workers before acknowledging a stop, while retaining the parent
-  conversation. Show confirmed stops and unfinished workers as settled.
-- Pin worker model choices to the parent's provider and account. Model-picker
-  changes apply to the next audit, and hosted metadata comes from that account's catalog.
-- Keep onboarding completion in the operator's global settings. Reset selected
-  settings without promoting unrelated project overrides into global preferences.
-- Default fresh settings to slate and right-aligned operator bubbles. Preserve
-  saved styles, including migration from `messenger`, and place message/tool
-  labels in their top borders. Collapsed tools retain recorded command or path.
-- Keep permission mode in the bottom row, even with optional status telemetry
-  hidden. Show elapsed time for the whole active root turn.
-- Make early-stop retries opt-in through `0SEC_FEATURE_EARLY_STOP=1`.
-- Preserve unrelated host refusals during explicit target recovery and keep
-  saved credentials bound to their original origin across target/mode changes.
-- Block unanchored shared-address-space HTTP destinations, including
-  IPv4-mapped DNS answers, while retaining explicit internal targets.
-- Commit each work-plan transition and its audit records atomically, reducing
-  repeated synchronous database flushes and rolling back partial transitions
+## [0.19.0] - 2026-09-18
+
+### Added
+
+- `0sec guide` provides an agent-readable product and capability reference,
+  with command contracts discovered from registered CLI metadata.
+
+### Security
+
+- Move automatic HTTP target classification after engagement-scope admission.
+  Previously, an unscoped or out-of-scope configured target could receive a
+  probe before the scan was refused. The probe now refuses redirects and
+  cancels their response bodies.
+
+### Changed
+
+- Bound executable-plugin and source-evolution guest admission per controller
+  by active count, aggregate memory/CPU, and a bounded FIFO queue. Deadlines
+  cover queued work; nested calls fail promptly when capacity is unavailable.
+  Reservations stay held through teardown, and uncertain cleanup stops new
+  admissions. Docker remains the default; guests are not reused.
+- Present the product as **0security**, with a full wordmark and orange branding
+  across the CLI, dashboard, desktop app, documentation, and README assets.
+  The `0sec` executable, package identifiers, configuration paths, desktop
+  profile location, and release artifact names remain compatible.
+- Clarify the Research Preview mission and 0cloud's hosted inference and managed
+  security roles while preserving local and BYOK operation.
+
+### Fixed
+
+- Separate dashboard text accents from solid orange actions so links, selected
+  workflow text, and translucent badges remain readable in light and dark
+  themes. Use the canonical aperture and SVG wordmark in dashboard navigation.
+- Fail closed when `connect` cannot establish enrollment readiness or inspect
+  existing schedules. Missing/malformed endpoints no longer fabricate repository
+  authorization. GitHub App installation remains an action-required handoff.
+- Require explicit `--yes` approval for new work in JSON mode. A failed
+  recurrence operation preserves the created scan ID and reports incomplete
+  enrollment instead of success. The budget confirmation describes a per-run
+  ceiling, not a monthly allowance.
+- Keep guide account state unknown after a health response. Add hosted inference
+  as a separate service capability, discover command contracts from registered
+  metadata, and reject unknown JSON topics consistently with human output.
+
+## [0.18.0] - 2026-09-16
+
+### Added
+
+- **`0sec secure` — the self-securing lifecycle.** Point the CLI at a
+  repository and it investigates, behaviorally reproduces each finding with a
+  frozen probe, repairs across multiple files, runs your regression command,
+  and independently verifies the fix in a fresh checkout before retaining the
+  patch and evidence. Broken candidates (e.g. feature-disabling patches) are
+  rejected; unresolved findings block the run instead of reporting clean.
+  Runs are resumable with identity checks, persist an exclusive lock, and
+  track real token cost. `--publish` opens PRs for verified patches only.
+- **`0sec connect` — one-command cloud onboarding.** `0sec auth login` once,
+  then `0sec connect <repo-url>`: auth is verified, the test command is
+  auto-detected (package.json / Makefile / pytest / Cargo / Go), the first
+  secure run starts immediately, and a recurring schedule is installed.
+- **Learning loop.** Verified and failed repair outcomes are recorded in the
+  revision-aware memory store and recalled as untrusted hints on later runs.
+  State is stable per repository by default, so learnings accumulate across
+  runs instead of resetting.
+- **Developer-choice learning.** Repair PRs carry a machine-readable
+  attribution marker; accepted/rejected outcomes (`0SEC_SECURE_PRIOR_OUTCOMES`)
+  and reviewer comments (`0SEC_SECURE_GUIDANCE`) flow back into future repair
+  prompts as untrusted guidance.
+- **Per-repo repair rules.** `--rules` / `0SEC_SECURE_RULES` render
+  plain-English team standards ("minimal diffs; no new dependencies") into
+  repair prompts.
+
+### Changed
+
+- `0sec update` is now an alias of `0sec upgrade`.
+
+
+- Show a consistently spaced `0SECURITY` hero wordmark on wide terminals, with
+  the original `0SEC` mark retained for narrow columns.
+- Replace the duplicate aperture above the wordmark with Zero peeking over an
+  edge, facing forward with both gloves visible. Preserve the original image
+  resolution and antialias the silhouette without its white fringe. Native
+  images are composited onto the active theme canvas; when native graphics
+  cannot be used, omit the mascot entirely instead of displaying pixel art.
+  Keep the orange band and fit the portrait to the available body rows rather
+  than hiding it below a fixed terminal-height cutoff.
+- Vertically centre the entire welcome group, including the mascot, wordmark,
+  input and shortcuts, while keeping the input stationary when filtering commands.
+- Default analytics and training sharing to `full` for new installations, with
+  category-specific onboarding/settings disclosure and preserved saved,
+  environment and organization opt-outs. Capture console tools and all submitted
+  executable-plugin files through the shared redaction boundary.
+- Retain ordinary training content, including emails, URLs and opaque strings.
+  Scrub recognized credentials rather than applying broad PII or entropy
+  masking; handle nested JSON/shell credentials without losing JSON quoting.
+- Keep metadata overflow markers within the receiver's 4,000-character limit
+  so a long finding cannot invalidate an otherwise acceptable capture batch.
+- Preserve accepted tool/code content up to 256 KiB per redacted UTF-8 field;
+  bound Cloud batches by encoded bytes and count, report oversized captures
+  locally, and recheck consent before every POST.
+- Use the latest planner request's input tokens for context occupancy rather
+  than cumulative turn usage, including usage reported before a stream failure.
+- Render scrollbars with a one-column, narrow-stroke thumb and remove unused
+  scrollbar reservations from expanded inline tool cards.
+- Accept `update` as an alias for `upgrade`, including the CLI entrypoint and
+  generated command reference.
+
+## [0.17.0] - 2026-09-15
+
+### Added
+
+- Hackstore community discovery, extension authoring commands, and a runnable
+  generated SHA-256 extension. Installation and per-project enablement remain
+  separate operator decisions.
+- Multi-tab browser tools, authenticated Chrome attachment, JavaScript/Python
+  evaluation tools, and additional security-engine tools and skills.
+- Additional provider connection flows, live model/provider selection,
+  per-agent routing, context compaction, and consent-gated redacted analytics.
+- A publishable benchmark scoreboard through `0sec bench scoreboard`, with
+  benchmark-miss harvesting available through `lens-synth --from-bench`.
+
+### Changed
+
+- Reworked terminal dialogs, command and model pickers, keyboard controls,
+  code and tool cards, worker activity, themes, and shutdown feedback.
+- Report live session links, pane activity, and runtime context to Herdr, and
+  release the session sink on exit.
+- Default automatic updates on for profiles without an explicit update policy.
+  Eligible startup checks may download and install remote code; explicit `off`
+  and `notify` preferences and existing updater safety checks remain intact.
+- Pin the default Foxguard scanner and standalone installer companion to
+  v0.14.0, with matching published checksums for every supported platform.
+
+### Fixed
+
+- Make `plugin run` consume the name-keyed built-in tool registry correctly.
+  Approval-denied output distinguishes loading plugin code from invoking a tool.
+- Execute plugins with the embedded Bun interpreter in standalone builds,
+  without requiring Node or Bun on `PATH`.
+- Exclude security engines with sub-analysis or network capabilities from
+  attacker-controlled source scopes while retaining trusted audit access.
+- Preserve live conversations, scope decisions, worker state, and accounting
+  across supported runtime changes; retain the active engine on failed replacement.
+- Keep unlimited turn budgets out of finite-JSON checkpoints, contain source
+  aliases within immutable engine generations, and terminate owned sandbox
+  process groups on cancellation, deadlines, and output overflow.
+- Validate browser arguments and initial scope before acquiring a backend.
+  Preserve explicit target authority, origin-bound credentials, and refusal
+  of unanchored shared-address-space destinations.
+- Commit work-plan transitions and audit records atomically, with rollback
   when audit artifact storage fails.
-- Reuse isolated empty database schemas in pipeline fixtures and load hunt
-  orchestration before timing ledger behavior.
+
+### Release
+
+- Publish the established `0sec-cli` npm package through the release workflow
+  after the standalone platform builds, using the repository's CI credential.
+  An npm-only recovery run leaves existing tags and native assets unchanged.
 
 ## [0.16.3] - 2026-09-12
 

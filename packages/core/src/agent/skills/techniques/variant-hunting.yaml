@@ -1,0 +1,55 @@
+id: variant-hunting
+name: "Variant Hunting from a Seed"
+description: "When to reach for the offline `variant_hunt` engine: given a proven bug (a seed fix diff or a described bug class) hunt the SAME class at OTHER sites in the source tree — LLM bug-class extraction + grep'd candidate sites → parallel finders → adversarial skeptic gate. Offline source read; never touches the target network. Emits LEADS, not confirmed 0-days."
+version: 1
+applicable_roles:
+  - attack
+  - audit
+  - review
+tags:
+  - variant-analysis
+  - variant-hunt
+  - bug-class
+  - patch-diffing
+  - source-review
+  - n-day
+triggers:
+  - "variant"
+  - "same (bug|vuln|pattern|class) (elsewhere|again|somewhere)"
+  - "patch.?diff"
+  - "seed (fix|diff|patch)"
+  - "hunt (for )?(other|more) (instances|occurrences|sites)"
+estimated_tokens: 650
+content: |
+  ## Variant hunting from a seed (offline)
+
+  One real bug is rarely alone. When you have a PROVEN bug — a fix commit, a
+  described root cause, or a confirmed finding — the highest-yield next move is
+  to hunt the SAME bug class at every OTHER site in the tree. Reach for
+  **`variant_hunt`** instead of ad-hoc grepping.
+
+  ### What it does
+  - Extracts the bug CLASS from the seed (the sink, the missing guard, the
+    dangerous pattern), then generates candidate sites across the tree (an LLM
+    bug-class pass + grep'd structural candidates).
+  - Runs parallel finders over the candidates, then gates survivors through an
+    adversarial skeptic that re-reads each and tries to refute it.
+
+  ### How to drive it
+  - Point it at the `source` tree (a local path; resolved within the scoped
+    source path when one is set).
+  - Provide the `seed` — a fix diff, the finding, or a description of the bug
+    class. A sharper seed yields sharper candidates. With no seed it falls back
+    to a broader class-agnostic sweep.
+
+  ### Reading the result
+  - A surviving hunt finding is a **LEAD, not a confirmed 0-day**: the skeptic
+    gate filters (re-reads + refutes) but does not PROVE, and novelty (is this
+    site already fixed upstream?) is a downstream gate.
+  - Treat `confirmed` as "worth verifying". Before any disclosure: trace the
+    real sink from a concrete entry point, and check the site is not already
+    patched. Hand a promising lead to `verify_finding` to close the loop.
+
+  ### When to use
+  - Right after a fix lands or a finding is confirmed — hunt siblings.
+  - When reviewing a codebase with a known recurring anti-pattern.

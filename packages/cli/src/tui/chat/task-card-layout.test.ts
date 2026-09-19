@@ -98,13 +98,15 @@ describe("subReportRows", () => {
     expect(rows[0]).toEqual({
       name: "A",
       badge: " (scout)",
-      brief: ": probe",
+      // The raw prompt is dropped; with no telemetry the tail falls back to
+      // "Starting…" (the card only paints it while the agent is running).
+      brief: "",
       isolated: " [isolated]",
       accentId: "A",
       status: "",
       running: false,
       stats: [],
-      intent: "",
+      intent: "Starting…",
     });
   });
 
@@ -119,7 +121,7 @@ describe("subReportRows", () => {
       status: "",
       running: false,
       stats: [],
-      intent: "",
+      intent: "Starting…",
     });
   });
 
@@ -238,13 +240,15 @@ describe("composeSubReportRow", () => {
     ).toEqual({
       name: "Explorer",
       badge: " (scout)",
-      brief: ": enumerate the users table",
+      // The raw prompt is NOT surfaced; the tail carries the live summary.
+      brief: "",
       isolated: "",
       accentId: "agent-7f",
       status: "running",
       running: true,
       stats: ["12.4k tok", "8.20s", "sonnet"],
-      intent: "shell: probing for IDOR",
+      // Derived from the `report_status` note, sentence-cased — not the prompt.
+      intent: "Probing for IDOR",
     });
   });
 
@@ -254,5 +258,52 @@ describe("composeSubReportRow", () => {
     expect(row.accentId).toBe("Prober");
     // "in_progress" is not the running/working live state, so no intent shows.
     expect(row.running).toBe(false);
+  });
+
+  it("derives the tail from the child's current tool + args, never the spawn prompt", () => {
+    const row = composeSubReportRow({
+      name: "Reader",
+      brief: "audit the whole authentication subsystem for IDOR and CSRF",
+      status: "running",
+      tool: "read_file",
+      toolInput: { path: "src/auth/session.ts" },
+      toolRunning: true,
+    });
+    // An in-flight tool is the freshest "now"; the prompt never appears.
+    expect(row.intent).toBe("Reading session.ts");
+    expect(row.brief).toBe("");
+    expect(row.running).toBe(true);
+  });
+
+  it("prefers the child's latest assistant prose over a stale last tool", () => {
+    const row = composeSubReportRow({
+      name: "Writer",
+      brief: "draft the migration plan",
+      status: "working",
+      tool: "read_file",
+      assistant: "Now writing the rollback section of the migration plan.",
+    });
+    expect(row.intent).toBe("Now writing the rollback section of the migration plan");
+    expect(row.brief).toBe("");
+  });
+
+  it("shows a live 'Working (turn N/M)' fallback before any tool/prose, not the prompt", () => {
+    const row = composeSubReportRow({
+      name: "Starter",
+      brief: "explore the codebase",
+      status: "running",
+      turn: 2,
+      maxTurns: 8,
+    });
+    expect(row.intent).toBe("Working (turn 2/8)");
+    expect(row.brief).toBe("");
+  });
+
+  it("keeps a settled agent's terminal word (running/done/failed distinct)", () => {
+    const done = composeSubReportRow({ name: "A", status: "completed", brief: "x" });
+    expect(done.running).toBe(false);
+    expect(done.intent).toBe("done");
+    const failed = composeSubReportRow({ name: "B", status: "failed", brief: "x" });
+    expect(failed.intent).toBe("failed");
   });
 });

@@ -183,6 +183,57 @@ describe("0sec auth login", () => {
   });
 });
 
+describe("development Cloud authentication", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    process.exitCode = undefined;
+  });
+
+  it("uses the configured dev host and logs out without changing production credentials", async () => {
+    const home = freshHome();
+    const productionPath = seedHomeWithCreds(home, "https://cloud.0.security", "production-token");
+    const productionBytes = readFileSync(productionPath);
+    const privateDir = join(home, ".0cloud");
+    mkdirSync(privateDir);
+    const privatePath = join(privateDir, "credentials.json");
+    writeFileSync(privatePath, '{"token":"private-production-token"}', { mode: 0o600 });
+    const privateBytes = readFileSync(privatePath);
+    vi.stubEnv("0SEC_DEV_SOURCE_ROOT", "/fixture/engine");
+    vi.stubEnv("0SEC_CLOUD_HOST", "https://dev.0sec.ai");
+    vi.stubEnv("0SEC_CLOUD_TOKEN", undefined);
+    const opened: string[] = [];
+    const polled: string[] = [];
+    const io = captureIO();
+    try {
+      await runLogin({
+        homeDir: home,
+        pollAttempts: 1,
+        pollIntervalMs: 0,
+        openBrowser: (url) => { opened.push(url); },
+        fetchImpl: async (url) => {
+          polled.push(String(url));
+          return jsonResponse({ status: "ready", token: SECRET });
+        },
+      });
+      expect(process.exitCode).toBe(0);
+      expect(opened.map((url) => new URL(url).origin)).toEqual(["https://dev.0sec.ai"]);
+      expect(polled.map((url) => new URL(url).origin)).toEqual(["https://dev.0sec.ai"]);
+      const devPath = join(home, ".0sec", "dev", "cloud.env");
+      expect(readFileSync(devPath, "utf8")).toContain(`0SEC_CLOUD_TOKEN=${SECRET}`);
+      expect(statSync(devPath).mode & 0o777).toBe(0o600);
+      expect(readFileSync(productionPath)).toEqual(productionBytes);
+      expect(readFileSync(privatePath)).toEqual(privateBytes);
+      runLogout({ homeDir: home });
+      expect(existsSync(devPath)).toBe(false);
+      expect(readFileSync(productionPath)).toEqual(productionBytes);
+      expect(readFileSync(privatePath)).toEqual(privateBytes);
+      expect(io.stdout.join("\n") + io.stderr.join("\n")).not.toContain(SECRET);
+    } finally {
+      io.restore();
+    }
+  });
+});
+
 describe("0sec auth logout", () => {
   let home: string;
   let io: ReturnType<typeof captureIO>;
@@ -240,9 +291,14 @@ describe("0sec auth status", () => {
     io.restore();
   });
 
-  it("prints OK with host on 200, exit 0", async () => {
+  it("authenticates against the Cloud account on a custom host", async () => {
     seedHomeWithCreds(home);
-    const fetchImpl = (async () => jsonResponse({ status: "ok" })) as typeof fetch;
+    const fetchImpl = (async (input) => {
+      const path = new URL(String(input)).pathname;
+      return path === "/api/inference/account"
+        ? jsonResponse({ credits: null })
+        : new Response("Not an account endpoint", { status: 404 });
+    }) as typeof fetch;
     await runStatus({ fetchImpl });
     expect(process.exitCode).toBe(0);
     expect(io.stdout.join("\n")).toContain(`OK (host=${HOST})`);
@@ -258,7 +314,10 @@ describe("0sec auth status", () => {
 
   it("exit 2 on 401, stderr does NOT contain token", async () => {
     seedHomeWithCreds(home);
-    const fetchImpl = (async () => new Response("nope", { status: 401 })) as typeof fetch;
+    const fetchImpl = (async (input) =>
+      new URL(String(input)).pathname === "/api/inference/account"
+        ? new Response("nope", { status: 401 })
+        : jsonResponse({ status: "ok" })) as typeof fetch;
     await runStatus({ fetchImpl });
     expect(process.exitCode).toBe(2);
     expect(io.stderr.join("\n")).toContain("FAIL (HTTP 401)");

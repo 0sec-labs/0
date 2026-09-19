@@ -9,6 +9,7 @@ import {
   frameIntervalMs,
   framePeriodMs,
   formatElapsed,
+  formatElapsedClock,
   type AnimationKind,
 } from "./animation.js";
 
@@ -207,6 +208,23 @@ describe("elapsed label", () => {
   it("clamps absurd values instead of producing an unbounded label", () => {
     expect(formatElapsed(Number.MAX_SAFE_INTEGER)).toBe("99h59m");
     expect(formatElapsed(Number.MAX_SAFE_INTEGER).length).toBeLessThanOrEqual(6);
+  });
+
+  it("formatElapsedClock is the spaced, oh-my-pi-style presentation of the same arithmetic", () => {
+    expect(formatElapsedClock(9_000)).toBe("9s");
+    expect(formatElapsedClock(59_000)).toBe("59s");
+    expect(formatElapsedClock(60_000)).toBe("1m 00s");
+    expect(formatElapsedClock(72_000)).toBe("1m 12s");
+    expect(formatElapsedClock(3_599_000)).toBe("59m 59s");
+    expect(formatElapsedClock(3_600_000)).toBe("1h 00m");
+    expect(formatElapsedClock(7_500_000)).toBe("2h 05m");
+  });
+
+  it("formatElapsedClock is total over hostile and clamped inputs", () => {
+    expect(formatElapsedClock(-1)).toBe("0s");
+    expect(formatElapsedClock(Number.NaN)).toBe("0s");
+    expect(formatElapsedClock(Number.POSITIVE_INFINITY)).toBe("0s");
+    expect(formatElapsedClock(Number.MAX_SAFE_INTEGER)).toBe("99h 59m");
   });
 });
 

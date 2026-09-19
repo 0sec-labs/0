@@ -688,7 +688,7 @@ export function FindingsScreen({ options, onExit, shell }: { options: FindingsSc
     push(filterSummary, theme.MUTED);
     push(`limit ${options.limit}`, theme.MUTED);
     push(`mode ${options.all ? "raw rows" : "grouped families"}`, theme.MUTED);
-    push("enter inspect/chat · a accept · s suppress · r reopen · f generate candidate", theme.MUTED);
+    push("[⏎] inspect/chat · [a] accept · [s] suppress · [r] reopen · [f] generate candidate", theme.MUTED);
 
     lines.push({ text: "" });
     lines.push({ text: "DESCRIPTION", fg: theme.PRIMARY });
@@ -737,6 +737,7 @@ export function FindingsScreen({ options, onExit, shell }: { options: FindingsSc
           gutter
           renderDetail={renderFindingsDetail}
           onActivateRow={(itemIndex) => applyIndex(itemIndex)}
+          onHoverRow={(itemIndex) => applyIndex(itemIndex)}
           onScroll={moveFindingsCursor}
           onRowContextMenu={mouseSupport ? (itemIndex, event) => {
             // Select the right-clicked row first, so every reused action (which
@@ -751,8 +752,8 @@ export function FindingsScreen({ options, onExit, shell }: { options: FindingsSc
         </Cells>
         <FooterBar
           hint={findingsFiltering
-            ? "type to filter · enter keep · esc clear"
-            : "↑↓ move · enter inspect · a accept · s suppress · r reopen · f fix · / filter · esc back"}
+            ? "type to filter · [⏎] keep · [esc] clear"
+            : "[↑↓] move · [⏎] inspect · [a] accept · [s] suppress · [r] reopen · [f] fix · [/] filter · [esc] back"}
         />
       </box>
     </ShellFrame>

@@ -258,7 +258,7 @@ export function DoctorScreen({ onExit, shell }: { onExit: () => void; shell?: Sh
         <Cells width={width} fg={doctorStatusTone}>
           {doctorStatusText}
         </Cells>
-        <FooterBar hint="↑↓ move · esc back · ctrl+p commands · ctrl+c exit" />
+        <FooterBar hint="[↑↓] move · [esc] back · [⌃P] commands · [⌃C] exit" />
       </box>
     </ShellFrame>
   );

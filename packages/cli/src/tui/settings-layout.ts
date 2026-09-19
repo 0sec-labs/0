@@ -617,21 +617,21 @@ export type SettingsMode = "browse" | "filter" | "confirm-reset" | "confirm-rese
 export function settingsFooterHint(mode: SettingsMode, hasFilter = false): string {
   switch (mode) {
     case "filter":
-      return "type/paste search · up/down move · left/right or enter change · ctrl+u clear · esc browse";
+      return "type/paste search · [↑↓] move · [←→]/[⏎] change · [⌃U] clear · [esc] browse";
     case "confirm-reset":
     case "confirm-reset-all":
-      return "y confirm · n or esc cancel";
+      return "[y] confirm · [n]/[esc] cancel";
     default:
       return [
-        "up/down move",
-        "left/right change",
-        "tab next group",
-        "enter/space change",
-        "/ search",
-        "r reset",
-        "shift+r reset all",
-        hasFilter ? "esc clear filter" : "esc back",
-        "ctrl+c exit",
+        "[↑↓] move",
+        "[←→] change",
+        "[⇥] next group",
+        "[⏎] change",
+        "[/] search",
+        "[r] reset",
+        "[⇧R] reset all",
+        hasFilter ? "[esc] clear filter" : "[esc] back",
+        "[⌃C] exit",
       ].join(" · ");
   }
 }

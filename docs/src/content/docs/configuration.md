@@ -3,7 +3,7 @@ title: Configuration
 description: Runtime modes, scan modes, depth settings, state paths, env vars, feature flags, and diagnostics.
 ---
 
-> Status: 2026-09-14. Living document.
+> Status: 2026-09-18. Living document.
 
 Configure command options, provider credentials, console settings and run storage
 separately. Each section below gives its precedence rules.
@@ -38,19 +38,19 @@ export XAI_API_KEY="..."
 export OPENCODE_API_KEY="..."
 
 # `0SEC_*` names begin with a digit; pass a Codex token with env.
-env 0SEC_CHATGPT_OAUTH_REFRESH_TOKEN="..." 0sec doctor
+env 0SEC_CHATGPT_OAUTH_REFRESH_TOKEN="..." 0 doctor
 ```
 
 See [API Keys](/api-keys/) for the full provider list, default models, and
 credential priority.
 
-For Azure, also set `AZURE_OPENAI_BASE_URL` and `AZURE_OPENAI_MODEL` unless 0sec
+For Azure, also set `AZURE_OPENAI_BASE_URL` and `AZURE_OPENAI_MODEL` unless 0
 can read them from an Azure-backed `~/.codex/config.toml`. For the Responses API,
 the base URL must include `/openai/v1`. Incomplete Azure configuration fails before execution.
 
 For ChatGPT Codex, run `codex login`, then either rely on
 `~/.codex/auth.json` or use
-`env 0SEC_CHATGPT_OAUTH_REFRESH_TOKEN=... 0sec <command>`. An explicit token
+`env 0SEC_CHATGPT_OAUTH_REFRESH_TOKEN=... 0 <command>`. An explicit token
 takes priority over API-key providers.
 
 ### CLI runtimes (claude, codex, gemini)
@@ -72,8 +72,8 @@ npm i -g @google/gemini-cli
 Then use them:
 
 ```bash
-0sec scan --target https://api.example.com/chat --scope ./scope.json --runtime claude
-0sec review ./my-repo --runtime codex --depth deep
+0 scan --target https://api.example.com/chat --scope ./scope.json --runtime claude
+0 review ./my-repo --runtime codex --depth deep
 ```
 
 The Codex CLI isn't used as a live-target wrapper. For live scans on a Codex
@@ -81,7 +81,7 @@ subscription, configure the direct provider instead:
 
 ```bash
 env 0SEC_CHATGPT_OAUTH_REFRESH_TOKEN="..." \
-  0sec scan --target https://example.com --scope ./scope.json --runtime codex
+  0 scan --target https://example.com --scope ./scope.json --runtime codex
 ```
 
 ### Codex runtime parity matrix
@@ -91,14 +91,14 @@ the authenticated CLI; live-target subscription calls use the direct provider.
 
 | Surface                                | Command                                                      | Supported via direct provider |
 |----------------------------------------|--------------------------------------------------------------|--------------------------------|
-| Web / URL scan                         | `0sec scan --target https://example.com --scope ./scope.json --runtime codex` | yes |
-| npm package audit                      | `0sec audit lodash --ecosystem npm --runtime codex`        | yes                            |
-| PyPI package audit                     | `0sec audit requests --ecosystem pypi --runtime codex`     | yes                            |
-| crates.io package audit                | `0sec audit tokio --ecosystem cargo --runtime codex`       | yes                            |
-| OCI image audit                        | `0sec audit nginx:1.25 --ecosystem oci --runtime codex`    | yes                            |
-| Default source-code review             | `0sec review ./repo --runtime codex`                       | yes                            |
-| Linux kernel review                    | `0sec review ./linux --profile linux-kernel --runtime codex` | yes                          |
-| C/C++ library review                   | `0sec review ./lib --profile c-library --runtime codex`    | yes                            |
+| Web / URL scan                         | `0 scan --target https://example.com --scope ./scope.json --runtime codex` | yes |
+| npm package audit                      | `0 audit lodash --ecosystem npm --runtime codex`        | yes                            |
+| PyPI package audit                     | `0 audit requests --ecosystem pypi --runtime codex`     | yes                            |
+| crates.io package audit                | `0 audit tokio --ecosystem cargo --runtime codex`       | yes                            |
+| OCI image audit                        | `0 audit nginx:1.25 --ecosystem oci --runtime codex`    | yes                            |
+| Default source-code review             | `0 review ./repo --runtime codex`                       | yes                            |
+| Linux kernel review                    | `0 review ./linux --profile linux-kernel --runtime codex` | yes                          |
+| C/C++ library review                   | `0 review ./lib --profile c-library --runtime codex`    | yes                            |
 
 Managed runtime availability follows the separate [0cloud deployment policy](/roadmap/#0cloud).
 
@@ -116,10 +116,10 @@ Managed runtime availability follows the separate [0cloud deployment policy](/ro
 
 ```bash
 # LLM API assessment: select deep mode explicitly.
-0sec scan --target https://api.example.com/chat --scope ./scope.json --mode deep
+0 scan --target https://api.example.com/chat --scope ./scope.json --mode deep
 
 # Web application assessment.
-0sec scan --target https://example.com --scope ./scope.json --mode web
+0 scan --target https://example.com --scope ./scope.json --mode web
 ```
 
 ## Depth settings
@@ -136,9 +136,9 @@ These are not fixed test-case counts or guaranteed completion times. See
 [Budget Management](/budget-management/) for the budget mechanisms.
 
 ```bash
-0sec scan --target https://api.example.com/chat --scope ./scope.json --mode deep --depth quick
-0sec audit express --depth deep
-0sec review ./my-repo --depth deep --runtime claude
+0 scan --target https://api.example.com/chat --scope ./scope.json --mode deep --depth quick
+0 audit express --depth deep
+0 review ./my-repo --depth deep --runtime claude
 ```
 
 ## Output formats
@@ -155,7 +155,7 @@ Set with `--format`:
 | `markdown` | Human-readable Markdown report |
 
 For GitHub Code Scanning, run the CLI with `--format sarif` and upload the
-result with `github/codeql-action/upload-sarif`. A dedicated 0sec composite
+result with `github/codeql-action/upload-sarif`. A dedicated 0 composite
 action has not shipped; use the complete [GitHub CI](/ci/github-action/) workflow.
 
 ## Diff-aware review
@@ -164,7 +164,7 @@ Review only changed files against a base branch — handy in CI to skip scanning
 the whole codebase on every PR:
 
 ```bash
-0sec review ./my-repo --diff-base origin/main --changed-only
+0 review ./my-repo --diff-base origin/main --changed-only
 ```
 
 ## Verbose output
@@ -172,7 +172,7 @@ the whole codebase on every PR:
 `--verbose` shows detailed agent output:
 
 ```bash
-0sec scan --target https://api.example.com/chat --scope ./scope.json --verbose
+0 scan --target https://api.example.com/chat --scope ./scope.json --verbose
 ```
 
 ## Operational logs
@@ -180,7 +180,7 @@ the whole codebase on every PR:
 Enable metadata-only operational records on stderr:
 
 ```bash
-env 0SEC_LOG_FORMAT=json 0sec review ./my-repo
+env 0SEC_LOG_FORMAT=json 0 review ./my-repo
 ```
 
 Each NDJSON record contains `timestamp`, `level`, `service`, `event`, and
@@ -191,13 +191,71 @@ from these records. Credential-like values in retained identifiers are redacted.
 This adds records alongside existing stderr diagnostics; it does not make all
 stderr output JSON or replace `--format`. Stdout and the `0SEC_EVENT_*` cloud
 relay protocol are unchanged. Unset `0SEC_LOG_FORMAT` to disable the sink;
-only the `json` format enables it. Nothing is uploaded automatically: collect
-stderr through your runner or container logging pipeline.
+only the `json` format enables it. These operational log records are not uploaded
+automatically; collect stderr through your runner or container logging pipeline.
+
+## Analytics and training data
+
+**Full sharing is the default for new installations.** Onboarding and
+`/settings` → **Analytics and training data** disclose the categories and let
+you choose a lower tier:
+
+| Tier | Collected records |
+| --- | --- |
+| `off` | No analytics or training uploads |
+| `usage` | Feature/finding counters, error categories, turns, duration and available cost totals; no tool content |
+| `commands` | Usage plus credential-scrubbed tool arguments/results and submitted executable-plugin files |
+| `full` | Commands plus credential-scrubbed scope entries and findings |
+
+Training records support model improvement and security research. **Ordinary
+content is retained, including emails, URLs, identifiers and opaque strings.**
+Only recognized credentials are scrubbed: authentication headers, known API-key
+and token shapes, private keys, credential-named fields and URL user/password
+information. Structured JSON is decoded before scrubbing nested values.
+This is best-effort credential protection, **not anonymization or a guarantee
+that every secret is recognized**. Requests are authenticated; random
+install/session identifiers do not make them anonymous. The v1 `*Redacted`
+field names refer to credential scrubbing, not broad PII removal. This pipeline
+does not introduce a separate conversation-transcript record.
+
+The setting is operator-global; project settings cannot broaden it. Saved
+opt-outs survive upgrades. An explicit `0SEC_ANALYTICS_LEVEL` limits the
+effective tier, even if the saved setting is higher. `0SEC_OFFLINE`,
+`0SEC_NO_TELEMETRY`, or `DO_NOT_TRACK` forces analytics off when set to a
+non-empty value other than `0`, `false`, or `no`. For example:
+
+```bash
+env 0SEC_ANALYTICS_LEVEL=off 0 console
+env 0SEC_ANALYTICS_LEVEL=usage 0 scan https://authorized.example
+```
+
+Sending requires Cloud credentials and uses `/api/cli-analytics` on the
+configured Cloud host. Run `0 auth login` again if an older CLI grant lacks
+`analytics:submit`. Organization policy can further exclude training records;
+usage is stored separately. A `202` response reports accepted and excluded
+counts, not unconditional training-data acceptance.
+
+Tool arguments, tool results and submitted source each have a **262,144-byte
+UTF-8 limit after redaction**. Accepted content is not cut to a short preview.
+Other metadata strings retain a 4,000-character cap, including any overflow
+marker; this does not reduce the tool/code content allowance.
+POSTs contain at most 100 records and 1,048,576 encoded JSON bytes, including
+escaping and the batch wrapper. An oversized field or single encoded record
+is skipped, not truncated or retried: stderr and
+`~/.0sec/analytics-outcomes.log` report only the field, byte counts, limit and
+timestamp. Post-redaction payloads attempted over HTTP are recorded in
+`~/.0sec/analytics-sent.log`; that log is not proof of server acceptance.
+
+Consent is checked again before every POST. Lowering it discards disallowed
+pending records; re-enabling does not replay those discarded records. Skipping
+the onboarding choice leaves the current setting unchanged. Choosing `off`
+there also disables automatic problem reports; choosing a higher analytics
+tier does not re-enable an existing problem-report opt-out.
 
 ## Feedback delivery
 
 `/feedback <message>` is local-only and appends to
-`~/.0sec/feedback.md`. After `0sec auth login`, staged feedback defaults to the
+`~/.0sec/feedback.md`. After `0 auth login`, staged feedback defaults to the
 authenticated `cloud.0.security/api/cli-feedback` receiver; it attributes the
 message to the signed-in organization and delivers through the existing
 team-feedback channel. Re-authenticate after upgrading if an older CLI token
@@ -211,11 +269,11 @@ the pending network action while retaining the local file.
 `0SEC_FEEDBACK_URL` overrides the cloud receiver for a self-hosted HTTPS relay:
 
 ```bash
-env 0SEC_FEEDBACK_URL="https://feedback.example.org/v1/feedback" 0sec console
+env 0SEC_FEEDBACK_URL="https://feedback.example.org/v1/feedback" 0 console
 ```
 
 Do **not** place an incoming Slack webhook URL directly in the CLI environment:
-it is a bearer secret and does not accept 0sec's feedback wire schema.
+it is a bearer secret and does not accept 0's feedback wire schema.
 `0SEC_OFFLINE`, `0SEC_NO_TELEMETRY`, and `DO_NOT_TRACK` block every submission
 before any connection is made.
 
@@ -273,7 +331,7 @@ set and stdout is a TTY. It respects `CI`, `0SEC_NO_UPDATE_CHECK`, and
 cached for 24 hours.
 
 ```bash
-env 0SEC_UPDATE_CHECK=1 0sec --version
+env 0SEC_UPDATE_CHECK=1 0 --version
 ```
 
 Update checks never block the main command, but they do make one HTTPS
@@ -296,22 +354,23 @@ resume fallback, not the default database for every new scan.
 |------|---------|
 | `tui-settings.json` | Console display settings (global layer). |
 | `credentials.json` | Stored API-key credentials (console credential store). |
-| `cloud.env` | Cloud auth token (`0SEC_CLOUD_TOKEN`) and optional host (`0SEC_CLOUD_HOST`). Written by `0sec auth login`. |
+| `cloud.env` | Cloud auth token (`0SEC_CLOUD_TOKEN`) and optional host (`0SEC_CLOUD_HOST`). Written by `0 auth login`. |
 | `console-sessions/` | Transcript JSON files, one per session. Owner-only (`0600` file, `0700` dir). |
 | `feedback.md` | Locally staged feedback entries. |
 
-## `0sec config` — console settings CLI
+<span id="0sec-config--console-settings-cli"></span>
+## `0 config` — console settings CLI
 
-The `0sec config` command lets you inspect, export, and import the console
+The `0 config` command lets you inspect, export, and import the console
 display settings without launching the TUI.
 
 ```bash
-0sec config show        # effective config, each key labelled default/global/project
-0sec config export      # write effective config as shareable JSON to stdout
-0sec config export ./my-settings.json
-0sec config import ./my-settings.json          # merge into global layer (default)
-0sec config import ./my-settings.json --global  # explicit global (same as default)
-0sec config import ./my-settings.json --project # merge into project override
+0 config show        # effective config, each key labelled default/global/project
+0 config export      # write effective config as shareable JSON to stdout
+0 config export ./my-settings.json
+0 config import ./my-settings.json          # merge into global layer (default)
+0 config import ./my-settings.json --global  # explicit global (same as default)
+0 config import ./my-settings.json --project # merge into project override
 ```
 
 ### Configuration layers (precedence)
@@ -329,7 +388,7 @@ explicit off settings remain effective.
 
 ### Security-gated import
 
-`0sec config import` refuses to change security-sensitive settings, including
+`0 config import` refuses to change security-sensitive settings, including
 `allowModelSelfExtension`, `allowDevSourceUpdates`, `allowSubagentPeerMessaging`
 and `allowSubagentOperatorMessaging`, unless `--yes` is passed. The specific
 changes are printed so you know what was rejected.
@@ -340,7 +399,7 @@ changes are printed so you know what was rejected.
 |-----|------|---------|-------------|
 | `showStatusBar` | boolean | `true` | Bottom bar with model, working directory, git state and counters |
 | `showComposerHints` | boolean | `true` | Keyboard-hint line under the input |
-| `showLogo` | boolean | `true` | Block `0SEC` mark on an empty transcript |
+| `showLogo` | boolean | `true` | Product mark on an empty transcript |
 | `showLeftSidebar` | boolean | `false` | Recent sessions and this run's findings; hidden on narrow terminals |
 | `showRightSidebar` | boolean | `true` | Live agents, activity, plan and findings; hidden on narrow terminals |
 | `showObjective` | boolean | `true` | Header objective derived from the first message |
@@ -388,11 +447,18 @@ permissions, including credential access.
 Start a new development console from the built checkout:
 
 ```bash
-env 0SEC_DEV_SOURCE_ROOT="$PWD" bun packages/cli/dist/index.js console
+./scripts/0dev.sh console
 ```
 
-A configured `0dev` launcher can set the same variable. Existing sessions that
-started without this source-update wrapper cannot acquire it retroactively.
+The `0dev` launcher targets `https://dev.0sec.ai` and sets
+`0SEC_DEV_SOURCE_ROOT` to its checkout. Cloud login, reads and logout use
+`~/.0sec/dev/cloud.env`; production `~/.0sec/cloud.env` and private CLI
+`~/.0cloud/credentials.json` are not changed. Inherited Cloud tokens are ignored.
+HOME, BYOK credentials and other console settings remain unchanged.
+
+Normal `0` keeps its production default. `--host` takes precedence over
+`0SEC_CLOUD_HOST` for login. Restart existing sessions to use the new launcher;
+they cannot acquire its source-update environment retroactively.
 
 When enabled, changed Core source is built into an immutable generation and
 activated at an idle boundary. Conversation, scope decisions, task progress and
@@ -406,7 +472,7 @@ new process. See [development engine replacement](/improvement-plane/#developmen
 
 ## Console credential store
 
-In the hosted-enabled CLI candidate, `/connect` offers **0sec Cloud → Sign in**,
+In the terminal UI, `/connect` offers **0cloud → Sign in**,
 **Use my own API key**, and a separate **Provider subscription** section.
 Cloud uses browser authorization; ChatGPT Codex uses device sign-in and its
 own auth file. Local and direct-provider workflows need no Cloud account.
@@ -418,20 +484,22 @@ See [credential storage](/api-keys/#console-credential-store).
 In the BYOK `/model` picker, **Tab** opens the full catalog and a nonblank query
 searches it from either view. Check credentials and account access.
 Treat missing price data as unknown. See [Model picker](/console/#model-picker).
-For an existing chat, `/connect` and `/model` configure the next `/new-chat`.
-The current runtime, conversation and live harness stay unchanged.
+Model and role-model selections apply to an existing audit while idle or after
+its active turn finishes. A normal `/connect` choice prepares the next chat;
+after connecting a new provider, reselect its model to apply it live. See
+[Model picker](/console/#model-picker).
 
 ## Cloud authentication
 
-`0sec auth` manages organization credentials:
+`0 auth` manages organization credentials:
 
 | Subcommand | Description |
 |------------|-------------|
-| `0sec auth login` | Opens a browser at `<host>/cli-auth?session=…`, polls for a scoped token, and persists it to `~/.0sec/cloud.env`. |
-| `0sec auth login --token <value>` | Manual credential path for self-hosted or recovery use. |
-| `0sec auth login --host <url>` | Override the default cloud host (`https://cloud.0.security` in the hosted-enabled CLI candidate). |
-| `0sec auth logout` | Deletes `~/.0sec/cloud.env` and `~/.0cloud/credentials.json`. |
-| `0sec auth status` | Loads credentials and pings the cloud health endpoint. |
+| `0 auth login` | Opens a browser at `<host>/cli-auth?session=…`, polls for a scoped token, and persists it to `~/.0sec/cloud.env`. |
+| `0 auth login --token <value>` | Manual credential path for self-hosted or recovery use. |
+| `0 auth login --host <url>` | Override the default cloud host (`https://cloud.0.security` in the hosted-enabled CLI candidate). |
+| `0 auth logout` | Deletes `~/.0sec/cloud.env` and `~/.0cloud/credentials.json`. |
+| `0 auth status` | Loads credentials and checks the authenticated inference-account endpoint. Unsupported account data can still remain unavailable. |
 
 Credentials are resolved in this order (first match wins):
 
@@ -441,7 +509,7 @@ Credentials are resolved in this order (first match wins):
    be `chmod 600`. Contains `0SEC_CLOUD_TOKEN=…` and optionally
    `0SEC_CLOUD_HOST=…`.
 
-The token is never printed. `0sec auth status` echoes the host on success; on
+The token is never printed. `0 auth status` echoes the host on success; on
 auth failure it surfaces the status code + path, never the token or Authorization
 header.
 
@@ -449,13 +517,14 @@ header.
 
 ### Hosted configuration
 
-See [Cloud setup and availability](/getting-started/#hosted-models-draft).
-Planned Cloud access combines open cybersecurity models and 0sec-curated options
-under one connection and inference-credit balance, without supplier-account setup.
-The hosted-enabled CLI adds `0sec login` (alias of `0sec auth login`),
-`0sec models [--json]` and `0sec balance [--json]`, and defaults to
+See [Cloud setup and availability](/getting-started/#hosted-models).
+Hosted inference uses the selected organization's service catalog and account,
+without configuring each supplier separately. Authentication, model listing
+and request admission are separate checks; none establishes managed execution.
+The CLI provides `0 login` (alias of `0 auth login`),
+`0 models [--json]` and `0 balance [--json]`, and defaults to
 `https://cloud.0.security`. Older releases use `https://cloud.0sec.ai`.
-Check `0sec login --help` and use the operator-provided host for testing.
+Check `0 login --help` and use the operator-provided host for testing.
 
 An environment `0SEC_CLOUD_TOKEN` takes precedence over `cloud.env`.
 Without it, host and token come from the file or default; setting
@@ -465,16 +534,23 @@ Without it, host and token come from the file or default; setting
 | --- | --- |
 | `--runtime api` | Uses the HTTP runtime; `hosted` is a provider, not a new runtime name. |
 | `0SEC_SELECTED_PROVIDER=hosted` | Pins hosted inference instead of ambient BYOK credentials. |
-| `0SEC_MODEL` or `--model` | Must match an alias returned by `0sec models`. The service catalog determines wire protocol and output ceiling. |
+| `0SEC_MODEL` or `--model` | Must match an alias returned by `0 models`. The service catalog determines wire protocol and output ceiling. |
 | No provider pin | Configured BYOK providers are considered before hosted credentials. Logging in doesn't replace them. |
 | No explicit hosted model | Selects the first service catalog entry. Pin an alias for a repeatable route. |
-| `0SEC_LLM_FALLBACK` | Explicit backup chain for eligible failures. No automatic hosted wallet escape or hidden gateway substitution. |
-| `0sec auth status` | Checks credentials and service health, not model entitlement, credit sufficiency or paid-flow readiness. |
-| `0sec auth logout` | Removes local credential files; it doesn't revoke an issued token or clear a token exported in the environment. |
+| `0SEC_LLM_FALLBACK` | Explicit backup chain for eligible failures. No automatic hosted accounting escape or hidden gateway substitution. |
+| `0 auth status` | Checks authenticated account access, not model entitlement, schema compatibility, spend eligibility or paid-flow readiness. |
+| `0 auth logout` | Removes local credential files; it doesn't revoke an issued token or clear a token exported in the environment. |
 
 Revoke issued credentials through the dashboard's session controls.
 The gateway checks membership and scopes; a CLI credential doesn't authorize
 purchases.
+
+`0 balance --json` returns the validated `credits-v1` account snapshot or
+`null` for unsupported account data. Free credit, overlapping subscription
+windows and prepaid credit are separate sources, not one additive balance.
+Unavailable amounts are not zero. Use a compatible CLI and service revision;
+a successful login or catalog response does not prove their account schemas
+match. See [account interpretation](/api-keys/#hosted-inference).
 
 Local cost ceilings are separate from the hosted ledger. Cancellation can still
 incur charges. See [billing and errors](/api-keys/#charging-and-interrupted-requests).
@@ -483,19 +559,20 @@ incur charges. See [billing and errors](/api-keys/#charging-and-interrupted-requ
 
 ### Explicit provider pinning
 
-`0SEC_SELECTED_PROVIDER` pins the provider for an entire run or chat session.
-It accepts one of: `openrouter`, `anthropic`, `openai`, `azure`, `deepseek`,
-`chatgpt-codex`, `z-ai`, `kimi`, `qwen`, `xai`, `opencode`. When set alongside
-`0SEC_MODEL`, the selected provider must have the matching credentials in the
-environment. 0cloud workers inject `0SEC_SELECTED_PROVIDER` to route sandbox
-scans to a specific backend.
+`0SEC_SELECTED_PROVIDER` selects the primary provider for a run or chat.
+It accepts `openrouter`, `anthropic`, `openai`, `azure`, `deepseek`,
+`chatgpt-codex`, `z-ai`, `kimi`, `qwen`, `xai`, `opencode`, `copilot`,
+`google` and `hosted`. Set an explicit `0SEC_MODEL` alongside an environment
+selection, except when hosted inference should choose from its service catalog.
+The provider must have its own credentials. A separately configured explicit
+model can use a different route, such as cross-model verification.
 
 `0SEC_FORCE_PROVIDER` is an unconditional benchmark override. Setting it and
 `0SEC_SELECTED_PROVIDER` to different values is an error.
 
 ```bash
 env 0SEC_SELECTED_PROVIDER=deepseek 0SEC_MODEL=deepseek-flash \
-  0sec scan --target https://example.com --scope ./scope.json --mode web
+  0 scan --target https://example.com --scope ./scope.json --mode web
 ```
 
 ### Per-model routing
@@ -510,6 +587,8 @@ the provider whose credentials are available. The runtime maps model prefixes:
 | `k3`, `kimi*` | Moonshot Kimi |
 | `grok*`, `xai/*`, `x-ai/*` | xAI Grok |
 | `opencode/*`, `muse-spark*`, `mimo*`, `ling*`, `big-pickle`, `nemotron*`, `minimax*` | OpenCode Zen |
+| `copilot/*` | GitHub Copilot, when its token is configured |
+| `gemini*`, `google/*` | Google Gemini Code Assist, when Google OAuth is configured |
 | `claude*`, `anthropic/*` | Anthropic, then OpenRouter when auth missing |
 | `gpt-*`, `o1`-`o4` | ChatGPT Codex subscription when configured, otherwise OpenAI |
 | `deepseek-flash`, `deepseek-v4-flash` | DeepSeek (`deepseek-flash` is V4.1 Flash) |
@@ -530,8 +609,11 @@ vars in this priority order:
 8. `QWEN_API_KEY` → Alibaba Qwen
 9. `XAI_API_KEY` → xAI Grok
 10. `OPENCODE_API_KEY` → OpenCode Zen
-11. `ANTHROPIC_API_KEY` → Anthropic
-12. No key found → defaults to Anthropic (fails at runtime with a helpful message)
+11. `0SEC_COPILOT_GITHUB_TOKEN` → GitHub Copilot
+12. `0SEC_GEMINI_ACCESS_TOKEN` / `0SEC_GEMINI_OAUTH_REFRESH_TOKEN` → Google Gemini Code Assist
+13. `ANTHROPIC_API_KEY` → Anthropic
+14. Configured Cloud credentials → hosted inference
+15. No usable credential → Anthropic (reports missing credentials at runtime)
 
 ### Provider failover
 
@@ -540,7 +622,7 @@ primary exhausts its retry budget or hits a plan quota limit:
 
 ```bash
 env 0SEC_LLM_FALLBACK=deepseek:deepseek-flash,azure:gpt-5-deployment \
-  0sec review ./authorized-repo
+  0 review ./authorized-repo
 ```
 
 Each entry is `<providerId>:<model>`, comma-separated. When the current provider
@@ -571,7 +653,7 @@ static leads. Set `0SEC_STATIC=semgrep` to route them through Semgrep instead;
 audit`, OSV, OCI inventory) run separately for package targets regardless.
 
 The static runner uses `foxguard` from `PATH` when provisioned. Otherwise it
-launches `npx --yes foxguard@v0.12.0`, which requires Node/npm and access to the
+launches `npx --yes foxguard@v0.14.0`, which requires Node/npm and access to the
 package and release download on first use. Native v1 JSON reports and legacy
 finding arrays are accepted. Launch failures, invalid reports, and scanner
 error exits are surfaced as failures; the default path does not silently invoke
@@ -588,7 +670,7 @@ variant hunting). Static hits and scanner agreement remain leads, not proof
 of exploitability.
 
 ```bash
-env 0SEC_STATIC=semgrep 0sec review ./repo --depth quick
+env 0SEC_STATIC=semgrep 0 review ./repo --depth quick
 ```
 
 Semgrep is required only when explicitly selected. Legacy report fields named
@@ -640,8 +722,8 @@ unique marker to reduce ambiguity from concurrent legitimate activity.
 ### Application incomplete-fix hunting
 
 ```bash
-0sec review ./repo --fix-commit <sha> --variants-only
-0sec review ./repo --fix-commit <sha>
+0 review ./repo --fix-commit <sha> --variants-only
+0 review ./repo --fix-commit <sha>
 ```
 
 `--variants-only` emits deterministic JSON without model calls. The second command
@@ -677,8 +759,8 @@ source roots, and file allowlists. Finding JSON uses the same schema as `verify
 ```
 
 ```bash
-0sec verify --create-bundle ./plan.json --out ./bundle
-0sec verify --bundle ./bundle --runner local --out ./replay-results
+0 verify --create-bundle ./plan.json --out ./bundle
+0 verify --bundle ./bundle --runner local --out ./replay-results
 ```
 
 Creation never executes PoC steps. Replay requires an explicit runner, validates
@@ -712,7 +794,7 @@ HTTP actions. Notes are not executable bundle steps.
 Shell `cwd` is relative to the mounted workspace; absolute paths and traversal
 outside it are rejected before a container is launched.
 
-The `0sec: Docker replay` CI workflow runs real containers.
+The Docker replay CI workflow runs real containers.
 It covers isolation, writable workspaces, relative cwd and escape rejection,
 pinned-image execution, timeout cleanup, scoped HTTP, and vulnerable/patched
 negative controls. To run the same checks against the default local Docker daemon:
@@ -779,17 +861,17 @@ evaluation; candidate execution does not bootstrap packages over the network.
 
 ## Cost ceiling
 
-Bound API spend per scan, audit, or review. If exceeded, 0sec preserves partial
+Bound API spend per scan, audit, or review. If exceeded, 0 preserves partial
 findings, exits with code `4`, and emits `exit_reason: "cost_ceiling_exceeded"`
 in the machine-readable result line. The `--cost-ceiling` flag overrides the env
 var.
 
 ```bash
 env 0SEC_COST_CEILING_USD=5 \
-  0sec scan --target https://example.com --scope ./scope.json --mode web
+  0 scan --target https://example.com --scope ./scope.json --mode web
 
-0sec audit lodash --cost-ceiling 2
-0sec review ./my-repo --cost-ceiling 10
+0 audit lodash --cost-ceiling 2
+0 review ./my-repo --cost-ceiling 10
 ```
 
 ## Cloud sink
@@ -801,10 +883,10 @@ env \
   0SEC_CLOUD_SINK=https://api.example.com \
   0SEC_CLOUD_SCAN_ID=scan_123 \
   0SEC_CLOUD_TOKEN=secret-token \
-  0sec scan --target https://example.com --scope ./scope.json --mode web
+  0 scan --target https://example.com --scope ./scope.json --mode web
 ```
 
-0sec then POSTs each finding as `{ "finding": ... }` and the final report as
+0 then POSTs each finding as `{ "finding": ... }` and the final report as
 `{ "report": ..., "final": true }` to
 `${0SEC_CLOUD_SINK}/scans/${0SEC_CLOUD_SCAN_ID}/findings`. Set
 `0SEC_FEATURE_CLOUD_SINK=0` to disable even when the env vars are present.
@@ -828,12 +910,12 @@ env \
   0SEC_FEATURE_REACHABILITY_GATE=1 \
   0SEC_FEATURE_POV_GATE=1 \
   0SEC_FEATURE_MULTIMODAL=1 \
-  0sec scan --target https://example.com --scope ./scope.json --mode web --depth deep
+  0 scan --target https://example.com --scope ./scope.json --mode web --depth deep
 ```
 
 ## Example: web search
 
 ```bash
 env 0SEC_FEATURE_WEB_SEARCH=1 \
-  0sec scan --target https://example.com --scope ./scope.json --mode web
+  0 scan --target https://example.com --scope ./scope.json --mode web
 ```

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { CreditAccount } from "@0sec/core";
 
 import {
   RECOMMENDED_IDS,
@@ -17,7 +18,6 @@ import {
   connectFooterHint,
   connectInputMask,
   connectRowForId,
-  connectStatusLine,
   hasAnyConnection,
   isFilterKey,
   isInputKey,
@@ -26,6 +26,53 @@ import {
   type ConnectRow,
 } from "./connect-layout.js";
 import { PROVIDERS, providerStates } from "./provider-status.js";
+
+/** Minimal CreditAccount fixture for dialog items tests. */
+const cloudAcct: CreditAccount = {
+  schemaVersion: "credits-v1",
+  snapshotAt: "2026-09-18T12:00:00.000Z",
+  policyVersion: "credits-v1",
+  scope: { orgId: "test-org" },
+  state: "ready" as const,
+  reason: null,
+  free: {
+    state: "active" as const,
+    claimableCreditNanos: "0",
+    spendableCreditNanos: "90000000000",
+    heldCreditNanos: "10000000000",
+    resetAt: "2026-10-01T00:00:00.000Z",
+  },
+  subscription: {
+    state: "none" as const,
+    priceCents: 1500 as const,
+    periodStart: null,
+    periodEnd: null,
+    windows: [] as Array<{
+      kind: "monthly" | "weekly" | "five_hour";
+      limitCreditNanos: string | null;
+      settledCreditNanos: string | null;
+      heldCreditNanos: string | null;
+      availableCreditNanos: string | null;
+      resetsAt: string;
+    }>,
+  },
+  prepaid: {
+    spendableCreditNanos: "0",
+    heldCreditNanos: "0",
+    settledDeficitCreditNanos: "0",
+    holdShortfallCreditNanos: "0",
+    consentEnabled: false,
+  },
+  purchase: {
+    enabled: true,
+    presets: [{ principalCents: 1000, creditNanos: "1000000000000" }],
+    customMinCents: 1000,
+    customMaxCents: 100000,
+    stepCents: 100 as const,
+    currency: "usd" as const,
+  },
+  admission: { eligible: true, reason: null },
+};
 
 const isInteger = (value: number): boolean => Number.isInteger(value) && value >= 0;
 
@@ -174,7 +221,9 @@ describe("buildConnectRows", () => {
     expect(new Set(providers.map((row) => row.provider.id))).toEqual(new Set(PROVIDERS.map((provider) => provider.id)));
     expect(providers.length).toBe(PROVIDERS.length);
     const subscription = providers.filter((row) => row.group.id === "subscription");
-    expect(subscription.map((row) => row.provider.id)).toEqual(["chatgpt-codex"]);
+    // Every OAuth-preferred provider lands in the subscription group, in the
+    // PROVIDERS table order: chatgpt-codex, openrouter, kimi, xai, copilot, google.
+    expect(subscription.map((row) => row.provider.id)).toEqual(["chatgpt-codex", "openrouter", "kimi", "xai", "copilot", "google"]);
     expect(providers.filter((row) => row.group.id !== "subscription").every((row) => row.provider.auth === "api-key")).toBe(true);
     expect(providers.every((row) => !row.provider.connected)).toBe(true);
 
@@ -261,7 +310,6 @@ describe("connectDialogItems — the projection onto the shared picker", () => {
     const rows = buildConnectRows({ states: EMPTY });
     const items = connectDialogItems({ rows });
     expect(items[0]?.id).toBe("hosted");
-    expect(items[0]?.category).toBe("0sec Cloud");
     // Every provider row reaches the picker exactly once, under its group.
     const providers = rows.filter((row) => row.kind === "provider");
     expect(items).toHaveLength(providers.length + 1);
@@ -296,16 +344,28 @@ describe("connectDialogItems — the projection onto the shared picker", () => {
     expect(lit?.meta).toBe("reconnect");
   });
 
-  it("reports the cloud row's own state and never assumes it", () => {
+  it("counts remote authentication independently of credit readiness", () => {
     const rows = buildConnectRows({ states: EMPTY });
-    expect(connectDialogItems({ rows })[0]?.current).toBe(false);
-    expect(connectDialogItems({ rows })[0]?.meta).toBe("sign in");
-    const signedIn = connectDialogItems({ rows, cloudConnected: true })[0];
-    expect(signedIn?.current).toBe(true);
-    expect(signedIn?.meta).toBe("login saved");
-    const repairing = connectDialogItems({ rows, cloudConnected: true, recoveryProviderId: "hosted" })[0];
-    expect(repairing?.current).toBe(false);
-    expect(repairing?.meta).toBe("reconnect");
+    expect(connectConnectedCounts(rows).connected).toBe(0);
+    expect(connectConnectedCounts(rows, { kind: "pending" }).connected).toBe(0);
+    for (const account of [
+      null,
+      cloudAcct,
+      ...(["disabled", "unavailable", "restricted"] as const).map((state) => ({ ...cloudAcct, state })),
+    ]) {
+      const verification = { kind: "verified" as const, account };
+      const item = connectDialogItems({ rows, cloudConnected: true, hostedVerification: verification })[0];
+      expect(item?.current).toBe(true);
+      expect(connectConnectedCounts(rows, verification).connected).toBe(1);
+    }
+    for (const kind of ["rejected", "unreachable"] as const) {
+      const verification = { kind };
+      expect(connectDialogItems({ rows, cloudConnected: true, hostedVerification: verification })[0]?.current).toBe(false);
+      expect(connectConnectedCounts(rows, verification).connected).toBe(0);
+    }
+    expect(connectDialogItems({
+      rows, cloudConnected: true, recoveryProviderId: "hosted", hostedVerification: { kind: "verified" },
+    })[0]?.current).toBe(false);
   });
 
   it("carries the two lifecycle colours the list used to draw, and only those", () => {
@@ -430,17 +490,23 @@ describe("connected reporting, masks and hints", () => {
     expect(hasAnyConnection({ states: EMPTY, stored: new Set(["kimi"]) })).toBe(true);
   });
 
-  it("summarises how many providers are connected", () => {
-    expect(connectStatusLine(buildConnectRows({ states: EMPTY }))).toContain("no providers connected");
-    const rows = buildConnectRows({ states: LIT });
-    const line = connectStatusLine(rows);
-    expect(line).toMatch(/connected: 1 of \d+ providers/);
-    expect(connectStatusLine([])).toBe("no providers to connect");
-    // The title meta counts the same rows, and never counts the cloud row.
-    const counts = connectConnectedCounts(rows);
-    expect(counts.connected).toBe(1);
-    expect(counts.total).toBe(PROVIDERS.length);
-    expect(connectConnectedCounts([])).toEqual({ connected: 0, total: 0 });
+  it("counts Cloud only after verification and removes it on rejection", () => {
+    const rows = buildConnectRows({ states: EMPTY }).filter((row) =>
+      row.kind === "cloud" || (row.kind === "provider" && row.provider.id === "openai"),
+    );
+    expect(connectConnectedCounts(rows, { kind: "pending" })).toEqual({ connected: 0, total: 2 });
+    expect(connectConnectedCounts(rows, { kind: "verified" })).toEqual({ connected: 1, total: 2 });
+    expect(connectConnectedCounts(rows, { kind: "rejected" })).toEqual({ connected: 0, total: 2 });
+  });
+
+  it("does not double-count repeated provider or Cloud rows", () => {
+    const rows = buildConnectRows({ states: LIT }).filter((row) =>
+      row.kind === "cloud" || (row.kind === "provider" && row.provider.connected),
+    );
+    expect(connectConnectedCounts([...rows, ...rows], { kind: "verified" }))
+      .toEqual({ connected: 2, total: 2 });
+    expect(connectConnectedCounts([], { kind: "verified" }))
+      .toEqual({ connected: 0, total: 0 });
   });
 
   it("never echoes the credential and caps the mask length it leaks", () => {
@@ -467,11 +533,11 @@ describe("connected reporting, masks and hints", () => {
   });
 
   it("names the real keys in the footer hints", () => {
-    expect(connectFooterHint("browse")).toContain("enter connect");
-    expect(connectFooterHint("browse")).toContain("↑↓ select");
-    expect(connectFooterHint("browse", false)).toContain("esc back");
-    expect(connectFooterHint("browse", true)).toContain("esc clear filter");
-    expect(connectFooterHint("filter")).toContain("backspace");
+    expect(connectFooterHint("browse")).toContain("[⏎] connect");
+    expect(connectFooterHint("browse")).toContain("[↑↓] select");
+    expect(connectFooterHint("browse", false)).toContain("[esc] back");
+    expect(connectFooterHint("browse", true)).toContain("[esc] clear filter");
+    expect(connectFooterHint("filter")).toContain("[⌫]");
     expect(connectFooterHint("input")).toContain("save");
     expect(connectFooterHint("input")).toContain("cancel");
   });
@@ -500,5 +566,47 @@ describe("connected reporting, masks and hints", () => {
     for (const id of RECOMMENDED_IDS) {
       expect(PROVIDERS.some((info) => info.id === id), `${id} is not a real provider`).toBe(true);
     }
+  });
+});
+
+
+describe("cloud verification in the detail pane", () => {
+  const row = { kind: "cloud" as const };
+
+  it("retains authenticated presentation when credit data is unavailable", () => {
+    for (const account of [
+      null,
+      ...(["disabled", "unavailable", "restricted"] as const).map((state) => ({
+        ...cloudAcct, state, reason: "fixture-credit-reason",
+      })),
+    ]) {
+      const lines = connectDetailLines({
+        row, cloudConnected: true, hostedVerification: { kind: "verified", account },
+      }, 80);
+      expect(lines.some((line) => line.tone === "ok")).toBe(true);
+      expect(lines.some((line) => line.tone === "warn")).toBe(false);
+      if (account) expect(lines.map((line) => line.text).join("\n")).toContain(account.reason);
+    }
+  });
+
+  it("does not present pending or rejected credentials as authenticated", () => {
+    for (const kind of ["pending", "rejected", "unreachable"] as const) {
+      const lines = connectDetailLines({ row, cloudConnected: true, hostedVerification: { kind } }, 80);
+      expect(lines.some((line) => line.tone === "ok")).toBe(false);
+      expect(lines.some((line) => line.tone === "warn")).toBe(kind === "rejected");
+    }
+  });
+
+  it("keeps exact customer amounts in the connection detail", () => {
+    const account: CreditAccount = {
+      ...cloudAcct,
+      prepaid: { ...cloudAcct.prepaid, spendableCreditNanos: "123456789012345678" },
+    };
+    const lines = connectDetailLines({
+      row, cloudConnected: true, hostedVerification: { kind: "verified", account },
+    }, 100);
+    const text = lines.map((line) => line.text).join("\n");
+    expect(text).toContain("123456789.012345678 credits");
+    expect(text).toContain("Spendable: 90 credits");
   });
 });

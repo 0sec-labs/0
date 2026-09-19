@@ -4,7 +4,7 @@
 // Subcommands:
 //   - login        alias for `0sec auth login` (opens browser/polls)
 //   - models       list available hosted inference models
-//   - balance      show the percentage of inference credits remaining
+//   - balance      show credit account balance
 //
 // All use CloudClient from @0sec/core, which reads scoped creds from
 // env or ~/.0sec/cloud.env. 401 → clear auth error, not silent fallback.
@@ -23,9 +23,9 @@ import {
   CloudForbiddenError,
   CloudNetworkError,
   CloudError,
-  DEFAULT_CLOUD_HOST,
 } from "@0sec/core";
 import { runLogin } from "./auth.js";
+import { formatBalanceDetail } from "../tui/hosted-balance.js";
 
 const EXIT_OK = 0;
 const EXIT_USER_ERROR = 1;
@@ -37,7 +37,7 @@ export function registerHostedCommand(program: Command): void {
   program
     .command("login")
     .description("Sign in to 0sec Cloud (optional for your own provider)")
-    .option("--host <url>", `Cloud host (default ${DEFAULT_CLOUD_HOST})`)
+    .option("--host <url>", "Cloud host (defaults to 0SEC_CLOUD_HOST or production)")
     .option("--token <value>", "Skip the browser flow and persist this token directly")
     .action(async (opts: { host?: string; token?: string }) => {
       await runLogin(opts);
@@ -46,8 +46,8 @@ export function registerHostedCommand(program: Command): void {
   // ── 0sec models ──
   program
     .command("models")
-    .description("List 0sec Cloud models and catalog rates")
-    .option("--json", "Output raw JSON instead of a formatted table")
+    .description("List 0sec Cloud models and capabilities")
+    .option("--json", "Output model IDs and capabilities as JSON")
     .action(async (opts: { json?: boolean }) => {
       await runModels(opts);
     });
@@ -55,8 +55,8 @@ export function registerHostedCommand(program: Command): void {
   // ── 0sec balance ──
   program
     .command("balance")
-    .description("Show the percentage of inference credits remaining")
-    .option("--json", "Output raw JSON instead of a formatted line")
+    .description("Show 0sec Cloud credit account balance")
+    .option("--json", "Output the validated credit account as JSON")
     .action(async (opts: { json?: boolean }) => {
       await runBalance(opts);
     });
@@ -138,18 +138,28 @@ async function runModels(opts: { json?: boolean }): Promise<void> {
     const models = response.data;
 
     if (opts.json) {
-      consolePresentationOutput.stdout(JSON.stringify(models, null, 2), "hosted.models-json");
+      // Customer presentation: model id and capabilities only, not supplier
+      // pricing or provider internals.
+      const publicModels = models.map((m) => ({
+        id: m.id,
+        contextTokens: m.context_length,
+        maxOutputTokens: m.max_output_tokens ?? null,
+      }));
+      consolePresentationOutput.stdout(
+        JSON.stringify(publicModels, null, 2),
+        "hosted.models-json",
+      );
       process.exitCode = EXIT_OK;
       return;
     }
 
     if (models.length === 0) {
-      consolePresentationOutput.stdout("No models available.", "hosted.models-empty");
+      consolePresentationOutput.stdout("No models listed for this account.", "hosted.models-empty");
       process.exitCode = EXIT_OK;
       return;
     }
 
-    // Format as a table
+    // Format as a table: model id, context, output limit
     const rows: string[] = [];
     const labelWidth = Math.min(
       Math.max(...models.map((m) => m.id.length), 10),
@@ -159,16 +169,16 @@ async function runModels(opts: { json?: boolean }): Promise<void> {
     for (const model of models) {
       const id = model.id.padEnd(labelWidth);
       const ctx = formatTokenCount(model.context_length);
-      const inputPrice = `$${model.pricing.input_per_million_usd.toFixed(2)}/M`;
-      const outputPrice = `$${model.pricing.output_per_million_usd.toFixed(2)}/M`;
+      const outLimit = model.max_output_tokens
+        ? `${formatTokenCount(model.max_output_tokens)} output`
+        : "";
       rows.push(
-        `  ${chalk.bold(id)}  ${ctx} context  ${inputPrice} input  ${outputPrice} output`,
+        `  ${chalk.bold(id)}  ${ctx} context${outLimit ? `  ${outLimit}` : ""}`,
       );
     }
 
     consolePresentationOutput.stdout(
-      `\n${chalk.bold("0sec Cloud models (catalog base rates):")}\n` +
-        rows.join("\n") + "\nCredit charges use catalog rates, peak multipliers and provider usage receipts.\n",
+      `\n${chalk.bold("0cloud models:")}\n` + rows.join("\n") + "\n",
       "hosted.models-list",
     );
     process.exitCode = EXIT_OK;
@@ -190,26 +200,7 @@ async function runBalance(opts: { json?: boolean }): Promise<void> {
     if (opts.json) {
       consolePresentationOutput.stdout(JSON.stringify(acct, null, 2), "hosted.balance-json");
     } else {
-      const percent = acct.credits?.remainingPercent;
-      const percentLabel = percent === null || percent === undefined
-        ? undefined
-        : percent > 0 && percent < 0.1
-          ? "<0.1"
-          : percent > 99.9 && percent < 100
-            ? ">99.9"
-            : String(Number(percent.toFixed(1)));
-      consolePresentationOutput.stdout(
-        percentLabel === undefined
-          ? "  Cloud: usage percentage unavailable"
-          : `  Cloud: ${chalk.bold(`${percentLabel}%`)} credits remaining`,
-        "hosted.balance",
-      );
-      if (acct.credits?.nextResetAt !== null && acct.credits?.nextResetAt !== undefined) {
-        consolePresentationOutput.stdout(
-          `  Next credit source reset: ${new Date(acct.credits.nextResetAt).toISOString()}`,
-          "hosted.balance-reset",
-        );
-      }
+      consolePresentationOutput.stdout(formatBalanceDetail(acct), "hosted.balance");
     }
     process.exitCode = EXIT_OK;
   } catch (err) {

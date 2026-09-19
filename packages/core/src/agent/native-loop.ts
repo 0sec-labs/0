@@ -135,6 +135,8 @@ function shouldHarvestLoot(toolName: string): boolean {
 //
 // Exported for unit tests.
 const REASONING_PREFIX_RE =
+  // Each repetition starts with a non-whitespace marker, fixing its boundary.
+  // foxguard: ignore[js/no-unsafe-regex]
   /^\s*(?:[*_>#-]\s*)*(?:thought|reasoning|plan)\s*:\s*/i;
 const SENTENCE_SPLIT_RE = /(?<=[.!?])\s+/;
 const REASONING_MAX_LEN = 140;
@@ -2118,8 +2120,10 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
       const beforeCount = state.messages.length;
       currentRunContribution()?.record("compaction", { phase: "before", messagesBefore: beforeCount, inputTokens: state.totalUsage.inputTokens, strategy: "llm_with_regex_fallback" });
 
-      // Use LLM-based compaction if we have the runtime, otherwise regex
-      state.messages = await compactMessagesWithLLM(state.messages, runtime, config.systemPrompt);
+      // Use LLM-based compaction if we have the runtime, otherwise regex.
+      // Default opts preserve the scan loop's original behavior (tail count 10,
+      // security-testing summarizer instruction).
+      state.messages = (await compactMessagesWithLLM(state.messages, runtime, config.systemPrompt)).messages;
 
       compactionCount++;
       tokensAtLastCompaction = state.totalUsage.inputTokens;
@@ -3265,24 +3269,73 @@ export function resolveCompactionThresholds(
 }
 
 /**
+ * The scan loop's summarizer instruction (security-testing framing). Kept as
+ * the DEFAULT so the autonomous scan loop's behavior is unchanged when it calls
+ * `compactMessagesWithLLM` without an explicit `summarizerInstruction`. The
+ * console loop passes a general-purpose instruction instead (see turn-engine).
+ */
+export const SCAN_SUMMARIZER_INSTRUCTION =
+  `Summarize this security testing conversation. Preserve ALL:\n- URLs and endpoints discovered\n- Credentials, tokens, cookies, API keys found\n- Technologies and frameworks identified\n- Vulnerabilities found or suspected\n- Attack attempts and their results (success/failure)\n- Any flags or partial flags seen\n- OPEN todo/plan items and the current objective/phase (what is still in progress and what to do next)\n- Payloads/commands that worked, so they need not be re-derived\n\nBe concise but complete. Use bullet points.`;
+
+/** Options bag for {@link compactMessagesWithLLM}. All optional; the defaults
+ * reproduce the scan loop's original behavior exactly. */
+export interface CompactMessagesOptions {
+  /** How many trailing messages to preserve verbatim. Default 10. */
+  preserveTailCount?: number;
+  /**
+   * The summarizer's user-facing instruction (the part BEFORE the serialized
+   * conversation). Defaults to {@link SCAN_SUMMARIZER_INSTRUCTION}. When
+   * supplied, a GENERIC summarizer system prompt is used instead of the
+   * scan loop's security-testing one.
+   */
+  summarizerInstruction?: string;
+  /** Invoked with the summarizer model call's usage, when the runtime reports it. */
+  onSummaryUsage?: (usage: { inputTokens: number; outputTokens: number }) => void;
+}
+
+/** Result of {@link compactMessagesWithLLM}. */
+export interface CompactMessagesResult {
+  /** The rebuilt (compacted) message array — or the input unchanged when there
+   * was too little to compact. */
+  messages: NativeMessage[];
+  /** The `[COMPACTED CONVERSATION SUMMARY]` body produced (empty when nothing
+   * was compacted). */
+  summaryText: string;
+  /** True when the LLM summary threw or was too short and it fell back to regex
+   * extraction / hard-trim. */
+  degraded: boolean;
+}
+
+/**
  * Compact the conversation using LLM-based summarization.
  *
  * Approach (BoxPwnr-inspired):
- * 1. Serialize all middle messages (between first prompt and last 10 turns) to text
+ * 1. Serialize all middle messages (between first prompt and last N turns) to text
  * 2. Ask the LLM to produce a concise technical summary (preserving creds, endpoints, findings)
  * 3. Rebuild conversation: [system + initial prompt] → [assistant ack] → [user: summary] → [tail]
  *
- * Falls back to regex-based extraction if LLM summarization fails.
+ * Falls back to regex-based extraction if LLM summarization fails (`degraded`).
+ *
+ * Returns `{ messages, summaryText, degraded }`. The scan loop reads `.messages`
+ * and default opts keep its summarizer instruction / tail count unchanged; the
+ * console loop passes a general-purpose instruction and reads `summaryText` +
+ * `degraded` for its compaction event.
  */
 export async function compactMessagesWithLLM(
   messages: NativeMessage[],
   runtime: NativeRuntime,
   systemPrompt: string,
-): Promise<NativeMessage[]> {
-  const preserveTailCount = 10;
+  opts: CompactMessagesOptions = {},
+): Promise<CompactMessagesResult> {
+  void systemPrompt;
+  const preserveTailCount = opts.preserveTailCount ?? 10;
+  const summarizerInstruction = opts.summarizerInstruction ?? SCAN_SUMMARIZER_INSTRUCTION;
+  const summarizerSystem = opts.summarizerInstruction === undefined
+    ? "You are a concise technical summarizer for a security testing conversation."
+    : "You are a concise, thorough technical summarizer.";
 
   if (messages.length <= preserveTailCount + 2) {
-    return messages; // not enough messages to compact
+    return { messages, summaryText: "", degraded: false }; // not enough messages to compact
   }
 
   const firstMessage = messages[0]!;
@@ -3305,20 +3358,23 @@ export async function compactMessagesWithLLM(
 
   // Try LLM summarization
   let summaryText: string;
+  let degraded = false;
   try {
     const summaryResult = await runtime.executeNative(
-      "You are a concise technical summarizer for a security testing conversation.",
+      summarizerSystem,
       [
         {
           role: "user",
           content: [{
             type: "text",
-            text: `Summarize this security testing conversation. Preserve ALL:\n- URLs and endpoints discovered\n- Credentials, tokens, cookies, API keys found\n- Technologies and frameworks identified\n- Vulnerabilities found or suspected\n- Attack attempts and their results (success/failure)\n- Any flags or partial flags seen\n- OPEN todo/plan items and the current objective/phase (what is still in progress and what to do next)\n- Payloads/commands that worked, so they need not be re-derived\n\nBe concise but complete. Use bullet points.\n\nCONVERSATION:\n${conversationText}`,
+            text: `${summarizerInstruction}\n\nCONVERSATION:\n${conversationText}`,
           }],
         },
       ],
       [], // no tools for summary
     );
+
+    if (summaryResult.usage) opts.onSummaryUsage?.(summaryResult.usage);
 
     // Extract text from result
     const textBlocks = summaryResult.content.filter(
@@ -3331,6 +3387,7 @@ export async function compactMessagesWithLLM(
     }
   } catch {
     // Fallback to regex extraction
+    degraded = true;
     summaryText = [
       "## Scan Progress Summary (compacted)",
       "",
@@ -3401,7 +3458,7 @@ export async function compactMessagesWithLLM(
     lastRole = msg.role;
   }
 
-  return compacted;
+  return { messages: compacted, summaryText, degraded };
 }
 
 /**

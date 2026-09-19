@@ -60,6 +60,16 @@ import {
 import { useTheme, type Theme } from "./theme-context.js";
 import { createTranscriptDocument, modelProvider } from "@0sec/shared";
 import { homedir } from "node:os";
+import { existsSync } from "node:fs";
+import {
+  addImage,
+  addText,
+  createPasteStore,
+  expandPasteMarkers,
+  isLongPaste,
+  IMAGE_PATH_RE,
+  type PasteStore,
+} from "./chat/paste-store.js";
 import {
   createPresentationEmitter,
   type PresentationEmitter,
@@ -75,14 +85,13 @@ import {
   pillText,
   type StatusColorRole,
 } from "./status-bar.js";
-import { SHIMMER_TEXT_INTERVAL_MS } from "./animations.js";
+import { SHIMMER_TEXT_INTERVAL_MS, spinnerGlyph } from "./animations.js";
 import { ShimmerText } from "./chat/shimmer.js";
 import {
   createSelectorState,
   highlighted,
   reduceSelector,
   visibleItems,
-  windowFor,
   type SelectorItem,
   type SelectorState,
 } from "./selector.js";
@@ -108,9 +117,19 @@ import {
   saveSession,
 } from "./session-store.js";
 import type { SessionPluginHostManager } from "./session-plugin-host.js";
-import { reportOperatorGate } from "../herdr-state.js";
+import {
+  reportOperatorGate,
+  reportHerdrModel,
+  reportHerdrContextPercent,
+  reportHerdrTarget,
+  reportHerdrObjective,
+  reportHerdrActivity,
+  reportHerdrCompaction,
+} from "../herdr-state.js";
 import {
   GLYPH_CELLS,
+  ELAPSED_VISIBLE_AFTER_MS,
+  formatElapsedClock,
   frameAt,
   frameIntervalMs,
   type AnimationKind,
@@ -148,8 +167,9 @@ import {
   buildToolsPanel,
 } from "./panels.js";
 import { getAllCapabilities } from "./capability-registry.js";
-import { fitTuiText, sanitizeComposerText } from "./text.js";
-import { THEME_NAMES, getThemeEntry, isThemeName } from "./themes.js";
+import { fitLegend, fitTuiText, sanitizeComposerText } from "./text.js";
+import { THEME_NAMES, getThemeEntry, isThemeName, readableOnPrimary } from "./themes.js";
+import { sleekScrollbar } from "./scrollbar.js";
 import {
   parseSubagentCard,
   reduceActiveSubagents,
@@ -248,6 +268,7 @@ import {
 import type {
   ChatEntry,
   ChatImageAttachment,
+  CompactionRecap,
   EntryDisplay,
   KeyHint,
 } from "./chat/types.js";
@@ -299,6 +320,7 @@ import {
 } from "./chat/ApprovalCard.js";
 import { OperatorQuestionCard } from "./chat/OperatorQuestionCard.js";
 import { Masthead } from "./chat/Masthead.js";
+import { ZERO_HEIGHT } from "./chat/zero-art.js";
 import { CommandMenu } from "./chat/CommandMenu.js";
 import {
   AGENT_SIDEBAR_ROWS,
@@ -589,7 +611,7 @@ function statusRoleColor(
 
 function startupRecoveryText(detail: string): string {
   if (/no provider credential found/i.test(detail)) {
-    return "Use /connect to sign in to 0sec Cloud, or use your own API key or provider subscription.";
+    return "Use /connect to sign in to 0cloud, or use your own API key or provider subscription.";
   }
   const recovery = connectionRecoveryForError(detail);
   if (recovery?.providerId === "chatgpt-codex") {
@@ -893,6 +915,21 @@ const SUBAGENT_TRANSCRIPT_MAX = 300;
 
 const EMPTY_EXPANDED_TURNS: ReadonlySet<number> = new Set();
 
+/**
+ * Parse a compaction-threshold setting (`"80%"`) into the fraction the core
+ * loop expects (`0.80`). Falls back to the 0.80 default on anything unparseable,
+ * so a malformed setting never disables compaction with a NaN threshold.
+ */
+function parsePct(value: string): number {
+  const n = Number.parseInt(value, 10);
+  return Number.isFinite(n) && n > 0 ? n / 100 : 0.8;
+}
+
+/** The inline transcript indicator text for a (non-degraded) compaction row. */
+function compactionIndicatorText(tokensBefore: number, tokensAfter?: number): string {
+  return `⊟ compacted · ${tokensBefore}→${tokensAfter ?? "?"} · [⌃O]`;
+}
+
 export function ChatScreen({
   options,
   onGoBack,
@@ -1010,12 +1047,14 @@ export function ChatScreen({
     WARNING,
     INFO,
     ACCENT,
-    BRAND,
     PANEL,
     PANEL_ALT,
     CANVAS,
     BORDER,
   } = theme;
+  // Dark/legible text for the orange (PRIMARY) header strip — theme-picked so
+  // it reads on every palette's signature colour.
+  const headerFg = readableOnPrimary(theme);
   // The OpenTUI renderer, for the OSC-52 clipboard path (copy-on-highlight).
   // OpenTUI owns the framebuffer, so the terminal's native mouse-selection is
   // off; we re-add copy-on-highlight ourselves and must never touch raw stdout.
@@ -1108,6 +1147,18 @@ export function ChatScreen({
   const [reviewOpen, setReviewOpen] = useState(false);
   const reviewRenderableRef = useRef<TranscriptReviewRenderable | null>(null);
   const reviewEventOpenRef = useRef(false);
+  // ── Context-compaction recaps ───────────────────────────────────────────────
+  // Every compaction the core loop performs this session, keyed by its 1-based
+  // `compactionNumber`. Bounded by the (small) compaction count, so the whole
+  // set is kept for the session — the Ctrl+O overlay reads the most recent one.
+  const compactionRecapsRef = useRef<Map<number, CompactionRecap>>(new Map());
+  // The most recent compaction number, in state so the indicator + overlay
+  // recap re-render when a compaction happens. `undefined` until the first one.
+  const [latestCompaction, setLatestCompaction] = useState<number | undefined>(undefined);
+  // A compaction whose `tokensAfter` is still unknown: the NEXT planner usage
+  // sample is the post-compaction size, so we patch it into the recap + the
+  // inline indicator when that sample arrives, then clear this.
+  const pendingTokensAfterRef = useRef<number | undefined>(undefined);
   useEffect(() => {
     const emitter = presentationEmitterRef.current!;
     if (!session) return;
@@ -1437,6 +1488,13 @@ export function ChatScreen({
     controlsWidth,
   } = layout;
   const composerRef = useRef("");
+  // OMP-style paste collapsing: long text and image-path pastes are stashed here
+  // and represented in the composer by a compact chip marker; `pasteCounterRef`
+  // is the monotonic chip number N (shared across text and image chips so their
+  // store keys never collide). Expanded back to full payloads at the Enter
+  // boundary — see the return handler — then the consumed keys are cleared.
+  const pasteStoreRef = useRef<PasteStore>(createPasteStore());
+  const pasteCounterRef = useRef(0);
   const composingRef = useRef(false);
   const commandMenuOpenRef = useRef(false);
   /**
@@ -1459,23 +1517,17 @@ export function ChatScreen({
   // The drilled-in subagent's transcript scrollbox (auto-follows newest, like
   // the main one); pageup/pagedown scroll it while focused.
   const focusTranscriptRef = useRef<ScrollBoxRenderable | null>(null);
-  /**
-   * The slash-command list scrollbox, so the selected row can be scrolled into
-   * view as the operator arrows past the height-clamped window. Not focusable —
-   * navigation stays with the module-level keyboard handler.
-   */
-  const commandMenuScrollRef = useRef<ScrollBoxRenderable | null>(null);
   /** The `ask_operator` modal body scrollbox, scrolled to keep the active row visible. */
   const operatorScrollRef = useRef<ScrollBoxRenderable | null>(null);
   const commandCatalog: readonly SlashCommand[] = SLASH_COMMANDS;
   const isSlashComposer = composer.trimStart().startsWith("/");
   const slashQuery = isSlashComposer ? composer.trimStart().slice(1).split(/\s+/, 1)[0] ?? "" : "";
-  // A wide menu prints a description under each command; a compact one
-  // does not. The row cost per entry therefore differs, and the visible
-  // count has to be derived from the real height instead of a constant —
-  // over-allocating is what painted the menu's bottom border through the
-  // last two command rows.
-  const commandRowsPerCommand = compact ? 1 : 2;
+  // The command menu now renders through the shared `DialogSelectBody`, which
+  // puts each command on ONE row (name · description · alias columns) exactly
+  // like the model/theme pickers — so every entry costs a single row, compact
+  // or not. The visible count is still derived from the real terminal height so
+  // the box is never taller than the column can spare.
+  const commandRowsPerCommand = 1;
   const commandMenuLimit = computeCommandMenuHeight({
     height,
     compact,
@@ -1517,6 +1569,12 @@ export function ChatScreen({
     // live draft. A recall re-sets the cursor immediately after calling this.
     historyIndexRef.current = historyRef.current.length;
   }, [setCommandMenuVisible]);
+
+  // Drop the store entries a submit expanded, so the map does not grow without
+  // bound. Called from the composer-clear branches after Enter expands markers.
+  const clearConsumedPastes = useCallback((ids: string[]) => {
+    for (const id of ids) pasteStoreRef.current.delete(id);
+  }, []);
 
   const restorePaletteDraft = useCallback(() => {
     const draft = paletteDraftRef.current;
@@ -1698,12 +1756,31 @@ export function ChatScreen({
       env,
     });
     const resolvedModel = runtime.resolvedModel();
+    // Initial compaction window: resolved synchronously from the just-built
+    // runtime's model + provider. BYOK/local models resolve against the synced/
+    // offline catalog here; a hosted route's window is only in the per-account
+    // catalog (not yet loaded for this new session), so it stays undefined and
+    // is re-based by the effect below once that catalog arrives. Deliberately
+    // NOT the display-gated `contextLimit` (that goes null when the meter is
+    // hidden or a subagent is focused, which must not disable compaction).
+    const buildDiag = runtime.getConfigurationDiagnostics();
+    const initialContextWindow = resolveContextLimit(
+      { modelId: resolvedModel, providerId: buildDiag.provider, hosted: buildDiag.provider === "hosted" },
+      { hostedCatalog: null },
+    )?.tokens;
     const pluginLease = pluginHostManager?.acquire();
     let created: ConsoleSession;
     try {
     created = createLocalConsoleSession({
       runtime,
       costModel: resolvedModel,
+      // Context-compaction (Stream A) inputs: the model's window drives the
+      // trigger, and the operator's settings gate it + set the threshold.
+      contextWindowTokens: initialContextWindow,
+      compaction: {
+        enabled: settingsRef.current.autoCompaction,
+        thresholdFraction: parsePct(settingsRef.current.compactionThreshold),
+      },
       target: options?.target,
       scope: options?.scope,
       role: options?.role,
@@ -1954,7 +2031,7 @@ export function ChatScreen({
         : isProviderConfigured(targetProvider, env);
       if (!configured) {
         const label = targetProvider === "hosted"
-          ? "0sec Cloud"
+          ? "0cloud"
           : PROVIDERS.find((candidate) => candidate.id === targetProvider)?.label ?? targetProvider;
         appendEntry({
           kind: "notice",
@@ -1978,7 +2055,7 @@ export function ChatScreen({
     modelIdRef.current = applied;
     const providerNow = runtime.getConfigurationDiagnostics().provider;
     const providerLabel = providerNow === "hosted"
-      ? "0sec Cloud"
+      ? "0cloud"
       : PROVIDERS.find((candidate) => candidate.id === providerNow)?.label ?? providerNow;
     appendEntry({
       kind: "notice",
@@ -2027,7 +2104,7 @@ export function ChatScreen({
     }
     const provider = providerId as NonNullable<RuntimeConfig["provider"]>;
     const providerLabel = providerId === "hosted"
-      ? "0sec Cloud"
+      ? "0cloud"
       : knownProvider?.label ?? providerId;
     // Keep the choice staged so /new inherits it too; then apply it LIVE to
     // this audit's running runtime (deferred to the turn boundary when busy).
@@ -3606,8 +3683,49 @@ export function ChatScreen({
             ? { used: usage.turnTokensUsed, limit: usage.turnTokenBudget }
             : null);
           if (usage.kind === "planner") {
-            setLastContext(Number.isFinite(usage.inputTokens) && usage.inputTokens > 0 ? usage.inputTokens : undefined);
+            const planned = Number.isFinite(usage.inputTokens) && usage.inputTokens > 0 ? usage.inputTokens : undefined;
+            setLastContext(planned);
+            // Stream A emits `tokensAfter` undefined — the rewrite is only sized
+            // once the model actually receives it, which is THIS next planner
+            // sample. Patch it into both the stored recap and the inline
+            // indicator so the operator sees the real before→after.
+            const pending = pendingTokensAfterRef.current;
+            if (pending !== undefined && planned !== undefined) {
+              pendingTokensAfterRef.current = undefined;
+              const recap = compactionRecapsRef.current.get(pending);
+              if (recap) recap.tokensAfter = planned;
+              const before = recap?.tokensBefore ?? planned;
+              setEntries((current) => current.map((entry) =>
+                entry.compactionNumber === pending && entry.kind === "notice"
+                  ? { ...entry, text: compactionIndicatorText(before, planned) }
+                  : entry));
+            }
           }
+        },
+        onCompaction: (event) => {
+          // Retain the recap for the Ctrl+O overlay (bounded by compaction
+          // count). `tokensAfter` is unknown at emit time — the next planner
+          // sample patches it in (see onUsage above).
+          compactionRecapsRef.current.set(event.compactionNumber, {
+            tokensBefore: event.tokensBefore,
+            tokensAfter: event.tokensAfter,
+            summaryText: event.summaryText,
+            preCompactionMessages: event.preCompactionMessages,
+            degraded: event.degraded,
+          });
+          setLatestCompaction(event.compactionNumber);
+          // A degraded compaction kept its history but produced no usable
+          // summary and no meaningful post size, so its indicator is a muted
+          // "summary unavailable" with no token counts to back-fill.
+          if (!event.degraded) pendingTokensAfterRef.current = event.compactionNumber;
+          appendEntry({
+            kind: "notice",
+            text: event.degraded
+              ? "⊟ compacted · summary unavailable"
+              : compactionIndicatorText(event.tokensBefore, event.tokensAfter),
+            turn: currentTurn,
+            compactionNumber: event.compactionNumber,
+          });
         },
         onNotice: (notice) => {
           setScopeRules(session.scope?.raw.in_scope ?? []);
@@ -3630,14 +3748,18 @@ export function ChatScreen({
         input: prev.input + outcome.usage.inputTokens,
         output: prev.output + outcome.usage.outputTokens,
       }));
-      // Context occupancy = the tokens the last model call actually sent (the
-      // whole conversation resent). Some backends (e.g. the ChatGPT/Codex wire)
-      // report usage only on the RETURN value, not through the streaming
-      // `onUsage(kind:"planner")` callback above — so without this the meter
-      // stayed at 0% for a full conversation. Fall back to the turn's final
-      // input count whenever it is a real, positive measurement.
-      if (Number.isFinite(outcome.usage.inputTokens) && outcome.usage.inputTokens > 0) {
-        setLastContext(outcome.usage.inputTokens);
+      // Context occupancy = the tokens the last planner call actually sent (the
+      // whole conversation resent — a per-call measure). Some backends
+      // (e.g. the ChatGPT/Codex wire) report usage only on the RETURN value,
+      // not through the streaming `onUsage(kind:"planner")` callback above — so
+      // without this the meter stayed at 0% for a full conversation.
+      // Crucially, outcome.usage.inputTokens is the TURN-CUMULATIVE sum of
+      // every model call; using it here would wrongly inflate context
+      // occupancy toward 238% when a tool-using turn re-sends the growing
+      // conversation multiple times. outcome.contextInputTokens is the
+      // true per-call planner input token count.
+      if (outcome.contextInputTokens !== undefined && outcome.contextInputTokens > 0) {
+        setLastContext(outcome.contextInputTokens);
       }
       turnUsage = { inputTokens: outcome.usage.inputTokens, outputTokens: outcome.usage.outputTokens };
 
@@ -3916,6 +4038,44 @@ export function ChatScreen({
     submitOperatorMessage(prompt);
   }, [session, submitOperatorMessage]);
 
+  // ── Command-menu pointer handlers (hover + click) ──────────────────────────
+  // The shared `DialogSelectBody` reports a hovered row and a clicked row; both
+  // reuse the SAME select/run path the keyboard already drives, so the mouse is
+  // purely additive and steals nothing from the module keyboard handler.
+  // Hover highlights (moves the cursor); a click activates the row exactly as
+  // pressing Enter on it would.
+  const hoverSlashCommand = useCallback((index: number) => {
+    setSlashSelected(index);
+  }, []);
+  const scrollSlashCommand = useCallback((delta: number) => {
+    setSlashSelected((current) =>
+      Math.min(Math.max(0, current + delta), Math.max(0, menuCommands.length - 1)),
+    );
+  }, [menuCommands.length]);
+  const activateSlashCommand = useCallback((index: number) => {
+    const command = menuCommands[index];
+    if (!command) return;
+    setSlashSelected(index);
+    const parsed = findCommand(composerRef.current);
+    const input = completionFor(command, parsed.args);
+    // A command whose usage still expects arguments and has none typed yet
+    // completes into the composer (the Tab affordance) rather than running with
+    // an empty argument; anything runnable submits, exactly like Enter.
+    if (!parsed.args && completionFor(command).endsWith(" ")) {
+      setComposerText(input);
+      setCommandMenuVisible(true);
+      return;
+    }
+    historyRef.current = pushHistory(historyRef.current, input);
+    submitOperatorMessage(input);
+    if (!restorePaletteDraft()) {
+      composingRef.current = false;
+      setComposerText("");
+      setComposing(false);
+      setCommandMenuVisible(false);
+    }
+  }, [menuCommands, submitOperatorMessage, setComposerText, setCommandMenuVisible, restorePaletteDraft]);
+
 
   // Deliver one parked message per idle transition. One at a time rather than a
   // loop: delivering makes the console busy again, so the NEXT idle drains the
@@ -3948,7 +4108,21 @@ export function ChatScreen({
     if (approvalPrompt || picker || reviewOpen) return;
     composingRef.current = true;
     setComposing(true);
-    setComposerText(composerRef.current + text);
+    // OMP-style collapse: an image path or a long text paste becomes a compact
+    // chip marker instead of dumping raw content into the composer; a short
+    // paste appends inline as before. Length/shape are measured on the SANITIZED
+    // text. The chip is literal text, so wrapping/history/slash-menu are intact;
+    // Enter expands it back to the full payload before the message ships.
+    const trimmed = text.trim();
+    if (IMAGE_PATH_RE.test(trimmed) && existsSync(trimmed)) {
+      const { marker } = addImage(pasteStoreRef.current, (pasteCounterRef.current += 1), trimmed);
+      setComposerText(composerRef.current + marker);
+    } else if (isLongPaste(text)) {
+      const { marker } = addText(pasteStoreRef.current, (pasteCounterRef.current += 1), text);
+      setComposerText(composerRef.current + marker);
+    } else {
+      setComposerText(composerRef.current + text);
+    }
   });
 
   useKeyboard((key) => {
@@ -4454,6 +4628,14 @@ export function ChatScreen({
           setComposing(false);
           return;
         }
+        // Expand any paste chips back to their full payloads HERE, at the Enter
+        // boundary — before pushHistory and submit. This must happen outside the
+        // send path: submitOperatorMessage may QUEUE the raw string and the idle
+        // drain replays it later, so expanding inside send would ship literal
+        // markers. History stores the EXPANDED text so Up-arrow recall still
+        // works after the store keys are cleared. A slash command has no markers,
+        // so expansion is a no-op there.
+        const { text: expandedInput, consumedIds: consumedPasteIds } = expandPasteMarkers(input, pasteStoreRef.current);
         // Drilled into a subagent: a plain message is steered straight to it via
         // the hub mailbox, not sent to the main agent. Slash commands still run
         // as commands (they fall through), so /agents, /settings, etc. keep
@@ -4462,15 +4644,16 @@ export function ChatScreen({
           const worker = herdAgents[focusAgentId];
           if (worker?.status === "completed" || worker?.status === "failed") {
             const result = renderInboundMessage({ id: `${focusAgentId}-followup`, from: focusAgentId, to: "Main", ts: Date.now(), body: worker.summary ?? worker.error ?? "" }).text;
-            submitOperatorMessage(`Follow up on ${worker.name ?? focusAgentId}.\nTask: ${worker.task}\n${result}\n\nOperator request: ${input}`);
+            submitOperatorMessage(`Follow up on ${worker.name ?? focusAgentId}.\nTask: ${worker.task}\n${result}\n\nOperator request: ${expandedInput}`);
             setFocusAgentId(null);
             setAgentNavIndex(-1);
           } else {
-            const res = deliverToSubagent(focusAgentId, input);
-            setSubagentTranscripts((prev) => ({ ...prev, [focusAgentId]: [...(prev[focusAgentId] ?? []), { id: `${focusAgentId}-operator-${Date.now()}`, kind: res.ok ? "user" : "error", text: res.ok ? input : `${res.reason ?? "Message could not be delivered"}. Your draft is retained; Escape returns to Main.`, turn: worker?.turn ?? 0, at: Date.now() }] }));
+            const res = deliverToSubagent(focusAgentId, expandedInput);
+            setSubagentTranscripts((prev) => ({ ...prev, [focusAgentId]: [...(prev[focusAgentId] ?? []), { id: `${focusAgentId}-operator-${Date.now()}`, kind: res.ok ? "user" : "error", text: res.ok ? expandedInput : `${res.reason ?? "Message could not be delivered"}. Your draft is retained; Escape returns to Main.`, turn: worker?.turn ?? 0, at: Date.now() }] }));
             if (!res.ok) return;
           }
-          historyRef.current = pushHistory(historyRef.current, input);
+          historyRef.current = pushHistory(historyRef.current, expandedInput);
+          clearConsumedPastes(consumedPasteIds);
           composingRef.current = false;
           setComposerText("");
           setComposing(false);
@@ -4480,8 +4663,9 @@ export function ChatScreen({
         // Remember every submitted message (sent or queued) for Up/Down recall.
         // Done before the setComposerText("") below, which re-bases the history
         // cursor onto the freshly-grown ring.
-        historyRef.current = pushHistory(historyRef.current, input);
-        submitOperatorMessage(input);
+        historyRef.current = pushHistory(historyRef.current, expandedInput);
+        submitOperatorMessage(expandedInput);
+        clearConsumedPastes(consumedPasteIds);
         if (!restorePaletteDraft()) {
           composingRef.current = false;
           setComposerText("");
@@ -4563,16 +4747,46 @@ export function ChatScreen({
   const contextLimit = useMemo(() => !focusAgentId && settings.showContextMeter
     ? resolveContextLimit({ modelId: activeModel, providerId: activeProvider, hosted: activeProvider === "hosted" }, { hostedCatalog: currentHostedCatalog })
     : null, [focusAgentId, settings.showContextMeter, activeModel, activeProvider, currentHostedCatalog]);
+  // The window that drives context COMPACTION — resolved independently of the
+  // context-METER display (which is gated by `showContextMeter` / a focused
+  // subagent). Compaction must not turn off just because the meter is hidden or
+  // the operator drilled into a child, so this ignores both gates.
+  const compactionContextWindow = useMemo(
+    () => (activeModel && activeProvider)
+      ? resolveContextLimit({ modelId: activeModel, providerId: activeProvider, hosted: activeProvider === "hosted" }, { hostedCatalog: currentHostedCatalog })?.tokens
+      : undefined,
+    [activeModel, activeProvider, currentHostedCatalog],
+  );
+  // Re-base the live session's compaction trigger whenever that window changes:
+  // a `/model` switch to a different-window model, or the per-account hosted
+  // catalog loading after the session was built (when the window was unknown).
+  // An empty/undefined value is a no-op in core (it only re-bases on a real
+  // number), so this never disables a window the session already had.
+  useEffect(() => {
+    if (compactionContextWindow === undefined) return;
+    sessionRef.current?.reconfigureRuntime({ contextWindowTokens: compactionContextWindow });
+  }, [compactionContextWindow]);
   // The live "what it's doing" one-liner: the active tool + its args, truthfully
   // (never fabricated). Only while the root turn is running and not focused on a
   // worker. Computed here because the status bar is built above the later
   // `runningEntry`.
+  const runningWorkers = Object.values(herdAgents).filter((agent) => agent.status === "running" || agent.status === "queued").length;
+  // The fleet's "running N agents" line, oh-my-pi style — a concise, TRUTHFUL
+  // count of the subagents genuinely in flight, or "" when the herd is quiet.
+  // Reused by the header status word, the below-composer working line, and the
+  // status-bar activity pill so all three read the same live fact.
+  const fleetActivityLabel = runningWorkers > 0
+    ? `running ${runningWorkers} agent${runningWorkers === 1 ? "" : "s"}`
+    : "";
   const statusRunningEntry = busy && !focusAgentId && runningTool
     ? entries.findLast((entry) => entry.kind === "tool" && entry.text === runningTool && entry.success === undefined)
     : undefined;
+  // The live "what it's doing" pill: the in-flight tool (+ its argument
+  // preview) while the root turn owns a call, otherwise the fleet's running
+  // count when subagents are the only thing in flight. Never fabricated.
   const statusActivity = busy && !focusAgentId && runningTool
     ? (statusRunningEntry?.toolArgs ? `${runningTool} · ${statusRunningEntry.toolArgs}` : runningTool)
-    : undefined;
+    : fleetActivityLabel || undefined;
   const statusSegments = buildStatusSegments({
     model: focusAgentId ? focusedTelemetry?.model : modelId ?? undefined,
     mode: autonomyFooterText(mode),
@@ -4601,7 +4815,32 @@ export function ChatScreen({
     hostedBalance: !focusAgentId && cloudBalance && cloudBalance.owner === session && cloudSource.current?.isHosted()
       ? formatHostedBalance(cloudBalance.state) : undefined,
   });
-  const runningWorkers = Object.values(herdAgents).filter((agent) => agent.status === "running" || agent.status === "queued").length;
+  // Feed herdr the same live facts the status bar shows — model/provider,
+  // context %, the target/objective topic and the current activity — so the
+  // pane's sidebar chrome names 0sec's work. Gated on `interactive`: only the
+  // selected, non-overlay audit owns the single pane's topic, so hidden audits
+  // never fight over it. Percent mirrors the status-bar meter exactly. All
+  // reporters are no-ops off-herdr and fail-soft.
+  const herdrContextPercent =
+    contextLimit?.tokens && lastContext !== undefined && contextLimit.tokens > 0
+      ? (lastContext / contextLimit.tokens) * 100
+      : null;
+  useEffect(() => {
+    if (!interactive) return;
+    reportHerdrModel(activeModel ?? null, activeProvider ?? null);
+    reportHerdrContextPercent(herdrContextPercent);
+    reportHerdrTarget(target || null);
+    reportHerdrObjective(objective || null);
+    reportHerdrActivity(statusActivity ?? null);
+  }, [interactive, activeModel, activeProvider, herdrContextPercent, target, objective, statusActivity]);
+  // A compaction just ran: surface it to herdr as a monotonic count token.
+  // Fires once per new compaction (the effect only re-runs when the number
+  // changes); guarded against the undefined initial value.
+  useEffect(() => {
+    if (latestCompaction === undefined) return;
+    reportHerdrCompaction();
+  }, [latestCompaction]);
+
   // The OMP-style pill row: the SAME segments, kept/dropped at the bar's real
   // width, each painted as its own coloured glyph+text with a subtle separator
   // between (rendered below via `renderStatusPills`). `statusBarText` remains as
@@ -4623,11 +4862,12 @@ export function ChatScreen({
     hasContext: false,
     hasDetail: Boolean(pickerDetail),
   });
-  const pickerWindow = picker
-    ? windowFor(picker.state, pickerPlan.maxItemRows)
-    : { start: 0, end: 0 };
-  const pickerRows = pickerVisible.slice(pickerWindow.start, pickerWindow.end);
-  const pickerBoxHeight = selectorPanelHeight(pickerRows.length, false, pickerPlan.showDetail);
+  // The shared list body windows the full item list around the cursor itself,
+  // so the picker no longer slices its own visible window — it passes the whole
+  // filtered list and the absolute cursor. It still budgets the box height for
+  // exactly the rows that will paint.
+  const pickerVisibleRows = Math.min(pickerPlan.maxItemRows, pickerVisible.length);
+  const pickerBoxHeight = selectorPanelHeight(pickerVisibleRows, false, pickerPlan.showDetail);
 
   // The approval card shows its choices in full (there are only ever two) and
   // spends the rest of its budget on READABLE argument rows. A long arg list is
@@ -4904,7 +5144,41 @@ export function ChatScreen({
   const showTerminalMark =
     settings.showLogo && empty && ledgerRows >= LEDGER_MARK_ROWS && contentWidth >= TERMINAL_BLOCK_LOGO_WIDTH;
   const showEmptyStateTagline = empty && ledgerRows >= 3;
-  const sessionState = startupError ? "unavailable" : busy ? "working" : session ? "ready" : "connecting";
+  // The header readiness word, oh-my-pi style: not a bare "working" but a live,
+  // informative indicator — an animated spinner glyph, the present-tense verb
+  // for what's happening (thinking / responding / a tool name), the fleet's
+  // "running N agents" when subagents are in flight, and the turn's elapsed
+  // clock ("1m 12s") once past the flicker threshold. Every piece is driven by
+  // the SAME `animTick` the below-composer indicator uses (no new interval), so
+  // the glyph advances in lock-step; reduceMotion pins the glyph to frame 0
+  // (via `motion:false` in `frameAt`) so the word stays honest but still.
+  const turnElapsedMs =
+    busy && activeTurnStartedAt.current !== null ? Date.now() - activeTurnStartedAt.current : 0;
+  const elapsedClock =
+    turnElapsedMs >= ELAPSED_VISIBLE_AFTER_MS ? formatElapsedClock(turnElapsedMs) : "";
+  const busyStatusWord = (() => {
+    // A busy machine-turn: spinner + verb (+ agents) (+ elapsed).
+    if (animation && animationKind !== "awaiting-operator") {
+      const parts = [animation.label];
+      if (fleetActivityLabel) parts.push(fleetActivityLabel);
+      if (elapsedClock) parts.push(elapsedClock);
+      return `${loadingLabel} ${parts.join(" · ")}`;
+    }
+    // The human's turn: expectant wording, not a grinding spinner.
+    if (animationKind === "awaiting-operator" && animation) {
+      return `${loadingLabel} ${animation.label}`;
+    }
+    // The root turn is idle but the herd is still working: keep the header
+    // alive with the smooth spinner and the running count.
+    if (!busy && fleetActivityLabel) {
+      const glyph = spinnerGlyph(animTick, { reduceMotion: settings.reduceMotion });
+      return `${glyph} ${fleetActivityLabel}`;
+    }
+    return "";
+  })();
+  const sessionState = startupError
+    ? "unavailable"
+    : busyStatusWord || (busy ? "working" : session ? "ready" : "connecting");
   const headerSegments: string[] = [];
   if (settings.showScope) headerSegments.push(`Scope: ${scopeLabel}`);
   headerSegments.push(sessionState);
@@ -4920,9 +5194,16 @@ export function ChatScreen({
   // Activity comes from the real in-flight call, not an invented model intent.
   // Its spinner lives once, below the composer in the loading/status row.
   const runningEntry = runningTool ? entries.findLast((entry) => entry.kind === "tool" && entry.text === runningTool && entry.success === undefined) : undefined;
-  const workingLine = runningEntry?.toolArgs
+  const workingLineBase = runningEntry?.toolArgs
     ? `${runningTool} · ${runningEntry.toolArgs}`
     : animation?.label ?? "";
+  // Fold the live "running N agents" fact into the below-composer indicator too
+  // (unless the base already speaks about the fleet), so the most prominent
+  // "something is happening" line names what the herd is doing, not just the
+  // root turn's verb.
+  const workingLine = fleetActivityLabel && !workingLineBase.includes("agent")
+    ? (workingLineBase ? `${workingLineBase} · ${fleetActivityLabel}` : fleetActivityLabel)
+    : workingLineBase;
   const canInterrupt = busy && !composing && !gateOpen && !picker && !commandMenuVisible && !reviewOpen;
   const workingLineFitted = fitTuiText(`${canInterrupt ? "Esc · " : ""}${workingLine}`, controlsWidth);
   const workingIndicator = animation ? (
@@ -4967,8 +5248,8 @@ export function ChatScreen({
         ? queueLabel
         : busy
           ? settings.busyInputMode === "queue"
-            ? "type a follow-up · enter queues"
-            : "type a follow-up · enter steers main"
+            ? "type a follow-up · [⏎] queues"
+            : "type a follow-up · [⏎] steers main"
           : !session
             ? "connecting · type to queue a message"
             : "type to chat or / for commands";
@@ -5039,7 +5320,7 @@ export function ChatScreen({
           <box flexDirection="column" minWidth={0}>
             <text fg={WARNING}>
               {fitTuiText(
-                `${composerQueueLabel(queuedMessages.length)} · enter sends next · ctrl+y edit`,
+                `${composerQueueLabel(queuedMessages.length)} · [⏎] sends next · [⌃Y] edit`,
                 contentWidth,
               )}
             </text>
@@ -5074,21 +5355,18 @@ export function ChatScreen({
     outerWidth: heroComposerWidth,
     padY: 1,
   });
-  // A FIXED bottom spacer (not a flexGrow) is what actually anchors the hero
-  // composer: with it fixed and the region above it flexGrow, the composer's
-  // distance from the bottom never changes, so opening the slash menu (which
-  // grows upward in the region above) cannot move the composer. Sized to put the
-  // composer near the vertical centre when the menu is closed — roughly the same
-  // number of rows sit below it as the composer/hint block spends.
-  // The space ABOVE the composer must hold the tallest the command menu can get
-  // (not the current filtered count — that changes as the query narrows, and the
-  // composer must not move), so an open overlay grows into that space instead of
-  // overflowing upward into the header. Reserve for the stable max menu height
-  // plus the composer card, hint and header chrome, then centre what is left.
+  // Centre the whole welcome group, not just the composer. Measure the actual
+  // masthead (which may omit the native image) and composer rather than assuming
+  // a fixed hero height. Retain the masthead measurement while an overlay replaces
+  // it, so filtering the slash menu cannot move the input.
+  const [heroMastheadRows, setHeroMastheadRows] = useState(0);
+  const [heroComposerRows, setHeroComposerRows] = useState(0);
+  // Four rows belong to the outer header/footer; two to the shortcut line and
+  // its margin. Keep enough room above the input for the tallest command menu.
   const heroMenuMaxRows = commandMenuBoxHeight(commandMenuLimit, commandRowsPerCommand);
   const heroBottomSpacer = Math.max(
     1,
-    Math.min(Math.floor((height - 6) / 2), height - 12 - heroMenuMaxRows),
+    Math.min(Math.floor((height - 4 - heroMastheadRows - heroComposerRows - 2) / 2), height - 12 - heroMenuMaxRows),
   );
 
   // ── Overlays that share the slot directly above the composer ───────────────
@@ -5103,14 +5381,14 @@ export function ChatScreen({
       layout={ml}
       boxWidth={boxWidth}
       height={commandMenuHeight}
-      scrollRef={commandMenuScrollRef}
       commands={menuCommands}
       selectedIndex={slashSelected}
       visibleRows={visibleCommandRows}
-      rowsPerCommand={commandRowsPerCommand}
       query={slashQuery}
-      compact={compact}
       theme={theme}
+      onActivateRow={activateSlashCommand}
+      onHoverRow={hoverSlashCommand}
+      onScroll={scrollSlashCommand}
     />
   );
   const commandMenuNode = commandMenuVisible ? buildCommandMenu(menu, "100%") : null;
@@ -5132,7 +5410,7 @@ export function ChatScreen({
         <text fg={MUTED}>{fitTuiText(`Stored owner-only in your 0sec state dir and exported as ${secretPrompt.envVar}. Never transmitted by 0sec.`, approvalWidth, { mode: "middle" })}</text>
       </box>
       <box width={approvalWidth} flexShrink={0} minWidth={0}>
-        <text fg={MUTED}>{fitTuiText("enter save · esc cancel", approvalWidth)}</text>
+        <text fg={MUTED}>{fitLegend(approvalWidth, "[⏎] save · [esc] cancel")}</text>
       </box>
     </box>
   ) : null;
@@ -5141,11 +5419,11 @@ export function ChatScreen({
     <SelectorPanel
       title={picker.state.title}
       subtitle={picker.state.query ? picker.state.query : `${pickerVisible.length} available`}
-      rows={pickerRows}
-      windowStart={pickerWindow.start}
+      items={pickerVisible}
       activeIndex={picker.state.index}
+      visibleRows={pickerVisibleRows}
       detail={pickerPlan.showDetail ? pickerDetail : undefined}
-      hint="↑↓ select · type to filter · enter apply · esc cancel"
+      hint="[↑↓] select · type to filter · [⏎] apply · [esc] cancel"
       emptyText={`no match for "${picker.state.query}"`}
       borderColor={MUTED}
       titleColor={PRIMARY}
@@ -5163,7 +5441,7 @@ export function ChatScreen({
       body={approvalBodyShown}
       choices={approvalItems}
       activeIndex={approvalState.index}
-      hint="↑↓ choose · enter confirm · esc decline"
+      hint="[↑↓] choose · [⏎] confirm · [esc] decline"
       accent={approvalPrompt.borderColor}
       severity={approvalPrompt.severity}
       contentWidth={contentWidth}
@@ -5223,8 +5501,8 @@ export function ChatScreen({
   const subagentHeaderText = subagentPanelCollapsed
     ? `${subagentToggleGlyph} ${summarizeRoster(subagentEntries.map(subagentEffectiveStatus))}`
     : agentNavIndex >= 0
-      ? `${subagentToggleGlyph} agents (${subagentEntries.length}) · ↑↓ select · enter open · esc back`
-      : `${subagentToggleGlyph} agents (${subagentEntries.length}) · ${runningWorkers} running · ↓ select`;
+      ? `${subagentToggleGlyph} agents (${subagentEntries.length}) · [↑↓] select · [⏎] open · [esc] back`
+      : `${subagentToggleGlyph} agents (${subagentEntries.length}) · ${runningWorkers} running · [↓] select`;
   const subagentNode = subagentBlockRows > 0 ? (
     <box flexDirection="column" width="100%" minWidth={0} height={subagentBlockRows} flexShrink={0} marginTop={1}>
       <box width={contentWidth} flexShrink={0} onMouseDown={() => {
@@ -5263,8 +5541,8 @@ export function ChatScreen({
       {subagentOverflowRow > 0 ? (
         <text fg={MUTED}>{fitTuiText(
           agentNavIndex >= 0
-            ? `${rosterStart + 1}–${rosterStart + subagentVisible.length}/${subagentEntries.length} · ↑↓ browse all`
-            : `+${subagentOverflow} more · ↓ browse all`,
+            ? `${rosterStart + 1}–${rosterStart + subagentVisible.length}/${subagentEntries.length} · [↑↓] browse all`
+            : `+${subagentOverflow} more · [↓] browse all`,
           contentWidth,
         )}</text>
       ) : null}
@@ -5383,7 +5661,7 @@ export function ChatScreen({
         <CloudHintCard hostedConnected={cloudConfigured} width={rightInner} rows={cloudHintRows} theme={theme}
           dismissed={cloudHintDismissed} onDismiss={() => setCloudHintDismissed(true)} onConnect={() => onNavigate("connect")} />
         <box width={rightInner} flexShrink={0} minWidth={0} onMouseDown={() => updateSetting("showRightSidebar", false)}>
-          <text fg={MUTED}>{fitTuiText("Hide agents · ctrl+l", rightInner)}</text>
+          <text fg={MUTED}>{fitLegend(rightInner, "Hide agents · [⌃L]")}</text>
         </box>
       </box>
     </box>
@@ -5450,6 +5728,11 @@ export function ChatScreen({
         model?: string;
         tool?: string;
         note?: string;
+        assistant?: string;
+        toolInput?: Record<string, unknown> | null;
+        toolRunning?: boolean;
+        turn?: number;
+        maxTurns?: number;
       }
     >();
     for (const id in herdAgents) {
@@ -5467,6 +5750,13 @@ export function ChatScreen({
         model: tel?.model,
         tool: rec.tool,
         note: rec.note,
+        turn: rec.turn,
+        maxTurns: rec.maxTurns,
+        // The child's latest prose + current tool (with args + in-flight flag),
+        // spread LAST so the fresher message tool/args win over the coarse
+        // herd `tool`. Identical to what the AGENTS rail feeds
+        // `summarizeAgentActivity`; the Task card derives the same live line.
+        ...summaryInputFromMessage(tel),
       });
     }
     return byName;
@@ -5617,7 +5907,7 @@ export function ChatScreen({
             flexGrow={1}
             minHeight={0}
             backgroundColor={PANEL}
-            verticalScrollbarOptions={{ trackOptions: { backgroundColor: PANEL, foregroundColor: MUTED }, arrowOptions: { foregroundColor: MUTED, backgroundColor: PANEL } }}
+            verticalScrollbarOptions={sleekScrollbar(theme, PANEL)}
             contentOptions={{ flexDirection: "column" }}
             stickyScroll
             stickyStart="bottom"
@@ -5654,7 +5944,7 @@ export function ChatScreen({
         </box>
       )}
       <text fg={MUTED} marginTop={1}>
-        {fitTuiText(`ctrl+o transcript · ctrl+r ${workerDisplay.transcriptDetail === "expanded" ? "collapse" : "expand"} details · esc/← Main`, focusInner)}
+        {fitTuiText(`[⌃O] ${latestCompaction !== undefined ? "recap" : "transcript"} · [⌃R] ${workerDisplay.transcriptDetail === "expanded" ? "collapse" : "expand"} details · [esc]/[←] Main`, focusInner)}
       </text>
     </box>
   );
@@ -5673,6 +5963,7 @@ export function ChatScreen({
       expandedTurns={expandedTurns}
       theme={theme}
       renderableRef={reviewRenderableRef}
+      recap={latestCompaction !== undefined ? compactionRecapsRef.current.get(latestCompaction) : undefined}
     />
   ) : focused ? (
     focusViewNode
@@ -5688,7 +5979,7 @@ export function ChatScreen({
         paddingX={compact ? 1 : 2}
         paddingY={1}
       >
-        <scrollbox ref={transcriptRef} focusable={false} width="100%" flexGrow={1} minHeight={0} backgroundColor={PANEL} stickyScroll stickyStart="bottom" verticalScrollbarOptions={{ trackOptions: { backgroundColor: PANEL, foregroundColor: MUTED }, arrowOptions: { foregroundColor: MUTED, backgroundColor: PANEL } }}>
+        <scrollbox ref={transcriptRef} focusable={false} width="100%" flexGrow={1} minHeight={0} backgroundColor={PANEL} stickyScroll stickyStart="bottom" verticalScrollbarOptions={sleekScrollbar(theme, PANEL)}>
           <box flexDirection="column" width="100%">
             {renderTranscriptEntries(entries, transcriptWidth, entryDisplay)}
             {/* The plan lives in the RIGHT sidebar now; this inline card is only
@@ -5744,16 +6035,10 @@ export function ChatScreen({
   const heroOverlayOpen = commandMenuVisible || Boolean(picker) || Boolean(approvalPrompt) || Boolean(secretPrompt) || operatorQuestionOpen;
   const showMasthead = !heroOverlayOpen && !startupError;
 
-  // ── Command-menu selection scroll ──────────────────────────────────────────
-  // Keep the highlighted command inside the height-clamped window: the rows live
-  // in a scrollbox, so scrolling — not slicing — is what makes entries past the
-  // visible window reachable. Centred, clamped flush to the ends (chat-layout).
-  useEffect(() => {
-    const box = commandMenuScrollRef.current;
-    if (!box || !commandMenuVisible || menuCommands.length === 0) return;
-    const start = commandMenuWindowStart(slashSelected, visibleCommandRows, menuCommands.length);
-    box.scrollTop = start * commandRowsPerCommand;
-  }, [commandMenuVisible, slashSelected, visibleCommandRows, menuCommands.length, commandRowsPerCommand]);
+  // The command menu now renders through the shared `DialogSelectBody`, which
+  // windows the list around the cursor internally (see dialog-select-layout's
+  // `dialogWindow`) exactly as every other picker does — so it needs no external
+  // scrollbox and no scroll effect of its own.
 
   // ── ask_operator body scroll ───────────────────────────────────────────────
   // Scroll the active answerable row into view within the fixed-height body.
@@ -5797,7 +6082,7 @@ export function ChatScreen({
   });
 
   return (
-    <box flexDirection="column" width="100%" height="100%" paddingLeft={compact ? 1 : 2} paddingRight={compact ? 1 : 2} paddingTop={1} backgroundColor={CANVAS}>
+    <box flexDirection="column" width="100%" height="100%" paddingTop={1} backgroundColor={CANVAS}>
       {/*
         * flexShrink is disabled because this box is two stacked rows with
         * no explicit height: when the column is over-subscribed Yoga
@@ -5811,31 +6096,39 @@ export function ChatScreen({
         * environmental (model, cwd, branch, counters) moved to the bottom
         * bar, where it sits next to the input the operator is looking at.
         */}
-      <box flexDirection="row" width="100%" minWidth={0} flexShrink={0} marginBottom={1} gap={1}>
+      <box flexDirection="row" width="100%" minWidth={0} flexShrink={0} marginBottom={1} gap={1} paddingLeft={1} paddingRight={1} backgroundColor={PRIMARY}>
         <box flexDirection="row" flexShrink={0} minWidth={0}>
-          <text fg={PRIMARY}>0sec</text>
+          <text fg={headerFg}>0sec</text>
         </box>
         <box width={headerEngagementWidth} flexShrink={0} minWidth={0}>
-          <text fg={MUTED}>{fitTuiText(headerEngagement, headerEngagementWidth, { mode: "middle" })}</text>
+          <text fg={headerFg}>{fitTuiText(headerEngagement, headerEngagementWidth, { mode: "middle" })}</text>
         </box>
         {headerObjectiveWidth > 0 ? (
-          // The async AI objective summary, right-aligned at the top-right in the
-          // 0sec voice (BRAND). Empty/compact hides it and the engagement
-          // summary reclaims the cells.
+          // The async AI objective summary, right-aligned at the top-right.
+          // Legible on the orange strip via the contrast-picked header fg; the
+          // 0sec voice (BRAND) reads on canvas but not on PRIMARY. Empty/compact
+          // hides it and the engagement summary reclaims the cells.
           <box width={headerObjectiveWidth} flexShrink={0} minWidth={0} flexDirection="row" justifyContent="flex-end">
-            <text fg={BRAND}>{fitTuiText(headerObjective, headerObjectiveWidth, { mode: "end" })}</text>
+            <text fg={headerFg}>{fitTuiText(headerObjective, headerObjectiveWidth, { mode: "end" })}</text>
           </box>
         ) : null}
         <box width={sidebarControlWidth} flexDirection="row" flexShrink={0} gap={1}>
           <box width={Math.floor((sidebarControlWidth - 1) / 2)} flexShrink={0} onMouseDown={() => updateSetting("showLeftSidebar", !settingsRef.current.showLeftSidebar)}>
-            <text fg={settings.showLeftSidebar ? ACCENT : MUTED}>{sidebarControlWidth > 8 ? `${settings.showLeftSidebar ? "▾" : "▸"} Audits` : "◀"}</text>
+            <text fg={headerFg}>{sidebarControlWidth > 8 ? `${settings.showLeftSidebar ? "▾" : "▸"} Audits` : "◀"}</text>
           </box>
           <box width={Math.floor(sidebarControlWidth / 2)} flexShrink={0} onMouseDown={() => updateSetting("showRightSidebar", !settingsRef.current.showRightSidebar)}>
-            <text fg={settings.showRightSidebar ? ACCENT : MUTED}>{sidebarControlWidth > 8 ? `${settings.showRightSidebar ? "▾" : "▸"} Agents` : "▶"}</text>
+            <text fg={headerFg}>{sidebarControlWidth > 8 ? `${settings.showRightSidebar ? "▾" : "▸"} Agents` : "▶"}</text>
           </box>
         </box>
       </box>
 
+      {/*
+        * The BODY wrapper carries the horizontal padding the outer frame used
+        * to own. Moving the side gutter here (rather than onto the root box)
+        * is what lets the masthead strip above bleed to both terminal edges
+        * while everything below it keeps its usual `compact ? 1 : 2` inset.
+        */}
+      <box flexDirection="column" flexGrow={1} minHeight={0} width="100%" minWidth={0} paddingLeft={compact ? 1 : 2} paddingRight={compact ? 1 : 2}>
       {empty && !reviewOpen && !leftSidebarNode ? (
         /*
          * The centered start screen: logo + captions + the COMPOSER + a dim
@@ -5851,13 +6144,17 @@ export function ChatScreen({
           <box flexDirection="column" flexGrow={1} minHeight={0} width={heroContentWidth} minWidth={0} alignItems="center">
             <box flexDirection="column" flexGrow={1} minHeight={0} width="100%" minWidth={0} justifyContent="flex-end" alignItems="center">
               {showMasthead ? (
+                <box flexDirection="column" width="100%" minWidth={0} flexShrink={0} alignItems="center"
+                  onSizeChange={function () { setHeroMastheadRows(this.height); }}>
                 <Masthead
                   showTerminalMark={showTerminalMark && heroContentWidth >= TERMINAL_BLOCK_LOGO_WIDTH}
+                  showMascot={ledgerRows >= LEDGER_MARK_ROWS + ZERO_HEIGHT + 1}
                   showTagline={showEmptyStateTagline}
                   contentWidth={heroContentWidth}
                   logoFrameGrid={logoFrameGrid}
                   theme={theme}
                 />
+                </box>
               ) : null}
               {workingIndicator}
               {startupError && !heroOverlayOpen ? (
@@ -5868,14 +6165,15 @@ export function ChatScreen({
               ) : null}
               {heroOverlaysNode}
             </box>
-            <box flexDirection="column" width={heroComposerWidth} minWidth={0} flexShrink={0}>
+            <box flexDirection="column" width={heroComposerWidth} minWidth={0} flexShrink={0}
+              onSizeChange={function () { setHeroComposerRows(this.height); }}>
               {heroComposerNode}
             </box>
             <box flexShrink={0} minWidth={0} marginTop={1}>
               {keyHintsLength(heroHintPairs, " · ") <= heroContentWidth ? (
                 <KeyHints pairs={heroHintPairs} theme={theme} />
               ) : (
-                <text fg={MUTED}>{fitTuiText("/connect · /resume · ctrl+p", heroContentWidth)}</text>
+                <text fg={MUTED}>{fitLegend(heroContentWidth, "/connect · /resume · [⌃P]")}</text>
               )}
             </box>
             <box height={heroBottomSpacer} flexShrink={0} minWidth={0} />
@@ -5930,6 +6228,7 @@ export function ChatScreen({
             </box>
           ) : <text fg={MUTED}>{fitTuiText(statusBarText, statusContentWidth)}</text>}
         </box>
+      </box>
       {/*
         * The copy-on-highlight toast. Positioned absolutely with a high
         * zIndex (see toast.tsx), so it floats over the transcript without

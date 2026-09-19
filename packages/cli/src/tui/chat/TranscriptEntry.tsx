@@ -608,7 +608,7 @@ export function renderFold(
   // (its turn is not `activeTurn`) stays static muted, exactly as before. Gated
   // on BOTH the turn match and a numeric `shimmerFrame`, so reduceMotion /
   // settled turns keep the flat summary.
-  const summaryFitted = fitTuiText(`${summary} · ${interaction?.onToggle ? "click or " : ""}ctrl+r to expand`, Math.max(1, maxWidth - 2));
+  const summaryFitted = fitTuiText(`${summary} · ${interaction?.onToggle ? "click or " : ""}[⌃R] to expand`, Math.max(1, maxWidth - 2));
   const shimmerFold =
     item.turn === display.activeTurn && typeof display.shimmerFrame === "number";
   // A collapsed fold is clickable: mousing down toggles its turn into the

@@ -4,7 +4,7 @@ import stringWidth from "string-width";
 import type { BorderSides } from "@opentui/core";
 import type { Theme } from "../theme-context.js";
 import type { TuiSettings } from "../settings.js";
-import { fitTuiText, sanitizeComposerText } from "../text.js";
+import { fitLegend, fitTuiText, sanitizeComposerText } from "../text.js";
 
 /** Horizontal rules frame input without turning it into another card. */
 const RAIL_SIDES: BorderSides[] = ["top", "bottom"];
@@ -26,6 +26,34 @@ export const COMPOSER_MAX_ROWS = 8;
 
 
 const GRAPHEMES = new Intl.Segmenter(undefined, { granularity: "grapheme" });
+
+/**
+ * Paste chips ({@link ../chat/paste-store}) are literal text in the composer
+ * buffer, but reading them as distinct helps: this matches a WHOLE chip marker
+ * that falls within a single visual row. A marker split across a soft-wrap
+ * boundary simply renders plain — correctness never depends on the colour.
+ */
+const COMPOSER_CHIP_RE = /\[Pasted text #\d+ · [^\]]*\]|\[Image #\d+\]/g;
+
+/**
+ * Split one visual row into spans, colouring any complete chip marker with
+ * `chipColor` and leaving the rest as `textColor`. Returns a single plain span
+ * when the row holds no marker, so the common case is untouched.
+ */
+function renderComposerRow(line: string, textColor: string, chipColor: string): React.ReactNode[] {
+  const parts: React.ReactNode[] = [];
+  let last = 0;
+  let key = 0;
+  COMPOSER_CHIP_RE.lastIndex = 0;
+  let match: RegExpExecArray | null;
+  while ((match = COMPOSER_CHIP_RE.exec(line)) !== null) {
+    if (match.index > last) parts.push(<span key={key++} fg={textColor}>{line.slice(last, match.index)}</span>);
+    parts.push(<span key={key++} fg={chipColor}>{match[0]}</span>);
+    last = match.index + match[0].length;
+  }
+  if (last < line.length) parts.push(<span key={key++} fg={textColor}>{line.slice(last)}</span>);
+  return parts;
+}
 
 /**
  * Clamp ghost (autosuggestion) text to at most `cells` display columns, cutting
@@ -175,7 +203,7 @@ export function ComposerInput({
    */
   suggestion?: string | null;
 }) {
-  const { TEXT, MUTED } = theme;
+  const { TEXT, MUTED, PRIMARY } = theme;
   if (composing) {
     const rows = composerContentRows(sanitizeComposerText(text).replace(/\t/g, "    "), textWidth);
     const cursor = composerCursorGlyph(active);
@@ -184,11 +212,12 @@ export function ComposerInput({
         {rows.map((line, i) => {
           const isLast = i === rows.length - 1;
           // Sanitize before wrapping, and expand tabs for display only. The
-          // submitted draft retains its original whitespace.
+          // submitted draft retains its original whitespace. Paste chips are
+          // coloured so they read as distinct tokens; plain text is unchanged.
           if (!isLast) {
             return (
               <text key={`composer-line-${i}`} fg={TEXT}>
-                {line}
+                {renderComposerRow(line, TEXT, PRIMARY)}
               </text>
             );
           }
@@ -199,7 +228,8 @@ export function ComposerInput({
           const ghost = suggestion ? truncateGhostText(suggestion, remaining) : "";
           return (
             <text key={`composer-line-${i}`} fg={TEXT} wrapMode="none">
-              {`${line}${cursor}`}
+              {renderComposerRow(line, TEXT, PRIMARY)}
+              <span fg={TEXT}>{cursor}</span>
               {ghost ? <span fg={MUTED}>{ghost}</span> : null}
             </text>
           );
@@ -207,7 +237,7 @@ export function ComposerInput({
       </box>
     );
   }
-  return <text fg={placeholderTone ?? MUTED}>{fitTuiText(placeholder, textWidth)}</text>;
+  return <text fg={placeholderTone ?? MUTED}>{fitLegend(textWidth, placeholder)}</text>;
 }
 
 /**

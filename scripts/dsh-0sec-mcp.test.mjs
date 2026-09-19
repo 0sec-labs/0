@@ -114,7 +114,7 @@ test("runner gives DSH a private patch and removes it after the one-shot", async
   const entrypoint = join(fixture, "0sec.js");
   const scope = join(fixture, "scope.json");
   const observed = join(fixture, "observed.json");
-  const dsh = join(fixture, "dsh");
+  const dsh = join(fixture, "dsh.mjs");
 
   try {
     await writeFile(entrypoint, "");

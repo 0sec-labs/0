@@ -6,6 +6,7 @@
  */
 
 import type { AgentInjectionVector } from "@0sec/shared";
+import type { JevUsage } from "@0sec/shared";
 
 /** The injection vector a behaviour rides in — i.e. which untrusted document the
  * target ingests and which we control. */
@@ -113,6 +114,47 @@ export interface BreakRecord {
   transcriptExcerpt: string;
 }
 
+/** Advisory Jev attempt-feedback labels for the next generation's strategy
+ *  selection. Never authoritative — the regex/LLM judge and action oracle
+ *  alone determine broken/not-broken. */
+export type JevAttemptFeedbackLabel =
+  | "explicit-refusal"
+  | "partial-compliance"
+  | "attempted-prohibited"
+  | "ambiguous";
+
+/** Per-attempt advisory evaluation from the Jev model. */
+export interface JevAttemptFeedback {
+  /** The intermediate label assigned to this attempt. */
+  label: JevAttemptFeedbackLabel;
+  /** Model-assigned probability of this label (0..1). */
+  probability: number;
+  /** Always advisory — never changes broken/not-broken by itself. */
+  readonly advisory: true;
+  /** Per-evaluation token usage; excluded from main-model usage reporting. */
+  usage?: JevUsage;
+  /** True when the Jev provider could not be reached or timed out. */
+  unavailable?: boolean;
+}
+
+/** Per-attempt report produced by the campaign engine. */
+export interface AttemptReport {
+  /** The model that received this attempt. */
+  model?: string;
+  /** Strategy chain that generated the payload. */
+  strategies: string[];
+  /** Whether the authoritative judge found a break. */
+  broken: boolean;
+  /** Judge evidence (matched proof or explanation). */
+  evidence?: string;
+  /** 1-based attempt index within the run. */
+  index: number;
+  /** Advisory Jev attempt feedback (intermediate label for next gen). */
+  jevFeedback?: JevAttemptFeedback;
+  /** Whether the attempt was skipped due to a prior break on this model. */
+  skipped: boolean;
+}
+
 export interface CampaignResult {
   behaviorId: string;
   target: string;
@@ -120,4 +162,6 @@ export interface CampaignResult {
   breaks: BreakRecord[];
   /** Unique broken models (when the target fans out across models). */
   brokenModels: string[];
+  /** Per-attempt reports including advisory Jev feedback. */
+  attemptReports: AttemptReport[];
 }

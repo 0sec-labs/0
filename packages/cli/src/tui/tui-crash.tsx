@@ -413,7 +413,7 @@ function CrashPanel({ crash, onRestart, onQuit }: { crash: CrashInfo; onRestart:
   });
 
   const footerHint = view === "feedback"
-    ? "enter send · esc back · ctrl+c quit"
+    ? "[⏎] send · [esc] back · [⌃C] quit"
     : view === "submitting"
       ? "submitting feedback…"
       : "r restart · f feedback · q quit";
@@ -421,11 +421,9 @@ function CrashPanel({ crash, onRestart, onQuit }: { crash: CrashInfo; onRestart:
   return (
     <ShellFrame view="crash">
       <box
-        border
-        borderColor={theme.ERROR}
         backgroundColor={theme.PANEL}
-        paddingX={1}
-        paddingY={0}
+        paddingX={2}
+        paddingY={1}
         width="100%"
         flexShrink={0}
         minWidth={0}

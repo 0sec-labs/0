@@ -242,7 +242,7 @@ export function HomeScreen({
         <Cells width={width} fg={notice ? theme.WARNING : planTone}>
           {notice ?? planText}
         </Cells>
-        <FooterBar hint="enter run · ctrl+p workspace · ctrl+c exit" status={evolutionStatus ? tuiLensEvolutionStatusLabel(evolutionStatus) : undefined} />
+        <FooterBar hint="[⏎] run · [⌃P] workspace · [⌃C] exit" status={evolutionStatus ? tuiLensEvolutionStatusLabel(evolutionStatus) : undefined} />
       </box>
     </ShellFrame>
   );

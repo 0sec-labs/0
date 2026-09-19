@@ -555,7 +555,7 @@ export function modelDetailLines(
     const contextText = formatContextTokens(contextTokens);
     push(`${ICON_CONTEXT} Context: ${contextText}`, contextText === "unknown" ? "muted" : "text");
     if (row.active) push("Currently active", "accent");
-    else push("Enter stages this model for the next audit", "accent");
+    else push("Enter applies this model", "accent");
   }
 
   separate();
@@ -703,8 +703,8 @@ export function hostedDetailLines(
  * draws no header, no horizontal padding and no top padding —
  * `useSurfaceDimensions()` is then the full panel interior and no shell chrome
  * comes off it. What the route does put in that interior alongside this
- * screen's body is exactly two rows: the "selections apply to the next audit"
- * staging line above it, and a `FooterBar` below it which is exactly one row
+ * screen's body is exactly two rows: the context line that names what the next
+ * Enter applies above it, and a `FooterBar` below it which is exactly one row
  * in a dialog. Reserving fewer paints the list through the footer, and
  * OpenTUI does not clip (see PRIMITIVES.md).
  *
@@ -872,7 +872,7 @@ export function modelDialogTitle({ scope, providerId, showAll = false, cloudMerg
   if (scope === "unknown") return `${head} · no connection`;
   const connection = sanitizeTuiText(providerId ?? "");
   const source = cloudMerged
-    ? `${connection.length > 0 ? connection : "BYOK"} + 0sec Cloud`
+    ? `${connection.length > 0 ? connection : "BYOK"} + 0cloud`
     : connection.length > 0 ? connection : "BYOK";
   return `${head} · ${source} · ${showAll ? "all synced" : "curated"}`;
 }
@@ -912,27 +912,29 @@ export interface ModelDialogHintInput {
 export function modelDialogHint({ scope, role = null, hasFilter = false, canReload }: ModelDialogHintInput): string {
   const reload = canReload ?? scope === "hosted";
   return [
-    "↑↓ model",
-    "enter stage",
-    "ctrl+←/→ target",
-    "ctrl+s single",
-    role !== null ? "ctrl+backspace inherit" : undefined,
-    scope === "byok" ? "tab curated/all" : undefined,
-    reload ? "ctrl+r reload" : undefined,
-    hasFilter ? "ctrl+u clear" : "type to filter",
-    hasFilter ? "esc clear" : "esc back",
+    "[↑↓] model",
+    "[⏎] apply",
+    "[⌃←→] target",
+    "[⌃S] single",
+    role !== null ? "[⌃⌫] inherit" : undefined,
+    scope === "byok" ? "[⇥] curated/all" : undefined,
+    reload ? "[⌃R] reload" : undefined,
+    hasFilter ? "[⌃U] clear" : "type to filter",
+    hasFilter ? "[esc] clear" : "[esc] back",
   ]
     .filter((part): part is string => part !== undefined)
     .join(" · ");
 }
 
 /**
- * The "what am I about to change" line under the title.
+ * The one compact "what am I about to change" line under the title.
  *
  * It states the target (the parent model, or one role) and the model that
  * target resolves to today, and it says outright when a role has no assignment
  * of its own — an unconfigured role inherits, and showing the inherited id
- * without that word would read as an assignment that was never made.
+ * without that word would read as an assignment that was never made. Kept to a
+ * single short `Target: <who> → <model>` phrase: the key that changes the
+ * target lives in the footer, not here.
  */
 export function modelTargetLine(
   role: string | null,
@@ -941,15 +943,15 @@ export function modelTargetLine(
   symbols: SymbolTable = DEFAULT_SYMBOLS,
   singleModel = false,
 ): string {
-  const target = role === null ? "parent (base) model" : `${sanitizeTuiText(role)} agent`;
+  const target = role === null ? "parent" : sanitizeTuiText(role);
   const model = sanitizeTuiText(activeModel ?? "");
   const value = model.length > 0 ? model : "not selected";
-  const inherits = role !== null && !assigned ? " (inherits the parent)" : "";
-  // When single-model is on, a role pick is staged but the runtime ignores it
-  // (llm-api pins every role to the base model), so the focus line says so
-  // outright rather than letting Enter look like it took effect.
-  const inert = singleModel && role !== null ? " · single-model on: this pick is inert" : "";
-  return `${symbols.fieldModel} Selecting for ${target} → ${value}${inherits}${inert}`;
+  const inherits = role !== null && !assigned ? " (inherits parent)" : "";
+  // When single-model is on, a role pick applies but the runtime ignores it
+  // (llm-api pins every role to the base model), so the line says so outright
+  // rather than letting Enter look like it took effect.
+  const inert = singleModel && role !== null ? " · single-model on (role picks inert)" : "";
+  return `${symbols.fieldModel} Target: ${target} → ${value}${inherits}${inert}`;
 }
 
 /**
@@ -974,11 +976,11 @@ export interface AgentRosterInput {
   roles: readonly (string | null)[];
   /** The parent/base model the session runs, when there is one. */
   parentModel?: string;
-  /** Per-role assignments staged for the next audit. */
+  /** Per-role assignments applied to the current audit. */
   agentModels?: Readonly<Record<string, string>>;
   /** The target currently in focus, bracketed in the roster. */
   activeRole: string | null;
-  /** Whether single-model mode is staged, which makes role picks inert. */
+  /** Whether single-model mode is active, which makes role picks inert. */
   singleModel?: boolean;
 }
 
@@ -1023,7 +1025,7 @@ export function agentRosterLines(
 /** The single-model policy line, stating the policy and how to change it. */
 export function singleModelLine(enabled: boolean): string {
   return enabled
-    ? "Single model: on — role overrides are inactive for the next audit"
+    ? "Single model: on — role overrides are inactive"
     : "Single model: off — explicit role overrides are honoured";
 }
 
@@ -1036,10 +1038,10 @@ export type ModelMode = "browse" | "filter";
 /** Contextual shortcuts for the model picker. */
 export function modelFooterHint(mode: ModelMode, hasFilter = false): string {
   return [
-    "↑↓ select",
-    "enter select for new chat",
-    "tab curated/all",
-    mode === "filter" || hasFilter ? "esc clear" : "esc back",
+    "[↑↓] select",
+    "[⏎] select for new chat",
+    "[⇥] curated/all",
+    mode === "filter" || hasFilter ? "[esc] clear" : "[esc] back",
   ].join(" · ");
 }
 

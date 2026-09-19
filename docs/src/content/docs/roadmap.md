@@ -14,22 +14,27 @@ Use these guides for current instructions. The dated plans below preserve earlie
 | Findings and triage | [Commands](/commands/#findings) and [Finding Triage](/triage/) | Triage state is not proof that a vulnerability was reproduced or fixed. |
 | Diff-aware review and CI | [Integrations](/integrations/) and [GitHub CI](/ci/github-action/) | Local/scripted CI support does not imply a published composite action. |
 | Deterministic verification | [Verification Results](/verification-result/) | Replay requires executable inputs and valid setup; it does not cover every candidate automatically. |
-| Research adapters | [Research Workflows](/research-workflows/) | Imported evidence is distinct from execution performed by 0sec. |
+| Research adapters | [Research Workflows](/research-workflows/) | Imported evidence is distinct from execution performed by 0. |
 
 
 ## 0cloud
 
-**0cloud remains in development.** Managed testing has no public onboarding or launch date.
-The separate **0sec Cloud** inference service follows the availability described in
-[Getting started](/getting-started/#hosted-models-draft).
+**0cloud remains in development.** The complete self-serve managed onboarding
+path is not yet qualified. [Contact the team](https://0.security/contact/?intent=contact)
+to discuss managed work; access, scope, budget and deliverables must be agreed
+separately. Proposed onboarding examples are not a connected setup flow.
+
+[Hosted inference](/getting-started/#hosted-models) has its own availability
+and account-compatibility boundary. Signing in does not establish hosted spend,
+managed execution or PR-review entitlement.
 
 ## Desktop
 
 **Desktop remains in development**, without a public download. Use the
 [Console](/console/) for terminal work.
 
-Documentation follows the source checkout. Check `0sec --version` and
-`0sec <command> --help` against your installed release before using newly
+Documentation follows the source checkout. Check `0 --version` and
+`0 <command> --help` against your installed release before using newly
 documented flags.
 
 Priorities: reliable execution, usable evidence, and orchestration.
@@ -108,7 +113,7 @@ See [TypeScript/Rust Boundary](/research/typescript-rust-boundary/).
 
 ## Implemented, pending release
 
-- **Isolated improvement workers and promotion canaries.** The `0sec evolve`
+- **Isolated improvement workers and promotion canaries.** The `0 evolve`
   CLI provides config-driven source candidate
   proposals with explicit `allowModelSourceAccess` consent, three-lane
   evaluation (development/held-out/negative-control) in network-none Docker
@@ -117,14 +122,14 @@ See [TypeScript/Rust Boundary](/research/typescript-rust-boundary/).
   artifact publication. Configured `autoPromote` controls promotion autonomy.
   Candidates execute as sandboxed versioned workers.
   [Improvement Plane](/improvement-plane/).
-- **Operational feedback curation.** `0sec evolve feedback capture/approve/status/release`
+- **Operational feedback curation.** `0 evolve feedback capture/approve/status/release`
   for evidence-backed observations with operator-curated `ValidationFixture`
   arrays (positives, heldOut, negativeControls), source access consent, and
   content-digest drift detection.
 - **Skill/router artifact bridge.** `artifact-bridge.mjs` authorizes candidate
   artifacts against the evolution registry before skill-refine or active-learning
   loops may promote them.
-- `0sec lens-synth --status` and `--rollback` for inspecting and retiring
+- `0 lens-synth --status` and `--rollback` for inspecting and retiring
   promoted overlay lenses.
 
 ## Recently shipped (April 2026)
@@ -194,7 +199,7 @@ restarting.
 **Why:** the repo already persists `agent_sessions` and `pipeline_events`;
 restarting long agentic workflows is expensive.
 
-**Current implementation:** `0sec resume <scan-id>` and journal continuation
+**Current implementation:** `0 resume <scan-id>` and journal continuation
 exist. The remaining goal is reliable recovery across all workflows. Read
 [Scan Workflows](/scan-workflows/) for supported routing, state requirements,
 and caveats.

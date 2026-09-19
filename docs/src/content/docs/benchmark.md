@@ -3,7 +3,7 @@ title: Benchmark
 description: Public security benchmark results, test conditions, and reproduction commands.
 ---
 
-Published vulnerability disclosures are listed at [0.security](https://0.security). The CTF results below measure performance on smaller, controlled challenges. Compare scores using the same benchmark fork, model, turn cap, and retry protocol.
+Published vulnerability disclosures are listed at [0](https://0.security). The CTF results below measure performance on smaller, controlled challenges. Compare scores using the same benchmark fork, model, turn cap, and retry protocol.
 
 <span id="where-0sec-stands-honest-condition-specific"></span>
 ## Results
@@ -20,14 +20,14 @@ The XBOW headline uses the gpt-5.4 cohort (93/95). The wider retained-artifact a
 
 ## Running the canonical harness
 
-`0sec bench run` is the single benchmark orchestrator. Integrations own only suite-specific target lifecycle and official grading; every run still produces the same manifest, attempt receipts, scorecard, tournament, and evidence contract.
+`0 bench run` is the single benchmark orchestrator. Integrations own only suite-specific target lifecycle and official grading; every run still produces the same manifest, attempt receipts, scorecard, tournament, and evidence contract.
 
 ```bash
 # Core web/source-audit corpus.
-0sec bench run --integration core --variants variants.json
+0 bench run --integration core --variants variants.json
 
 # XBOW: Docker lifecycle + fresh per-attempt flag, scored by the shared oracle.
-0sec bench run \
+0 bench run \
   --integration xbow \
   --xbow-path /path/to/xbow \
   --variants variants.json \
@@ -36,7 +36,7 @@ The XBOW headline uses the gpt-5.4 cohort (93/95). The wider retained-artifact a
   --schedule case-major
 
 # CyberGym: official differential oracle, strict one graded submit per task.
-0sec bench run \
+0 bench run \
   --integration cybergym \
   --cybergym-harness /path/to/cybergym \
   --cybergym-subset results/cybergym-fair-v1.subset.txt \
@@ -49,7 +49,7 @@ Cybench, npm audit, AutoPenBench, and HarmBench retain their specialized suite c
 
 ## Related
 
-- **[0.security](https://0.security)**
+- **[0](https://0.security)**
 - [Methodology](/methodology/) — per-attempt rate, Wilson CI, single-model caveats
 - [XBOW Analysis](/research/xbow-analysis/) — how the XBOW score is built, and its limits
 - [Competitive Landscape](/research/competitive-landscape/) — where other agents sit, briefly

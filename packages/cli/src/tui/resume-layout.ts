@@ -562,18 +562,18 @@ export function resumeFooterHint(
 
   switch (mode) {
     case "filter":
-      return "type to filter · enter open · esc cancel · backspace delete a character";
+      return "type to filter · [⏎] open · [esc] cancel · [⌫] delete a character";
     case "confirm-delete":
-      return "del confirm delete · esc cancel";
+      return "[del] confirm delete · [esc] cancel";
     default:
       return [
-        "↑↓",
-        hasSessions ? "enter open" : undefined,
-        highlightProtected ? `${ICON_PROTECTED} del protected` : "del delete",
-        "/ filter",
+        "[↑↓]",
+        hasSessions ? "[⏎] open" : undefined,
+        highlightProtected ? `${ICON_PROTECTED} [del] protected` : "[del] delete",
+        "[/] filter",
         `tab ${scope === "project" ? "all" : "project"}`,
         count,
-        hasFilter ? "esc clear" : "esc back",
+        hasFilter ? "[esc] clear" : "[esc] back",
       ]
         .filter((part): part is string => part !== undefined)
         .join(" · ");

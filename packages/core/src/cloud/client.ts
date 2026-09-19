@@ -15,6 +15,11 @@ export class CloudError extends Error {
     message: string,
     readonly status?: number,
     readonly path?: string,
+    /** The gateway's machine error code from the `{error:{code}}` body, when present
+     * (e.g. `inference_disabled`, `provider_unavailable`, `billing_unavailable`,
+     * `insufficient_funds`) — lets a caller tell a deliberate service gate from an
+     * outage. */
+    readonly code?: string,
   ) {
     super(message);
     this.name = "CloudError";
@@ -85,27 +90,218 @@ export interface InferenceModelsResponse {
   data: InferenceModel[];
 }
 
-/** Availability reported by the service for one Autumn credit pool. */
-export interface InferenceCreditBalance {
-  featureId: string;
-  granted: number | null;
-  remaining: number;
-  remainingPercent: number | null;
-  /** Unix milliseconds; only the earliest balance source may reset then. */
-  nextResetAt: number | null;
-}
-
-/** Account balance from GET /api/inference/account */
-export interface InferenceAccountResponse {
-  remainingUsd: number;
-  currency: "USD";
-  credits: InferenceCreditBalance | null;
-}
-
 /** Usage metadata from GET /api/inference/usage */
 export interface InferenceUsageResponse {
   requests: Record<string, unknown>[];
 }
+
+// ── Credit account types (v1 direct /account DTO) ──
+
+/**
+ * Customer credit account from GET /api/inference/account.
+ *
+ * All CREDIT NANO fields are decimal integer strings or `null`
+ * (numeric(30,0) on the server). No client-side Number coercion.
+ * The caller preserves them as-is for display using BigInt/string
+ * operations.
+ *
+ * Authenticated `disabled`/`unavailable`/`restricted` returns HTTP 200
+ * with `state`/`reason` and nullable amounts. A missing, unknown, or
+ * malformed response is `null` — not an auth error. HTTP 401/403 still
+ * throw the existing typed errors.
+ */
+export interface CreditAccount {
+  schemaVersion: "credits-v1";
+  snapshotAt: string;
+  policyVersion: string;
+  scope: { orgId: string };
+  state: "ready" | "disabled" | "unavailable" | "restricted";
+  reason: string | null;
+  free: CreditAccountFree;
+  subscription: CreditAccountSubscription;
+  prepaid: CreditAccountPrepaid;
+  purchase: CreditAccountPurchase;
+  admission: CreditAccountAdmission;
+}
+
+export interface CreditAccountFree {
+  state:
+    | "unverified"
+    | "ineligible"
+    | "eligible_unclaimed"
+    | "active"
+    | "expired"
+    | "revoked"
+    | "unresolved";
+  claimableCreditNanos: string | null;
+  spendableCreditNanos: string | null;
+  heldCreditNanos: string | null;
+  resetAt: string | null;
+}
+
+export interface CreditAccountSubscriptionWindow {
+  kind: "monthly" | "weekly" | "five_hour";
+  limitCreditNanos: string | null;
+  settledCreditNanos: string | null;
+  heldCreditNanos: string | null;
+  availableCreditNanos: string | null;
+  resetsAt: string;
+}
+
+export interface CreditAccountSubscription {
+  state: "none" | "active" | "inactive_verified" | "expired" | "revoked" | "unresolved";
+  priceCents: 1500;
+  periodStart: string | null;
+  periodEnd: string | null;
+  windows: CreditAccountSubscriptionWindow[];
+}
+
+export interface CreditAccountPrepaid {
+  spendableCreditNanos: string | null;
+  heldCreditNanos: string | null;
+  settledDeficitCreditNanos: string | null;
+  holdShortfallCreditNanos: string | null;
+  consentEnabled: boolean;
+}
+
+export interface CreditAccountPurchasePreset {
+  principalCents: number;
+  creditNanos: string;
+}
+
+export interface CreditAccountPurchase {
+  enabled: boolean;
+  presets: CreditAccountPurchasePreset[];
+  customMinCents: number;
+  customMaxCents: number;
+  stepCents: 100;
+  currency: "usd";
+}
+
+export interface CreditAccountAdmission {
+  eligible: boolean;
+  reason: string | null;
+}
+
+/**
+ * Bounded runtime type guard for the CreditAccount v1 direct wire shape.
+ *
+ * Checks the top-level discriminator (`schemaVersion === "credits-v1"`),
+ * structural fields, and credit-nano type discipline (string or null).
+ * Unrecognised / legacy / structurally invalid payloads return `false`,
+ * which surfaces as a `null` account — never an auth failure.
+ */
+function isCreditAccount(raw: unknown): raw is CreditAccount {
+  if (!raw || typeof raw !== "object") return false;
+  const obj = raw as Record<string, unknown>;
+
+  // ── Discriminator — reject legacy and unknown schemas ──
+  if (obj.schemaVersion !== "credits-v1") return false;
+
+  // ── Required top-level fields ──
+  if (!isUtcDate(obj.snapshotAt)) return false;
+  if (typeof obj.policyVersion !== "string") return false;
+
+  // ── Scope ──
+  if (!obj.scope || typeof obj.scope !== "object") return false;
+  if (typeof (obj.scope as Record<string, unknown>).orgId !== "string") return false;
+
+  // ── State ──
+  if (typeof obj.state !== "string") return false;
+  if (!["ready", "disabled", "unavailable", "restricted"].includes(obj.state)) return false;
+
+  // ── Reason (string or null) ──
+  if (obj.reason !== null && typeof obj.reason !== "string") return false;
+
+  // ── Section objects ──
+  if (!obj.free || typeof obj.free !== "object") return false;
+  if (!obj.subscription || typeof obj.subscription !== "object") return false;
+  if (!obj.prepaid || typeof obj.prepaid !== "object") return false;
+  if (!obj.purchase || typeof obj.purchase !== "object") return false;
+  if (!obj.admission || typeof obj.admission !== "object") return false;
+
+  const free = obj.free as Record<string, unknown>;
+  const sub = obj.subscription as Record<string, unknown>;
+  const prepaid = obj.prepaid as Record<string, unknown>;
+  const purchase = obj.purchase as Record<string, unknown>;
+
+  // ── free ──
+  if (typeof free.state !== "string") return false;
+  if (
+    !["unverified", "ineligible", "eligible_unclaimed", "active", "expired", "revoked", "unresolved"].includes(
+      free.state as string,
+    )
+  ) return false;
+  if (!isNanoStringOrNull(free.claimableCreditNanos)) return false;
+  if (!isNanoStringOrNull(free.spendableCreditNanos)) return false;
+  if (!isNanoStringOrNull(free.heldCreditNanos)) return false;
+  if (free.resetAt !== null && !isUtcDate(free.resetAt)) return false;
+
+  // ── subscription ──
+  if (typeof sub.state !== "string") return false;
+  if (!["none", "active", "inactive_verified", "expired", "revoked", "unresolved"].includes(sub.state as string)) return false;
+  if (sub.priceCents !== 1500) return false;
+  if (sub.periodStart !== null && !isUtcDate(sub.periodStart)) return false;
+  if (sub.periodEnd !== null && !isUtcDate(sub.periodEnd)) return false;
+  if (!Array.isArray(sub.windows)) return false;
+  for (const w of sub.windows as unknown[]) {
+    if (!w || typeof w !== "object") return false;
+    const win = w as Record<string, unknown>;
+    if (typeof win.kind !== "string") return false;
+    if (!["monthly", "weekly", "five_hour"].includes(win.kind as string)) return false;
+    if (!isNanoStringOrNull(win.limitCreditNanos)) return false;
+    if (!isNanoStringOrNull(win.settledCreditNanos)) return false;
+    if (!isNanoStringOrNull(win.heldCreditNanos)) return false;
+    if (!isNanoStringOrNull(win.availableCreditNanos)) return false;
+    if (!isUtcDate(win.resetsAt)) return false;
+  }
+
+  // ── prepaid ──
+  if (!isNanoStringOrNull(prepaid.spendableCreditNanos)) return false;
+  if (!isNanoStringOrNull(prepaid.heldCreditNanos)) return false;
+  if (!isNanoStringOrNull(prepaid.settledDeficitCreditNanos)) return false;
+  if (!isNanoStringOrNull(prepaid.holdShortfallCreditNanos)) return false;
+  if (typeof prepaid.consentEnabled !== "boolean") return false;
+
+  // ── purchase ──
+  if (typeof purchase.enabled !== "boolean") return false;
+  if (!isOfferCents(purchase.customMinCents)) return false;
+  if (!isOfferCents(purchase.customMaxCents)) return false;
+  if (purchase.stepCents !== 100) return false;
+  if (purchase.currency !== "usd") return false;
+  if (!Array.isArray(purchase.presets)) return false;
+  for (const p of purchase.presets as unknown[]) {
+    if (!p || typeof p !== "object") return false;
+    const preset = p as Record<string, unknown>;
+    if (!isOfferCents(preset.principalCents)) return false;
+    if (typeof preset.creditNanos !== "string" || !isNanoStringOrNull(preset.creditNanos)) return false;
+  }
+
+  // ── admission ──
+  const admission = obj.admission as Record<string, unknown>;
+  if (typeof admission.eligible !== "boolean") return false;
+  if (admission.reason !== null && typeof admission.reason !== "string") return false;
+
+  return true;
+}
+
+/** Canonical unsigned numeric(30,0) text, without Number coercion. */
+function isNanoStringOrNull(v: unknown): v is string | null {
+  if (v === null) return true;
+  if (typeof v !== "string") return false;
+  return /^(0|[1-9]\d{0,29})$/.test(v);
+}
+
+function isOfferCents(value: unknown): value is number {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
+}
+
+function isUtcDate(value: unknown): value is string {
+  return typeof value === "string"
+    && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$/.test(value)
+    && Number.isFinite(Date.parse(value));
+}
+
 function healthPath(host: string): string {
   try {
     const hostname = new URL(host).hostname.toLowerCase();
@@ -149,30 +345,73 @@ export class CloudClient {
   }
 
   /**
-   * Fetch the organization's hosted inference credit availability. The service
-   * calculates the percentage from Autumn's current pool; holds reduce availability.
-   * Older gateways without percentage metadata remain explicitly unavailable.
+   * Fetch the organization's credit account — reported credit balances,
+   * subscription windows, prepaid spends, and purchase presets.
+   *
+   * Returns `null` when the response is a recognised HTTP 200 (customer is
+   * authenticated) but the payload is missing, legacy, or structurally
+   * unrecognised — not an auth failure. HTTP 401/403 still throw the
+   * existing typed errors so the caller can distinguish a credential
+   * problem from unsupported credit data.
+   *
+   * All credit nano amounts are decimal integer strings (no Number
+   * coercion); the caller preserves them for exact display. The server's
+   * `state` field carries readiness independently of amount presence.
    */
-  async getInferenceAccount(): Promise<InferenceAccountResponse> {
-    const account = await this.getJson<InferenceAccountResponse>("/api/inference/account");
-    const credits = account.credits;
-    if (!credits || typeof credits !== "object" ||
-        typeof credits.featureId !== "string" || !credits.featureId.trim() ||
-        typeof credits.remaining !== "number" || !Number.isFinite(credits.remaining) || credits.remaining < 0 ||
-        (credits.granted !== null && (typeof credits.granted !== "number" || !Number.isFinite(credits.granted) || credits.granted < 0))) {
-      return { ...account, credits: null };
-    }
-    // Validate, but never reconstruct a quota or percentage on the client.
-    const remainingPercent = typeof credits.remainingPercent === "number" &&
-      Number.isFinite(credits.remainingPercent) && credits.remainingPercent >= 0 && credits.remainingPercent <= 100 &&
-      credits.granted !== null && credits.granted > 0 && credits.remaining <= credits.granted
-      ? credits.remainingPercent : null;
-    const nextResetAt = typeof credits.nextResetAt === "number" &&
-      Number.isSafeInteger(credits.nextResetAt) && credits.nextResetAt > 0 && credits.nextResetAt <= 8.64e15
-      ? credits.nextResetAt : null;
-    return { ...account, credits: {
-      featureId: credits.featureId, granted: credits.granted, remaining: credits.remaining, remainingPercent, nextResetAt,
-    } };
+  async getInferenceAccount(): Promise<CreditAccount | null> {
+    const raw = await this.getJson<unknown>("/api/inference/account");
+    if (!isCreditAccount(raw)) return null;
+    // Return only the customer contract, including inside arrays. A valid v1
+    // payload must not smuggle private accounting metadata into CLI JSON.
+    const { free, subscription, prepaid, purchase, admission } = raw;
+    return {
+      schemaVersion: raw.schemaVersion,
+      snapshotAt: raw.snapshotAt,
+      policyVersion: raw.policyVersion,
+      scope: { orgId: raw.scope.orgId },
+      state: raw.state,
+      reason: raw.reason,
+      free: {
+        state: free.state,
+        claimableCreditNanos: free.claimableCreditNanos,
+        spendableCreditNanos: free.spendableCreditNanos,
+        heldCreditNanos: free.heldCreditNanos,
+        resetAt: free.resetAt,
+      },
+      subscription: {
+        state: subscription.state,
+        priceCents: subscription.priceCents,
+        periodStart: subscription.periodStart,
+        periodEnd: subscription.periodEnd,
+        windows: subscription.windows.map((window) => ({
+          kind: window.kind,
+          limitCreditNanos: window.limitCreditNanos,
+          settledCreditNanos: window.settledCreditNanos,
+          heldCreditNanos: window.heldCreditNanos,
+          availableCreditNanos: window.availableCreditNanos,
+          resetsAt: window.resetsAt,
+        })),
+      },
+      prepaid: {
+        spendableCreditNanos: prepaid.spendableCreditNanos,
+        heldCreditNanos: prepaid.heldCreditNanos,
+        settledDeficitCreditNanos: prepaid.settledDeficitCreditNanos,
+        holdShortfallCreditNanos: prepaid.holdShortfallCreditNanos,
+        consentEnabled: prepaid.consentEnabled,
+      },
+      purchase: {
+        enabled: purchase.enabled,
+        presets: purchase.presets.map((preset) => ({
+          principalCents: preset.principalCents,
+          creditNanos: preset.creditNanos,
+        })),
+        customMinCents: purchase.customMinCents,
+        customMaxCents: purchase.customMaxCents,
+        stepCents: purchase.stepCents,
+        currency: purchase.currency,
+      },
+      admission: { eligible: admission.eligible, reason: admission.reason },
+    };
   }
 
   /**
@@ -182,6 +421,67 @@ export class CloudClient {
    */
   async getInferenceUsage(): Promise<InferenceUsageResponse> {
     return this.getJson<InferenceUsageResponse>("/api/inference/usage");
+  }
+
+  /**
+   * Generic JSON DELETE helper with the same error mapping as getJson/postJson.
+   * Used by `0sec service disconnect` to remove scan schedules.
+   */
+  async deleteJson<T = unknown>(path: string): Promise<T> {
+    const url = `${this.host}${path}`;
+    let res: Response;
+    try {
+      res = await this.fetchImpl(url, {
+        method: "DELETE",
+        headers: { ...this.headers(), "Content-Type": "application/json" },
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      throw new CloudNetworkError(this.scrub(msg), path);
+    }
+    if (!res.ok) {
+      let code: string | undefined;
+      try {
+        const parsed = (await res.json()) as { error?: { code?: unknown } | string } | null;
+        const raw = typeof parsed?.error === "object" ? parsed.error?.code : undefined;
+        if (typeof raw === "string" && raw.length > 0) code = raw;
+      } catch { /* no / malformed body */ }
+      this.throwForStatus(res.status, path, code);
+    }
+    // 204 No Content is the orchestrator's successful-delete contract
+    // (scan-schedules). res.json() on an empty body throws — treat it as
+    // success with no payload instead of misreporting a completed delete.
+    if (res.status === 204) return undefined as T;
+    return (await res.json()) as T;
+  }
+
+  /**
+   * Generic JSON POST helper with the same error mapping as getJson.
+   * Used by `0sec connect` to enqueue scans and schedules.
+   */
+  async postJson<T = unknown>(path: string, body: unknown): Promise<T> {
+    const url = `${this.host}${path}`;
+    let res: Response;
+    try {
+      res = await this.fetchImpl(url, {
+        method: "POST",
+        headers: { ...this.headers(), "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      throw new CloudNetworkError(this.scrub(msg), path);
+    }
+    if (!res.ok) {
+      let code: string | undefined;
+      try {
+        const parsed = (await res.json()) as { error?: { code?: unknown } | string } | null;
+        const raw = typeof parsed?.error === "object" ? parsed.error?.code : undefined;
+        if (typeof raw === "string" && raw.length > 0) code = raw;
+      } catch { /* no / malformed body */ }
+      this.throwForStatus(res.status, path, code);
+    }
+    return (await res.json()) as T;
   }
 
   /**
@@ -202,8 +502,31 @@ export class CloudClient {
       throw new CloudNetworkError(this.scrub(msg), path);
     }
 
-    this.assertOk(res, path);
+    if (!res.ok) {
+      // The gateway returns a machine code in the body (`{error:{code}}`) — read it
+      // so a deliberate 503 gate (`inference_disabled`) is distinguishable from an
+      // outage. Best-effort: a missing / non-JSON body leaves the code undefined.
+      let code: string | undefined;
+      try {
+        const body = (await res.json()) as { error?: { code?: unknown } } | null;
+        const raw = body?.error?.code;
+        if (typeof raw === "string" && raw.length > 0) code = raw;
+      } catch { /* no / malformed body */ }
+      this.throwForStatus(res.status, path, code);
+    }
     return (await res.json()) as T;
+  }
+
+  /** Throw a typed error for a non-2xx status, carrying the gateway's body `code`. */
+  throwForStatus(status: number, path: string, code?: string): never {
+    if (status === 401) throw new CloudUnauthorizedError(path);
+    if (status === 403) throw new CloudForbiddenError(path);
+    throw new CloudError(
+      `0sec-cloud request failed (HTTP ${status}${code ? ` ${code}` : ""}) on ${path}.`,
+      status,
+      path,
+      code,
+    );
   }
 
   /**

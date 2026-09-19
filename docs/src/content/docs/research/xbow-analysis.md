@@ -1,14 +1,15 @@
 ---
 title: XBOW Analysis
-description: Where 0sec's XBOW score comes from, its caveats, and what the benchmark does and doesn't tell you.
+description: Where 0's XBOW score comes from, its caveats, and what the benchmark does and doesn't tell you.
 ---
 
-XBOW is a web-CTF substrate. A benchmark score is not the product — real disclosed CVEs at **[0.security](https://0.security)** are the proof. This page explains how 0sec's XBOW number is built and where its limits are.
+XBOW is a web-CTF substrate. A benchmark score is not the product — real disclosed CVEs at **[0](https://0.security)** are the proof. This page explains how 0's XBOW number is built and where its limits are.
 
-## How 0sec scores on XBOW, and the caveats
+<span id="how-0sec-scores-on-xbow-and-the-caveats"></span>
+## How 0 scores on XBOW, and the caveats
 
 **93 / 95 = 97.9% black-box on the gpt-5.4 model-specific cohort.**
-Across the 95 XBOW challenges where 0sec has a retained gpt-5.4 attempt within the
+Across the 95 XBOW challenges where 0 has a retained gpt-5.4 attempt within the
 live CI window, 93 are solved, at ~$0.48/run and $5.20/flag. The per-model number is
 the headline because it is a stable single-model solve rate, not a best-of-N union
 over an aging artifact window.
@@ -69,7 +70,7 @@ separate blind-verify step that decides which findings survive.
 
 ## Other benchmarks in scope
 
-| Benchmark | Domain | Scale | 0sec relevance |
+| Benchmark | Domain | Scale | 0 relevance |
 |-----------|--------|-------|----------------|
 | [Cybench](https://github.com/andyzorigin/cybench) | Broad CTF (web/crypto/pwn/rev) | 40 challenges | Scored: 36/40 = 90.0% single-config |
 | [AutoPenBench](https://github.com/lucagioacchini/auto-pen-bench) | Network / CVE pentesting | 33 Docker tasks | Harness built; shell-first maps to its `execute_bash` |
@@ -78,7 +79,7 @@ separate blind-verify step that decides which findings survive.
 
 ## Related
 
-- **[0.security](https://0.security)**
+- **[0](https://0.security)**
 - [Benchmark](/benchmark/)
 - [Methodology](/methodology/)
 - [Competitive Landscape](/research/competitive-landscape/)

@@ -1,0 +1,55 @@
+id: entra-attack-paths
+name: "Entra ID Attack-Path Analysis"
+description: "When to reach for the offline `entra_attack_paths` engine: given an AzureHound export on disk, enumerate paths to Global Administrator, service-principal escalation, consent-grant abuse, owner chains, and guest escalation — files only, no collection, no authentication, no network."
+version: 1
+applicable_roles:
+  - attack
+  - audit
+  - review
+tags:
+  - entra-id
+  - azure-ad
+  - azurehound
+  - global-administrator
+  - service-principal
+  - consent-grant
+  - privilege-escalation
+triggers:
+  - "AzureHound"
+  - "[Gg]lobal [Aa]dministrator"
+  - "service principal"
+  - "consent grant"
+  - "Entra"
+  - "Azure AD"
+estimated_tokens: 600
+content: |
+  ## Entra ID (Azure AD) attack-path analysis (offline)
+
+  When an **AzureHound** export is on disk, use the **`entra_attack_paths`**
+  tool rather than reasoning about the tenant graph by hand. It ingests the
+  AzureHound JSON, builds the directory graph, and runs the path analyzers
+  entirely offline — it never collects, authenticates, or touches the network.
+
+  ### When this applies
+  - A directory of AzureHound `*.json`, or a single AzureHound export.
+  - Questions about paths to **Global Administrator**, **service-principal**
+    escalation, **consent-grant** abuse, owner chains, or guest escalation.
+
+  ### How to drive it
+  - Pass `dir` (a directory) or `file` (a single export).
+  - Optionally pass `owned` (comma-separated object ids already under your
+    control) to make those principals the path sources, and `max_depth` to bound
+    traversal.
+
+  ### Reading the result
+  - `findings[]` are severity-then-shortest-path ordered; each carries a
+    `shortestPath`, path count, affected principals, and remediation.
+  - Check `graph.relationshipsCollected`. **If false, membership/ownership was
+    not collected** — paths that depend on it cannot be computed, and their
+    absence is NOT evidence that none exist. Recommend a fuller AzureHound run.
+
+  ### Contrast with posture
+  - `entra_attack_paths` is OFFLINE graph reasoning over an export.
+  - `entra_posture` is a live, read-only Graph API posture assessment (token in
+    `0SEC_GRAPH_ACCESS_TOKEN`). Use posture for config hygiene; use attack-paths
+    for reachability/escalation.

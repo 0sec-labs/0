@@ -37,7 +37,7 @@ async function runCli(argv: string[]): Promise<void> {
 
 const ORIGINAL_FLAG = process.env["0SEC_FEATURE_CLOUD_SURFACE"];
 
-describe("0sec cloud", () => {
+describe("0cloud", () => {
   let io: ReturnType<typeof captureIO>;
   let dir: string;
   let scopePath: string;

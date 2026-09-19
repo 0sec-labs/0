@@ -15,7 +15,7 @@ Pass `--repo` alongside your target, pointing at the root of the source running
 behind the URL (local checkout, clone, or mounted CI volume):
 
 ```bash
-0sec scan --target http://localhost:8080 --scope ./scope.json --repo ./my-app
+0 scan --target http://localhost:8080 --scope ./scope.json --repo ./my-app
 ```
 
 In the benchmark runner, `--white-box` sets the repo path to the challenge

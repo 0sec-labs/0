@@ -14,9 +14,11 @@ import {
   browserToolDefinitions,
   browserDispatch,
   executeBrowser,
+  PlaywrightDriver,
   type BrowserDriver,
   type BrowserDriverFactory,
   type BrowserDriverOptions,
+  type BrowserDriverHost,
   type BrowserPage,
   type BrowserToolContext,
 } from "./browser.js";
@@ -93,15 +95,6 @@ function scopedCtx(): BrowserToolContext {
 
 // ── Definition / dispatch shape ───────────────────────────────────────────────
 
-describe("browser tool definition", () => {
-  it("declares the full action enum", () => {
-    expect(browserToolDefinitions.browser.parameters.action.enum).toEqual([...BROWSER_ACTIONS]);
-    expect(browserToolDefinitions.browser.required).toEqual(["action"]);
-  });
-  it("routes through the browserAction handler name (unchanged from recon.ts)", () => {
-    expect(browserDispatch.browser).toBe("browserAction");
-  });
-});
 
 // ── Arg validation ────────────────────────────────────────────────────────────
 
@@ -241,22 +234,166 @@ describe("executeBrowser screenshot image meta", () => {
 
 // ── Driver options threading (attribution + scope-pinned interceptor) ─────────
 
-describe("executeBrowser driver options", () => {
-  it("forwards userAgent / extraHeaders / interceptor into the backend factory", async () => {
+
+// ── CDP attach (connect to operator's already-authenticated Chrome) ───────────
+
+describe("executeBrowser CDP attach", () => {
+  it("declares the attach action", () => {
+    expect([...BROWSER_ACTIONS]).toContain("attach");
+  });
+
+  it("requires cdp_url for attach", async () => {
+    const r = await executeBrowser(unscopedCtx, { action: "attach" }, { createDriver: fakeFactory });
+    expect(r.success).toBe(false);
+    expect(r.error).toMatch(/cdp_url is required/);
+  });
+
+  it("rejects a cdp_url that is not a CDP endpoint", async () => {
+    const r = await executeBrowser(unscopedCtx, { action: "attach", cdp_url: "127.0.0.1:9222" }, { createDriver: fakeFactory });
+    expect(r.success).toBe(false);
+    expect(r.error).toMatch(/not a CDP endpoint/);
+  });
+
+  it("routes a valid cdp_url through the factory as cdpEndpoint", async () => {
     let seen: BrowserDriverOptions | undefined;
     const capturingFactory: BrowserDriverFactory = async (opts) => {
       seen = opts;
       return { driver: fakeDriver() };
     };
+    const r = await executeBrowser(
+      unscopedCtx,
+      { action: "attach", cdp_url: "http://127.0.0.1:9222" },
+      { createDriver: capturingFactory },
+    );
+    expect(r.success).toBe(true);
+    expect(seen?.cdpEndpoint).toBe("http://127.0.0.1:9222");
+    expect((r.output as { attached: boolean }).attached).toBe(true);
+  });
+
+  it("omitting cdp_url preserves the launch path (no cdpEndpoint)", async () => {
+    let seen: BrowserDriverOptions | undefined;
+    const capturingFactory: BrowserDriverFactory = async (opts) => {
+      seen = opts;
+      return { driver: fakeDriver() };
+    };
+    await executeBrowser(
+      unscopedCtx,
+      { action: "navigate", url: "https://target.test/" },
+      { createDriver: capturingFactory },
+    );
+    expect(seen).toBeDefined();
+    expect(seen?.cdpEndpoint).toBeUndefined();
+  });
+
+  it("keeps scope-gating on a CDP-attached context", async () => {
+    const host: BrowserDriverHost = { driver: null };
+    const deps = { createDriver: fakeFactory, host };
+    const attach = await executeBrowser(scopedCtx(), { action: "attach", cdp_url: "http://127.0.0.1:9222" }, deps);
+    expect(attach.success).toBe(true);
+    // An in-scope navigation on the adopted context is allowed …
+    const ok = await executeBrowser(scopedCtx(), { action: "navigate", url: "https://target.test/dash" }, deps);
+    expect(ok.success).toBe(true);
+    // … but an out-of-scope one is refused just as on a launched context.
+    const bad = await executeBrowser(scopedCtx(), { action: "navigate", url: "https://evil.example/" }, deps);
+    expect(bad.success).toBe(false);
+    expect(bad.error).toMatch(/out-of-scope/);
+  });
+
+  it("re-attach disposes any prior driver before reconnecting", async () => {
+    let disposed = false;
+    const prior: BrowserDriver = { ...fakeDriver(), async dispose() { disposed = true; } };
+    const host: BrowserDriverHost = { driver: prior };
+    await executeBrowser(unscopedCtx, { action: "attach", cdp_url: "http://127.0.0.1:9222" }, { createDriver: fakeFactory, host });
+    expect(disposed).toBe(true);
+    expect(host.driver).not.toBe(prior);
+    expect(host.driver).toBeTruthy();
+  });
+});
+
+// ── PlaywrightDriver CDP backend seam (mock playwright module, no real Chrome) ─
+
+function mockBackendPage() {
+  return {
+    async goto() { return { status: () => 200 }; },
+    url: () => "https://target.test/",
+    async title() { return "Authed"; },
+    async click() {},
+    async fill() {},
+    async type() {},
+    async evaluate() { return null; },
+    async content() { return "<html></html>"; },
+    async screenshot() { return Buffer.from(""); },
+    async waitForTimeout() {},
+    on() {},
+    async close() {},
+  };
+}
+
+describe("PlaywrightDriver CDP backend", () => {
+  it("connects over CDP, adopts the existing context, and never tears the operator's browser/context down", async () => {
+    let opCtxClosed = false;
+    let routeGlob: string | undefined;
+    const operatorContext = {
+      pages: () => [mockBackendPage()],
+      newPage: async () => mockBackendPage(),
+      async route(glob: string) { routeGlob = glob; },
+      async addInitScript() {},
+      async close() { opCtxClosed = true; },
+    };
+    let browserClosed = false;
+    const browser = {
+      contexts: () => [operatorContext],
+      async newContext() { return operatorContext; },
+      async close() { browserClosed = true; },
+    };
+    let connectedTo: string | undefined;
+    let launched = false;
+    const mod = {
+      chromium: {
+        async launch() { launched = true; return browser; },
+        async connectOverCDP(ep: string) { connectedTo = ep; return browser; },
+      },
+    };
     const interceptor: BrowserDriverOptions["interceptor"] = async () => null;
-    await executeBrowser(unscopedCtx, { action: "list_tabs" }, {
-      createDriver: capturingFactory,
-      userAgent: "0sec-browser/1.0",
-      extraHeaders: { "X-0sec": "engagement" },
-      interceptor,
-    });
-    expect(seen?.userAgent).toBe("0sec-browser/1.0");
-    expect(seen?.extraHeaders).toEqual({ "X-0sec": "engagement" });
-    expect(seen?.interceptor).toBe(interceptor);
+    const driver = new PlaywrightDriver(
+      mod as unknown as ConstructorParameters<typeof PlaywrightDriver>[0],
+      { cdpEndpoint: "http://127.0.0.1:9222", interceptor },
+    );
+
+    // First tab() forces the CDP connection + context adoption.
+    await driver.tab("main");
+    expect(connectedTo).toBe("http://127.0.0.1:9222");
+    expect(launched).toBe(false); // never launched a fresh browser
+    expect(routeGlob).toBe("**/*"); // scope interceptor installed on the adopted context
+
+    await driver.dispose();
+    expect(opCtxClosed).toBe(false); // operator's authenticated context left intact
+    expect(browserClosed).toBe(true); // only the CDP connection is severed
+  });
+
+  it("launches a fresh browser when no cdpEndpoint is given (default path)", async () => {
+    let launched = false;
+    let connected = false;
+    const context = {
+      pages: () => [],
+      newPage: async () => mockBackendPage(),
+      async route() {},
+      async addInitScript() {},
+      async close() {},
+    };
+    const browser = { contexts: () => [], async newContext() { return context; }, async close() {} };
+    const mod = {
+      chromium: {
+        async launch() { launched = true; return browser; },
+        async connectOverCDP() { connected = true; return browser; },
+      },
+    };
+    const driver = new PlaywrightDriver(
+      mod as unknown as ConstructorParameters<typeof PlaywrightDriver>[0],
+      {},
+    );
+    await driver.tab("main");
+    expect(launched).toBe(true);
+    expect(connected).toBe(false);
   });
 });

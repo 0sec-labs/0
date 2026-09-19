@@ -1,0 +1,63 @@
+id: entra-id
+name: "Entra ID Posture Assessment"
+description: "When to reach for the read-only `entra_posture` engine: assess a Microsoft Entra ID (Azure AD) tenant's privileged role assignments, conditional-access coverage, app registrations, service principals, and federated-domain trust over the read-only Graph API. Token comes from 0SEC_GRAPH_ACCESS_TOKEN only."
+version: 1
+applicable_roles:
+  - attack
+  - audit
+  - review
+tags:
+  - entra-id
+  - azure-ad
+  - conditional-access
+  - service-principal
+  - graph-api
+  - posture
+  - identity
+triggers:
+  - "Entra"
+  - "Azure AD"
+  - "conditional access"
+  - "service principal"
+  - "app registration"
+  - "tenant"
+estimated_tokens: 650
+content: |
+  ## Entra ID (Azure AD) posture assessment (read-only)
+
+  For tenant configuration hygiene, use the **`entra_posture`** tool. It runs a
+  read-only Microsoft Graph collection and scores it against identity-security
+  checks — it reads directory objects, it never writes or mutates the tenant.
+
+  ### Authentication (important)
+  - The Graph access token is read from the **`0SEC_GRAPH_ACCESS_TOKEN`**
+    environment variable ONLY. It is NEVER an argument — a directory-read token
+    is a whole-tenant credential and must not land in a command line or log.
+  - If the env var is unset, the tool returns a graceful error. Do not attempt
+    to pass a token as an argument; instruct the operator to export it.
+
+  ### How to drive it
+  - Optionally pass `tenant` (the expected tenant GUID): a mismatch between the
+    requested tenant and the token's tenant is reported, never silently
+    assessed.
+  - Optionally pass `scope` (a JSON scope file); when set, `graph.microsoft.com`
+    must be explicitly in scope or no request goes out.
+
+  ### Checks it covers
+  - Privileged role assignments (standing Global Admin, over-broad roles).
+  - Conditional-access coverage and report-only / disabled policies.
+  - App registrations and service principals (stale credentials, over-scoped
+    permissions, unused principals).
+  - Federated-domain trust.
+
+  ### Reading the result
+  - `summary` + `findings[]` (each with a `check`, severity, affected count, and
+    remediation). Sort your attention by severity.
+  - **Honour the `partial` flag.** A partial snapshot (a collection step failed)
+    means a short finding list is NOT a clean bill of health — surface the
+    warnings and say the assessment is incomplete.
+
+  ### Contrast
+  - Use `entra_attack_paths` (offline, over an AzureHound export) for
+    reachability/escalation questions; use `entra_posture` for live config
+    hygiene.

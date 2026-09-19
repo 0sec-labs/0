@@ -1,5 +1,6 @@
 /** @jsxImportSource @opentui/react */
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { sleekScrollbar } from "./scrollbar.js";
 import { useKeyboard } from "@opentui/react";
 import { useTheme, type Theme } from "./theme-context.js";
 import { severityToneFor } from "./themes.js";
@@ -168,7 +169,7 @@ function TimelineOverlay({
   );
 
   return (
-    <OverlayFrame title="TURN TIMELINE" footer="ctrl+j close · enter jump · esc cancel">
+    <OverlayFrame title="TURN TIMELINE" footer="ctrl+j close · [⏎] jump · [esc] cancel">
         {turns.slice(0, visibleTurns).map((turn, index) => {
           const active = index === selected;
           return (
@@ -192,7 +193,7 @@ function ComposeOverlay({ text }: { text: string }) {
   const inputWidth = Math.max(1, contentWidth - 3);
 
   return (
-    <OverlayFrame title="MESSAGE TO AGENT" footer="enter send · esc cancel">
+    <OverlayFrame title="MESSAGE TO AGENT" footer="[⏎] send · [esc] cancel">
       <text fg={theme.MUTED} wrapMode="word">{fitTuiText("will be injected at next turn boundary", contentWidth)}</text>
       <box flexDirection="row" marginTop={1} width="100%" minWidth={0}>
         <text width={2} flexShrink={0} fg={theme.PRIMARY}>&gt; </text>
@@ -384,9 +385,7 @@ function renderTranscriptItem(
         <box
           flexDirection="column"
           marginLeft={1}
-          backgroundColor={isHovered ? theme.PANEL : theme.PANEL_ALT}
-          border
-          borderColor={isHovered || isExpanded ? theme.MUTED : theme.BORDER}
+          backgroundColor={theme.PANEL_ALT}
           paddingX={1}
           paddingY={0}
           flexGrow={1}
@@ -451,10 +450,11 @@ function PanelSection({
 }) {
   const theme = useTheme();
   return (
-    // flexShrink is off because the section draws its own border: squeeze it
-    // and Yoga paints that bottom border straight through the last row of
-    // content. Overflowing off-screen is recoverable; a corrupt frame is not.
-    <box flexDirection="column" flexShrink={0} minWidth={0} border borderColor={tone} backgroundColor={theme.PANEL} paddingX={1} paddingY={0}>
+    // flexShrink is off so Yoga cannot squeeze the raised PANEL block below its
+    // content height; the section is delineated by background contrast (a PANEL
+    // surface on the CANVAS sidebar) plus a tone-coloured title, not a drawn
+    // border, with a one-row gap separating stacked sections.
+    <box flexDirection="column" flexShrink={0} minWidth={0} backgroundColor={theme.PANEL} paddingX={2} paddingY={1} marginBottom={1}>
       <text fg={tone}>{fitTuiText(title.toUpperCase(), contentWidth ?? 44)}</text>
       <box flexDirection="column" minWidth={0}>
         {children}
@@ -809,22 +809,10 @@ export function SessionScreen({ state, onExit, shell, queueUserMessage }: { stat
           minHeight={0}
           stickyScroll
           stickyStart="bottom"
-          border
-          borderColor={theme.BORDER}
-          focusedBorderColor={theme.BORDER}
           backgroundColor={theme.PANEL}
           paddingX={1}
           paddingY={0}
-          verticalScrollbarOptions={{
-            trackOptions: {
-              backgroundColor: theme.PANEL_ALT,
-              foregroundColor: theme.MUTED,
-            },
-            arrowOptions: {
-              foregroundColor: theme.MUTED,
-              backgroundColor: theme.PANEL,
-            },
-          }}
+          verticalScrollbarOptions={sleekScrollbar(theme)}
         >
           <box flexDirection="column" width="100%" minWidth={0}>
             {visibleTranscript.map((item) => renderTranscriptItem(theme, item, {
@@ -848,16 +836,7 @@ export function SessionScreen({ state, onExit, shell, queueUserMessage }: { stat
           flexShrink={0}
           minWidth={0}
           minHeight={0}
-          verticalScrollbarOptions={{
-            trackOptions: {
-              backgroundColor: theme.PANEL_ALT,
-              foregroundColor: theme.MUTED,
-            },
-            arrowOptions: {
-              foregroundColor: theme.MUTED,
-              backgroundColor: theme.PANEL,
-            },
-          }}
+          verticalScrollbarOptions={sleekScrollbar(theme)}
         >
           <PanelSection title="Target" contentWidth={sidebarTextWidth} tone={theme.PRIMARY}>
             <box flexDirection="column" minWidth={0}>
@@ -969,10 +948,10 @@ export function SessionScreen({ state, onExit, shell, queueUserMessage }: { stat
       )}
       <FooterBar
         hint={reviewOpen
-          ? "ctrl+o or esc live · pgup/pgdn scroll"
+          ? "[⌃O]/[esc] live · [⇞⇟] scroll"
           : state.pendingUserMessages.length > 0
-            ? `message queued (${state.pendingUserMessages.length}) · ctrl+p commands`
-            : "i inject message · ctrl+p commands"}
+            ? `message queued (${state.pendingUserMessages.length}) · [⌃P] commands`
+            : "[i] inject message · [⌃P] commands"}
         status={summary ? <LiveBadge label={`ready · ${state.mode}`} active={false} /> : <LiveBadge label={`running · ${state.mode}`} />}
       />
     </ShellFrame>

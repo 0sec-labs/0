@@ -34,6 +34,15 @@ import { askOperatorToolDefinitions } from "./ask-operator.js";
 import { todosToolDefinitions } from "./todos.js";
 import { evalToolDefinitions } from "./eval.js";
 import { proxyToolDefinitions } from "./proxy.js";
+import { securityEngineToolDefinitions } from "./security-engines.js";
+import {
+  offensiveEngineToolDefinitions,
+  OFFENSIVE_SCOPED_TOOL_NAMES,
+  MEMSAFETY_TOOL_NAMES,
+  NPM_DISCOVERY_TOOL_NAMES,
+  KERNEL_WEAPONIZE_TOOL_NAMES,
+  CVE_ADAPT_TOOL_NAMES,
+} from "./offensive-engines.js";
 
 export {
   SCANNER_TOOL_NAMES,
@@ -41,6 +50,12 @@ export {
   ORCHESTRATOR_TOOL_NAMES,
   OAST_TOOL_NAMES,
   BINARY_TOOL_NAMES,
+  // Phase-2 offensive-engine gating name-sets (dev-live-engine-recovery).
+  OFFENSIVE_SCOPED_TOOL_NAMES,
+  MEMSAFETY_TOOL_NAMES,
+  NPM_DISCOVERY_TOOL_NAMES,
+  KERNEL_WEAPONIZE_TOOL_NAMES,
+  CVE_ADAPT_TOOL_NAMES,
 };
 
 // Every per-domain definition map, merged. Key collisions are impossible —
@@ -65,6 +80,8 @@ const DOMAIN_DEFINITIONS: Record<string, ToolDefinition> = {
   ...todosToolDefinitions,
   ...evalToolDefinitions,
   ...proxyToolDefinitions,
+  ...securityEngineToolDefinitions,
+  ...offensiveEngineToolDefinitions,
 };
 
 // Canonical registry order. getToolsForRole("audit"/"review") enumerates
@@ -131,6 +148,32 @@ const TOOL_REGISTRY_ORDER = [
   // Burp-style intercepting HTTP(S) proxy (burp-network-20260913). Behind a
   // lazy ProxyDriver seam; scope-gated like http_request/browser.
   "proxy",
+  // Offline / read-only security engines (dev-live-engine-recovery). File/DB
+  // read or read-only + env-scoped — no target network, no exploit — so they
+  // join the DEFAULT read-only role set (SCOPED_SOURCE_AUDIT_TOOLS), not any
+  // allowScanners/cloud gate.
+  "ad_attack_paths",
+  "entra_attack_paths",
+  "entra_posture",
+  "deep_source_review",
+  "file_security_review",
+  "assemble_advisory",
+  "cve_lookup",
+  // Phase-2 offensive / active security engines (dev-live-engine-recovery).
+  // GROUP 1 (offline) join SCOPED_SOURCE_AUDIT_TOOLS; GROUP 2 are scope-gated;
+  // GROUP 3 are feature-flag + scope gated, deny-by-default. See tools.ts
+  // getToolsForRole and tools/offensive-engines.ts.
+  "variant_hunt",
+  "assumption_hunt",
+  "generate_fix",
+  "verify_finding",
+  "protocol_conformance",
+  "spec_drift",
+  "safety_eval",
+  "memsafety_fuzz",
+  "npm_dynamic_discovery",
+  "weaponize_kernel",
+  "cve_adapt",
 ] as const;
 
 export const TOOL_DEFINITIONS: Record<string, ToolDefinition> = Object.fromEntries(

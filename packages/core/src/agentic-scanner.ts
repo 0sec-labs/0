@@ -31,8 +31,9 @@ import {
   shellPentestPrompt,
   buildAccessControlPromptBlock,
 } from "./agent/prompts.js";
-import { resolveIdentities } from "@0sec/shared";
+import { createJevEvaluator, jevConfigFromEnvironment, resolveIdentities } from "@0sec/shared";
 import type { RuntimeMode, PipelineEvent } from "@0sec/shared";
+import { createScanMemoryStore } from "./triage/memories.js";
 import { features } from "./agent/features.js";
 import { diag } from "./diagnostics/channel.js";
 import type { ScanEvent, ScanListener } from "./scanner.js";
@@ -522,12 +523,8 @@ function hasDirectChatGptCodexProvider(
   return diagnostics.valid && diagnostics.provider === "chatgpt-codex";
 }
 
-/**
- * Auto-detect whether an HTTP target is a web app vs an AI/API endpoint.
- * If the target serves HTML and the user requested "deep" mode,
- * automatically switch to "web" mode for better coverage.
- */
-async function normalizeScanConfig(config: ScanConfig): Promise<ScanConfig> {
+/** Normalize target spelling without making requests before scope admission. */
+function normalizeScanConfig(config: ScanConfig): ScanConfig {
   if (config.repoPath) {
     config = { ...config, repoPath: resolveLocalTargetPath(config.repoPath) };
   }
@@ -548,7 +545,11 @@ async function normalizeScanConfig(config: ScanConfig): Promise<ScanConfig> {
   ) {
     config = { ...config, target: `https://${config.target.trim()}` };
   }
+  return config;
+}
 
+/** Classify an admitted target. Redirects require separate scope admission. */
+async function detectScanMode(config: ScanConfig): Promise<ScanConfig> {
   // Only auto-route for default/deep mode on HTTP targets
   const requestedMode = config.mode ?? "deep";
   if (requestedMode !== "deep") return config;
@@ -564,14 +565,21 @@ async function normalizeScanConfig(config: ScanConfig): Promise<ScanConfig> {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), Math.min(config.timeout ?? 30_000, 8_000));
     try {
+      // Scope admission precedes this probe; redirects are never followed.
+      // foxguard: ignore[js/no-ssrf]
       const response = await fetch(config.target, {
         method: "GET",
+        redirect: "manual",
         headers: {
           Accept: "text/html,application/xhtml+xml,application/json;q=0.9,*/*;q=0.8",
         },
         signal: controller.signal,
       });
       limiter.noteResponse(config.target, response);
+      if (response.status >= 300 && response.status < 400) {
+        await response.body?.cancel();
+        return config;
+      }
       const contentType = response.headers.get("content-type")?.toLowerCase() ?? "";
       const body = await response.text();
 
@@ -885,7 +893,7 @@ export async function agenticScan(opts: AgenticScanOptions): Promise<ScanReport>
     return runCraftScanStage(opts.config, opts.craftTarget, opts.craft, emit);
   }
 
-  const config = await normalizeScanConfig(opts.config);
+  let config = normalizeScanConfig(opts.config);
 
   // Programmatic scope ingestion (0sec#215). Load once at the top and
   // pass the parsed `ScopePolicy` to every agent config below. The CLI
@@ -934,6 +942,13 @@ export async function agenticScan(opts: AgenticScanOptions): Promise<ScanReport>
   // should see now, not after the loud default has already run. Resolving to
   // the `standard` posture is a no-op — nothing changes unless opted in.
   const enteredPosture = resolveEngagementForConfig(config);
+
+  const detectedConfig = await detectScanMode(config);
+  if (detectedConfig !== config) {
+    // Keep the admitted scope snapshot across the mode-only config copy.
+    if (scope) scopePolicyCache.set(detectedConfig, scope);
+    config = detectedConfig;
+  }
 
   const runState = await (async () => {
     try {
@@ -3493,13 +3508,15 @@ export async function agenticScan(opts: AgenticScanOptions): Promise<ScanReport>
     // set, right before the report stage. Mutates findings in place with
     // additive optional fields; fail-soft — a post-process error never fails
     // the scan (the pass itself is also fail-soft per batch).
-    if (features.semanticDedupe || features.incrementalRank) {
+    const jevDedupeConfig = jevConfigFromEnvironment("dedupe", process.env);
+    const dedupeEnabled = features.semanticDedupe || jevDedupeConfig !== undefined;
+    if (dedupeEnabled || features.incrementalRank) {
       try {
         // Load prior-scan anchors for cross-scan dedupe when semanticDedupe
         // is active and a local DB is available. Anchor-load failure must
         // never fail the scan — proceed with no anchors on error.
         let anchors: DedupeItem[] | undefined;
-        if (features.semanticDedupe) {
+        if (dedupeEnabled) {
           try {
             anchors = await loadPriorScanAnchors(db, config.target, { excludeScanId: scanId });
           } catch {
@@ -3508,10 +3525,11 @@ export async function agenticScan(opts: AgenticScanOptions): Promise<ScanReport>
         }
 
         const collapsed = await applyFindingPostProcess(allFindings, nativeRuntime, {
-          semanticDedupe: features.semanticDedupe,
+          semanticDedupe: dedupeEnabled,
           incrementalRank: features.incrementalRank,
           scanId,
           anchors,
+          jevEvaluator: jevDedupeConfig ? createJevEvaluator(jevDedupeConfig) : undefined,
         });
         // Findings were persisted before the report post-process. Re-save the
         // additive mapping/rank so reports, later resumes, and cross-scan
@@ -4263,11 +4281,18 @@ export async function runNativeVerify(
   // Per-finding verify loop (#285). One agent session per finding so each
   // gets its own turn budget — N findings → N runtime calls, never a shared
   // pool the model can starve from.
+  const memoryStore = db ? createScanMemoryStore(db) : undefined;
   for (const finding of findings) {
+    let memoryContext = "";
+    if (memoryStore) {
+      try {
+        memoryContext = await memoryStore.formatForPrompt(await memoryStore.getRelevantMemories(finding, config.target));
+      } catch { /* Historical context never replaces independent verification. */ }
+    }
     await runNativeAgentLoop({
       config: {
         role: "verify",
-        systemPrompt: verifyPromptSingleFinding(config.target, finding, config.auth),
+        systemPrompt: verifyPromptSingleFinding(config.target, finding, config.auth) + "\n\n" + memoryContext,
         tools: getToolsForRole("verify", { hasScope: !!config.repoPath, allowScanners: config.allowScanners }),
         maxTurns: VERIFY_TURNS_PER_FINDING,
         target: config.target,

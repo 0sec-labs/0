@@ -1,5 +1,5 @@
 /**
- * herdr pane-state integration (protocol 19).
+ * herdr pane integration (protocol 19).
  *
  * `herdr` (https://herdr.dev) is a terminal workspace manager for AI coding
  * agents. When 0sec runs inside a herdr pane, herdr wants to know whether the
@@ -8,13 +8,21 @@
  * Without a native reporter herdr falls back to screen-scraping our TUI and
  * essentially always shows `unknown`.
  *
+ * On top of that coarse state, herdr's sidebar/pane chrome can display a rich
+ * per-pane picture — the pane's live TOPIC (its title), the model in use, the
+ * provider roster, the tool it is running, subagent/task counts, context-window
+ * occupancy and the agent-session link. This module reports all of that so a
+ * 0sec pane is a first-class herdr citizen, on par with oh-my-pi.
+ *
  * This module implements a `HerdrEventSink` — a normal `EventSink` (see
  * `../events/bus.ts`) that translates the bus's event vocabulary into herdr
- * agent-state reports. It deliberately mirrors the shape, naming and
- * registration style of `CloudEventSink` in `bus.ts`: a passive sink object
- * plus an env-gated factory, OFF unless the environment says otherwise.
+ * pane reports, plus a set of explicit setters the CLI calls for state that
+ * never rides the bus (the live-apply model/provider, context %, compaction,
+ * the session link). It mirrors the shape, naming and registration style of
+ * `CloudEventSink` in `bus.ts`: a passive sink object plus an env-gated
+ * factory, OFF unless the environment says otherwise.
  *
- * ── Wire protocol ────────────────────────────────────────────────────────
+ * ── Wire protocol (herdr's authoritative RPC, see herdr `src/api/schema/panes.rs`) ─
  * Transport is a Unix domain socket at `$HERDR_SOCKET_PATH` (a named pipe
  * `\\.\pipe\<path>` on Windows). Framing is newline-delimited JSON, one
  * request per line:
@@ -26,24 +34,42 @@
  * the same), treat the first `data` frame as "delivered", and never parse the
  * response — there is nothing actionable in it for us.
  *
+ * Methods emitted:
+ *   - `pane.report_agent`         coarse state (idle/working/blocked) + message
+ *   - `pane.report_agent_session` link the pane to the 0sec agent session
+ *                                 (id/path/start-source) — herdr's session
+ *                                 lifecycle signal (started/updated)
+ *   - `pane.report_metadata`      the pane TOPIC (`title`) + a `tokens` map
+ *                                 (model, provider roster, tool, task/subagent
+ *                                 counts, findings, context %, phase, …)
+ *   - `pane.release_agent`        we are done owning this pane's agent slot
+ *
  * ── Non-negotiables ──────────────────────────────────────────────────────
  *
  *  1. FAIL-SOFT, ALWAYS. This is decoration for a pane title. A missing
  *     socket, a hung daemon, a malformed response or an EPIPE must never
  *     throw into, block, or slow down a security scan. Every path here
  *     swallows. One ~500 ms attempt plus one ~1500 ms retry, then we give up
- *     on that report — no backoff loop, no unbounded queue.
+ *     on that report — no backoff loop, no unbounded queue. Sockets are
+ *     `unref`'d so a pending report never keeps the process alive, and the
+ *     metadata TTL is clamped to herdr's 24h ceiling.
  *
- *  2. NO PRINTING. 0sec runs inside an Ink TUI that owns the terminal;
- *     a stray `console.log` or `process.stderr.write` corrupts the
- *     framebuffer. There is deliberately not a single write to stdout/stderr
- *     in this file, not even on error. Failures are silent by design.
+ *  2. NO PRINTING. 0sec runs inside a TUI that owns the terminal; a stray
+ *     `console.log` or `process.stderr.write` corrupts the framebuffer. There
+ *     is deliberately not a single write to stdout/stderr in this file, not
+ *     even on error. Failures are silent by design.
  *
- *  3. PRIVACY IS A HARD REQUIREMENT. See the block above
- *     `SAFE_TOKEN_KEYS` — the herdr socket is readable by any local process
- *     running as this user, and `tokens` / `title` render in shared chrome
- *     (and in herdr's own logs). We therefore emit COUNTS and FIXED ENUMS
- *     only. Never a finding title, target host, URL, tool argument or path.
+ *  3. CONTENT POLICY — deliberately RICH. This 0sec build runs on a single
+ *     operator's hardened, boxed pentester machine, and the operator has
+ *     explicitly waived the shared-socket privacy concern in favour of full
+ *     herdr visibility. We therefore DO send the useful engagement content —
+ *     the target/objective as the pane topic, the finding/activity the agent
+ *     is on, tool names and their salient args, the model and provider names.
+ *     (An earlier build gated all of that behind a `SAFE_TOKEN_KEYS`
+ *     allow-list; that gate is intentionally removed here.) We still enforce
+ *     herdr's PROTOCOL limits — token keys must match its regex, at most 16
+ *     token entries, values and the title are control-stripped and length-
+ *     bounded so one report can never wedge the daemon or the pane chrome.
  */
 
 import { createConnection } from "node:net";
@@ -61,10 +87,20 @@ const HERDR_AGENT = "0sec";
 
 /** Protocol 19: `tokens` is a map of at most 16 entries… */
 const MAX_TOKENS = 16;
-/** …whose keys must each match this. */
+/** …whose keys must each match this (herdr `metadata_token_patch_schema`). */
 const TOKEN_KEY_RE = /^[A-Za-z0-9_-]{1,32}$/;
 /** …and `ttl_ms` must be <= 24h. */
 const MAX_TTL_MS = 86_400_000;
+
+/**
+ * herdr places no length or content constraint on a token VALUE or on the pane
+ * `title` (both are free-form `Option<String>` on the wire). We nonetheless
+ * bound them: a token value renders in a narrow sidebar cell and the title in
+ * the pane tab, so an unbounded string helps no one and a control character
+ * could corrupt the chrome. These are ergonomics, not privacy.
+ */
+const MAX_TOKEN_VALUE_LEN = 64;
+const MAX_TITLE_LEN = 100;
 
 /**
  * How long herdr should keep showing our metadata if we stop reporting.
@@ -77,47 +113,11 @@ const DEFAULT_TTL_MS = 300_000;
 const DEFAULT_ATTEMPT_MS = 500;
 const DEFAULT_RETRY_MS = 1500;
 
-// ── Privacy allow-lists ─────────────────────────────────────────────────────
-
 /**
- * WHY AN ALLOW-LIST AND NOT A DENY-LIST: the bus payloads are open-ended
- * (`[k: string]: unknown` on most of them) and grow over time. A deny-list of
- * "don't send `title`, don't send `target`" silently starts leaking the day
- * someone adds `payload.host`. So nothing reaches the wire unless its key is
- * literally enumerated here, and every one of these is a count, a fixed
- * engine-internal enum, or a number.
- *
- * Deliberately EXCLUDED, and why:
- *   - finding `title` / `description` / `category` — engagement content, and
- *     the single most sensitive string we hold.
- *   - `target`, any hostname or URL — identifies the customer/asset.
- *   - `args_preview`, `summary`, `reason`, `error`, subagent `task` — free
- *     text that routinely embeds URLs, payloads and paths.
- *   - `source_path` and any file path — leaks repo layout and often the
- *     customer name.
- *   - tool NAMES — they look like a safe internal enum, but MCP tools are
- *     user-named and an MCP server called `acme-prod-api` would name the
- *     customer in herdr's sidebar. Excluded out of caution; we report the
- *     tool-call COUNT instead.
- *   - `severity` — combined with a public disclosure timeline this is
- *     engagement-sensitive, and it buys the operator nothing a count doesn't.
- */
-const SAFE_TOKEN_KEYS: ReadonlySet<string> = new Set([
-  "findings",
-  "turn",
-  "max_turns",
-  "tools",
-  "cost_usd",
-  "phase",
-  "subagents",
-]);
-
-/**
- * The only strings we will ever put in an operator-visible field. These are
- * the canonical pipeline phase names documented on `PhaseStartedPayload` in
- * `bus.ts` — a closed enum with no engagement content in it. `phase_started`
- * carries `name: string`, so a caller *could* emit something else; anything
- * not in this set is dropped rather than passed through.
+ * The canonical 0sec pipeline phase names (documented on `PhaseStartedPayload`
+ * in `bus.ts`). `phase_started` carries `name: string`, so a caller *could*
+ * emit an off-script value; anything not in this closed set is ignored so a
+ * stray phase name never becomes a pane label.
  */
 const PHASE_NAMES: ReadonlySet<string> = new Set([
   "prepare",
@@ -126,17 +126,6 @@ const PHASE_NAMES: ReadonlySet<string> = new Set([
   "verify",
   "report",
 ]);
-
-/**
- * Second line of defence on token VALUES. Anything that is not a finite
- * number, a boolean, or a short identifier-shaped string is dropped.
- *
- * Note we DROP rather than truncate over-long strings: a truncated hostname
- * is still an identifying hostname, so silently shortening it would defeat
- * the point. And no space is allowed, which alone kills essentially every
- * finding title, URL-with-query and shell command.
- */
-const TOKEN_VALUE_RE = /^[A-Za-z0-9_.:+-]{1,32}$/;
 
 // ── Injection seams ─────────────────────────────────────────────────────────
 
@@ -200,13 +189,45 @@ export function clampTtlMs(ttlMs: number): number {
 }
 
 /**
- * Enforce every protocol AND privacy constraint on a token map: optional
- * key allow-list, the protocol key regex, value coercion, and the 16-entry
- * cap. Returns a brand new object — the caller's map is never mutated.
+ * Strip control characters, collapse internal whitespace and trim. Shared by
+ * the token-value and title bounding so nothing we send can carry a newline
+ * (which would break NDJSON framing on a naive reader) or a spinner frame.
+ */
+function cleanText(value: string): string {
+  return value
+    // eslint-disable-next-line no-control-regex
+    .replace(/[ -]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/**
+ * Bound a pane title/topic: control-stripped, whitespace-collapsed, and capped
+ * with an ellipsis. Returns `undefined` for an empty/blank input so the caller
+ * omits the field rather than sending an empty title.
+ */
+export function sanitizeHerdrTitle(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const clean = cleanText(value);
+  if (clean.length === 0) return undefined;
+  return clean.length > MAX_TITLE_LEN ? `${clean.slice(0, MAX_TITLE_LEN - 1)}…` : clean;
+}
+
+/**
+ * Enforce every protocol constraint on a token map: an optional key allow-list
+ * (default: none — send whatever the caller built), the protocol key regex,
+ * value coercion, and the 16-entry cap. Returns a brand new object — the
+ * caller's map is never mutated.
+ *
+ * Values are coerced richly: finite numbers, booleans, and non-empty strings
+ * (control-stripped and length-bounded). Unlike an earlier build this does NOT
+ * reject strings that contain spaces or look identifying — the operator wants
+ * the real content — it only drops values that cannot be represented (objects,
+ * arrays, null/undefined, non-finite numbers, blank strings).
  */
 export function sanitizeHerdrTokens(
   input: Record<string, unknown>,
-  allow: ReadonlySet<string> | null = SAFE_TOKEN_KEYS,
+  allow: ReadonlySet<string> | null = null,
 ): Record<string, string> {
   const out: Record<string, string> = {};
   let count = 0;
@@ -225,12 +246,16 @@ export function sanitizeHerdrTokens(
 function coerceTokenValue(value: unknown): string | null {
   if (typeof value === "number") {
     if (!Number.isFinite(value)) return null;
-    // Trim float noise so `$0.043200000000000005` doesn't reach a pane title.
+    // Trim float noise so `$0.043200000000000005` doesn't reach a pane cell.
     const rounded = Number.isInteger(value) ? String(value) : value.toFixed(4);
-    return rounded.length <= 32 ? rounded : null;
+    return rounded.length <= MAX_TOKEN_VALUE_LEN ? rounded : null;
   }
   if (typeof value === "boolean") return value ? "true" : "false";
-  if (typeof value === "string") return TOKEN_VALUE_RE.test(value) ? value : null;
+  if (typeof value === "string") {
+    const clean = cleanText(value);
+    if (clean.length === 0) return null;
+    return clean.length > MAX_TOKEN_VALUE_LEN ? `${clean.slice(0, MAX_TOKEN_VALUE_LEN - 1)}…` : clean;
+  }
   return null;
 }
 
@@ -246,7 +271,8 @@ function coerceTokenValue(value: unknown): string | null {
  *   idle     ← scan_completed,
  *              agent_turn_completed{reason: finished | max_turns | error |
  *                                   cost_ceiling | early_stop}
- *   blocked  ← (nothing on the bus — see below)
+ *   blocked  ← (nothing on the bus — exposed as `reportBlocked()` for the
+ *              operator-gate call sites; see herdr-state.ts in the CLI)
  *
  * WHY `step_completed` / `phase_completed` DO NOT MAP TO `idle`: a phase
  * completing is immediately followed by the next phase starting. Reporting
@@ -254,18 +280,6 @@ function coerceTokenValue(value: unknown): string | null {
  * scan, and herdr fires a completion sound/toast on every working→idle edge.
  * Only genuinely terminal events (`scan_completed`, a turn that is not
  * continuing) settle us to idle.
- *
- * WHY `agent_turn_completed` IS CONDITIONAL: `reason:"continue"` means the
- * loop is going straight into the next turn, so the agent is still working.
- *
- * WHY THERE IS NO `blocked` MAPPING: the bus vocabulary in `bus.ts` has no
- * event that means "waiting on the operator". The two places 0sec actually
- * blocks on a human — the co-pilot `approveTool` gate and the
- * `requestScope` prompt in `console/turn-engine.ts` — resolve their promises
- * inline and emit nothing. Rather than invent a mapping from an event that
- * does not mean what herdr's `blocked` means, the state is exposed as an
- * explicit `reportBlocked()` / `reportWorking()` pair for those gates to call
- * once someone owns wiring them.
  */
 function mapEventToState(
   type: EventType,
@@ -308,6 +322,14 @@ interface PendingReport {
   message?: string;
 }
 
+/** The agent-session link reported via `pane.report_agent_session`. */
+export interface HerdrSessionRef {
+  sessionId?: string;
+  sessionPath?: string;
+  /** Why the session started: `new` | `resume` | `fork` | … (display only). */
+  startSource?: string;
+}
+
 export class HerdrEventSink implements EventSink {
   private readonly paneId: string;
   private readonly socketPath: string;
@@ -330,18 +352,34 @@ export class HerdrEventSink implements EventSink {
   // backlog would just replay history slowly and unboundedly.
   private pendingState: PendingReport | null = null;
   private pendingTokens = false;
+  private pendingSession = false;
   private flushPromise: Promise<void> | null = null;
   private lastReported: string | null = null;
   private released = false;
 
-  // Non-identifying counters, mirrored into `tokens` on every metadata report.
+  // Counters, mirrored into `tokens` on every metadata report.
   private findings = 0;
   private toolCalls = 0;
   private turn = 0;
   private maxTurns = 0;
   private costUsd = 0;
   private activeSubagents = 0;
+  private compactions = 0;
   private phase: string | null = null;
+
+  // Rich, content-bearing fields (operator waived the shared-socket privacy
+  // concern; see the file header). Every one is bounded at report time.
+  private model: string | null = null;
+  private providers: string | null = null;
+  private contextPercent: number | null = null;
+  private latestTool: string | null = null;
+  /** The pane TOPIC ingredients, composed into `title` by {@link buildTitle}. */
+  private target: string | null = null;
+  private objective: string | null = null;
+  private activity: string | null = null;
+  private latestFinding: string | null = null;
+  /** The agent-session link, sent via `pane.report_agent_session`. */
+  private session: HerdrSessionRef | null = null;
 
   constructor(paneId: string, socketPath: string, options: HerdrEventSinkOptions = {}) {
     this.paneId = paneId;
@@ -359,15 +397,122 @@ export class HerdrEventSink implements EventSink {
    */
   emit(type: EventType, payload: Record<string, unknown>): void {
     try {
-      const countersChanged = this.updateCounters(type, payload);
+      const changed = this.updateFromEvent(type, payload);
       const state = mapEventToState(type, payload);
       if (state) this.queueState(state);
-      // Only re-report metadata when a counter actually moved. `delta` events
-      // fire hundreds of times per turn; without this guard every token batch
+      // Only re-report metadata when a reported field actually moved. `delta`
+      // events fire hundreds of times per turn; without this guard every batch
       // would schedule a socket connection for identical numbers.
-      if (countersChanged) this.queueTokens();
+      if (changed) this.queueTokens();
     } catch {
       /* fail-soft: telemetry must never break a scan */
+    }
+  }
+
+  // ── Explicit setters (CLI-side state that never rides the bus) ───────────
+
+  /** The active (live-apply) model, and optionally the resolved provider. */
+  setModel(model: string | null, provider?: string | null): void {
+    try {
+      const nextModel = typeof model === "string" && model.trim() ? model.trim() : null;
+      let changed = nextModel !== this.model;
+      this.model = nextModel;
+      if (provider !== undefined) {
+        const nextProvider = typeof provider === "string" && provider.trim() ? provider.trim() : null;
+        changed = changed || nextProvider !== this.providers;
+        this.providers = nextProvider;
+      }
+      if (changed) this.queueTokens();
+    } catch {
+      /* fail-soft */
+    }
+  }
+
+  /** The provider roster (names only). Joined into one bounded token value. */
+  setProviders(providers: readonly string[]): void {
+    try {
+      const joined = providers.map((p) => String(p).trim()).filter(Boolean).join(",");
+      const next = joined.length > 0 ? joined : null;
+      if (next === this.providers) return;
+      this.providers = next;
+      this.queueTokens();
+    } catch {
+      /* fail-soft */
+    }
+  }
+
+  /** Context-window occupancy as a whole-number percent (the status-bar figure). */
+  setContextPercent(percent: number | null): void {
+    try {
+      const next =
+        typeof percent === "number" && Number.isFinite(percent)
+          ? Math.max(0, Math.min(100, Math.round(percent)))
+          : null;
+      if (next === this.contextPercent) return;
+      this.contextPercent = next;
+      this.queueTokens();
+    } catch {
+      /* fail-soft */
+    }
+  }
+
+  /** The engagement target/scope — the base of the pane topic. */
+  setTarget(target: string | null): void {
+    this.setTopicField("target", target);
+  }
+
+  /** The "what am I working on" objective (session-objective pill). */
+  setObjective(objective: string | null): void {
+    this.setTopicField("objective", objective);
+  }
+
+  /** The live one-liner (running tool + args, or the fleet activity). */
+  setActivity(activity: string | null): void {
+    this.setTopicField("activity", activity);
+  }
+
+  private setTopicField(field: "target" | "objective" | "activity", value: string | null): void {
+    try {
+      const next = typeof value === "string" && value.trim() ? value.trim() : null;
+      if (next === this[field]) return;
+      this[field] = next;
+      this.queueTokens();
+    } catch {
+      /* fail-soft */
+    }
+  }
+
+  /** Note that the compaction path ran (herdr has no compaction method; we
+   * surface it as a monotonic `compactions` count token — the truthful,
+   * non-flapping representation, since 0sec only observes compaction after it
+   * completes). */
+  reportCompacting(): void {
+    try {
+      this.compactions++;
+      this.queueTokens();
+    } catch {
+      /* fail-soft */
+    }
+  }
+
+  /**
+   * Link this pane to the 0sec agent session, or refresh the link. This is
+   * herdr's session-lifecycle signal: the first call after mount is the
+   * session "start", later calls (a resume/fork, or a session id becoming
+   * known) are "updates". Sends `pane.report_agent_session`.
+   */
+  reportSession(ref: HerdrSessionRef): void {
+    try {
+      if (this.released) return;
+      const sessionId = ref.sessionId?.trim() || undefined;
+      const sessionPath = ref.sessionPath?.trim() || undefined;
+      const startSource = ref.startSource?.trim() || undefined;
+      if (!sessionId && !sessionPath) return; // nothing to link
+      this.session = { sessionId, sessionPath, startSource };
+      this.pendingSession = true;
+      this.scheduleFlush();
+    } catch {
+      /* fail-soft */
     }
   }
 
@@ -390,6 +535,7 @@ export class HerdrEventSink implements EventSink {
     this.released = true;
     this.pendingState = null;
     this.pendingTokens = false;
+    this.pendingSession = false;
     await this.drain();
     await this.send({
       id: this.nextId(),
@@ -410,26 +556,65 @@ export class HerdrEventSink implements EventSink {
     }
   }
 
-  // ── counters ──────────────────────────────────────────────────────────
+  // ── event ingestion ───────────────────────────────────────────────────
 
   /**
-   * PRIVACY: this is the only place bus payloads are read, and it reads
-   * exactly five numeric fields plus one enum. Nothing else from a payload
-   * is ever retained, so no string from an event body can reach the wire
-   * except a `phase` name that survives the `PHASE_NAMES` allow-list.
-   *
-   * Returns `true` when a reported counter actually changed, so the caller
-   * can skip a metadata report for the (very frequent) events that move
+   * The one place bus payloads are read. Updates counters AND the rich topic
+   * fields. Returns `true` when a reported field actually changed, so the
+   * caller can skip a metadata report for the (very frequent) events that move
    * nothing.
    */
-  private updateCounters(type: EventType, payload: Record<string, unknown>): boolean {
+  private updateFromEvent(type: EventType, payload: Record<string, unknown>): boolean {
     switch (type) {
-      case "finding_ingested":
+      case "finding_ingested": {
         this.findings++;
+        const title = payload["title"];
+        if (typeof title === "string" && title.trim()) this.latestFinding = title.trim();
         return true;
+      }
       case "tool_call_completed":
         this.toolCalls++;
         return true;
+      case "tool_call_started": {
+        const tool = payload["tool"];
+        const args = payload["args_preview"];
+        let changed = false;
+        if (typeof tool === "string" && tool.trim()) {
+          this.latestTool = tool.trim();
+          const line =
+            typeof args === "string" && args.trim()
+              ? `${this.latestTool} · ${args.trim()}`
+              : this.latestTool;
+          this.activity = line;
+          changed = true;
+        }
+        return changed;
+      }
+      case "llm_planner_invoked": {
+        const model = payload["model"];
+        if (typeof model === "string" && model.trim() && model.trim() !== this.model) {
+          this.model = model.trim();
+          return true;
+        }
+        return false;
+      }
+      case "session_objective": {
+        const objective = payload["objective"];
+        const next = typeof objective === "string" && objective.trim() ? objective.trim() : null;
+        if (next !== this.objective) {
+          this.objective = next;
+          return true;
+        }
+        return false;
+      }
+      case "step_started": {
+        const step = payload["step"];
+        if (typeof step === "string" && step.trim() && step.trim() !== this.activity) {
+          this.activity = step.trim();
+          return true;
+        }
+        return false;
+      }
       case "agent_turn_started": {
         const turn = numberOr(payload["turn"], this.turn);
         const maxTurns = numberOr(payload["max_turns"], this.maxTurns);
@@ -446,7 +631,6 @@ export class HerdrEventSink implements EventSink {
       }
       case "phase_started": {
         const name = payload["name"];
-        // Only a name from the documented closed enum is operator-visible.
         const phase = typeof name === "string" && PHASE_NAMES.has(name) ? name : null;
         const changed = phase !== this.phase;
         this.phase = phase;
@@ -458,6 +642,8 @@ export class HerdrEventSink implements EventSink {
         const changed = findings !== this.findings || cost !== this.costUsd;
         this.findings = findings;
         this.costUsd = cost;
+        // A completed scan is no longer actively working a tool.
+        this.activity = null;
         return changed;
       }
       case "subagent_lifecycle": {
@@ -485,8 +671,25 @@ export class HerdrEventSink implements EventSink {
       tools: this.toolCalls,
       cost_usd: this.costUsd,
       subagents: this.activeSubagents,
+      ...(this.compactions > 0 ? { compactions: this.compactions } : {}),
       ...(this.phase ? { phase: this.phase } : {}),
+      ...(this.model ? { model: this.model } : {}),
+      ...(this.providers ? { providers: this.providers } : {}),
+      ...(this.latestTool ? { tool: this.latestTool } : {}),
+      ...(this.contextPercent !== null ? { ctx: `${this.contextPercent}%` } : {}),
     });
+  }
+
+  /**
+   * Compose the pane TOPIC (herdr `title`). The target/scope anchors it; the
+   * live objective, current finding, or running activity says what is
+   * happening on it right now. Returns `undefined` when we have nothing
+   * meaningful — the caller then omits the field.
+   */
+  private buildTitle(): string | undefined {
+    const focus = this.objective ?? this.latestFinding ?? this.activity ?? null;
+    const composed = this.target && focus ? `${this.target} · ${focus}` : (this.target ?? focus ?? null);
+    return sanitizeHerdrTitle(composed);
   }
 
   // ── single-flight queue ───────────────────────────────────────────────
@@ -520,7 +723,7 @@ export class HerdrEventSink implements EventSink {
 
   private async flush(): Promise<void> {
     try {
-      while (this.pendingState !== null || this.pendingTokens) {
+      while (this.pendingState !== null || this.pendingTokens || this.pendingSession) {
         const state = this.pendingState;
         this.pendingState = null;
         if (state) {
@@ -538,16 +741,36 @@ export class HerdrEventSink implements EventSink {
             },
           });
         }
+        if (this.pendingSession) {
+          this.pendingSession = false;
+          const ref = this.session;
+          if (ref && (ref.sessionId || ref.sessionPath)) {
+            await this.send({
+              id: this.nextId(),
+              method: "pane.report_agent_session",
+              params: {
+                pane_id: this.paneId,
+                source: HERDR_SOURCE,
+                agent: HERDR_AGENT,
+                ...(ref.sessionId ? { agent_session_id: ref.sessionId } : {}),
+                ...(ref.sessionPath ? { agent_session_path: ref.sessionPath } : {}),
+                ...(ref.startSource ? { session_start_source: ref.startSource } : {}),
+                seq: this.nextSeq(),
+              },
+            });
+          }
+        }
         if (this.pendingTokens) {
           this.pendingTokens = false;
+          const title = this.buildTitle();
           await this.send({
             id: this.nextId(),
             method: "pane.report_metadata",
             params: {
               pane_id: this.paneId,
               source: HERDR_SOURCE,
-              // No `title`: it is the most tempting place to put the target,
-              // and herdr renders it in shared chrome. We never send one.
+              // The pane TOPIC: target/scope + live focus. Omitted when empty.
+              ...(title ? { title } : {}),
               tokens: this.buildTokens(),
               ttl_ms: this.ttlMs,
               seq: this.nextSeq(),

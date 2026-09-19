@@ -1,9 +1,20 @@
 /** @jsxImportSource @opentui/react */
 import React from "react";
+import { CliRenderEvents, resolveImageRenderProtocol, type NativeImage } from "@opentui/core";
+import { useRenderer } from "@opentui/react";
 import { fitTuiText } from "../text.js";
-import { computeLogoFrame, logoRowRuns } from "../logo-animation.js";
-import { TERMINAL_BLOCK_LOGO_WIDTH, logoRunStyle } from "./logo.js";
+import { finalLogoFrame, logoRowRuns, type LogoFrame } from "../logo-animation.js";
+import {
+  TERMINAL_BLOCK_LOGO_COMPACT,
+  TERMINAL_BLOCK_LOGO_FULL_WIDTH,
+  TERMINAL_BLOCK_LOGO_WIDTH,
+  logoRunStyle,
+} from "./logo.js";
+import { createZeroImage } from "./mascot.js";
+import { ZERO_WIDTH, ZERO_HEIGHT } from "./zero-art.js";
 import type { Theme } from "../theme-context.js";
+
+const COMPACT_LOGO_FRAME = finalLogoFrame(TERMINAL_BLOCK_LOGO_COMPACT);
 
 /**
  * What the masthead is allowed to say about the engagement, and nothing more.
@@ -36,6 +47,7 @@ export interface MastheadEngagement {
  */
 export function Masthead({
   showTerminalMark,
+  showMascot = true,
   showTagline,
   contentWidth,
   logoFrameGrid,
@@ -43,14 +55,49 @@ export function Masthead({
   theme,
 }: {
   showTerminalMark: boolean;
+  showMascot?: boolean;
   showTagline: boolean;
   contentWidth: number;
-  logoFrameGrid: ReturnType<typeof computeLogoFrame>;
+  logoFrameGrid: LogoFrame;
   /** Real engagement facts from the host; anything absent is simply not drawn. */
   engagement?: MastheadEngagement;
   theme: Theme;
 }) {
   const { MUTED, TEXT } = theme;
+  const renderer = useRenderer();
+  const subscribe = React.useCallback((changed: () => void) => {
+    renderer.on(CliRenderEvents.CAPABILITIES, changed);
+    renderer.on(CliRenderEvents.RESIZE, changed);
+    // Pixel resolution arrives asynchronously without its own event.
+    renderer.on(CliRenderEvents.FRAME, changed);
+    return () => {
+      renderer.off(CliRenderEvents.CAPABILITIES, changed);
+      renderer.off(CliRenderEvents.FRAME, changed);
+      renderer.off(CliRenderEvents.RESIZE, changed);
+    };
+  }, [renderer]);
+  const getProtocol = React.useCallback(() => {
+    const resolution = renderer.resolution;
+    const hasResolution = renderer.terminalWidth > 0 && renderer.terminalHeight > 0
+      && Boolean(resolution && resolution.width > 0 && resolution.height > 0);
+    return resolveImageRenderProtocol("auto", renderer.capabilities, hasResolution);
+  }, [renderer]);
+  const protocol = React.useSyncExternalStore(subscribe, getProtocol);
+  const [portrait, setPortrait] = React.useState<{ canvas: string; image: NativeImage }>();
+  const showImage = protocol !== "blocks" && showTerminalMark && showMascot;
+  React.useEffect(() => {
+    if (!showImage) {
+      setPortrait(undefined);
+      return;
+    }
+    const image = createZeroImage(theme.CANVAS);
+    setPortrait({ canvas: theme.CANVAS, image });
+    return () => image.dispose();
+  }, [showImage, theme.CANVAS]);
+  const portraitImage = showImage && portrait?.canvas === theme.CANVAS ? portrait.image : undefined;
+  const fullWord = contentWidth >= TERMINAL_BLOCK_LOGO_FULL_WIDTH;
+  const blockFrame = fullWord ? logoFrameGrid : COMPACT_LOGO_FRAME;
+  const blockWidth = fullWord ? TERMINAL_BLOCK_LOGO_FULL_WIDTH : TERMINAL_BLOCK_LOGO_WIDTH;
   // Only facts that exist. `filter(Boolean)` after trimming is the whole
   // truthfulness policy: an empty or whitespace value is an absent value.
   const facts: Array<{ label: string; value: string }> = [
@@ -58,25 +105,22 @@ export function Masthead({
     { label: "Scope", value: String(engagement?.scope ?? "").trim() },
     { label: "Session", value: String(engagement?.sessionState ?? "").trim() },
   ].filter((fact) => fact.value.length > 0);
+  // Only native graphics: never substitute a block-art mascot, including the
+  // renderer's automatic fallback for tmux or Sixel without pixel dimensions.
   return (
     <>
       {showTerminalMark ? (
-        <text fg={MUTED} marginBottom={1}>{fitTuiText("Swiss Applied AI Cybersecurity Research Lab", contentWidth, { mode: "middle" })}</text>
+        <text fg={MUTED} marginBottom={1}>{fitTuiText("Swiss Applied AI & Cybersecurity Research Lab", contentWidth, { mode: "middle" })}</text>
+      ) : null}
+      {portraitImage ? (
+        <box flexDirection="column" width={ZERO_WIDTH} height={ZERO_HEIGHT} flexShrink={0} marginBottom={1} backgroundColor={theme.CANVAS}>
+          <image source={portraitImage} protocol={protocol} fit="fit" width={ZERO_WIDTH} height={ZERO_HEIGHT} flexShrink={0} />
+        </box>
       ) : null}
       {showTerminalMark ? (
-        <box flexDirection="column" width={TERMINAL_BLOCK_LOGO_WIDTH} minWidth={TERMINAL_BLOCK_LOGO_WIDTH} flexShrink={0}>
-          {/*
-            * 0sec brand mark: a slashed zero — a white "0" outline with a
-            * red diagonal slash through its hollow — then white "SEC".
-            * The per-cell frame comes from computeLogoFrame (the intro
-            * animation, or the settled final frame under reduceMotion/"off");
-            * logoRowRuns coalesces each row into (tone,visible) runs whose
-            * widths sum to TERMINAL_BLOCK_LOGO_WIDTH, so no run overflows and
-            * each tone keeps its own token. Rendered verbatim — the row
-            * widths are exact, so no fitTuiText/trim is needed.
-            */}
-          {logoFrameGrid.map((row, index) => (
-            <box key={`logo-${index}`} flexDirection="row" width={TERMINAL_BLOCK_LOGO_WIDTH} flexShrink={0} minWidth={0}>
+        <box flexDirection="column" width={blockWidth} minWidth={blockWidth} flexShrink={0}>
+          {blockFrame.map((row, index) => (
+            <box key={`logo-${index}`} flexDirection="row" width={blockWidth} flexShrink={0} minWidth={0}>
               {logoRowRuns(row).map((run, runIndex) => {
                 const style = logoRunStyle(run.tone, theme);
                 const glyph = run.visible ? "█" : " ";
@@ -96,12 +140,17 @@ export function Masthead({
       ) : (
         <box flexDirection="row" width={contentWidth} flexShrink={0} minWidth={0}>
           <text width={contentWidth} height={1} wrapMode="none" truncate fg={TEXT}>
-            {fitTuiText("0SEC · OPERATOR CONSOLE", contentWidth, { mode: "middle" })}
+            {fitTuiText("0SECURITY · OPERATOR CONSOLE", contentWidth, { mode: "middle" })}
           </text>
         </box>
       )}
+      {showTerminalMark ? (
+        <box flexDirection="row" width={9} height={1} flexShrink={0} marginTop={1}>
+          <text width={9} flexShrink={0} fg="#FD802E">━━━━━━━━━</text>
+        </box>
+      ) : null}
       {showTagline ? (
-        <text fg={TEXT} marginTop={1}>{fitTuiText("The open, extensible cybersecurity harness", contentWidth, { mode: "middle" })}</text>
+        <text fg={TEXT} marginTop={1}>{fitTuiText("Make software secure itself.", contentWidth, { mode: "middle" })}</text>
       ) : null}
       {facts.length > 0 ? (
         <box flexDirection="column" width={contentWidth} flexShrink={0} minWidth={0} marginTop={1} alignItems="center">

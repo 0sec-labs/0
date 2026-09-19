@@ -1,5 +1,5 @@
 /**
- * Pure, deterministic per-frame animation for the "0SEC" block-logo intro.
+ * Pure, deterministic per-frame animation for the "0SECURITY" block-logo intro.
  *
  * This module owns only the *logic* of the intro: given the base logo grid
  * (the three-letter colour map used by the masthead — `' '` empty, `'#'` white,
@@ -348,22 +348,22 @@ const SCRAMBLE_TONES: readonly LogoCellTone[] = [
 /** Neon palette for the `neon` warm-up flicker (pink, cyan, purple, amber, white). */
 const NEON_TONES: readonly string[] = ["#ff2d95", "#00e5ff", "#b388ff", "#fde74c", "#ffffff"];
 
-/** Matrix-rain drop gradient, head (hot white-red) -> tail (deep red) — on brand. */
-const MATRIX_REDS: readonly string[] = ["#ffe3e3", "#ff6b6b", "#e5484d", "#5c1a1a"];
+/** Matrix-rain drop gradient, head (hot cream-orange) -> tail (deep amber) — on brand. */
+const MATRIX_REDS: readonly string[] = ["#ffe9d6", "#ffb26b", "#fd802e", "#5c3110"];
 
-/** Wave crest gradient, lead (brightest) -> trailing (deep red) — on brand. */
-const WAVE_REDS: readonly string[] = ["#fff0f0", "#ff9a9a", "#ff3b3b", "#7a1616"];
+/** Wave crest gradient, lead (brightest) -> trailing (deep amber) — on brand. */
+const WAVE_REDS: readonly string[] = ["#fff2e6", "#ffc48f", "#fd802e", "#7a3d12"];
 
-/** Draw pen-tip gradient, tip (white) -> trailing (light red) — on brand. */
-const DRAW_TIP: readonly string[] = ["#ffffff", "#ffb3b3"];
+/** Draw pen-tip gradient, tip (white) -> trailing (light orange) — on brand. */
+const DRAW_TIP: readonly string[] = ["#ffffff", "#ffcfa3"];
 
 /**
  * The "hot edge" tone for the reveal styles (strike/typein/sweep) and the pulse
- * peak. A bright RED — brighter than the settled `error` red — so a leading edge
+ * peak. A bright ORANGE — brighter than the settled brand orange — so a leading edge
  * still reads as hotter than the mark behind it, WITHOUT the purple that belongs
  * to the 0sec voice rather than the logo.
  */
-const HOT_RED = "#ff6a6a";
+const HOT_RED = "#ffb25e";
 
 /**
  * strike: the SEC outline and the "0" white cells are visible from frame 0; the

@@ -54,6 +54,36 @@ export function operatorIcon(screen: string, symbols: SymbolTable = DEFAULT_SYMB
   return symbols[key];
 }
 
+/**
+ * Category heading → glyph role, for the section headers in the settings picker
+ * and any other categorized dialog. Reuses existing preset-aware roles (so the
+ * glyphs re-skin with the Symbols setting and stay single-cell/width-safe), and
+ * returns `undefined` for an unmapped category — a dialog whose categories are
+ * dynamic (a model picker's provider names) simply renders those headers bare.
+ */
+const CATEGORY_ICONS: Readonly<Record<string, SymbolKey>> = {
+  display: "iconOps",
+  transcript: "fieldFile",
+  security: "fieldProtected",
+  context: "fieldContext",
+  motion: "iconReplay",
+  privacy: "fieldEye",
+  telemetry: "iconUsage",
+  updates: "iconConnect",
+  behaviour: "iconSettings",
+  behavior: "iconSettings",
+  general: "iconSettings",
+};
+
+/**
+ * The glyph for a category heading, or `undefined` when the category has no
+ * mapping. Labels always accompany it, so an ASCII preset loses no meaning.
+ */
+export function categoryIcon(category: string, symbols: SymbolTable = DEFAULT_SYMBOLS): string | undefined {
+  const key = CATEGORY_ICONS[category.trim().toLowerCase()];
+  return key ? symbols[key] : undefined;
+}
+
 export function operatorTitle(screen: string): string {
   return SCREENS[screen.toLowerCase()]?.[1] ?? screen;
 }

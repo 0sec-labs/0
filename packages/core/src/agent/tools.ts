@@ -15,7 +15,7 @@ import type {
   VerificationBehaviorStep,
   NamedIdentity,
 } from "@0sec/shared";
-import { resolveIdentities, compareRoles, DEFAULT_AUTONOMY_MODE } from "@0sec/shared";
+import { resolveIdentities, compareRoles, DEFAULT_AUTONOMY_MODE, createJevEvaluator, jevConfigFromEnvironment, type JevEvaluator } from "@0sec/shared";
 import type { ToolDefinition, ToolCall, ToolResult, ToolResultMeta, ToolContext, AgentRole } from "./types.js";
 import type {
   OperatorQuestion,
@@ -188,6 +188,28 @@ import {
 } from "./agent-messaging.js";
 import { mapWithConcurrency } from "../concurrency.js";
 import { executeIntel } from "./tools/intel.js";
+import {
+  executeAdAttackPaths,
+  executeEntraAttackPaths,
+  executeEntraPosture,
+  executeDeepSourceReview,
+  executeFileSecurityReview,
+  executeAssembleAdvisory,
+  executeCveLookup,
+} from "./tools/security-engines.js";
+import {
+  executeVariantHunt,
+  executeAssumptionHunt,
+  executeGenerateFix,
+  executeVerifyFinding,
+  executeProtocolConformance,
+  executeSpecDrift,
+  executeSafetyEval,
+  executeMemsafetyFuzz,
+  executeNpmDynamicDiscovery,
+  executeWeaponizeKernel,
+  executeCveAdapt,
+} from "./tools/offensive-engines.js";
 import { executeBrowser, type BrowserDriverHost } from "./tools/browser.js";
 import { resolveScopedPath } from "./tools/scope-path.js";
 import { windowFileContent } from "./tools/read-file-window.js";
@@ -211,6 +233,11 @@ import {
   ORCHESTRATOR_TOOL_NAMES,
   OAST_TOOL_NAMES,
   BINARY_TOOL_NAMES,
+  OFFENSIVE_SCOPED_TOOL_NAMES,
+  MEMSAFETY_TOOL_NAMES,
+  NPM_DISCOVERY_TOOL_NAMES,
+  KERNEL_WEAPONIZE_TOOL_NAMES,
+  CVE_ADAPT_TOOL_NAMES,
 } from "./tools/index.js";
 export {
   TOOL_DEFINITIONS,
@@ -219,6 +246,11 @@ export {
   ORCHESTRATOR_TOOL_NAMES,
   OAST_TOOL_NAMES,
   BINARY_TOOL_NAMES,
+  OFFENSIVE_SCOPED_TOOL_NAMES,
+  MEMSAFETY_TOOL_NAMES,
+  NPM_DISCOVERY_TOOL_NAMES,
+  KERNEL_WEAPONIZE_TOOL_NAMES,
+  CVE_ADAPT_TOOL_NAMES,
 };
 import { executeStartScan } from "./tools/orchestrator.js";
 import { executeProxy, type ProxyHost } from "./tools/proxy.js";
@@ -581,6 +613,14 @@ const SCOPED_SOURCE_AUDIT_TOOLS: Record<string, true> = {
   // Explicitly opt-in; the handler confines the path, strips credentials, and
   // leaves dynamic target execution disabled unless 0verse itself is configured.
   analyze_binary: true,
+  // NOTE: the wired security engines (ad_attack_paths, entra_*, deep_source_review,
+  // file_security_review, assemble_advisory, cve_lookup, variant_hunt,
+  // assumption_hunt, generate_fix) are deliberately NOT in this set. Several
+  // spawn sub-analyses / run lenses / make network calls (entra_posture,
+  // cve_lookup), so exposing them inside the ATTACKER-CONTROLLED scoped source
+  // boundary would widen the trust surface. They remain in TOOL_REGISTRY_ORDER
+  // and so are available to the trusted (non-scoped) audit/review role via
+  // `allEnabledTools` — just never inside a hostile scope.
 };
 
 /**
@@ -2468,8 +2508,8 @@ export function validateSpawnPersistentAgentArgs(
     return { ok: false, error: parsed.error.issues[0]?.message ?? "invalid arguments" };
   }
   const { task, name, max_turns, role, model } = parsed.data;
-  // Clamp the turn budget to the same [1,25] band spawn_agent uses.
-  const maxTurns = Math.min(25, Math.max(1, max_turns ?? 15));
+  // Clamp the turn budget to the same [1,120] band spawn_agent uses.
+  const maxTurns = Math.min(120, Math.max(1, max_turns ?? 40));
   return { ok: true, args: { task, ...(name ? { name } : {}), maxTurns, ...(role !== undefined ? { role } : {}), ...(model !== undefined ? { model } : {}) } };
 }
 
@@ -2877,6 +2917,8 @@ export class ToolExecutor {
    * old single-page `_browser`/`_browserPage`/`_browserActionContext` fields.
    */
   private _browserHost: BrowserDriverHost = {};
+  private _browserJev: JevEvaluator | null | undefined;
+  private _browserReadOnlyUrls: ReadonlySet<string> = new Set();
   private _playwrightAvailable: boolean | null = null;
   private _ptyManager: PtySessionManager | null = null;
   private _pyKernel: PythonKernelManager | null = null;
@@ -5965,12 +6007,23 @@ export class ToolExecutor {
       : "0sec-browser/1.0";
     const extraHeaders =
       attribution && Object.keys(attribution.headers).length > 0 ? attribution.headers : undefined;
+    if (this._browserJev === undefined) {
+      const config = jevConfigFromEnvironment("browser", process.env);
+      this._browserJev = config ? createJevEvaluator(config) : null;
+      this._browserReadOnlyUrls = new Set((process.env["0SEC_JEV_BROWSER_READ_ONLY_URLS"] ?? "")
+        .split(",").map(url => url.trim()).filter(Boolean).map(url => new URL(url).href));
+    }
+    const execution = this._executionContext.getStore();
 
     const result = await executeBrowser(this.ctx, args, {
       host: this._browserHost,
       userAgent,
       extraHeaders,
       interceptor: this._browserInterceptor,
+      jev: this._browserJev ?? undefined,
+      readOnlyUrls: this._browserReadOnlyUrls,
+      signal: execution?.signal,
+      assertAuthority: execution?.assertAuthority,
     });
 
     // Evidence trail: persist the action + resulting URL, as the old handler did.
@@ -6599,7 +6652,7 @@ export class ToolExecutor {
     const selection = subagentModelSelectionSchema.safeParse(args);
     if (!selection.success) return { success: false, output: null, error: selection.error.issues[0]?.message ?? "Invalid model selection" };
 
-    const maxTurns = Math.min((args.max_turns as number) ?? 15, 25);
+    const maxTurns = Math.min((args.max_turns as number) ?? 40, 120);
     const base = this.buildSubagentLifecycleBase(task, maxTurns);
 
     const lease = this._workerTree.acquire(base.agent_id, this.ctx.scanId);
@@ -6677,7 +6730,7 @@ export class ToolExecutor {
       }
       const selection = subagentModelSelectionSchema.safeParse(entry);
       if (!selection.success) return { success: false, output: null, error: `tasks[${i}]: ${selection.error.issues[0]?.message ?? "Invalid model selection"}` };
-      const maxTurns = Math.min((entry?.max_turns as number) ?? 15, 25);
+      const maxTurns = Math.min((entry?.max_turns as number) ?? 40, 120);
       specs.push({ task, maxTurns, base: this.buildSubagentLifecycleBase(task, maxTurns), selection: selection.data });
     }
 
@@ -8199,6 +8252,86 @@ export class ToolExecutor {
     return executeIntel(this.ctx, args);
   }
 
+  // ── Offline / read-only security engines (dev-live-engine-recovery) ──
+  // Thin delegates to the free-function handlers in tools/security-engines.ts,
+  // mirroring the intelTool → executeIntel shape (0sec#1284).
+  private adAttackPathsTool(args: Record<string, unknown>): Promise<ToolResult> {
+    return executeAdAttackPaths(this.ctx, args);
+  }
+
+  private entraAttackPathsTool(args: Record<string, unknown>): Promise<ToolResult> {
+    return executeEntraAttackPaths(this.ctx, args);
+  }
+
+  private entraPostureTool(args: Record<string, unknown>): Promise<ToolResult> {
+    return executeEntraPosture(this.ctx, args);
+  }
+
+  private deepSourceReviewTool(args: Record<string, unknown>): Promise<ToolResult> {
+    return executeDeepSourceReview(this.ctx, args);
+  }
+
+  private fileSecurityReviewTool(args: Record<string, unknown>): Promise<ToolResult> {
+    return executeFileSecurityReview(this.ctx, args);
+  }
+
+  private assembleAdvisoryTool(args: Record<string, unknown>): Promise<ToolResult> {
+    return executeAssembleAdvisory(this.ctx, args);
+  }
+
+  private cveLookupTool(args: Record<string, unknown>): Promise<ToolResult> {
+    return executeCveLookup(this.ctx, args);
+  }
+
+  // ── Phase-2 offensive / active security engines (dev-live-engine-recovery) ──
+  // Thin delegates to the free-function handlers in tools/offensive-engines.ts.
+  // GROUP 1 offline (variant/assumption/fix); GROUP 2 scope-gated (verify /
+  // protocol / spec / safety); GROUP 3 feature-flag + scope gated (memsafety /
+  // npm / kernel / cve). The handlers re-check every gate (defense-in-depth).
+  private variantHuntTool(args: Record<string, unknown>): Promise<ToolResult> {
+    return executeVariantHunt(this.ctx, args);
+  }
+
+  private assumptionHuntTool(args: Record<string, unknown>): Promise<ToolResult> {
+    return executeAssumptionHunt(this.ctx, args);
+  }
+
+  private generateFixTool(args: Record<string, unknown>): Promise<ToolResult> {
+    return executeGenerateFix(this.ctx, args);
+  }
+
+  private verifyFindingTool(args: Record<string, unknown>): Promise<ToolResult> {
+    return executeVerifyFinding(this.ctx, args);
+  }
+
+  private protocolConformanceTool(args: Record<string, unknown>): Promise<ToolResult> {
+    return executeProtocolConformance(this.ctx, args);
+  }
+
+  private specDriftTool(args: Record<string, unknown>): Promise<ToolResult> {
+    return executeSpecDrift(this.ctx, args);
+  }
+
+  private safetyEvalTool(args: Record<string, unknown>): Promise<ToolResult> {
+    return executeSafetyEval(this.ctx, args);
+  }
+
+  private memsafetyFuzzTool(args: Record<string, unknown>): Promise<ToolResult> {
+    return executeMemsafetyFuzz(this.ctx, args);
+  }
+
+  private npmDynamicDiscoveryTool(args: Record<string, unknown>): Promise<ToolResult> {
+    return executeNpmDynamicDiscovery(this.ctx, args);
+  }
+
+  private weaponizeKernelTool(args: Record<string, unknown>): Promise<ToolResult> {
+    return executeWeaponizeKernel(this.ctx, args);
+  }
+
+  private cveAdaptTool(args: Record<string, unknown>): Promise<ToolResult> {
+    return executeCveAdapt(this.ctx, args);
+  }
+
   private updateTarget(args: Record<string, unknown>): ToolResult {
     if (args.type) this.ctx.targetInfo.type = args.type as TargetInfo["type"];
     if (args.model) this.ctx.targetInfo.model = args.model as string;
@@ -9147,6 +9280,19 @@ export function getToolsForRole(role: string, opts?: { hasScope?: boolean; webMo
   // #659 — OAST out-of-band interaction tools, opt-in (default off; inert
   // without a deployed collaborator). Confirm blind SSRF/XSS, OOB RCE/SQLi.
   const oastTools = featureFlags.oastCollaborator ? [...OAST_TOOL_NAMES] : [];
+  // Phase-2 GROUP 2 (dev-live-engine-recovery): offensive engines that touch a
+  // target — verify_finding (loop-closer), protocol_conformance, spec_drift,
+  // safety_eval. Offered ONLY when an engagement scope is active, mirroring the
+  // target-touching precedent: a no-scope session never sees them.
+  const offensiveScopedTools = opts?.hasScope ? [...OFFENSIVE_SCOPED_TOOL_NAMES] : [];
+  // Phase-2 GROUP 3: engines that RUN/BUILD untrusted code or weaponize.
+  // Deny-by-default — each needs its named feature flag AND an active scope
+  // (0SEC_FEATURE_CLOUD_SURFACE parity). weaponize_kernel / cve_adapt add a
+  // runtime kernel-VM-artifact check in their handlers on top of this.
+  const memsafetyTools = featureFlags.memsafetyFuzz && opts?.hasScope ? [...MEMSAFETY_TOOL_NAMES] : [];
+  const npmDiscoveryTools = featureFlags.npmDynamicDiscovery && opts?.hasScope ? [...NPM_DISCOVERY_TOOL_NAMES] : [];
+  const kernelWeaponizeTools = featureFlags.kernelWeaponize && opts?.hasScope ? [...KERNEL_WEAPONIZE_TOOL_NAMES] : [];
+  const cveAdaptTools = featureFlags.cveAdapt && opts?.hasScope ? [...CVE_ADAPT_TOOL_NAMES] : [];
   const networkTools = [
     "http_request",
     "crawl",
@@ -9173,6 +9319,11 @@ export function getToolsForRole(role: string, opts?: { hasScope?: boolean; webMo
     ...cloudTools,
     ...orchestratorTools,
     ...oastTools,
+    ...offensiveScopedTools,
+    ...memsafetyTools,
+    ...npmDiscoveryTools,
+    ...kernelWeaponizeTools,
+    ...cveAdaptTools,
     "send_prompt",
     "save_finding",
     "update_finding",
@@ -9225,7 +9376,18 @@ export function getToolsForRole(role: string, opts?: { hasScope?: boolean; webMo
     // feature flag once the transport backend lands (WIRING TODO: add a
     // `featureFlags.proxy` gate + `"proxy"` to networkTools). Excluded by
     // omission here so it never leaks into the audit/review "everything" set.
-    && name !== "proxy",
+    && name !== "proxy"
+    // Phase-2 GROUP 2 (dev-live-engine-recovery): target-touching offensive
+    // engines stay out of the audit/review "everything" set unless a scope is
+    // active (parity with the scanner gating above — no scope ⇒ not offered).
+    && (opts?.hasScope || !OFFENSIVE_SCOPED_TOOL_NAMES.includes(name))
+    // Phase-2 GROUP 3: untrusted-exec / weaponization engines stay out unless
+    // BOTH their feature flag AND a scope are present (0SEC_FEATURE_CLOUD_SURFACE
+    // parity). Absent flag ⇒ never offered, even in the "everything" set.
+    && ((featureFlags.memsafetyFuzz && opts?.hasScope) || !MEMSAFETY_TOOL_NAMES.includes(name))
+    && ((featureFlags.npmDynamicDiscovery && opts?.hasScope) || !NPM_DISCOVERY_TOOL_NAMES.includes(name))
+    && ((featureFlags.kernelWeaponize && opts?.hasScope) || !KERNEL_WEAPONIZE_TOOL_NAMES.includes(name))
+    && ((featureFlags.cveAdapt && opts?.hasScope) || !CVE_ADAPT_TOOL_NAMES.includes(name)),
   );
   const scopedSourceTools = Object.keys(SCOPED_SOURCE_AUDIT_TOOLS).filter((name) =>
     name !== "remember_codebase" && (featureFlags.zeroverse || name !== "analyze_binary"),

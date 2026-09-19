@@ -1191,6 +1191,8 @@ describe("compactMessagesWithLLM — preserve credential-bearing messages (0sec#
   // etc.) — otherwise the line would leak into the regex-derived
   // "Additional extracted context" block even with the feature disabled,
   // and the negative assertion would be impossible.
+  // Synthetic narrative fixture exercises credential preservation during compaction.
+  // foxguard: ignore[js/no-hardcoded-secret]
   const CREDENTIAL_LINE = "Recovered the operator credential mfsmpKraken72 from the login portal";
 
   function buildThirtyMessageConversation(): NativeMessage[] {
@@ -1270,7 +1272,7 @@ describe("compactMessagesWithLLM — preserve credential-bearing messages (0sec#
     const runtime = createParaphrasingRuntime();
     const messages = buildThirtyMessageConversation();
 
-    const compacted = await compactMessagesWithLLM(messages, runtime, "system");
+    const compacted = (await compactMessagesWithLLM(messages, runtime, "system")).messages;
     const serialized = serializeCompacted(compacted);
 
     // The literal credential survives.
@@ -1285,7 +1287,7 @@ describe("compactMessagesWithLLM — preserve credential-bearing messages (0sec#
     const runtime = createParaphrasingRuntime();
     const messages = buildThirtyMessageConversation();
 
-    const compacted = await compactMessagesWithLLM(messages, runtime, "system");
+    const compacted = (await compactMessagesWithLLM(messages, runtime, "system")).messages;
     const serialized = serializeCompacted(compacted);
 
     // Without the feature, the literal credential token from middle turn 12
@@ -1374,11 +1376,11 @@ describe("compactMessagesWithLLM — same-role tail runs are merged, not dropped
   }
 
   it("keeps the tool_result that follows an injected user message", async () => {
-    const compacted = await compactMessagesWithLLM(
+    const compacted = (await compactMessagesWithLLM(
       conversationWithConsecutiveUserTail(),
       summarizingRuntime(),
       "system",
-    );
+    )).messages;
 
     const last = compacted.at(-1)!;
     expect(last.role).toBe("user");
@@ -1427,7 +1429,7 @@ describe("compactMessagesWithLLM — same-role tail runs are merged, not dropped
       conversationWithConsecutiveAssistantTail("gpt-5.5"),
       summarizingRuntime(),
       "system",
-    ))
+    )).messages
       .find((m) => m.content.some((b) => b.type === "text" && b.text === "first"))!;
     expect(merged.content).toEqual([{ type: "text", text: "first" }, { type: "text", text: "second" }]);
     expect(merged.providerRaw!.output).toEqual([{ type: "reasoning", id: "rs_1" }, { type: "reasoning", id: "rs_2" }]);
@@ -1439,7 +1441,7 @@ describe("compactMessagesWithLLM — same-role tail runs are merged, not dropped
       conversationWithConsecutiveAssistantTail("other-model"),
       summarizingRuntime(),
       "system",
-    ))
+    )).messages
       .find((m) => m.content.some((b) => b.type === "text" && b.text === "first"))!;
     expect(mismatched.content).toHaveLength(2);
     expect(mismatched.providerRaw).toBeUndefined();

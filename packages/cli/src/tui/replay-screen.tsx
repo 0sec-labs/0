@@ -409,7 +409,7 @@ export function ReplayScreen({ dbPath, scanId, onExit, shell }: { dbPath?: strin
         <Cells width={width} fg={error ? theme.ERROR : theme.MUTED}>
           {replayStatusLine}
         </Cells>
-        <FooterBar hint={replayFiltering ? "type to filter · enter keep · esc clear" : "↑↓ move · / filter · esc back · ctrl+p commands · ctrl+c exit"} />
+        <FooterBar hint={replayFiltering ? "type to filter · [⏎] keep · [esc] clear" : "[↑↓] move · [/] filter · [esc] back · [⌃P] commands · [⌃C] exit"} />
       </box>
     </ShellFrame>
   );

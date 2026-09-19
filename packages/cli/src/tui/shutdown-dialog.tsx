@@ -1,16 +1,16 @@
 /** @jsxImportSource @opentui/react */
 import React, { useEffect, useState } from "react";
-import { RGBA } from "@opentui/core";
 import { useKeyboard, useTerminalDimensions } from "@opentui/react";
 import { TextAttributes } from "@opentui/core";
 import { useTheme } from "./theme-context.js";
 import { useSettings } from "./settings-store.js";
 import { spinnerGlyph, UI_ANIMATION_INTERVAL_MS } from "./animations.js";
+import { Popup } from "./popup.js";
 
 /**
  * A centered modal shown while the app tears down on quit. It replaces a single
  * muted line at the top of the screen that was easy to miss and read as lag: a
- * bordered, backdrop-dimmed popup (matching the other dialogs) makes it obvious
+ * raised, backdrop-dimmed popup (matching the other dialogs) makes it obvious
  * the session is closing, and — because a wedged resource can still make
  * cleanup take a couple of seconds — offers an explicit, one-press "force quit
  * now" so the operator is never left wondering whether it hung.
@@ -46,27 +46,18 @@ export function ShutdownDialog({ auditCount, onForceQuit }: {
     : "Releasing resources.";
 
   return (
-    <box
-      position="absolute" top={0} left={0} width="100%" height="100%" zIndex={200}
-      backgroundColor={RGBA.fromInts(0, 0, 0, 150)}
-      alignItems="center" justifyContent="center"
-    >
-      <box
-        width={panelWidth} flexDirection="column" paddingTop={1} paddingBottom={1} paddingLeft={2} paddingRight={2}
-        border borderStyle="rounded" borderColor={theme.BORDER} backgroundColor={theme.PANEL}
-      >
-        <box flexDirection="row">
-          <text fg={theme.PRIMARY}>{spinner} </text>
-          <text fg={theme.TEXT} attributes={TextAttributes.BOLD}>Stopping audits…</text>
-        </box>
-        <text fg={theme.MUTED}>{detail}</text>
-        <box height={1} />
-        <box flexDirection="row" justifyContent="center"
-          onMouseDown={(event) => { event.stopPropagation?.(); onForceQuit(); }}>
-          <text fg={theme.ACCENT} attributes={TextAttributes.BOLD}>[ Force quit now ]</text>
-          <text fg={theme.MUTED}>  ·  Ctrl+C</text>
-        </box>
+    <Popup variant="centered" width={panelWidth} height="auto" dismissOnBackdrop={false} zIndex={200}>
+      <box flexDirection="row">
+        <text fg={theme.PRIMARY}>{spinner} </text>
+        <text fg={theme.TEXT} attributes={TextAttributes.BOLD}>Stopping audits…</text>
       </box>
-    </box>
+      <text fg={theme.MUTED}>{detail}</text>
+      <box height={1} />
+      <box flexDirection="row" justifyContent="center"
+        onMouseDown={(event) => { event.stopPropagation?.(); onForceQuit(); }}>
+        <text fg={theme.ACCENT} attributes={TextAttributes.BOLD}>[ Force quit now ]</text>
+        <text fg={theme.MUTED}>  ·  Ctrl+C</text>
+      </box>
+    </Popup>
   );
 }

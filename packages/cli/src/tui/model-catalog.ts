@@ -173,9 +173,9 @@ export function scopeModelCatalog(
 // explicit operator selection; they are not described as qualified, entitled,
 // ready, healthy, verified or funded anywhere in this module.
 
-export interface HostedCatalogModel extends CatalogModel {
-  /** The service's own row, verbatim. Never reshaped, never defaulted. */
-  catalog: InferenceModel;
+/** Customer-facing Cloud model capabilities; routing stays in the service catalog. */
+export interface HostedCatalogModel {
+  id: string;
   /** `context_length` when it is a positive finite number, else null. */
   contextTokens: number | null;
   /** `max_output_tokens` under the same rule. */
@@ -192,32 +192,11 @@ function hostedTokens(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : null;
 }
 
-/**
- * Price the hosted row off its own `pricing` block. "free" only when both
- * published rates are genuinely zero (that is `formatModelPrice`'s rule, the
- * same one the BYOK rows use); "unknown" when either rate is absent, not a
- * number, not finite, or negative — a negative rate is not a rate.
- */
-function hostedPrice(model: InferenceModel): string {
-  const input = model.pricing?.input_per_million_usd;
-  const output = model.pricing?.output_per_million_usd;
-  if (typeof input !== "number" || !Number.isFinite(input) || input < 0) return "unknown";
-  if (typeof output !== "number" || !Number.isFinite(output) || output < 0) return "unknown";
-  return formatModelPrice(input, output);
-}
-
-/** `$5` for a published rate, `unknown` for anything the row did not publish. */
-function hostedRate(value: unknown): string {
-  return typeof value === "number" && Number.isFinite(value) && value >= 0
-    ? `$${formatRate(value)}`
-    : "unknown";
-}
 
 /**
  * Project the account's live catalogue onto rows the picker can draw.
  *
- * One argument on purpose: the canonical account response carries a balance
- * and nothing per-model, so a second `account` parameter would be decorative.
+ * Funding remains in the account response, separate from model capabilities.
  *
  * Malformed input is rejected rather than absorbed. A row with a missing or
  * non-string id cannot be selected (there is nothing to send), and two rows
@@ -237,9 +216,6 @@ export function buildHostedModelCatalog(models: readonly InferenceModel[]): Host
     seen.add(model.id);
     return {
       id: model.id,
-      provider: model.provider,
-      price: hostedPrice(model),
-      catalog: model,
       contextTokens: hostedTokens(model.context_length),
       maxOutputTokens: hostedTokens(model.max_output_tokens),
     };
@@ -270,32 +246,12 @@ export function preferredHostedModel(
 /**
  * The detail column's lines for one hosted row.
  *
- * Every line is a canonical field of the service's own row — provider,
- * upstream model, wire API, context length, max output tokens and the three
- * published rates — and anything the row did not carry reads `unknown`. There
- * is no readiness, state, route-identity, allowance or entitlement line here,
- * because canonical carries none of those and inventing one would put a claim
- * on screen that nothing in this tree can back.
+ * Only customer model identity and capabilities are shown. Supplier routing and
+ * cost metadata stay out of this projection; listing is not a funding guarantee.
  */
 export function hostedModelDetails(model: HostedCatalogModel): string[] {
-  const { catalog } = model;
-  const provider = typeof catalog.provider === "string" && catalog.provider.length > 0
-    ? catalog.provider
-    : "unknown";
-  const upstream = typeof catalog.upstream_model === "string" && catalog.upstream_model.length > 0
-    ? catalog.upstream_model
-    : "unknown";
-  const wire = typeof catalog.wire_api === "string" && catalog.wire_api.length > 0
-    ? catalog.wire_api
-    : "unknown";
   return [
     model.id,
-    `Upstream: ${provider} / ${upstream}`,
-    `Wire API: ${wire}`,
     `Context: ${model.contextTokens ?? "unknown"} · output limit: ${model.maxOutputTokens ?? "unknown"}`,
-    `Catalog rates: ${model.price}`,
-    `Input / 1M: ${hostedRate(catalog.pricing?.input_per_million_usd)}`,
-    `Output / 1M: ${hostedRate(catalog.pricing?.output_per_million_usd)}`,
-    `Cached input / 1M: ${hostedRate(catalog.pricing?.cached_input_per_million_usd)}`,
   ];
 }

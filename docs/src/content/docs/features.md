@@ -1,6 +1,6 @@
 ---
 title: Features
-description: Find the supported 0sec workflow for your target, with links to command contracts, configuration, and evidence limits.
+description: Find the supported 0 workflow for your target, with links to command contracts, configuration, and evidence limits.
 ---
 
 Choose a workflow by target, then follow its setup and authorization requirements.
@@ -98,6 +98,39 @@ limits; [Configuration](/configuration/) owns feature settings and defaults.
 Use [Console](/console/) for interactive work. Desktop is in development; see
 [Roadmap](/roadmap/#desktop) for status.
 
+### Advisory evaluations
+
+Jev assistance is opt-in for browser exploration, memory ranking, duplicate
+assessment, and red-team feedback. It does not verify a vulnerability, authorize
+an action, or replace the existing verification path.
+
+Set `0SEC_JEV_FEATURES` to the selected comma-separated features: `browser`,
+`memory`, `dedupe`, or `redteam`. Credentials alone do not enable assistance.
+
+| Setting | Behavior |
+| --- | --- |
+| `0SEC_JEV_PROVIDER` | `vercel` by default; `typesafe` for direct access or `cloud` for a managed scan capability |
+| `AI_GATEWAY_API_KEY` / `TYPESAFE_API_KEY` | Credential for the selected direct provider; keep it out of command history |
+| `0SEC_JEV_TIMEOUT_MS` | Per-request timeout; default `10000` |
+| `0SEC_JEV_MAX_REQUESTS` | Per-evaluator request limit; default `100` |
+| `0SEC_JEV_MAX_COST_USD` | Per-evaluator estimated budget; default `0.10`, not a customer invoice or whole-scan ceiling |
+| `0SEC_JEV_BROWSER_READ_ONLY_URLS` | Exact comma-separated URLs approved for assisted navigation; engagement scope still applies |
+
+After configuring the provider credential:
+
+```bash
+env 0SEC_JEV_FEATURES=memory,dedupe 0sec review ./repo
+```
+
+Assistance sends selected observations to the evaluator. Browser assistance
+hands forms, authentication, writes, and ambiguous decisions back to the main
+agent. Unavailable evaluations retain the existing decision path rather than
+inventing a result.
+
+Managed workers receive a separate scan-bound capability and endpoint from
+0cloud. Installing this engine does not enable the hosted service, establish
+account entitlement, or prove that a deployed worker uses this version.
+
 ## Benchmarks
 
 Published benchmark scores, configurations, and caveats are in
@@ -107,7 +140,9 @@ results are not current-target guarantees.
 <span id="unified-soc-story"></span>
 ## Related products
 
-See [Integrations](/integrations/) for connected tools and
-[Roadmap](/roadmap/#0cloud) for managed 0cloud status. Optional
-[0sec Cloud inference](/getting-started/#hosted-models-draft) has separate setup and availability.
+See [Integrations](/integrations/) for connected tools.
+[Hosted inference](/getting-started/#hosted-models) leaves tools in your
+environment; [managed work](/getting-started/#managed-work-and-onboarding)
+requires separate scoping, access and terms. Neither is required to use the
+local open-source CLI with your own model connection.
 See [Commands](/commands/) for the full CLI reference.

@@ -3,7 +3,7 @@
 #
 # Downloads the verified release asset from 0sec-labs/foxguard to a configurable
 # install directory (default: /usr/local/bin). The pinned version is the same
-# FOXGUARD_PINNED_TAG used by the 0sec runtime (v0.13.0).
+# FOXGUARD_PINNED_TAG used by the 0sec runtime (v0.14.0).
 #
 # Usage:
 #   bash scripts/provision-foxguard.sh                    # install to /usr/local/bin
@@ -11,23 +11,23 @@
 set -eu
 
 FOXGUARD_REPO="0sec-labs/foxguard"
-FOXGUARD_TAG="${FOXGUARD_TAG:-v0.13.0}"
+FOXGUARD_TAG="${FOXGUARD_TAG:-v0.14.0}"
 INSTALL_DIR="${INSTALL_DIR:-/usr/local/bin}"
 
-# ── v0.13.0 checksums (cross-checked against the release's checksums.txt) ──
+# ── v0.14.0 checksums (cross-checked against the release's checksums.txt) ──
 # Update the pin and its checksums together when upgrading.
-FOXGUARD_SHA256_LINUX_X64="2ddb59b892836c85c38c7b100a3b714c950d04ad4762bd8b606bc7ec1482d000"
-FOXGUARD_SHA256_LINUX_ARM64="a0a6bebf632dfe27b8d5a1d0a86c01782424d4cadc1981f6bf5de2649fd298fc"
-FOXGUARD_SHA256_MACOS_ARM64="042015d898b2a2de18ac4bba20fe3152ad6d055fe2fdfb7c735449744f9a3f53"
-FOXGUARD_SHA256_MACOS_X64="8cc20d138eed0c7a82ce9e23c5dd5574b4b0f27e82ce7ab8c112c15b55dd7288"
-FOXGUARD_SHA256_WIN_X64="044d1a3023c5f10266f66125e6c9d019a98888fbc12a07120b66bdd8e6014238"
+FOXGUARD_SHA256_LINUX_X64="ef56a4d5cfc4cc4462e435bf31ca0f90694f47df1384772361a67828427db3d9"
+FOXGUARD_SHA256_LINUX_ARM64="7d5c7263d71089eb06113a634aa3394ab8b54782b16e67a349693fedbb598120"
+FOXGUARD_SHA256_MACOS_ARM64="aa47b956f31bfbc87e0f43cd48e01f3bc73229192ffff0113ff094e5b3fd7d12"
+FOXGUARD_SHA256_MACOS_X64="628b6dcecbba8abd7312be1c94ac2346a363a680429b979ec5f63cf8ac7bca4b"
+FOXGUARD_SHA256_WIN_X64="6ff15185c968da849845afa321f23f14de142d45efd568a9513d2600eec281c2"
 
 fail() {
   printf '%s\n' "foxguard provisioner: $*" >&2
   exit 1
 }
 
-[ "$FOXGUARD_TAG" = "v0.13.0" ] || fail "update the pinned checksums before selecting another release"
+[ "$FOXGUARD_TAG" = "v0.14.0" ] || fail "update the pinned checksums before selecting another release"
 
 # Resolve platform → asset name + expected sha256
 case "$(uname -s)" in

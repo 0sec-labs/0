@@ -14,7 +14,6 @@ import {
   indexOfModel,
   isFilterKey,
   modelDetailLines,
-  modelDialogTitle,
   modelTargetLine,
   providerGroupFor,
   type ModelRow,
@@ -236,7 +235,7 @@ describe("provider credential reporting", () => {
 
   it("calls a vendor with no runtime env path unmapped rather than unconfigured", () => {
     // These come from the pricing table and have no entry in PROVIDERS.
-    for (const id of ["google", "meta", "mistral", "unknown"]) {
+    for (const id of ["meta", "mistral", "unknown"]) {
       const group = providerGroupFor(id, EMPTY_ENV);
       expect(group.credential, id).toBe("unmapped");
       expect(group.envVars).toEqual([]);
@@ -455,24 +454,14 @@ describe("the focus / target line", () => {
   });
 
   it("says a role inherits when it has no assignment of its own", () => {
-    expect(modelTargetLine("attack", "gpt-5", false)).toContain("inherits the parent");
-    expect(modelTargetLine("attack", "opus", true)).not.toContain("inherits the parent");
+    expect(modelTargetLine("attack", "gpt-5", false)).toContain("inherits parent");
+    expect(modelTargetLine("attack", "opus", true)).not.toContain("inherits parent");
   });
 
   it("marks the pick inert for a role while single-model is on", () => {
     expect(modelTargetLine("attack", "opus", true, undefined, true)).toMatch(/single-model on/i);
     // The parent target is never inert — single-model pins to it.
     expect(modelTargetLine(null, "gpt-5", false, undefined, true)).not.toMatch(/single-model on/i);
-  });
-});
-
-describe("the dialog title", () => {
-  it("flags a merged 0sec Cloud group without hiding the BYOK connection", () => {
-    const merged = modelDialogTitle({ scope: "byok", providerId: "anthropic", cloudMerged: true });
-    expect(merged).toContain("anthropic");
-    expect(merged).toContain("0sec Cloud");
-    const plain = modelDialogTitle({ scope: "byok", providerId: "anthropic" });
-    expect(plain).not.toContain("0sec Cloud");
   });
 });
 

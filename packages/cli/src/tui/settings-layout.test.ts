@@ -389,13 +389,9 @@ describe("text", () => {
   });
 
   it("clips the detail body to the rows the pane holds", () => {
-    // The longest description in the table, so the clip is exercised whichever
-    // def happens to be the wordiest today.
-    const def = [...SETTING_DEFS].sort(
-      (a, b) => b.description.length - a.description.length,
-    )[0];
-    const lines = settingsDetailLines(def, def?.default, 24);
-    expect(lines.length).toBeGreaterThan(4);
+    // A fixed short title keeps the last visible row nonblank. Product copy
+    // must not decide whether this exercises inline or standalone overflow.
+    const lines = settingsDetailLines(PROBE_DEF, PROBE_DEF.default, 24);
     const clipped = clipDetailLines(lines, 4);
     expect(clipped).toHaveLength(4);
     expect(clipped.at(-1)?.text).toBe("...");

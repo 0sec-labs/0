@@ -4,15 +4,16 @@
 //   - login        opens a browser at <host>/cli-auth?session=… and polls
 //                  for the mint endpoint to drop a scoped token in
 //   - logout       deletes ~/.0sec/cloud.env
-//   - status       loads creds, hits CloudClient.pingHealth(), reports
+//   - status       loads creds, verifies the token against the
+//                  authenticated Cloud account endpoint, reports
 //
 // The browser flow is backed by the 0cloud session-mint endpoint:
 //   - `0sec auth login` opens `<host>/cli-auth?session=…` and polls the
 //     session URL until browser confirmation makes a scoped token ready.
 //   - `0sec auth login --token <value>` remains a manual credential path for
 //     self-hosted or recovery use.
-//   - `0sec auth status` works against any reachable cloud host that answers
-//     GET /health with a 2xx and `{status: "ok"}`-shaped body.
+//   - `0sec auth status` verifies the saved token against the same
+//     authenticated account endpoint used by the Cloud connection screen.
 //
 // DIVERGENCE FROM h1.ts
 // ──────────────────────
@@ -27,7 +28,7 @@
 // never the token or the Authorization header.
 
 import { spawn } from "node:child_process";
-import { homeStateDir } from "@0sec/shared";
+import { cloudStateDir, homeStateDir } from "@0sec/shared";
 import { mkdirSync, writeFileSync, chmodSync, unlinkSync, existsSync } from "node:fs";
 import { homedir, platform } from "node:os";
 import { join } from "node:path";
@@ -122,7 +123,7 @@ export function registerAuthCommand(program: Command): void {
   auth
     .command("login")
     .description("Log in to 0sec-cloud (opens browser; --token to paste directly)")
-    .option("--host <url>", `Cloud host (default ${DEFAULT_CLOUD_HOST})`)
+    .option("--host <url>", "Cloud host (defaults to 0SEC_CLOUD_HOST or production)")
     .option("--token <value>", "Skip the browser flow and persist this token directly")
     .action(async (opts: { host?: string; token?: string }) => {
       await runLogin(opts);
@@ -131,7 +132,7 @@ export function registerAuthCommand(program: Command): void {
   // ── 0sec auth logout ──
   auth
     .command("logout")
-    .description("Delete ~/.0sec/cloud.env")
+    .description("Delete credentials for the current Cloud profile")
     .action(() => {
       runLogout({});
     });
@@ -139,7 +140,7 @@ export function registerAuthCommand(program: Command): void {
   // ── 0sec auth status ──
   auth
     .command("status")
-    .description("Verify 0sec-cloud credentials against /health")
+    .description("Verify 0sec-cloud credentials and account access")
     .action(async () => {
       await runStatus({});
     });
@@ -159,7 +160,7 @@ export type HostedLoginPhase = "opening" | "opener-failed" | "polling" | "cancel
  * Returned status contains no credentials and does not imply inference availability.
  */
 export async function hostedBrowserLoginFlow(opts: HostedBrowserLoginOptions = {}): Promise<LoginResult> {
-  const host = normaliseHostArg(opts.host ?? DEFAULT_CLOUD_HOST);
+  const host = normaliseHostArg(opts.host ?? process.env["0SEC_CLOUD_HOST"] ?? DEFAULT_CLOUD_HOST);
   if (host === null) {
     return { ok: false, error: "Cloud host must be an http(s) URL without credentials, query or fragment." };
   }
@@ -184,7 +185,7 @@ export async function hostedBrowserLoginFlow(opts: HostedBrowserLoginOptions = {
     return { ok: false, error: "Sign-in timed out. Try again.", recoverable: true };
   };
   try {
-    opts.onStatus?.("opening", "Opening browser for 0sec Cloud sign-in.", loginUrl);
+    opts.onStatus?.("opening", "Opening browser for 0cloud sign-in.", loginUrl);
     signal.throwIfAborted();
     try {
       await awaitLoginStep(Promise.resolve().then(() => {
@@ -242,9 +243,9 @@ export async function hostedBrowserLoginFlow(opts: HostedBrowserLoginOptions = {
             try {
               persistCredentials(host, token, opts.homeDir);
             } catch {
-              return { ok: false, error: "Could not save 0sec Cloud credentials." };
+              return { ok: false, error: "Could not save 0cloud credentials." };
             }
-            opts.onStatus?.("ready", "Signed in to 0sec Cloud.");
+            opts.onStatus?.("ready", "Signed in to 0cloud.");
             return { ok: true, host };
           }
           if (status === "pending") continue;
@@ -255,7 +256,7 @@ export async function hostedBrowserLoginFlow(opts: HostedBrowserLoginOptions = {
         if (res.status === 410) return { ok: false, error: "Sign-in request expired. Try again.", recoverable: true };
         return {
           ok: false,
-          error: `0sec Cloud sign-in unavailable (HTTP ${res.status}). Use your own provider or try again later.`,
+          error: `0cloud sign-in unavailable (HTTP ${res.status}). Use your own provider or try again later.`,
           recoverable: res.status === 429 || res.status >= 500,
         };
       } finally {
@@ -291,7 +292,7 @@ async function awaitLoginStep<T>(operation: Promise<T>, signal: AbortSignal): Pr
 
 /** CLI command wrapper: calls hostedBrowserLoginFlow and prints results. */
 export async function runLogin(opts: LoginOptions): Promise<void> {
-  const host = normaliseHostArg(opts.host ?? DEFAULT_CLOUD_HOST);
+  const host = normaliseHostArg(opts.host ?? process.env["0SEC_CLOUD_HOST"] ?? DEFAULT_CLOUD_HOST);
   if (host === null) {
     consolePresentationOutput.stderr(chalk.red("Error: Cloud host must be an http(s) URL without credentials, query or fragment."), "auth.login.host-error");
     process.exitCode = EXIT_USER_ERROR;
@@ -309,7 +310,7 @@ export async function runLogin(opts: LoginOptions): Promise<void> {
     try {
       persistCredentials(host, tok, opts.homeDir);
     } catch {
-      consolePresentationOutput.stderr(chalk.red("Could not save 0sec Cloud credentials."), "auth.login.save-error");
+      consolePresentationOutput.stderr(chalk.red("Could not save 0cloud credentials."), "auth.login.save-error");
       process.exitCode = EXIT_USER_ERROR;
       return;
     }
@@ -352,7 +353,8 @@ export async function runLogin(opts: LoginOptions): Promise<void> {
 
 export function runLogout(opts: LogoutOptions): void {
   const home = opts.homeDir ?? homedir();
-  const osecPath = join(homeStateDir(opts.homeDir), "cloud.env");
+  const stateDir = cloudStateDir(opts.homeDir);
+  const osecPath = join(stateDir, "cloud.env");
   const cloudCredsPath = join(home, ".0cloud", "credentials.json");
   let deletedAny = false;
 
@@ -369,16 +371,18 @@ export function runLogout(opts: LogoutOptions): void {
     }
   }
 
-  // Also clean up 0cloud-compatible credential file
-  try {
-    unlinkSync(cloudCredsPath);
-    deletedAny = true;
-  } catch (err: unknown) {
-    const code = (err as { code?: string }).code;
-    if (code !== "ENOENT") {
-      consolePresentationOutput.stderr(chalk.red(`Could not delete ${cloudCredsPath}: ${err instanceof Error ? err.message : String(err)}`), "auth.logout.delete-error");
-      process.exitCode = EXIT_USER_ERROR;
-      return;
+  // Development logout must not delete production-compatible credentials.
+  if (stateDir === homeStateDir(opts.homeDir)) {
+    try {
+      unlinkSync(cloudCredsPath);
+      deletedAny = true;
+    } catch (err: unknown) {
+      const code = err !== null && typeof err === "object" && "code" in err ? err.code : undefined;
+      if (code !== "ENOENT") {
+        consolePresentationOutput.stderr(chalk.red(`Could not delete ${cloudCredsPath}: ${err instanceof Error ? err.message : String(err)}`), "auth.logout.delete-error");
+        process.exitCode = EXIT_USER_ERROR;
+        return;
+      }
     }
   }
 
@@ -408,7 +412,7 @@ export async function runStatus(opts: StatusOptions): Promise<void> {
 
   const client = new CloudClient({ ...creds, fetchImpl: opts.fetchImpl });
   try {
-    await client.pingHealth();
+    await client.getInferenceAccount();
     consolePresentationOutput.stdout(`OK (host=${creds.host})`, "auth.status.ok");
     process.exitCode = EXIT_OK;
   } catch (err) {
@@ -457,7 +461,7 @@ function normaliseHostArg(host: string | undefined): string | null {
 function persistCredentials(host: string, token: string, homeDirOverride?: string): void {
   if (!validCloudToken(token)) throw new Error("Invalid Cloud credential");
   const home = homeDirOverride ?? homedir();
-  const dir = homeStateDir(homeDirOverride);
+  const dir = cloudStateDir(homeDirOverride);
   mkdirSync(dir, { recursive: true, mode: 0o700 });
   const path = join(dir, "cloud.env");
   const body =
@@ -476,6 +480,9 @@ function persistCredentials(host: string, token: string, homeDirOverride?: strin
     // Should be impossible; we just wrote it.
     return;
   }
+
+  // Keep the private CLI's production credentials untouched by 0dev.
+  if (dir !== homeStateDir(homeDirOverride)) return;
 
   // Write 0cloud-compatible credential file for unified auth.
   // Best-effort: don't fail the 0sec login if this secondary write fails.
@@ -554,7 +561,7 @@ function extractToken(body: unknown): string | null {
  * elsewhere. Adding a dep for a 12-line function loses on the
  * dependency-cost calculus.
  */
-function defaultOpenBrowser(url: string): Promise<void> {
+export function defaultOpenBrowser(url: string): Promise<void> {
   const plat = platform();
   return new Promise<void>((resolve, reject) => {
     const options = { detached: true, stdio: "ignore" as const, shell: false };

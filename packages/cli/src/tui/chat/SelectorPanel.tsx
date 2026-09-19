@@ -1,16 +1,19 @@
 /** @jsxImportSource @opentui/react */
 import React from "react";
 import { TextAttributes } from "@opentui/core";
-import { fitTuiText } from "../text.js";
+import { fitLegend, fitTuiText } from "../text.js";
 import { commandMenuBoxHeight } from "../chat-layout.js";
+import { DialogSelectBody } from "../dialog-select.js";
+import { computeDialogPanel, type DialogItem } from "../dialog-select-layout.js";
 import type { SelectorItem } from "../selector.js";
 import type { Theme } from "../theme-context.js";
 
 /**
  * How many rows a selector panel may spend, and on what.
  *
- * The panel is a bordered box stacked above the composer with an EXPLICIT
- * height, so whatever it claims here is exactly what it paints. `budget` is
+ * The panel is a background-contrast popup stacked above the composer with an
+ * EXPLICIT height, so whatever it claims here is exactly what it paints.
+ * `budget` is
  * the number of content rows the column can spare (from
  * `computeCommandMenuHeight`, which already reserves the composer, the
  * header and a minimum transcript).
@@ -43,8 +46,9 @@ export function selectorPanelBudget({
 
 /**
  * Total rows a selector panel occupies for the rows it actually renders.
- * `commandMenuBoxHeight` covers the two border rows, the header and the
- * hint footer; the optional lines are added explicitly.
+ * `commandMenuBoxHeight` covers the two chrome rows (now paddingY, formerly
+ * the border), the header and the hint footer; the optional lines are added
+ * explicitly.
  */
 export function selectorPanelHeight(itemRows: number, showContext: boolean, showDetail: boolean): number {
   return commandMenuBoxHeight(Math.max(itemRows, 1), 1)
@@ -53,49 +57,27 @@ export function selectorPanelHeight(itemRows: number, showContext: boolean, show
 }
 
 /**
- * Row markers.
- *
- * These were Nerd Font private-use codepoints (U+F192 and friends), which draw
- * as tofu on every terminal without a patched font — the picker's single most
- * information-dense cell, illegible by default. They are ordinary box/geometry
- * glyphs now, the same vocabulary the sidebar sections and the dialog list use:
- *
- *   ▸  the focused row
- *   ●  the value currently in effect
- *   ✕  a choice that is not available
- *   ·  everything else
- */
-const MARK_ACTIVE = "▸";
-const MARK_CURRENT = "●";
-const MARK_DISABLED = "✕";
-const MARK_IDLE = "·";
-
-/**
  * THE decision surface.
  *
- * `/model`, `/mode`, `/settings`, `/providers`, `/resume` and every
- * authorization prompt render through this one component, driven by the same
- * `SelectorState` reducer and the same key bindings. Approvals used to be
- * four bespoke bordered boxes of loose `<text>` children; opentui defaults
- * `flexShrink` to 1 for any box without a numeric width/height, so under
- * column pressure Yoga collapsed those boxes while their children kept their
- * intrinsic size — every line, and the border, painted onto one row.
- *
- * Two properties prevent that here and are the reason approvals were moved
- * onto this component rather than patched in place:
- *   - an explicit `height` plus `flexShrink={0}`, so the box is clipped by
- *     the layout rather than squeezed under its own contents;
- *   - every child given an explicit cell width, so no row can overspend the
- *     panel's inner width and paint into the border.
+ * The in-chat picker (`/mode`, `/scope` and every inline `SelectorState`-driven
+ * choice) renders through this one component, driven by the same reducer and
+ * the same key bindings. Its item list is now drawn by the SAME
+ * `DialogSelectBody` the model/theme pickers use, in inline `bodyRows` mode, so
+ * the rows are byte-for-byte the same style as every other picker: one row per
+ * item, the PRIMARY-background active-row highlight, the shared column layout
+ * and the current-value gutter dot. Only the surrounding chrome (the title /
+ * context / detail / footer lines) is this component's own, and it keeps the
+ * explicit-height + `flexShrink={0}` discipline that stops Yoga from squeezing
+ * the box under its own contents.
  */
 export function SelectorPanel({
   title,
   subtitle,
   context,
   contextColor,
-  rows,
-  windowStart,
+  items,
   activeIndex,
+  visibleRows,
   detail,
   hint,
   emptyText,
@@ -109,9 +91,12 @@ export function SelectorPanel({
   subtitle: string;
   context?: string;
   contextColor?: string;
-  rows: SelectorItem[];
-  windowStart: number;
+  /** The FULL filtered item list; the body windows it around `activeIndex`. */
+  items: SelectorItem[];
+  /** Highlighted position within `items` (absolute, not a window offset). */
   activeIndex: number;
+  /** List rows the body may paint — the item region the caller budgeted. */
+  visibleRows: number;
   detail?: string;
   hint: string;
   emptyText: string;
@@ -121,7 +106,7 @@ export function SelectorPanel({
   height: number;
   theme: Theme;
 }) {
-  const { CANVAS, PANEL_ALT, MUTED, TEXT, PRIMARY, ACCENT, ERROR } = theme;
+  const { PANEL_ALT, MUTED, TEXT, ERROR } = theme;
   // Deliberately conservative: the real inner width is 2 (compact) to 4
   // (wide) cells more than this, so every explicit allocation below fits
   // with room to spare and can never reach the border.
@@ -129,21 +114,40 @@ export function SelectorPanel({
   const headerGap = innerWidth > 12 ? 1 : 0;
   const headerTitleWidth = Math.max(1, Math.min(innerWidth - headerGap, Math.floor(innerWidth * 0.55)));
   const headerSubtitleWidth = Math.max(0, innerWidth - headerTitleWidth - headerGap);
-  // Marker cell + its gap, then label, then whatever is left for the meta
-  // column. Widths and margins sum to exactly `innerWidth`; the old picker
-  // used `gap={1}` on top of widths that already spent the full row, which
-  // overspent it by two cells.
-  const labelWidth = Math.max(1, Math.min(Math.max(1, innerWidth - 2), Math.floor(innerWidth * 0.45)));
-  const afterLabel = innerWidth - 2 - labelWidth;
-  const metaGap = afterLabel > 1 ? 1 : 0;
-  const metaWidth = Math.max(0, afterLabel - metaGap);
+
+  // One DialogItem per selector row. `detail` is NOT mapped to the row's
+  // description column — it stays the single detail line below the list, as
+  // before — so each row shows label + right-aligned meta, plus the shared
+  // gutter dot for the current value.
+  const dialogItems: DialogItem[] = items.map((item) => ({
+    id: item.id,
+    label: item.label,
+    meta: item.meta,
+    current: item.current,
+    disabled: item.disabled,
+  }));
+  const hasGutter = items.some((item) => item.current);
+  // Inline geometry: the panel supplies the chrome, so the body spends none of
+  // its width on it and sizes its list from `visibleRows` (+ the one row the
+  // body reserves for its hidden search line).
+  const panel = computeDialogPanel({
+    width: innerWidth,
+    height: Math.max(1, visibleRows),
+    totalRows: dialogItems.length,
+    bodyRows: Math.max(1, visibleRows) + 1,
+  });
 
   return (
     // Inline, NOT a dialog: no scrim, no absolute positioning, no centring —
-    // it sits in the composer's column and shares its vertical budget. It
-    // borrows only the dialog language's rounded outline so the two surfaces
-    // read as one family.
-    <box flexDirection="column" width="100%" minWidth={0} height={height} flexShrink={0} marginTop={1} border borderStyle="rounded" borderColor={borderColor} backgroundColor={PANEL_ALT} paddingX={1}>
+    // it sits in the composer's column and shares its vertical budget.
+    // Borderless like the restyled dialogs/screens: the drawn rounded outline
+    // is replaced by the PANEL_ALT background contrast that now delineates the
+    // popup. The two former border columns become paddingX={2} and the two
+    // border rows become paddingY={1}, so the inner width/height budget is
+    // unchanged and `commandMenuBoxHeight`'s two chrome rows still hold. The
+    // `borderColor` prop stays in the public interface (callers pass it) but no
+    // longer draws a box; identity now rides the bold `titleColor` title text.
+    <box flexDirection="column" width="100%" minWidth={0} height={height} flexShrink={0} marginTop={1} backgroundColor={PANEL_ALT} paddingX={2} paddingY={1}>
       <box flexDirection="row" width={innerWidth} height={1} flexShrink={0} minWidth={0}>
         <box width={headerTitleWidth} height={1} flexShrink={0} minWidth={0}>
           <text width={headerTitleWidth} height={1} wrapMode="none" truncate fg={titleColor} attributes={TextAttributes.BOLD}>{fitTuiText(title, headerTitleWidth)}</text>
@@ -162,31 +166,20 @@ export function SelectorPanel({
           <text width={innerWidth} height={1} wrapMode="none" truncate fg={contextColor ?? TEXT}>{fitTuiText(context, innerWidth, { mode: "middle" })}</text>
         </box>
       ) : null}
-      {rows.length > 0 ? rows.map((item, offset) => {
-        const index = windowStart + offset;
-        const active = index === activeIndex;
-        // The highlight marks focus; the gutter separately shows the current
-        // value, an unavailable choice, or the keyboard selection.
-        const rowBg = active ? PRIMARY : undefined;
-        const dotFg = active ? CANVAS : ACCENT;
-        const labelFg = active ? CANVAS : item.disabled ? MUTED : TEXT;
-        const metaFg = active ? CANVAS : MUTED;
-        return (
-          <box key={item.id} flexDirection="row" width={innerWidth} height={1} flexShrink={0} minWidth={0} backgroundColor={rowBg}>
-            <text width={1} height={1} flexShrink={0} wrapMode="none" truncate fg={dotFg} bg={rowBg} attributes={TextAttributes.BOLD}>
-              {active ? MARK_ACTIVE : item.current ? MARK_CURRENT : item.disabled ? MARK_DISABLED : MARK_IDLE}
-            </text>
-            <box width={labelWidth} height={1} flexShrink={0} minWidth={0} marginLeft={1} backgroundColor={rowBg}>
-              <text width={labelWidth} height={1} wrapMode="none" truncate fg={labelFg} bg={rowBg} attributes={active ? TextAttributes.BOLD : undefined}>{fitTuiText(item.label, labelWidth)}</text>
-            </box>
-            {metaWidth > 0 ? (
-              <box width={metaWidth} height={1} flexShrink={0} minWidth={0} marginLeft={metaGap} backgroundColor={rowBg}>
-                <text width={metaWidth} height={1} wrapMode="none" truncate fg={metaFg} bg={rowBg}>{fitTuiText(item.meta ?? "", metaWidth, { mode: "middle" })}</text>
-              </box>
-            ) : null}
-          </box>
-        );
-      }) : (
+      {dialogItems.length > 0 ? (
+        // The shared list body: identical highlight, columns and gutter as every
+        // other picker. The search line is hidden — this picker filters through
+        // the composer above, exactly as it did before.
+        <DialogSelectBody
+          items={dialogItems}
+          cursor={activeIndex}
+          panel={panel}
+          query=""
+          hideSearch
+          gutter={hasGutter}
+          emptyText={emptyText}
+        />
+      ) : (
         <box width={innerWidth} height={1} flexShrink={0} minWidth={0}>
           <text width={innerWidth} height={1} wrapMode="none" truncate fg={ERROR}>{fitTuiText(emptyText, innerWidth)}</text>
         </box>
@@ -199,7 +192,7 @@ export function SelectorPanel({
       {/* The footer hint row — the inline equivalent of a dialog's action
           footer, and the last row the precomputed `height` accounts for. */}
       <box width={innerWidth} height={1} flexShrink={0} minWidth={0}>
-        <text width={innerWidth} height={1} wrapMode="none" truncate fg={MUTED}>{fitTuiText(hint, innerWidth)}</text>
+        <text width={innerWidth} height={1} wrapMode="none" truncate fg={MUTED}>{fitLegend(innerWidth, hint)}</text>
       </box>
     </box>
   );

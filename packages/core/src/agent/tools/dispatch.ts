@@ -29,6 +29,8 @@ import { askOperatorDispatch } from "./ask-operator.js";
 import { todosDispatch } from "./todos.js";
 import { evalDispatch } from "./eval.js";
 import { proxyDispatch } from "./proxy.js";
+import { securityEngineDispatch } from "./security-engines.js";
+import { offensiveEngineDispatch } from "./offensive-engines.js";
 
 export const TOOL_DISPATCH: Record<string, string> = {
   ...reconDispatch,
@@ -50,4 +52,6 @@ export const TOOL_DISPATCH: Record<string, string> = {
   ...todosDispatch,
   ...evalDispatch,
   ...proxyDispatch,
+  ...securityEngineDispatch,
+  ...offensiveEngineDispatch,
 };

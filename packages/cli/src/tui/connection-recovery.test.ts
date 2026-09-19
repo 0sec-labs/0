@@ -37,14 +37,14 @@ describe("connectionRecoveryForError", () => {
   it("recovers Cloud authentication without treating its upstream as BYOK", () => {
     for (const error of [
       "0sec-cloud auth rejected (HTTP 401)",
-      "0sec Cloud API error 401: OpenAI credential revoked",
+      "0cloud API error 401: OpenAI credential revoked",
       "RuntimeConfig.provider=hosted has no configured credentials",
     ]) {
       expect(connectionRecoveryForError(error)?.providerId).toBe("hosted");
     }
     for (const status of [403, 402, 429, 503]) {
       expect(connectionRecoveryForError(
-        `0sec Cloud API error ${status}: OpenAI unavailable`,
+        `0cloud API error ${status}: OpenAI unavailable`,
       )).toBeNull();
     }
   });

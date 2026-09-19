@@ -489,7 +489,7 @@ export function OverviewPage({ data }: { data: DashboardResponse }) {
                   {needsAttention.map((group) => (
                     <TableRow key={group.fingerprint}>
                       <TableCell className="font-medium">
-                        <NavLink to={`/findings/${group.fingerprint}`} className="text-foreground hover:text-primary">
+                        <NavLink to={`/findings/${group.fingerprint}`} className="text-foreground hover:text-primary-text">
                           {group.latest.title}
                         </NavLink>
                       </TableCell>
@@ -536,7 +536,7 @@ export function OverviewPage({ data }: { data: DashboardResponse }) {
                   <div key={group.fingerprint} className="rounded-lg border border-border bg-background px-4 py-3">
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
-                        <NavLink to={`/findings/${group.fingerprint}`} className="text-sm font-medium text-foreground hover:text-primary">
+                        <NavLink to={`/findings/${group.fingerprint}`} className="text-sm font-medium text-foreground hover:text-primary-text">
                           {group.latest.title}
                         </NavLink>
                         <div className="mt-1 text-xs text-muted-foreground">
@@ -633,7 +633,7 @@ export function OverviewPage({ data }: { data: DashboardResponse }) {
                   {recentRuns.map((scan) => (
                     <TableRow key={scan.id}>
                       <TableCell className="font-medium">
-                        <NavLink to={`/runs/${scan.id}`} className="text-foreground hover:text-primary">
+                        <NavLink to={`/runs/${scan.id}`} className="text-foreground hover:text-primary-text">
                           {scan.target}
                         </NavLink>
                       </TableCell>
@@ -687,7 +687,7 @@ export function OverviewPage({ data }: { data: DashboardResponse }) {
                   {latestThreads.map((group) => (
                     <TableRow key={group.fingerprint}>
                       <TableCell className="font-medium">
-                        <NavLink to={`/findings/${group.fingerprint}`} className="text-foreground hover:text-primary">
+                        <NavLink to={`/findings/${group.fingerprint}`} className="text-foreground hover:text-primary-text">
                           {group.latest.title}
                         </NavLink>
                       </TableCell>
@@ -730,7 +730,7 @@ export function OverviewPage({ data }: { data: DashboardResponse }) {
               <div key={`${incident.scanId}:${incident.timestamp}`} className="rounded-md border border-destructive/20 bg-destructive/5 px-4 py-3">
                 <div className="flex items-start justify-between gap-4">
                   <div className="min-w-0">
-                    <NavLink to={`/runs/${incident.scanId}`} className="text-sm font-medium text-foreground hover:text-primary">
+                    <NavLink to={`/runs/${incident.scanId}`} className="text-sm font-medium text-foreground hover:text-primary-text">
                       {incident.scanTarget}
                     </NavLink>
                     <div className="mt-1 text-sm leading-6 text-muted-foreground">{incident.headline}</div>
@@ -783,12 +783,12 @@ export function OverviewPage({ data }: { data: DashboardResponse }) {
                   <TableRow key={event.id}>
                     <TableCell className="font-medium">
                       <div className="space-y-1">
-                        <NavLink to={`/runs/${event.scanId}`} className="text-foreground hover:text-primary">
+                        <NavLink to={`/runs/${event.scanId}`} className="text-foreground hover:text-primary-text">
                           {event.scanTarget}
                         </NavLink>
                         {event.findingFingerprint ? (
                           <div>
-                            <NavLink to={`/findings/${event.findingFingerprint}`} className="text-xs text-muted-foreground hover:text-primary">
+                            <NavLink to={`/findings/${event.findingFingerprint}`} className="text-xs text-muted-foreground hover:text-primary-text">
                               Open finding
                             </NavLink>
                           </div>

@@ -25,7 +25,14 @@ export type {
   FetchImpl,
   InferenceModel,
   InferenceModelsResponse,
-  InferenceAccountResponse,
+  CreditAccount,
+  CreditAccountFree,
+  CreditAccountSubscription,
+  CreditAccountSubscriptionWindow,
+  CreditAccountPrepaid,
+  CreditAccountPurchase,
+  CreditAccountPurchasePreset,
+  CreditAccountAdmission,
   InferenceUsageResponse,
 } from "./client.js";
 

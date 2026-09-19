@@ -26,6 +26,7 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { sleekScrollbar } from "./scrollbar.js";
 import { useKeyboard } from "@opentui/react";
 import { TextAttributes } from "@opentui/core";
 import { eventBus } from "@0sec/core";
@@ -483,10 +484,7 @@ export function AgentsCommsScreen({
             scrollX={false}
             stickyScroll
             stickyStart="bottom"
-            verticalScrollbarOptions={{
-              trackOptions: { backgroundColor: theme.PANEL, foregroundColor: theme.MUTED },
-              arrowOptions: { foregroundColor: theme.MUTED, backgroundColor: theme.PANEL },
-            }}
+            verticalScrollbarOptions={sleekScrollbar(theme)}
           >
             <box flexDirection="column" width="100%" minWidth={0}>
               {streamShown.map((message) => (
@@ -540,10 +538,9 @@ function RegionShell({
       flexGrow={0}
       minWidth={0}
       minHeight={0}
-      border={bordered || undefined}
-      borderColor={bordered ? theme.BORDER : undefined}
       backgroundColor={bordered ? theme.PANEL : undefined}
-      paddingX={bordered ? 1 : undefined}
+      paddingX={bordered ? 2 : undefined}
+      paddingY={bordered ? 1 : undefined}
     >
       <box flexDirection="row" width={innerWidth} flexShrink={0} minWidth={0}>
         <Cells width={cols.titleWidth} fg={theme.PRIMARY} attributes={TextAttributes.BOLD}>

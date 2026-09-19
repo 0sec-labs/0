@@ -56,13 +56,14 @@ export function analyticsOptedOut(env: NodeJS.ProcessEnv = process.env): boolean
 }
 
 /**
- * Resolve the effective analytics tier. Any opt-out env forces "off"; an
- * unknown or invalid `0SEC_ANALYTICS_LEVEL` also yields "off" (fail closed).
+ * Resolve the effective analytics tier. Any opt-out env forces "off"; when
+ * `0SEC_ANALYTICS_LEVEL` is unset the default is "full". An unknown/invalid
+ * value still fails closed to "off".
  */
 export function resolveAnalyticsLevel(env: NodeJS.ProcessEnv = process.env): AnalyticsLevel {
   if (analyticsOptedOut(env)) return "off";
   const raw = env[ANALYTICS_LEVEL_ENV];
-  if (typeof raw !== "string") return "off";
+  if (typeof raw !== "string") return "full";
   const normalized = raw.trim().toLowerCase();
   return isAnalyticsLevel(normalized) ? normalized : "off";
 }

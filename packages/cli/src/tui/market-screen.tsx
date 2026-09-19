@@ -34,6 +34,7 @@
  */
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { sleekScrollbar } from "./scrollbar.js";
 import { useKeyboard } from "@opentui/react";
 import { TextAttributes } from "@opentui/core";
 
@@ -540,16 +541,7 @@ export function MarketScreen({
         height={pane.height}
         flexShrink={0}
         scrollX={false}
-        verticalScrollbarOptions={{
-          trackOptions: {
-            backgroundColor: theme.PANEL,
-            foregroundColor: theme.MUTED,
-          },
-          arrowOptions: {
-            foregroundColor: theme.MUTED,
-            backgroundColor: theme.PANEL,
-          },
-        }}
+        verticalScrollbarOptions={sleekScrollbar(theme)}
       >
         <box width={inner} flexDirection="column" flexShrink={0} minWidth={0}>
           {lines.map((line, index) => (
@@ -645,6 +637,11 @@ export function MarketScreen({
             const rowIndex = rowIndexOfItem[itemIndex];
             if (rowIndex !== undefined) applySelected(rowIndex);
           }}
+          onHoverRow={(itemIndex) => {
+            // Hover previews selection, exactly as arrow-key navigation does.
+            const rowIndex = rowIndexOfItem[itemIndex];
+            if (rowIndex !== undefined) applySelected(rowIndex);
+          }}
           onScroll={move}
         />
       )}
@@ -660,7 +657,7 @@ export function MarketScreen({
 
   const hasFilter = filter.length > 0;
   const hint = rows.length === 0 && !hasFilter && mode === "browse"
-    ? "esc back · ctrl+c exit"
+    ? "[esc] back · [⌃C] exit"
     : marketFooterHint(mode, hasFilter, activeAction);
   return <>{frame({ body, hint })}</>;
 }

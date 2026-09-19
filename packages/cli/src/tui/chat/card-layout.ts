@@ -361,29 +361,29 @@ export interface ToolInputSection {
 
 /**
  * Project the call's input for display, or `null` when the entry retained no
- * input at all (a restored transcript often has not). The diff on an edit card
- * is deliberately NOT treated as input — it is the result of the edit and
- * belongs in the output region.
+ * input at all (a restored transcript often has not), OR when the input would
+ * merely restate what the headline / body already shows.
+ *
+ * The card headline IS the operation that ran, so an input section that repeats
+ * it is dead weight — the "command shown twice" bug. It is therefore suppressed
+ * for every metaKind whose distinctive content already lives elsewhere on the
+ * card:
+ *   - command → the `$ cmd` headline already IS the command; body is its output
+ *   - edit    → the headline carries the path; the body is the diff
+ *   - web     → the headline names the search; the body carries query/answer/sources
+ * Only a generic tool — whose header is a bounded, possibly-truncated verb line
+ * and whose body is just its output — keeps an Arguments section, because that
+ * is the one place its full recorded input is shown.
  */
 export function toolInputSection(entry: ChatEntry, maxLines = 12): ToolInputSection | null {
   const cap = Math.max(1, Math.floor(maxLines));
   const split = (text: string): string[] =>
     text.replace(/\s+$/, "").split("\n").slice(0, cap).map((line) => sanitizeTuiText(line));
 
-  if (entry.metaKind === "command") {
-    const command = (entry.command ?? "").trim();
-    if (!command) return null;
-    return { label: "Command", language: "bash", lines: split(command) };
-  }
-  if (entry.metaKind === "web") {
-    const query = (entry.webQuery ?? "").trim();
-    if (!query) return null;
-    return { label: "Query", lines: split(query) };
-  }
-  if (entry.metaKind === "edit") {
-    const path = (entry.editPath ?? "").trim();
-    if (!path) return null;
-    return { label: "Path", lines: split(path) };
+  // command / edit / web all render their input in the headline or the body,
+  // so a raw input section here would only duplicate it.
+  if (entry.metaKind === "command" || entry.metaKind === "edit" || entry.metaKind === "web") {
+    return null;
   }
   const args = (entry.toolArgs ?? "").trim();
   if (!args) return null;
@@ -395,13 +395,6 @@ export function toolInputSection(entry: ChatEntry, maxLines = 12): ToolInputSect
 // ---------------------------------------------------------------------------
 // The status region
 // ---------------------------------------------------------------------------
-
-/** A single structured status row. `tone` selects the theme colour, not text. */
-export interface ToolStatusRow {
-  label: string;
-  value: string;
-  tone: "state" | "error" | "muted";
-}
 
 /**
  * Human duration for a measured wallclock, or `undefined` when nothing was
@@ -433,75 +426,60 @@ export function formatCompact(n: number | undefined): string {
 }
 
 /**
- * The structured Status block. The state row is always present (it is always
- * known); every other row appears only when its field was recorded.
+ * Compact status fragment appended to the card HEADLINE, OMP-style. The old
+ * multi-row State / Exit / Ceiling / Output block is gone: the run's STATE is
+ * already carried by the border colour and the headline glyph, its DURATION
+ * rides the border (` · (<dur>)`), and its output-line count is self-evident
+ * from the Output region — so none of those earns a row of its own.
+ *
+ * What is left is the handful of facts a glance at the border cannot convey,
+ * folded onto the header as ` · <fact>` segments, and ONLY when the field was
+ * actually recorded:
+ *   - a wallclock kill        → `timed out`
+ *   - a non-zero exit code    → `exit N`   (a zero exit is the unremarkable case)
+ *   - an edit's line delta     → `+A -R`
+ *   - a web search's source count → `N sources`
+ *
+ * The running-only "Ceiling" (the timeout budget) is intentionally NOT here —
+ * it belongs on the live running note (`toolRunningNote`) and disappears once
+ * the call settles.
  */
-export function toolStatusRows(
-  entry: ChatEntry,
-  state: ToolState,
-  outputLines: number,
-  outputTruncated: boolean,
-): ToolStatusRow[] {
-  const rows: ToolStatusRow[] = [];
-  const { word } = toolStateLabel(state);
-  rows.push({ label: "State", value: word, tone: state === "failed" ? "error" : "state" });
-
-  if (entry.timedOut === true) {
-    rows.push({ label: "Timeout", value: "killed at the wallclock ceiling", tone: "error" });
-  }
-  if (typeof entry.exitCode === "number") {
-    rows.push({
-      label: "Exit",
-      value: String(entry.exitCode),
-      tone: entry.exitCode === 0 ? "muted" : "error",
-    });
-  }
-  // Duration is NOT a status row: it rides the top border headline (OMP-style,
-  // ` · (<dur>)` after the title). See `formatDurationMs` — still exported and
-  // used by `ToolCard`'s headline — and the headline construction in ToolCard.
-  if (typeof entry.timeoutMs === "number" && Number.isFinite(entry.timeoutMs)) {
-    rows.push({ label: "Ceiling", value: `${Math.round(entry.timeoutMs / 1000)}s`, tone: "muted" });
+export function toolHeaderStatus(entry: ChatEntry, state: ToolState): string {
+  const parts: string[] = [];
+  if (entry.timedOut === true) parts.push("timed out");
+  if (typeof entry.exitCode === "number" && entry.exitCode !== 0) parts.push(`exit ${entry.exitCode}`);
+  if (state === "failed" && !parts.length && entry.metaKind !== "edit" && entry.metaKind !== "web") {
+    // A failure with no exit/timeout signal still says so once, so the header
+    // is never a silent-looking success painted only by the border colour.
+    parts.push("failed");
   }
   if (entry.metaKind === "edit" && (entry.editAdded !== undefined || entry.editRemoved !== undefined)) {
-    const parts: string[] = [];
-    if (entry.editAdded !== undefined) parts.push(`+${entry.editAdded}`);
-    if (entry.editRemoved !== undefined) parts.push(`-${entry.editRemoved}`);
-    rows.push({ label: "Changes", value: parts.join(" / "), tone: "muted" });
+    const seg: string[] = [];
+    if (entry.editAdded !== undefined) seg.push(`+${entry.editAdded}`);
+    if (entry.editRemoved !== undefined) seg.push(`-${entry.editRemoved}`);
+    if (seg.length) parts.push(seg.join(" "));
   }
   if (entry.metaKind === "web" && entry.webSources && entry.webSources.length > 0) {
-    rows.push({
-      label: "Sources",
-      value: `${entry.webSources.length}`,
-      tone: "muted",
-    });
+    const n = entry.webSources.length;
+    parts.push(`${n} source${n === 1 ? "" : "s"}`);
   }
-  if (outputLines > 0) {
-    rows.push({
-      label: "Output",
-      value: `${outputLines} line${outputLines === 1 ? "" : "s"}${outputTruncated ? " (capped)" : ""}`,
-      tone: "muted",
-    });
-  }
-  return rows;
+  return parts.length ? ` · ${parts.join(" · ")}` : "";
 }
 
 /**
- * Column split for the status grid: a fixed label gutter sized to the widest
- * label present, and the remainder for values. Both are clamped so the two
- * columns plus the gap can never exceed the inner width.
+ * The single muted note drawn beneath a card while it is still RUNNING —
+ * `◌ running`, plus the wallclock ceiling (the timeout budget) when one was
+ * recorded, e.g. `running · ceiling 30s`. Returns `undefined` for a settled
+ * call, which shows no note at all. `glyph` is the state glyph the caller
+ * already computed.
  */
-export function statusColumns(
-  rows: readonly ToolStatusRow[],
-  innerWidth: number,
-): { labelWidth: number; gap: number; valueWidth: number } {
-  const inner = Math.max(0, Math.floor(innerWidth));
-  if (inner < 6 || rows.length === 0) return { labelWidth: 0, gap: 0, valueWidth: inner };
-  const widest = rows.reduce((n, row) => Math.max(n, row.label.length), 0);
-  const gap = 1;
-  // Never let the gutter eat more than a third of the card.
-  const labelWidth = Math.min(widest, Math.max(3, Math.floor(inner / 3)));
-  const valueWidth = Math.max(1, inner - labelWidth - gap);
-  return { labelWidth, gap, valueWidth };
+export function toolRunningNote(entry: ChatEntry, state: ToolState, glyph: string): string | undefined {
+  if (state !== "running") return undefined;
+  const ceiling =
+    typeof entry.timeoutMs === "number" && Number.isFinite(entry.timeoutMs) && entry.timeoutMs > 0
+      ? ` · ceiling ${Math.round(entry.timeoutMs / 1000)}s`
+      : "";
+  return `${glyph} running${ceiling}`;
 }
 
 // ---------------------------------------------------------------------------

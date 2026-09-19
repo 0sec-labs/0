@@ -10,9 +10,9 @@
  *   2. Runs `redactContent` over EVERY string in the record (keys included),
  *      so a secret that reached a counter label or free-text field is scrubbed
  *      before it can leave the process.
- *   3. Attaches the anonymous envelope (install id, per-run session id, CLI
- *      version, finite platform / arch / runtime — never anything that
- *      identifies the operator).
+ *   3. Attaches random install/session identifiers and finite runtime metadata.
+ *      Authenticated delivery is attributable; the identifiers are not a
+ *      guarantee of anonymity.
  *   4. Batches and transmits fire-and-forget to `/api/cli-analytics`.
  *
  * SAFETY CONTRACT:
@@ -21,11 +21,16 @@
  *   - Telemetry must NEVER block or break an audit: every path is wrapped in
  *     try/catch, transmission is fire-and-forget with a short timeout, and a
  *     failure (offline, DNS, 500, no credentials) is a silent no-op.
- *   - USAGE tier only for now: the bus sink derives aggregate COUNTERS
- *     (tool names, counts, error categories, durations, cost) from the event
- *     bus. It never reads raw content — the bus only carries a bounded preview
- *     and this sink deliberately ignores it. Command / code / target / finding
- *     collectors are a separate, reviewed wave and are NOT wired here.
+ *   - USAGE tier: the bus sink derives aggregate COUNTERS (tool names, counts,
+ *     error categories, durations, cost) from the event bus. It never reads raw
+ *     content — the bus only carries a bounded preview and this sink
+ *     deliberately ignores it.
+ *   - COMMANDS tier: tool call records (command, args, output) and code snippets.
+ *   - FULL tier: scope entries and findings.
+ *
+ * On a level downgrade, disallowed pending records are purged. Explicit off
+ * unsubscribes the bus sink; environment opt-outs also gate accumulation.
+ * Every POST re-checks each record's required tier against the live level.
  */
 
 import { homeStateDir, VERSION } from "@0sec/shared";
@@ -39,7 +44,7 @@ import {
   type AnalyticsLevel,
 } from "./analytics-level.js";
 import { getInstallId, newSessionId } from "./install-id.js";
-import { redactContent, type RedactContext } from "./redaction.js";
+import { MAX_CONTENT_BYTES, redactContent, type RedactContext } from "./redaction.js";
 import type {
   AnalyticsEnvelope,
   CodeRecord,
@@ -69,6 +74,18 @@ const USAGE_FLUSH_DEBOUNCE_MS = 2000;
 
 /** Debounce (ms) before a non-empty batch is POSTed. */
 const TRANSMIT_DEBOUNCE_MS = 500;
+
+/**
+ * Maximum records in a single POST body (receiver limit).
+ * Encoded JSON body must also fit within {@link MAX_BODY_BYTES}.
+ */
+const MAX_RECORDS_PER_BATCH = 100;
+
+/**
+ * Maximum encoded POST body size in bytes (receiver limit).
+ * Includes the `{"records":[…]}` wrapper.
+ */
+export const MAX_BODY_BYTES = 1_048_576;
 
 // ---------------------------------------------------------------------------
 // Finite host labels (mirror feedback.ts / schema.ts allowlists)
@@ -140,12 +157,21 @@ function classifyFailureText(text: string): string | null {
 // ---------------------------------------------------------------------------
 
 const SENSITIVE_FIELD = /^(?:password|passwd|pwd|secret|client[_-]?secret|token|api[_-]?key|access[_-]?token|refresh[_-]?token|authorization|proxy[_-]?authorization|cookie|set[_-]?cookie|credentials?|x[-_].*(?:key|auth|token|secret))$/i;
+
+const CONTENT_FIELDS = ["argsRedacted", "outputRedacted", "sourceRedacted"] as const;
+const BODY_PREFIX = '{"records":[';
+const BODY_SUFFIX = "]}";
+const BODY_OVERHEAD_BYTES = BODY_PREFIX.length + BODY_SUFFIX.length;
+
 /**
  * Recursively run {@link redactContent} over every string in a record —
  * VALUES and object KEYS alike (a counter label is a tool / category name and
  * could, in the MCP case, carry attacker-influenced text). Numbers and
  * booleans pass through untouched. Never throws: on any failure the field is
  * dropped rather than emitted raw.
+ *
+ * Content fields are redacted without truncation; enqueue checks their UTF-8
+ * byte limits. Other strings retain the bounded metadata policy.
  */
 export function redactRecordStrings<T>(value: T, context: RedactContext = {}): T {
   try {
@@ -155,20 +181,23 @@ export function redactRecordStrings<T>(value: T, context: RedactContext = {}): T
       return value.map((v) => redactRecordStrings(v, context)) as unknown as T;
     }
     if (value && typeof value === "object") {
-      const out: Record<string, unknown> = {};
+      const out: Record<string, unknown> = Object.create(null);
       const namedField = (value as Record<string, unknown>).name;
       for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
         // Redact the key too; keep a stable fallback so a dropped key never
         // silently merges two distinct counters into "".
         const rk = redactContent(k, context) || "<redacted-key>";
         out[rk] = SENSITIVE_FIELD.test(k) || (k === "value" && typeof namedField === "string" && SENSITIVE_FIELD.test(namedField))
-          ? "<REDACTED-SECRET>" : redactRecordStrings(v, context);
+          ? "<REDACTED-SECRET>"
+          : typeof v === "string" && CONTENT_FIELDS.includes(k as typeof CONTENT_FIELDS[number])
+            ? redactContent(v, { ...context, maxChars: Number.POSITIVE_INFINITY })
+            : redactRecordStrings(v, context);
       }
       return out as unknown as T;
     }
     return value;
   } catch {
-    return null as T;
+    return undefined as T;
   }
 }
 
@@ -246,6 +275,8 @@ export interface AnalyticsPipelineOptions {
  */
 class AnalyticsPipeline {
   private level: AnalyticsLevel = "off";
+  private observedLevel: AnalyticsLevel = "off";
+  private transmitting: Promise<void> | null = null;
   private homeDir: string | undefined;
   private fetchImpl: FetchImpl | undefined;
 
@@ -255,7 +286,12 @@ class AnalyticsPipeline {
   private acc: UsageAccumulator = emptyAccumulator();
   private accDirty = false;
 
-  private batch: Array<Record<string, unknown>> = [];
+  /**
+   * Queued payload + the tier it was enqueued at. The tier is kept so on
+   * downgrade we can purge records that are no longer permitted, and so
+   * transmit can re-check each record against the live level.
+   */
+  private batch: Array<{ json: string; bytes: number; requiredTier: AnalyticsLevel }> = [];
 
   private usageFlushTimer: ReturnType<typeof setTimeout> | null = null;
   private transmitTimer: ReturnType<typeof setTimeout> | null = null;
@@ -273,17 +309,70 @@ class AnalyticsPipeline {
     if (opts.fetchImpl !== undefined) this.fetchImpl = opts.fetchImpl;
   }
 
-  /** Update the cached consent tier live (e.g. a /settings change). */
+  /**
+   * Update the cached consent tier live (e.g. a /settings change).
+   *
+   * Downgrading the level purges any queued records that are no longer
+   * permitted. Switching to "off" also unsubscribes the bus sink and resets
+   * the usage accumulator so events emitted while off are never queued.
+   * Switching from "off" to a non-off level subscribes the sink with a fresh
+   * accumulator.
+   */
   setLevel(level: AnalyticsLevel): void {
+    const wasOff = this.level === "off";
+
+    // ── Purge queued records that exceed the new level ──────────────────
+    if (!levelAtLeast(level, this.level)) {
+      // Downgrade: drop records above the new tier.
+      this.batch = this.batch.filter((entry) =>
+        levelAtLeast(level, entry.requiredTier),
+      );
+    }
+
     this.level = level;
-    // Turning analytics on after startup must begin listening; the enqueue
-    // gate keeps an "off" state cheap so we never need to tear the sink down.
-    if (level !== "off") this.ensureSubscribed();
+    this.effectiveLevel();
+
+    if (level === "off") {
+      // Unsubscribe sink so no usage is accumulated while off.
+      this.unsubscribe?.();
+      this.unsubscribe = null;
+      this.acc = emptyAccumulator();
+      this.accDirty = false;
+      this.batch = [];
+    } else {
+      if (wasOff) {
+        // Coming back from off — start fresh, don't flush stale events.
+        this.acc = emptyAccumulator();
+        this.accDirty = false;
+      }
+      this.ensureSubscribed();
+    }
   }
 
-  /** Current cached tier. */
+  /** Current tier after live environment restrictions. */
   getLevel(): AnalyticsLevel {
-    return this.level;
+    return this.effectiveLevel();
+  }
+
+  /**
+   * The effective consent tier: minimum of the stored (saved/configured) tier
+   * and the environment-resolved tier. This ensures an explicit env override
+   * (e.g. `0SEC_ANALYTICS_LEVEL=off` in the parent shell) can never be
+   * bypassed by a cached "full" pipeline. Also re-checks opt-out env vars
+   * at every call, so a late-set `0SEC_OFFLINE` still takes effect.
+   */
+  private effectiveLevel(): AnalyticsLevel {
+    const envLevel = resolveAnalyticsLevel();
+    const level = levelAtLeast(this.level, envLevel) ? envLevel : this.level;
+    if (!levelAtLeast(level, this.observedLevel)) {
+      this.batch = this.batch.filter((entry) => levelAtLeast(level, entry.requiredTier));
+      if (level === "off") {
+        this.acc = emptyAccumulator();
+        this.accDirty = false;
+      }
+    }
+    this.observedLevel = level;
+    return level;
   }
 
   /** True iff the bus sink is currently subscribed. */
@@ -304,6 +393,11 @@ class AnalyticsPipeline {
 
   private onBusEvent(type: EventType, payload: Record<string, unknown>): void {
     try {
+      // Never accumulate usage while the effective level is below usage;
+      // the sink stays subscribed so other consumers still receive events,
+      // but our state stays clean.
+      if (!levelAtLeast(this.effectiveLevel(), "usage")) return;
+
       switch (type) {
         case "tool_call_started": {
           const tool = typeof payload["tool"] === "string" ? (payload["tool"] as string) : "unknown";
@@ -412,7 +506,7 @@ class AnalyticsPipeline {
     turn: unknown;
   }): void {
     try {
-      if (!levelAtLeast(this.level, "commands")) return;
+      if (!levelAtLeast(this.effectiveLevel(), "commands")) return;
       const record: CommandRecord = {
         tool: label(input.tool),
         argsRedacted: toText(input.args),
@@ -433,7 +527,7 @@ class AnalyticsPipeline {
    */
   recordCode(input: { lang: unknown; source: unknown; origin: unknown }): void {
     try {
-      if (!levelAtLeast(this.level, "commands")) return;
+      if (!levelAtLeast(this.effectiveLevel(), "commands")) return;
       const record: CodeRecord = {
         lang: label(input.lang),
         sourceRedacted: toText(input.source),
@@ -451,7 +545,7 @@ class AnalyticsPipeline {
    */
   recordScope(input: { target: unknown; kind: unknown }): void {
     try {
-      if (!levelAtLeast(this.level, "full")) return;
+      if (!levelAtLeast(this.effectiveLevel(), "full")) return;
       const record: ScopeRecord = {
         targetRedacted: toText(input.target),
         kind: label(input.kind),
@@ -475,7 +569,7 @@ class AnalyticsPipeline {
     confidence: unknown;
   }): void {
     try {
-      if (!levelAtLeast(this.level, "full")) return;
+      if (!levelAtLeast(this.effectiveLevel(), "full")) return;
       const record: FindingRecord = {
         severity: label(input.severity),
         category: label(input.category),
@@ -492,27 +586,50 @@ class AnalyticsPipeline {
 
   // ── The choke point ───────────────────────────────────────────────────
 
-  /**
-   * The ONLY path toward transmission. Gate → redact → envelope → batch →
-   * transmit. Never throws; a below-tier record is silently dropped.
-   */
+  /** The only path to transmission: consent, redaction, byte limits, envelope. */
   private enqueue(record: Record<string, unknown>, requiredTier: AnalyticsLevel): void {
     try {
-      // (1) Consent gate. Below the required tier, transmit nothing.
-      if (!levelAtLeast(this.level, requiredTier)) return;
-
-      // (2) Redact EVERY string field (values + keys).
+      const level = this.effectiveLevel();
+      if (level === "off" || !levelAtLeast(level, requiredTier)) return;
       const redacted = redactRecordStrings(record);
-
-      // (3) Attach the anonymous envelope.
-      const envelope = this.buildEnvelope();
-      const payload: Record<string, unknown> = { ...envelope, ...redacted };
-
-      // (4) Batch + schedule transmit.
-      this.batch.push(payload);
+      if (!redacted) return;
+      for (const field of CONTENT_FIELDS) {
+        const content = redacted[field];
+        if (typeof content !== "string") continue;
+        const bytes = Buffer.byteLength(content, "utf8");
+        if (bytes > MAX_CONTENT_BYTES) {
+          this.reportOversize(field, bytes, MAX_CONTENT_BYTES);
+          return;
+        }
+      }
+      const json = JSON.stringify({ ...this.buildEnvelope(), ...redacted });
+      const bytes = Buffer.byteLength(json, "utf8");
+      if (bytes + BODY_OVERHEAD_BYTES > MAX_BODY_BYTES) {
+        this.reportOversize("record", bytes + BODY_OVERHEAD_BYTES, MAX_BODY_BYTES);
+        return;
+      }
+      this.batch.push({ json, bytes, requiredTier });
       this.scheduleTransmit();
     } catch {
-      // Default-deny, fail-soft: never let telemetry break the caller.
+      // Default-deny: malformed collector input never reaches the wire.
+    }
+  }
+
+  private reportOversize(field: typeof CONTENT_FIELDS[number] | "record", bytes: number, maxBytes: number): void {
+    const filename = "analytics-outcomes.log";
+    try {
+      const dir = homeStateDir(this.homeDir);
+      mkdirSync(dir, { recursive: true, mode: 0o700 });
+      appendFileSync(join(dir, filename),
+        `${JSON.stringify({ ts: Date.now(), outcome: "oversize", field, bytes, maxBytes })}\n`,
+        { mode: 0o600 });
+    } catch {
+      // A read-only home must not break the tool or hide the stderr outcome.
+    }
+    try {
+      process.stderr.write(`[0sec analytics] Skipped oversized ${field}: ${bytes} UTF-8 bytes exceeds ${maxBytes}; not truncated or uploaded. Details: ${filename}.\n`);
+    } catch {
+      // Telemetry never breaks the caller.
     }
   }
 
@@ -528,7 +645,7 @@ class AnalyticsPipeline {
       schemaVersion: ANALYTICS_SCHEMA_VERSION,
       installId: this.installId,
       sessionId: this.sessionId,
-      tier: this.level,
+      tier: this.effectiveLevel(),
       ts: Date.now(),
       cliVersion: typeof VERSION === "string" ? VERSION : "unknown",
       platform: finitePlatform(),
@@ -550,69 +667,73 @@ class AnalyticsPipeline {
     }
   }
 
-  /**
-   * POST the pending batch. Fire-and-forget: resolves the credential set
-   * (silent no-op when the cloud is offline / unconfigured), writes the
-   * post-redaction payloads to the transparency log, then POSTs with a short
-   * timeout. Any failure is swallowed.
-   */
-  private async transmit(): Promise<void> {
-    const batch = this.batch.splice(0);
-    if (batch.length === 0) return;
+  /** Serialize drains so consent changes can purge every still-pending record. */
+  private transmit(): Promise<void> {
+    if (!this.transmitting) {
+      this.transmitting = Promise.resolve().then(() => this.drain()).finally(() => {
+        this.transmitting = null;
+      });
+    }
+    return this.transmitting;
+  }
 
+  private async drain(): Promise<void> {
+    this.effectiveLevel();
+    if (this.batch.length === 0) return;
     let creds: { host: string; token: string };
     try {
       creds = loadCloudCredentials(this.homeDir ? { homeDir: this.homeDir } : {});
     } catch {
-      // Cloud offline / no credentials — silent no-op. Nothing transmitted,
-      // so nothing is written to the transparency log.
+      this.batch = [];
       return;
     }
-
-    // Transparency: record every payload we are about to transmit.
-    for (const p of batch) this.appendTransparencyLog(p);
-
-    const controller = new AbortController();
-    let timer: ReturnType<typeof setTimeout> | null = null;
-    try {
-      timer = setTimeout(() => controller.abort(), TRANSMIT_TIMEOUT_MS);
+    while (this.batch.length > 0) {
+      // Recheck before EACH POST. Unsent records remain in this.batch while
+      // awaiting HTTP, so a downgrade purges them even if later re-enabled.
+      const level = this.effectiveLevel();
+      this.batch = this.batch.filter((entry) => levelAtLeast(level, entry.requiredTier));
+      if (this.batch.length === 0) return;
+      let bytes = BODY_OVERHEAD_BYTES;
+      let count = 0;
+      for (const entry of this.batch) {
+        const nextBytes = bytes + entry.bytes + (count === 0 ? 0 : 1);
+        if (count === MAX_RECORDS_PER_BATCH || nextBytes > MAX_BODY_BYTES) break;
+        bytes = nextBytes;
+        count++;
+      }
+      const chunk = this.batch.splice(0, count);
+      const body = BODY_PREFIX + chunk.map((entry) => entry.json).join(",") + BODY_SUFFIX;
+      for (const entry of chunk) this.appendTransparencyLog(entry.json);
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), TRANSMIT_TIMEOUT_MS);
       timer.unref?.();
-    } catch {
-      /* no timer — the fetch may hang slightly longer, still non-blocking */
-    }
-
-    try {
-      const doFetch = this.fetchImpl ?? fetch;
-      await doFetch(`${creds.host}${ANALYTICS_ENDPOINT}`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${creds.token}`,
-          "Content-Type": "application/json",
-          Accept: "application/json",
-          "User-Agent": `0sec-cli/${typeof VERSION === "string" ? VERSION : "unknown"}`,
-        },
-        body: JSON.stringify({ records: batch }),
-        signal: controller.signal,
-      });
-    } catch {
-      // Network error, non-2xx, abort — telemetry never breaks an audit.
-    } finally {
-      if (timer) {
-        try {
-          clearTimeout(timer);
-        } catch {
-          /* ignore */
-        }
+      try {
+        const doFetch = this.fetchImpl ?? fetch;
+        await doFetch(`${creds.host}${ANALYTICS_ENDPOINT}`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${creds.token}`,
+            "Content-Type": "application/json",
+            Accept: "application/json",
+            "User-Agent": `0sec-cli/${typeof VERSION === "string" ? VERSION : "unknown"}`,
+          },
+          body,
+          signal: controller.signal,
+        });
+      } catch {
+        // Best-effort delivery, no retries or raw-content error reporting.
+      } finally {
+        clearTimeout(timer);
       }
     }
   }
 
-  private appendTransparencyLog(payload: Record<string, unknown>): void {
+  private appendTransparencyLog(json: string): void {
     try {
       const dir = homeStateDir(this.homeDir);
       mkdirSync(dir, { recursive: true, mode: 0o700 });
       const path = join(dir, ANALYTICS_SENT_LOG_FILENAME);
-      appendFileSync(path, `${JSON.stringify(payload)}\n`, { mode: 0o600 });
+      appendFileSync(path, `${json}\n`, { mode: 0o600 });
     } catch {
       // Transparency logging is best-effort; never let it break transmission.
     }
@@ -665,6 +786,7 @@ class AnalyticsPipeline {
     this.usageFlushTimer = null;
     this.transmitTimer = null;
     this.level = "off";
+    this.observedLevel = "off";
     this.homeDir = undefined;
     this.fetchImpl = undefined;
     this.installId = null;
@@ -679,9 +801,11 @@ export const analyticsPipeline = new AnalyticsPipeline();
 
 /**
  * Mirror of `maybeSubscribeCloudEventSink`: resolve the effective analytics
- * tier from the environment and, when it is not "off", cache it and subscribe
- * the usage sink to the event bus. When "off", do nothing (no subscription,
- * no transmission). Idempotent and env-gated; safe to call multiple times.
+ * tier from the environment, cache it via {@link AnalyticsPipeline.setLevel},
+ * and subscribe the usage sink to the event bus when non-off. The env is
+ * re-read at transmit time so a late env change (e.g. `0SEC_ANALYTICS_LEVEL`
+ * set before spawning a child) is still honoured. Idempotent and env-gated;
+ * safe to call multiple times.
  */
 export function maybeSubscribeAnalyticsPipeline(): void {
   const level = resolveAnalyticsLevel();

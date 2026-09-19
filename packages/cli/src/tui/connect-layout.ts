@@ -52,8 +52,11 @@
  * for that move.
  */
 
+import { PROVIDER_DEVICE_AUTH } from "./device-auth.js";
 import { PROVIDERS, providerStates, type ProviderState } from "./provider-status.js";
 import type { DialogItem } from "./dialog-select-layout.js";
+import type { CreditAccount } from "@0sec/core";
+import { formatBalanceDetail } from "./hosted-balance.js";
 import {
   DIALOG_HOST_FOOTER_ROWS,
   computeDialogScreenLayout,
@@ -144,10 +147,10 @@ export interface ConnectGroup {
  * them, but the shared picker groups by category, so it needs one of its own —
  * and it sorts first because `buildConnectRows` emits it first.
  */
-const CLOUD_GROUP: ConnectGroup = { id: "cloud", label: "0sec Cloud" };
+const CLOUD_GROUP: ConnectGroup = { id: "cloud", label: "0cloud" };
 /** The picker id the cloud row commits with; the runtime calls it "hosted". */
 const CLOUD_ITEM_ID = "hosted";
-const CLOUD_LABEL = "0sec Cloud";
+const CLOUD_LABEL = "0cloud";
 const POPULAR_GROUP: ConnectGroup = { id: "popular", label: "Use my own API key" };
 const ALL_GROUP: ConnectGroup = { id: "all", label: "Other API providers" };
 const SUBSCRIPTION_GROUP: ConnectGroup = { id: "subscription", label: "Provider subscription" };
@@ -181,6 +184,8 @@ export interface ConnectSources {
    * readiness or funding assertion.
    */
   cloudConnected?: boolean;
+  /** Live verification of the saved cloud sign-in (component-supplied). */
+  hostedVerification?: HostedVerificationStatus;
 }
 
 /** Does any provider hold a real credential? Drives the onboarding nudge. */
@@ -283,7 +288,7 @@ export function buildConnectRows({
     .sort((a, b) => compareStrings(a.id, b.id));
 
   const rows: ConnectRow[] = [];
-  if (terms.every((term) => "hosted 0sec cloud sign in".includes(term))) rows.push({ kind: "cloud" });
+  if (terms.every((term) => "hosted 0cloud sign in".includes(term))) rows.push({ kind: "cloud" });
 
   const pushGroup = (group: ConnectGroup, providers: readonly ConnectProvider[]) => {
     const shown = providers.filter(matches);
@@ -335,13 +340,15 @@ export interface ConnectItemsInput {
     /** This provider is the one being repaired. */
     readonly recovering?: string;
   };
+  /** Live backend verification of the saved cloud sign-in. */
+  hostedVerification?: HostedVerificationStatus;
 }
 
 /**
  * Projects the connect rows onto the console's one shared picker.
  *
  * `DialogItem` carries the group as `category`, so the picker draws the same
- * "0sec Cloud / Use my own API key / Other API providers / Provider
+ * "0cloud / Use my own API key / Other API providers / Provider
  * subscription" headings the hand-rolled list drew, and it searches them. The
  * subtitle that used to occupy a row of its own becomes the item's
  * `description`, which costs no row and cannot be landed on by the cursor.
@@ -357,6 +364,7 @@ export function connectDialogItems({
   cloudConnected,
   recoveryProviderId,
   tones,
+  hostedVerification,
 }: ConnectItemsInput): DialogItem[] {
   const items: DialogItem[] = [];
   // Subtitles are rows in the row model; fold them onto the item above.
@@ -369,15 +377,57 @@ export function connectDialogItems({
 
   for (const row of rows) {
     if (row.kind === "cloud") {
-      const connected = cloudConnected === true && recoveryProviderId !== "hosted";
+      // Cloud item state depends on backend verification, not just credential
+      // presence. A saved token that the server rejects is not a connection.
+      const stored = cloudConnected === true;
+      const recovering = recoveryProviderId === "hosted";
+      let meta: string;
+      let current: boolean;
+      let tone: string | undefined;
+      if (recovering) {
+        meta = "reconnect";
+        current = false;
+        tone = tones?.recovering;
+      } else if (!stored) {
+        meta = "sign in";
+        current = false;
+        tone = undefined;
+      } else if (!hostedVerification || hostedVerification.kind === "pending") {
+        // Credentials exist but verification hasn't completed yet.
+        meta = "login saved";
+        current = true;
+        tone = tones?.connected;
+      } else {
+        switch (hostedVerification.kind) {
+          case "verified": {
+            const account = hostedVerification.account;
+            meta = account && account.state !== "ready"
+              ? `connected · credits ${account.state}`
+              : "connected";
+            current = true;
+            tone = tones?.connected;
+            break;
+          }
+          case "rejected":
+            meta = "rejected";
+            current = false;
+            tone = tones?.recovering;
+            break;
+          case "unreachable":
+            meta = "offline";
+            current = false;
+            tone = undefined;
+            break;
+        }
+      }
       items.push({
         id: CLOUD_ITEM_ID,
         label: CLOUD_LABEL,
-        description: "Sign in once to use the 0sec-managed model catalog",
-        meta: recoveryProviderId === "hosted" ? "reconnect" : connected ? "login saved" : "sign in",
+        description: "Sign in once to use the 0security-managed model catalog",
+        meta,
         category: CLOUD_GROUP.label,
-        current: connected,
-        tone: recoveryProviderId === "hosted" ? tones?.recovering : connected ? tones?.connected : undefined,
+        current,
+        tone,
       });
       continue;
     }
@@ -460,6 +510,21 @@ export interface ConnectDetailLine {
   readonly tone: ConnectDetailTone;
 }
 
+/**
+ * The result of verifying a saved 0cloud sign-in against the backend
+ * (`GET /api/inference/account`). `pending` while the check is in flight;
+ * `verified` for every successful HTTP 200, carrying the typed DTO (which
+ * may be null for unsupported schemas or carry state=disabled/unavailable/
+ * restricted — these are not auth failures); `rejected` means the token
+ * was refused (401/403 — sign in again); `unreachable` is a transient
+ * network failure, not a bad token.
+ */
+export type HostedVerificationStatus =
+  | { readonly kind: "pending" }
+  | { readonly kind: "verified"; readonly account?: CreditAccount | null }
+  | { readonly kind: "rejected" }
+  | { readonly kind: "unreachable" };
+
 export interface ConnectDetailInput {
   row?: ConnectRow;
   compact?: boolean;
@@ -468,6 +533,8 @@ export interface ConnectDetailInput {
    * never reads environment variables or credential files.
    */
   cloudConnected?: boolean;
+  /** Live backend verification of the saved cloud sign-in (component-supplied). */
+  hostedVerification?: HostedVerificationStatus;
 }
 
 /**
@@ -477,7 +544,7 @@ export interface ConnectDetailInput {
  * alignment columns, because `sanitizeTuiText` would trim padded literals.
  */
 export function connectDetailLines(
-  { row, compact = false, cloudConnected }: ConnectDetailInput,
+  { row, compact = false, cloudConnected, hostedVerification }: ConnectDetailInput,
   width: number,
 ): ConnectDetailLine[] {
   const limit = cells(width);
@@ -494,20 +561,32 @@ export function connectDetailLines(
       if (!compact) lines.push({ text: "", tone: "blank" });
     };
 
-    push("0sec Cloud", "title");
+    push("0cloud", "title");
     separate();
-    push("Sign in once to use the 0sec-managed model catalog.", "text");
+    push("Sign in once to use the 0security-managed model catalog.", "text");
     push("Model access and credits are checked when used.", "muted");
     separate();
     if (connected) {
-      push("Cloud login saved locally; not verified here.", "text");
+      const v = hostedVerification;
+      if (!v || v.kind === "pending") {
+        push("Verifying your 0cloud sign-in\u2026", "muted");
+      } else if (v.kind === "verified") {
+        push("Connected to 0cloud.", "ok");
+        for (const line of formatBalanceDetail(v.account ?? null).trimEnd().split("\n")) {
+          push(line.trimStart(), "text");
+        }
+      } else if (v.kind === "rejected") {
+        push("Sign-in saved, but 0cloud rejected the token \u2014 press Enter to sign in again.", "warn");
+      } else {
+        push("Sign-in saved; couldn\u2019t reach 0cloud to verify right now.", "muted");
+      }
     } else {
       push("Cloud login not configured.", "muted");
     }
-    push("Use your own API key or provider subscription without a 0sec account.", "muted");
+    push("Use your own API key or provider subscription without a 0cloud account.", "muted");
     separate();
     push(
-      "Enter: open browser for 0sec Cloud sign-in.",
+      "Enter: open browser for 0cloud sign-in.",
       "muted",
     );
     return lines;
@@ -532,8 +611,12 @@ export function connectDetailLines(
   }
   separate();
 
+  // OpenRouter's OAuth is a browser (PKCE loopback) flow that mints an API key,
+  // not a device-code flow where the operator types a code — name it honestly.
+  const oauthVerb =
+    PROVIDER_DEVICE_AUTH[provider.id]?.kind === "pkce-loopback" ? "browser sign-in" : "device sign-in";
   push(
-    provider.auth === "oauth" ? "Auth: ChatGPT Codex device OAuth" : "Auth: API key",
+    provider.auth === "oauth" ? `Auth: ${provider.label} ${oauthVerb}` : "Auth: API key",
     "text",
   );
 
@@ -559,7 +642,7 @@ export function connectDetailLines(
   separate();
   push(
     provider.auth === "oauth"
-      ? "Enter: start Codex device OAuth. No API key or pasted token is used."
+      ? `Enter: start ${provider.label} ${oauthVerb}. No API key or pasted token is used.`
       : "Enter: paste an API key. It is stored owner-only on this machine.",
     "muted",
   );
@@ -621,38 +704,42 @@ export function computeConnectTitleLayout(innerWidth: number, metaLength: number
 // ---------------------------------------------------------------------------
 
 export interface ConnectCounts {
-  /** Providers holding a verified credential (env or store). */
+  /** Configured providers plus a remotely verified Cloud connection. */
   readonly connected: number;
-  /** Distinct providers offered, the cloud row excluded. */
+  /** Distinct connections offered by the displayed rows, including Cloud. */
   readonly total: number;
 }
 
-/**
- * How many providers actually hold a credential.
- *
- * Counted off the same `provider.connected` the rows carry, so it can never
- * disagree with the dots and checks the list draws, and the cloud row is left
- * out of both numbers: it is a sign-in, not one of the providers.
- */
-export function connectConnectedCounts(rows: readonly ConnectRow[]): ConnectCounts {
+/** Count each provider and the Cloud row once; saved Cloud credentials alone do not count. */
+export function connectConnectedCounts(
+  rows: readonly ConnectRow[],
+  hostedVerification?: HostedVerificationStatus,
+): ConnectCounts {
   const seen = new Set<string>();
   let connected = 0;
+  let hasCloud = false;
   for (const row of rows) {
-    if (row.kind === "cloud") continue; // cloud is not a counted provider
+    if (row.kind === "cloud") {
+      hasCloud = true;
+      continue;
+    }
     if (row.kind !== "provider") continue;
     if (seen.has(row.provider.id)) continue;
     seen.add(row.provider.id);
     if (row.provider.connected) connected += 1;
   }
-  return { connected, total: seen.size };
+  return {
+    connected: connected + Number(hasCloud && hostedVerification?.kind === "verified"),
+    total: seen.size + Number(hasCloud),
+  };
 }
 
-/** The always-on status line under the list: how many providers are connected. */
-export function connectStatusLine(rows: readonly ConnectRow[]): string {
-  const { connected, total } = connectConnectedCounts(rows);
-  if (total === 0) return "no providers to connect";
-  if (connected === 0) return "no providers connected yet - select one to connect";
-  return `connected: ${connected} of ${total} provider${total === 1 ? "" : "s"}`;
+/** The always-on status line under the list: how many providers and cloud are connected. */
+export function connectStatusLine(rows: readonly ConnectRow[], hostedVerification?: HostedVerificationStatus): string {
+  const { connected, total } = connectConnectedCounts(rows, hostedVerification);
+  if (total === 0) return "no connections to show";
+  if (connected === 0) return "no connections yet - select one to connect";
+  return `connected: ${connected} of ${total}`;
 }
 
 /** The detail pane's stable, left-aligned header label. */
@@ -694,16 +781,16 @@ export function connectInputMask(secretLength: number): string {
 
 /** The footer hint, per mode. Names the real bindings. */
 export function connectFooterHint(mode: ConnectMode, hasFilter = false): string {
-  if (mode === "input") return "paste credential · enter save · esc cancel";
-  if (mode === "oauth") return "device sign-in running · esc cancel";
-  if (mode === "hosted") return "cloud sign-in running · esc cancel";
-  if (mode === "filter") return "type to filter · enter connect · esc done · backspace delete";
+  if (mode === "input") return "paste credential · [⏎] save · [esc] cancel";
+  if (mode === "oauth") return "device sign-in running · [esc] cancel";
+  if (mode === "hosted") return "cloud sign-in running · [esc] cancel";
+  if (mode === "filter") return "type to filter · [⏎] connect · [esc] done · [⌫] delete";
   return [
-    "↑↓ select",
-    "enter connect",
-    "/ filter",
-    hasFilter ? "esc clear filter" : "esc back",
-    "ctrl+c exit",
+    "[↑↓] select",
+    "[⏎] connect",
+    "[/] filter",
+    hasFilter ? "[esc] clear filter" : "[esc] back",
+    "[⌃C] exit",
   ].join(" · ");
 }
 

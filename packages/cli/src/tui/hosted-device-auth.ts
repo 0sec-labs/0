@@ -1,4 +1,5 @@
-import { loadCloudCredentials } from "@0sec/core";
+import { loadCloudCredentials, CloudClient, CloudUnauthorizedError, CloudForbiddenError } from "@0sec/core";
+import type { HostedVerificationStatus } from "./connect-layout.js";
 import { hostedBrowserLoginFlow, type HostedBrowserLoginOptions, type HostedLoginPhase, type LoginResult } from "../commands/auth.js";
 
 export interface HostedDeviceAuthUpdate {
@@ -44,7 +45,32 @@ export function startHostedDeviceAuth(options: StartHostedDeviceAuthOptions): { 
     else if (phase !== "timeout") onUpdate({ phase: "failed", message: result.error });
     onSettled?.(result);
   }, () => {
-    if (!controller.signal.aborted) onUpdate({ phase: "failed", message: "0sec Cloud sign-in could not complete. Use your own provider or try again." });
+    if (!controller.signal.aborted) onUpdate({ phase: "failed", message: "0cloud sign-in could not complete. Use your own provider or try again." });
   });
   return { cancel: () => controller.abort() };
+}
+
+/**
+ * Verify a saved 0cloud sign-in against the backend by calling the
+ * Bearer-authenticated account endpoint (`GET /api/inference/account`).
+ * Every successful HTTP 200 produces `verified`, carrying the typed DTO
+ * (which may be null for unsupported schemas, or have state=disabled/
+ * unavailable/restricted — these are not auth failures). A refused token
+ * (401/403) is `rejected`. Any other failure is `unreachable`.
+ */
+export async function verifyHostedConnection(opts: {
+  env: Record<string, string | undefined>;
+  homeDir?: string;
+  fetchImpl?: typeof fetch;
+}): Promise<HostedVerificationStatus> {
+  const creds = loadCloudCredentials({ env: opts.env, homeDir: opts.homeDir, warn: () => {} });
+  if (!creds.token || !creds.host) return { kind: "unreachable" };
+  const client = new CloudClient({ host: creds.host, token: creds.token, fetchImpl: opts.fetchImpl });
+  try {
+    const account = await client.getInferenceAccount();
+    return { kind: "verified", account };
+  } catch (error) {
+    if (error instanceof CloudUnauthorizedError || error instanceof CloudForbiddenError) return { kind: "rejected" };
+    return { kind: "unreachable" };
+  }
 }

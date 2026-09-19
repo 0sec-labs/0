@@ -277,6 +277,21 @@ export function contrastRatio(a: string, b: string): number {
   return (hi + 0.05) / (lo + 0.05);
 }
 
+/**
+ * The legible foreground for text painted directly on the theme's `PRIMARY`
+ * strip — the orange header bar. Picks whichever of `CANVAS` / `TEXT` has the
+ * higher WCAG contrast against `PRIMARY`, so a dark glyph reads on a light
+ * signature colour and a light glyph reads on a dark one, across every theme
+ * (0sec orange, blue-team blue, golden-gate tan, the light and high-contrast
+ * palettes). Both candidates are always `#RRGGBB` (degrade snaps to hex), so
+ * `contrastRatio` never throws here.
+ */
+export function readableOnPrimary(theme: Theme): string {
+  return contrastRatio(theme.CANVAS, theme.PRIMARY) >= contrastRatio(theme.TEXT, theme.PRIMARY)
+    ? theme.CANVAS
+    : theme.TEXT;
+}
+
 /* -------------------------------------------------------------- thresholds */
 
 /** WCAG 2.2 SC 1.4.3 (AA), normal-size text. The bar for every `TEXT_TOKEN`. */
@@ -616,7 +631,7 @@ const SWISS: Theme = {
  * ≥3.3:1) — every text token clears 4.5:1 on all three backgrounds with no
  * waivers, verified by validateTheme.
  */
-const OPENCODE: Theme = {
+const GOLDEN: Theme = {
   CANVAS: "#0A0A0A",
   PANEL: "#141414",
   PANEL_ALT: "#1E1E1E",
@@ -721,9 +736,89 @@ const OH_MY_PI: Theme = {
   LINK: "#00B4FF",
 };
 
+/**
+ * `0sec` — the flagship 0sec look: signature orange on warm graphite.
+ *
+ * The brand palette. Two anchors drive everything: the signature orange
+ * `#FD802E` (PRIMARY / BRAND — the hero the eye lands on: rails, titles, the
+ * active selection, the logo) and a warm graphite `#403D39` that the whole
+ * surface family derives from. The neutrals stay warm — graphite has a
+ * brown/olive cast, so the ramp never drifts to cool blue-grey.
+ *
+ * Surface ramp (dark, so each tier steps *up* in luminance): CANVAS `#1A1613`
+ * is a graphite darker than `#403D39` — the app ground; PANEL `#26221D` a step
+ * up for cards; PANEL_ALT `#35302A` a further step for inset/nested rows; and
+ * `overlay` is `#403D39` itself — the graphite anchor as the topmost raised
+ * tier so a floating panel reads as "on top". `surface`/`surfaceAlt` mirror
+ * PANEL/PANEL_ALT.
+ *
+ * Colour is disciplined: orange + warm graphite neutrals + exactly two
+ * supporting hues. ACCENT is a warm amber `#F2A24C` (orange's lighter, calmer
+ * sibling — headers and secondary highlights, so orange-for-everything never
+ * reads flat), and a muted teal `#4FBAC6` is the single cool pop, used only for
+ * INFO / LINK against the warm ground. TEXT is a warm bone white `#F5EEE4`,
+ * MUTED a warm mid grey `#B0A493` that still clears AA.
+ *
+ * Semantics are held apart by hue *and* luminance for colour-blind separation:
+ * SUCCESS a warm-leaning green `#69C489`, WARNING a gold `#E4BC46` kept
+ * distinctly more yellow than the orange PRIMARY (so a warning never blends
+ * into brand chrome), ERROR a clear coral red `#F47B72`.
+ *
+ * No waivers: every text token clears AA (4.5:1) on all three backgrounds and
+ * BORDER clears the 3:1 non-text bar, verified by validateTheme (worst text
+ * ratio 4.93:1 — ERROR on PANEL_ALT; semantic separation 1.175:1). The
+ * signature orange `#FD802E` is used verbatim (unnudged): it measures 7.11:1 on
+ * CANVAS, 6.25:1 on PANEL and 5.17:1 on PANEL_ALT, comfortably past the 4.5:1
+ * text bar as PRIMARY. The brand chrome stays orange, but the code syntax
+ * palette adopts oh-my-pi's (titanium) semantic hues — keyword=purple,
+ * string=green, function=blue, type=cyan, number=amber, comment=dim blue-grey
+ * — a cooler polychrome that reads as "code" against the warm graphite PANEL
+ * and never washes into the orange chrome. All syntax tokens clear AA on PANEL.
+ */
+const OSEC_THEME: Theme = {
+  CANVAS: "#1A1613",
+  PANEL: "#26221D",
+  PANEL_ALT: "#35302A",
+  BORDER: "#8A7D6B",
+  TEXT: "#F5EEE4",
+  MUTED: "#B0A493",
+  PRIMARY: "#FD802E",
+  ACCENT: "#F2A24C",
+  BRAND: "#FD802E",
+  SUCCESS: "#69C489",
+  WARNING: "#E4BC46",
+  ERROR: "#F47B72", // signature-adjacent coral; lifted from a deeper red so it clears AA on PANEL_ALT
+  INFO: "#4FBAC6",
+  background: "#1A1613",
+  surface: "#26221D",
+  surfaceAlt: "#35302A",
+  overlay: "#403D39", // the #403D39 graphite anchor itself, as the topmost raised surface tier
+  // Code palette HARMONIZED to the 0sec warm palette (oh-my-pi dark-volcanic
+  // philosophy: draw the syntax hues from the theme's OWN colours rather than a
+  // foreign rainbow, so code reads as part of the brand, not confetti). A warm
+  // family carries the meaningful tokens — keyword=amber (ACCENT), function=soft
+  // gold, string=yellow (WARNING hue), number=green (SUCCESS) — with ONE cool
+  // teal (INFO) for types as the single contrast note; everything structural
+  // (variable/operator/punctuation/comment) recedes into warm greys so the eye
+  // lands on the meaning, not the punctuation. Every token clears AA on PANEL.
+  syntaxKeyword: "#F2A24C",     // amber (ACCENT) — warm, in-brand
+  syntaxFunction: "#F7C97D",    // soft gold, a step lighter than keyword
+  syntaxString: "#E4BC46",      // saturated yellow (WARNING hue)
+  syntaxNumber: "#69C489",      // green (SUCCESS) — the warm-family break
+  syntaxType: "#4FBAC6",        // teal (INFO) — the single cool accent
+  syntaxVariable: "#D8CBBA",    // warm cream — plain identifiers stay calm
+  syntaxComment: "#9E927F",     // dim warm grey — dimmer than MUTED
+  syntaxOperator: "#B0A493",    // MUTED — structure recedes
+  syntaxPunctuation: "#9E9384", // a touch dimmer than operators
+  DIFF_ADD: "#69C489",          // number/string green
+  DIFF_DEL: "#F47B72",          // ERROR coral
+  LINK: "#4FBAC6",              // teal (INFO)
+};
+
 /* ----------------------------------------------------------------- registry */
 
 export const THEME_NAMES = [
+  "0sec",
   "midnight",
   "dark",
   "light",
@@ -733,19 +828,35 @@ export const THEME_NAMES = [
   "paper",
   "mono-dim",
   "swiss",
-  "opencode",
-  "oh-my-pi",
+  "golden-gate",
+  "blue-team",
 ] as const;
 export type ThemeName = (typeof THEME_NAMES)[number];
 
 /**
- * The theme a fresh session gets. `opencode` — the warm-tan-on-near-black look
- * with a purple accent and a polychrome syntax palette — is the shipped look,
- * because a rich, semantically-coloured transcript (the OpenCode/oh-my-pi feel
- * the operator asked for) reads far less flat than a neutral grey. Like the
- * other shipped darks it clears AA on every text token with no waivers, so the
- * default carries no contrast debt. `slate` remains available for anyone who
- * prefers hueless grey chrome.
+ * Legacy theme ids that map to a renamed built-in. `opencode` was renamed to
+ * `golden-gate`; a persisted `theme: "opencode"` still resolves to the same palette.
+ */
+export const THEME_ALIASES: Readonly<Record<string, ThemeName>> = {
+  opencode: "golden-gate",
+  golden: "golden-gate",
+  "oh-my-pi": "blue-team",
+  ember: "0sec",
+};
+
+/**
+ * The theme a fresh session gets. `0sec` — the flagship 0sec look, signature
+ * orange (`#FD802E`) on warm graphite — is the shipped default: it puts the
+ * brand hue front and centre while a rich, semantically-coloured transcript
+ * reads far less flat than a neutral grey. `blue-team` (electric-blue on
+ * titanium) and `golden-gate` (warm tan-and-gold) remain available for anyone
+ * who prefers them. Like the other shipped darks all three clear AA on every
+ * text token with no waivers, so the default carries no contrast debt.
+ * `slate` remains available for anyone who prefers hueless grey chrome.
+ *
+ * available in `/settings` alongside blue-team and golden-gate.
+ * and the operator can rename it freely (label, id, and the `THEME_ALIASES`
+ * entries are the only places the name is user-visible).
  *
  * This is a default, not a migration: an operator who has explicitly chosen a
  * theme keeps it, because a persisted preference is read in preference to this
@@ -756,7 +867,7 @@ export type ThemeName = (typeof THEME_NAMES)[number];
  * preferred the old warm-grey look can opt back into it. That preservation — not
  * being the default — is why `dark` is the sole carrier of `CONTRAST_WAIVERS`.
  */
-export const DEFAULT_THEME_NAME: ThemeName = "oh-my-pi";
+export const DEFAULT_THEME_NAME: ThemeName = "0sec";
 
 /**
  * The one palette pinned byte-for-byte to the original `ui/theme.ts`, and so the
@@ -781,6 +892,13 @@ export interface ThemeEntry {
 }
 
 export const THEMES: Readonly<Record<ThemeName, ThemeEntry>> = {
+  "0sec": {
+    name: "0sec",
+    label: "0sec",
+    description: "The flagship 0sec look: signature orange on warm graphite, with an amber accent.",
+    mode: "dark",
+    palette: OSEC_THEME,
+  },
   dark: {
     name: "dark",
     label: "Carbon",
@@ -840,20 +958,20 @@ export const THEMES: Readonly<Record<ThemeName, ThemeEntry>> = {
   swiss: {
     name: "swiss",
     label: "Swiss",
-    description: "Swiss-flag red on near-black, crisp white text. For the Swiss Applied AI Cybersecurity Research Lab.",
+    description: "Swiss-flag red on near-black, crisp white text. For the Swiss Applied AI & Cybersecurity Research Lab.",
     mode: "dark",
     palette: SWISS,
   },
-  opencode: {
-    name: "opencode",
-    label: "OpenCode",
-    description: "Warm tan highlight on near-black surfaces, purple accent. The OpenCode look.",
+  "golden-gate": {
+    name: "golden-gate",
+    label: "Golden Gate",
+    description: "Warm tan-and-gold highlights on near-black surfaces, with a purple accent.",
     mode: "dark",
-    palette: OPENCODE,
+    palette: GOLDEN,
   },
-  "oh-my-pi": {
-    name: "oh-my-pi",
-    label: "oh-my-pi",
+  "blue-team": {
+    name: "blue-team",
+    label: "Blue Team",
     description: "Electric-blue on brushed-titanium near-black, gold accent. A port of oh-my-pi's titanium theme.",
     mode: "dark",
     palette: OH_MY_PI,
@@ -888,6 +1006,10 @@ export function getTheme(name: unknown): Theme {
  */
 export function getThemeEntry(name: unknown): ThemeEntry {
   if (isThemeName(name)) return THEMES[name];
+  // A renamed built-in still resolves from its legacy id, so an operator who
+  // persisted the old name keeps the same palette instead of silently
+  // reverting to the default.
+  if (typeof name === "string" && name in THEME_ALIASES) return THEMES[THEME_ALIASES[name]!];
   if (typeof name === "string" && installedThemes !== null) {
     const installed = installedThemes.get(name);
     if (installed) return installed;

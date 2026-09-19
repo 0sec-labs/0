@@ -28,7 +28,7 @@ export function MetricCard({
               tone === "danger" && "border-destructive/20 bg-destructive/10 text-destructive",
               tone === "warning" && "border-amber-500/20 bg-amber-500/10 text-amber-300",
               tone === "success" && "border-emerald-500/20 bg-emerald-500/10 text-emerald-300",
-              tone === "accent" && "border-primary/20 bg-primary/12 text-primary",
+              tone === "accent" && "border-primary/20 bg-primary/12 text-primary-text",
             )}
           >
             <Icon className="size-5" />

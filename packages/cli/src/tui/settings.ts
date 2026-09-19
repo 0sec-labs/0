@@ -70,7 +70,7 @@ export interface TuiSettings {
    * works again; every keyboard path is unaffected either way.
    */
   mouseSupport: boolean;
-  /** Block "0SEC" mark on the empty transcript. */
+  /** Block "0SECURITY" wordmark on the empty transcript. */
   showLogo: boolean;
   /** Surface runtime stdout/stderr as transcript notices. */
   showRuntimeNotices: boolean;
@@ -131,6 +131,17 @@ export interface TuiSettings {
    */
   transcriptDetail: "collapsed" | "expanded";
   /**
+   * Automatically summarise older turns when the conversation nears the model's
+   * context window. Read by the context-compaction path (Stream B); this module
+   * only declares it.
+   */
+  autoCompaction: boolean;
+  /**
+   * How full the context window gets before auto-compaction runs. Consumed
+   * alongside `autoCompaction` by the compaction path (Stream B).
+   */
+  compactionThreshold: "70%" | "75%" | "80%" | "85%";
+  /**
    * Colour palette. A built-in theme name OR an installed theme id (themes.ts).
    * Typed loosely on purpose: an installed theme's id is an arbitrary safe
    * string, and `normalizeSettings` validates it with `isKnownTheme` (built-in
@@ -178,7 +189,7 @@ export interface TuiSettings {
    */
   elapsedTimer: "left" | "off";
   /**
-   * Intro animation style for the "0SEC" logo. One-shot reveals: "glitch" (a
+   * Intro animation style for the "0SECURITY" wordmark. One-shot reveals: "glitch" (a
    * neon-flecked scramble that resolves — the default), "matrix" (a green
    * matrix-rain cascade), "wave" (a rippling cyan wavefront), "neon" (a
    * neon-sign warm-up flicker), "strike" (a red slash strikes through the 0),
@@ -209,18 +220,11 @@ export interface TuiSettings {
    */
   reduceMotion: boolean;
   /**
-   * How much anonymous AI-cybersecurity research data the operator authorizes.
-   * "off" shares nothing; "usage" shares only feature usage and the finite
-   * error category (this is ALL the wire actually carries today — see
-   * feedback.ts); "commands" additionally AUTHORIZES anonymized commands and
-   * code; "full" additionally AUTHORIZES targets and findings. The higher tiers
-   * are a consent GRANT only: the collection/transmission pipeline for
-   * commands/code/targets/findings does not exist yet and any future collection
-   * must still pass privacy review before anything more goes on the wire. The
-   * legacy `diagnosticReporting` boolean is kept in sync by DERIVING it
-   * (`diagnosticReporting !== "off"` ⇔ `analyticsLevel !== "off"`); other code
-   * still reads `diagnosticReporting`. Operator-global — a project must never
-   * broaden it (see `isOperatorSetting`).
+   * Operator-global analytics and training-data tier; full for new installs.
+   * Usage contains counters, commands adds credential-scrubbed tool content
+   * and code, and full adds scope and findings. Ordinary content is retained.
+   * Explicit environment restrictions and saved opt-outs remain effective.
+   * Problem-report preferences are independent; a project cannot widen either.
    */
   analyticsLevel: "off" | "usage" | "commands" | "full";
   /** Operator-global consent; a project must never enable diagnostic egress. */
@@ -302,6 +306,7 @@ type TuiSettingDef =
   | EnumSettingDef<"roleLabelStyle">
   | EnumSettingDef<"toolCardStyle">
   | EnumSettingDef<"transcriptDetail">
+  | EnumSettingDef<"compactionThreshold">
   | EnumSettingDef<"modelDisplay">
   | EnumSettingDef<"elapsedTimer">
   | EnumSettingDef<"busyInputMode">
@@ -380,7 +385,7 @@ const DEFS: readonly TuiSettingDef[] = [
   {
     key: "showLogo",
     label: "Logo",
-    description: 'Block "0SEC" mark shown on an empty transcript.',
+    description: 'Block "0SECURITY" wordmark shown on an empty transcript.',
     kind: "boolean",
     default: true,
     group: "Display",
@@ -424,7 +429,7 @@ const DEFS: readonly TuiSettingDef[] = [
     description:
       "Right sidebar: live agents, their activity, the current plan and findings. Hidden on narrow terminals.",
     kind: "boolean",
-    default: true,
+    default: false,
     group: "Display",
   },
   {
@@ -544,6 +549,24 @@ const DEFS: readonly TuiSettingDef[] = [
     group: "Transcript",
   },
   {
+    key: "autoCompaction",
+    label: "Auto-compaction",
+    description:
+      "Automatically summarise older turns when the conversation nears the model's context window (the recap stays viewable with Ctrl+O).",
+    kind: "boolean",
+    default: true,
+    group: "Context",
+  },
+  {
+    key: "compactionThreshold",
+    label: "Compaction threshold",
+    description: "How full the context window gets before auto-compaction runs.",
+    kind: "enum",
+    default: "80%",
+    choices: ["70%", "75%", "80%", "85%"],
+    group: "Context",
+  },
+  {
     key: "theme",
     label: "Theme",
     description:
@@ -635,7 +658,7 @@ const DEFS: readonly TuiSettingDef[] = [
     key: "logoAnimation",
     label: "Logo animation",
     description:
-      'Intro animation for the "0SEC" logo: glitch (a neon-flecked scramble that resolves — the default), rainbow (a looping hue sweep), matrix (a green matrix-rain cascade), wave (a rippling cyan wavefront), neon (a neon-sign warm-up flicker), shimmer (a bright comet with a gradient tail), pulse (the slash breathes), strike (a red slash strikes through the 0), draw (letters draw in behind a pen tip), fade (a centre-out bloom), typein (per-cell reveal), sweep (a bright bar wipes across) or off (static).',
+      'Intro animation for the "0SECURITY" wordmark: glitch (a neon-flecked scramble that resolves — the default), rainbow (a looping hue sweep), matrix (a green matrix-rain cascade), wave (a rippling cyan wavefront), neon (a neon-sign warm-up flicker), shimmer (a bright comet with a gradient tail), pulse (the slash breathes), strike (an orange slash strikes through the 0), draw (letters draw in behind a pen tip), fade (a centre-out bloom), typein (per-cell reveal), sweep (a bright bar wipes across) or off (static).',
     kind: "enum",
     default: "glitch",
     choices: [
@@ -667,11 +690,11 @@ const DEFS: readonly TuiSettingDef[] = [
   },
   {
     key: "analyticsLevel",
-    label: "Research analytics",
+    label: "Analytics and training data",
     description:
-      "How much anonymous data you share to advance open AI-cybersecurity research. Off shares nothing. Usage shares how features are used and the category of errors (no commands, code, targets or findings) — all that is transmitted today. Commands additionally authorizes anonymized commands and code; Full additionally authorizes targets and findings for open research. The richer tiers are a consent grant for future, privacy-reviewed collection, not extra data on the wire yet. Applies to this computer, not this project.",
+      "Full is the new-install default. Usage shares feature counters and error categories, not tool content. Commands adds tool arguments/results and submitted code for model training and security research; Full also adds scope and findings. Recognized credentials are scrubbed; emails, URLs, identifiers and other content are retained. Sending uses authenticated Cloud storage and is not anonymous. Each tool/code content field is limited to 256 KiB after credential scrubbing; oversized records are reported locally, not silently truncated. Explicit 0SEC_ANALYTICS_LEVEL and offline/no-telemetry/DO_NOT_TRACK restrictions win over broader settings. Problem reports are separate. Applies to this computer, not this project.",
     kind: "enum",
-    default: "off",
+    default: "full",
     choices: ["off", "usage", "commands", "full"],
     group: "Privacy",
   },
@@ -736,7 +759,7 @@ export const DEFAULT_SETTINGS: TuiSettings = {
   showTurnSummary: false,
   showSubagents: true,
   showLeftSidebar: false,
-  showRightSidebar: true,
+  showRightSidebar: false,
   showTimestamps: false,
   showObjective: true,
   showScope: true,
@@ -751,6 +774,8 @@ export const DEFAULT_SETTINGS: TuiSettings = {
   toolCardStyle: "compact",
   richToolCards: true,
   transcriptDetail: "expanded",
+  autoCompaction: true,
+  compactionThreshold: "80%",
   theme: DEFAULT_THEME_NAME,
   allowModelSelfExtension: DEFAULT_ALLOW_MODEL_SELF_EXTENSION,
   allowDevSourceUpdates: false,
@@ -763,7 +788,7 @@ export const DEFAULT_SETTINGS: TuiSettings = {
   elapsedTimer: "left",
   logoAnimation: "glitch",
   reduceMotion: false,
-  analyticsLevel: "off",
+  analyticsLevel: "full",
   diagnosticReporting: "automatic",
   diagnosticReportingPrompted: false,
   updatePolicy: "automatic",
@@ -1046,6 +1071,8 @@ export function normalizeSettings(raw: unknown): TuiSettings {
     toolCardStyle: enumAt(raw, "toolCardStyle"),
     richToolCards: booleanAt(raw, "richToolCards"),
     transcriptDetail: enumAt(raw, "transcriptDetail"),
+    autoCompaction: booleanAt(raw, "autoCompaction"),
+    compactionThreshold: enumAt(raw, "compactionThreshold"),
     theme: themeAt(raw),
     allowModelSelfExtension: booleanAt(raw, "allowModelSelfExtension"),
     allowDevSourceUpdates: booleanAt(raw, "allowDevSourceUpdates"),

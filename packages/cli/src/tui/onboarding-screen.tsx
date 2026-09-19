@@ -42,10 +42,13 @@ import React, {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
+import { sleekScrollbar } from "./scrollbar.js";
 import { useKeyboard } from "@opentui/react";
-import { TextAttributes } from "@opentui/core";
+import { TextAttributes, type ScrollBoxRenderable } from "@opentui/core";
+import { analyticsPipeline } from "@0sec/core";
 
 import { Cells, textCells } from "./primitives.js";
 import { updateSetting, useSettings } from "./settings-store.js";
@@ -121,35 +124,12 @@ export function finalizeOnboarding(): void {
 /** The four consent tiers, matching the `analyticsLevel` setting's choices. */
 export type AnalyticsLevel = TuiSettings["analyticsLevel"];
 
-/**
- * Persist the analytics-consent decision. Writes the chosen tier to
- * `analyticsLevel`, keeps the legacy `diagnosticReporting` boolean in sync by
- * DERIVING it (`analyticsLevel !== "off"` ⇒ "automatic", else "off"), and
- * ALWAYS records that we asked (`diagnosticReportingPrompted`) so the separate
- * in-session prompt never re-asks. Exported so a test drives the exact writes
- * the `analytics` step's Enter performs, the way `finalizeOnboarding` is tested.
- *
- * This does NOT broaden WHAT is collected. A tier above "usage" is a CONSENT
- * GRANT only: the collection/transmission pipeline for commands, code, targets
- * and findings does not exist yet, and the wire still carries only feature
- * usage and the finite error category regardless of the stored tier (see
- * feedback.ts `diagnosticError`, which maps failures to a category label, never
- * raw text). Any future collection must still pass privacy review before
- * anything more goes on the wire.
- */
+/** Save the sharing tier without broadening a separate problem-report choice. */
 export function recordAnalyticsConsent(level: AnalyticsLevel): void {
   updateSetting("analyticsLevel", level);
-  updateSetting("diagnosticReporting", level === "off" ? "off" : "automatic");
-  updateSetting("diagnosticReportingPrompted", true);
+  if (level === "off") updateSetting("diagnosticReporting", "off");
 }
 
-/**
- * Skip the analytics step: record that we asked so the in-session prompt never
- * re-asks, and leave the current `diagnosticReporting` default untouched.
- */
-export function skipAnalyticsConsent(): void {
-  updateSetting("diagnosticReportingPrompted", true);
-}
 
 // ---------------------------------------------------------------------------
 // Props
@@ -217,10 +197,10 @@ const BLANK: StepLine = { text: "", tone: "muted" };
 
 function welcomeLines(width: number): StepLine[] {
   return [
-    ...paragraph("Welcome to 0sec", "title", width),
+    ...paragraph("Welcome to 0security", "title", width),
     BLANK,
     ...paragraph(
-      "This console is your workspace for security assessments, audits, and red-team operations with AI agents.",
+      "This console is your command center for self-improving, open-source security workflows.",
       "text",
       width,
     ),
@@ -256,71 +236,59 @@ const STEP_LINES: Partial<Record<OnboardingStep, (width: number) => StepLine[]>>
 };
 
 const STEP_HINT: Record<OnboardingStep, string> = {
-  welcome: "enter begin · esc skip onboarding",
-  connect: "connect or esc to skip · ctrl+c cancel",
-  models: "select a model or esc to skip · ctrl+c cancel",
-  preferences: "←/→ change · enter confirm · s skip · esc cancel",
-  analytics: "↑/↓ choose · enter confirm · s skip · esc cancel",
-  done: "enter start working · esc review later",
+  welcome: "[⏎] begin · [esc] skip onboarding",
+  connect: "connect or [esc] to skip · [⌃C] cancel",
+  models: "select a model or [esc] to skip · [⌃C] cancel",
+  preferences: "[←→] change · [⏎] confirm · [s] skip · [esc] cancel",
+  analytics: "[↑↓] choose · [PgUp/PgDn] read · [⏎] confirm · [s] skip · [esc] cancel",
+  done: "[⏎] start working · [esc] review later",
 };
 
 // ---------------------------------------------------------------------------
 // Analytics consent step
 // ---------------------------------------------------------------------------
 
-/**
- * The four consent tiers, top → bottom, each mapping to an `analyticsLevel`.
- * The first three are escalating GRANTS of sharing (the operator's "3 versions"
- * of sharing); the fourth declines everything. This is a GENUINE radio, not a
- * dark pattern: every option is visible at once, the selection moves one
- * ↑/↓ keystroke at a time, Enter confirms whatever is highlighted, and `s`
- * skips the whole step without changing the stored value. Declining ("Don't
- * share anything") sits in the list exactly like every other option.
- *
- * CRITICAL: the `detail` copy describes what each tier AUTHORIZES, not what is
- * transmitted. See the honesty note on `recordAnalyticsConsent` — tiers above
- * "usage" grant consent for future, privacy-reviewed collection that does not
- * exist yet; the wire carries only usage + error category regardless of tier.
- */
+/** Every tier remains selectable; skipping preserves the current preference. */
 const ANALYTICS_OPTIONS = [
   {
     level: "usage",
-    label: "Anonymous usage & error types",
+    label: "Usage metrics only",
     detail:
-      "How features are used and the category of errors that occur. No commands, code, targets, or findings.",
+      "Feature counters and error categories. No tool content, code, scope or findings.",
   },
   {
     level: "commands",
-    label: "＋ Commands & code",
+    label: "Tool content and code",
     detail:
-      "Also the commands the agent runs and the code it writes, anonymized. Helps us understand real workflows and failures.",
+      "Also tool arguments/results and submitted code for training, with recognized credentials scrubbed.",
   },
   {
     level: "full",
-    label: "＋ Full engagement",
+    label: "Full training data (new-install default)",
     detail:
-      "Also targets and findings — the most useful for open research. Only enable on engagements where you're authorized to share.",
+      "Usage, tool arguments/results, submitted code, scope and findings; recognized credentials scrubbed.",
   },
   {
     level: "off",
-    label: "Don't share anything",
-    detail: "Nothing leaves your machine.",
+    label: "Off",
+    detail: "No analytics or training uploads. Also turns automatic problem reports off.",
   },
 ] as const satisfies readonly { level: AnalyticsLevel; label: string; detail: string }[];
 
-/**
- * The intro copy above the radio. HONEST: it describes sharing anonymized data
- * and that the operator chooses how much — it does NOT claim any particular
- * category is currently being transmitted. Kept to two short lines (title +
- * one body paragraph) so the four tiers below dominate the card.
- */
+/** Disclose the default, actual data categories, and independent restrictions. */
 function analyticsLines(width: number): StepLine[] {
   return [
-    ...paragraph("Help advance open AI-cybersecurity research", "title", width),
+    ...paragraph("Analytics and training data", "title", width),
     BLANK,
     ...paragraph(
-      "Share anonymous usage analytics so we can improve and advance open AI-cybersecurity research. Everything is anonymized and you choose how much to share — change it anytime in /settings.",
+      "Full sharing is on by default for new installs. Usage metrics are separate from training data: tool arguments/results, submitted code, scope and findings for model improvement and security research. Recognized credentials are scrubbed; emails, URLs, identifiers and other content are retained. This is not anonymous. Sending requires Cloud sign-in.",
       "text",
+      width,
+    ),
+    BLANK,
+    ...paragraph(
+      `Active in this process: ${analyticsPipeline.getLevel()}. Saved choices and environment restrictions are preserved. 0SEC_ANALYTICS_LEVEL, 0SEC_OFFLINE, 0SEC_NO_TELEMETRY and DO_NOT_TRACK can restrict collection. Skip keeps the current setting; change it anytime in /settings.`,
+      "muted",
       width,
     ),
   ];
@@ -484,10 +452,17 @@ export function OnboardingScreen({
     setChoiceIndex((i) => ((i + delta) % n + n) % n);
   }, [prefChoices.length]);
 
-  // Analytics consent: which tier is highlighted (0 = the minimal "usage"
-  // share, the recommended default). Nothing is persisted while moving — only
-  // Enter (or skip) writes.
-  const [analyticsIndex, setAnalyticsIndex] = useState(0);
+  // Analytics consent: which tier is highlighted. Seeded from the current
+  // stored setting (full on a fresh install). Moving or skipping writes nothing.
+  const [analyticsIndex, setAnalyticsIndex] = useState(() => {
+    const idx = ANALYTICS_OPTIONS.findIndex((o) => o.level === settings.analyticsLevel);
+    return idx >= 0 ? idx : 2; // index 2 = "full"
+  });
+  useEffect(() => {
+    if (currentStep === "analytics") {
+      setAnalyticsIndex(ANALYTICS_OPTIONS.findIndex((option) => option.level === settings.analyticsLevel));
+    }
+  }, [currentStep, settings.analyticsLevel]);
 
   const cycleAnalytics = useCallback((delta: number) => {
     const n = ANALYTICS_OPTIONS.length;
@@ -501,7 +476,6 @@ export function OnboardingScreen({
   }, [analyticsIndex, advanceTo]);
 
   const skipAnalytics = useCallback(() => {
-    skipAnalyticsConsent();
     advanceTo("done");
   }, [advanceTo]);
 
@@ -552,7 +526,7 @@ export function OnboardingScreen({
     return interactive ? (renderModels(subNav) as React.ReactElement) : null;
   }
 
-  const hint = STEP_HINT[currentStep] ?? "esc to dismiss";
+  const hint = STEP_HINT[currentStep] ?? "[esc] to dismiss";
 
   // Cap the card and center it on a wide surface, the way the overlay does, so
   // no line runs edge-to-edge. Fully responsive: on a narrow (~60 col) dialog
@@ -590,14 +564,14 @@ export function OnboardingScreen({
 
   let body: React.ReactNode;
   if (currentStep === "analytics") {
-    body = renderAnalytics({
-      lines: analyticsLines(cardTextWidth),
-      choiceIndex: analyticsIndex,
-      theme,
-      contentWidth: cardWidth,
-      textWidth: cardTextWidth,
-      bodyRows,
-    });
+    body = <AnalyticsCard
+      lines={analyticsLines(cardTextWidth)}
+      choiceIndex={analyticsIndex}
+      theme={theme}
+      contentWidth={cardWidth}
+      textWidth={cardTextWidth}
+      bodyRows={bodyRows}
+    />;
   } else if (currentStep === "preferences" && prefDef) {
     body = renderPreferences({
       def: prefDef,
@@ -671,10 +645,7 @@ function renderProse({
       height={bodyRows}
       flexShrink={0}
       scrollX={false}
-      verticalScrollbarOptions={{
-        trackOptions: { backgroundColor: theme.PANEL, foregroundColor: theme.MUTED },
-        arrowOptions: { foregroundColor: theme.MUTED, backgroundColor: theme.PANEL },
-      }}
+      verticalScrollbarOptions={sleekScrollbar(theme)}
     >
       <box flexDirection="column" width={textWidth} flexShrink={0} minWidth={0}>
         {rows}
@@ -750,20 +721,8 @@ function renderPreferences({
   );
 }
 
-/**
- * The analytics consent card: the honest intro (centered), then a vertical
- * RADIO of the four tiers. Every option's label is always visible; the
- * highlighted option is accented, marked with a filled dot, and shows its
- * detail beneath it (the same "describe the highlighted choice" pattern the
- * preferences step uses). NOT a dark pattern — declining ("Don't share
- * anything") is one ↑/↓ keystroke away like any other option and Enter confirms
- * whatever is highlighted.
- *
- * The detail copy states what each tier AUTHORIZES, not what is transmitted:
- * see `recordAnalyticsConsent` — the wire still carries only usage + error
- * category regardless of the chosen tier.
- */
-function renderAnalytics({
+/** Keep the tier choices reachable alongside the training-data disclosure. */
+function AnalyticsCard({
   lines,
   choiceIndex,
   theme,
@@ -779,6 +738,8 @@ function renderAnalytics({
   bodyRows: number;
 }) {
   const rows: React.ReactNode[] = [];
+  const scroll = useRef<ScrollBoxRenderable | null>(null);
+  let selectedRow = 0;
 
   lines.forEach((line, index) => {
     rows.push(
@@ -793,6 +754,7 @@ function renderAnalytics({
   const detailWidth = Math.max(1, textWidth - 2);
   ANALYTICS_OPTIONS.forEach((option, index) => {
     const active = index === choiceIndex;
+    if (active) selectedRow = rows.length;
     rows.push(
       <Cells
         key={`analytics-opt-${index}`}
@@ -814,8 +776,24 @@ function renderAnalytics({
     }
   });
 
-  // Center the block vertically when it fits; anchor to the top and clip only
-  // when a very short surface cannot hold every row.
+  useEffect(() => {
+    const viewport = scroll.current;
+    if (!viewport) return;
+    viewport.scrollTo(Math.min(selectedRow, Math.max(0, rows.length - bodyRows)));
+  }, [choiceIndex, selectedRow, rows.length, bodyRows]);
+  useKeyboard((key) => {
+    if (key.name === "pageup") scroll.current?.scrollBy(-1, "viewport");
+    if (key.name === "pagedown") scroll.current?.scrollBy(1, "viewport");
+  });
+
+  if (rows.length > bodyRows) {
+    return (
+      <scrollbox ref={scroll} width={contentWidth} height={bodyRows} flexShrink={0}
+        scrollX={false} verticalScrollbarOptions={sleekScrollbar(theme)}>
+        <box flexDirection="column" width={textWidth} flexShrink={0}>{rows}</box>
+      </scrollbox>
+    );
+  }
   return (
     <box
       flexDirection="column"

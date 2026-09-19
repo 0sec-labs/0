@@ -2249,7 +2249,14 @@ export type {
   CloudHealthResponse,
   InferenceModel,
   InferenceModelsResponse,
-  InferenceAccountResponse,
+  CreditAccount,
+  CreditAccountFree,
+  CreditAccountSubscription,
+  CreditAccountSubscriptionWindow,
+  CreditAccountPrepaid,
+  CreditAccountPurchase,
+  CreditAccountPurchasePreset,
+  CreditAccountAdmission,
   InferenceUsageResponse,
   WindowsEvidenceStoredBlob,
   WindowsEvidenceSubmissionReceipt,
@@ -2352,6 +2359,7 @@ export type {
   ConsoleSessionCheckpoint,
   ConsoleSessionConfig,
   ConsoleRenderCallbacks,
+  ConsoleCompactionEvent,
   ConsoleTurnOutcome,
   ConsoleStopReason,
   ConsoleAutonomyMode,
@@ -2499,3 +2507,19 @@ export type {
 
 // Isolated, evaluated self-rewriting candidates and pinned future workers.
 export * from "./improvement/index.js";
+
+// Self-securing software lifecycle: prepare → investigate → behavioral repair
+// → independent verification → patch/PR delivery, with persisted resume state.
+export { runSecureProject } from "./secure/project.js";
+export { runBehavioralRepair } from "./secure/behavioral-repair.js";
+export type {
+  BehavioralProbeResult,
+  BehavioralRepairOptions,
+  BehavioralRepairResult,
+  PriorRepairOutcome,
+  RepairGuidance,
+  SecureEvent,
+  SecurePhase,
+  SecureProjectOptions,
+  SecureProjectResult,
+} from "./secure/types.js";

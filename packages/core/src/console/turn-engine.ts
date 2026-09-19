@@ -4,6 +4,12 @@ import { homedir } from "node:os";
 import { basename, dirname, isAbsolute, resolve, sep } from "node:path";
 
 import { LlmApiRuntime } from "../runtime/llm-api.js";
+import {
+  compactMessagesWithLLM,
+  dropOldestMessages,
+  isContextWindowError,
+  resolveCompactionThresholds,
+} from "../agent/native-loop.js";
 import { diag } from "../diagnostics/channel.js";
 import { DEFAULT_AUTONOMY_MODE, DEFAULT_ALLOW_MODEL_SELF_EXTENSION, homeStateDir, type HarnessSnapshot } from "@0sec/shared";
 import type {
@@ -49,6 +55,7 @@ import type { AgentRole, OperatorQuestionAnswer, OperatorQuestionRequest, Scoped
 import { classifyToolRisk } from "../agent/destructive-classifier.js";
 import { normalizeScopeHostname, ScopePolicy } from "../scope/scope.js";
 import { eventBus } from "../events/bus.js";
+import { analyticsPipeline } from "../telemetry/analytics-pipeline.js";
 import { createSessionObjectiveService } from "./session-objective.js";
 import { consoleSessionCheckpointSchema } from "./session-checkpoint.js";
 import type { ConsoleSessionCheckpoint } from "./session-checkpoint.js";
@@ -91,6 +98,38 @@ import { registerSignalCleanup } from "../agent/signal-cleanup.js";
  * layer.
  */
 
+/**
+ * Emitted once each time the console loop compacts its conversation history at a
+ * turn boundary (context-window management, mirroring the autonomous scan loop's
+ * `context_compacted` event). Stream B renders this and back-fills `tokensAfter`
+ * from the next planner usage sample. This EXACT shape is a contract with the
+ * renderer — do not reshape it.
+ */
+export interface ConsoleCompactionEvent {
+  /** Planner input tokens that tripped the trigger (the pre-compaction occupancy). */
+  tokensBefore: number;
+  /**
+   * Post-compaction planner input tokens. Left `undefined` at emit time — the
+   * rewrite has not been sent to the model yet, so the true post size is only
+   * known on the next planner sample, which Stream B patches in.
+   */
+  tokensAfter?: number;
+  /** The model's context window in tokens, when known. */
+  contextWindowTokens?: number;
+  /** Message count before the rewrite. */
+  messagesBefore: number;
+  /** Message count after the rewrite. */
+  messagesAfter: number;
+  /** The `[COMPACTED CONVERSATION SUMMARY]` body produced. */
+  summaryText: string;
+  /** Deep copy of the pre-compaction history, so a renderer can offer "expand". */
+  preCompactionMessages: NativeMessage[];
+  /** 1-based index of this compaction within the session. */
+  compactionNumber: number;
+  /** True when the summary degraded to regex extraction / hard-trim. */
+  degraded: boolean;
+}
+
 /** Streaming + activity callbacks a renderer (CLI REPL, product UI) hooks into. */
 export interface ConsoleRenderCallbacks {
   onHarnessUpdate?: (snapshot: HarnessSnapshot) => void;
@@ -111,6 +150,11 @@ export interface ConsoleRenderCallbacks {
   onUsage?: (usage: ConsoleUsageReport) => void;
   /** Non-fatal operational notice (e.g. the turn ran out of token budget). */
   onNotice?: (message: string) => void;
+  /**
+   * Fired once when the console loop compacts its history at a turn boundary.
+   * See {@link ConsoleCompactionEvent}.
+   */
+  onCompaction?: (event: ConsoleCompactionEvent) => void;
 }
 
 /**
@@ -303,6 +347,13 @@ export interface ConsoleTurnOutcome {
   assistantText: string;
   toolCalls: Array<{ call: ToolCall; result: ToolResult }>;
   usage: { inputTokens: number; outputTokens: number };
+  /**
+   * The most recent / current planner-model-call input tokens — the actual
+   * conversation occupancy passed to the model. Distinct from the cumulative
+   * `usage.inputTokens`, which sums every model call (planner + plugin) across
+   * the turn. Undefined when no planner call reported usage.
+   */
+  contextInputTokens?: number;
   /**
    * Consumption vs. the limits in force. Always present, whatever the stop
    * reason — the operator needs the numbers to decide whether to continue.
@@ -592,6 +643,21 @@ export interface ConsoleSessionConfig {
    * rebuilds the default prompt from fresh source on engine replacement.
    */
   developmentSourceRoot?: string;
+  /**
+   * The active model's context window in prompt tokens. Used only to drive
+   * console-loop context compaction (see {@link compaction}); when unset,
+   * compaction never fires (there is nothing to measure occupancy against).
+   * Recomputed on an in-place `/model` switch via {@link ConsoleSession.reconfigureRuntime}.
+   */
+  contextWindowTokens?: number;
+  /**
+   * Console-loop context compaction. Off unless `enabled` is true. When on and
+   * {@link contextWindowTokens} is known, the loop rewrites its middle history
+   * into a summary at a turn boundary once planner input occupancy crosses
+   * `thresholdFraction` of the context window (default 0.80). Mirrors the
+   * autonomous scan loop's compaction, reusing the same machinery.
+   */
+  compaction?: { enabled: boolean; thresholdFraction: number };
 }
 
 /** A live console session: persistent history + a `send()` per operator line. */
@@ -629,6 +695,12 @@ export interface ConsoleSession {
     agentModels?: Record<string, string>;
     singleModel?: boolean;
     env?: NodeJS.ProcessEnv;
+    /**
+     * The new model's context window in prompt tokens. When provided, the
+     * console-loop compaction trigger is re-based on it, so a `/model` switch
+     * to a smaller- or larger-window model compacts at the right point.
+     */
+    contextWindowTokens?: number;
   }): void;
   /**
    * Clear all conversation messages while preserving session identity, target,
@@ -695,6 +767,15 @@ const DEFAULT_MAX_TOOL_ITERATIONS = 100;
  * `Number.isFinite` guard in `chat-screen.tsx`'s `onUsage`).
  */
 const DEFAULT_MAX_TURN_TOKENS = Number.POSITIVE_INFINITY;
+
+/**
+ * General-purpose summarizer instruction for console-loop compaction. Unlike the
+ * scan loop's security-testing framing, the interactive console can be doing
+ * anything (code review, ops, research, a pentest), so the summary must preserve
+ * task-agnostic context without assuming an attack narrative.
+ */
+const CONSOLE_SUMMARIZER_INSTRUCTION =
+  `Summarize this conversation so it can be continued without loss of essential context. Preserve ALL:\n- The user's goal(s) and any explicit instructions or constraints\n- Decisions made and their rationale\n- Files, paths, commands, URLs, identifiers, and configuration values referenced\n- Concrete results, outputs, and errors that matter going forward\n- OPEN todo/plan items and the current objective/phase (what is still in progress and what to do next)\n- Anything the user asked to remember or that must be typed back verbatim later\n\nBe concise but complete. Use bullet points. Do not invent details.`;
 
 /**
  * Build the console persona system prompt. Distinct from the scan-role prompts
@@ -1675,6 +1756,20 @@ async function dispatchConversationHistoryTool(call: ToolCall, history: ConsoleC
  * The returned session holds conversation history in memory; each `send()`
  * runs the model and its tool calls to a natural stop and returns control.
  */
+/**
+ * True when the runtime performs SERVER-SIDE context compaction (it opted in via
+ * a compaction threshold — see `LlmApiRuntime`'s `serverCompactionTokens`, wired
+ * through as `compactionTokens`). Client-side compaction must stand down in that
+ * case, exactly as the scan loop does, so the two never fight over the same
+ * history. Read defensively: the field is not on the `NativeRuntime` interface,
+ * so a stub runtime simply reports false.
+ */
+function runtimeUsesServerSideCompaction(runtime: NativeRuntime): boolean {
+  const r = runtime as unknown as { compactionTokens?: number; serverCompactionTokens?: number };
+  const tokens = r.compactionTokens ?? r.serverCompactionTokens;
+  return typeof tokens === "number" && tokens > 0;
+}
+
 export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSession {
   const cp = config.initialCheckpoint === undefined
     ? undefined
@@ -2007,6 +2102,18 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
   // default), operator-facing notices omit the "of N tokens" ceiling clause
   // rather than print "of Infinity".
   const hasTurnTokenCap = Number.isFinite(maxTurnTokens);
+
+  // ── Console-loop context compaction state (persists ACROSS turns) ──
+  // Mirrors the autonomous scan loop's compaction bookkeeping. `contextWindowTokens`
+  // is mutable so a `/model` switch can re-base the trigger. `lastPlannerInputTokens`
+  // is the prompt occupancy the most recent planner call reported — the signal the
+  // trigger measures against; it starts at 0 so the very first turn never compacts.
+  let contextWindowTokens = config.contextWindowTokens;
+  const compactionEnabled = config.compaction?.enabled ?? false;
+  const compactionThresholdFraction = config.compaction?.thresholdFraction ?? 0.80;
+  let lastPlannerInputTokens = 0;
+  let tokensAtLastCompaction = 0;
+  let compactionCount = 0;
 
   // Seed conversation history from checkpoint or caller-supplied initialMessages.
   // Checkpoint takes precedence: the caller constructing a candidate from a
@@ -2797,6 +2904,34 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
     const usage = { inputTokens: 0, outputTokens: 0 };
     let assistantText = "";
     let iterations = 0;
+    const recordToolResult = (call: ToolCall, result: ToolResult, startedAt: number, findingsBefore: number): void => {
+      try {
+        analyticsPipeline.recordCommand({
+          tool: call.name,
+          args: call.arguments,
+          output: result.success ? result.output : result.error,
+          status: result.success ? "ok" : "error",
+          durationMs: Date.now() - startedAt,
+          turn: iterations,
+        });
+        for (let index = findingsBefore; index < toolContext.findings.length; index++) {
+          const finding = toolContext.findings[index]!;
+          analyticsPipeline.recordFinding({
+            severity: finding.severity,
+            category: finding.category,
+            title: finding.title,
+            description: finding.description,
+            evidence: finding.evidence,
+            confidence: finding.confidence ?? 0,
+          });
+        }
+      } catch {
+        // Collection must never break the authorized tool path.
+      }
+    };
+    // Bounded context-window overflow recoveries within this turn (scan-loop
+    // parity). Only used if the provider rejects a request for its window.
+    let contextOverflowRecoveries = 0;
     try {
     await ready;
     if (callbacks?.onHarnessUpdate) unsubscribeHarness = harness?.subscribe(callbacks.onHarnessUpdate);
@@ -2809,6 +2944,12 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
         budget: { tokensUsed: 0, tokenBudget: maxTurnTokens, iterations: 0, maxToolIterations },
         stopReason: "cancelled",
       };
+    }
+    try {
+      if (sessionTarget) analyticsPipeline.recordScope({ target: sessionTarget, kind: "target" });
+      if (sessionScopePath) analyticsPipeline.recordScope({ target: sessionScopePath, kind: "scope-path" });
+    } catch {
+      // Collection must never block a console turn.
     }
 
     messages.push({ role: "user", content: [{ type: "text", text: userText }] });
@@ -2861,6 +3002,7 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
         usage.inputTokens += delta.inputTokens;
         usage.outputTokens += delta.outputTokens;
         lastCallInputTokens = delta.inputTokens;
+        if (kind === "planner") lastPlannerInputTokens = delta.inputTokens;
       }
       callbacks?.onUsage?.({
         inputTokens: delta?.inputTokens ?? 0,
@@ -2918,6 +3060,8 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
           ? () => harness!.assertDriverAuthority()
           : authorityResult ? () => harness!.assertDriverAuthority(authorityResult) : undefined;
         callbacks?.onToolStart?.(call);
+        const startedAt = Date.now();
+        const findingsBefore = toolContext.findings.length;
         let result: ToolResult;
         try {
           result = nativeTools.some((tool) => tool.name === name)
@@ -2931,6 +3075,7 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
           { role: "user", content: [{ type: "tool_result", tool_use_id: driverCallId, content: stringifyToolResult(result), is_error: !result.success }] },
         );
         runCalls.push({ call, result });
+        recordToolResult(call, result, startedAt, findingsBefore);
         callbacks?.onToolResult?.(call, result);
         return result;
       },
@@ -2946,6 +3091,112 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
         model: (system, messages, tools, modelSignal) => invokePluginModel({ system, messages, tools }, modelSignal),
       }, { ...toolContext.pluginExecutionContext?.(), signal: effectiveSignal });
     };
+
+    // ── Console-loop context compaction (turn boundary) ──
+    // Reuse the scan loop's machinery (compactMessagesWithLLM). This is a clean
+    // boundary: the user line is on history and no model call has run this turn.
+    // Fire when planner occupancy has crossed the configured fraction of the
+    // context window AND enough new context has accrued since the last
+    // compaction. A failure here must NEVER break the turn: on any throw we keep
+    // `messages` unchanged and continue with a degraded notice. Stands down when
+    // the runtime compacts server-side, exactly as the scan loop does.
+    if (
+      compactionEnabled
+      && contextWindowTokens
+      && !runtimeUsesServerSideCompaction(config.runtime)
+    ) {
+      const envThresholds = resolveCompactionThresholds(process.env);
+      const envThresholdSet = process.env["0SEC_COMPACTION_THRESHOLD"] !== undefined;
+      const envRegrowSet = process.env["0SEC_COMPACTION_REGROW"] !== undefined;
+      // Fraction-of-window trigger, with the scan loop's absolute env threshold
+      // honoured as a floor for parity: an operator who sets
+      // 0SEC_COMPACTION_THRESHOLD gets it as a lower bound here too.
+      const triggerThreshold = envThresholdSet
+        ? Math.max(contextWindowTokens * compactionThresholdFraction, envThresholds.threshold)
+        : contextWindowTokens * compactionThresholdFraction;
+      // Regrow gate: ~15% of the window, or the env-tuned value when set.
+      const regrow = envRegrowSet
+        ? envThresholds.regrow
+        : Math.max(Math.round(contextWindowTokens * 0.15), 1);
+
+      if (
+        lastPlannerInputTokens >= triggerThreshold
+        && lastPlannerInputTokens - tokensAtLastCompaction > regrow
+        && messages.length > 12
+      ) {
+        const messagesBefore = messages.length;
+        const tokensBefore = lastPlannerInputTokens;
+        const preCompactionMessages = structuredClone(messages);
+        let summaryUsage: { inputTokens: number; outputTokens: number } | undefined;
+        try {
+          const compacted = await compactMessagesWithLLM(messages, config.runtime, systemPrompt, {
+            summarizerInstruction: CONSOLE_SUMMARIZER_INSTRUCTION,
+            onSummaryUsage: (u) => { summaryUsage = u; },
+          });
+          // Only a REAL LLM summary is applied. A degraded result (the summarizer
+          // threw or returned too little, so compactMessagesWithLLM fell back to
+          // regex extraction) is NOT applied: for an interactive console a regex
+          // dump is low-value and risks losing conversational nuance, and the
+          // context-overflow recovery below is the hard safety net if the model
+          // later rejects the request. History is left UNCHANGED in that case.
+          if (!compacted.degraded) {
+            // Rewrite history IN PLACE so the persistent `messages` reference the
+            // session exposes (and every closure over it) stays valid. Copy first
+            // to avoid any aliasing with the returned array.
+            const rebuilt = [...compacted.messages];
+            messages.length = 0;
+            messages.push(...rebuilt);
+          }
+          // Advance the regrow baseline either way, so a persistently failing
+          // summarizer is not re-invoked on every subsequent turn.
+          tokensAtLastCompaction = lastPlannerInputTokens;
+          compactionCount++;
+          // First real use of the reserved "compaction" usage kind: attribute
+          // the summarizer call's tokens to the turn (0 when it failed).
+          recordModelUsage("compaction", summaryUsage);
+          const event: ConsoleCompactionEvent = {
+            tokensBefore,
+            // Left undefined at emit: the rewrite has not hit the model yet, so
+            // the true post size is only known on the next planner sample, which
+            // Stream B patches in.
+            tokensAfter: undefined,
+            contextWindowTokens,
+            messagesBefore,
+            messagesAfter: messages.length,
+            summaryText: compacted.summaryText,
+            preCompactionMessages,
+            compactionNumber: compactionCount,
+            degraded: compacted.degraded,
+          };
+          callbacks?.onCompaction?.(event);
+          if (compacted.degraded) {
+            callbacks?.onNotice?.(
+              "Context compaction produced a degraded summary (LLM summarizer unavailable); continuing.",
+            );
+          }
+          // Mirror native-loop.ts's context_compacted event for telemetry parity.
+          config.db?.logEvent({
+            scanId,
+            stage: "console",
+            eventType: "context_compacted",
+            agentRole: role,
+            payload: {
+              tokensBefore,
+              messagesBefore,
+              messagesAfter: messages.length,
+              compactionNumber: compactionCount,
+              degraded: compacted.degraded,
+            },
+            timestamp: Date.now(),
+          });
+        } catch (error) {
+          // A failed compaction leaves history UNCHANGED and the turn proceeds.
+          callbacks?.onNotice?.(
+            `Context compaction failed; continuing without it (${describeCaughtError(error)}).`,
+          );
+        }
+      }
+    }
 
     // Turn cycle: plan → run tools → feed results back → repeat until the model
     // stops requesting tools (end_turn), the turn's token budget is spent, or
@@ -2978,7 +3229,11 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
         callbacks?.onNotice?.(
           `Turn cancelled by operator after ${iterations} tool round(s) — used ${usage.inputTokens + usage.outputTokens}${hasTurnTokenCap ? ` of ${maxTurnTokens}` : ""} tokens. Conversation is intact; send another message to continue.`,
         );
-        return { assistantText, toolCalls: runCalls, usage, budget: budgetSnapshot(), stopReason: "cancelled" };
+        return {
+          assistantText, toolCalls: runCalls, usage,
+          contextInputTokens: lastPlannerInputTokens > 0 ? lastPlannerInputTokens : undefined,
+          budget: budgetSnapshot(), stopReason: "cancelled",
+        };
       }
 
       // Background results enter the model at request boundaries, not only if
@@ -3009,7 +3264,12 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
           driverResult = supplied;
           // Actual SDK model calls already recorded their usage through invokePluginModel.
         } else {
-          result = await runtime.executeNative(systemPrompt, messages, nativeTools, streamCallbacks, signal);
+          try {
+            result = await runtime.executeNative(systemPrompt, messages, nativeTools, streamCallbacks, signal);
+          } catch (error) {
+            if (streamedUsage) recordModelUsage("planner", streamedUsage);
+            throw error;
+          }
           recordModelUsage("planner", result.usage ?? streamedUsage);
         }
       } catch (error) {
@@ -3027,9 +3287,13 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
               : { value: String(error) },
           );
         }
-        return { assistantText, toolCalls: runCalls, usage, budget: budgetSnapshot(),
+        return {
+          assistantText, toolCalls: runCalls, usage,
+          contextInputTokens: lastPlannerInputTokens > 0 ? lastPlannerInputTokens : undefined,
+          budget: budgetSnapshot(),
           stopReason: signal?.aborted ? "cancelled" : "error",
-          error: signal?.aborted ? "turn cancelled by operator" : describeCaughtError(error) };
+          error: signal?.aborted ? "turn cancelled by operator" : describeCaughtError(error),
+        };
       } finally { directDriver = false; }
 
       if (result.stopReason === "error") {
@@ -3045,10 +3309,36 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
             stopReason: "cancelled",
           };
         }
+        // Context-window overflow recovery (scan-loop parity): if the provider
+        // rejected the request for its window, prune the oldest messages and
+        // retry the round rather than failing the turn. Bounded to 2 attempts;
+        // narrows the preserved tail each time. Only a real context-window
+        // error qualifies — other runtime errors still fail fast.
+        if (
+          result.error
+          && isContextWindowError(result.error)
+          && contextOverflowRecoveries < 2
+        ) {
+          const beforeCount = messages.length;
+          const preserveTailCount = Math.max(2, 10 - contextOverflowRecoveries * 4);
+          const pruned = dropOldestMessages(messages, preserveTailCount);
+          if (pruned.length < beforeCount) {
+            contextOverflowRecoveries++;
+            messages.length = 0;
+            messages.push(...pruned);
+            tokensAtLastCompaction = lastPlannerInputTokens;
+            callbacks?.onNotice?.(
+              `Context overflow: pruned ${beforeCount - pruned.length} old messages `
+              + `(recovery ${contextOverflowRecoveries}/2); retrying.`,
+            );
+            continue;
+          }
+        }
         return {
           assistantText,
           toolCalls: runCalls,
           usage,
+          contextInputTokens: lastPlannerInputTokens > 0 ? lastPlannerInputTokens : undefined,
           budget: budgetSnapshot(),
           stopReason: "error",
           error: result.error ?? "LLM runtime error",
@@ -3070,7 +3360,11 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
         (b): b is Extract<NativeContentBlock, { type: "tool_use" }> => b.type === "tool_use",
       );
       if (toolUseBlocks.length === 0) {
-        return { assistantText, toolCalls: runCalls, usage, budget: budgetSnapshot(), stopReason: "end_turn" };
+        return {
+          assistantText, toolCalls: runCalls, usage,
+          contextInputTokens: lastPlannerInputTokens > 0 ? lastPlannerInputTokens : undefined,
+          budget: budgetSnapshot(), stopReason: "end_turn",
+        };
       }
 
       const toolResultBlocks: NativeContentBlock[] = [];
@@ -3108,6 +3402,7 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
             error: "Tool call cancelled by operator before dispatch.",
           };
           callbacks?.onToolStart?.(call);
+          recordToolResult(call, cancelResult, Date.now(), toolContext.findings.length);
           callbacks?.onToolResult?.(call, cancelResult);
           runCalls.push({ call, result: cancelResult });
           toolResultBlocks.push({
@@ -3120,12 +3415,15 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
         }
 
         callbacks?.onToolStart?.(call);
+        const startedAt = Date.now();
+        const findingsBefore = toolContext.findings.length;
         let toolResult: ToolResult;
         try { toolResult = await dispatchAuthorized(call, callbacks?.onNotice, signal, true, assertAuthority); }
         catch (error) {
           if (!authorityFailure) throw error;
           toolResult = { success: false, output: null, error: authorityFailure };
         }
+        recordToolResult(call, toolResult, startedAt, findingsBefore);
         callbacks?.onToolResult?.(call, toolResult);
         runCalls.push({ call, result: toolResult });
         toolResultBlocks.push({
@@ -3140,7 +3438,11 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
       iterations += 1;
       try { assertAuthority?.(); } catch { /* Preserve completed tool receipts before reporting lost authority. */ }
       if (authorityFailure) {
-        return { assistantText, toolCalls: runCalls, usage, budget: budgetSnapshot(), stopReason: "error", error: authorityFailure };
+        return {
+          assistantText, toolCalls: runCalls, usage,
+          contextInputTokens: lastPlannerInputTokens > 0 ? lastPlannerInputTokens : undefined,
+          budget: budgetSnapshot(), stopReason: "error", error: authorityFailure,
+        };
       }
 
       // A mid-round abort stops here — AFTER the tool_result message for this
@@ -3150,7 +3452,11 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
         callbacks?.onNotice?.(
           `Turn cancelled by operator mid-round — used ${usage.inputTokens + usage.outputTokens}${hasTurnTokenCap ? ` of ${maxTurnTokens}` : ""} tokens over ${iterations} tool round(s). Outstanding tool calls were closed out; send another message to continue.`,
         );
-        return { assistantText, toolCalls: runCalls, usage, budget: budgetSnapshot(), stopReason: "cancelled" };
+        return {
+          assistantText, toolCalls: runCalls, usage,
+          contextInputTokens: lastPlannerInputTokens > 0 ? lastPlannerInputTokens : undefined,
+          budget: budgetSnapshot(), stopReason: "cancelled",
+        };
       }
 
       // Both guards are evaluated HERE — after every tool_use block in this
@@ -3171,7 +3477,11 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
         callbacks?.onNotice?.(
           `Token budget for this turn is spent — used ${tokensUsed} of ${maxTurnTokens} tokens over ${iterations} tool round(s). Pausing for operator input; send another message to continue from here.`,
         );
-        return { assistantText, toolCalls: runCalls, usage, budget: budgetSnapshot(), stopReason: "max_turn_tokens" };
+        return {
+          assistantText, toolCalls: runCalls, usage,
+          contextInputTokens: lastPlannerInputTokens > 0 ? lastPlannerInputTokens : undefined,
+          budget: budgetSnapshot(), stopReason: "max_turn_tokens",
+        };
       }
 
       // BACKSTOP: runaway rounds. Only reachable when the turn is burning
@@ -3180,7 +3490,11 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
         callbacks?.onNotice?.(
           `Reached the ${maxToolIterations}-tool-call runaway cap for this turn (${tokensUsed} tokens used${hasTurnTokenCap ? ` of ${maxTurnTokens}` : ""}); pausing for operator input.`,
         );
-        return { assistantText, toolCalls: runCalls, usage, budget: budgetSnapshot(), stopReason: "max_tool_iterations" };
+        return {
+          assistantText, toolCalls: runCalls, usage,
+          contextInputTokens: lastPlannerInputTokens > 0 ? lastPlannerInputTokens : undefined,
+          budget: budgetSnapshot(), stopReason: "max_tool_iterations",
+        };
       }
     }
     } finally {
@@ -3290,7 +3604,15 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
     reconfigureRuntime: (sel) => {
       // Mutate the existing runtime in place; the engine reads config.runtime
       // per turn and binds forkForSubagent per fork, so no teardown is needed.
-      runtime.reconfigure?.(sel);
+      const { contextWindowTokens: newWindow, ...runtimeSel } = sel;
+      runtime.reconfigure?.(runtimeSel);
+      // Re-base the compaction trigger on the new model's window when provided.
+      // Reset the regrow baseline so the fresh window governs the next trigger
+      // cleanly rather than inheriting the prior model's accrual.
+      if (newWindow !== undefined) {
+        contextWindowTokens = newWindow;
+        tokensAtLastCompaction = 0;
+      }
     },
     clearConversation: () => {
       messages.length = 0;

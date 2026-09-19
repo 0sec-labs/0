@@ -85,6 +85,16 @@ export const MANUAL_PRICING: Record<string, ModelRates> = {
   "grok-4.6": { input: 2.00, output: 6.00 },
   "grok-4.5": { input: 2.00, output: 6.00 },
   "grok-4.3": { input: 1.25, output: 2.50 },
+  // GitHub Copilot (device-code OAuth) — the `copilot/` prefix disambiguates
+  // routing/pricing (Copilot serves gpt-*/claude-*/gemini-* families). These are
+  // DISPLAY-ONLY estimates so the model picker can group and show these ids;
+  // Copilot subscription billing is per-seat, not metered per token, so the
+  // estimated spend against a Copilot key is not a real charge. v1 ships the
+  // gpt-* families (claude-*/gemini-* need a one-time model-policy enable —
+  // TODO). Rates mirror the underlying OpenAI list prices.
+  "copilot/gpt-4o": { input: 2.50, output: 10.00, cachedInput: 1.25 },
+  "copilot/gpt-4o-mini": { input: 0.15, output: 0.60, cachedInput: 0.075 },
+  "copilot/gpt-4.1": { input: 2.00, output: 8.00, cachedInput: 0.50 },
   // Azure Foundry deployment names (verified 2026-07-25) — exact aliases
   // forwarded by the engine. DeepSeek/gpt-oss rates use the Azure-specific `azure_ai/*` LiteLLM feed
   // entries (not the cheaper direct-provider rates). Kimi is Microsoft's
@@ -94,6 +104,12 @@ export const MANUAL_PRICING: Record<string, ModelRates> = {
   // which this schema cannot represent.
   "DeepSeek-V4-Pro": { input: 1.74, output: 3.48 },
   "DeepSeek-V4-Flash": { input: 0.19, output: 0.51 },
+  // Fireworks-on-Foundry Global meters (verified 2026-09-17 against the Azure
+  // Retail Prices API): input $0.375/M, cached input $0.008/M, output $1.50/M.
+  // The deployment name is the lowercase "deepseek-v4.1-flash" — cannot reuse
+  // the direct "deepseek-flash" $0.30/$1.20 tariff because Azure Foundry billing
+  // differs from DeepSeek's own API invoice.
+  "deepseek-v4.1-flash": { input: 0.375, output: 1.5, cachedInput: 0.008 },
   "Kimi-K2.7-Code": { input: 0.95, output: 4.00, cachedInput: 0.19 },
   "gpt-oss-120b": { input: 0.15, output: 0.60 },
   "gpt-5.6-sol": { input: 5.00, output: 30.00, cachedInput: 0.50 },
@@ -121,6 +137,8 @@ export const MODEL_PRICING: Record<string, ModelRates> = {
 const AZURE_DEPLOYMENT_PRICE_ALIASES = new Map<string, string>([
   ["deepseek-v4-pro", "DeepSeek-V4-Pro"],
   ["deepseek-v4-flash", "DeepSeek-V4-Flash"],
+  ["deepseek-v4.1-flash", "deepseek-v4.1-flash"],
+  ["fw-deepseek-v4.1-flash", "deepseek-v4.1-flash"],
   ["kimi-k2.7-code", "Kimi-K2.7-Code"],
   ["gpt-oss-120b", "gpt-oss-120b"],
   ["gpt-5.6-sol", "gpt-5.6-sol"],
@@ -198,6 +216,7 @@ export function modelProvider(model?: string): string {
   if (lowered.startsWith("kimi/") || lowered.startsWith("moonshot/")) return "kimi";
   if (lowered.startsWith("openrouter/")) return "openrouter";
   if (lowered.startsWith("opencode/")) return "opencode";
+  if (lowered.startsWith("copilot/")) return "copilot";
   if (lowered.startsWith("xai/") || lowered.startsWith("x-ai/")) return "xai";
 
   const stripped = normalizeModel(model).toLowerCase();

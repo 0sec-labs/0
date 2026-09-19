@@ -5,11 +5,10 @@ import { Command } from "commander";
 import chalk from "chalk";
 import { VERSION } from "@0sec/shared";
 import {
-  ANALYTICS_LEVEL_ENV,
+  analyticsPipeline,
   createHerdrEventSink,
   configureRunContributionsFromEnvironment,
   eventBus,
-  maybeSubscribeAnalyticsPipeline,
   maybeSubscribeCloudEventSink,
   maybeSubscribeOperationalEventSink,
   presentationEventSink,
@@ -44,19 +43,13 @@ maybeLoadCodexAuth();
 // dark for every scan.
 maybeSubscribeCloudEventSink();
 
-// Consent bridge for the analytics pipeline. core must NOT import the CLI
-// settings store, so the operator's `analyticsLevel` crosses the boundary as
-// an env var that `resolveAnalyticsLevel` reads (any opt-out env — 0SEC_OFFLINE
-// / 0SEC_NO_TELEMETRY / DO_NOT_TRACK — still wins and forces "off"). We set it
-// from the resolved setting, then subscribe the pipeline's usage sink. When the
-// level is "off" this is a no-op: nothing subscribes and nothing transmits.
-// A live /settings change re-runs this bridge from settings-store.ts.
+// The settings store initializes the pipeline and preserves explicit environment
+// restrictions. Do not overwrite the tier env or reinitialize from env alone.
 try {
-  process.env[ANALYTICS_LEVEL_ENV] = getSettings().analyticsLevel;
+  getSettings();
 } catch {
-  // Settings unreadable — leave the env untouched; resolve fails closed to off.
+  analyticsPipeline.setLevel("off");
 }
-maybeSubscribeAnalyticsPipeline();
 // Independent, purpose-specific enrollment. Missing configuration does not enroll.
 try { configureRunContributionsFromEnvironment(); }
 catch { process.stderr.write("[0sec] Run contribution unavailable: invalid private enrollment configuration.\n"); }
@@ -83,63 +76,6 @@ if (herdrSink) eventBus.subscribe(herdrSink);
 // Parked so the interactive console can also report the `blocked` state,
 // which no bus event covers (approval gates resolve inline).
 setHerdrSink(herdrSink);
-import {
-  registerScanCommand,
-  registerResumeCommand,
-  registerReplayCommand,
-  registerHistoryCommand,
-  registerFindingsCommand,
-  registerReviewCommand,
-  registerFixCommand,
-  registerAuditCommand,
-  registerDoctorCommand,
-  registerDashboardCommand,
-  registerTuiCommand,
-  registerOrchestrateCommand,
-  registerDbCommand,
-  registerMcpServerCommand,
-  registerTriageCommand,
-  registerEvalCommand,
-  registerBenchCommand,
-  registerIngestCommand,
-  registerKernelCommand,
-  registerDiscloseCommand,
-  registerVerifyCommand,
-  registerExploitCommand,
-  registerHuntCommand,
-  registerRecencyHuntCommand,
-  registerDeepReviewCommand,
-  registerLensSynthCommand,
-  registerMemsafetyCommand,
-  registerAssumptionHuntCommand,
-  registerSpecdriftCommand,
-  registerProtocolCheckCommand,
-  registerCveCommand,
-  registerUpgradeCommand,
-  registerH1Command,
-  registerAuthCommand,
-  registerHostedCommand,
-  registerIntelCommand,
-  registerReconCommand,
-  registerConsoleCommand,
-  registerJsReconCommand,
-  registerNpmDiscoveryCommand,
-  registerIdentityCommand,
-  registerAdGraphCommand,
-  registerEntraGraphCommand,
-  registerCloudCommand,
-  registerXnuFuzzCommand,
-  registerResearchCommand,
-  registerTimelineCommand,
-  registerFileReviewCommand,
-  registerAgentAssureCommand,
-  registerBinaryCommand,
-  registerPluginCommand,
-  registerThemeCommand,
-  registerEvolveCommand,
-  registerConfigCommand,
-  registerHackstoreCommand,
-} from "./commands/index.js";
 import { detectAndRoute } from "./routing.js";
 import { runStartupUpdate } from "./utils/update-check.js";
 import { enforceSourceDistFreshness } from "./source-freshness.js";
@@ -151,69 +87,79 @@ enforceSourceDistFreshness({ entryUrl: import.meta.url });
 // Notification-only checks stay in the background; unset settings remain opt-in.
 await runStartupUpdate(VERSION);
 
-const program = new Command();
-
-program
-  .name("0sec")
-  .description("Open-source multi-model security research harness")
-  .version(VERSION)
-  .enablePositionalOptions();
-
-registerScanCommand(program);
-registerResumeCommand(program);
-registerReplayCommand(program);
-registerHistoryCommand(program);
-registerFindingsCommand(program);
-registerReviewCommand(program);
-registerFixCommand(program);
-registerAuditCommand(program);
-registerDoctorCommand(program);
-registerDashboardCommand(program);
-registerTuiCommand(program);
-registerOrchestrateCommand(program);
-registerDbCommand(program);
-registerMcpServerCommand(program);
-registerTriageCommand(program);
-registerEvalCommand(program);
-registerBenchCommand(program);
-registerIngestCommand(program);
-registerKernelCommand(program);
-registerDiscloseCommand(program);
-registerVerifyCommand(program);
-registerExploitCommand(program);
-registerHuntCommand(program);
-registerRecencyHuntCommand(program);
-registerDeepReviewCommand(program);
-registerLensSynthCommand(program);
-registerMemsafetyCommand(program);
-registerAssumptionHuntCommand(program);
-registerSpecdriftCommand(program);
-registerProtocolCheckCommand(program);
-registerCveCommand(program);
-registerUpgradeCommand(program);
-registerH1Command(program);
-registerAuthCommand(program);
-registerHostedCommand(program);
-registerIntelCommand(program);
-registerReconCommand(program);
-registerConsoleCommand(program);
-registerJsReconCommand(program);
-registerNpmDiscoveryCommand(program);
-registerIdentityCommand(program);
-registerAdGraphCommand(program);
-registerEntraGraphCommand(program);
-registerCloudCommand(program);
-registerXnuFuzzCommand(program);
-registerResearchCommand(program);
-registerTimelineCommand(program);
-registerFileReviewCommand(program);
-registerAgentAssureCommand(program);
-registerBinaryCommand(program);
-registerPluginCommand(program);
-registerThemeCommand(program);
-registerEvolveCommand(program);
-registerConfigCommand(program);
-registerHackstoreCommand(program);
+// The empty-argv path launches straight into the interactive TUI and needs none
+// of the 56 subcommand modules. Importing (and registering) that barrel is the
+// single biggest chunk of cold-start import cost, so defer it behind a dynamic
+// import that only runs when the user actually passes a command/args.
+async function buildProgram(): Promise<Command> {
+  const c = await import("./commands/index.js");
+  const program = new Command();
+  program
+    .name("0sec")
+    .description("Open-source multi-model security research harness")
+    .version(VERSION)
+    .enablePositionalOptions();
+  c.registerScanCommand(program);
+  c.registerResumeCommand(program);
+  c.registerReplayCommand(program);
+  c.registerHistoryCommand(program);
+  c.registerFindingsCommand(program);
+  c.registerSecureCommand(program);
+  c.registerReviewCommand(program);
+  c.registerFixCommand(program);
+  c.registerConnectCommand(program);
+  c.registerGuideCommand(program);
+  c.registerAuditCommand(program);
+  c.registerDoctorCommand(program);
+  c.registerDashboardCommand(program);
+  c.registerTuiCommand(program);
+  c.registerOrchestrateCommand(program);
+  c.registerDbCommand(program);
+  c.registerMcpServerCommand(program);
+  c.registerTriageCommand(program);
+  c.registerEvalCommand(program);
+  c.registerBenchCommand(program);
+  c.registerIngestCommand(program);
+  c.registerKernelCommand(program);
+  c.registerDiscloseCommand(program);
+  c.registerVerifyCommand(program);
+  c.registerExploitCommand(program);
+  c.registerHuntCommand(program);
+  c.registerRecencyHuntCommand(program);
+  c.registerDeepReviewCommand(program);
+  c.registerLensSynthCommand(program);
+  c.registerMemsafetyCommand(program);
+  c.registerAssumptionHuntCommand(program);
+  c.registerSpecdriftCommand(program);
+  c.registerProtocolCheckCommand(program);
+  c.registerCveCommand(program);
+  c.registerUpgradeCommand(program);
+  c.registerH1Command(program);
+  c.registerAuthCommand(program);
+  c.registerHostedCommand(program);
+  c.registerIntelCommand(program);
+  c.registerReconCommand(program);
+  c.registerConsoleCommand(program);
+  c.registerJsReconCommand(program);
+  c.registerNpmDiscoveryCommand(program);
+  c.registerIdentityCommand(program);
+  c.registerAdGraphCommand(program);
+  c.registerEntraGraphCommand(program);
+  c.registerCloudCommand(program);
+  c.registerXnuFuzzCommand(program);
+  c.registerResearchCommand(program);
+  c.registerTimelineCommand(program);
+  c.registerFileReviewCommand(program);
+  c.registerAgentAssureCommand(program);
+  c.registerBinaryCommand(program);
+  c.registerPluginCommand(program);
+  c.registerThemeCommand(program);
+  c.registerEvolveCommand(program);
+  c.registerConfigCommand(program);
+  c.registerServiceCommand(program);
+  c.registerHackstoreCommand(program);
+  return program;
+}
 
 
 // ── Interactive menu ──
@@ -245,40 +191,51 @@ async function showInteractiveMenu(): Promise<void> {
   console.log("");
 }
 
+// Debounce timers are unreferenced; flush the final batch of a short-lived
+// command before natural process exit. Hard termination remains best-effort.
+process.once("beforeExit", () => {
+  void analyticsPipeline.flushNow().catch(() => {});
+});
+
 // ── Entry point ──
 const userArgs = process.argv.slice(2);
-const knownCommands = ["scan", "resume", "replay", "history", "findings", "review", "fix", "file-review", "audit", "doctor", "dashboard", "tui", "watch", "orchestrate", "db", "mcp-server", "eval", "bench", "ingest", "kernel", "disclose", "verify", "exploit", "hunt", "recency-hunt", "deep-review", "lens-synth", "memsafety", "assumption-hunt", "specdrift", "protocol-check", "cve", "upgrade", "h1", "auth", "login", "models", "balance", "intel", "recon", "js-recon", "npm-discovery", "identity", "adgraph", "entragraph", "cloud", "xnu-fuzz", "research", "timeline", "console", "agent-assure", "binary", "plugin", "theme", "config", "evolve", "hackstore", "hack", "store", "help"];
+const knownCommands = ["scan", "resume", "replay", "history", "findings", "secure", "connect", "guide", "review", "fix", "file-review", "audit", "doctor", "dashboard", "tui", "watch", "orchestrate", "db", "mcp-server", "eval", "bench", "ingest", "kernel", "disclose", "verify", "exploit", "hunt", "recency-hunt", "deep-review", "lens-synth", "memsafety", "assumption-hunt", "specdrift", "protocol-check", "cve", "upgrade", "update", "h1", "auth", "login", "models", "balance", "intel", "recon", "js-recon", "npm-discovery", "identity", "adgraph", "entragraph", "cloud", "service", "xnu-fuzz", "research", "timeline", "console", "agent-assure", "binary", "plugin", "theme", "config", "evolve", "hackstore", "hack", "store", "help"];
 
 if (userArgs.length === 0) {
+  // Fast path: straight into the TUI without ever importing the command barrel.
   showInteractiveMenu().catch((err) => {
     console.error(chalk.red(err instanceof Error ? err.message : String(err)));
     process.exit(2);
   });
-} else if (userArgs[0] === "-r" || userArgs[0] === "--resume") {
-  // `0 -r [id]` is the top-level shortcut for `console --resume [id]`: resume a
-  // saved chat session by id/prefix, or open the picker with no id. commander's
-  // root can't take a bare `-r`, so rewrite argv onto the `console` subcommand.
-  process.argv = [process.argv[0], process.argv[1], "console", "--resume", ...userArgs.slice(1)];
-  program.parse();
-} else if (userArgs[0] === "-c" || userArgs[0] === "--continue") {
-  // `0 -c` → `console --continue`: reopen the most recent chat session.
-  process.argv = [process.argv[0], process.argv[1], "console", "--continue", ...userArgs.slice(1)];
-  program.parse();
-} else if (userArgs[0] === "-p" || userArgs[0] === "--print") {
-  // `0 -p "<prompt>"` → `console --print "<prompt>"`: one-shot non-interactive
-  // query (or read the prompt from piped stdin when no argument is given).
-  process.argv = [process.argv[0], process.argv[1], "console", "--print", ...userArgs.slice(1)];
-  program.parse();
-} else if (userArgs.length >= 1 && !knownCommands.includes(userArgs[0]) && !userArgs[0].startsWith("-")) {
-  const route = detectAndRoute(userArgs[0]);
-  if (route) {
-    const extraArgs = userArgs.slice(1);
-    process.argv = [process.argv[0], process.argv[1], ...route, ...extraArgs];
-    program.parse();
-  } else {
-    console.error("Ambiguous target. Use the control plane (`0`) or an explicit URL, path, source:, npm:, pypi:, cargo:, or oci: target.");
-    process.exitCode = 2;
-  }
 } else {
-  program.parse();
+  // Any command/args path pays the barrel import once, here.
+  const program = await buildProgram();
+  if (userArgs[0] === "-r" || userArgs[0] === "--resume") {
+    // `0 -r [id]` is the top-level shortcut for `console --resume [id]`: resume a
+    // saved chat session by id/prefix, or open the picker with no id. commander's
+    // root can't take a bare `-r`, so rewrite argv onto the `console` subcommand.
+    process.argv = [process.argv[0], process.argv[1], "console", "--resume", ...userArgs.slice(1)];
+    program.parse();
+  } else if (userArgs[0] === "-c" || userArgs[0] === "--continue") {
+    // `0 -c` → `console --continue`: reopen the most recent chat session.
+    process.argv = [process.argv[0], process.argv[1], "console", "--continue", ...userArgs.slice(1)];
+    program.parse();
+  } else if (userArgs[0] === "-p" || userArgs[0] === "--print") {
+    // `0 -p "<prompt>"` → `console --print "<prompt>"`: one-shot non-interactive
+    // query (or read the prompt from piped stdin when no argument is given).
+    process.argv = [process.argv[0], process.argv[1], "console", "--print", ...userArgs.slice(1)];
+    program.parse();
+  } else if (userArgs.length >= 1 && !knownCommands.includes(userArgs[0]) && !userArgs[0].startsWith("-")) {
+    const route = detectAndRoute(userArgs[0]);
+    if (route) {
+      const extraArgs = userArgs.slice(1);
+      process.argv = [process.argv[0], process.argv[1], ...route, ...extraArgs];
+      program.parse();
+    } else {
+      console.error("Ambiguous target. Use the control plane (`0`) or an explicit URL, path, source:, npm:, pypi:, cargo:, or oci: target.");
+      process.exitCode = 2;
+    }
+  } else {
+    program.parse();
+  }
 }

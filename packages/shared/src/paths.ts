@@ -9,6 +9,12 @@ export function homeStateDir(home: string = homedir()): string {
   return join(home, ".0sec");
 }
 
+/** Keep development Cloud credentials separate without changing other user state. */
+export function cloudStateDir(home: string = homedir(), env: NodeJS.ProcessEnv = process.env): string {
+  const state = homeStateDir(home);
+  return env["0SEC_DEV_SOURCE_ROOT"]?.trim() ? join(state, "dev") : state;
+}
+
 /**
  * Private mutable state for one engine execution. Every fresh run owns this
  * directory; only an explicit resume may reuse it.

@@ -2035,6 +2035,48 @@ describe("LlmApiRuntime stream idle watchdog", () => {
     expect(result.error).toContain("stalled");
   });
 
+  it("trips the EVENT watchdog when only keep-alive comments flow (Codex queue hold)", async () => {
+    // The 2026-09 headless-bench hang: the ChatGPT Codex backend (or its CDN)
+    // accepts the request and holds the SSE stream open with periodic comment
+    // keep-alives (`: keep-alive`) — bytes that reset the byte-level watchdog
+    // forever while no real `data:` event ever arrives. The byte watchdog
+    // (200ms) must stay quiet here; the EVENT watchdog (400ms) must fire.
+    vi.useFakeTimers();
+    const EVENT_IDLE_ENV = "0SEC_LLM_STREAM_EVENT_IDLE_TIMEOUT_MS";
+    process.env[IDLE_ENV] = "200";
+    process.env[EVENT_IDLE_ENV] = "400";
+    try {
+      const rt = mkStreamingRt(30000); // overall budget far away — not what fires
+      vi.stubGlobal("fetch", vi.fn(async () => {
+        let interval: ReturnType<typeof setInterval> | undefined;
+        const body = new ReadableStream<Uint8Array>({
+          start(controller) {
+            interval = setInterval(() => {
+              controller.enqueue(new TextEncoder().encode(": keep-alive\n\n"));
+            }, 50);
+            // never sends an event, never closes
+          },
+          cancel() {
+            clearInterval(interval);
+          },
+        });
+        return { ok: true, body };
+      }));
+
+      const pending = rt.executeNative("sys", userMsg, []);
+      // 3 attempts × 400ms event-watchdog + 500/1000ms backoffs ≈ 2.7s virtual;
+      // 10s of fake clock covers the whole retry chain with margin. Pre-fix
+      // this stream NEVER settled inside the 30s overall budget (the keep-
+      // alives reset the only watchdog that existed) — the run hung.
+      await vi.advanceTimersByTimeAsync(10_000);
+      const result = await pending;
+      expect(result.stopReason).toBe("error");
+      expect(result.error).toContain("stalled");
+    } finally {
+      delete process.env[EVENT_IDLE_ENV];
+    }
+  });
+
   it("applies the total request timeout even while an SSE stream keeps yielding", async () => {
     vi.useFakeTimers();
     process.env[IDLE_ENV] = "1000";
@@ -2169,6 +2211,8 @@ describe("resolveFailoverProvider", () => {
   });
 
   it("resolves deepseek when key is present", () => {
+    // Synthetic provider-auth fixture; resolution only, no network request.
+    // foxguard: ignore[js/no-hardcoded-secret]
     process.env.DEEPSEEK_API_KEY = "ds-key";
     const cfg = resolveFailoverProvider("deepseek", "deepseek-v4-flash");
     expect(cfg).not.toBeUndefined();
@@ -2177,6 +2221,8 @@ describe("resolveFailoverProvider", () => {
   });
 
   it("resolves openrouter when key is present", () => {
+    // Synthetic provider-auth fixture; resolution only, no network request.
+    // foxguard: ignore[js/no-hardcoded-secret]
     process.env.OPENROUTER_API_KEY = "sk-or-fallback";
     const cfg = resolveFailoverProvider("openrouter", "qwen/qwen-2.5-coder-32b-instruct");
     expect(cfg).not.toBeUndefined();
@@ -2185,6 +2231,8 @@ describe("resolveFailoverProvider", () => {
   });
 
   it("resolves azure when key and base URL are present", () => {
+    // Synthetic provider-auth fixture; resolution only, no network request.
+    // foxguard: ignore[js/no-hardcoded-secret]
     process.env.AZURE_OPENAI_API_KEY = "az-key";
     process.env.AZURE_OPENAI_BASE_URL = "https://test.openai.azure.com";
     const cfg = resolveFailoverProvider("azure", "gpt-5-deployment");
@@ -2194,6 +2242,8 @@ describe("resolveFailoverProvider", () => {
   });
 
   it("returns undefined for azure when base URL is missing", () => {
+    // Synthetic provider-auth fixture; resolution only, no network request.
+    // foxguard: ignore[js/no-hardcoded-secret]
     process.env.AZURE_OPENAI_API_KEY = "az-key";
     delete process.env.AZURE_OPENAI_BASE_URL;
     // No base URL from the codex config either (no file present)
@@ -2201,6 +2251,8 @@ describe("resolveFailoverProvider", () => {
   });
 
   it("resolves anthropic when key is present", () => {
+    // Synthetic provider-auth fixture; resolution only, no network request.
+    // foxguard: ignore[js/no-hardcoded-secret]
     process.env.ANTHROPIC_API_KEY = "sk-ant-fallback";
     const cfg = resolveFailoverProvider("anthropic", "claude-sonnet-4-20250514");
     expect(cfg).not.toBeUndefined();
@@ -2313,7 +2365,11 @@ describe("LlmApiRuntime cross-provider failover (0SEC_LLM_FALLBACK)", () => {
 
   it("fails over to the next provider after exhausting the 429 budget", async () => {
     // Primary: OpenAI. Fallback: OpenRouter with a different model.
+    // Synthetic key used only by mocked provider requests.
+    // foxguard: ignore[js/no-hardcoded-secret]
     process.env.OPENAI_API_KEY = "sk-openai-primary";
+    // Synthetic key used only by mocked provider requests.
+    // foxguard: ignore[js/no-hardcoded-secret]
     process.env.OPENROUTER_API_KEY = "sk-or-fallback";
     // Urgent: 0SEC_LLM_FALLBACK entries and 12 429s for the primary.
     // Tune 429 budget so it exhausts quickly: 1 retry then failover.
@@ -2421,7 +2477,11 @@ describe("LlmApiRuntime cross-provider failover (0SEC_LLM_FALLBACK)", () => {
   });
 
   it("surfaces the terminal error when the fallback chain is exhausted", async () => {
+    // Synthetic key used only by mocked provider requests.
+    // foxguard: ignore[js/no-hardcoded-secret]
     process.env.OPENAI_API_KEY = "sk-openai-primary";
+    // Synthetic key used only by mocked provider requests.
+    // foxguard: ignore[js/no-hardcoded-secret]
     process.env.OPENROUTER_API_KEY = "sk-or-fallback";
     process.env["0SEC_LLM_429_MAX_RETRIES"] = "0";
     process.env["0SEC_LLM_FALLBACK"] = "openrouter:qwen/qwen-2.5-coder-32b-instruct";
@@ -2477,7 +2537,11 @@ describe("LlmApiRuntime cross-provider failover (0SEC_LLM_FALLBACK)", () => {
   });
 
   it("does NOT fail over for non-429 errors", async () => {
+    // Synthetic key used only by mocked provider requests.
+    // foxguard: ignore[js/no-hardcoded-secret]
     process.env.OPENAI_API_KEY = "sk-openai-primary";
+    // Synthetic key used only by mocked provider requests.
+    // foxguard: ignore[js/no-hardcoded-secret]
     process.env.OPENROUTER_API_KEY = "sk-or-fallback";
     process.env["0SEC_LLM_FALLBACK"] = "openrouter:qwen/qwen-2.5-coder-32b-instruct";
 

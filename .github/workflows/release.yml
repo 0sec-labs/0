@@ -16,12 +16,17 @@ on:
       tag:
         description: "Existing tag to build + release (e.g. v0.15.0)"
         required: true
+      npm_only:
+        description: "Publish only npm from the existing tag; leave native assets unchanged"
+        type: boolean
+        default: false
 
 permissions:
   contents: write
 
 jobs:
   build:
+    if: ${{ !inputs.npm_only }}
     name: build ${{ matrix.asset }}
     strategy:
       fail-fast: false
@@ -115,6 +120,8 @@ jobs:
               }
             '
           )
+      - name: Smoke standalone plugin execution
+        run: node scripts/smoke-plugin-runtime.mjs "dist-bin/${{ matrix.asset }}"
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.asset }}
@@ -151,3 +158,60 @@ jobs:
               --notes "Automated multi-platform release. See CHANGELOG.md for changes." \
               --verify-tag
           fi
+
+  publish-npm:
+    name: publish npm
+    needs: release
+    if: ${{ !cancelled() && (needs.release.result == 'success' || (github.event_name == 'workflow_dispatch' && inputs.npm_only)) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
+      RELEASE_TAG: ${{ github.event.inputs.tag || github.ref_name }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: refs/tags/${{ github.event.inputs.tag || github.ref_name }}
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+      - run: corepack enable
+      - name: Verify package versions match the release tag
+        run: |
+          node --input-type=module -e '
+            import { readFileSync } from "node:fs";
+            for (const file of ["package.json", "packages/cli/package.json"]) {
+              const pkg = JSON.parse(readFileSync(file, "utf8"));
+              if (`v${pkg.version}` !== process.env.RELEASE_TAG) {
+                throw new Error(`${file} does not match ${process.env.RELEASE_TAG}`);
+              }
+            }
+          '
+      - run: pnpm install --frozen-lockfile
+      - name: Build the published CLI package
+        run: pnpm build
+      - name: Normalize public npm identity
+        working-directory: dist
+        # The private workspace name is not the established npm channel.
+        # Apply packaging metadata here too so older tags can be recovered.
+        run: npm pkg set name=0sec-cli bin.0sec=0sec.js bin.0=0sec.js
+      - name: Install runtime dependencies and smoke the bundle
+        run: |
+          npm --prefix dist install --omit=dev --no-audit --no-fund
+          node dist/0sec.js --version
+          bash scripts/smoke-cli.sh "node dist/0sec.js"
+          node scripts/smoke-plugin-runtime.mjs dist/0sec.js
+      - name: Smoke an installed package
+        run: |
+          mkdir -p "$RUNNER_TEMP/npm-pack" "$RUNNER_TEMP/npm-smoke"
+          npm pack ./dist --pack-destination "$RUNNER_TEMP/npm-pack"
+          npm install --prefix "$RUNNER_TEMP/npm-smoke" "$RUNNER_TEMP"/npm-pack/*.tgz --omit=dev --no-audit --no-fund
+          "$RUNNER_TEMP/npm-smoke/node_modules/.bin/0sec" --version
+          node scripts/smoke-plugin-runtime.mjs "$RUNNER_TEMP/npm-smoke/node_modules/.bin/0sec"
+      - name: Publish npm package
+        working-directory: dist
+        run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

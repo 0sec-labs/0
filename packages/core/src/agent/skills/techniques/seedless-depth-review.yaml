@@ -1,0 +1,59 @@
+id: seedless-depth-review
+name: "Seedless Depth Source Review"
+description: "When to reach for the offline source-review engines: `deep_source_review` (seedless depth method — specialized finder lenses × a multi-lens refute quorum) and `file_security_review` (whole-repo regex → coverage gate → batched AI investigation, resumable). Both read source only; neither touches the target network."
+version: 1
+applicable_roles:
+  - attack
+  - audit
+  - review
+tags:
+  - source-review
+  - deep-review
+  - depth-review
+  - finder-lens
+  - file-review
+  - static-analysis
+triggers:
+  - "deep review"
+  - "depth review"
+  - "finder lens"
+  - "source review"
+  - "review the (repo|codebase|source|code)"
+  - "whole-repo"
+estimated_tokens: 750
+content: |
+  ## Seedless depth review of a source tree (offline)
+
+  When the task is "find bugs in this source tree" and you have no seed fix diff
+  to derive variants from, reach for one of two offline engines instead of
+  ad-hoc grepping.
+
+  ### `deep_source_review` — the depth method
+  - Enumerates candidate files from the tree, then re-hunts each through
+    specialized **finder lenses** (memory-safety, input-validation, authz/logic,
+    secrets/crypto, plus the appsec pack) and gates survivors through a
+    **multi-lens refute quorum** — every lens re-reads and tries to refute.
+  - Drive it with `target` (a local path); bound cost with `max_candidates`
+    (largest-first, default 8), `concurrency`, and `cost_ceiling_usd`. Use
+    `subsystem` to narrow a large tree (there is a 5000-file review cap).
+  - **Output is LEADS, not confirmed bugs.** Each lead survived the refute
+    quorum but is not proven. Verify the real sink and impact — trace the taint
+    from a concrete entry point — before you report or disclose.
+
+  ### `file_security_review` — whole-repo, resumable
+  - A different shape: free regex scan → coverage gate → batched AI
+    investigation (refusal audit + field repair) → optional static revalidate.
+  - Drive it with `target`; bound with `max_cost_usd` / `max_duration_ms`,
+    `batch_size`, `concurrency`; set `revalidate: true` to adversarially
+    re-check HIGH+ findings.
+  - **It is resumable.** `exitCode === 3` means a cost/duration limit stopped
+    the run at a checkpoint — re-run the same tool on the same target to
+    continue. Treat exit 3 as "paused", not "failed".
+
+  ### Choosing between them
+  - Use `deep_source_review` for a focused, lens-driven depth pass on the files
+    most likely to hold a serious bug.
+  - Use `file_security_review` for broad whole-repo coverage with a durable,
+    resumable record store.
+  - Either way, a clean run with zero findings is a valid outcome — not proof of
+    perfection, but also not a failure.

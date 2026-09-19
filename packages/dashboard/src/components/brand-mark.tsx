@@ -1,38 +1,49 @@
-import iconUrl from "../../../../assets/0sec-icon.gif";
+import wordmarkInkUrl from "../../../../assets/0sec-aperture-ink.svg";
+import wordmarkWhiteUrl from "../../../../assets/0sec-aperture-white.svg";
 import { cn } from "@/lib/utils";
 
 export function BrandMark({
   compact = false,
-  animated: _animated = false,
   className,
 }: {
   compact?: boolean;
-  animated?: boolean;
   className?: string;
 }) {
   if (compact) {
     return (
-      <img
-        alt="0sec"
-        src={iconUrl}
-        className={cn("size-9 object-contain", className)}
-      />
+      <svg
+        role="img"
+        aria-label="0security"
+        viewBox="-2 -2 24 24"
+        className={cn("size-9 text-[#403D39] dark:text-[#FCFAF6]", className)}
+      >
+        <path fill="#FD802E" d="M12.5 2 H17.5 L7.5 18 H2.5 Z" />
+        <path
+          fill="currentColor"
+          fillRule="evenodd"
+          d="M4 0 H16 L20 4 V16 L16 20 H4 L0 16 V4 Z M4 5 V15 L5 16 H15 L16 15 V5 L15 4 H5 Z"
+        />
+      </svg>
     );
   }
 
   return (
-    <div className={cn("flex items-center gap-3", className)}>
+    <div className={cn("space-y-2", className)}>
       <img
-        alt="0sec"
-        src={iconUrl}
-        className="size-10 object-contain"
+        alt="0security"
+        src={wordmarkInkUrl}
+        width={240}
+        height={24}
+        className="h-auto w-48 max-w-full dark:hidden"
       />
-      <div className="space-y-0.5">
-        <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-primary">
-          0sec
-        </div>
-        <div className="text-sm font-medium text-foreground">0sec operator shell</div>
-      </div>
+      <img
+        alt="0security"
+        src={wordmarkWhiteUrl}
+        width={240}
+        height={24}
+        className="hidden h-auto w-48 max-w-full dark:block"
+      />
+      <div className="text-sm font-medium text-foreground">0security operator shell</div>
     </div>
   );
 }

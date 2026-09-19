@@ -49,6 +49,7 @@
  */
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { sleekScrollbar } from "./scrollbar.js";
 import { decodePasteBytes, TextAttributes } from "@opentui/core";
 import { useKeyboard, usePaste } from "@opentui/react";
 
@@ -68,11 +69,16 @@ import {
 import type { ConnectionRecovery } from "./connection-recovery.js";
 import {
   startCodexDeviceAuth,
-  type CodexDeviceAuthSession,
   type CodexDeviceAuthUpdate,
 } from "./codex-device-auth.js";
 import {
+  startDeviceAuth,
+  PROVIDER_DEVICE_AUTH,
+  type DeviceAuthSession,
+} from "./device-auth.js";
+import {
   startHostedDeviceAuth,
+  verifyHostedConnection,
   readHostedConnection,
   type HostedDeviceAuthUpdate,
 } from "./hosted-device-auth.js";
@@ -83,6 +89,7 @@ import {
   computeConnectTitleLayout,
   connectConnectedCounts,
   connectDetailLines,
+  type HostedVerificationStatus,
   connectDetailTitleLabel,
   connectDetailTitleMeta,
   connectDialogItems,
@@ -175,16 +182,17 @@ function oauthStateTone(theme: Theme, phase: CodexDeviceAuthUpdate["phase"]): st
 function oauthStateTitle(
   phase: CodexDeviceAuthUpdate["phase"],
   standalone: boolean,
+  label: string,
 ): string {
   switch (phase) {
     case "connected":
-      return standalone ? "ChatGPT Codex connected" : "connected";
+      return standalone ? `${label} connected` : "connected";
     case "failed":
-      return standalone ? "ChatGPT Codex sign-in failed" : "sign-in failed";
+      return standalone ? `${label} sign-in failed` : "sign-in failed";
     case "cancelled":
-      return standalone ? "ChatGPT Codex sign-in cancelled" : "sign-in cancelled";
+      return standalone ? `${label} sign-in cancelled` : "sign-in cancelled";
     default:
-      return standalone ? "ChatGPT Codex device sign-in" : "device sign-in";
+      return standalone ? `${label} device sign-in` : "device sign-in";
   }
 }
 
@@ -206,9 +214,9 @@ function oauthRecoveryHint(phase: CodexDeviceAuthUpdate["phase"]): string {
     case "running":
       return "Complete the sign-in in your browser. Keep this pane open; Esc cancels.";
     case "failed":
-      return "Review the Codex output, then press Enter to try again or use ↑/↓ to choose another provider.";
+      return "Review the sign-in output, then press Enter to try again or use ↑/↓ to choose another provider.";
     case "connected":
-      return "The subscription credential is loaded for this session.";
+      return "The credential is loaded for this session.";
     default:
       return "Press Enter to try again or use ↑/↓ to choose another provider.";
   }
@@ -236,18 +244,18 @@ function hostedStateTone(theme: Theme, phase: HostedDeviceAuthUpdate["phase"]): 
  * The title for the cloud sign-in state.
  */
 function hostedStateTitle(phase: HostedDeviceAuthUpdate["phase"]): string {
-  if (phase === "failed") return "0sec Cloud sign-in unavailable";
+  if (phase === "failed") return "0cloud sign-in unavailable";
   switch (phase) {
     case "ready":
-      return "Signed in to 0sec Cloud";
+      return "Signed in to 0cloud";
     case "cancelled":
-      return "0sec Cloud sign-in cancelled";
+      return "0cloud sign-in cancelled";
     case "timeout":
-      return "0sec Cloud sign-in timed out";
+      return "0cloud sign-in timed out";
     case "opener-failed":
       return "Open this URL to sign in";
     default:
-      return "Signing in to 0sec Cloud";
+      return "Signing in to 0cloud";
   }
 }
 
@@ -327,7 +335,9 @@ export function ConnectScreen({ frame, onBack, onExit, recovery, onConnected, en
     setInputValue(next);
   };
   const [notice, setNotice] = useState<string | undefined>(undefined);
-  const oauthSessionRef = useRef<CodexDeviceAuthSession | undefined>(undefined);
+  // Both engines expose the same cancel-only session, so one ref serves the
+  // Codex subprocess flow and the generic in-process device-code flow alike.
+  const oauthSessionRef = useRef<DeviceAuthSession | undefined>(undefined);
   const hostedSessionRef = useRef<{ cancel(): void } | undefined>(undefined);
   const [oauth, setOauth] = useState<
     (CodexDeviceAuthUpdate & { providerId: string }) | undefined
@@ -346,6 +356,7 @@ export function ConnectScreen({ frame, onBack, onExit, recovery, onConnected, en
     setHosted(next);
   };
   const [authEpoch, setAuthEpoch] = useState(0);
+  const [hostedVerification, setHostedVerification] = useState<HostedVerificationStatus | undefined>(undefined);
 
   const cloudState = useMemo(() => readHostedConnection(env ?? process.env, homeDir), [env, authEpoch, homeDir]);
   const cloudConnected = cloudState.configured && recovery?.providerId !== "hosted";
@@ -371,8 +382,9 @@ export function ConnectScreen({ frame, onBack, onExit, recovery, onConnected, en
       // others: connected reads green, a provider awaiting repair reads as an
       // error. Both come off state the row model already verified.
       tones: { connected: theme.SUCCESS, recovering: theme.ERROR },
+      hostedVerification,
     }),
-    [rows, cloudConnected, recovery?.providerId, theme.SUCCESS, theme.ERROR],
+    [rows, cloudConnected, recovery?.providerId, theme.SUCCESS, theme.ERROR, hostedVerification],
   );
   const totalRows = useMemo(() => connectDisplayRowCount(items), [items]);
 
@@ -425,6 +437,20 @@ export function ConnectScreen({ frame, onBack, onExit, recovery, onConnected, en
     hostedSessionRef.current?.cancel();
   }, []);
 
+  // Actually verify a saved 0sec Cloud sign-in against the backend (rather than
+  // trusting that the browser flow completed): call the Bearer-authenticated
+  // account endpoint and surface verified / rejected / unreachable in the cloud
+  // detail pane. Re-runs whenever the sign-in changes (authEpoch).
+  useEffect(() => {
+    if (!cloudConnected) { setHostedVerification(undefined); return; }
+    let active = true;
+    setHostedVerification({ kind: "pending" });
+    void verifyHostedConnection({ env: (env ?? process.env) as Record<string, string | undefined>, homeDir })
+      .then((result) => { if (active) setHostedVerification(result); })
+      .catch(() => { if (active) setHostedVerification({ kind: "unreachable" }); });
+    return () => { active = false; };
+  }, [cloudConnected, authEpoch, env, homeDir]);
+
   const currentRows = () => filterRef.current === filter
     ? rows
     : buildConnectRows({ states, stored: storedIds, filter: filterRef.current });
@@ -435,6 +461,7 @@ export function ConnectScreen({ frame, onBack, onExit, recovery, onConnected, en
       cloudConnected,
       recoveryProviderId: recovery?.providerId,
       tones: { connected: theme.SUCCESS, recovering: theme.ERROR },
+      hostedVerification,
     });
 
   const move = (delta: number) => {
@@ -464,21 +491,47 @@ export function ConnectScreen({ frame, onBack, onExit, recovery, onConnected, en
       providerId: provider.id,
       phase: "running",
       lines: [],
-      message: "Starting ChatGPT Codex device sign-in…",
+      message: `Starting ${provider.label} device sign-in…`,
     });
-    oauthSessionRef.current = startCodexDeviceAuth({
+    // The state plumbing is identical for both engines; only the engine that
+    // owns the protocol differs. ChatGPT Codex delegates to the Codex CLI
+    // subprocess; every other OAuth provider runs the in-process RFC 8628
+    // device-code engine, configured from PROVIDER_DEVICE_AUTH.
+    const handleUpdate = (update: CodexDeviceAuthUpdate) => {
+      applyOauth({ ...update, providerId: provider.id });
+      if (update.phase === "failed") setNotice(update.message);
+    };
+    const handleConnected = () => {
+      oauthSessionRef.current = undefined;
+      setAuthEpoch((current) => current + 1);
+      setStored(loadCredentials(homeDir));
+      setNotice(`connected ${provider.label} through device OAuth`);
+      onConnected?.(provider.id);
+    };
+    if (provider.id === "chatgpt-codex") {
+      oauthSessionRef.current = startCodexDeviceAuth({
+        homeDir,
+        onUpdate: handleUpdate,
+        onConnected: handleConnected,
+      });
+      return;
+    }
+    const config = PROVIDER_DEVICE_AUTH[provider.id];
+    if (config === undefined) {
+      applyOauth({
+        providerId: provider.id,
+        phase: "failed",
+        lines: [],
+        message: `${provider.label} has no device sign-in configured.`,
+      });
+      setNotice(`${provider.label} has no device sign-in configured.`);
+      return;
+    }
+    oauthSessionRef.current = startDeviceAuth(config, {
+      env: (env ?? process.env) as NodeJS.ProcessEnv,
       homeDir,
-      onUpdate: (update) => {
-        applyOauth({ ...update, providerId: provider.id });
-        if (update.phase === "failed") setNotice(update.message);
-      },
-      onConnected: () => {
-        oauthSessionRef.current = undefined;
-        setAuthEpoch((current) => current + 1);
-        setStored(loadCredentials(homeDir));
-        setNotice(`connected ${provider.label} through device OAuth`);
-        onConnected?.(provider.id);
-      },
+      onUpdate: handleUpdate,
+      onConnected: handleConnected,
     });
   };
 
@@ -492,7 +545,7 @@ export function ConnectScreen({ frame, onBack, onExit, recovery, onConnected, en
     applyHosted({
       providerId: "hosted",
       phase: "opening",
-      message: "Starting 0sec Cloud sign-in…",
+      message: "Starting 0cloud sign-in…",
     });
     hostedSessionRef.current = startHostedDeviceAuth({
       homeDir,
@@ -506,7 +559,7 @@ export function ConnectScreen({ frame, onBack, onExit, recovery, onConnected, en
       onConnected: () => {
         hostedSessionRef.current = undefined;
         setAuthEpoch((current) => current + 1);
-        setNotice("signed in to 0sec Cloud");
+        setNotice("signed in to 0cloud");
         onConnected?.("hosted");
       },
     });
@@ -711,7 +764,7 @@ export function ConnectScreen({ frame, onBack, onExit, recovery, onConnected, en
 
     if (hostedHere && hosted) {
       const tone = hostedStateTone(theme, hosted.phase);
-      title = "0sec Cloud";
+      title = "0cloud";
       meta = hostedStateMeta(hosted.phase);
       metaFg = tone;
       lines.push(...wrap(hostedStateTitle(hosted.phase), tone, true), blank());
@@ -723,10 +776,10 @@ export function ConnectScreen({ frame, onBack, onExit, recovery, onConnected, en
       title = provider.label;
       meta = oauthStateMeta(oauth.phase);
       metaFg = tone;
-      lines.push(...wrap(oauthStateTitle(oauth.phase, headerRows === 0), tone, true), blank());
+      lines.push(...wrap(oauthStateTitle(oauth.phase, headerRows === 0, provider.label), tone, true), blank());
       lines.push(...wrap(oauth.message, oauth.phase === "failed" ? theme.TEXT : theme.MUTED));
       if (oauth.lines.length > 0) {
-        lines.push(blank(), ...wrap("CODEX", theme.MUTED));
+        lines.push(blank(), ...wrap(provider.label.toUpperCase(), theme.MUTED));
         for (const line of oauth.lines) lines.push(...wrap(line, theme.TEXT));
       }
       lines.push(blank(), ...wrap(oauthRecoveryHint(oauth.phase), theme.MUTED));
@@ -744,10 +797,10 @@ export function ConnectScreen({ frame, onBack, onExit, recovery, onConnected, en
       if (provider.envVars.length > 0) {
         lines.push(...wrap(`Exported to the runtime as ${provider.envVars[0]}`, theme.MUTED));
       }
-      lines.push(blank(), ...wrap("enter save · esc cancel", theme.MUTED));
+      lines.push(blank(), ...wrap("[⏎] save · [esc] cancel", theme.MUTED));
     } else {
       const codexRecovery = recovery?.providerId === "chatgpt-codex";
-      title = isCloud ? "0sec Cloud" : provider?.label ?? connectDetailTitleLabel();
+      title = isCloud ? "0cloud" : provider?.label ?? connectDetailTitleLabel();
       meta = recovering ? "reconnect" : connectDetailTitleMeta(shownRow, cloudConnected);
       metaFg = recovering
         ? theme.ERROR
@@ -768,7 +821,7 @@ export function ConnectScreen({ frame, onBack, onExit, recovery, onConnected, en
         lines.push(blank());
       }
       const detail = connectDetailLines(
-        { row: shownRow, compact: bodyRows < 12, cloudConnected },
+        { row: shownRow, compact: bodyRows < 12, cloudConnected, hostedVerification },
         width,
       );
       // The pane header already names the provider; drop the repeated lead
@@ -811,16 +864,7 @@ export function ConnectScreen({ frame, onBack, onExit, recovery, onConnected, en
             height={bodyRows}
             flexShrink={0}
             scrollX={false}
-            verticalScrollbarOptions={{
-              trackOptions: {
-                backgroundColor: theme.PANEL,
-                foregroundColor: theme.MUTED,
-              },
-              arrowOptions: {
-                foregroundColor: theme.MUTED,
-                backgroundColor: theme.PANEL,
-              },
-            }}
+            verticalScrollbarOptions={sleekScrollbar(theme)}
           >
             <box width={width} flexDirection="column" flexShrink={0} minWidth={0}>
               {lines.map((line, index) => (
@@ -839,7 +883,7 @@ export function ConnectScreen({ frame, onBack, onExit, recovery, onConnected, en
   // ── status line ──────────────────────────────────────────────────────────
   // Never the secret: the input sub-step reports only the masked length.
   const statusText = inHosted
-    ? hosted?.message ?? "signing in to 0sec Cloud..."
+    ? hosted?.message ?? "signing in to 0cloud..."
     : hostedVisible && hosted
       ? hosted.phase === "ready" ? "Cloud login saved; access and credits checked when used" : hosted.message
       : oauthVisible && oauth
@@ -854,7 +898,7 @@ export function ConnectScreen({ frame, onBack, onExit, recovery, onConnected, en
               ? notice
               : isCloudRow && cloudState.warning
                 ? cloudState.warning
-                : connectStatusLine(rows);
+                : connectStatusLine(rows, hostedVerification);
   const statusFg = inHosted
     ? theme.ACCENT
     : hostedVisible && hosted
@@ -864,7 +908,7 @@ export function ConnectScreen({ frame, onBack, onExit, recovery, onConnected, en
         : recovery ? theme.ERROR : inInput ? theme.ACCENT : isCloudRow && cloudState.warning ? theme.WARNING : theme.MUTED;
 
   const hint = connectFooterHint(mode, filter.length > 0);
-  const counts = connectConnectedCounts(rows);
+  const counts = connectConnectedCounts(rows, hostedVerification);
   const titleText = `${operatorIcon(SCREEN_KEY, symbols)} ${operatorTitle(SCREEN_KEY)}`;
   const titleMeta = counts.total === 0 ? "" : `${counts.connected}/${counts.total} connected`;
   const title = computeConnectTitleLayout(contentWidth, titleMeta.length);

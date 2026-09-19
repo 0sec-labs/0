@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { mkdtempSync, readFileSync, rmSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -6,9 +6,10 @@ import { eventBus } from "../events/bus.js";
 import {
   analyticsPipeline,
   ANALYTICS_SENT_LOG_FILENAME,
+  MAX_BODY_BYTES,
   redactRecordStrings,
 } from "./analytics-pipeline.js";
-import { REDACTED_OPENAI, REDACTED_SECRET } from "./redaction.js";
+import { MAX_CONTENT_BYTES, REDACTED_OPENAI, REDACTED_SECRET } from "./redaction.js";
 
 const dirs: string[] = [];
 function tmpHome(): string {
@@ -48,20 +49,18 @@ beforeEach(() => {
   analyticsPipeline.__resetForTests();
   captured = [];
   home = tmpHome();
-  // Cloud credentials via env so loadCloudCredentials resolves (source=env).
-  process.env["0SEC_CLOUD_TOKEN"] = "test-token";
-  process.env["0SEC_CLOUD_HOST"] = "https://analytics.test";
-  // Ensure no opt-out env interferes.
-  delete process.env["0SEC_OFFLINE"];
-  delete process.env["0SEC_NO_TELEMETRY"];
-  delete process.env["DO_NOT_TRACK"];
+  vi.stubEnv("0SEC_CLOUD_TOKEN", "test-token");
+  vi.stubEnv("0SEC_CLOUD_HOST", "https://analytics.test");
+  vi.stubEnv("0SEC_ANALYTICS_LEVEL", undefined);
+  vi.stubEnv("0SEC_OFFLINE", undefined);
+  vi.stubEnv("0SEC_NO_TELEMETRY", undefined);
+  vi.stubEnv("DO_NOT_TRACK", undefined);
   analyticsPipeline.configure({ homeDir: home, fetchImpl: capturingFetch() });
 });
 
 afterEach(() => {
   analyticsPipeline.__resetForTests();
-  delete process.env["0SEC_CLOUD_TOKEN"];
-  delete process.env["0SEC_CLOUD_HOST"];
+  vi.unstubAllEnvs();
   while (dirs.length) rmSync(dirs.pop()!, { recursive: true, force: true });
 });
 
@@ -88,7 +87,7 @@ describe("consent gate", () => {
     expect(captured[0].url).toBe("https://analytics.test/api/cli-analytics");
     const rec = lastRecord();
     expect(rec["kind"]).toBe("usage");
-    // Envelope attached, with finite + anonymous identity only.
+    // Random identifiers and finite runtime metadata, not an anonymity guarantee.
     expect(typeof rec["installId"]).toBe("string");
     expect(typeof rec["sessionId"]).toBe("string");
     expect(rec["schemaVersion"]).toBe(1);
@@ -309,26 +308,147 @@ describe("scope / finding collectors (full tier)", () => {
     expect(String(rec["descriptionRedacted"])).toContain(REDACTED_SECRET);
   });
 
-  it("recordScope / recordFinding are no-throw when off", () => {
+});
+
+describe("consent changes with pending records", () => {
+  it("permanently purges full-tier records on downgrade, regardless of scope kind", async () => {
+    analyticsPipeline.setLevel("full");
+    analyticsPipeline.recordCode({ lang: "ts", source: "keep", origin: "test" });
+    analyticsPipeline.recordScope({ target: "drop.example", kind: "usage" });
+    analyticsPipeline.setLevel("commands");
+    analyticsPipeline.setLevel("full");
+    await analyticsPipeline.flushNow();
+    expect(JSON.parse(captured[0]!.body).records.map((record: Record<string, unknown>) => record.sourceRedacted)).toEqual(["keep"]);
+    expect(captured[0]!.body).not.toContain("drop.example");
+  });
+
+  it("discards queued content and counters while off, without replay after re-enabling", async () => {
+    analyticsPipeline.setLevel("full");
+    analyticsPipeline.recordCode({ lang: "ts", source: "discard", origin: "test" });
+    eventBus.emit("tool_call_started", { tool: "before_off", turn: 0, ts: Date.now() });
     analyticsPipeline.setLevel("off");
-    expect(() => analyticsPipeline.recordScope({ target: {}, kind: 5 })).not.toThrow();
-    expect(() => analyticsPipeline.recordFinding({ severity: 1, category: null, title: undefined, description: {}, evidence: [], confidence: "x" })).not.toThrow();
+    eventBus.emit("tool_call_started", { tool: "while_off", turn: 0, ts: Date.now() });
+    await analyticsPipeline.flushNow();
+    expect(captured).toEqual([]);
+    expect(existsSync(logPath())).toBe(false);
+    analyticsPipeline.setLevel("full");
+    eventBus.emit("tool_call_started", { tool: "after_on", turn: 1, ts: Date.now() });
+    await analyticsPipeline.flushNow();
+    expect(lastRecord()["featureCounts"]).toEqual({ after_on: 1 });
+  });
+
+  it("honors an environment opt-out and clears earlier accumulated usage", async () => {
+    analyticsPipeline.setLevel("full");
+    eventBus.emit("tool_call_started", { tool: "before_off", turn: 0, ts: Date.now() });
+    process.env["0SEC_ANALYTICS_LEVEL"] = "off";
+    eventBus.emit("tool_call_started", { tool: "while_off", turn: 0, ts: Date.now() });
+    await analyticsPipeline.flushNow();
+    expect(captured).toEqual([]);
+    delete process.env["0SEC_ANALYTICS_LEVEL"];
+    eventBus.emit("tool_call_started", { tool: "after_on", turn: 1, ts: Date.now() });
+    await analyticsPipeline.flushNow();
+    expect(lastRecord()["featureCounts"]).toEqual({ after_on: 1 });
+  });
+
+  it("rechecks the environment before later POSTs, retaining only permitted usage", async () => {
+    analyticsPipeline.setLevel("full");
+    const capture = capturingFetch();
+    analyticsPipeline.configure({ fetchImpl: (async (...args: Parameters<typeof fetch>) => {
+      const response = await capture(...args);
+      process.env["0SEC_ANALYTICS_LEVEL"] = "usage";
+      return response;
+    }) as typeof fetch });
+    for (let i = 0; i < 100; i++) analyticsPipeline.recordCode({ lang: "ts", source: `code ${i}`, origin: "test" });
+    analyticsPipeline.recordScope({ target: "must-not-send.example", kind: "usage" });
+    eventBus.emit("tool_call_started", { tool: "safe_counter", turn: 1, ts: Date.now() });
+    await analyticsPipeline.flushNow();
+    expect(captured.map((request) => JSON.parse(request.body).records.length)).toEqual([100, 1]);
+    expect(lastRecord()["featureCounts"]).toEqual({ safe_counter: 1 });
+    expect(captured.some((request) => request.body.includes("must-not-send.example"))).toBe(false);
+  });
+
+  it("does not resurrect unsent records when consent is downgraded then restored during HTTP", async () => {
+    analyticsPipeline.setLevel("full");
+    const capture = capturingFetch();
+    analyticsPipeline.configure({ fetchImpl: (async (...args: Parameters<typeof fetch>) => {
+      const response = await capture(...args);
+      analyticsPipeline.setLevel("usage");
+      analyticsPipeline.setLevel("full");
+      return response;
+    }) as typeof fetch });
+    for (let i = 0; i < 101; i++) analyticsPipeline.recordCode({ lang: "ts", source: `code ${i}`, origin: "test" });
+    await analyticsPipeline.flushNow();
+    expect(captured.map((request) => JSON.parse(request.body).records.length)).toEqual([100]);
+  });
+});
+
+describe("receiver byte and record limits", () => {
+  it("splits at 100 records without losing or duplicating records", async () => {
+    analyticsPipeline.setLevel("commands");
+    const sources = Array.from({ length: 150 }, (_, i) => `code ${i}`);
+    for (const source of sources) analyticsPipeline.recordCode({ lang: "ts", source, origin: "test" });
+    await analyticsPipeline.flushNow();
+    const batches: Record<string, unknown>[][] = captured.map((request) => JSON.parse(request.body).records);
+    expect(batches.map((batch) => batch.length)).toEqual([100, 50]);
+    expect(batches.flat().map((record) => record.sourceRedacted)).toEqual(sources);
+  });
+
+  it("preserves long Unicode content while splitting by encoded JSON bytes including escaping", async () => {
+    analyticsPipeline.setLevel("commands");
+    const source = "界\n".repeat(50_000);
+    for (let i = 0; i < 5; i++) analyticsPipeline.recordCode({ lang: "ts", source, origin: "test" });
+    await analyticsPipeline.flushNow();
+    const batches: Record<string, unknown>[][] = captured.map((request) => JSON.parse(request.body).records);
+    expect(batches.map((batch) => batch.length)).toEqual([4, 1]);
+    expect(batches.flat().map((record) => record.sourceRedacted)).toEqual(Array(5).fill(source));
+    for (const request of captured) expect(Buffer.byteLength(request.body, "utf8")).toBeLessThanOrEqual(MAX_BODY_BYTES);
+  });
+
+  it("accepts the exact redacted field limit and reports oversize fields and records locally only", async () => {
+    analyticsPipeline.setLevel("commands");
+    const stderr = vi.spyOn(process.stderr, "write").mockReturnValue(true);
+    try {
+      const boundary = "界".repeat(Math.floor(MAX_CONTENT_BYTES / 3)) + "a";
+      analyticsPipeline.recordCode({ lang: "ts", source: boundary, origin: "test" });
+      analyticsPipeline.recordCode({ lang: "ts", source: boundary + "界", origin: "test" });
+      // Raw size exceeds the limit, but the fully redacted field fits.
+      analyticsPipeline.recordCode({ lang: "ts", source: "sk-" + "a".repeat(MAX_CONTENT_BYTES + 1), origin: "test" });
+      // Both fields fit individually; JSON control-character escaping makes
+      // the complete wire record too large.
+      analyticsPipeline.recordCommand({
+        tool: "test", args: "\u0000".repeat(100_000), output: "\u0000".repeat(100_000),
+        status: "ok", durationMs: 1, turn: 1,
+      });
+      await analyticsPipeline.flushNow();
+      expect(JSON.parse(captured[0]!.body).records.map((record: Record<string, unknown>) => record.sourceRedacted)).toEqual([boundary, REDACTED_OPENAI]);
+      expect(captured).toHaveLength(1);
+      const outcomes = readFileSync(join(home, ".0sec", "analytics-outcomes.log"), "utf8").trim().split("\n").map((line) => JSON.parse(line));
+      expect(outcomes.map((outcome) => outcome.field)).toEqual(["sourceRedacted", "record"]);
+      for (const outcome of outcomes) {
+        expect(Object.keys(outcome).sort()).toEqual(["bytes", "field", "maxBytes", "outcome", "ts"]);
+        expect(outcome.outcome).toBe("oversize");
+        expect(outcome.bytes).toBeGreaterThan(outcome.maxBytes);
+      }
+      expect(stderr).toHaveBeenCalledTimes(2);
+      await analyticsPipeline.flushNow();
+      expect(captured).toHaveLength(1);
+    } finally {
+      stderr.mockRestore();
+    }
   });
 });
 
 describe("transparency log", () => {
-  it("writes every transmitted (post-redaction) payload as JSONL", async () => {
+  it("records only the post-redaction wire payload", async () => {
     analyticsPipeline.setLevel("usage");
     analyticsPipeline.__enqueueForTests(
       { kind: "usage", featureCounts: {}, findingCounts: {}, errorCategories: {}, turnCount: 2, durationMs: 3, leaked: "sk-ABCDEFGHIJKLMNOPQRSTUVWX" },
       "usage",
     );
     await analyticsPipeline.flushNow();
-    const lines = readFileSync(logPath(), "utf8").trim().split("\n");
-    expect(lines).toHaveLength(1);
-    const logged = JSON.parse(lines[0]) as Record<string, unknown>;
-    // The transparency log is post-redaction: the secret must already be gone.
-    expect(JSON.stringify(logged)).not.toContain("sk-ABCDEFGHIJKLMNOPQRSTUVWX");
-    expect(String(logged["leaked"])).toContain(REDACTED_OPENAI);
+    const logged = readFileSync(logPath(), "utf8").trim();
+    expect(JSON.parse(logged)).toEqual(lastRecord());
+    expect(logged).not.toContain("sk-ABCDEFGHIJKLMNOPQRSTUVWX");
+    expect(logged).toContain(REDACTED_OPENAI);
   });
 });

@@ -194,11 +194,11 @@ writeFileSync(bundlePath, bundle);
 
 // Write a clean package.json for publishing (no workspace: deps).
 const publishPkg = {
-  name: rootPkg.name,
+  name: cliPkg.name,
   version: rootPkg.version,
   type: "module",
   description: rootPkg.description,
-  bin: { "0sec": "./0sec.js", "0": "./0sec.js" },
+  bin: { "0sec": "0sec.js", "0": "0sec.js" },
   files: ["0sec.js", "chunks", "attacks", "dashboard"],
   keywords: rootPkg.keywords,
   author: rootPkg.author,

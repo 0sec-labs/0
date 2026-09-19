@@ -175,8 +175,8 @@ describe("clipShortcutsRows", () => {
 describe("static labels", () => {
   it("names the title and read-only footer keys", () => {
     expect(shortcutsTitle()).toBe("KEYBOARD SHORTCUTS");
-    expect(shortcutsFooterHint()).toContain("esc back");
-    expect(shortcutsFooterHint()).toContain("ctrl+c exit");
+    expect(shortcutsFooterHint()).toContain("[esc] back");
+    expect(shortcutsFooterHint()).toContain("[⌃C] exit");
   });
 });
 
@@ -309,9 +309,9 @@ describe("keybindingsEditorFooterHint", () => {
     expect(keybindingsEditorFooterHint(true)).toContain("press a chord");
     const idle = keybindingsEditorFooterHint(false);
     expect(idle).toContain("type to search");
-    expect(idle).toContain("enter rebind");
-    expect(idle).toContain("ctrl+r reset");
+    expect(idle).toContain("[⏎] rebind");
+    expect(idle).toContain("[⌃R] reset");
     expect(idle).toContain("reset all");
-    expect(idle).toContain("esc back");
+    expect(idle).toContain("[esc] back");
   });
 });

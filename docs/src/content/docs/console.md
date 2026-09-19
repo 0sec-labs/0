@@ -1,11 +1,12 @@
 ---
 title: Console
-description: The 0sec interactive chat console — talk to the engine, run tools, manage sessions, and navigate every surface from one terminal UI.
+description: The 0 interactive chat console — talk to the engine, run tools, manage sessions, and navigate every surface from one terminal UI.
 ---
 
-`0sec console` opens an interactive chat session with the 0sec engine. From one
-prompt the operator invokes every tool (recon, web pentest, source/package scan,
-variant hunt, verify, patch-gen).
+With the standalone binary or Bun, run `0` with no arguments to open
+the interactive chat console. `0 console` opens it with explicit options.
+From the prompt, the operator can investigate targets, review source, verify findings and
+work on candidate fixes with the available tools.
 
 Two front-ends share the same engine session (`createConsoleSession` from
 `@0sec/core`):
@@ -13,37 +14,39 @@ Two front-ends share the same engine session (`createConsoleSession` from
 | Front-end | Requirement | Features |
 |-----------|-------------|----------|
 | **TUI** (full) | [Bun](https://bun.sh) runtime + TTY (`stdout.isTTY && stdin.isTTY`) | All slash commands, visual transcript, sidebars, approval prompts, scope extensions, subagent inspection, command palette, theme picker |
-| **readline** (Node) | Node.js 24+, `--scope <file>` required | Text-only REPL; limited command subset; scope extensions and Co-pilot tool approvals always denied |
+| **readline** (Node) | Node.js 24+, `--scope <file>` required | Text-only REPL; limited command subset; scope extensions denied; no interactive tool-approval surface — see [approval limitations](#non-interactive-approval-limitations) |
 
 The runtime auto-detects Bun and uses the TUI when both Bun and a TTY are
 available, falling back to the readline console otherwise.
+The standalone release binary includes its runtime; Bun is needed separately
+when running the full terminal UI from source.
 
 ## Launch
 
 ```bash
 # Interactive chat — requires a configured LLM provider
-0sec console
+0 console
 
 # Start with an engagement target
-0sec console --target https://example.com --scope ./scope.json
+0 console --target https://example.com --scope ./scope.json
 
 # Start with a role (tool set)
-0sec console --role discovery --target https://example.com --scope ./scope.json
+0 console --role discovery --target https://example.com --scope ./scope.json
 
 # Start in YOLO mode with an initial engagement scope
-0sec console --yolo --scope ./scope.json --target https://example.com
+0 console --yolo --scope ./scope.json --target https://example.com
 
 # Resume the most recent saved session
-0sec console --continue
+0 console --continue
 
 # Open a session picker to resume a specific one
-0sec console --resume
+0 console --resume
 
 # One-shot: run a prompt and exit (non-interactive)
-0sec console --print "Summarise findings" --continue
+0 console --print "Summarise findings" --continue
 
 # Resume a specific session by id (or unique prefix)
-0sec console --resume a1b2c3d4
+0 console --resume a1b2c3d4
 ```
 
 ### Key flags
@@ -53,7 +56,7 @@ available, falling back to the readline console otherwise.
 | `--target <url>` | Engagement target the tools operate against | (optional; set in chat) |
 | `--scope <file>` | Initial authorization [scope file](/scope/); required under Node | (none) |
 | `--role <role>` | Tool set: `audit`, `review`, `discovery`, `attack`, `verify` | `audit` |
-| `--mode <mode>` | Autonomy mode: `standard`, `recon`, `copilot`, `yolo` | `standard` |
+| `--mode <mode>` | Autonomy mode: `standard`, `recon`, `copilot`, `yolo` | `yolo` |
 | `--yolo` | Shortcut for `--mode yolo` | — |
 | `--model <id>` | Override the LLM model ID | provider default |
 | `--max-tool-calls <n>` | Safety cap on tool-call rounds per operator message | `20` |
@@ -68,6 +71,16 @@ available, falling back to the readline console otherwise.
 A [`--scope` file](/scope/) is required for the Node readline fallback. Under
 the Bun TUI it is optional. YOLO public-network tools accept absolute URLs
 without a launch target; explicit configured restrictions and exclusions still apply.
+
+:::caution[Choose your autonomy policy]
+The console defaults to **YOLO**. Use `--mode standard` in the Bun TUI for
+interactive per-action approval, or `--mode recon` for the restricted Recon
+tool policy. **Co-pilot does not add per-action approval.** Standard also
+bypasses that gate when no approval callback is wired; see the
+[readline and headless limitation](#non-interactive-approval-limitations).
+Explicit restrictions and exclusions still apply. This does not change the
+ordinary `scan` command's requirement for a scope file on live targets.
+:::
 
 ### Review previous work
 
@@ -106,14 +119,32 @@ Cycle the mode with **Shift+Tab** in the TUI, or the `/mode` command.
 
 | Mode | Behavior |
 |------|----------|
-| **Standard** | Runs automatically inside scope; can request a narrow session-only scope extension. |
+| **Standard** | Prompts before each effectful (non-read-only) tool call when an `approveTool` callback is wired, as in the TUI. Without that callback, this gate is bypassed. Scope-extension requests are separate. |
 | **Recon** | Passive, read-only reconnaissance only. Effectful tools are refused. |
-| **Co-pilot** | Adds approval for every non-read-only tool. |
+| **Co-pilot** | Skips Standard's per-action approval gate. Eligible tools proceed automatically, subject to scope and the other authorization controls. |
 | **YOLO** | Public-network tools need no launch target or per-discovered-host approval. Explicit operator-configured scope, exclusions and prior refusals remain effective. |
 
-The readline fallback allows mode selection including Co-pilot and YOLO, but
-Co-pilot tool approvals always return denied — there is no approval surface in
-the text REPL. The TUI is required for interactive approval.
+<span id="non-interactive-approval-limitations"></span>
+:::caution[Readline and headless approval limitation]
+Neither Node/readline nor headless `--print` offers interactive tool-approval
+prompts. Selecting Standard or Co-pilot does **not** make these paths deny
+effectful calls whenever an operator cannot be asked:
+
+- A **Standard launch** leaves `approveTool` unset, so the Standard gate falls
+  through rather than denying the call. Other non-Co-pilot launch modes also
+  leave the callback unset.
+- A **Co-pilot launch** wires an always-rejecting callback, but Co-pilot skips
+  the per-action gate, so that callback is not consulted.
+- In **readline**, `/mode` changes the engine mode without replacing the launch
+  callback. Switching a session launched in Co-pilot to Standard makes the
+  retained callback reject effectful calls, not prompt for them. Switching to
+  Standard from a launch without a callback still bypasses this gate.
+
+Use the **Bun TUI in Standard mode** for interactive per-action approval.
+Session-only scope extensions are denied separately on the readline and
+`--print` paths. Scope, exclusions, Recon restrictions and workspace-trust
+checks remain independent controls.
+:::
 
 In YOLO, the target is optional task context, not a second permission gate.
 Search results and discovered URLs do not update the target or configured scope.
@@ -162,17 +193,24 @@ The console auto-detects available runtimes. The runtime is determined by
 
 ## First interaction
 
-For Cloud sign-in, your own API key, or a subscription connection, follow the
-[interactive setup guide](/getting-started/). Connection and model changes apply
-to a new chat, not the runtime of an existing conversation.
+On the first no-argument launch, guided setup walks through connection, model
+selection, display preferences and analytics consent. The final **Done**
+confirmation marks setup complete. Cancelling does not undo choices already
+saved, but setup appears again on the next launch.
+
+For Cloud sign-in, your own API key or a subscription connection, follow the
+[setup guide](/getting-started/#configure-a-provider). A normal `/connect`
+selection prepares the next chat; it does not automatically replace a healthy
+chat's current provider. After connecting, reselect the model in `/model` to
+apply it to the current conversation.
 
 When the TUI launches:
 
-- **Home screen** — 0sec brand mark, engagement panel, composer (text input)
+- **Home screen** — product mark, engagement panel, composer (text input)
   centred on the screen.
 - **Status bar** — active model, mode, working directory, cost/token counters
   (when enabled).
-- **Header** — `0sec`, configured scope, optional objective and clickable sidebar controls.
+- **Header** — product name, configured scope, optional objective and clickable sidebar controls.
 - **Conversation** — Messenger framing by default: your messages align right,
   answers align left. Saved alternative styles remain effective.
 - **Agents sidebar** — visible by default on wide terminals, with worker
@@ -292,9 +330,14 @@ The detail pane keeps its height while filtering, so a single BYOK result still
 shows its price estimate, credential source, and setup guidance. A listed model
 does not guarantee account access; missing prices remain unknown.
 
-If a chat already has a runtime, connection and model choices apply to the next
-`/new-chat`. The current runtime, conversation and unsent draft stay unchanged,
-including when you reach the picker through **Ctrl+P**.
+Model, role-model and single-model selections apply to the current audit
+immediately while idle, or after the current turn finishes. They also carry
+into the next audit. Conversation history, scope and self-extension remain
+intact; an in-flight turn is never reconfigured.
+
+If the selected provider is not connected, the selection stays staged for the
+next audit. Connect that provider, then select the model again to apply it live.
+These rules also apply when opening the picker through **Ctrl+P**.
 
 ## Keyboard shortcuts
 
@@ -386,9 +429,11 @@ All shortcuts apply in the main Chat screen unless otherwise noted.
 
 ## Modes, approvals, and scope
 
-When a tool needs operator approval that exceeds the current mode's permissions,
-a modal prompt appears showing the tool name, arguments, safety tier, and
-context-specific actions.
+The TUI presents the requests below as modal prompts. Per-action tool approval
+is a **Standard-mode** gate with a wired callback, not a Co-pilot guarantee.
+Scope requests, exclusions, Recon restrictions and workspace trust are separate
+controls. Readline and `--print` have no interactive approval surface; see
+[their callback limitation](#non-interactive-approval-limitations).
 
 ### Scope request (Standard mode)
 
@@ -412,15 +457,20 @@ Nothing is persisted to disk.
 When a source-audit tool is blocked by a safety gate:
 
 - **"Enable for this session"** — lifts the restriction for the session;
-  Standard or Co-pilot gates still apply.
+  scope, exclusions, workspace trust and Standard per-action approval (when wired) still apply.
 - **"Keep disabled"** — tool stays blocked.
 
-### Tool approval (Co-pilot mode)
+<span id="tool-approval-co-pilot-mode"></span>
+### Tool approval (Standard mode)
 
-Each non-read-only tool call shows:
+In the Bun TUI, Standard asks before each effectful (non-read-only) tool call:
 
 - **"Approve this call"** — runs once; the next call asks again.
 - **"Reject"** — the model continues without it.
+
+Read-only calls bypass this gate. Co-pilot and YOLO skip it entirely; a Standard
+session without an `approveTool` callback also bypasses it. These exemptions
+do not remove the separate scope, exclusions, Recon or workspace-trust controls.
 
 ### Operator question (`ask_operator`)
 
@@ -436,7 +486,7 @@ organised by safety tier:
 | Tier | Meaning |
 |------|---------|
 | **automatic** | Runs without operator confirmation |
-| **operator-confirmed** | Requires approval per action (based on mode) |
+| **operator-confirmed** | Classified for operator confirmation; actual per-action prompts depend on the mode and wired approval callback, not this label alone |
 | **blocked** | Disabled for the session (can be lifted per-session) |
 
 Categories: engagement, findings, verification, connect, settings, evolution, automation.
@@ -455,13 +505,13 @@ Interrupted partial assistant generations are not saved.
 
 ```bash
 # Open the session picker
-0sec console --resume
+0 console --resume
 
 # Resume a specific session by id (or unique prefix)
-0sec console --resume a1b2c3d4
+0 console --resume a1b2c3d4
 
 # Resume the most recent session
-0sec console --continue
+0 console --continue
 ```
 
 In the TUI, `/resume` or `/sessions` opens the same picker, showing preview
@@ -497,15 +547,20 @@ removed on the next session write. The keep count is a compile-time constant
 
 ```bash
 # Inline prompt
-0sec console --print "Check the target for CORS misconfiguration" --continue
+0 console --print "Check the target for CORS misconfiguration" --continue
 
 # Piped prompt — reads from stdin
-echo "Summarise the findings" | 0sec console --print --continue
+echo "Summarise the findings" | 0 console --print --continue
 ```
 
 `--print` runs one prompt through the engine and exits. Engine responses stream
 to stdout as text tokens. Combine with `--continue` or `--resume <id>` to query
 a saved session's context without the TUI.
+
+There is no interactive approval prompt in `--print`. Standard without an
+approval callback and Co-pilot both bypass the per-action gate; see
+[readline and headless approval limitations](#non-interactive-approval-limitations)
+before using this path for tasks that may run tools.
 
 ## Transcript vs replay
 

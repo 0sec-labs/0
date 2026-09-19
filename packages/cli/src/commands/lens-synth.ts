@@ -22,15 +22,22 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import type { Command } from "commander";
 import {
+  harvestMissesFromLedgerEntry,
   inspectLensRegistry,
+  lastGreen,
+  loadLedger,
+  loadManifest,
   makeFinderLensProbe,
+  mergeHarvestedMisses,
   retireArchetype,
   runLensSynthesisLoop,
+  type ConfirmedMiss,
   type LensProbe,
   type LensSynthesisInput,
   type LensSynthesisModel,
   type LensSynthesisResult,
   type LensRegistryStatus,
+  type MissHarvestResult,
   type MissInput,
   type ValidationCorpus,
   type ValidationFixture,
@@ -107,8 +114,35 @@ export interface LensSynthCommandOptions {
   model?: string;
   promote?: boolean;
   trials?: number;
+  /**
+   * Flywheel connector: harvest the champion's false-negatives from a
+   * completed benchmark ledger and union them into the curated miss-input's
+   * `confirmedMisses` before running the loop. Requires `manifest`. The
+   * corpus still comes from `--miss-input` — this FEEDS the pipeline; it does
+   * not bypass the corpus-gated promotion.
+   */
+  fromBench?: string;
+  /** Manifest path (ground-truth vuln class + sink), required with `fromBench`. */
+  manifest?: string;
   /** AbortSignal to cancel a long-running loop. Checked before registration. */
   signal?: AbortSignal;
+}
+
+/**
+ * Harvest the champion's false-negatives from a benchmark ledger into curated
+ * misses. Uses the most recent GREEN entry (the last recordable champion),
+ * falling back to the last entry when no green run exists yet.
+ */
+export async function harvestBenchMisses(
+  fromBench: string,
+  manifestPath: string,
+): Promise<{ misses: ConfirmedMiss[]; result: MissHarvestResult }> {
+  const ledger = await loadLedger(resolve(fromBench));
+  const entry = lastGreen(ledger) ?? ledger.entries[ledger.entries.length - 1];
+  if (!entry) throw new Error(`--from-bench: ledger ${fromBench} has no entries to harvest`);
+  const manifest = await loadManifest(resolve(manifestPath));
+  const result = harvestMissesFromLedgerEntry(entry, manifest);
+  return { misses: result.misses, result };
 }
 
 export interface LensSynthCommandDeps {
@@ -170,7 +204,14 @@ export async function runLensSynthCommand(
   deps: LensSynthCommandDeps = {},
 ): Promise<LensSynthesisResult> {
   const raw = JSON.parse(readFileSync(resolve(opts.missInput), "utf8")) as unknown;
-  return runLensSynthesisInput(parseMissInputFile(raw), opts, deps);
+  let input = parseMissInputFile(raw);
+  if (opts.fromBench) {
+    if (!opts.manifest) throw new Error("--from-bench requires --manifest");
+    const { misses } = await harvestBenchMisses(opts.fromBench, opts.manifest);
+    input = { ...input, misses: mergeHarvestedMisses(input.misses, misses) };
+    deps.log?.(`[lens-synth] harvested ${misses.length} bench miss(es) from ${opts.fromBench}`);
+  }
+  return runLensSynthesisInput(input, opts, deps);
 }
 
 /**
@@ -277,6 +318,8 @@ type LensSynthCliOptions = {
   model?: string;
   promote?: boolean;
   trials?: number;
+  fromBench?: string;
+  manifest?: string;
   watch?: boolean;
   pollInterval?: string;
   status?: boolean;
@@ -294,6 +337,8 @@ export function registerLensSynthCommand(program: Command): void {
     .option("-m, --model <id>", "synthesis model override")
     .option("--promote", "persist a validated champion to the durable overlay", false)
     .option("--trials <n>", "repeated validation trials (2–10; default 2)", Number)
+    .option("--from-bench <ledger>", "harvest the champion's false-negatives from a benchmark ledger into the curated misses (requires --manifest)")
+    .option("--manifest <path>", "bench manifest path (ground-truth vuln class + sink); required with --from-bench")
     .option("--watch", "poll the miss-input and process each new content revision", false)
     .option("--poll-interval <ms>", "watch polling interval (minimum 100ms)", "2000")
     .option("--status", "show the active durable overlay and promotion ledger", false)
@@ -325,6 +370,8 @@ export function registerLensSynthCommand(program: Command): void {
         if (opts.maxRegister !== undefined && (!Number.isInteger(opts.maxRegister) || opts.maxRegister < 0)) {
           throw new Error("--max-register must be a non-negative integer");
         }
+        if (opts.fromBench && !opts.manifest) throw new Error("--from-bench requires --manifest");
+        if (opts.fromBench && opts.watch) throw new Error("--from-bench cannot be combined with --watch");
         const pollIntervalMs = Number.parseInt(opts.pollInterval ?? "2000", 10);
         if (!Number.isInteger(pollIntervalMs) || pollIntervalMs < 100) {
           throw new Error("--poll-interval must be an integer of at least 100ms");
@@ -336,6 +383,8 @@ export function registerLensSynthCommand(program: Command): void {
           ...(opts.model ? { model: String(opts.model) } : {}),
           promote: Boolean(opts.promote),
           trials: trialCount(opts.trials),
+          ...(opts.fromBench ? { fromBench: String(opts.fromBench) } : {}),
+          ...(opts.manifest ? { manifest: resolve(String(opts.manifest)) } : {}),
         };
         const printResult = (result: LensSynthesisResult): void => {
           process.stdout.write(

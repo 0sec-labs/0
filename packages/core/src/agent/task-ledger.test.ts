@@ -304,7 +304,7 @@ describe("plan state survives a context-compaction cycle", () => {
       }),
     } as unknown as NativeRuntime;
 
-    const compacted = await compactMessagesWithLLM(messages, runtime, "system prompt");
+    const compacted = (await compactMessagesWithLLM(messages, runtime, "system prompt")).messages;
 
     // Precondition for the test to mean anything: compaction really did remove
     // the message that carried the plan.

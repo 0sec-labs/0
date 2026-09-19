@@ -1,5 +1,6 @@
 /** @jsxImportSource @opentui/react */
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { sleekScrollbar } from "./scrollbar.js";
 import { useKeyboard, usePaste } from "@opentui/react";
 import { decodePasteBytes } from "@opentui/core";
 import type { ScrollBoxRenderable } from "@opentui/core";
@@ -180,18 +181,9 @@ export function HarnessViewPanel({ contentWidth, onBack }: { contentWidth: numbe
         ref={scroll}
         flexGrow={1}
         minHeight={0}
-        verticalScrollbarOptions={{
-          trackOptions: {
-            backgroundColor: theme.PANEL,
-            foregroundColor: theme.MUTED,
-          },
-          arrowOptions: {
-            foregroundColor: theme.MUTED,
-            backgroundColor: theme.PANEL,
-          },
-        }}
+        verticalScrollbarOptions={sleekScrollbar(theme)}
       ><ViewBlocks blocks={document.view.blocks} width={Math.max(1, innerWidth - 1)} /></scrollbox>
-      <text fg={theme.MUTED}>↑↓ / PgUp/PgDn scroll · Esc picker</text>
+      <text fg={theme.MUTED}>[↑↓] scroll · [esc] picker</text>
     </> : <>
       <DialogSelectBody items={items} cursor={Math.max(0, Math.min(cursor, items.length - 1))} panel={panel}
         query={query} placeholder="Find a view, command or setting" gutter emptyText="No contributions match this chat. Esc returns to controls."
@@ -203,7 +195,7 @@ export function HarnessViewPanel({ contentWidth, onBack }: { contentWidth: numbe
             : "Enter opens this view. Escape returns without changing the conversation.";
           return <text fg={theme.TEXT} wrapMode="word">{detail}</text>;
         }} />
-      <text fg={theme.MUTED} wrapMode="word">↑↓ choose · Enter open/change · type to find · Esc back</text>
+      <text fg={theme.MUTED} wrapMode="word">[↑↓] choose · [⏎] open/change · type to find · [esc] back</text>
     </>}
   </box>;
 }

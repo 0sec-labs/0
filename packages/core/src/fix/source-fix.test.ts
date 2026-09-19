@@ -23,11 +23,16 @@ function createRepository(): string {
     ].join("\n"),
   );
   writeFileSync(
+    join(root, "package.json"),
+    JSON.stringify({ type: "module" }) + "\n",
+  );
+  writeFileSync(
     join(root, "test.js"),
     [
-      "import { readFileSync } from 'node:fs';",
-      "const source = readFileSync('src/auth.js', 'utf8');",
-      "if (!source.includes('typeof input !== \"string\"')) process.exit(1);",
+      "import assert from 'node:assert/strict';",
+      "import { parse } from './src/auth.js';",
+      "assert.throws(() => parse(42), TypeError);",
+      "assert.equal(parse('accepted'), 'accepted');",
       "",
     ].join("\n"),
   );

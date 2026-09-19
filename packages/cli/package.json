@@ -1,7 +1,7 @@
 {
   "name": "0sec-cli",
-  "version": "0.16.3",
-  "description": "Open-source agentic AI pentest framework. Autonomously discover, exploit, and verify vulnerabilities in web apps, AI/LLM apps, source code, and npm/PyPI/Cargo/OCI packages.",
+  "version": "0.19.0",
+  "description": "0security CLI — the self-improving, open-source cybersecurity harness for agent-driven security research and verification.",
   "type": "module",
   "bin": {
     "0sec": "dist/index.js",
@@ -14,6 +14,7 @@
     "build": "tsc",
     "dev": "tsc --watch",
     "test": "vitest run",
+    "test:tui": "bun --bun x vitest run -c vitest.tui.config.ts",
     "test:watch": "vitest",
     "clean": "rm -rf dist"
   },

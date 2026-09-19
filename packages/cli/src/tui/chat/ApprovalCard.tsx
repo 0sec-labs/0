@@ -1,6 +1,6 @@
 /** @jsxImportSource @opentui/react */
 import React from "react";
-import { fitTuiText, sanitizeTuiText } from "../text.js";
+import { fitLegend, fitTuiText, sanitizeTuiText } from "../text.js";
 import type { SelectorItem } from "../selector.js";
 import type { Theme } from "../theme-context.js";
 
@@ -248,7 +248,7 @@ export function ApprovalCard({
           );
         })}
         <box width={innerWidth} flexShrink={0} minWidth={0}>
-          <text fg={MUTED}>{fitTuiText(hint, innerWidth)}</text>
+          <text fg={MUTED}>{fitLegend(innerWidth, hint)}</text>
         </box>
       </box>
     </box>

@@ -20,7 +20,8 @@ import { KeyHints, keyHintsLength } from "./KeyHints.js";
  *
  * The body lives in a fixed-height `<scrollbox>` so any number of questions fits
  * the reserved rows without overflow; the caller scrolls the active row into
- * view. Every child carries an explicit cell width so no row reaches the border.
+ * view. Every child carries an explicit cell width so no row overspends the
+ * panel's inner width.
  */
 export function OperatorQuestionCard({
   rows,
@@ -45,7 +46,20 @@ export function OperatorQuestionCard({
   const innerWidth = Math.max(1, contentWidth - 4);
   const hintLen = keyHintsLength(hintPairs, " · ");
   return (
-    <box flexDirection="column" width="100%" minWidth={0} height={height} flexShrink={0} marginTop={1} border borderStyle="rounded" borderColor={BRAND} title={innerWidth >= 8 ? " ASK " : undefined} titleColor={BRAND} titleAlignment="left" backgroundColor={PANEL_ALT} paddingX={1}>
+    // Borderless popup (matches the landed OpenCode-style restyle): the drawn
+    // rounded box + border `title` are gone, replaced by the PANEL_ALT
+    // background contrast. opentui renders a box `title` INTO the border, so
+    // with no border the " ASK " tag would vanish — it is rendered instead as
+    // the bold BRAND "ASK" title text row below, which reclaims the TOP border
+    // row; `paddingBottom={1}` reclaims the bottom border row. Net vertical
+    // chrome stays 2 rows, so the caller's `operatorBoxHeight` (bodyViewport +
+    // 4) still budgets exactly: ASK(1)+header(1)+body+hint(1)+pad(1) = +4.
+    // `paddingX={2}` reclaims the two border columns, so `innerWidth` is
+    // unchanged.
+    <box flexDirection="column" width="100%" minWidth={0} height={height} flexShrink={0} marginTop={1} backgroundColor={PANEL_ALT} paddingX={2} paddingBottom={1}>
+      <box width={innerWidth} flexShrink={0} minWidth={0}>
+        <text fg={BRAND} attributes={TextAttributes.BOLD}>{fitTuiText("ASK", innerWidth)}</text>
+      </box>
       <box width={innerWidth} flexShrink={0} minWidth={0}>
         <text fg={BRAND} attributes={TextAttributes.BOLD}>{fitTuiText("0sec has a question for you", innerWidth)}</text>
       </box>

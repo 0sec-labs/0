@@ -1,5 +1,6 @@
 /** @jsxImportSource @opentui/react */
 import React, { useEffect, useReducer, useRef, useState } from "react";
+import { sleekScrollbar } from "../scrollbar.js";
 import { TextAttributes } from "@opentui/core";
 import type { TodosEventPayload } from "@0sec/core";
 import { fitTuiText } from "../text.js";
@@ -225,16 +226,7 @@ export function TodosSidebar({ payload, width, rows, theme, expanded: expandedPr
             height={capacity}
             flexShrink={0}
             scrollX={false}
-            verticalScrollbarOptions={{
-              trackOptions: {
-                backgroundColor: theme.PANEL,
-                foregroundColor: theme.MUTED,
-              },
-              arrowOptions: {
-                foregroundColor: theme.MUTED,
-                backgroundColor: theme.PANEL,
-              },
-            }}
+            verticalScrollbarOptions={sleekScrollbar(theme)}
           ><box width={bodyWidth} flexDirection="column" flexShrink={0}><TodoTree rows={tree} width={bodyWidth} theme={theme} strike={plan.strike} /></box></scrollbox>
         : <box flexDirection="column" width={columns} height={capacity} flexShrink={0} minWidth={0}><TodoTree rows={window.rows} width={bodyWidth} theme={theme} strike={plan.strike} /></box>}
       <text width={columns} height={1} wrapMode="none" truncate fg={theme.MUTED}>{fitTuiText(footer, columns)}</text>

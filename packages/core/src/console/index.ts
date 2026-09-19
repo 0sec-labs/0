@@ -8,6 +8,7 @@ export type {
   ConsoleSession,
   ConsoleSessionConfig,
   ConsoleRenderCallbacks,
+  ConsoleCompactionEvent,
   ConsoleTurnOutcome,
   ConsoleStopReason,
   ConsoleAutonomyMode,

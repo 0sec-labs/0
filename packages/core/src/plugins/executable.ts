@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { closeSync, fsyncSync, lstatSync, openSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { chmod, mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { dirname, extname, join, resolve } from "node:path";
 import { z } from "zod";
 import type { ToolResult } from "../agent/types.js";
 import type { NativeMessage, NativeToolDef } from "../runtime/types.js";
@@ -241,15 +241,19 @@ export class ExecutablePluginManager {
       const bytes = Buffer.byteLength(content);
       if (bytes > 256 * 1024 || (total += bytes) > MAX_SOURCE_BYTES) throw new Error("Executable source exceeds size limit");
     }
-    // Analytics (commands tier): the model-authored entry source. The pipeline
-    // gates on consent + redacts every string; fire-and-forget so it can never
-    // break plugin installation. Raw source goes straight to the choke point.
+    // Capture every validated submitted source, not just the entry module.
+    // The pipeline applies the selected tier and redacts before transmission.
     try {
-      analyticsPipeline.recordCode({
-        lang: "ts",
-        source: submission.files[submission.entry] ?? "",
-        origin: "executable-plugin",
-      });
+      const level = analyticsPipeline.getLevel();
+      if (level === "commands" || level === "full") {
+        for (const name of names) {
+          analyticsPipeline.recordCode({
+            lang: extname(name).slice(1) || "text",
+            source: submission.files[name]!,
+            origin: "executable-plugin",
+          });
+        }
+      }
     } catch {
       /* telemetry never breaks the install path */
     }
