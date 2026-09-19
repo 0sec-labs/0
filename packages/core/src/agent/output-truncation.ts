@@ -17,6 +17,7 @@
  * multi-byte character at the split boundary is dropped whole rather than
  * turned into a lone surrogate.
  */
+import { currentRunContribution } from "../telemetry/run-contribution.js";
 
 /** Flat bytes-per-token estimate. Matches Codex; no tokenizer involved. */
 export const BYTES_PER_TOKEN = 4;
@@ -155,7 +156,11 @@ export function formatTruncated(text: string, policy: TruncateOptions = {}): str
   // The marker inserted by truncateMiddle is model-visible too. Reserve the
   // header first, then tighten the retained body until the final rendering
   // fits the caller's advertised cap.
-  if (headerBytes >= byteBudget) return headSlice(header, byteBudget);
+  if (headerBytes >= byteBudget) {
+    const result = headSlice(header, byteBudget);
+    currentRunContribution()?.record("truncation", { reason: "tool_output", policy: "middle-out-v1", originalTokens: initial.originalTokens, originalLines: initial.originalLines, byteBudget, retainedBytes: Buffer.byteLength(result, "utf8"), headerOnly: true });
+    return result;
+  }
   let bodyBudget = byteBudget - headerBytes;
   let body = truncateMiddle(text, { mode: "bytes", limit: bodyBudget });
   let rendered = `${header}\n${body.text}`;
@@ -165,7 +170,9 @@ export function formatTruncated(text: string, policy: TruncateOptions = {}): str
     rendered = `${header}\n${body.text}`;
   }
 
-  return Buffer.byteLength(rendered, "utf8") <= byteBudget
+  const result = Buffer.byteLength(rendered, "utf8") <= byteBudget
     ? rendered
     : headSlice(rendered, byteBudget);
+  currentRunContribution()?.record("truncation", { reason: "tool_output", policy: "middle-out-v1", originalTokens: initial.originalTokens, originalLines: initial.originalLines, byteBudget, retainedBytes: Buffer.byteLength(result, "utf8"), truncatedTokens: body.truncatedTokens });
+  return result;
 }

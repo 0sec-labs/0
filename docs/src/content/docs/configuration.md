@@ -322,6 +322,33 @@ redacted and home usernames masked; this is best-effort, not a guarantee that
 all sensitive content is removed. Reports do not upload the feedback file or
 enable update checks.
 
+## Permissioned run contributions
+
+Run contributions use a separate, explicit enrollment. Analytics preferences,
+problem reports, Cloud login and paid credits don't enroll a run.
+
+`0SEC_RUN_CONTRIBUTION_CONFIG` points to an absolute, operator-owned JSON file
+with private permissions (`0600`). It contains `orgId`, the authoritative
+`receipt`, the matching `policy`, and an optional absolute `spoolDir`. Use the
+configuration issued for your enrollment. A locally written receipt doesn't
+grant permission at the collector.
+
+The client validates this configuration before capture and rechecks the receipt
+before upload. The existing `0SEC_OFFLINE`, `0SEC_NO_TELEMETRY` and `DO_NOT_TRACK`
+switches take precedence. Without valid enrollment, it creates no contribution
+spool or contribution upload. Collection doesn't change target scope or tool
+authorization.
+
+The spool defaults to `run-contributions` under the configured state directory.
+Receipt content flags control model, tool and scope capture; redaction isn't
+anonymization. Versioned manifests and ordered transitions retain missing usage
+as unknown, and interrupted attempts aren't treated as successful runs.
+Upload uses the existing Cloud credential loader and resumes from the collector's
+acknowledged chunk index. The policy and receipt bound local retention.
+
+This is a candidate integration contract, not production enrollment or a grant
+of model-training, licensing or public-distribution rights.
+
 ## Update checks
 
 Startup behavior depends on the **saved global** `updatePolicy`:

@@ -240,17 +240,17 @@ export function isRetryableHttpStatus(status: number): boolean {
 
 // ── Transient empty-stream retry (streaming ended with NO final response) ───
 //
-// Distinct from the HTTP-status retry above. Some providers — the ChatGPT
-// (Codex) backend especially — occasionally accept the request, open the SSE
-// stream, and then close it WITHOUT ever sending the terminal
-// `response.completed` frame (or send a bare `response.failed`). The wire
-// returned HTTP 200, so `isRetryableHttpStatus` never fired; `consumeResponsesStream`
-// surfaced `stopReason:"error"` with "stream completed without final response"
-// (or, for OpenRouter, "response stream failed"). That is a transient empty
-// stream, not a real API rejection: nothing usable was produced, so the whole
-// request is safe to re-issue. A genuine 4xx/auth/validation error, a timeout,
-// an operator cancellation, or ANY outcome that already produced tool calls is
-// NOT retried here.
+// Distinct from HTTP-status retry: a provider can accept a request, open an
+// SSE stream, then close without a recognized final response. This classifier
+// retains the existing bounded retry for that missing-final-response result;
+// EOF alone does not establish why the stream ended.
+//
+// Explicit `error`, `response.failed`, and `response.incomplete` events are
+// terminal failures, not transient empty streams. The Responses consumer keeps
+// their bounded protocol identifiers and returns a distinct non-retryable error.
+// "response stream failed" remains below for historical runtime results only.
+// Auth/validation errors, timeouts, operator cancellations, and outcomes that
+// already produced tool calls are not retried here.
 
 /**
  * Substrings that identify a transient "the stream ended without a usable final
@@ -4781,9 +4781,17 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
 
     const decoder = new TextDecoder();
     let buffer = "";
+    let trailingCR = false;
+    let receivedBytes = 0;
+    let malformedEvents = 0;
+    const eventTypes = new Set<string>();
+    // Only bounded protocol identifiers enter failure diagnostics, never the
+    // provider's free-form message, request contents or account metadata.
+    const identifier = (value: unknown): string | null =>
+      typeof value === "string" && /^[A-Za-z0-9_.:-]{1,96}$/.test(value) ? value : null;
     let completedResponse: Record<string, unknown> | null = null;
-    let openRouterStreamFailed = false;
-    let openRouterUsage: NativeRuntimeResult["usage"];
+    let streamFailure: Record<string, string | null> | undefined;
+    let responseUsage: NativeRuntimeResult["usage"];
     // The ChatGPT Codex backend's `response.completed` payload has NO
     // `output[]` array — it's just `{response: {id, usage, end_turn}}`.
     // Function calls + assistant messages flow exclusively through
@@ -4811,7 +4819,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
       callbacks.onThinking(thinkingText);
     };
 
-    while (true) {
+    responses: while (true) {
       let chunk: ReadableStreamReadResult<Uint8Array>;
       try {
         chunk = await readBounded();
@@ -4856,8 +4864,20 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
         throw err;
       }
       const { done, value } = chunk;
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
+      if (done) {
+        // SSE does not dispatch an unterminated final frame. Flush UTF-8 only
+        // so diagnostics account for the remaining bytes without inventing one.
+        buffer += decoder.decode();
+        break;
+      }
+      receivedBytes += value.byteLength;
+      let decoded = decoder.decode(value, { stream: true });
+      if (decoded) {
+        // SSE accepts LF, CRLF and CR, including CRLF split across reads.
+        if (trailingCR && decoded.startsWith("\n")) decoded = decoded.slice(1);
+        trailingCR = decoded.endsWith("\r");
+        buffer += decoded.replace(/\r\n?/g, "\n");
+      }
 
       let boundary = buffer.indexOf("\n\n");
       while (boundary >= 0) {
@@ -4879,34 +4899,51 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
         let event: Record<string, unknown>;
         try {
           event = JSON.parse(payload) as Record<string, unknown>;
+          if (!event || typeof event !== "object" || Array.isArray(event)) {
+            malformedEvents++;
+            continue;
+          }
         } catch {
+          malformedEvents++;
           continue;
         }
 
         const type = String(event.type ?? "");
-        if (this.provider === "openrouter" && (
-          type === "response.done" || type === "response.failed" ||
-          type === "response.completed" || type === "response.incomplete"
-        )) {
-          const response = event.response as Record<string, unknown> | undefined;
+        if (eventTypes.size < 32) eventTypes.add(identifier(type) ?? "unrecognized");
+        const terminal = type === "response.completed" ||
+          (this.provider === "openrouter" && type === "response.done");
+        if (terminal || type === "response.failed" || type === "response.incomplete" || type === "error") {
+          const response = event.response && typeof event.response === "object" && !Array.isArray(event.response)
+            ? event.response as Record<string, unknown> : undefined;
           const usage = response?.usage as Record<string, unknown> | undefined;
           if (usage &&
               typeof usage.input_tokens === "number" && Number.isFinite(usage.input_tokens) && usage.input_tokens >= 0 &&
               typeof usage.output_tokens === "number" && Number.isFinite(usage.output_tokens) && usage.output_tokens >= 0) {
             // A failed response can still report consumed tokens. Preserve them
             // independently of whether any output is safe to dispatch.
-            openRouterUsage = {
+            responseUsage = {
               inputTokens: usage.input_tokens,
               outputTokens: usage.output_tokens,
               ...readResponsesCachedTokens(usage),
             };
-            callbacks?.onUsage?.(openRouterUsage);
+            callbacks?.onUsage?.(responseUsage);
           }
-        }
-        if (this.provider === "openrouter" && (
-          type === "error" || type === "response.failed" || type === "response.incomplete"
-        )) {
-          openRouterStreamFailed = true;
+          if (!terminal || !response || response.error != null ||
+              ((type === "response.done" || response.status !== undefined) && response.status !== "completed")) {
+            const error = (response?.error ?? event.error) as Record<string, unknown> | undefined;
+            const incomplete = response?.incomplete_details as Record<string, unknown> | undefined;
+            streamFailure = {
+              event: type,
+              status: identifier(response?.status),
+              code: identifier(error?.code ?? event.code),
+              errorType: identifier(error?.type),
+              reason: identifier(incomplete?.reason),
+            };
+            // A terminal rejection is final even if a later frame claims
+            // success. Do not wait for EOF or allow buffered tools to escape.
+            break responses;
+          }
+          completedResponse = response;
           continue;
         }
         if (
@@ -4964,41 +5001,37 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
           continue;
         }
 
-        if (
-          type === "response.completed" || type === "response.incomplete" ||
-          (this.provider === "openrouter" && type === "response.done")
-        ) {
-          const response = event.response as Record<string, unknown> | undefined;
-          if (response) {
-            if (this.provider === "openrouter" && (
-              openRouterStreamFailed || response.error != null ||
-              ((type === "response.done" || response.status !== undefined) && response.status !== "completed")
-            )) {
-              openRouterStreamFailed = true;
-              continue;
-            }
-            completedResponse = response;
-            const usage = response.usage as Record<string, unknown> | undefined;
-            if (usage && this.provider !== "openrouter") {
-              callbacks?.onUsage?.({
-                inputTokens: Number(usage.input_tokens ?? 0),
-                outputTokens: Number(usage.output_tokens ?? 0),
-              });
-            }
-          }
-        }
       }
     }
 
     emitThinking(true);
 
-    if (!completedResponse || openRouterStreamFailed) {
+    if (!completedResponse || streamFailure) {
+      if (streamFailure) {
+        // Teardown must not delay an already-known terminal rejection.
+        void reader.cancel().catch(() => { /* best-effort */ });
+      }
+      appendNativeTrace({
+        kind: "native-response-stream-error",
+        provider: this.providerLabel,
+        wireApi: this.wireApi,
+        httpStatus: res.status,
+        eventStreamContentType: /^text\/event-stream(?:\s*;|$)/i.test(res.headers.get("content-type") ?? ""),
+        terminalFailure: streamFailure ?? null,
+        eventTypes: [...eventTypes],
+        receivedBytes,
+        malformedEvents,
+        trailingCharacters: buffer.length,
+        usage: responseUsage ?? null,
+      });
       return {
         content: thinkingText ? [{ type: "text", text: thinkingText }] : [{ type: "text", text: "" }],
         stopReason: "error",
         durationMs: Date.now() - start,
-        ...(openRouterUsage ? { usage: openRouterUsage } : {}),
-        error: `${this.providerLabel} API error: ${openRouterStreamFailed ? "response stream failed" : "stream completed without final response"}`,
+        ...(responseUsage ? { usage: responseUsage } : {}),
+        error: `${this.providerLabel} API error: ${streamFailure
+          ? `Responses terminal failure ${JSON.stringify(streamFailure)}`
+          : `stream completed without final response (HTTP ${res.status}; events=${[...eventTypes].join(",") || "none"}; malformed=${malformedEvents}; trailing=${buffer.length})`}`,
       };
     }
 
@@ -5087,24 +5120,10 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
       emitThinking(true);
     }
 
-    const usageRecord = completedResponse.usage as Record<string, unknown> | undefined;
-    const usage = usageRecord
-      ? {
-          inputTokens: Number(usageRecord.input_tokens ?? 0),
-          outputTokens: Number(usageRecord.output_tokens ?? 0),
-          // Responses `input_tokens` already INCLUDES the cached span (unlike
-          // Anthropic, which subtracts it), so no normalisation is needed —
-          // this is purely so cache behaviour becomes observable. Without it
-          // the Codex cache hit rate is unmeasurable: `prompt-cache.ts`
-          // instruments the Anthropic path only.
-          ...readResponsesCachedTokens(usageRecord),
-        }
-      : undefined;
-
     return {
       content,
       stopReason: content.some((item) => item.type === "tool_use") ? "tool_use" : "end_turn",
-      usage,
+      usage: responseUsage,
       durationMs: Date.now() - start,
       // `outputItems` is the complete, correctly-ordered response array —
       // reasoning items with their `encrypted_content` still attached, each
