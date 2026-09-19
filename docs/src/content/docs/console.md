@@ -56,7 +56,7 @@ available, falling back to the readline console otherwise.
 | `--mode <mode>` | Autonomy mode: `standard`, `recon`, `copilot`, `yolo` | `standard` |
 | `--yolo` | Shortcut for `--mode yolo` | — |
 | `--model <id>` | Override the LLM model ID | provider default |
-| `--max-tool-calls <n>` | Safety cap on tool-call rounds per operator message | `20` |
+| `--max-tool-calls <n>` | Safety cap on tool-call rounds per operator message | `100` |
 | `--allow-scanners` | Expose scanner wrappers (sqlmap, nikto, …) | off |
 | `--finding <id>` | Focus the chat on one persisted finding | (none) |
 | `--finding-intent <intent>` | Finding workflow: `investigate`, `verify`, `draft_fix` | (none) |
@@ -68,6 +68,43 @@ available, falling back to the readline console otherwise.
 A [`--scope` file](/scope/) is required for the Node readline fallback. Under
 the Bun TUI it is optional. YOLO public-network tools accept absolute URLs
 without a launch target; explicit configured restrictions and exclusions still apply.
+
+### Setup and navigation
+
+On first launch, Escape goes back one setup decision, including Density →
+Theme. Within a provider login or search, Escape cancels that local operation
+first. Connect and Models use Ctrl+N to skip; preferences and sharing use `s`.
+Back, Confirm, and Skip also have clickable controls. At Welcome, Escape skips
+setup and opens chat without marking setup complete. Ctrl+C explicitly quits.
+Confirmed settings and credentials remain saved; model choices are applied to
+the current audit when you finish or skip setup. Unconfirmed preference previews
+are discarded when you go back. `/onboard` opens setup again.
+
+Outside setup, Alt+Left and Alt+Right move through console route history.
+Nested popups own input until closed; Escape first closes the current popup or
+edit before returning to the previous screen. Shift+Tab moves backward through
+the engagement launcher's fields.
+
+### Long-running work and context
+
+The interactive console has no cumulative turn-token cap by default, including
+subscription-backed providers. Bare `0`, `0sec console`, and resumed sessions
+share the 100-tool-round default; `--max-tool-calls` overrides it explicitly.
+Provider subscription quotas and explicitly configured engine budgets still
+apply independently.
+
+With auto-compaction enabled and a known model window, the console maintains
+context between tool rounds and continues the same task. Summaries retain the
+opening task, latest instruction, and complete recent tool exchanges. Context
+recovery is bounded and reports when it cannot reduce the prompt; a provider
+quota or authentication error is not treated as context overflow.
+
+A “turn token budget” pause identifies a local cumulative budget, not the size
+of the current context. Older builds imposed a 2m-token default. If that pause
+appears unexpectedly, check `0sec --version` and `/doctor` for the running
+artifact, then restart after updating; an already-running process retains its
+loaded code. A separate source checkout or generated bundle may be older than
+the installed standalone executable.
 
 ### Review previous work
 

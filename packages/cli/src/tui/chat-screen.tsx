@@ -1747,13 +1747,13 @@ export function ChatScreen({
     if (closingRef.current || stoppingAuditRef.current) throw new Error("This audit is stopping.");
     // Resolve credentials into this construction only. Explicit shell exports
     // win, and changing a connection never mutates a live runtime's environment.
-    const env = credentialEnvPatch(loadCredentials(), process.env);
+    const env = { ...process.env, ...credentialEnvPatch(loadCredentials(), process.env) };
     const runtime = createConsoleRuntime({
       model: opts.model ?? options?.model,
       provider: opts.providerId ?? options?.providerId,
       agentModels: options?.agentModels,
       singleModel: options?.singleModel,
-      env,
+      env: Object.fromEntries(Object.entries(env).filter((entry): entry is [string, string] => entry[1] !== undefined)),
     });
     const resolvedModel = runtime.resolvedModel();
     // Initial compaction window: resolved synchronously from the just-built
@@ -1933,7 +1933,7 @@ export function ChatScreen({
     if (!interactive) return;
     try {
       const source = cloudSource.current;
-      const env = source && source.owner === session ? source.env : credentialEnvPatch(loadCredentials(), process.env);
+      const env = source && source.owner === session ? source.env : { ...process.env, ...credentialEnvPatch(loadCredentials(), process.env) };
       loadCloudCredentials({ env, warn: () => {} });
       setCloudConfigured(true);
     } catch (error) {
@@ -1953,8 +1953,9 @@ export function ChatScreen({
     let pending = false;
     const refresh = async () => {
       if (pending || !active) return;
-      setHostedCatalog(null);
-      if (!source.isHosted()) { setCloudBalance(null); return; }
+      // Keep still-valid metadata while refreshing. Clearing it here would
+      // disable compaction at every busy/idle transition and polling interval.
+      if (!source.isHosted()) { setCloudBalance(null); setHostedCatalog(null); return; }
       pending = true;
       setCloudBalance({ owner: session, state: { status: "loading" } });
       try {
@@ -1962,18 +1963,19 @@ export function ChatScreen({
         const client = new CloudClient({ host: credentials.host, token: credentials.token });
         const [account, catalog] = await Promise.all([
           client.getInferenceAccount(),
-          settings.showContextMeter ? client.getInferenceModels().catch(() => null) : Promise.resolve(null),
+          // Model windows drive compaction even when the meter is hidden.
+          client.getInferenceModels().catch(() => null),
         ]);
         if (!active || cloudSource.current !== source) return;
         const current = loadCloudCredentials({ env: source.env, warn: () => {} });
-        if (!source.isHosted()) { setCloudBalance(null); return; }
+        if (!source.isHosted()) { setCloudBalance(null); setHostedCatalog(null); return; }
         const sameCredentials = current.host === credentials.host && current.token === credentials.token;
         setCloudBalance({ owner: session, state: sameCredentials ? hostedBalanceState(account) : { status: "unavailable" } });
         if (sameCredentials && catalog) {
           try {
             setHostedCatalog({ owner: session, models: buildHostedModelCatalog(catalog.data), expiresAt: Date.now() + 60_000 });
-          } catch { /* Malformed catalog metadata cannot establish a context limit. */ }
-        }
+          } catch { setHostedCatalog(null); /* Malformed metadata cannot establish a limit. */ }
+        } else if (!sameCredentials) setHostedCatalog(null);
       } catch {
         if (active && cloudSource.current === source) {
           setCloudBalance(source.isHosted() ? { owner: session, state: { status: "unavailable" } } : null);
@@ -1983,7 +1985,7 @@ export function ChatScreen({
     void refresh();
     const interval = setInterval(() => { void refresh(); }, 30_000);
     return () => { active = false; clearInterval(interval); };
-  }, [session, busy, interactive, settings.showContextMeter]);
+  }, [session, busy, interactive]);
   // Marketplace changes never replace this session's runtime or live harness.
   // Its leased host remains usable until cleanup; new chats acquire the new set.
   useEffect(() => {
@@ -2013,7 +2015,7 @@ export function ChatScreen({
     if (!runtime) return;
     // Explicit shell exports win; a live switch re-resolves the account from
     // this environment, exactly as construction does.
-    const env = credentialEnvPatch(loadCredentials(), process.env);
+    const env = { ...process.env, ...credentialEnvPatch(loadCredentials(), process.env) };
     const currentProvider = runtime.getConfigurationDiagnostics().provider;
     // Which provider would this selection switch the live runtime into? An
     // explicit hint (e.g. a 0sec Cloud row's "hosted") wins over the model id,
@@ -3685,9 +3687,8 @@ export function ChatScreen({
           if (usage.kind === "planner") {
             const planned = Number.isFinite(usage.inputTokens) && usage.inputTokens > 0 ? usage.inputTokens : undefined;
             setLastContext(planned);
-            // Stream A emits `tokensAfter` undefined — the rewrite is only sized
-            // once the model actually receives it, which is THIS next planner
-            // sample. Patch it into both the stored recap and the inline
+            // Replace the pending count with measured occupancy once the model
+            // actually receives the rewrite. Patch both the recap and inline
             // indicator so the operator sees the real before→after.
             const pending = pendingTokensAfterRef.current;
             if (pending !== undefined && planned !== undefined) {
@@ -3708,7 +3709,9 @@ export function ChatScreen({
           // sample patches it in (see onUsage above).
           compactionRecapsRef.current.set(event.compactionNumber, {
             tokensBefore: event.tokensBefore,
-            tokensAfter: event.tokensAfter,
+            // Core's immediate count is a local estimate. Wait for measured
+            // planner usage before presenting an exact post-compaction count.
+            tokensAfter: undefined,
             summaryText: event.summaryText,
             preCompactionMessages: event.preCompactionMessages,
             degraded: event.degraded,
@@ -3722,7 +3725,7 @@ export function ChatScreen({
             kind: "notice",
             text: event.degraded
               ? "⊟ compacted · summary unavailable"
-              : compactionIndicatorText(event.tokensBefore, event.tokensAfter),
+              : compactionIndicatorText(event.tokensBefore),
             turn: currentTurn,
             compactionNumber: event.compactionNumber,
           });
@@ -4760,12 +4763,11 @@ export function ChatScreen({
   // Re-base the live session's compaction trigger whenever that window changes:
   // a `/model` switch to a different-window model, or the per-account hosted
   // catalog loading after the session was built (when the window was unknown).
-  // An empty/undefined value is a no-op in core (it only re-bases on a real
-  // number), so this never disables a window the session already had.
+  // Unknown metadata explicitly clears a previous model's window. Keeping that
+  // stale limit would compact against the wrong model after a switch.
   useEffect(() => {
-    if (compactionContextWindow === undefined) return;
-    sessionRef.current?.reconfigureRuntime({ contextWindowTokens: compactionContextWindow });
-  }, [compactionContextWindow]);
+    sessionRef.current?.reconfigureRuntime({ contextWindowTokens: compactionContextWindow ?? null });
+  }, [compactionContextWindow, activeModel, activeProvider]);
   // The live "what it's doing" one-liner: the active tool + its args, truthfully
   // (never fabricated). Only while the root turn is running and not focused on a
   // worker. Computed here because the status bar is built above the later

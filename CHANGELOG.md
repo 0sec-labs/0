@@ -12,6 +12,20 @@ on the published npm package and the GitHub Release tag.
 
 ## [Unreleased]
 
+### Fixed
+
+- Onboarding Escape returns to the previous decision; skipping setup enters
+  chat without completing setup or quitting. Provider login/search cancellation
+  stays local, confirmed choices survive navigation, and setup has clickable
+  Back/Confirm/Skip controls.
+- Use Alt+Left/Right for consistent route history and Shift+Tab for backward
+  launcher focus, preserving nested popup and text-input ownership.
+- Maintain context between continuing tool rounds, re-arm after reduction,
+  and recover bounded context-overflow errors without replaying completed tools.
+  Explicit budgets, provider failures, and operator cancellation remain distinct.
+- Align console and resume launch defaults with the engine's 100-round limit;
+  retain the unlimited default cumulative turn-token budget.
+
 ### Changed
 
 - Cloud balance and connection views consume the versioned credit account with

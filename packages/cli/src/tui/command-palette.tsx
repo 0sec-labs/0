@@ -13,6 +13,7 @@ import type { ShellNav } from "./shell-nav.js";
 import { rankFuzzy } from "./fuzzy-match.js";
 import { SLASH_COMMANDS } from "./slash-commands.js";
 import { KEYBINDINGS } from "./keybindings.js";
+import { useBlockRouteHistory } from "./route-history-keys.js";
 
 /**
  * What a palette row represents. `"command"` is a navigation/action command
@@ -230,7 +231,7 @@ export function createShellCommands(shell?: ShellNav): PaletteCommand[] {
       title: "Go back",
       category: "Navigate",
       description: "Return to the previous console route",
-      keybind: "[",
+      keybind: "Alt+Left",
       suggested: true,
       action: shell.goBack,
     },
@@ -239,7 +240,7 @@ export function createShellCommands(shell?: ShellNav): PaletteCommand[] {
       title: "Go forward",
       category: "Navigate",
       description: "Move to the next console route",
-      keybind: "]",
+      keybind: "Alt+Right",
       suggested: true,
       action: shell.goForward,
     },
@@ -358,6 +359,7 @@ export function PaletteOverlay({
   selected: number;
   commands: PaletteCommand[];
 }) {
+  useBlockRouteHistory();
   const theme = useTheme();
   const { width, height } = useSurfaceDimensions();
   const contentWidth = getOverlayLayout(width).contentWidth;

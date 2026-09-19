@@ -1,4 +1,5 @@
 export {
+  DEFAULT_MAX_TOOL_ITERATIONS,
   createConsoleSession,
   createConsoleRuntime,
   buildConsoleSystemPrompt,

@@ -227,6 +227,8 @@ export interface NativeStreamCallbacks {
 
 export interface NativeRuntime {
   readonly type: RuntimeType;
+  /** Provider output ceiling when known; used to reserve request headroom. */
+  readonly outputTokenLimit?: number;
   /**
    * `signal` is OPERATOR cancellation (the console's Esc), and is optional and
    * last so every pre-existing implementation and call site stays valid — a
