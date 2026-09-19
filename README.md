@@ -1,23 +1,24 @@
 <p align="center">
-  <a href="https://0.security/harness/">
-    <img src="https://raw.githubusercontent.com/0sec-labs/0sec/main/assets/readme-cover.png" alt="Your self-improving cybersecurity team. An ivory paper sculpture with an orange edge." width="100%">
+  <a href="https://0.security/">
+    <img src="assets/readme-cover.png" alt="Software already builds itself. Now it can secure itself, too. Zero looks over a mountain landscape." width="100%">
   </a>
 </p>
 
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/0sec-labs/0sec/main/assets/0sec-aperture-white.svg">
-    <img src="https://raw.githubusercontent.com/0sec-labs/0sec/main/assets/0sec-aperture-ink.svg" alt="0security" width="320">
+    <source media="(prefers-color-scheme: dark)" srcset="assets/0sec-aperture-white.svg">
+    <img src="assets/0sec-aperture-ink.svg" alt="0security" width="320">
   </picture>
 </p>
 
 <p align="center">
   <strong>We make software secure itself.</strong><br/>
-  Your self-improving, open-source cybersecurity team. <a href="#research-preview">Research Preview</a>.
+  Your self-improving, open-source cybersecurity team.
 </p>
 
 <p align="center">
-  <sub>The Swiss Applied AI &amp; Cybersecurity Research Lab · <a href="https://0.security">0.security</a></sub>
+  <a href="https://0.security/"><strong>0.security</strong></a><br/>
+  <sub>The Swiss Applied AI &amp; Cybersecurity Research Lab</sub>
 </p>
 
 <p align="center">
@@ -32,9 +33,21 @@
   <a href="#research-preview"><img src="https://img.shields.io/badge/status-research%20preview-FD802E?style=flat-square&amp;labelColor=1A1815" alt="Status: research preview"></a>
 </p>
 
+## How it works
+
 <p align="center">
-  <img src="https://raw.githubusercontent.com/0sec-labs/0sec/main/assets/demo-intro.gif" alt="0security interactive CLI demonstration" width="840">
+  <img src="assets/security-cycle-diagram.webp" alt="Illustrative workflow: Zero investigates, proposes fixes and reports the outcome, then repeats." width="100%">
 </p>
+
+An illustrated workflow, not an unattended outcome guarantee:
+
+1. **Find.** Investigate code and authorized targets. Reproduce findings with the checks supported by each workflow.
+2. **Fix.** Propose scoped source fixes and test candidates against an explicit regression command.
+3. **Tell.** Review the findings, evidence and proposed changes.
+4. **Repeat.** Run again as your code changes. Retain revision-aware codebase notes for later research.
+
+The local CLI runs on demand. Managed recurring work needs separate service
+access and configuration. Slack and GitLab delivery are planned.
 
 ## Get started
 
@@ -47,6 +60,13 @@ export PATH="$HOME/.0sec/bin:$PATH"
 Add the `export` line to your shell profile. Run `0` to open the interactive
 console, or `0 --help` for commands. Only test systems you own or have permission to assess.
 
+Connect your own model or provider credentials. A 0cloud account isn't required
+for local use; model support varies by workflow. See [model connections](https://docs.0.security/api-keys/).
+
+The interactive console defaults to YOLO, without per-action approval prompts.
+Set explicit scope and exclusions before starting work. See
+[configuration](https://docs.0.security/configuration/) for execution and isolation options.
+
 Alternatively, with Node.js 24 or newer:
 
 ```bash
@@ -55,6 +75,8 @@ npm install -g 0sec-cli
 ```
 
 The npm package is `0sec-cli`; its commands are `0sec` and `0`.
+The standalone binary includes the full terminal UI. Running that UI from the
+npm package or source requires Bun; Node supports the command-line workflows.
 
 ## Documentation
 
