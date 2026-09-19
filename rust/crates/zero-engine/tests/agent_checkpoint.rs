@@ -529,7 +529,7 @@ async fn unknown_cleanup_has_no_checkpoint_and_cannot_be_continued() {
     engine.shutdown().await.unwrap();
 }
 #[tokio::test]
-async fn missing_usage_hold_survives_continuation_and_limits_new_spending() {
+async fn missing_usage_hold_blocks_continuation_even_with_remaining_budget() {
     for limit in [5, 10] {
         let mut f = Setup::new("echo");
         f.request.max_turns = 1;
@@ -540,7 +540,25 @@ async fn missing_usage_hold_survives_continuation_and_limits_new_spending() {
         let engine = f.engine();
         http.configure(&engine);
         let s = session(&engine, limit).await;
-        let (parent, _) = limited(call(&engine, f.command(&s)).await);
+        let parent = match call(&engine, f.command(&s)).await {
+            Reply::Agent {
+                operation,
+                result: Some(result),
+                ..
+            } => {
+                assert_eq!(operation.status, OperationStatus::Unknown);
+                assert_eq!(result.status, AgentStatus::Unknown);
+                assert_eq!(result.tool_calls, 0);
+                assert!(result.continuation_artifact.is_none());
+                operation.id
+            }
+            other => panic!("{other:?}"),
+        };
+        assert!(matches!(
+            call(&engine, followup(&f, &s, &parent, "continue-with-hold")).await,
+            Reply::Error { .. }
+        ));
+        assert_eq!(http.count(), 1);
         assert_eq!(
             (
                 budget(&engine, &s).await.charged,
@@ -548,34 +566,7 @@ async fn missing_usage_hold_survives_continuation_and_limits_new_spending() {
             ),
             (0, 5)
         );
-        let calls = f.docker_calls();
-        let reply = call(&engine, followup(&f, &s, &parent, "continue-with-hold")).await;
-        if limit == 10 {
-            assert!(
-                matches!(reply,Reply::Agent {result:Some(result),..} if result.status==AgentStatus::Completed)
-            );
-            assert_eq!(http.count(), 2);
-            assert_eq!(
-                (
-                    budget(&engine, &s).await.charged,
-                    budget(&engine, &s).await.reserved
-                ),
-                (2, 5)
-            );
-        } else {
-            assert!(
-                !matches!(reply,Reply::Agent {result:Some(result),..} if result.status==AgentStatus::Completed)
-            );
-            assert_eq!(http.count(), 1);
-            assert_eq!(
-                (
-                    budget(&engine, &s).await.charged,
-                    budget(&engine, &s).await.reserved
-                ),
-                (0, 5)
-            );
-        }
-        assert_eq!(f.docker_calls(), calls);
+        assert!(f.docker_calls().is_empty());
         engine.shutdown().await.unwrap();
     }
 }

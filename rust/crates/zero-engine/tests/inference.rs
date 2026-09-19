@@ -453,7 +453,8 @@ async fn completed_without_final_usage_must_not_settle_provisional_usage() {
             completion: Some(completion),
             ..
         } => {
-            assert_eq!(completion.status, CompletionStatus::Completed);
+            assert_eq!(completion.status, CompletionStatus::Incomplete);
+            assert!(completion.content.is_empty());
             assert!(!completion.usage_is_final);
             assert_eq!(completion.usage.unwrap().input_tokens, 1);
         }

@@ -297,7 +297,7 @@ pub(super) async fn run_inference(
         }
     })
     .await;
-    let completion = match result {
+    let mut completion = match result {
         Ok(Ok(completion)) => completion,
         Ok(Err(error)) => {
             // Even HTTP/transport errors need explicit reconciliation before
@@ -327,15 +327,24 @@ pub(super) async fn run_inference(
         }
     };
     let mut store = lock(&shared.store)?;
-    // Only final reported usage closes a reservation. Intermediate usage may
-    // omit additional billed tokens, so incomplete streams retain the hold.
-    if completion.status == CompletionStatus::Completed && completion.usage_is_final {
-        if let Some(charge) = completion
+    // A completed wire response is not sufficient authority for another effect.
+    // Missing/final-but-unrepresentable usage must retain the original hold and
+    // stop the actor before tool dispatch or continuation admission.
+    if completion.status == CompletionStatus::Completed {
+        let charge = completion
             .usage
             .as_ref()
-            .and_then(|usage| rates.charge(usage))
-        {
+            .filter(|_| completion.usage_is_final && completion.error.is_none())
+            .and_then(|usage| rates.charge(usage));
+        if let Some(charge) = charge {
             store.settle_budget(session_id, operation_id, charge)?;
+        } else {
+            completion.status = CompletionStatus::Incomplete;
+            completion.content.clear();
+            completion.error.get_or_insert_with(|| {
+                "provider completion lacks final representable accounting; reservation retained"
+                    .into()
+            });
         }
     }
     let status = match completion.status {

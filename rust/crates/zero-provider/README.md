@@ -21,7 +21,12 @@ is unknown rather than free. Cancellation cannot prove remote billing stopped.
 Prices are operator-supplied integer microcurrency units per million tokens;
 no current price assumptions are embedded. Cached inputs are a subset of total
 inputs. Native inference reserves budget before dispatch; incomplete/unknown
-billing retains the reservation. This is durable accounting, not a guarantee
+billing retains the reservation. A completed wire response with missing final
+usage, an unrepresentable charge, or an accompanying error becomes an unknown
+engine operation with no executable content. It cannot authorize a subsequent
+tool or model turn; exact retry returns the retained result without another
+provider request. CLI fixtures cover Responses, Chat and Anthropic, alongside
+the Gemini adapter fixture. This is durable accounting, not a guarantee
 against a provider exceeding the requested or reserved amount.
 
 Contract references checked 2026-09-18 using the OpenAI Docs skill:
