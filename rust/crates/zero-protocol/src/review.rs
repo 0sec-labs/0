@@ -273,6 +273,43 @@ pub struct ReviewSnapshot {
     pub observed_at_ms: u64,
 }
 
+/// Bounded history metadata. Source claims and archive bytes require explicit
+/// report/archive reads; their absence here does not imply an empty review.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ReviewHistoryEntry {
+    pub review: ReviewRecord,
+    pub controller_status: crate::OperationStatus,
+    pub root_status: crate::OperationStatus,
+    pub close_reason: Option<ReviewCloseReason>,
+    pub budget: crate::BudgetSnapshot,
+    pub currency: ScanCurrency,
+    pub observed_sequence: u64,
+    pub observed_at_ms: u64,
+}
+
+impl From<ReviewSnapshot> for ReviewHistoryEntry {
+    fn from(snapshot: ReviewSnapshot) -> Self {
+        Self {
+            review: snapshot.review,
+            controller_status: snapshot.controller_status,
+            root_status: snapshot.root_status,
+            close_reason: snapshot.close_reason,
+            budget: snapshot.budget,
+            currency: snapshot.currency,
+            observed_sequence: snapshot.observed_sequence,
+            observed_at_ms: snapshot.observed_at_ms,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ReviewPage {
+    pub reviews: Vec<ReviewHistoryEntry>,
+    pub next_before_sequence: Option<u64>,
+}
+
 /// A point-in-time view over retained source evidence, never a safety verdict.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]

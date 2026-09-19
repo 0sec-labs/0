@@ -166,69 +166,125 @@ impl Store {
         let tx = self.conn.unchecked_transaction()?;
         let mut reader = Reader::new();
         let b = bound(&tx, key, &mut reader)?;
-        crate::admission_closure::validate(&tx, &b.record.session_id)?;
-        let budget = workflow::checked_budget(&tx, &b.record.session_id, &mut reader)?;
-        let sequence: u64 = tx.query_row(
-            "SELECT coalesce(max(sequence),0) FROM events WHERE session_id=?1",
-            [&b.record.session_id],
-            |r| r.get(0),
-        )?;
-        let agent_result = match &b.root.outcome {
-            Some(value) => {
-                match serde_json::from_value::<zero_protocol::agent::AgentResult>(value.clone()) {
-                    Ok(result) => Some(result),
-                    Err(_) if b.root.status == OperationStatus::Unknown => None,
-                    Err(error) => return Err(error.into()),
-                }
-            }
-            None => None,
-        };
-        use zero_protocol::agent::AgentStatus;
-        let matches_status = match b.root.status {
-            OperationStatus::Succeeded => agent_result
-                .as_ref()
-                .is_some_and(|r| r.status == AgentStatus::Completed),
-            OperationStatus::Cancelled => agent_result
-                .as_ref()
-                .is_some_and(|r| r.status == AgentStatus::Cancelled),
-            OperationStatus::Failed => agent_result
-                .as_ref()
-                .is_some_and(|r| matches!(r.status, AgentStatus::Failed | AgentStatus::TurnLimit)),
-            // Owner recovery can retain an opaque interrupted outcome. Never
-            // invent a terminal AgentResult for that uncertainty.
-            OperationStatus::Unknown => true,
-            OperationStatus::Admitted | OperationStatus::Running => agent_result.is_none(),
-        };
-        if !matches_status {
-            return Err(bad("root lifecycle contradicts retained agent result"));
-        }
-        if b.controller.status == OperationStatus::Succeeded {
-            let terminal_root = !matches!(
-                b.root.status,
-                OperationStatus::Admitted | OperationStatus::Running
-            );
-            let expected = json!({
-                "schema_version":1,
-                "review_id":b.record.id,
-                "root_operation_id":b.root.id,
-                "root_status":b.root.status,
-            });
-            if !terminal_root || b.controller.outcome.as_ref() != Some(&expected) {
-                return Err(bad(
-                    "controller settlement contradicts actual root lifecycle",
-                ));
-            }
-        }
-        Ok(ReviewSnapshot {
-            agent_result,
-            review: b.record,
-            controller_status: b.controller.status,
-            root_status: b.root.status,
-            close_reason: b.close,
-            budget,
-            currency: b.admission.profile.currency,
-            observed_sequence: sequence,
-            observed_at_ms: now()?,
-        })
+        snapshot(&tx, b, &mut reader)
     }
+
+    /// Newest admissions first, under one read snapshot and shared evidence
+    /// budget. Archive blobs and source artifacts are never materialized here.
+    pub fn review_page(&self, before: Option<u64>, limit: u32) -> Result<ReviewPage> {
+        if !(1..=32).contains(&limit) || before == Some(0) {
+            return Err(bad("history requires limit1..32 and a positive cursor"));
+        }
+        let tx = self.conn.unchecked_transaction()?;
+        let mut reader = Reader::new();
+        // A deleted projection must not turn retained reviews into an empty
+        // history. Per-entry validation authenticates each selected witness.
+        let inventory_matches: bool = tx.query_row(
+            "SELECT (SELECT count(*) FROM reviews)=(SELECT count(*) FROM events INDEXED BY review_command_created WHERE kind='review_created')",
+            [], |row| row.get(0),
+        )?;
+        if !inventory_matches {
+            return Err(bad("review history projection inventory differs"));
+        }
+        let mut query = tx.prepare("SELECT CASE WHEN length(CAST(id AS BLOB))<=256 THEN id END,sequence FROM reviews WHERE (?1 IS NULL OR sequence<?1) ORDER BY sequence DESC LIMIT 33")?;
+        let rows = query
+            .query_map([before.map(integer).transpose()?], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, u64>(1)?))
+            })?
+            .collect::<std::result::Result<Vec<_>, _>>()?;
+        drop(query);
+        let mut page = ReviewPage {
+            reviews: vec![],
+            next_before_sequence: None,
+        };
+        let mut consumed = 0;
+        for (key, sequence) in &rows {
+            if page.reviews.len() >= limit as usize || reader.remaining < 40 * 1024 * 1024 {
+                break;
+            }
+            let binding = bound(&tx, key, &mut reader)?;
+            let entry = snapshot(&tx, binding, &mut reader)?;
+            page.reviews.push(entry.into());
+            if encode(&page)?.len().saturating_add(32) > 1024 * 1024 {
+                page.reviews.pop();
+                break;
+            }
+            consumed += 1;
+            page.next_before_sequence = Some(*sequence);
+        }
+        if consumed == rows.len() && rows.len() < 33 {
+            page.next_before_sequence = None;
+        }
+        if page.reviews.is_empty() && !rows.is_empty() {
+            return Err(bad("first review exceeds history page bounds"));
+        }
+        Ok(page)
+    }
+}
+
+fn snapshot(conn: &Connection, b: Bound, reader: &mut Reader) -> Result<ReviewSnapshot> {
+    crate::admission_closure::validate(conn, &b.record.session_id)?;
+    let budget = workflow::checked_budget(conn, &b.record.session_id, reader)?;
+    let sequence: u64 = conn.query_row(
+        "SELECT coalesce(max(sequence),0) FROM events WHERE session_id=?1",
+        [&b.record.session_id],
+        |r| r.get(0),
+    )?;
+    let agent_result = match &b.root.outcome {
+        Some(value) => {
+            match serde_json::from_value::<zero_protocol::agent::AgentResult>(value.clone()) {
+                Ok(result) => Some(result),
+                Err(_) if b.root.status == OperationStatus::Unknown => None,
+                Err(error) => return Err(error.into()),
+            }
+        }
+        None => None,
+    };
+    use zero_protocol::agent::AgentStatus;
+    let matches_status = match b.root.status {
+        OperationStatus::Succeeded => agent_result
+            .as_ref()
+            .is_some_and(|r| r.status == AgentStatus::Completed),
+        OperationStatus::Cancelled => agent_result
+            .as_ref()
+            .is_some_and(|r| r.status == AgentStatus::Cancelled),
+        OperationStatus::Failed => agent_result
+            .as_ref()
+            .is_some_and(|r| matches!(r.status, AgentStatus::Failed | AgentStatus::TurnLimit)),
+        // Owner recovery can retain an opaque interrupted outcome. Never
+        // invent a terminal AgentResult for that uncertainty.
+        OperationStatus::Unknown => true,
+        OperationStatus::Admitted | OperationStatus::Running => agent_result.is_none(),
+    };
+    if !matches_status {
+        return Err(bad("root lifecycle contradicts retained agent result"));
+    }
+    if b.controller.status == OperationStatus::Succeeded {
+        let terminal_root = !matches!(
+            b.root.status,
+            OperationStatus::Admitted | OperationStatus::Running
+        );
+        let expected = json!({
+            "schema_version":1,
+            "review_id":b.record.id,
+            "root_operation_id":b.root.id,
+            "root_status":b.root.status,
+        });
+        if !terminal_root || b.controller.outcome.as_ref() != Some(&expected) {
+            return Err(bad(
+                "controller settlement contradicts actual root lifecycle",
+            ));
+        }
+    }
+    Ok(ReviewSnapshot {
+        agent_result,
+        review: b.record,
+        controller_status: b.controller.status,
+        root_status: b.root.status,
+        close_reason: b.close,
+        budget,
+        currency: b.admission.profile.currency,
+        observed_sequence: sequence,
+        observed_at_ms: now()?,
+    })
 }

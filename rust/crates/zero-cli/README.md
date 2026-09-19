@@ -1188,12 +1188,19 @@ Output is terminal text, one native JSON document, Markdown (`md` alias), or ine
 scans, newest admission first. It shows exact scan/session IDs, retained lifecycle,
 observation time and sequence, model charges and holds, HTTP byte holds,
 unverified claim counts and report publication state. An unavailable terminal
-result has an unavailable count, never an invented zero. Local review and other
-agent sessions are not included in this scan index.
+result has an unavailable count, never an invented zero. `--kind http` is the
+unchanged default. `--kind review` selects the separate local-review index,
+including running, stopped and Unknown reviews. It retains original input,
+snapshot identity, workspace-selection receipt, exact exclusion rules, model
+charges/holds and read freshness. Legacy captures without a selection receipt
+explicitly leave original workspace scope unrecorded. Other agent sessions are
+not included in these workflow indexes.
 
 ```sh
 0sec-native --state state.db history --limit 10
 0sec-native --state state.db history --before-sequence CURSOR --format json
+0sec-native --state state.db history --kind review --limit 10
+0sec-native --state state.db history --kind review --before-sequence CURSOR --format json
 0sec-native --state state.db timeline SCAN_ID --format markdown
 0sec-native --state state.db timeline --session SESSION_ID --format json
 0sec-native --state state.db timeline --session SESSION_ID --after-sequence CURSOR --format csv
@@ -1202,8 +1209,17 @@ agent sessions are not included in this scan index.
 These commands use read-only native storage while an engine owns the database.
 They do not load provider, sandbox, HTTP or harness configuration, create state,
 recover an epoch, dispatch work, or read a legacy TypeScript database. History
-JSON reuses the `scans` reply/page contract; follow `next_before_sequence` until
-it is null. Limits are 1–32 scans per page.
+HTTP JSON reuses the `scans` reply/page contract. Review JSON has
+`schema_version:1`, `kind:"review"` and `page:{reviews,next_before_sequence}`;
+each review entry is metadata, without model result text or source/archive
+bodies. Use `review report --review ID` for retained claims. Both indexes follow
+`next_before_sequence` until null, with independent admission-sequence cursors
+and limits of 1–32 entries. Do not reuse a cursor between kinds. Review reads
+validate original admission/lifecycle/budget witnesses under one read snapshot,
+with a shared 64 MiB evidence budget and a 1 MiB encoded page cap; byte limits can
+shorten a page. A corrupt entry fails explicitly, and a missing projection is not
+silently treated as empty history. Successful lifecycle never implies zero claims
+or a verified vulnerability.
 
 Timeline accepts one exact scan or session identity and returns up to 100 events
 in durable sequence order, with a 4 MiB retained payload read budget. Oversized
@@ -1222,7 +1238,7 @@ remain unsupported. Explicit native `--state` selects one database. Read workers
 are drained after signals or a five-second read deadline; output also has a
 five-second deadline. Existing SQLite/host I/O completion can delay a drained read.
 
-Executable acceptance lives in `tests/history.rs` and `tests/timeline.rs`: real
+Executable acceptance lives in `tests/history.rs`, `tests/review_history.rs` and `tests/timeline.rs`: real
 loopback scans, partial/cancelled usage holds, offline pagination after deleting
 configuration, live-owner reads, untrusted formatting, missing state and bounded
 oversized-row refusal. These fixtures do not qualify a paid provider or deployment.
