@@ -24,7 +24,7 @@ fn chat(delta: Value, finish: Value) -> Value {
 }
 fn transcript(wire: WireApi) -> (String, String) {
     match wire {
-    WireApi::GoogleGenerateContent => unreachable!("Google progress has its own native fixture"),
+    WireApi::GoogleGenerateContent | WireApi::OllamaChat => unreachable!("Google progress has its own native fixture"),
     WireApi::Responses=>(sse(vec![
         json!({"type":"response.created","response":{"id":"r1","status":"in_progress"}}),
         json!({"type":"response.output_text.delta","output_index":0,"content_index":0,"delta":"hello €"}),

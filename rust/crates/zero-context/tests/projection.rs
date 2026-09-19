@@ -23,6 +23,9 @@ fn round(wire: &str, id: &str, text: &str) -> Completion {
         "google" => vec![
             json!({"type":"google_content","model":"fixture","response_id":"r1","content":{"role":"model","parts":[{"text":text,"thought":true,"thoughtSignature":"opaque-signature"},{"functionCall":{"id":id,"name":"tool","args":{}}}]},"call_ids":[id]}),
         ],
+        "ollama" => vec![
+            json!({"type":"ollama_message","model":"fixture","resolved_model":"fixture:latest","request_id":"a".repeat(64),"message":{"role":"assistant","content":"","thinking":text,"tool_calls":[{"function":{"name":"tool","arguments":{}}}]},"call_ids":[id]}),
+        ],
         "anthropic" => vec![
             json!({"type":"anthropic_message","model":"fixture","usage":{"input_tokens":1},"message":{"role":"assistant","content":[{"type":"thinking","thinking":text,"signature":"signed-verbatim"},{"type":"redacted_thinking","data":"opaque-verbatim"},{"type":"tool_use","id":id,"name":"tool","input":{}}]}}),
         ],
@@ -47,7 +50,7 @@ fn output(id: &str, text: &str) -> Value {
 }
 #[test]
 fn all_wire_formats_omit_whole_rounds_and_preserve_every_user_prompt() {
-    for wire in ["responses", "chat", "anthropic", "google"] {
+    for wire in ["responses", "chat", "anthropic", "google", "ollama"] {
         let protected = json!({"role":"user","content":"original user constraints"});
         let mut state = ContextState::protected(vec![protected.clone()]).unwrap();
         let old = round(wire, "old", "old reasoning");

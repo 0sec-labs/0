@@ -90,6 +90,14 @@ pub async fn load(path: &Path) -> Result<Vec<(String, ProviderClient, Rates)>, B
                 let _ = credential_file;
                 return Err("Entra credential rotation requires Unix private-file support".into());
             }
+        } else if profile.wire_api == WireApi::OllamaChat
+            && matches!(profile.authentication, Authentication::WireDefault)
+            && profile.api_key_env.is_none()
+        {
+            if profile.entra_credentials_file.is_some() || profile.entra_token_endpoint.is_some() {
+                return Err("Entra credential fields require explicit Entra authentication".into());
+            }
+            Endpoint::responses(&profile.url, None)?
         } else {
             if profile.entra_credentials_file.is_some() || profile.entra_token_endpoint.is_some() {
                 return Err("Entra credential fields require explicit Entra authentication".into());
@@ -142,6 +150,29 @@ pub async fn configure(engine: &Engine, path: &Path) -> Result<(), Box<dyn Error
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[tokio::test]
+    async fn only_explicit_ollama_wire_allows_absent_credentials() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("providers.json");
+        let mut profile = json!({"local":{"url":"http://127.0.0.1:11434/api/chat","wire_api":"ollama_chat","rates":{"input":0,"cached_input":0,"output":0},"timeout_ms":1000,"max_response_bytes":8192}});
+        std::fs::write(&path, profile.to_string()).unwrap();
+        assert_eq!(load(&path).await.unwrap().len(), 1);
+        for wire in [
+            "responses",
+            "chat_completions",
+            "anthropic_messages",
+            "google_generate_content",
+        ] {
+            profile["local"]["wire_api"] = json!(wire);
+            std::fs::write(&path, profile.to_string()).unwrap();
+            assert!(load(&path).await.is_err());
+        }
+        profile["local"]["wire_api"] = json!("ollama_chat");
+        profile["local"]["entra_credentials_file"] = json!("forbidden");
+        std::fs::write(&path, profile.to_string()).unwrap();
+        assert!(load(&path).await.is_err());
+    }
 
     #[test]
     fn google_wire_is_explicit_and_preserves_exact_endpoint() {

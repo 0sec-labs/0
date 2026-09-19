@@ -91,7 +91,7 @@ fn compile(
     let suffix = match wire_api {
         WireApi::Responses => "/api/inference/v1/responses",
         WireApi::ChatCompletions => "/api/inference/v1/chat/completions",
-        WireApi::AnthropicMessages | WireApi::GoogleGenerateContent => {
+        WireApi::AnthropicMessages | WireApi::GoogleGenerateContent | WireApi::OllamaChat => {
             return Err(CloudError::InvalidResponse);
         }
     };

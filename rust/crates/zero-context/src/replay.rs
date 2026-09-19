@@ -44,6 +44,21 @@ pub(super) fn validate(replay: &[Value], call_ids: &[String], outputs: &[Value])
                     }
                 }
             }
+            Some("ollama_message") => {
+                if item["message"]["role"] != "assistant" {
+                    return Err(invalid());
+                }
+                let calls = item["message"]["tool_calls"]
+                    .as_array()
+                    .ok_or_else(invalid)?;
+                let ids = item["call_ids"].as_array().ok_or_else(invalid)?;
+                if calls.len() != ids.len() {
+                    return Err(invalid());
+                }
+                for call in ids {
+                    found.push(id(call)?);
+                }
+            }
             Some("google_content") => {
                 if item["content"]["role"] != "model" {
                     return Err(invalid());

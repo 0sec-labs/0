@@ -88,7 +88,13 @@ fn settled_inference(
     }
     if !matches!(
         operation.payload["kind"].as_str(),
-        Some("responses_inference" | "chat_inference" | "anthropic_inference" | "google_inference")
+        Some(
+            "responses_inference"
+                | "chat_inference"
+                | "anthropic_inference"
+                | "google_inference"
+                | "ollama_inference"
+        )
     ) || hash(&serde_json::to_vec(&operation.payload["request"])?) != request_sha
     {
         return Err(invalid("Python proposal retained request differs"));

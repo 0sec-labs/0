@@ -6,6 +6,8 @@ mod chat;
 mod entra;
 mod google;
 mod google_stream;
+mod ollama;
+mod ollama_stream;
 mod progress;
 mod responses;
 mod sse;

@@ -184,6 +184,7 @@ impl Engine {
                     zero_protocol::model::WireApi::ChatCompletions => "chat_inference",
                     zero_protocol::model::WireApi::AnthropicMessages => "anthropic_inference",
                     zero_protocol::model::WireApi::GoogleGenerateContent => "google_inference",
+                    zero_protocol::model::WireApi::OllamaChat => "ollama_inference",
                     zero_protocol::model::WireApi::Responses => unreachable!(),
                 });
                 payload["wire_api"] = serde_json::to_value(profile.client.wire_api())?;

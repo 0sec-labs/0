@@ -11,6 +11,7 @@ pub enum WireApi {
     ChatCompletions,
     AnthropicMessages,
     GoogleGenerateContent,
+    OllamaChat,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema, PartialEq, Eq)]

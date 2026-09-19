@@ -9,6 +9,7 @@ pub(super) struct Observer<'a> {
     wire: WireApi,
     sink: &'a mut (dyn FnMut(ProviderProgress) + Send),
     events: usize,
+    ollama_calls: u32,
     bytes: usize,
     // Accepted Chat id/name fields are invariant full metadata, not repeated deltas.
     metadata: BTreeMap<u32, (bool, bool)>,
@@ -25,6 +26,7 @@ impl<'a> Observer<'a> {
             wire,
             sink,
             events: 0,
+            ollama_calls: 0,
             bytes: 0,
             metadata: BTreeMap::new(),
         }
@@ -116,6 +118,28 @@ impl<'a> Observer<'a> {
             WireApi::ChatCompletions => self.chat(&value),
             WireApi::AnthropicMessages => self.anthropic(&value),
             WireApi::GoogleGenerateContent => self.google(&value),
+            WireApi::OllamaChat => self.ollama(&value),
+        }
+    }
+    fn ollama(&mut self, event: &Value) {
+        for (key, kind) in [
+            ("content", TextKind::Text),
+            ("thinking", TextKind::Reasoning),
+        ] {
+            if let Some(text) = event["message"][key].as_str() {
+                self.text(kind, 0, 0, text);
+            }
+        }
+        if let Some(calls) = event["message"]["tool_calls"].as_array() {
+            for call in calls {
+                let name = call["function"]["name"].as_str().unwrap_or("");
+                let args = call["function"]["arguments"]
+                    .as_str()
+                    .map(str::to_owned)
+                    .unwrap_or_else(|| call["function"]["arguments"].to_string());
+                self.tool(self.ollama_calls, "", name, &args);
+                self.ollama_calls = self.ollama_calls.saturating_add(1);
+            }
         }
     }
     fn google(&mut self, event: &Value) {

@@ -240,6 +240,11 @@ impl ProviderClient {
         if self.wire == crate::WireApi::GoogleGenerateContent {
             crate::google::validate_route(&self.endpoint.url, model)?;
         }
+        if self.wire == crate::WireApi::OllamaChat
+            && !self.endpoint.url.path().ends_with("/api/chat")
+        {
+            return Err(TransportError::InvalidRequest);
+        }
         if let Some(pin) = &self.hosted_catalog {
             if model != pin.model
                 || max_output_tokens == 0
@@ -267,6 +272,7 @@ impl ProviderClient {
                             kind.starts_with("chat_completion_")
                                 || kind.starts_with("anthropic_")
                                 || kind.starts_with("google_")
+                                || kind.starts_with("ollama_")
                         })
                 }) {
                     return Err(TransportError::InvalidRequest);
@@ -276,6 +282,7 @@ impl ProviderClient {
             crate::WireApi::ChatCompletions => crate::chat::encode(request),
             crate::WireApi::AnthropicMessages => crate::anthropic::encode(request),
             crate::WireApi::GoogleGenerateContent => crate::google::encode(request),
+            crate::WireApi::OllamaChat => crate::ollama::encode(request),
         }
     }
     /// Compatibility entry point for an explicitly configured Responses route.
@@ -341,11 +348,14 @@ impl ProviderClient {
         if self.wire == crate::WireApi::GoogleGenerateContent {
             url.set_query(Some("alt=sse"));
         }
-        let mut post = self
-            .client
-            .post(url)
-            .json(&body)
-            .header("Accept", "text/event-stream");
+        let mut post = self.client.post(url).json(&body).header(
+            "Accept",
+            if self.wire == crate::WireApi::OllamaChat {
+                "application/x-ndjson"
+            } else {
+                "text/event-stream"
+            },
+        );
         if self.endpoint.authentication == Authentication::AzureApiKey {
             if let Some(key) = &self.endpoint.api_key {
                 post = post.header("api-key", key.clone());
@@ -385,15 +395,23 @@ impl ProviderClient {
             .get("content-type")
             .and_then(|v| v.to_str().ok())
             .is_some_and(|v| {
-                v.split(';')
-                    .next()
-                    .is_some_and(|v| v.trim().eq_ignore_ascii_case("text/event-stream"))
+                v.split(';').next().is_some_and(|v| {
+                    v.trim()
+                        .eq_ignore_ascii_case(if self.wire == crate::WireApi::OllamaChat {
+                            "application/x-ndjson"
+                        } else {
+                            "text/event-stream"
+                        })
+                })
             })
         {
             return Err(TransportError::InvalidResponse);
         }
-        let mut decoder = Decoder::default();
+        let mut decoder = StreamDecoder::new(self.wire);
         let mut accumulator = match self.wire {
+            crate::WireApi::OllamaChat => {
+                StreamAccumulator::Ollama(crate::ollama_stream::Accumulator::new(request)?)
+            }
             crate::WireApi::GoogleGenerateContent => {
                 StreamAccumulator::Google(crate::google_stream::Accumulator::new(&request.model))
             }
@@ -417,9 +435,13 @@ impl ProviderClient {
             let chunk = match chunk {
                 Ok(Some(chunk)) => chunk,
                 Ok(None) => {
-                    let partial =
-                        self.wire == crate::WireApi::GoogleGenerateContent && decoder.has_pending();
-                    return Ok(accumulator.finish(partial.then_some("incomplete Google SSE frame")));
+                    let partial = matches!(
+                        self.wire,
+                        crate::WireApi::GoogleGenerateContent | crate::WireApi::OllamaChat
+                    ) && decoder.has_pending();
+                    return Ok(
+                        accumulator.finish(partial.then_some("incomplete provider stream frame"))
+                    );
                 }
                 Err(_) => {
                     return Ok(accumulator.finish(Some(
@@ -459,6 +481,7 @@ enum StreamAccumulator {
     Chat(crate::chat::Accumulator),
     Anthropic(crate::anthropic_stream::Accumulator),
     Google(crate::google_stream::Accumulator),
+    Ollama(crate::ollama_stream::Accumulator),
 }
 impl StreamAccumulator {
     fn event(&mut self, data: &[u8]) -> Result<(), TransportError> {
@@ -467,6 +490,7 @@ impl StreamAccumulator {
             Self::Chat(a) => a.event(data),
             Self::Anthropic(a) => a.event(data),
             Self::Google(a) => a.event(data),
+            Self::Ollama(a) => a.event(data),
         }
     }
     fn finish(self, interrupted: Option<&str>) -> Completion {
@@ -475,6 +499,7 @@ impl StreamAccumulator {
             Self::Chat(a) => a.finish(interrupted),
             Self::Anthropic(a) => a.finish(interrupted),
             Self::Google(a) => a.finish(interrupted),
+            Self::Ollama(a) => a.finish(interrupted),
         }
     }
 }
@@ -602,5 +627,31 @@ mod endpoint_tests {
         assert!(Endpoint::responses("http://[::1]:8080/responses", None).is_ok());
         assert!(Endpoint::responses("http://[::2]:8080/responses", None).is_err());
         assert!(Endpoint::responses("http://192.0.2.1:8080/responses", None).is_err());
+    }
+}
+
+enum StreamDecoder {
+    Sse(Decoder),
+    Ollama(crate::ollama_stream::Decoder),
+}
+impl StreamDecoder {
+    fn new(wire: crate::WireApi) -> Self {
+        if wire == crate::WireApi::OllamaChat {
+            Self::Ollama(Default::default())
+        } else {
+            Self::Sse(Default::default())
+        }
+    }
+    fn feed(&mut self, bytes: &[u8]) -> Result<Vec<Vec<u8>>, TransportError> {
+        match self {
+            Self::Sse(d) => d.feed(bytes),
+            Self::Ollama(d) => d.feed(bytes),
+        }
+    }
+    fn has_pending(&self) -> bool {
+        match self {
+            Self::Sse(d) => d.has_pending(),
+            Self::Ollama(d) => d.has_pending(),
+        }
     }
 }
