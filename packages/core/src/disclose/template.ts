@@ -406,7 +406,7 @@ export function renderAdvisoryMarkdown(finding: Finding, ctx: AdvisoryContext = 
 
   out.push("## Credits", "");
   out.push(
-    "Discovered by **0sec**, 0sec's AI-assisted security engine ([0sec.ai](https://0sec.ai)).",
+    "Discovered by **0.security**, the 0.security AI-assisted security engine ([0.security](https://0.security)).",
     "",
     "Reporter: _(your github handle)_",
     "",

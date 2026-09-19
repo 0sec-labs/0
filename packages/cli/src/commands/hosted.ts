@@ -1,4 +1,4 @@
-// `0sec login`, `0sec models`, `0sec balance` — 0sec Cloud hosted
+// `0sec login`, `0sec models`, `0sec balance` — 0.security Cloud hosted
 // inference CLI commands.
 //
 // Subcommands:
@@ -36,7 +36,7 @@ export function registerHostedCommand(program: Command): void {
   // ── 0sec login (alias for 0sec auth login) ──
   program
     .command("login")
-    .description("Sign in to 0sec Cloud (optional for your own provider)")
+    .description("Sign in to 0.security Cloud (optional for your own provider)")
     .option("--host <url>", "Cloud host (defaults to 0SEC_CLOUD_HOST or production)")
     .option("--token <value>", "Skip the browser flow and persist this token directly")
     .action(async (opts: { host?: string; token?: string }) => {
@@ -46,7 +46,7 @@ export function registerHostedCommand(program: Command): void {
   // ── 0sec models ──
   program
     .command("models")
-    .description("List 0sec Cloud models and capabilities")
+    .description("List 0.security Cloud models and capabilities")
     .option("--json", "Output model IDs and capabilities as JSON")
     .action(async (opts: { json?: boolean }) => {
       await runModels(opts);
@@ -55,7 +55,7 @@ export function registerHostedCommand(program: Command): void {
   // ── 0sec balance ──
   program
     .command("balance")
-    .description("Show 0sec Cloud credit account balance")
+    .description("Show 0.security Cloud credit account balance")
     .option("--json", "Output the validated credit account as JSON")
     .action(async (opts: { json?: boolean }) => {
       await runBalance(opts);

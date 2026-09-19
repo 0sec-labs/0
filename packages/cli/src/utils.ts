@@ -69,5 +69,5 @@ export function buildShareUrl(report: ScanReport | AuditReport | ReviewReport): 
   const json = JSON.stringify(report);
   const compressed = gzipSync(Buffer.from(json, "utf-8"));
   const b64 = compressed.toString("base64url");
-  return `https://0sec.ai/r#${b64}`;
+  return `https://0.security/r#${b64}`;
 }
