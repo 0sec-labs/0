@@ -7,4 +7,4 @@ Supporting line: Welcome to the post-pentest era.
 Export: Chromium, 1440x1000 CSS viewport; element screenshot of .oh-hero after fonts and images loaded. The hero's .oh-actions was hidden only in the capture page to avoid nonfunctional buttons in a static image. Website files were not changed.
 Output: readme-cover.png, 1781x925 pixels. Original landscape, Zero and billboard artwork retained.
 
-The adjacent security-cycle-diagram.webp is copied unchanged from the same website revision's public/open-horizon/security-cycle-diagram.webp. README text qualifies it as an illustrated workflow, not a guarantee of unattended outcomes or enabled integrations.
+The adjacent security-cycle-diagram.webp is a static export of the website's native .quiet-cycle HTML/SVG and individual Zero artwork in QuietSecurity.astro, introduced by 0sec-labs/0cloud@6d0ec7bed. It replaces the earlier screenshot-based diagram. Capture used the same 1440x1000 CSS viewport after fonts and images loaded, preserving all three labels, channel icons and return arrow. README text qualifies it as an illustrated workflow, not a guarantee of unattended outcomes or enabled integrations.
