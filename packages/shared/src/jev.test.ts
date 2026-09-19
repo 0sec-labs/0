@@ -55,8 +55,8 @@ describe("Jev evaluation trust boundaries", () => {
   });
 
   it("does not leak provider error bodies or retry failed requests", async () => {
-    const secret = "sensitive-customer-payload";
-    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(new Response(secret, { status: 429 }));
+    const providerErrorBody = "sensitive-customer-payload";
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(new Response(providerErrorBody, { status: 429 }));
     await expect(client(fetchImpl).evaluate(request)).rejects.toThrow(/^Jev provider returned HTTP 429$/);
     expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
@@ -121,8 +121,8 @@ describe("Jev evaluation trust boundaries", () => {
     await expect(createJevEvaluator({ provider: "classifier", feature: "kernel", fetch: unscored })
       .evaluate(kernelRequest)).rejects.toThrow("Classifier evaluation unavailable");
 
-    const secret = "provider-secret-body";
-    const failed = vi.fn<typeof fetch>().mockResolvedValue(new Response(secret, { status: 429 }));
+    const providerErrorBody = "provider-secret-body";
+    const failed = vi.fn<typeof fetch>().mockResolvedValue(new Response(providerErrorBody, { status: 429 }));
     await expect(createJevEvaluator({ provider: "classifier", feature: "kernel", fetch: failed })
       .evaluate(kernelRequest)).rejects.toThrow(/^Classifier provider returned HTTP 429$/);
   });
