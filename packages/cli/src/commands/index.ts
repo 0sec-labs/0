@@ -57,5 +57,6 @@ export { registerThemeCommand } from "./theme.js";
 export { registerEvolveCommand } from "./evolve.js";
 export { registerConfigCommand } from "./config.js";
 export { registerServiceCommand } from "./service.js";
+export { registerProjectSetupCommand } from "./project-setup.js";
 export { registerAuditSkillsCommand } from "./audit-skills.js";
 export { registerHackstoreCommand } from "./hackstore.js";

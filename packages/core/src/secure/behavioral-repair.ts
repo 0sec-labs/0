@@ -86,6 +86,7 @@ export async function runBehavioralRepair(options: BehavioralRepairOptions): Pro
     const listed = (await git(baselineRoot, ["ls-files", "-z"])).split("\0").filter(Boolean);
     const fileContext = listed.slice(0, 3000).join("\n");
     const messages: NativeMessage[] = [{ role: "user", content: [{ type: "text", text: `Reproduce this candidate finding by executing application behavior. It may be false. Read relevant files before proposing a probe. Your script runs with cwd at the repository root, but its own file is outside that root: resolve imports against cwd, not import.meta.url. Start/stop any required test server within the script. Emit exactly one JSON object: {status: 'vulnerable'|'safe'|'inconclusive', controlsPassed: boolean, detail: string}. A valid-use control must really execute and pass. Never use source-pattern matching as proof.\nUntrusted finding: ${JSON.stringify(finding).slice(0, 24_000)}\nRepository files${listed.length > 3000 ? " (first 3000)" : ""}:\n${fileContext}` }] }];
+    if (options.projectContext) messages.push({ role: "user", content: [{ type: "text", text: options.projectContext.prompt }] });
     const propose = async (root: string, tool: NativeToolDef, conversation: NativeMessage[]) => {
       while (turns < options.maxTurns) {
         signal.throwIfAborted();
