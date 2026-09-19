@@ -1,7 +1,7 @@
 //! A pinned, bounded view of both the original review and its reproduction.
 //! Archive manifests are historical identity evidence; raw source is not copied.
 use super::*;
-use crate::campaign_snapshot::{Cell, MAX_BYTES, MAX_RECORDS, capture};
+use crate::campaign_snapshot::{capture, Cell, MAX_BYTES, MAX_RECORDS};
 use rusqlite::types::Value as SqlValue;
 use std::collections::BTreeSet;
 
@@ -24,137 +24,267 @@ impl Store {
     /// This supplies existing provenance readers; it is not execution authority or
     /// a portable source attestation, and cannot be used to restore source files.
     pub fn native_reproduction_read_snapshot(&self, key: &str) -> Result<Self> {
-        self.native_reproduction_read_snapshot_inner(key, || {})
+        let source = self.conn.unchecked_transaction()?;
+        let frozen = capture_snapshot(&source, key)?;
+        source.commit()?;
+        Ok(frozen)
     }
 
+    #[cfg(test)]
     fn native_reproduction_read_snapshot_inner(
         &self,
         key: &str,
         after_pin: impl FnOnce(),
     ) -> Result<Self> {
         let source = self.conn.unchecked_transaction()?;
-        crate::schema::validate_current(&source)?;
-        let mut reader = Reader::new();
-        let original = bound(&source, key, &mut reader)?;
-        // Global parent/admission markers must agree before reducing the database
-        // to two sessions; a foreign duplicate must not disappear in the copy.
-        for sql in [
-            "SELECT count(*) FROM operations INDEXED BY native_reproduction_parent_command WHERE CASE WHEN json_valid(payload) THEN json_extract(payload,'$.kind') END='native_source_reproduction' AND json_extract(payload,'$.command_id')=?1",
-            "SELECT count(*) FROM events INDEXED BY native_reproduction_admission_command WHERE kind='command_admitted' AND CASE WHEN json_valid(payload) THEN json_extract(payload,'$.payload.kind') END='native_source_reproduction' AND json_extract(payload,'$.payload.command_id')=?1",
-        ] {
-            let count: u64 = source.query_row(sql, [&original.record.command_id], |r| r.get(0))?;
-            if count != 1 {
-                return Err(bad("global command identity differs in read view"));
-            }
-        }
-        let review =
-            crate::review::snapshot_source_record(&source, &original.record.source_review_id)?;
-        let manifest = crate::source_archive::manifest_for_record(&source, &review)?
-            .ok_or_else(|| bad("source archive metadata absent"))?;
-        let raw_chunks: BTreeSet<_> = manifest
-            .files
-            .iter()
-            .flat_map(|f| &f.chunks)
-            .map(|c| c.sha256.as_str())
-            .collect();
-        let parameters = [
-            SqlValue::Text(review.session_id.clone()),
-            SqlValue::Text(original.record.session_id.clone()),
-        ];
-        after_pin();
-        validate_sessions(&source, &review, &original.record)?;
+        let frozen = capture_snapshot_inner(&source, key, after_pin)?;
+        source.commit()?;
+        Ok(frozen)
+    }
 
-        let mut remaining = reader.remaining.min(MAX_BYTES);
-        let mut count = 0;
-        let mut tables = Vec::new();
-        for table in TABLES {
-            let filter = match *table {
-                "sessions" => "id IN (?1,?2)",
-                "operation_artifacts" | "agent_steering_windows" => {
-                    "operation_id IN (SELECT id FROM operations WHERE session_id IN (?1,?2))"
-                }
-                _ => "session_id IN (?1,?2)",
-            };
-            tables.push((
-                *table,
-                capture::read_rows(
-                    &source,
-                    table,
-                    filter,
-                    &parameters,
-                    &mut remaining,
-                    &mut count,
-                )?,
+    /// Fingerprint a complete, validated two-session evidence view. Raw source
+    /// chunks and mutable wall-clock observation times are not part of this ID.
+    pub fn native_reproduction_evidence_digest(&self, key: &str) -> Result<String> {
+        let view = self.native_reproduction_read_snapshot(key)?;
+        evidence_digest(&view, key)
+    }
+}
+
+/// The caller owns the source transaction, including any later admission CAS.
+/// No nested transaction is opened on `conn`; hydration uses another connection.
+pub(crate) fn capture_snapshot(conn: &Connection, key: &str) -> Result<Store> {
+    capture_snapshot_inner(conn, key, || {})
+}
+
+fn capture_snapshot_inner(
+    source: &Connection,
+    key: &str,
+    after_pin: impl FnOnce(),
+) -> Result<Store> {
+    if source.is_autocommit() {
+        return Err(bad(
+            "evidence capture requires an existing source transaction",
+        ));
+    }
+    crate::schema::validate_current(source)?;
+    let mut reader = Reader::new();
+    let original = bound(source, key, &mut reader)?;
+    // Global parent/admission markers must agree before reducing the database
+    // to two sessions; a foreign duplicate must not disappear in the copy.
+    for sql in [
+        "SELECT count(*) FROM operations INDEXED BY native_reproduction_parent_command WHERE CASE WHEN json_valid(payload) THEN json_extract(payload,'$.kind') END='native_source_reproduction' AND json_extract(payload,'$.command_id')=?1",
+        "SELECT count(*) FROM events INDEXED BY native_reproduction_admission_command WHERE kind='command_admitted' AND CASE WHEN json_valid(payload) THEN json_extract(payload,'$.payload.kind') END='native_source_reproduction' AND json_extract(payload,'$.payload.command_id')=?1",
+    ] {
+        let count: u64 = source.query_row(sql, [&original.record.command_id], |r| r.get(0))?;
+        if count != 1 {
+            return Err(bad("global command identity differs in read view"));
+        }
+    }
+    let review = crate::review::snapshot_source_record(source, &original.record.source_review_id)?;
+    let manifest = crate::source_archive::manifest_for_record(source, &review)?
+        .ok_or_else(|| bad("source archive metadata absent"))?;
+    let raw_chunks: BTreeSet<_> = manifest
+        .files
+        .iter()
+        .flat_map(|f| &f.chunks)
+        .map(|c| c.sha256.as_str())
+        .collect();
+    let parameters = [
+        SqlValue::Text(review.session_id.clone()),
+        SqlValue::Text(original.record.session_id.clone()),
+    ];
+    after_pin();
+    validate_sessions(source, &review, &original.record)?;
+
+    let mut remaining = reader.remaining.min(MAX_BYTES);
+    let mut count = 0;
+    let mut tables = Vec::new();
+    for table in TABLES {
+        let filter = match *table {
+            "sessions" => "id IN (?1,?2)",
+            "operation_artifacts" | "agent_steering_windows" => {
+                "operation_id IN (SELECT id FROM operations WHERE session_id IN (?1,?2))"
+            }
+            _ => "session_id IN (?1,?2)",
+        };
+        tables.push((
+            *table,
+            capture::read_rows(
+                source,
+                table,
+                filter,
+                &parameters,
+                &mut remaining,
+                &mut count,
+            )?,
+        ));
+    }
+    let digests = capture::strings(
+        source,
+        "SELECT CASE WHEN length(digest)=71 THEN digest END FROM (SELECT digest FROM operation_artifacts WHERE operation_id IN (SELECT id FROM operations WHERE session_id IN (?1,?2)) UNION SELECT source_review_sha256 AS digest FROM source_triage_decisions WHERE session_id IN (?1,?2) UNION SELECT manifest_sha256 AS digest FROM source_archives WHERE session_id IN (?1,?2)) ORDER BY digest LIMIT 65537",
+        &parameters,
+        MAX_RECORDS,
+    )?;
+    let mut artifacts = Vec::new();
+    for digest in digests {
+        // Never silently strip an attachment: either retain its complete
+        // evidence or reject a request to smuggle operational source into it.
+        if raw_chunks.contains(digest.as_str()) {
+            return Err(bad("raw archive chunk referenced by read evidence"));
+        }
+        let size: usize = source.query_row(
+            "SELECT length(bytes) FROM artifacts WHERE digest=?1",
+            [&digest],
+            |r| r.get(0),
+        )?;
+        if size > crate::MAX_ARTIFACT_BYTES || size > remaining {
+            return Err(bad("read view artifact byte bound"));
+        }
+        remaining -= size;
+        artifacts.push((digest.clone(), crate::artifacts::read(source, &digest)?));
+    }
+    let mut conn = Connection::open_in_memory()?;
+    conn.pragma_update(None, "foreign_keys", true)?;
+    crate::schema::initialize(&mut conn)?;
+    let tx = conn.transaction()?;
+    tx.pragma_update(None, "defer_foreign_keys", true)?;
+    for (digest, bytes) in artifacts {
+        tx.execute(
+            "INSERT INTO artifacts(digest,bytes) VALUES(?1,?2)",
+            params![digest, bytes],
+        )?;
+    }
+    for (table, rows) in tables {
+        let columns = capture::columns(&tx, table)?;
+        let sql = format!(
+            "INSERT INTO {table}({}) VALUES({})",
+            columns.join(","),
+            vec!["?"; columns.len()].join(",")
+        );
+        let mut insert = tx.prepare(&sql)?;
+        for row in rows {
+            insert.execute(rusqlite::params_from_iter(row.into_iter().map(
+                |cell| match cell {
+                    Cell::Null => SqlValue::Null,
+                    Cell::Integer(n) => SqlValue::Integer(n),
+                    Cell::Text(s) => SqlValue::Text(s),
+                },
+            )))?;
+        }
+    }
+    if tx.prepare("PRAGMA foreign_key_check")?.exists([])? {
+        return Err(bad("foreign reference in reproduction read view"));
+    }
+    tx.commit()?;
+    conn.pragma_update(None, "query_only", true)?;
+    let frozen = Store { conn };
+    let copied = frozen.native_reproduction(key)?;
+    if copied.record != original.record
+        || serde_json::to_value(copied.operation)? != serde_json::to_value(original.operation)?
+    {
+        return Err(bad("source and read view differ"));
+    }
+    frozen.review_snapshot(&review.id)?;
+    Ok(frozen)
+}
+
+/// Hash an already validated private in-memory capture. Query-only ownership is required so its
+/// complete metadata/artifact inventory cannot change between table reads.
+/// Capture authenticated the artifact bytes; the canonical digest stream needs
+/// only their content IDs and lengths, never a second copy of their contents.
+pub(crate) fn evidence_digest(view: &Store, key: &str) -> Result<String> {
+    id(key)?;
+    let readonly: bool = view
+        .conn
+        .pragma_query_value(None, "query_only", |row| row.get(0))?;
+    if !readonly || view.conn.path().is_some_and(|path| !path.is_empty()) {
+        return Err(bad(
+            "evidence digest requires a query-only in-memory captured view",
+        ));
+    }
+    // Authenticate the requested root and source binding even for crate callers.
+    let captured = view.native_reproduction(key)?;
+    view.review_snapshot(&captured.record.source_review_id)?;
+    let mut remaining = MAX_BYTES;
+    let mut count = 0;
+    // A SQL text byte can require six JSON bytes (a control character escape).
+    // Stream that worst case, preserving the original 64 MiB source read bound
+    // without allocating an escaped JSON representation or narrowing old inputs.
+    let mut output = DigestWriter {
+        hasher: Sha256::new(),
+        remaining: MAX_BYTES * 6,
+    };
+    output.token(b"[")?;
+    output.json(&"zero-native-reproduction-evidence-v1")?;
+    output.token(b",")?;
+    output.json(&key)?;
+    output.token(b",[")?;
+    for (index, table) in TABLES.iter().enumerate() {
+        let columns = capture::columns(&view.conn, table)?;
+        let rows = capture::read_rows(&view.conn, table, "1", &[], &mut remaining, &mut count)?;
+        if index != 0 {
+            output.token(b",")?;
+        }
+        output.token(b"[")?;
+        output.json(table)?;
+        output.token(b",")?;
+        output.json(&columns)?;
+        output.token(b",")?;
+        output.json(&rows)?;
+        output.token(b"]")?;
+    }
+    output.token(b"],[")?;
+    let (artifacts,bytes):(usize,usize)=view.conn.query_row(
+        "SELECT count(*),coalesce(sum(length(bytes)+length(CAST(digest AS BLOB))+32),0) FROM artifacts",
+        [],|r|Ok((r.get(0)?,r.get(1)?)))?;
+    if artifacts > MAX_RECORDS.saturating_sub(count) || bytes > remaining {
+        return Err(bad("evidence digest artifact inventory exceeds bound"));
+    }
+    let mut query=view.conn.prepare("SELECT CASE WHEN length(CAST(digest AS BLOB))=71 THEN digest END,length(bytes) FROM artifacts ORDER BY digest")?;
+    let mut rows = query.query([])?;
+    let mut first = true;
+    while let Some(row) = rows.next()? {
+        let digest: String = row.get(0)?;
+        let size: usize = row.get(1)?;
+        if !zero_protocol::is_sha256(&digest) || size > crate::MAX_ARTIFACT_BYTES {
+            return Err(bad("evidence digest artifact identity or size differs"));
+        }
+        if !first {
+            output.token(b",")?;
+        }
+        first = false;
+        output.json(&(digest, size))?;
+    }
+    output.token(b"]]")?;
+    Ok(format!("sha256:{:x}", output.hasher.finalize()))
+}
+
+struct DigestWriter {
+    hasher: Sha256,
+    remaining: usize,
+}
+impl std::io::Write for DigestWriter {
+    fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+        if bytes.len() > self.remaining {
+            return Err(std::io::Error::other(
+                "native reproduction encoded evidence bound",
             ));
         }
-        let digests = capture::strings(
-            &source,
-            "SELECT CASE WHEN length(digest)=71 THEN digest END FROM (SELECT digest FROM operation_artifacts WHERE operation_id IN (SELECT id FROM operations WHERE session_id IN (?1,?2)) UNION SELECT source_review_sha256 AS digest FROM source_triage_decisions WHERE session_id IN (?1,?2) UNION SELECT manifest_sha256 AS digest FROM source_archives WHERE session_id IN (?1,?2)) ORDER BY digest LIMIT 65537",
-            &parameters,
-            MAX_RECORDS,
-        )?;
-        let mut artifacts = Vec::new();
-        for digest in digests {
-            // Never silently strip an attachment: either retain its complete
-            // evidence or reject a request to smuggle operational source into it.
-            if raw_chunks.contains(digest.as_str()) {
-                return Err(bad("raw archive chunk referenced by read evidence"));
-            }
-            let size: usize = source.query_row(
-                "SELECT length(bytes) FROM artifacts WHERE digest=?1",
-                [&digest],
-                |r| r.get(0),
-            )?;
-            if size > crate::MAX_ARTIFACT_BYTES || size > remaining {
-                return Err(bad("read view artifact byte bound"));
-            }
-            remaining -= size;
-            artifacts.push((digest.clone(), crate::artifacts::read(&source, &digest)?));
-        }
-        source.commit()?;
-        let mut conn = Connection::open_in_memory()?;
-        conn.pragma_update(None, "foreign_keys", true)?;
-        crate::schema::initialize(&mut conn)?;
-        let tx = conn.transaction()?;
-        tx.pragma_update(None, "defer_foreign_keys", true)?;
-        for (digest, bytes) in artifacts {
-            tx.execute(
-                "INSERT INTO artifacts(digest,bytes) VALUES(?1,?2)",
-                params![digest, bytes],
-            )?;
-        }
-        for (table, rows) in tables {
-            let columns = capture::columns(&tx, table)?;
-            let sql = format!(
-                "INSERT INTO {table}({}) VALUES({})",
-                columns.join(","),
-                vec!["?"; columns.len()].join(",")
-            );
-            let mut insert = tx.prepare(&sql)?;
-            for row in rows {
-                insert.execute(rusqlite::params_from_iter(row.into_iter().map(
-                    |cell| match cell {
-                        Cell::Null => SqlValue::Null,
-                        Cell::Integer(n) => SqlValue::Integer(n),
-                        Cell::Text(s) => SqlValue::Text(s),
-                    },
-                )))?;
-            }
-        }
-        if tx.prepare("PRAGMA foreign_key_check")?.exists([])? {
-            return Err(bad("foreign reference in reproduction read view"));
-        }
-        tx.commit()?;
-        conn.pragma_update(None, "query_only", true)?;
-        let frozen = Store { conn };
-        let copied = frozen.native_reproduction(key)?;
-        if copied.record != original.record
-            || serde_json::to_value(copied.operation)? != serde_json::to_value(original.operation)?
-        {
-            return Err(bad("source and read view differ"));
-        }
-        frozen.review_snapshot(&review.id)?;
-        Ok(frozen)
+        self.remaining -= bytes.len();
+        self.hasher.update(bytes);
+        Ok(bytes.len())
+    }
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+impl DigestWriter {
+    fn token(&mut self, bytes: &[u8]) -> Result<()> {
+        std::io::Write::write_all(self, bytes).map_err(bad)
+    }
+    fn json(&mut self, value: &impl Serialize) -> Result<()> {
+        serde_json::to_writer(self, value)?;
+        Ok(())
     }
 }
 
@@ -424,6 +554,7 @@ mod tests {
         store
             .begin_native_reproduction_effect(&a.id, &child.id, "owner")
             .unwrap();
+        let before_digest = store.native_reproduction_evidence_digest(&a.id).unwrap();
         store
             .conn
             .pragma_update(None, "journal_mode", "WAL")
@@ -436,18 +567,25 @@ mod tests {
                     .unwrap();
             })
             .unwrap();
+        assert_eq!(evidence_digest(&frozen, &a.id).unwrap(), before_digest);
+        assert_eq!(
+            frozen.native_reproduction_evidence_digest(&a.id).unwrap(),
+            before_digest
+        );
+        assert_ne!(
+            store.native_reproduction_evidence_digest(&a.id).unwrap(),
+            before_digest
+        );
         assert!(store.native_reproduction_closed(&a.id).unwrap());
         assert!(!frozen.native_reproduction_closed(&a.id).unwrap());
         assert_eq!(
             frozen.get_operation(&child.id).unwrap().session_id,
             a.session_id
         );
-        assert!(
-            frozen
-                .operation_artifacts(&child.id)
-                .unwrap()
-                .contains_key("reproduction.request")
-        );
+        assert!(frozen
+            .operation_artifacts(&child.id)
+            .unwrap()
+            .contains_key("reproduction.request"));
         for chunk in archive.blobs.keys() {
             assert!(frozen.artifact(chunk).is_err());
         }
@@ -457,20 +595,20 @@ mod tests {
                 .unwrap(),
             Some(archive.manifest)
         );
-        assert!(
-            frozen
-                .review_source_archive(&a.authorization.review_id)
-                .is_err()
-        );
-        assert!(
-            frozen
-                .conn
-                .execute("DELETE FROM native_reproductions", [])
-                .is_err()
-        );
+        assert!(frozen
+            .review_source_archive(&a.authorization.review_id)
+            .is_err());
+        assert!(frozen
+            .conn
+            .execute("DELETE FROM native_reproductions", [])
+            .is_err());
         drop(writer);
         drop(store);
         drop(dir);
+        assert_eq!(
+            frozen.native_reproduction_evidence_digest(&a.id).unwrap(),
+            before_digest
+        );
         assert_eq!(
             frozen
                 .native_reproduction(&a.id)
@@ -484,6 +622,7 @@ mod tests {
     #[test]
     fn source_blob_loss_does_not_hide_metadata_or_require_source_restoration() {
         let (_dir, store, a, archive) = fixture();
+        let before = store.native_reproduction_evidence_digest(&a.id).unwrap();
         for digest in archive.blobs.keys() {
             store
                 .conn
@@ -491,6 +630,7 @@ mod tests {
                 .unwrap();
         }
         let frozen = store.native_reproduction_read_snapshot(&a.id).unwrap();
+        assert_eq!(evidence_digest(&frozen, &a.id).unwrap(), before);
         assert_eq!(
             frozen
                 .review_source_archive_manifest(&a.authorization.review_id)
@@ -505,6 +645,73 @@ mod tests {
             )
             .unwrap();
         assert!(store.native_reproduction_read_snapshot(&a.id).is_err());
+        assert!(store.native_reproduction_evidence_digest(&a.id).is_err());
+    }
+
+    #[test]
+    fn caller_transaction_capture_and_reopen_keep_identity_but_retained_changes_do_not() {
+        let (dir, mut store, a, _) = fixture();
+        assert!(capture_snapshot(&store.conn, &a.id).is_err());
+        assert!(evidence_digest(&store, &a.id).is_err());
+        let initial = store.native_reproduction_evidence_digest(&a.id).unwrap();
+        {
+            let tx = store.conn.unchecked_transaction().unwrap();
+            let view = capture_snapshot(&tx, &a.id).unwrap();
+            assert!(!tx.is_autocommit());
+            assert_eq!(evidence_digest(&view, &a.id).unwrap(), initial);
+            tx.commit().unwrap();
+        }
+        let escaped = b"ordinary retained evidence: \"\\\n\0";
+        store
+            .retain_operation_artifact(&a.operation_id, "owner", "evidence.fixture", escaped)
+            .unwrap();
+        let with_artifact = store.native_reproduction_evidence_digest(&a.id).unwrap();
+        assert_ne!(with_artifact, initial);
+        let outcome = zero_protocol::verification::ReproductionOutcome {
+            assessment: None,
+            artifacts: BTreeMap::new(),
+            children: vec![],
+            external_effects_started: false,
+            stop_reason: Some(zero_protocol::verification::ReproductionStop::SetupFailed),
+            error: Some("setup unavailable".into()),
+        };
+        store
+            .settle_native_reproduction(&a.id, "owner", OperationStatus::Failed, &outcome, false)
+            .unwrap();
+        let terminal = store.native_reproduction_evidence_digest(&a.id).unwrap();
+        assert_ne!(terminal, with_artifact);
+        drop(store);
+        let readonly = Store::open_read_only(dir.path().join("db")).unwrap();
+        readonly
+            .conn
+            .pragma_update(None, "query_only", true)
+            .unwrap();
+        assert!(evidence_digest(&readonly, &a.id).is_err());
+        assert_eq!(
+            readonly.native_reproduction_evidence_digest(&a.id).unwrap(),
+            terminal
+        );
+    }
+
+    #[test]
+    fn streamed_hash_is_exact_under_json_escaping_and_enforces_encoded_bound() {
+        let value = json!({"escaped": "\0\\\"\n".repeat(16_384), "number": 42});
+        let expected = serde_json::to_vec(&value).unwrap();
+        let mut writer = DigestWriter {
+            hasher: Sha256::new(),
+            remaining: expected.len(),
+        };
+        writer.json(&value).unwrap();
+        assert_eq!(writer.remaining, 0);
+        assert_eq!(
+            writer.hasher.finalize().as_slice(),
+            Sha256::digest(&expected).as_slice()
+        );
+        let mut too_small = DigestWriter {
+            hasher: Sha256::new(),
+            remaining: expected.len() - 1,
+        };
+        assert!(too_small.json(&value).is_err());
     }
 
     #[test]

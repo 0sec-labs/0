@@ -23,16 +23,23 @@ struct Baseline {
     receipt: CandidateReceipt,
 }
 fn baseline(store: &Store, request: &ReviewRepairPlan) -> Result<Baseline, EngineError> {
+    validate_request(request)?;
+    let view = store.native_reproduction_read_snapshot(&request.reproduction_id)?;
+    baseline_view(&view, request)
+}
+fn validate_request(request: &ReviewRepairPlan) -> Result<(), EngineError> {
     request.validate_envelope().map_err(error)?;
     if serde_json::to_vec(request)?.len() > zero_protocol::MAX_FRAME_BYTES {
         return Err(error("native repair authorization byte bound"));
     }
-    let view = store.native_reproduction_read_snapshot(&request.reproduction_id)?;
+    Ok(())
+}
+fn baseline_view(view: &Store, request: &ReviewRepairPlan) -> Result<Baseline, EngineError> {
     let Reply::SourceReproduction {
         operation,
         result: Some(result),
         ..
-    } = workflow_provenance::native_reproduction(&view, &request.reproduction_id)?
+    } = workflow_provenance::native_reproduction(view, &request.reproduction_id)?
     else {
         return Err(error(
             "native repair requires retained observed reproduction",
@@ -80,11 +87,8 @@ fn baseline(store: &Store, request: &ReviewRepairPlan) -> Result<Baseline, Engin
         ));
     }
     let record = view.native_reproduction(&request.reproduction_id)?.record;
-    let source = source_provenance::load(
-        &view,
-        &record.source_session_id,
-        &record.source_operation_id,
-    )?;
+    let source =
+        source_provenance::load(view, &record.source_session_id, &record.source_operation_id)?;
     let hypothesis = source
         .review
         .hypotheses
@@ -105,6 +109,31 @@ fn baseline(store: &Store, request: &ReviewRepairPlan) -> Result<Baseline, Engin
         operation_id: operation.id,
         logical,
         receipt,
+    })
+}
+
+/// Independently assessed baseline identity, not a dispatch or promotion permit.
+/// Admission must compare this fingerprint with a fresh capture inside its own
+/// write transaction before recording the repair's authorization.
+pub struct AssessedReviewRepair {
+    pub reproduction_operation_id: String,
+    pub reproduction_evidence_sha256: String,
+}
+
+/// Assess and fingerprint the same immutable two-session evidence view. Taking
+/// the digest from the live Store after assessment would allow a changed journal
+/// to be authorized using a conclusion reached against different evidence.
+pub fn assess(
+    store: &Store,
+    request: &ReviewRepairPlan,
+) -> Result<AssessedReviewRepair, EngineError> {
+    validate_request(request)?;
+    let view = store.native_reproduction_read_snapshot(&request.reproduction_id)?;
+    let baseline = baseline_view(&view, request)?;
+    Ok(AssessedReviewRepair {
+        reproduction_operation_id: baseline.operation_id,
+        reproduction_evidence_sha256: view
+            .native_reproduction_evidence_digest(&request.reproduction_id)?,
     })
 }
 fn binding(

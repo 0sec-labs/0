@@ -1095,12 +1095,29 @@ async fn archived_review_preparation_preserves_logical_plan_and_revalidates_offl
     };
     let mut too_few = repair.clone();
     too_few.max_executions = 7;
+    assert!(review_repair::assess(&store, &too_few).is_err());
     assert!(review_repair::prepare(&store, &too_few, &|| Ok(())).is_err());
     let mut wrong_target = repair.clone();
     wrong_target.materialize.target = "z-tool.sh".into();
+    assert!(review_repair::assess(&store, &wrong_target).is_err());
     assert!(review_repair::prepare(&store, &wrong_target, &|| Ok(())).is_err());
     assert!(review_repair::prepare(&store, &repair, &|| Err("cancelled".into())).is_err());
     let prepared = review_repair::prepare(&store, &repair, &|| Ok(())).unwrap();
+    let assessed = review_repair::assess(&store, &repair).unwrap();
+    assert_eq!(
+        assessed.reproduction_operation_id,
+        store
+            .native_reproduction(&repair.reproduction_id)
+            .unwrap()
+            .operation
+            .id
+    );
+    assert_eq!(
+        assessed.reproduction_evidence_sha256,
+        store
+            .native_reproduction_evidence_digest(&repair.reproduction_id)
+            .unwrap()
+    );
     let derived = prepared.materialize_request().clone();
     let execution_baseline = prepared.execution_baseline().clone();
     let binding = prepared.binding().clone();
