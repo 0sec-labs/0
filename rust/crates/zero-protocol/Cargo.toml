@@ -13,6 +13,7 @@ serde_json.workspace = true
 schemars.workspace = true
 thiserror.workspace = true
 base64 = "0.22"
+url = "2"
 
 [lints]
 workspace = true

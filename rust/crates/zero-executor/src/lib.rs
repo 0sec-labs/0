@@ -2,7 +2,11 @@
 //! fallback, image pulls, or abrupt-controller-death
 //! cleanup guarantee. Event sinks must be nonblocking; capture remains bounded.
 mod archive;
+#[cfg(target_os = "linux")]
+mod repository;
 pub use archive::{capture_source_archive, stage_source_archive};
+#[cfg(target_os = "linux")]
+pub use repository::{RepositoryRequest, acquire_repository};
 mod interactive;
 mod process;
 pub use interactive::{InteractiveInput, InteractiveSender, interactive_input};

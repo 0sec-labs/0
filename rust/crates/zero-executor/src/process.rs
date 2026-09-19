@@ -65,7 +65,7 @@ fn kill_group(_: Option<u32>) -> Result<(), String> {
 }
 
 #[cfg(unix)]
-async fn observe_exit(pid: u32) -> Result<(), String> {
+pub(crate) async fn observe_exit(pid: u32) -> Result<(), String> {
     use nix::{
         sys::wait::{Id, WaitPidFlag, WaitStatus, waitid},
         unistd::Pid,
@@ -87,9 +87,12 @@ async fn observe_exit(pid: u32) -> Result<(), String> {
 async fn observe_exit(_: u32) -> Result<(), String> {
     Err("unsupported process observation platform".into())
 }
-struct Group(Option<u32>);
+pub(crate) struct Group(Option<u32>);
 impl Group {
-    fn kill(&mut self) -> Result<(), String> {
+    pub(crate) fn new(pid: u32) -> Self {
+        Self(Some(pid))
+    }
+    pub(crate) fn kill(&mut self) -> Result<(), String> {
         kill_group(self.0.take())
     }
 }

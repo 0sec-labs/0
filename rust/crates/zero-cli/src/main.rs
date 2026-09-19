@@ -22,6 +22,7 @@ mod review_profiles;
 mod scan;
 mod scan_profiles;
 mod server;
+mod source;
 mod source_report;
 mod steering;
 mod strategy;
@@ -78,6 +79,9 @@ fn main() -> std::process::ExitCode {
 }
 
 async fn dispatch(args: Args) -> Result<u8, Box<dyn Error>> {
+    if let Command::Source { command } = &args.command {
+        return source::run(command).await;
+    }
     if let Command::ManagedHttp(options) = &args.command {
         return managed_scan::run(&args, options).await;
     }
@@ -496,6 +500,7 @@ async fn run(args: Args) -> Result<bool, Box<dyn Error>> {
         | Command::Steer { .. }
         | Command::Findings { .. }
         | Command::SourceReport { .. }
+        | Command::Source { .. }
         | Command::SourceRepairExport(_)
         | Command::Schema
         | Command::Snapshot { .. }

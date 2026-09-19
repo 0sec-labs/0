@@ -29,6 +29,7 @@ pub mod sandbox;
 pub mod scan;
 pub mod session;
 pub mod source;
+pub mod source_acquisition;
 pub mod source_archive;
 pub mod steering;
 pub mod strategy;

@@ -53,6 +53,11 @@ pub struct Args {
 
 #[derive(Debug, Subcommand)]
 pub enum Command {
+    /// Acquire bounded repository source without model calls or source execution.
+    Source {
+        #[command(subcommand)]
+        command: crate::source::SourceCommand,
+    },
     /// Browse retained native HTTP scan history without starting work.
     History(crate::history::HistoryArgs),
     /// Export an ordered native session journal without replaying effects.
