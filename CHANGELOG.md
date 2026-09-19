@@ -1,13 +1,13 @@
 # Changelog
 
-All notable changes to 0security (the open-source CLI + agent harness) are tracked
+All notable changes to 0.security (the open-source CLI + agent harness) are tracked
 here. The history before v0.11.0 lives in the git log and on the GitHub
 Releases page; this file starts the human-readable summary from v0.11.0
 onwards. Entries before v0.13.0 predate the pwnkit → 0sec rename and keep the
 old product name as written.
 
 The format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
-and 0security adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
+and 0.security adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 on the published npm package and the GitHub Release tag.
 
 ## [Unreleased]

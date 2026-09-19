@@ -13,7 +13,7 @@ export function BrandMark({
     return (
       <svg
         role="img"
-        aria-label="0security"
+        aria-label="0.security"
         viewBox="-2 -2 24 24"
         className={cn("size-9 text-[#403D39] dark:text-[#FCFAF6]", className)}
       >
@@ -30,20 +30,20 @@ export function BrandMark({
   return (
     <div className={cn("space-y-2", className)}>
       <img
-        alt="0security"
+        alt="0.security"
         src={wordmarkInkUrl}
         width={240}
         height={24}
         className="h-auto w-48 max-w-full dark:hidden"
       />
       <img
-        alt="0security"
+        alt="0.security"
         src={wordmarkWhiteUrl}
         width={240}
         height={24}
         className="hidden h-auto w-48 max-w-full dark:block"
       />
-      <div className="text-sm font-medium text-foreground">0security operator shell</div>
+      <div className="text-sm font-medium text-foreground">0.security operator shell</div>
     </div>
   );
 }
