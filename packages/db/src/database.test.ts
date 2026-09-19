@@ -71,6 +71,46 @@ describe("osecDB read-only open", () => {
   });
 });
 
+describe("osecDB schema initialization", () => {
+  it("rolls back failed schema creation without changing existing data and can retry", async () => {
+    const { createShimmedDatabase, ShimmedDatabase } = await import("./wasm-shim.js");
+    const dir = mkdtempSync(join(tmpdir(), "0sec-db-schema-"));
+    const path = join(dir, "test.db");
+    const original = createShimmedDatabase(path);
+    original.exec("CREATE TABLE retained (value TEXT); INSERT INTO retained VALUES ('preserved')");
+    const schemaBefore = original.prepare("SELECT name, sql FROM sqlite_master ORDER BY name").all();
+    original.close();
+    const exec = ShimmedDatabase.prototype.exec;
+    const failure = new Error("schema storage interrupted");
+    const injection = vi.spyOn(ShimmedDatabase.prototype, "exec").mockImplementation(function (this: InstanceType<typeof ShimmedDatabase>, sql) {
+      const result = exec.call(this, sql);
+      if (sql.includes("CREATE TABLE IF NOT EXISTS scans")) throw failure;
+      return result;
+    });
+    try {
+      expect(() => new osecDB(path)).toThrow(failure);
+      injection.mockRestore();
+      const unchanged = createShimmedDatabase(path);
+      try {
+        expect(unchanged.prepare("SELECT name, sql FROM sqlite_master ORDER BY name").all()).toEqual(schemaBefore);
+        expect(unchanged.prepare("SELECT value FROM retained").all()).toEqual([{ value: "preserved" }]);
+      } finally {
+        unchanged.close();
+      }
+      const retried = new osecDB(path);
+      try {
+        const id = retried.createScan({ target: "https://example.com", depth: "default" } as Parameters<typeof retried.createScan>[0]);
+        expect(retried.getScan(id)?.target).toBe("https://example.com");
+      } finally {
+        retried.close();
+      }
+    } finally {
+      injection.mockRestore();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
 describe("osecDB work item transitions", () => {
   it("rolls back the work plan and audit event when artifact storage fails", () => {
     withTempDb((db) => {
