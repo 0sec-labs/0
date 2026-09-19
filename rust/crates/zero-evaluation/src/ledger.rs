@@ -172,7 +172,11 @@ impl Ledger {
     }
 }
 #[cfg(unix)]
-fn open(root: &Path, create: bool) -> Result<(Connection, File, PathBuf)> {
+pub(crate) fn open_named(
+    root: &Path,
+    create: bool,
+    name: &str,
+) -> Result<(Connection, File, PathBuf)> {
     use fs2::FileExt;
     use std::{
         fs::{self, OpenOptions},
@@ -212,10 +216,10 @@ fn open(root: &Path, create: bool) -> Result<(Connection, File, PathBuf)> {
     {
         return Err(invalid("owner lock replaced"));
     }
-    let db = regular(&root.join("evaluation.sqlite"), create)?;
+    let db = regular(&root.join(name), create)?;
     let before = db.metadata()?;
-    let conn = Connection::open(root.join("evaluation.sqlite"))?;
-    let after = fs::symlink_metadata(root.join("evaluation.sqlite"))?;
+    let conn = Connection::open(root.join(name))?;
+    let after = fs::symlink_metadata(root.join(name))?;
     if before.ino() != after.ino() || before.dev() != after.dev() || after.nlink() != 1 {
         return Err(invalid("ledger replaced"));
     }
@@ -223,7 +227,7 @@ fn open(root: &Path, create: bool) -> Result<(Connection, File, PathBuf)> {
     Ok((conn, lock, root))
 }
 #[cfg(not(unix))]
-fn open(_: &Path, _: bool) -> Result<(Connection, File, PathBuf)> {
+pub(crate) fn open_named(_: &Path, _: bool, _: &str) -> Result<(Connection, File, PathBuf)> {
     Err(invalid("evaluation ownership requires Unix"))
 }
 
@@ -254,4 +258,8 @@ pub(crate) fn validate_identity(conn: &Connection) -> Result<()> {
     }
 
     Ok(())
+}
+
+fn open(root: &Path, create: bool) -> Result<(Connection, File, PathBuf)> {
+    open_named(root, create, "evaluation.sqlite")
 }

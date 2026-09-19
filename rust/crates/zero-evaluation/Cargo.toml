@@ -22,6 +22,7 @@ zero-plugin = { path = "../zero-plugin" }
 zero-plugin-runner = { path = "../zero-plugin-runner" }
 zero-sandbox.workspace = true
 zero-protocol.workspace = true
+zero-store.workspace = true
 [dev-dependencies]
 tempfile.workspace = true
 zero-executor.workspace = true

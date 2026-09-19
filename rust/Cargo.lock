@@ -2464,6 +2464,7 @@ dependencies = [
  "zero-protocol",
  "zero-sandbox",
  "zero-smolvm",
+ "zero-store",
 ]
 
 [[package]]

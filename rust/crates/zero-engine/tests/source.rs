@@ -901,6 +901,9 @@ async fn reproduction_rejects_source_outcome_artifact_substitution() {
 use zero_protocol::repair::{MaterializeRequest, RepairValidationRequest, RepairValidationStatus};
 async fn repair_fixture() -> (ReproFixture, RepairValidationRequest) {
     let mut f = ReproFixture::new("echo").await;
+    // Repair tests measure oracle/report semantics, not deadline handling. Allow
+    // the Python process fixture to run under concurrent test/compiler load.
+    f.plan.limits.timeout_ms = 5_000;
     f.plan.cases[0].safe_expected = Some(ExactOutput {
         exit_code: 0,
         stdout: b"safe-output\n".to_vec(),
@@ -1506,7 +1509,9 @@ async fn linked_repair_report_preserves_unsuccessful_candidate_and_control_outco
         assert_eq!(report.repairs[0].phases.len(), 1);
         assert_eq!(
             report.repairs[0].phases[0].assessment.disposition,
-            disposition
+            disposition,
+            "{}",
+            serde_json::to_string_pretty(&report.repairs[0].phases[0]).unwrap()
         );
         assert_eq!(before, f.calls());
         f.engine.shutdown().await.unwrap();

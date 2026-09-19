@@ -1,6 +1,7 @@
 mod approvals;
 mod args;
 mod artifact;
+mod code_evolution;
 mod console;
 mod doctor;
 mod evaluation;
@@ -176,6 +177,9 @@ async fn run(args: Args) -> Result<bool, Box<dyn Error>> {
     }
     if let Command::Artifact { command } = &args.command {
         return artifact::run(&args.state, command).await;
+    }
+    if let Command::EvolvePython { command } = &args.command {
+        return code_evolution::run(&args, command).await;
     }
     if let Command::Evaluation { command } = &args.command {
         return evaluation::run(
@@ -510,6 +514,7 @@ async fn run(args: Args) -> Result<bool, Box<dyn Error>> {
         | Command::Tui { .. }
         | Command::Hosted { .. }
         | Command::Report { .. }
+        | Command::EvolvePython { .. }
         | Command::Evaluation { .. }
         | Command::Artifact { .. }
         | Command::Review(_)

@@ -125,6 +125,11 @@ pub enum Command {
         #[command(subcommand)]
         command: crate::artifact::ArtifactCommand,
     },
+    /// Generate and independently measure one model-authored Python plugin source change.
+    EvolvePython {
+        #[command(subcommand)]
+        command: crate::code_evolution::CodeEvolutionCommand,
+    },
     /// Measure offline plugin fixtures; this does not promote production code.
     Evaluation {
         #[command(subcommand)]

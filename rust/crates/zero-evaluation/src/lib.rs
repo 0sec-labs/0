@@ -1,5 +1,10 @@
 //! Controller-owned offline fixture evaluation. No production activation authority.
+mod code_proposal;
 mod driver;
+pub use code_proposal::{
+    PythonCandidateOutput, PythonEvolutionInspection, PythonEvolutionPlan, PythonProposal,
+    PythonProposalContext,
+};
 mod inspect;
 mod ledger;
 mod score;

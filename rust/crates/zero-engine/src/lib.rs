@@ -26,6 +26,7 @@ pub use native_repair_export::read_review_repair_patch;
 mod native_reproduction;
 mod plugin;
 mod plugin_workers;
+mod python_holdout;
 pub use plugin_workers::read_plugin_worker_call;
 mod queue;
 mod repair;
