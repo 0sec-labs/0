@@ -24,8 +24,11 @@ mod plugin;
 mod queue;
 mod repair;
 mod reproduction;
+mod review;
+mod review_read;
 mod sandbox;
 mod scan;
+pub use review_read::{read_review_report, read_review_status};
 pub use scan::{read_scan_report, read_scan_status, read_scans};
 mod source;
 mod source_provenance;
@@ -132,6 +135,8 @@ struct Shared {
     providers: Mutex<HashMap<String, inference::Profile>>,
     plugins: Mutex<Option<plugin::Profile>>,
     strategy_runtime: Mutex<Option<zero_harness::Harness>>,
+    review_profiles:
+        Mutex<std::collections::BTreeMap<String, zero_protocol::review::ReviewProfile>>,
     scan_profiles: Mutex<std::collections::BTreeMap<String, zero_protocol::scan::ScanProfile>>,
     http: Mutex<HashMap<String, Arc<zero_http::Client>>>,
     plugin_root: PathBuf,
@@ -325,6 +330,7 @@ impl Engine {
                 providers: Mutex::new(HashMap::new()),
                 plugins: Mutex::new(None),
                 strategy_runtime: Mutex::new(None),
+                review_profiles: Mutex::new(std::collections::BTreeMap::new()),
                 scan_profiles: Mutex::new(std::collections::BTreeMap::new()),
                 http: Mutex::new(HashMap::new()),
                 plugin_root,
@@ -421,6 +427,26 @@ impl Engine {
             Command::RunManagedScan { grant } => {
                 return self.run_managed_scan(*grant, event_tx, progress_tx).await;
             }
+            Command::RunReview {
+                command_id,
+                input_path,
+                profile,
+                snapshot,
+            } => {
+                return self
+                    .run_review(
+                        command_id,
+                        input_path,
+                        profile,
+                        *snapshot,
+                        event_tx,
+                        progress_tx,
+                    )
+                    .await;
+            }
+            Command::ReviewStatus { review_id } => return self.review_status(&review_id),
+            Command::ReviewReport { review_id } => return self.review_report(&review_id),
+            Command::CancelReview { review_id } => return self.cancel_review(&review_id),
             Command::RunScan {
                 command_id,
                 target,
@@ -1100,6 +1126,10 @@ impl Engine {
                 .map(Reply::Reconciled)
                 .map_err(|e| EngineError::State(e.to_string())),
             Command::RunManagedScan { .. }
+            | Command::RunReview { .. }
+            | Command::ReviewStatus { .. }
+            | Command::ReviewReport { .. }
+            | Command::CancelReview { .. }
             | Command::RunScan { .. }
             | Command::ScanStatus { .. }
             | Command::ScanReport { .. }

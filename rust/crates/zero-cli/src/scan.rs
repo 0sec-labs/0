@@ -112,6 +112,9 @@ pub async fn run(args: &crate::args::Args, options: &ScanArgs) -> Result<u8, Box
             }
         }
     }
+    if args.review_profiles.is_some() {
+        return Err("Standalone HTTP scan does not accept local review profiles".into());
+    }
     validate_scan_target(&target)?;
     // Load/validate public configuration before opening state. Credentials stay in existing private clients.
     let scans = match args.scan_profiles.as_deref() {
@@ -440,7 +443,7 @@ impl Signals {
             terminate: tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())?,
         })
     }
-    async fn wait(&mut self) -> u8 {
+    pub(crate) async fn wait(&mut self) -> u8 {
         #[cfg(unix)]
         {
             tokio::select! {_=self.interrupt.recv()=>130,_=self.terminate.recv()=>143}

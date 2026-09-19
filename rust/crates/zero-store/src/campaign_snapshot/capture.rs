@@ -4,7 +4,10 @@ use rusqlite::{
     types::{Value, ValueRef},
 };
 pub(super) fn columns(conn: &Connection, table: &str) -> Result<Vec<String>> {
-    if !TABLES.contains(&table) && !SEARCH_TABLES.contains(&table) && table != "scans" {
+    if !TABLES.contains(&table)
+        && !SEARCH_TABLES.contains(&table)
+        && !matches!(table, "scans" | "reviews" | "source_triage_decisions")
+    {
         return Err(invalid("unsupported table"));
     }
     let mut q = conn.prepare(&format!("PRAGMA table_info({table})"))?;
@@ -244,21 +247,23 @@ impl Store {
             return Err(invalid("unsupported approval consumption"));
         }
         let scan_witness: bool = tx.query_row(
-            &format!("SELECT EXISTS(SELECT 1 FROM events WHERE {session_filter} AND kind IN ('scan_created','scan_admission_closed','scan_budget_denied')) OR EXISTS(SELECT 1 FROM sessions WHERE id IN (SELECT session_id FROM events WHERE {session_filter}) AND generation LIKE 'native-scan:%')"),
+            &format!("SELECT EXISTS(SELECT 1 FROM events WHERE {session_filter} AND kind IN ('scan_created','scan_admission_closed','scan_budget_denied','review_created','review_admission_closed','review_budget_denied')) OR EXISTS(SELECT 1 FROM sessions WHERE id IN (SELECT session_id FROM events WHERE {session_filter}) AND (generation LIKE 'native-scan:%' OR generation LIKE 'native-review:%'))"),
             rusqlite::params_from_iter(&parameters), |r| r.get(0))?;
         if scan_witness {
-            return Err(invalid("scan evidence requires its own complete history"));
+            return Err(invalid(
+                "scan evidence or review evidence requires its own complete history",
+            ));
         }
         let (operation_bytes,operation_max):(usize,usize)=tx.query_row(&format!("SELECT COALESCE(sum(length(CAST(payload AS BLOB))+COALESCE(length(CAST(outcome AS BLOB)),0)),0),COALESCE(max(length(CAST(payload AS BLOB))+COALESCE(length(CAST(outcome AS BLOB)),0)),0) FROM operations WHERE {session_filter}"),rusqlite::params_from_iter(&parameters),|r|Ok((r.get(0)?,r.get(1)?)))?;
         if operation_bytes > MAX_BYTES || operation_max > 32 * 1024 * 1024 {
             return Err(invalid("operation exceeds source bound"));
         }
         let scan_marker: bool = tx.query_row(
-            &format!("SELECT EXISTS(SELECT 1 FROM operations WHERE {session_filter} AND CASE WHEN json_valid(payload) THEN json_type(payload,'$.scan_operation_id') IS NOT NULL OR json_type(payload,'$.scan_context') IS NOT NULL ELSE 0 END)"),
+            &format!("SELECT EXISTS(SELECT 1 FROM operations WHERE {session_filter} AND CASE WHEN json_valid(payload) THEN json_type(payload,'$.scan_operation_id') IS NOT NULL OR json_type(payload,'$.scan_context') IS NOT NULL OR json_type(payload,'$.review_operation_id') IS NOT NULL OR json_type(payload,'$.review_context') IS NOT NULL ELSE 0 END)"),
             rusqlite::params_from_iter(&parameters), |r| r.get(0))?;
         if scan_marker {
             return Err(invalid(
-                "scan operation cannot be reduced to campaign evidence",
+                "scan operation or review operation cannot be reduced to campaign evidence",
             ));
         }
         let controller_kinds = match layout {

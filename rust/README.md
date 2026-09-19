@@ -3,13 +3,15 @@
 Integration branch: `the-great-rust-rewrite`.
 
 This is an experimental implementation, not a replacement release. Native crates
-currently provide a versioned JSON protocol, SQLite session journal and budget
-ledger, single-owner engine, offline Docker snapshot execution, source-preserving
-finding reconciliation, explicit Docker/smolvm snapshot backends, Responses/Chat/Anthropic Messages
-inference with durable accounting, a bounded offline snapshot agent, and a CLI
-with an NDJSON app-server. Production scan commands, remaining provider adapters,
-full agent orchestration, evolution integration and TUI
-are still migration work. Unsupported legacy commands fail explicitly.
+provide a versioned JSON protocol, SQLite session journal and budget ledger,
+a single-owner engine, explicit Docker/smolvm snapshot backends, Responses/Chat/
+Anthropic inference, bounded agents and delegation, console/TUI interfaces, and
+an NDJSON app-server. Native HTTP scans and local source reviews have dedicated
+controllers with durable authority, cancellation and retained reports. See the
+[local source workflow](SOURCE-WORKFLOW.md) for `review` behavior and limits.
+Full production command parity, cloud integration, specialist workflows,
+evolution promotion, migration and release qualification remain unfinished.
+Unsupported legacy commands fail explicitly.
 
 The destination is the native CLI and engine described in the
 [architecture and migration plan](../docs/design/2026-09-18-native-harness-architecture.md).

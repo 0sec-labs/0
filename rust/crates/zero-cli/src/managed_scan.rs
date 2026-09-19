@@ -69,6 +69,9 @@ pub async fn run(
             }
         }
     }
+    if args.review_profiles.is_some() {
+        return Err("Managed HTTP does not accept local review profiles".into());
+    }
     let providers = match args.providers.as_deref() {
         Some(path) => crate::providers::load(path).await?,
         None => vec![],
@@ -229,6 +232,7 @@ fn validate_report_path(
         args.providers
             .iter()
             .chain(args.http_profiles.iter())
+            .chain(args.review_profiles.iter())
             .cloned(),
     );
     for path in protected {

@@ -1,6 +1,7 @@
 //! Bounded logical campaign evidence. Packages contain data, never executable SQL.
 mod capture;
 mod package;
+mod review;
 mod scan;
 mod search;
 use crate::{Error, Result, Store};

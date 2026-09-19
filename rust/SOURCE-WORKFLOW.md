@@ -77,8 +77,8 @@ separate from these deterministic contract fixtures.
 
 ## Direct local review: authority and preparation
 
-The next product workflow is `review <local-path> --profile <name>`. This command
-is not wired yet. Its first prerequisites now exist:
+The native CLI provides `review <local-path> --profile <name>`, backed by a
+dedicated owned controller and the existing adaptive source actor:
 
 - `zero_protocol::review::ReviewProfile` compiles one host-captured snapshot into
   the existing adaptive source actor. It captures provider/model, instructions,
@@ -125,44 +125,72 @@ Generic cancellation, shutdown and abnormal worker cleanup persist the review
 stop before draining its work. Existing standalone source actors preserve their
 historical failed-tool behavior.
 
-This is still an internal execution milestone, not a runnable review command:
-the dedicated top-level controller and CLI remain to be connected. Status reads
-validate projection/journal
-bindings, immutable intent and lifecycle witnesses, admission closure and the
-funding ledger. Deleting the review projection cannot reopen a generic session.
-Read-only opening never migrates old state; writable opening validates the prior
-schema before the additive migration. Existing portable campaign/scan evidence
-cannot silently omit review membership.
+Status reads validate projection/journal bindings, immutable intent and lifecycle
+witnesses, admission closure and the funding ledger. Deleting the review
+projection cannot reopen a generic session. Read-only opening never migrates old
+state; writable opening validates the prior schema before the additive migration.
+Existing portable campaign/scan evidence cannot silently omit review membership.
 
-The controller and command remain required work. Resolve an exact retained retry
-before reading current configuration or the source path. For a new command,
-perform bounded cancellable local capture before admission, with no model/backend
-work. Drain its blocking worker on cancellation. Atomically admit a dedicated
-review session, controller, actual root and frozen intent/provider rates; start
-the durable deadline at that admission. Cap serialized intent/catalog size as
-well as file contents. Do not label preflight hashing as an admitted actor.
+The CLI resolves exact retained retries before reading current configuration or
+the source path. A fresh command performs bounded cancellable local capture
+before opening the engine, with a preparation deadline of the smaller of the
+profile deadline and 60 seconds. It verifies and copies the captured tree into a private preflight directory,
+then reanchors the same manifest to that copy. This prevents a state database
+inside the requested directory from invalidating the investigation when the
+engine opens. The original caller path remains the retry identity; the captured
+canonical root identifies the private copy. No files are silently excluded.
+It drains the blocking capture worker on a signal or timeout. Admission then starts the separate durable investigation
+deadline and freezes intent, manifest, provider identity and rates. Source capture
+is preflight, not an admitted model operation. The actor independently verifies
+and stages the captured source before its first inference. The frontend keeps
+its private copy until the owned controller drains, then removes it; the copy
+is never mounted into a guest. A process killed without cleanup may leave that
+private temporary directory, as with other native staged snapshots.
 
-Use `prepare_actor` and `run_actor` directly under the dedicated controller.
-Review-specific Store fences must cover inference, delegated roles and sandbox
-requests, including source/backend/resource identity, cancellation, deadline and
-shared funding. Do not overload the HTTP scan record or recursively invoke the
-public `RunAgent` command. Reuse worker ownership and cleanup handling so owner
-loss produces Unknown and exact retries never repeat effects.
+The controller calls `prepare_actor` and `run_actor` directly. Worker ownership,
+durable stop records and cleanup cover cancellation, deadline, shutdown and
+owner loss. Controller success records that its owned actor lifecycle drained;
+actor status, unresolved budget holds and security conclusions remain separate.
+Exact retries never replay effects, including after owner recovery.
 
-Compose reports from one pinned Store read snapshot, reusing retained source
-provenance. A partial run without a terminal submission must not be turned into
-an empty successful review. Preserve charged/reserved funding and cleanup
-uncertainty independently of hypothesis counts. The command acceptance still
-requires a real loopback-provider fixture exercising search/read, cited
-submission, unchanged source, cancellation, owner loss, config-free retry and
-reporting after source deletion.
+`review show` and `review report` accept either `--review <id>` or
+`--command-id <original-command-id>`. They need only the state database, including
+while the owning process is running. Reports compose from one bounded, pinned
+Store snapshot, retaining source provenance after the original directory and
+configuration are removed. A partial run without a terminal structured submission
+has no source report; it is never presented as an empty successful review.
+Hypotheses remain model claims, and the report's security conclusion remains
+`not_established`. A controller recovered as Unknown does not erase an authentic
+completed actor submission; its separate lifecycle uncertainty remains visible.
 
-The internal review actor is now exercised with an actual loopback provider:
-search → exact source read → selected-file cited submission, with preparation
-permission before copying and tool permission before reading/result retention.
-The original source stays unchanged. Closed/expired reviews reject late tool
-calls from an already in-flight model response. Generic engine Cancel and
-shutdown record closure, drain the worker and retain the unresolved model hold
-instead of treating cancellation as free usage. These tests use the actual
-prepared actor and worker guard; they do not qualify the still-unwired top-level
-`review` command or a live Docker/smolvm execution.
+Fresh runs require `--review-profiles <json>` with a strict object mapping profile
+names to `ReviewProfile` values, and configured providers or a hosted model. The
+execution profile must select an immutable Docker image or hashed smolvm archive,
+even if the agent chooses only source inspection. Provider credentials stay in
+the separate provider configuration. HTTP, scan, harness and strategy runtime
+configuration are rejected for this local workflow.
+
+```sh
+0sec-native --state review.db --providers providers.json \
+  --review-profiles review-profiles.json \
+  review ./selected-source --profile local --command-id source-review-1
+0sec-native --state review.db review show --command-id source-review-1
+0sec-native --state review.db review report --command-id source-review-1 --format html
+```
+
+A completed review exits 0, or 1 when submitted hypotheses claim High/Critical
+severity. Exit 1 does not independently verify those claims. Incomplete, failed,
+deadline-expired or uncertain results exit 2; a received interrupt/termination
+exits 130/143 after owned work drains. Read-only inspection exits 0 on a valid
+read regardless of the retained investigation outcome. JSON replies expose the
+structured status; terminal, Markdown and HTML include lifecycle and budget
+information alongside any source report.
+
+The internal actor tests exercise an actual loopback provider: search, exact
+source read, selected-file cited submission, unchanged original source, late
+calls rejected after closure/deadline, and cancellation with unresolved model
+holds. CLI integration fixtures extend this to the actual executable and retained
+read interfaces. These deterministic fixtures do not qualify live-provider
+quality, live Docker/smolvm execution, or the full production CLI replacement.
+Repository acquisition, package selection, patch application and external
+publication remain separate unfinished product work.

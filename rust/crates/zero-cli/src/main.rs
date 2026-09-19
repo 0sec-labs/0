@@ -15,6 +15,8 @@ mod managed_scan;
 mod providers;
 mod questions;
 mod report;
+mod review;
+mod review_profiles;
 mod scan;
 mod scan_profiles;
 mod server;
@@ -75,6 +77,9 @@ fn main() -> std::process::ExitCode {
 async fn dispatch(args: Args) -> Result<u8, Box<dyn Error>> {
     if let Command::ManagedHttp(options) = &args.command {
         return managed_scan::run(&args, options).await;
+    }
+    if let Command::Review(options) = &args.command {
+        return review::run(&args, options).await;
     }
     if let Command::Scan(options) = &args.command {
         return scan::run(&args, options).await;
@@ -203,11 +208,18 @@ async fn run(args: Args) -> Result<bool, Box<dyn Error>> {
         Some(path) => scan_profiles::load(path).await?,
         None => Vec::new(),
     };
+    let review_profiles = match args.review_profiles.as_deref() {
+        Some(path) => review_profiles::load(path).await?,
+        None => Vec::new(),
+    };
     let engine = Arc::new(Engine::open_with_backends(
         &args.state,
         args.docker_bin,
         args.smolvm_bin,
     )?);
+    for (name, profile) in review_profiles {
+        engine.configure_review(&name, profile)?;
+    }
     for (name, profile) in scan_profiles {
         engine.configure_scan(&name, profile)?;
     }
@@ -482,6 +494,7 @@ async fn run(args: Args) -> Result<bool, Box<dyn Error>> {
         | Command::Report { .. }
         | Command::Evaluation { .. }
         | Command::Artifact { .. }
+        | Command::Review(_)
         | Command::Scan(_)
         | Command::ManagedHttp(_) => unreachable!(),
     };

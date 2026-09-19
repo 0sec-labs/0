@@ -23,6 +23,9 @@ pub struct Args {
     /// Explicit public profiles for standalone scoped HTTP scans.
     #[arg(long, global = true)]
     pub scan_profiles: Option<PathBuf>,
+    /// Explicit named profiles for bounded local-source reviews.
+    #[arg(long, global = true)]
+    pub review_profiles: Option<PathBuf>,
     /// Provider profiles; secrets are read from explicitly named environment variables.
     #[arg(long, global = true)]
     pub providers: Option<PathBuf>,
@@ -54,6 +57,8 @@ pub enum Command {
     ManagedHttp(crate::managed_scan::ManagedScanArgs),
     /// Run or inspect a durable standalone HTTP scan; findings remain unverified.
     Scan(crate::scan::ScanArgs),
+    /// Review local pinned source or inspect retained unverified hypotheses.
+    Review(crate::review::ReviewArgs),
     /// Run bounded paired strategy qualification or inspect retained campaign evidence.
     Strategy {
         #[command(subcommand)]

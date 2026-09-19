@@ -240,3 +240,120 @@ fn wrong_owner_and_oversized_intent_leave_no_state() {
     assert!(s.admit_review("run", "owner", &a).is_err());
     assert!(s.review_by_command("run").unwrap().is_none());
 }
+
+fn actor_result(status: &str) -> Value {
+    json!({"status":status,"text":"retained","turns":1,"tool_calls":0,"error":null})
+}
+
+#[test]
+fn known_root_lifecycle_requires_matching_terminal_actor_result() {
+    for (root, result, accepted) in [
+        (OperationStatus::Succeeded, "completed", true),
+        (OperationStatus::Succeeded, "failed", false),
+        (OperationStatus::Cancelled, "cancelled", true),
+        (OperationStatus::Cancelled, "completed", false),
+        (OperationStatus::Failed, "failed", true),
+        (OperationStatus::Failed, "turn_limit", true),
+        (OperationStatus::Failed, "completed", false),
+    ] {
+        let (_d, mut store, a) = setup();
+        store.admit_review("run", "owner", &a).unwrap();
+        store
+            .settle_operation(&a.root_operation_id, "owner", root, &actor_result(result))
+            .unwrap();
+        assert_eq!(
+            store.review_snapshot(&a.review_id).is_ok(),
+            accepted,
+            "{root:?}/{result}"
+        );
+        assert_eq!(store.review_read_snapshot(&a.review_id).is_ok(), accepted);
+    }
+    let (_d, mut store, a) = setup();
+    store.admit_review("run", "owner", &a).unwrap();
+    store
+        .settle_operation(
+            &a.root_operation_id,
+            "owner",
+            OperationStatus::Succeeded,
+            &Value::Null,
+        )
+        .unwrap();
+    assert!(store.review_snapshot(&a.review_id).is_err());
+}
+
+#[test]
+fn controller_completion_requires_exact_terminal_root_binding() {
+    for mutation in 0..6 {
+        let (_d, mut store, a) = setup();
+        store.admit_review("run", "owner", &a).unwrap();
+        if mutation != 1 {
+            store
+                .settle_operation(
+                    &a.root_operation_id,
+                    "owner",
+                    OperationStatus::Succeeded,
+                    &actor_result("completed"),
+                )
+                .unwrap();
+        }
+        let mut outcome = json!({"schema_version":1,"review_id":a.review_id,"root_operation_id":a.root_operation_id,"root_status":"succeeded"});
+        match mutation {
+            2 => outcome["review_id"] = json!("foreign"),
+            3 => outcome["root_operation_id"] = json!("foreign"),
+            4 => outcome["root_status"] = json!("failed"),
+            5 => outcome["unexpected"] = json!(true),
+            _ => {}
+        }
+        store
+            .settle_operation(
+                &a.controller_operation_id,
+                "owner",
+                OperationStatus::Succeeded,
+                &outcome,
+            )
+            .unwrap();
+        assert_eq!(
+            store.review_snapshot(&a.review_id).is_ok(),
+            mutation == 0,
+            "mutation {mutation}"
+        );
+    }
+}
+
+#[test]
+fn unknown_recovery_preserves_absence_and_independent_completed_actor() {
+    let (_d, mut store, a) = setup();
+    store.admit_review("run", "owner", &a).unwrap();
+    store
+        .mark_operation_unknown(&a.root_operation_id, "owner", "owner interrupted")
+        .unwrap();
+    store.settle_operation(&a.controller_operation_id, "owner", OperationStatus::Succeeded, &json!({"schema_version":1,"review_id":a.review_id,"root_operation_id":a.root_operation_id,"root_status":"unknown"})).unwrap();
+    let recovered = store.review_snapshot(&a.review_id).unwrap();
+    assert!(recovered.agent_result.is_none());
+    assert_eq!(recovered.controller_status, OperationStatus::Succeeded);
+    assert_eq!(recovered.root_status, OperationStatus::Unknown);
+    let (_d, mut store, a) = setup();
+    store.admit_review("run", "owner", &a).unwrap();
+    store
+        .settle_operation(
+            &a.root_operation_id,
+            "owner",
+            OperationStatus::Succeeded,
+            &actor_result("completed"),
+        )
+        .unwrap();
+    store
+        .mark_operation_unknown(
+            &a.controller_operation_id,
+            "owner",
+            "controller interrupted",
+        )
+        .unwrap();
+    let recovered = store.review_snapshot(&a.review_id).unwrap();
+    assert_eq!(
+        recovered.agent_result.unwrap().status,
+        zero_protocol::agent::AgentStatus::Completed
+    );
+    assert_eq!(recovered.controller_status, OperationStatus::Unknown);
+    assert_eq!(recovered.root_status, OperationStatus::Succeeded);
+}

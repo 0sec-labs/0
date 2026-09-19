@@ -69,6 +69,22 @@ pub enum Command {
     RunManagedScan {
         grant: Box<managed_scan::ManagedScanGrant>,
     },
+    /// Run one source review using an explicitly host-captured snapshot.
+    RunReview {
+        command_id: String,
+        input_path: String,
+        profile: String,
+        snapshot: Box<SnapshotPin>,
+    },
+    ReviewStatus {
+        review_id: String,
+    },
+    ReviewReport {
+        review_id: String,
+    },
+    CancelReview {
+        review_id: String,
+    },
     RunScan {
         command_id: String,
         target: String,
@@ -469,6 +485,20 @@ pub struct ReconcileResult {
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Reply {
+    ReviewRun {
+        review: review::ReviewSnapshot,
+        duplicate: bool,
+    },
+    ReviewStatus {
+        review: review::ReviewSnapshot,
+    },
+    ReviewReport {
+        report: review::ReviewReport,
+    },
+    ReviewCancelled {
+        review_id: String,
+        accepted: bool,
+    },
     ScanRun {
         scan: scan::ScanSnapshot,
         duplicate: bool,

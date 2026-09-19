@@ -230,6 +230,7 @@ pub enum ReviewCloseReason {
 #[serde(deny_unknown_fields)]
 pub struct ReviewSnapshot {
     pub review: ReviewRecord,
+    pub agent_result: Option<crate::agent::AgentResult>,
     pub controller_status: crate::OperationStatus,
     pub root_status: crate::OperationStatus,
     pub close_reason: Option<ReviewCloseReason>,
@@ -237,4 +238,14 @@ pub struct ReviewSnapshot {
     pub currency: ScanCurrency,
     pub observed_sequence: u64,
     pub observed_at_ms: u64,
+}
+
+/// A point-in-time view over retained source evidence, never a safety verdict.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ReviewReport {
+    pub schema_version: u32,
+    pub review: ReviewSnapshot,
+    pub source: Option<crate::source::SourceReport>,
+    pub security_conclusion: crate::source::SecurityConclusion,
 }

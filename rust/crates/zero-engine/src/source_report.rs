@@ -21,6 +21,18 @@ pub fn read_source_workflow_report(
     reproduction_ids: &[String],
     repair_ids: &[String],
 ) -> Result<SourceReport, EngineError> {
+    let store = Store::open_read_only(state)?;
+    compose_from_store(&store, session, operation, reproduction_ids, repair_ids)
+}
+
+/// Compose against the caller's pinned view; never reopen the live database.
+pub(super) fn compose_from_store(
+    store: &Store,
+    session: &str,
+    operation: &str,
+    reproduction_ids: &[String],
+    repair_ids: &[String],
+) -> Result<SourceReport, EngineError> {
     if reproduction_ids.len().saturating_add(repair_ids.len()) > 32 {
         return Err(EngineError::State(
             "source report permits at most 32 workflow links".into(),
@@ -34,8 +46,7 @@ pub fn read_source_workflow_report(
             ));
         }
     }
-    let store = Store::open_read_only(state)?;
-    let validated = source_provenance::load(&store, session, operation)?;
+    let validated = source_provenance::load(store, session, operation)?;
     let attachments = store.operation_artifacts(operation)?;
     // Only submission provenance belongs in this export. The agent may also
     // retain unrelated execution or continuation artifacts.
@@ -50,7 +61,7 @@ pub fn read_source_workflow_report(
         .collect();
     let reproductions = reproduction_ids
         .iter()
-        .map(|id| workflow_provenance::reproduction(&store, session, operation, id))
+        .map(|id| workflow_provenance::reproduction(store, session, operation, id))
         .collect::<Result<Vec<_>, _>>()?;
     let mut repairs = Vec::new();
     for id in repair_ids {
@@ -67,7 +78,7 @@ pub fn read_source_workflow_report(
                 )
             })?;
         repairs.push(workflow_provenance::repair(
-            &store, session, operation, id, baseline,
+            store, session, operation, id, baseline,
         )?);
     }
     Ok(SourceReport {

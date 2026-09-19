@@ -165,7 +165,54 @@ impl Store {
             [&b.record.session_id],
             |r| r.get(0),
         )?;
+        let agent_result = match &b.root.outcome {
+            Some(value) => {
+                match serde_json::from_value::<zero_protocol::agent::AgentResult>(value.clone()) {
+                    Ok(result) => Some(result),
+                    Err(_) if b.root.status == OperationStatus::Unknown => None,
+                    Err(error) => return Err(error.into()),
+                }
+            }
+            None => None,
+        };
+        use zero_protocol::agent::AgentStatus;
+        let matches_status = match b.root.status {
+            OperationStatus::Succeeded => agent_result
+                .as_ref()
+                .is_some_and(|r| r.status == AgentStatus::Completed),
+            OperationStatus::Cancelled => agent_result
+                .as_ref()
+                .is_some_and(|r| r.status == AgentStatus::Cancelled),
+            OperationStatus::Failed => agent_result
+                .as_ref()
+                .is_some_and(|r| matches!(r.status, AgentStatus::Failed | AgentStatus::TurnLimit)),
+            // Owner recovery can retain an opaque interrupted outcome. Never
+            // invent a terminal AgentResult for that uncertainty.
+            OperationStatus::Unknown => true,
+            OperationStatus::Admitted | OperationStatus::Running => agent_result.is_none(),
+        };
+        if !matches_status {
+            return Err(bad("root lifecycle contradicts retained agent result"));
+        }
+        if b.controller.status == OperationStatus::Succeeded {
+            let terminal_root = !matches!(
+                b.root.status,
+                OperationStatus::Admitted | OperationStatus::Running
+            );
+            let expected = json!({
+                "schema_version":1,
+                "review_id":b.record.id,
+                "root_operation_id":b.root.id,
+                "root_status":b.root.status,
+            });
+            if !terminal_root || b.controller.outcome.as_ref() != Some(&expected) {
+                return Err(bad(
+                    "controller settlement contradicts actual root lifecycle",
+                ));
+            }
+        }
         Ok(ReviewSnapshot {
+            agent_result,
             review: b.record,
             controller_status: b.controller.status,
             root_status: b.root.status,

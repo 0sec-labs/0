@@ -11,6 +11,9 @@ use std::collections::{BTreeMap, BTreeSet};
 use zero_protocol::{SnapshotPin, campaign::CampaignProviderContext, review::*};
 mod hooks;
 mod read;
+pub(crate) fn snapshot_source_record(conn: &Connection, key: &str) -> Result<ReviewRecord> {
+    Ok(read::bound(conn, key, &mut Reader::new())?.record)
+}
 pub(crate) use hooks::{authorize, budget_denied, guard_begin, guard_owner, guard_reservation};
 const MAX_INTENT_BYTES: usize = 2 * 1024 * 1024;
 #[derive(Debug, Clone, Serialize, Deserialize)]
