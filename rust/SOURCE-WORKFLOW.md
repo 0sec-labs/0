@@ -257,3 +257,45 @@ Exact retries return the original receipt without recapturing source or reading
 current profiles. Historical admissions without a receipt remain readable and
 retain their original serialization; their original workspace scope is reported
 as unrecorded, rather than inferred from a private snapshot path.
+
+### Archive-backed reproduction preparation
+
+`ReviewReproductionPlan` is the strict host authorization envelope for a future
+native follow-up. It binds the original review/root, retained archive manifest,
+logical `verification::Plan`, a total deadline of at most one hour, and an explicit
+execution cap of at most 256. The full attack/control matrix must fit the cap;
+`FrozenPlan` still validates the complete oracle, backend, expectations and
+resource contract. This envelope is not yet a runnable CLI command.
+
+`zero_engine::review_reproduction::prepare` checks a drained review controller,
+succeeded structured source submission, exact source bundle/hypothesis/snapshot
+and complete archive before reconstructing a private tree. It needs no original
+source directory or provider configuration. The caller runs this synchronous
+preparation on a joined blocking worker and supplies cancellation/deadline
+checks; individual SQLite reads must drain before cancellation returns. The
+returned stage requires explicit removal after its consumers have drained.
+Preparation does not grant permission to launch a sandbox or reopen the review.
+
+The logical frozen plan retains the original source location. A distinct
+execution frozen plan changes only that location to the verified reconstruction;
+its digest is distinct. Source IDs, manifests, commands, expected outputs,
+backend, repeats and resource limits remain exact. The oracle and matrix still
+compare the complete request, including location. A retained binding connects
+both plan hashes, the entire authorization hash (including total deadline and
+execution cap), the review/source session/root and archive manifest hash.
+
+`validate_binding` checks this relation after both original and reconstructed
+directories are gone. `Store::review_source_archive_manifest` validates the
+archive's historical metadata and witnesses without loading its raw chunks.
+That metadata read does not establish that the raw bytes remain available or
+intact: actual preparation always uses the full validated archive read.
+
+The next integration step is a dedicated atomic native reproduction admission:
+a separate zero-model-budget session, immutable host intent, closed authority
+except its exact matrix children, and one-use physical dispatch permissions.
+Cancellation, total deadline and owner-loss recovery must close that session
+without changing the original review. Reports must validate this cross-session
+lineage and independently reassess the actual observations; a prepared binding
+alone proves neither authorized dispatch nor success. Existing same-session
+reproduction and repair commands retain their current contracts until those
+explicit native workflows are wired.

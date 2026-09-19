@@ -30,6 +30,34 @@ impl FrozenPlan {
     pub fn digest(&self) -> &str {
         &self.digest
     }
+    /// Derive an execution plan at a new location without changing source or
+    /// observation authority. This pure operation does not inspect filesystem
+    /// contents: the caller must independently verify reconstructed source bytes
+    /// and retain the original-to-execution plan binding before dispatch.
+    pub fn reanchor_snapshot(&self, staged: &zero_protocol::SnapshotPin) -> Result<Self> {
+        // Bound typed inputs before allocating comparison bytes or cloning paths.
+        hash(staged, MAX_PLAN_BYTES)?;
+        if staged.digest != self.plan.snapshot.digest
+            || serde_json::to_vec(&staged.files)? != serde_json::to_vec(&self.plan.snapshot.files)?
+        {
+            return Err(invalid("reanchored snapshot content identity differs"));
+        }
+        let mut plan = self.plan.clone();
+        // The staging pin's generated ID is not the original source identity.
+        plan.snapshot.root = staged.root.clone();
+        Self::new(plan)
+    }
+
+    /// Check a retained relocation without accessing either filesystem path.
+    /// Every field except the snapshot root must remain exactly unchanged.
+    pub fn validate_reanchored(&self, execution: &Self) -> Result<()> {
+        let expected = self.reanchor_snapshot(&execution.plan.snapshot)?;
+        if serde_json::to_vec(expected.plan())? != serde_json::to_vec(execution.plan())? {
+            return Err(invalid("execution plan differs from the frozen relocation"));
+        }
+        Ok(())
+    }
+
     pub fn request(
         &self,
         case_id: &str,

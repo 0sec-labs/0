@@ -540,3 +540,105 @@ fn archived_selected_bytes_remain_bound_to_the_original_workspace_scope() {
     sql.execute("UPDATE events SET payload=json_set(payload,'$.workspace_selection.original_root','/forged') WHERE kind='review_created'",[]).unwrap();
     assert!(store.review_source_archive(&a.review_id).is_err());
 }
+
+#[test]
+fn manifest_read_authenticates_identity_without_reading_missing_or_corrupt_chunks() {
+    for missing in [false, true] {
+        let (dir, mut store, a, archive) = fixture();
+        assert!(
+            store
+                .review_source_archive_manifest(&a.review_id)
+                .unwrap()
+                .is_none()
+        );
+        store
+            .begin_review_source_preparation(&a.root_operation_id, "owner")
+            .unwrap();
+        store
+            .retain_review_source_archive(&a.root_operation_id, "owner", &archive)
+            .unwrap();
+        let sql = rusqlite::Connection::open(dir.path().join("db")).unwrap();
+        let chunk = archive.blobs.keys().next().unwrap();
+        if missing {
+            sql.execute("DELETE FROM artifacts WHERE digest=?1", [chunk])
+                .unwrap();
+        } else {
+            sql.execute(
+                "UPDATE artifacts SET bytes=?1 WHERE digest=?2",
+                rusqlite::params![b"corrupt".as_slice(), chunk],
+            )
+            .unwrap();
+        }
+        drop(store);
+        let read = Store::open_read_only(dir.path().join("db")).unwrap();
+        assert_eq!(
+            read.review_source_archive_manifest(&a.review_id).unwrap(),
+            Some(archive.manifest)
+        );
+        assert!(read.review_source_archive(&a.review_id).is_err());
+    }
+}
+
+#[test]
+fn manifest_read_rejects_missing_or_forged_archive_authority() {
+    for mutation in 0..7 {
+        let (dir, mut store, a, archive) = fixture();
+        store
+            .begin_review_source_preparation(&a.root_operation_id, "owner")
+            .unwrap();
+        let digest = store
+            .retain_review_source_archive(&a.root_operation_id, "owner", &archive)
+            .unwrap();
+        let sql = rusqlite::Connection::open(dir.path().join("db")).unwrap();
+        match mutation {
+            0 => {
+                sql.execute("DELETE FROM source_archives", []).unwrap();
+            }
+            1 => {
+                sql.execute("DELETE FROM events WHERE kind='review_source_archived'", [])
+                    .unwrap();
+            }
+            2 => {
+                sql.execute(
+                    "UPDATE artifacts SET bytes=?1 WHERE digest=?2",
+                    rusqlite::params![b"{}".as_slice(), digest],
+                )
+                .unwrap();
+            }
+            3 => {
+                sql.execute("DELETE FROM events WHERE kind='operation_detail' AND json_extract(payload,'$.kind')='review_source_preparation_started'", []).unwrap();
+            }
+            4 => {
+                sql.execute("UPDATE source_archives SET command_id='forged'", [])
+                    .unwrap();
+            }
+            5 => {
+                sql.execute("PRAGMA foreign_keys=OFF", []).unwrap();
+                sql.execute("DELETE FROM artifacts WHERE digest=?1", [&digest])
+                    .unwrap();
+            }
+            _ => {
+                // Rehash a structurally valid replacement and change both mutable
+                // index and archive event: the original captured pin still binds it.
+                let replacement = source(b"different source".to_vec());
+                let bytes = replacement.manifest.canonical_bytes().unwrap();
+                let replacement_digest = format!("sha256:{:x}", Sha256::digest(&bytes));
+                sql.execute(
+                    "INSERT INTO artifacts(digest,bytes) VALUES(?1,?2)",
+                    rusqlite::params![replacement_digest, bytes],
+                )
+                .unwrap();
+                sql.execute(
+                    "UPDATE source_archives SET manifest_sha256=?1",
+                    [&replacement_digest],
+                )
+                .unwrap();
+                sql.execute("UPDATE events SET payload=json_set(payload,'$.manifest_sha256',?1) WHERE kind='review_source_archived'", [&replacement_digest]).unwrap();
+            }
+        }
+        assert!(
+            store.review_source_archive_manifest(&a.review_id).is_err(),
+            "mutation {mutation}"
+        );
+    }
+}

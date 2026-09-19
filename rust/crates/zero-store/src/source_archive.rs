@@ -103,7 +103,10 @@ pub(crate) fn validate_command(
     }
     Ok(())
 }
-fn load(conn: &Connection, record: &ReviewRecord) -> Result<Option<SourceArchive>> {
+fn load_manifest(
+    conn: &Connection,
+    record: &ReviewRecord,
+) -> Result<Option<(review::ArchiveBinding, ArchiveManifest)>> {
     let Some(Metadata { binding, digest }) = metadata(conn, record)? else {
         return Ok(None);
     };
@@ -113,6 +116,22 @@ fn load(conn: &Connection, record: &ReviewRecord) -> Result<Option<SourceArchive
     if manifest.canonical_bytes().map_err(bad)? != bytes {
         return Err(bad("manifest encoding is not canonical"));
     }
+    if manifest.snapshot_sha256 != binding.snapshot.digest
+        || manifest.files.len() != binding.snapshot.files.len()
+        || manifest
+            .files
+            .iter()
+            .zip(&binding.snapshot.files)
+            .any(|(a, p)| a.path != p.path || a.sha256 != p.digest || a.bytes != p.bytes)
+    {
+        return Err(bad("manifest differs from the captured snapshot"));
+    }
+    Ok(Some((binding, manifest)))
+}
+fn load(conn: &Connection, record: &ReviewRecord) -> Result<Option<SourceArchive>> {
+    let Some((binding, manifest)) = load_manifest(conn, record)? else {
+        return Ok(None);
+    };
     // Validate declared aggregate/per-chunk sizes before loading any raw blobs.
     // Manifest and raw data have separate explicit bounds (8 MiB + 64 MiB).
     let mut declared = BTreeMap::new();
@@ -214,6 +233,18 @@ impl Store {
         }
         tx.commit()?;
         Ok(digest)
+    }
+
+    /// Authenticate the retained manifest and original snapshot without reading
+    /// raw chunks. This proves historical identity, not current blob availability
+    /// or permission to execute; use `review_source_archive` before restoration.
+    pub fn review_source_archive_manifest(
+        &self,
+        review_id: &str,
+    ) -> Result<Option<ArchiveManifest>> {
+        let tx = self.conn.unchecked_transaction()?;
+        let record = review::snapshot_source_record(&tx, review_id)?;
+        Ok(load_manifest(&tx, &record)?.map(|(_, manifest)| manifest))
     }
 
     /// Explicit full-source read. Metadata/report views deliberately do not call

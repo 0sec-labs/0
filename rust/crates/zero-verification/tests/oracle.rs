@@ -416,3 +416,141 @@ fn content_addressed_source_hypothesis_id_is_supported() {
     raw.hypothesis_id = sha('a');
     assert!(FrozenPlan::new(raw).is_ok());
 }
+
+#[test]
+fn reanchored_archive_preserves_original_authority_and_requires_its_own_exact_requests() {
+    let source = tempfile::tempdir().unwrap();
+    std::fs::write(
+        source.path().join("source.js"),
+        b"retained original source\n",
+    )
+    .unwrap();
+    let mut original = plan();
+    original.snapshot = zero_executor::pin_snapshot(source.path()).unwrap();
+    original.snapshot.id = "original-host-source-id".into();
+    let logical = FrozenPlan::new(original).unwrap();
+    let archive =
+        zero_executor::capture_source_archive(&logical.plan().snapshot, &|| Ok(())).unwrap();
+    source.close().unwrap();
+    let (stage, staged) = zero_executor::stage_source_archive(&archive, &|| Ok(())).unwrap();
+    assert_ne!(staged.id, logical.plan().snapshot.id);
+    let execution = logical.reanchor_snapshot(&staged).unwrap();
+    assert_ne!(logical.digest(), execution.digest());
+    assert_eq!(execution.plan().snapshot.id, "original-host-source-id");
+    assert_eq!(
+        execution.plan().snapshot.digest,
+        logical.plan().snapshot.digest
+    );
+    let mut expected = logical.plan().clone();
+    expected.snapshot.root = staged.root.clone();
+    assert_eq!(
+        serde_json::to_vec(execution.plan()).unwrap(),
+        serde_json::to_vec(&expected).unwrap()
+    );
+    logical.validate_reanchored(&execution).unwrap();
+    zero_executor::verify_snapshot(&execution.plan().snapshot, &|| Ok(())).unwrap();
+    let rows = evidence(&execution);
+    let measured = assess(&execution, &rows).unwrap();
+    assert_eq!(measured.disposition, Disposition::ObservedForPlan);
+    assert_eq!(measured.plan_digest, execution.digest());
+    assert!(!measured.vulnerability_reportable);
+    let wrong_location = assess(&logical, &rows).unwrap();
+    assert_eq!(wrong_location.disposition, Disposition::Inconclusive);
+    assert!(
+        wrong_location
+            .reasons
+            .contains(&Reason::RequestIdentityMismatch)
+    );
+    stage.remove().unwrap();
+    // Read-only re-assessment needs retained identities, never either live path.
+    logical.validate_reanchored(&execution).unwrap();
+    assert_eq!(
+        assess(&execution, &rows).unwrap().assessment_digest,
+        measured.assessment_digest
+    );
+}
+
+#[test]
+fn reanchoring_rejects_changed_file_bytes_digests_paths_order_membership_and_invalid_roots() {
+    let mut original = plan();
+    original.snapshot.files.push(SnapshotFile {
+        path: "z.js".into(),
+        digest: sha('e'),
+        bytes: 2,
+    });
+    original.snapshot.digest = zero_executor::snapshot_digest(&original.snapshot.files).unwrap();
+    let logical = FrozenPlan::new(original).unwrap();
+    for mutation in 0..12 {
+        let mut staged = logical.plan().snapshot.clone();
+        staged.root = "/new-private/source".into();
+        match mutation {
+            0 => staged.digest = sha('f'),
+            1 => staged.files[0].digest = sha('f'),
+            2 => staged.files[0].bytes += 1,
+            3 => staged.files[0].path = "other.js".into(),
+            4 => staged.files.swap(0, 1),
+            5 => {
+                staged.files.pop();
+            }
+            6 => staged.files.push(SnapshotFile {
+                path: "extra.js".into(),
+                digest: sha('f'),
+                bytes: 3,
+            }),
+            7 => staged.root = "relative/source".into(),
+            8 => staged.root.clear(),
+            9 => staged.root = "/source\0hidden".into(),
+            10 => staged.root = "/source,mount-option".into(),
+            _ => staged.root = format!("/{}", "x".repeat(MAX_PLAN_BYTES)),
+        }
+        assert!(
+            logical.reanchor_snapshot(&staged).is_err(),
+            "mutation {mutation}"
+        );
+    }
+}
+
+#[test]
+fn retained_relocation_rejects_other_valid_plan_authority_and_expectation_changes() {
+    let logical = FrozenPlan::new(plan()).unwrap();
+    let mut staged = logical.plan().snapshot.clone();
+    staged.root = "/new-private/source".into();
+    let execution = logical.reanchor_snapshot(&staged).unwrap();
+    for mutation in 0..18 {
+        let mut changed = execution.plan().clone();
+        match mutation {
+            0 => changed.snapshot.id = "replacement-source-id".into(),
+            1 => changed.hypothesis_id = "different-hypothesis".into(),
+            2 => changed.source_bundle_digest = sha('f'),
+            3 => changed.backend = SandboxBackend::Docker { image: sha('e') },
+            4 => changed.limits.timeout_ms += 1,
+            5 => changed.limits.memory_mb += 1,
+            6 => changed.limits.cpus = 1.0,
+            7 => changed.limits.max_output_bytes += 1,
+            8 => changed.repeats += 1,
+            9 => changed.cases[0].argv.push("changed-argument".into()),
+            10 => changed.cases[0].stdin = Some("changed-input".into()),
+            11 => changed.cases[0].expected.exit_code = 1,
+            12 => changed.cases[0].expected.stdout.push(b'!'),
+            13 => changed.cases[0].expected.stderr.push(b'!'),
+            14 => changed.cases[0]
+                .safe_expected
+                .as_mut()
+                .unwrap()
+                .stdout
+                .push(b'!'),
+            15 => changed.cases[0].id = "changed-case".into(),
+            16 => changed.cases.swap(0, 1),
+            _ => {
+                changed.cases[0].mode = Mode::LegitimateControl;
+                changed.cases[0].safe_expected = None;
+                changed.cases[1].mode = Mode::Attack;
+            }
+        }
+        let changed = FrozenPlan::new(changed).unwrap();
+        assert!(
+            logical.validate_reanchored(&changed).is_err(),
+            "mutation {mutation}"
+        );
+    }
+}

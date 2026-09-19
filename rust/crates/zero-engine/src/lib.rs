@@ -26,6 +26,7 @@ mod repair;
 mod reproduction;
 mod review;
 mod review_read;
+pub mod review_reproduction;
 mod sandbox;
 mod scan;
 pub use review_read::{read_review_report, read_review_status};

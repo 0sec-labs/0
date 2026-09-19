@@ -119,6 +119,10 @@ impl Fixture {
             "pub fn greeting() -> &'static str {\n    \"retained review source\"\n}\n",
         )
         .unwrap();
+        fs::write(source.join("z-unread.bin"), [0, 255, 1, 128]).unwrap();
+        fs::write(source.join("z-tool.sh"), "#!/bin/sh\nexit 0\n").unwrap();
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(source.join("z-tool.sh"), fs::Permissions::from_mode(0o755)).unwrap();
         let snapshot = zero_executor::pin_snapshot(&source).unwrap();
         let provider = Provider::new().await;
         // No tool in these tests launches a sandbox. A nonexistent configured
@@ -559,4 +563,125 @@ async fn generic_cancel_and_shutdown_close_review_and_preserve_inflight_hold() {
         drop(socket);
         f.engine.shutdown().await.unwrap();
     }
+}
+
+#[tokio::test]
+async fn archived_review_preparation_preserves_logical_plan_and_revalidates_offline() {
+    use zero_protocol::review_reproduction::ReviewReproductionPlan;
+    let mut f = Fixture::new(60_000).await;
+    let task = f.start();
+    let (socket, _) = f.provider.next().await;
+    let digest = &f.admission.snapshot.files[0].digest;
+    respond(socket,"submit","submit_source_hypotheses",json!({"selected_files":["app.rs"],"hypotheses":[{"title":"Greeting is printed","claimed_severity":"low","explanation":"The pinned source contains a greeting string.","citations":[{"path":"app.rs","sha256":digest,"start_line":1,"end_line":3}]}]})).await;
+    let (operation, _) = finish(task).await;
+    assert_eq!(operation.status, OperationStatus::Succeeded);
+    let mut store = lock(&f.engine.shared.store).unwrap();
+    let source = source_provenance::load(&store, &f.admission.session_id, &operation.id).unwrap();
+    let manifest = store
+        .review_source_archive_manifest(&f.admission.review_id)
+        .unwrap()
+        .unwrap();
+    let authorization: ReviewReproductionPlan = serde_json::from_value(json!({
+        "schema_version":1,
+        "review_id":f.admission.review_id,
+        "source_operation_id":operation.id,
+        "archive_manifest_sha256":format!("sha256:{}",zero_plugin::sha256(&manifest.canonical_bytes().unwrap())),
+        "deadline_ms":30000,"max_executions":4,
+        "plan":{
+            "schema_version":1,"oracle_version":zero_verification::ORACLE_VERSION,
+            "hypothesis_id":source.review.hypotheses[0].id,
+            "source_bundle_digest":source.bundle.digest(),"snapshot":source.snapshot,
+            "backend":{"type":"docker","image":format!("sha256:{}","a".repeat(64))},
+            "limits":{"timeout_ms":1000,"memory_mb":128,"cpus":1,"max_output_bytes":4096},
+            "repeats":2,"cases":[
+                {"id":"attack","mode":"attack","argv":["/bin/sh","z-tool.sh"],"stdin":null,"expected":{"exit_code":0,"stdout":"","stderr":""}},
+                {"id":"control","mode":"legitimate_control","argv":["/bin/true"],"stdin":null,"expected":{"exit_code":0,"stdout":"","stderr":""}}
+            ]
+        }
+    })).unwrap();
+    // A succeeded source actor alone does not establish a drained controller.
+    assert!(review_reproduction::prepare(&store, &authorization, &|| Ok(())).is_err());
+    store.settle_operation(&f.admission.controller_operation_id, &f.engine.shared.owner,
+        OperationStatus::Succeeded,
+        &json!({"schema_version":1,"review_id":f.admission.review_id,"root_operation_id":operation.id,"root_status":operation.status})).unwrap();
+    let events_before =
+        serde_json::to_value(store.events(&f.admission.session_id, 0, 1000).unwrap()).unwrap();
+    let budget_before =
+        serde_json::to_value(store.budget(&f.admission.session_id).unwrap()).unwrap();
+    fs::remove_dir_all(&f.admission.snapshot.root).unwrap();
+    let prepared = review_reproduction::prepare(&store, &authorization, &|| Ok(())).unwrap();
+    let execution = prepared.execution_plan().clone();
+    let binding = prepared.binding().clone();
+    assert_ne!(prepared.logical_plan().digest(), execution.digest());
+    assert_eq!(
+        serde_json::to_value(prepared.logical_plan().plan()).unwrap(),
+        serde_json::to_value(&authorization.plan).unwrap()
+    );
+    let restored = Path::new(&execution.plan().snapshot.root);
+    assert_eq!(
+        fs::read(restored.join("z-unread.bin")).unwrap(),
+        [0, 255, 1, 128]
+    );
+    use std::os::unix::fs::PermissionsExt;
+    assert_ne!(
+        fs::metadata(restored.join("z-tool.sh"))
+            .unwrap()
+            .permissions()
+            .mode()
+            & 0o111,
+        0
+    );
+    zero_executor::verify_snapshot(&execution.plan().snapshot, &|| Ok(())).unwrap();
+    review_reproduction::validate_binding(&store, &authorization, &execution, &binding).unwrap();
+    prepared.remove().unwrap();
+    assert!(!restored.exists());
+    // Offline validation needs neither temporary tree nor original directory.
+    review_reproduction::validate_binding(&store, &authorization, &execution, &binding).unwrap();
+    for changed in 0..8 {
+        let mut forged = binding.clone();
+        match changed {
+            0 => forged.schema_version = 2,
+            1 => forged.review_id = uuid::Uuid::new_v4().to_string(),
+            2 => forged.source_session_id = uuid::Uuid::new_v4().to_string(),
+            3 => forged.source_operation_id = uuid::Uuid::new_v4().to_string(),
+            4 => forged.archive_manifest_sha256 = format!("sha256:{}", "0".repeat(64)),
+            7 => forged.authorization_sha256 = format!("sha256:{}", "0".repeat(64)),
+            5 => forged.logical_plan_sha256 = format!("sha256:{}", "0".repeat(64)),
+            _ => forged.execution_plan_sha256 = format!("sha256:{}", "0".repeat(64)),
+        }
+        assert!(
+            review_reproduction::validate_binding(&store, &authorization, &execution, &forged)
+                .is_err()
+        );
+    }
+    let mut wrong = authorization.clone();
+    wrong.archive_manifest_sha256 = format!("sha256:{}", "0".repeat(64));
+    assert!(review_reproduction::prepare(&store, &wrong, &|| Ok(())).is_err());
+    assert!(review_reproduction::validate_binding(&store, &wrong, &execution, &binding).is_err());
+    wrong = authorization.clone();
+    wrong.plan.cases[0].argv.push("changed-host-command".into());
+    assert!(review_reproduction::validate_binding(&store, &wrong, &execution, &binding).is_err());
+    assert!(
+        review_reproduction::prepare(&store, &authorization, &|| Err("cancelled".into())).is_err()
+    );
+    for field in ["deadline_ms", "max_executions"] {
+        let mut value = serde_json::to_value(&authorization).unwrap();
+        value[field] = json!(if field == "deadline_ms" { 20000 } else { 5 });
+        let changed = serde_json::from_value(value).unwrap();
+        assert!(
+            review_reproduction::validate_binding(&store, &changed, &execution, &binding).is_err()
+        );
+    }
+    assert_eq!(
+        serde_json::to_value(store.events(&f.admission.session_id, 0, 1000).unwrap()).unwrap(),
+        events_before
+    );
+    assert_eq!(
+        serde_json::to_value(store.budget(&f.admission.session_id).unwrap()).unwrap(),
+        budget_before
+    );
+    drop(store);
+    f.provider.assert_no_more_requests();
+    assert!(!f.dir.path().join("no-backend").exists());
+    f.engine.shutdown().await.unwrap();
 }
