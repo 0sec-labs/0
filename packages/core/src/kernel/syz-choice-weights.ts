@@ -15,12 +15,23 @@
  */
 import { createHash } from "node:crypto";
 import { LlmApiRuntime } from "../runtime/llm-api.js";
+import type { KernelCommitPrepassResult } from "../research/kernel-jev-commit-prepass.js";
+import type { KernelJevPrepassResult } from "../research/kernel-jev-prepass.js";
+
+export interface SyzJevPrepassInput {
+  commits?: KernelCommitPrepassResult;
+  hypotheses?: KernelJevPrepassResult;
+  /** Maximum candidates of each kind included in the bounded planning context. */
+  limitPerKind?: number;
+}
 
 export interface SyzChoiceWeightsOptions {
   /** Target kernel version, e.g. "6.12.101". */
   target: string;
   /** Recent crash descriptions from the fleet, to inform weighting. */
   crashSummary?: string;
+  /** Ranked Jev output to translate into syzkaller syscall-family priorities. */
+  jevPrepass?: SyzJevPrepassInput;
   /**
    * Syscall names the manager config enables. When set, the prompt restricts
    * the plan to this universe (the fork rejects weights for anything else).
@@ -56,6 +67,54 @@ const SYSCALL_NAME = /^[a-z][a-z0-9_]*(\$[a-zA-Z0-9_]+)?$/;
 const MAX_WEIGHT = 100;
 const MIN_WEIGHT = 0.1;
 
+/**
+ * Convert advisory Jev rankings into compact evidence for the syscall planner.
+ * This bridge deliberately carries no syscall guesses: the weights planner has
+ * the enabled-call universe and remains responsible for that mapping.
+ */
+export function syzWeightingContextFromJev(input: SyzJevPrepassInput): string {
+  const limit = Math.max(1, Math.min(100, input.limitPerKind ?? 24));
+  const lines: string[] = [];
+  const commits = input.commits?.candidates
+    .filter((candidate) => candidate.score >= 0)
+    .slice(0, limit) ?? [];
+  if (commits.length) {
+    lines.push("Jev-ranked kernel commits (review priority, not vulnerability verdict):");
+    for (const candidate of commits) {
+      lines.push(JSON.stringify({
+        rank: candidate.rank, score: candidate.score, action: candidate.nextAction,
+        sha: candidate.sha, subject: candidate.subject.slice(0, 240), files: candidate.files.slice(0, 12),
+        signals: candidate.signals && {
+          attacker: candidate.signals.attackerInfluencedPath,
+          invariant: candidate.signals.securityInvariantTouched,
+          missingPair: candidate.signals.missingPairedSafetyChange,
+          direction: candidate.signals.direction,
+        },
+      }));
+    }
+  }
+  const hypotheses = input.hypotheses?.candidates
+    .filter((candidate) => candidate.disposition === "ranked")
+    .slice(0, limit) ?? [];
+  if (hypotheses.length) {
+    lines.push("Jev-ranked kernel findings (must still pass the kernel oracle):");
+    for (const candidate of hypotheses) {
+      lines.push(JSON.stringify({
+        rank: candidate.rank, score: candidate.score, action: candidate.nextAction,
+        title: candidate.finding.title.slice(0, 240), category: candidate.finding.category,
+        location: candidate.finding.reviewAnnotation?.path ?? candidate.finding.evidence.request.slice(0, 300),
+        signals: candidate.signals && {
+          reachable: candidate.signals.userspaceReachable,
+          invariant: candidate.signals.invariantViolation,
+          evidence: candidate.signals.evidenceSufficient,
+          oraclePriority: candidate.signals.oraclePriority,
+        },
+      }));
+    }
+  }
+  return lines.join("\n").slice(0, 12_000);
+}
+
 const SYSTEM_PROMPT = `You are a Linux kernel fuzzing strategist configuring a syzkaller variant for the kernelCTF latest-LTS target.
 
 Target environment constraints (all verified, all load-bearing):
@@ -73,15 +132,17 @@ export async function generateSyzChoiceWeights(
   opts: SyzChoiceWeightsOptions,
 ): Promise<SyzChoiceWeightsResult> {
   const maxEntries = opts.maxEntries ?? 48;
+  const jevContext = opts.jevPrepass ? syzWeightingContextFromJev(opts.jevPrepass) : "";
+  const planningEvidence = [opts.crashSummary, jevContext].filter(Boolean).join("\n\n");
   const userPrompt = [
     `Target kernel: linux ${opts.target} (kernelCTF latest-LTS, x86_64).`,
     `Produce at most ${maxEntries} weighted syscalls for this target.`,
     opts.enabledSyscalls?.length
       ? `HARD CONSTRAINT: every weighted name MUST come from this enabled-syscall universe (the manager rejects any weight outside it). Runtime-support calls (nanosleep, getpid, wait4, exit...) get weight 1 or are omitted:\n${JSON.stringify(opts.enabledSyscalls)}`
       : "",
-    opts.crashSummary
-      ? `Recent fleet crashes on this target (bias toward nearby unexplored surface, away from already-triaged dead ends):\n${opts.crashSummary.slice(0, 4000)}`
-      : "No fleet crash history supplied; use generic kernelCTF LTS priors.",
+    planningEvidence
+      ? `Ranked local evidence for this target (map evidenced reachable subsystems to enabled syzkaller calls; do not treat rankings as vulnerability verdicts):\n${planningEvidence.slice(0, 12_000)}`
+      : "No fleet crash or Jev prepass evidence supplied; use generic kernelCTF LTS priors.",
   ].filter(Boolean).join("\n\n");
 
   const runtime = new LlmApiRuntime({ type: "api", timeout: 120_000, model: opts.model });
@@ -92,7 +153,7 @@ export async function generateSyzChoiceWeights(
 
   const parsed = parseModelJson(res.output);
   const planHash = createHash("sha256").update(SYSTEM_PROMPT + "\n" + userPrompt).digest("hex");
-  const sourceHash = createHash("sha256").update(opts.crashSummary ?? opts.target).digest("hex");
+  const sourceHash = createHash("sha256").update(planningEvidence || opts.target).digest("hex");
   return {
     file: buildWeightsFile(parsed, opts.target, planHash, sourceHash, opts.maxEntries ?? 48, "0sec/llm-api", opts.model),
     rationale: typeof parsed.rationale === "string" ? parsed.rationale : "",

@@ -6008,10 +6008,17 @@ export class ToolExecutor {
     const extraHeaders =
       attribution && Object.keys(attribution.headers).length > 0 ? attribution.headers : undefined;
     if (this._browserJev === undefined) {
-      const config = jevConfigFromEnvironment("browser", process.env);
-      this._browserJev = config ? createJevEvaluator(config) : null;
-      this._browserReadOnlyUrls = new Set((process.env["0SEC_JEV_BROWSER_READ_ONLY_URLS"] ?? "")
-        .split(",").map(url => url.trim()).filter(Boolean).map(url => new URL(url).href));
+      // Misconfiguration (enabled feature without a key, malformed read-only URL)
+      // must degrade to assist-handoff, never break unrelated browser actions.
+      try {
+        const config = jevConfigFromEnvironment("browser", process.env);
+        this._browserJev = config ? createJevEvaluator(config) : null;
+        this._browserReadOnlyUrls = new Set((process.env["0SEC_JEV_BROWSER_READ_ONLY_URLS"] ?? "")
+          .split(",").map(url => url.trim()).filter(Boolean).map(url => new URL(url).href));
+      } catch {
+        this._browserJev = null;
+        this._browserReadOnlyUrls = new Set();
+      }
     }
     const execution = this._executionContext.getStore();
 
