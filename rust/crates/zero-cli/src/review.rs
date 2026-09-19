@@ -11,6 +11,9 @@ use std::{
 };
 use tokio::io::AsyncWriteExt;
 use tokio_util::sync::CancellationToken;
+use zero_protocol::workspace::{
+    WorkspaceSelectionMode, WorkspaceSelectionPolicy, WorkspaceSelectionReceipt,
+};
 use zero_protocol::{
     Command, OperationStatus, Reply, SnapshotPin,
     agent::AgentStatus,
@@ -140,16 +143,28 @@ pub async fn run(args: &crate::args::Args, options: &ReviewArgs) -> Result<u8, B
         .map(|(_, profile)| profile)
         .ok_or("Unknown review profile")?;
     let deadline_ms = profile.deadline_ms.min(60_000);
+    let selection_mode = profile.workspace_selection;
     let providers = match args.providers.as_deref() {
         Some(path) => crate::providers::load(path).await?,
         None => vec![],
     };
     let mut signals = Signals::new()?;
-    let CapturedSource { snapshot, stage } =
-        match capture(PathBuf::from(&input_path), deadline_ms, &mut signals).await? {
-            Capture::Pinned(source) => source,
-            Capture::Interrupted(code) => return Ok(code),
-        };
+    let CapturedSource {
+        snapshot,
+        stage,
+        receipt,
+    } = match capture(
+        PathBuf::from(&input_path),
+        args.state.clone(),
+        selection_mode,
+        deadline_ms,
+        &mut signals,
+    )
+    .await?
+    {
+        Capture::Pinned(source) => *source,
+        Capture::Interrupted(code) => return Ok(code),
+    };
     let engine = Arc::new(zero_engine::Engine::open_with_backends(
         &args.state,
         args.docker_bin.clone(),
@@ -190,6 +205,7 @@ pub async fn run(args: &crate::args::Args, options: &ReviewArgs) -> Result<u8, B
             input_path,
             profile: profile_name,
             snapshot: Box::new(snapshot),
+            workspace_selection: Some(receipt),
         },
         signals,
     )
@@ -223,13 +239,16 @@ impl Drop for PreflightStage {
 struct CapturedSource {
     snapshot: SnapshotPin,
     stage: PreflightStage,
+    receipt: WorkspaceSelectionReceipt,
 }
 enum Capture {
-    Pinned(CapturedSource),
+    Pinned(Box<CapturedSource>),
     Interrupted(u8),
 }
 async fn capture(
     path: PathBuf,
+    state: PathBuf,
+    mode: WorkspaceSelectionMode,
     deadline_ms: u64,
     signals: &mut Signals,
 ) -> Result<Capture, Box<dyn Error>> {
@@ -250,26 +269,26 @@ async fn capture(
         let canonical = std::fs::canonicalize(&path)
             .map_err(|error| format!("Cannot resolve review source directory: {error}"))?;
         check()?;
-        let mut snapshot = zero_executor::pin_snapshot_checked(
+        let policy = workspace_policy(&canonical, &state, mode, &check)?;
+        let (staged, snapshot, receipt) = zero_executor::capture_workspace(
             &canonical,
+            &policy,
             zero_executor::SnapshotLimits {
                 max_files: 4096,
                 max_bytes: 64 * 1024 * 1024,
             },
             &check,
         )?;
-        let staged = zero_executor::stage_snapshot(&snapshot, &check)?;
-        let root = staged.source();
         let stage = PreflightStage(Some(staged));
         check()?;
-        snapshot.root = root
-            .to_str()
-            .ok_or("Private review source path must be UTF-8")?
-            .into();
-        Ok::<_, String>(CapturedSource { snapshot, stage })
+        Ok::<_, String>(CapturedSource {
+            snapshot,
+            stage,
+            receipt,
+        })
     });
     tokio::select! {
-        result = &mut worker => Ok(Capture::Pinned(result?.map_err(std::io::Error::other)?)),
+        result = &mut worker => Ok(Capture::Pinned(Box::new(result?.map_err(std::io::Error::other)?))),
         code = signals.wait() => {
             cancel.cancel();
             // Blocking filesystem work is cooperative; never detach it or open
@@ -283,6 +302,88 @@ async fn capture(
             Err("Review source preparation deadline exceeded".into())
         }
     }
+}
+/// Resolve only existing ancestors; never create state during source selection.
+/// If control paths would resolve inside the source, require their spelling and
+/// ancestors to be unambiguous so exclusions describe the actual database.
+fn workspace_policy(
+    root: &Path,
+    state: &Path,
+    mode: WorkspaceSelectionMode,
+    check: &dyn Fn() -> Result<(), String>,
+) -> Result<WorkspaceSelectionPolicy, String> {
+    use std::path::Component;
+    if mode == WorkspaceSelectionMode::FullTree {
+        return Ok(WorkspaceSelectionPolicy::FullTree);
+    }
+    check()?;
+    let absolute = if state.is_absolute() {
+        state.to_owned()
+    } else {
+        std::env::current_dir()
+            .map_err(|error| error.to_string())?
+            .join(state)
+    };
+    let mut ancestor = absolute.clone();
+    let mut missing = Vec::new();
+    loop {
+        check()?;
+        match std::fs::symlink_metadata(&ancestor) {
+            Ok(_) => break,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                missing.push(
+                    ancestor
+                        .file_name()
+                        .ok_or("Cannot resolve native state path")?
+                        .to_owned(),
+                );
+                if !ancestor.pop() {
+                    return Err("Cannot resolve native state path".into());
+                }
+            }
+            Err(error) => return Err(format!("Cannot inspect native state path: {error}")),
+        }
+    }
+    let mut resolved = std::fs::canonicalize(&ancestor)
+        .map_err(|error| format!("Cannot resolve native state path: {error}"))?;
+    for component in missing.iter().rev() {
+        resolved.push(component);
+    }
+    check()?;
+    let Ok(relative) = resolved.strip_prefix(root) else {
+        return Ok(WorkspaceSelectionPolicy::FullTree);
+    };
+    if relative.as_os_str().is_empty() {
+        return Err("Native state must name a file, not the reviewed directory".into());
+    }
+    let mut prefix = PathBuf::new();
+    for component in absolute.components() {
+        check()?;
+        if component == Component::ParentDir {
+            return Err("In-source native state paths cannot contain parent traversal".into());
+        }
+        prefix.push(component);
+        match std::fs::symlink_metadata(&prefix) {
+            Ok(metadata) if metadata.file_type().is_symlink() => {
+                return Err(
+                    "In-source native state paths cannot use symlinked files or ancestors".into(),
+                );
+            }
+            Ok(_) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => break,
+            Err(error) => return Err(format!("Cannot inspect native state path: {error}")),
+        }
+    }
+    let relative = relative.to_str().ok_or("Native state path must be UTF-8")?;
+    if relative
+        .split('/')
+        .any(|part| part.is_empty() || part == "." || part == "..")
+    {
+        return Err("In-source native state path must be canonical".into());
+    }
+    Ok(WorkspaceSelectionPolicy::ExcludeNativeState {
+        state_relative_path: relative.into(),
+    })
 }
 fn exit_code(review: &ReviewSnapshot) -> u8 {
     if review.close_reason == Some(ReviewCloseReason::Cancelled) {
@@ -380,8 +481,27 @@ fn snapshot_text(s: &ReviewSnapshot) -> String {
         zero_protocol::scan::ScanCurrency::Usd => "micro-USD",
         zero_protocol::scan::ScanCurrency::Units => "units",
     };
+    let scope = match &s.review.workspace_selection {
+        Some(receipt) => format!(
+            "Workspace root: {}\nSelection policy: {}\nConfigured exclusion rules (including absent paths): {}\nSelected source: {} files, {} bytes\n",
+            receipt.original_root,
+            match receipt.policy {
+                WorkspaceSelectionPolicy::FullTree => "full tree",
+                WorkspaceSelectionPolicy::ExcludeNativeState { .. } =>
+                    "exclude configured native state files",
+            },
+            if receipt.exclusions.is_empty() {
+                "none (full tree)".into()
+            } else {
+                receipt.exclusions.join(", ")
+            },
+            receipt.file_count,
+            receipt.bytes
+        ),
+        None => "Snapshot capture without a workspace selection receipt; original workspace scope not recorded.\n".into(),
+    };
     crate::console::terminal_text(&format!(
-        "Local source review {}\nController {:?}; actor {:?}; host stop {:?}\nSource {}\nSnapshot {}\nSession {}; root {}\nObserved at {} ms, journal sequence {}\nModel budget: {} charged, {} held, {} limit ({}; host-declared rates)\nAgent result: {}\nAll hypotheses remain unverified. Security conclusion: not established. Empty or partial results do not establish safety.\n",
+        "{scope}Local source review {}\nController {:?}; actor {:?}; host stop {:?}\nSource {}\nSnapshot {}\nSession {}; root {}\nObserved at {} ms, journal sequence {}\nModel budget: {} charged, {} held, {} limit ({}; host-declared rates)\nAgent result: {}\nAll hypotheses remain unverified. Security conclusion: not established. Empty or partial results do not establish safety.\n",
         s.review.id,
         s.controller_status,
         s.root_status,
@@ -562,6 +682,42 @@ mod tests {
         snapshot.close_reason = Some(ReviewCloseReason::Cancelled);
         assert_eq!(exit_code(&snapshot), 130);
     }
+    #[test]
+    fn workspace_policy_resolves_actual_state_without_creating_it_and_rejects_aliases() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().join("source");
+        std::fs::create_dir(&root).unwrap();
+        let mode = WorkspaceSelectionMode::ExcludeNativeState;
+        let check = || Ok(());
+        let state = root.join("private/native.sqlite");
+        assert!(
+            matches!(workspace_policy(&root, &state, mode, &check).unwrap(),
+            WorkspaceSelectionPolicy::ExcludeNativeState { state_relative_path } if state_relative_path == "private/native.sqlite")
+        );
+        assert!(
+            !root.join("private").exists(),
+            "selection must not create state ancestors"
+        );
+        assert!(matches!(
+            workspace_policy(&root, &dir.path().join("external.db"), mode, &check).unwrap(),
+            WorkspaceSelectionPolicy::FullTree
+        ));
+        assert!(matches!(
+            workspace_policy(&root, &state, WorkspaceSelectionMode::FullTree, &check).unwrap(),
+            WorkspaceSelectionPolicy::FullTree
+        ));
+        std::fs::create_dir(root.join("private")).unwrap();
+        assert!(workspace_policy(&root, &root.join("private/../native.db"), mode, &check).is_err());
+        #[cfg(unix)]
+        {
+            std::os::unix::fs::symlink(root.join("private"), root.join("alias")).unwrap();
+            assert!(workspace_policy(&root, &root.join("alias/native.db"), mode, &check).is_err());
+            std::fs::write(root.join("private/existing.db"), b"not opened").unwrap();
+            std::os::unix::fs::symlink(root.join("private/existing.db"), root.join("alias.db"))
+                .unwrap();
+            assert!(workspace_policy(&root, &root.join("alias.db"), mode, &check).is_err());
+        }
+    }
     #[tokio::test]
     async fn capture_enforces_deadline_and_byte_bounds_and_preserves_source() {
         let dir = tempfile::tempdir().unwrap();
@@ -569,14 +725,25 @@ mod tests {
         std::fs::write(&path, b"fn main() {}\n").unwrap();
         let mut signals = Signals::new().unwrap();
         assert!(
-            capture(dir.path().to_owned(), 0, &mut signals)
-                .await
-                .is_err()
-        );
-        let Capture::Pinned(pin) = capture(dir.path().to_owned(), 1000, &mut signals)
+            capture(
+                dir.path().to_owned(),
+                dir.path().join(".0sec/state.db"),
+                WorkspaceSelectionMode::ExcludeNativeState,
+                0,
+                &mut signals
+            )
             .await
-            .unwrap()
-        else {
+            .is_err()
+        );
+        let Capture::Pinned(pin) = capture(
+            dir.path().to_owned(),
+            dir.path().join(".0sec/state.db"),
+            WorkspaceSelectionMode::ExcludeNativeState,
+            1000,
+            &mut signals,
+        )
+        .await
+        .unwrap() else {
             panic!("unexpected signal")
         };
         assert_eq!(pin.snapshot.files.len(), 1);
@@ -597,9 +764,15 @@ mod tests {
         let oversized = std::fs::File::create(dir.path().join("oversized")).unwrap();
         oversized.set_len(64 * 1024 * 1024 + 1).unwrap();
         assert!(
-            capture(dir.path().to_owned(), 1000, &mut signals)
-                .await
-                .is_err()
+            capture(
+                dir.path().to_owned(),
+                dir.path().join(".0sec/state.db"),
+                WorkspaceSelectionMode::ExcludeNativeState,
+                1000,
+                &mut signals
+            )
+            .await
+            .is_err()
         );
         assert_eq!(std::fs::read(&path).unwrap(), b"fn main() {}\n");
     }

@@ -46,6 +46,7 @@ fn prepared(archive: &SourceArchive) -> ReviewAdmission {
         profile_name: "local".into(),
         profile,
         snapshot,
+        workspace_selection: None,
         root_payload: json!({"kind":"offline_snapshot_agent","request":request,"endpoint":pins["p"]["endpoint"],"rates":pins["p"]["rates"],"review_template":template}),
         provider_context: serde_json::from_value(pins).unwrap(),
     }
@@ -491,4 +492,51 @@ fn archive_command_prevents_reuse_when_original_binding_and_creation_are_lost() 
             before
         );
     }
+}
+
+#[test]
+fn archived_selected_bytes_remain_bound_to_the_original_workspace_scope() {
+    use zero_protocol::workspace::{WorkspaceSelectionPolicy, WorkspaceSelectionReceipt};
+    let dir = tempfile::tempdir().unwrap();
+    let mut store = Store::open(dir.path().join("db")).unwrap();
+    store.claim_engine_epoch("owner").unwrap();
+    let archive = source(b"only selected application bytes".to_vec());
+    let mut a = prepared(&archive);
+    let policy = WorkspaceSelectionPolicy::ExcludeNativeState {
+        state_relative_path: ".0sec/native/state.db".into(),
+    };
+    a.workspace_selection = Some(WorkspaceSelectionReceipt {
+        schema_version: 1,
+        original_root: "/original/workspace".into(),
+        exclusions: policy.exclusions().unwrap(),
+        policy,
+        snapshot_sha256: a.snapshot.digest.clone(),
+        file_count: a.snapshot.files.len() as u32,
+        bytes: a.snapshot.files.iter().map(|f| f.bytes).sum(),
+    });
+    a.root_payload["request"] = serde_json::to_value(
+        a.profile
+            .request_with_selection(
+                a.snapshot.clone(),
+                &a.root_operation_id,
+                a.workspace_selection.as_ref(),
+            )
+            .unwrap(),
+    )
+    .unwrap();
+    store.admit_review("selected", "owner", &a).unwrap();
+    store
+        .begin_review_source_preparation(&a.root_operation_id, "owner")
+        .unwrap();
+    store
+        .retain_review_source_archive(&a.root_operation_id, "owner", &archive)
+        .unwrap();
+    assert_eq!(
+        store.review_source_archive(&a.review_id).unwrap(),
+        Some(archive)
+    );
+    let sql = rusqlite::Connection::open(dir.path().join("db")).unwrap();
+    sql.execute("UPDATE reviews SET record=json_set(record,'$.workspace_selection.original_root','/forged')",[]).unwrap();
+    sql.execute("UPDATE events SET payload=json_set(payload,'$.workspace_selection.original_root','/forged') WHERE kind='review_created'",[]).unwrap();
+    assert!(store.review_source_archive(&a.review_id).is_err());
 }

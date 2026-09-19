@@ -75,6 +75,7 @@ pub(super) fn bound(conn: &Connection, key: &str, r: &mut Reader) -> Result<Boun
         || a.root_operation_id != v.root_operation_id
         || a.input_path != v.input_path
         || a.canonical_path != v.canonical_path
+        || a.workspace_selection != v.workspace_selection
         || a.snapshot.digest != v.snapshot_sha256
         || a.profile_name != v.profile_name
         || hash(&a.profile)? != v.profile_sha256

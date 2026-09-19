@@ -37,6 +37,7 @@ pub mod verification;
 mod verification_binary;
 pub mod web;
 pub mod web_experiment;
+pub mod workspace;
 pub use execution::*;
 pub use session::*;
 
@@ -76,6 +77,8 @@ pub enum Command {
         input_path: String,
         profile: String,
         snapshot: Box<SnapshotPin>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        workspace_selection: Option<workspace::WorkspaceSelectionReceipt>,
     },
     ReviewStatus {
         review_id: String,

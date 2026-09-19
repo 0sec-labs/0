@@ -194,3 +194,73 @@ fn rendered_source_question_checks_utf8_bytes_including_compiler_prefix() {
     p.question.push('é');
     assert!(p.validate().is_err());
 }
+
+fn selection() -> (
+    SnapshotPin,
+    zero_protocol::workspace::WorkspaceSelectionReceipt,
+) {
+    use sha2::{Digest, Sha256};
+    use zero_protocol::workspace::*;
+    let mut pin = pin();
+    let encoded = serde_json::to_vec(&vec![
+        json!({"bytes":pin.files[0].bytes,"digest":pin.files[0].digest,"path":pin.files[0].path}),
+    ])
+    .unwrap();
+    pin.digest = format!("sha256:{:x}", Sha256::digest(encoded));
+    let policy = WorkspaceSelectionPolicy::ExcludeNativeState {
+        state_relative_path: ".0sec/native/state.db".into(),
+    };
+    let receipt = WorkspaceSelectionReceipt {
+        schema_version: 1,
+        original_root: "/original/workspace".into(),
+        exclusions: policy.exclusions().unwrap(),
+        policy,
+        snapshot_sha256: pin.digest.clone(),
+        file_count: 1,
+        bytes: 10,
+    };
+    (pin, receipt)
+}
+#[test]
+fn historical_profile_and_absent_receipt_preserve_compiler_bytes() {
+    let value = raw();
+    let p = profile(value.clone());
+    assert_eq!(serde_json::to_value(&p).unwrap(), value);
+    assert_eq!(
+        serde_json::to_value(p.request(pin(), "root").unwrap()).unwrap(),
+        serde_json::to_value(p.request_with_selection(pin(), "root", None).unwrap()).unwrap()
+    );
+}
+#[test]
+fn selected_scope_is_host_context_and_full_tree_choice_is_enforced() {
+    use zero_protocol::workspace::*;
+    let (pin, receipt) = selection();
+    let mut p = profile(raw());
+    let request = p
+        .request_with_selection(pin.clone(), "root", Some(&receipt))
+        .unwrap();
+    assert!(request.prompt.contains("/original/workspace"));
+    assert!(request.prompt.contains(".0sec/native/state.db"));
+    assert!(request.http_profile.is_none() && request.plugin_tools.is_empty());
+    p.workspace_selection = WorkspaceSelectionMode::FullTree;
+    assert!(
+        p.request_with_selection(pin.clone(), "root", Some(&receipt))
+            .is_err()
+    );
+    let mut full = receipt;
+    full.policy = WorkspaceSelectionPolicy::FullTree;
+    full.exclusions.clear();
+    p.request_with_selection(pin, "root", Some(&full)).unwrap();
+}
+#[test]
+fn selected_scope_cannot_overflow_host_prompt_bound() {
+    let (pin, receipt) = selection();
+    let mut p = profile(raw());
+    let prefix = p.request(pin.clone(), "root").unwrap().prompt.len() - p.question.len();
+    p.question = "q".repeat(zero_protocol::source::MAX_SOURCE_QUESTION_BYTES - prefix);
+    p.request(pin.clone(), "root").unwrap();
+    assert!(
+        p.request_with_selection(pin, "root", Some(&receipt))
+            .is_err()
+    );
+}

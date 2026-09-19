@@ -212,6 +212,7 @@ mod tests {
             profile_name: "local".into(),
             profile,
             snapshot,
+            workspace_selection: None,
             root_payload: json!({"kind":"offline_snapshot_agent","request":request,"endpoint":pins["p"]["endpoint"],"rates":pins["p"]["rates"],"review_template":template}),
             provider_context: serde_json::from_value(pins).unwrap(),
         }

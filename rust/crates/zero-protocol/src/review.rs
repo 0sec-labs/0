@@ -50,6 +50,11 @@ impl ReviewExecution {
 #[serde(deny_unknown_fields)]
 pub struct ReviewProfile {
     pub schema_version: u32,
+    #[serde(
+        default,
+        skip_serializing_if = "crate::workspace::WorkspaceSelectionMode::is_default"
+    )]
+    pub workspace_selection: crate::workspace::WorkspaceSelectionMode,
     pub provider: String,
     pub model: String,
     pub instructions: String,
@@ -196,6 +201,32 @@ impl ReviewProfile {
         request.validate_capabilities()?;
         Ok(request)
     }
+    /// New selected captures bind their host scope into the actor prompt.
+    /// Historical records without a receipt preserve the original compiler bytes.
+    pub fn request_with_selection(
+        &self,
+        snapshot: SnapshotPin,
+        execution_id: &str,
+        selection: Option<&crate::workspace::WorkspaceSelectionReceipt>,
+    ) -> Result<AgentRequest, ValidationError> {
+        if let Some(receipt) = selection {
+            receipt.validate_pin(&snapshot).map_err(|_| invalid())?;
+            if self.workspace_selection == crate::workspace::WorkspaceSelectionMode::FullTree
+                && receipt.policy != crate::workspace::WorkspaceSelectionPolicy::FullTree
+            {
+                return Err(invalid());
+            }
+        }
+        let mut request = self.request(snapshot, execution_id)?;
+        if let Some(receipt) = selection {
+            request.prompt.push_str(&receipt.prompt_scope());
+            if request.prompt.len() > crate::source::MAX_SOURCE_QUESTION_BYTES {
+                return Err(invalid());
+            }
+        }
+        request.validate_capabilities()?;
+        Ok(request)
+    }
 }
 
 /// Immutable identity of an admitted local source investigation.
@@ -203,6 +234,8 @@ impl ReviewProfile {
 #[serde(deny_unknown_fields)]
 pub struct ReviewRecord {
     pub schema_version: u32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workspace_selection: Option<crate::workspace::WorkspaceSelectionReceipt>,
     pub id: String,
     pub command_id: String,
     pub session_id: String,

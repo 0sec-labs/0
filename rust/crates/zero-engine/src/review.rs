@@ -103,6 +103,7 @@ impl Engine {
         input_path: String,
         name: String,
         snapshot: SnapshotPin,
+        workspace_selection: Option<zero_protocol::workspace::WorkspaceSelectionReceipt>,
         events: mpsc::Sender<ExecutionEvent>,
         progress: Option<mpsc::Sender<ExecutionEvent>>,
     ) -> Result<Reply, EngineError> {
@@ -134,7 +135,9 @@ impl Engine {
             let session = uuid::Uuid::new_v4().to_string();
             let controller = uuid::Uuid::new_v4().to_string();
             let root = uuid::Uuid::new_v4().to_string();
-            let request = profile.request(snapshot.clone(), &root).map_err(error)?;
+            let request = profile
+                .request_with_selection(snapshot.clone(), &root, workspace_selection.as_ref())
+                .map_err(error)?;
             let provider = lock(&self.shared.providers)?
                 .get(&profile.provider)
                 .cloned()
@@ -153,6 +156,7 @@ impl Engine {
             )?;
             payload["review_template"] = serde_json::to_value(&actor.template)?;
             let admission = zero_store::ReviewAdmission {
+                workspace_selection,
                 review_id: id,
                 session_id: session,
                 controller_operation_id: controller,

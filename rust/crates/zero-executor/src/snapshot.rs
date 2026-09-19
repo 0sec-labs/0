@@ -64,6 +64,36 @@ pub fn pin_snapshot_checked(
     }
 }
 
+/// Captures an explicitly selected workspace into a private, verified source
+/// tree. Exclusions are exact regular-file names, never directory prefixes.
+/// The returned pin describes every file in the private tree; ordinary snapshot
+/// verification remains full-tree. Call off async runtime threads.
+pub fn capture_workspace(
+    root: &Path,
+    policy: &zero_protocol::workspace::WorkspaceSelectionPolicy,
+    limits: SnapshotLimits,
+    check: &dyn Fn() -> Result<(), String>,
+) -> Result<
+    (
+        StagedSnapshot,
+        SnapshotPin,
+        zero_protocol::workspace::WorkspaceSelectionReceipt,
+    ),
+    String,
+> {
+    limits.validate()?;
+    check()?;
+    #[cfg(target_os = "linux")]
+    {
+        anchored::workspace(root, policy, limits, check)
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = (root, policy);
+        Err("workspace capture is currently supported only on Linux".into())
+    }
+}
+
 /// Pins source through nofollow directory handles. The caller chooses the
 /// authorized source root. Call off an async thread for large trees.
 pub fn pin_snapshot(root: &Path) -> Result<SnapshotPin, String> {
@@ -141,14 +171,14 @@ mod anchored {
     use nix::{
         dir::Dir,
         fcntl::{OFlag, open, openat},
-        sys::stat::Mode,
+        sys::stat::{Mode, mkdirat},
         unistd::dup,
     };
     use std::{
         collections::{BTreeMap, BTreeSet},
         ffi::OsStr,
         fs::{self, File},
-        io::Read,
+        io::{Read, Write},
         os::unix::{
             ffi::OsStrExt,
             fs::{MetadataExt, PermissionsExt},
@@ -186,6 +216,16 @@ mod anchored {
         dir: &File,
         prefix: &str,
         visitor: &mut Visitor<'_>,
+        check: &dyn Fn() -> Result<(), String>,
+    ) -> Result<(), String> {
+        walk_selected(dir, prefix, visitor, &BTreeSet::new(), check)
+    }
+
+    fn walk_selected(
+        dir: &File,
+        prefix: &str,
+        visitor: &mut Visitor<'_>,
+        exclusions: &BTreeSet<String>,
         check: &dyn Fn() -> Result<(), String>,
     ) -> Result<(), String> {
         check()?;
@@ -228,6 +268,12 @@ mod anchored {
             .map_err(|e| format!("cannot open snapshot entry without following links: {e}"))?;
             let file = File::from(fd);
             let metadata = file.metadata().map_err(|e| e.to_string())?;
+            if exclusions.contains(&relative) {
+                if !metadata.is_file() || metadata.nlink() != 1 {
+                    return Err("excluded native state must be a regular single-link file".into());
+                }
+                continue;
+            }
             if metadata.is_dir() {
                 stack.push(make_frame(file, relative)?);
             } else if metadata.is_file() && metadata.nlink() == 1 {
@@ -303,6 +349,14 @@ mod anchored {
             },
             check,
         )?;
+        finish_pin(root, files, check)
+    }
+
+    fn finish_pin(
+        root: &Path,
+        mut files: Vec<SnapshotFile>,
+        check: &dyn Fn() -> Result<(), String>,
+    ) -> Result<SnapshotPin, String> {
         check()?;
         files.sort_by(|a, b| a.path.cmp(&b.path));
         if files.is_empty() {
@@ -331,6 +385,129 @@ mod anchored {
             digest,
             files,
         })
+    }
+
+    pub(super) fn workspace(
+        root: &Path,
+        policy: &zero_protocol::workspace::WorkspaceSelectionPolicy,
+        limits: SnapshotLimits,
+        check: &dyn Fn() -> Result<(), String>,
+    ) -> Result<
+        (
+            StagedSnapshot,
+            SnapshotPin,
+            zero_protocol::workspace::WorkspaceSelectionReceipt,
+        ),
+        String,
+    > {
+        let exclusions = policy.exclusions()?;
+        let excluded: BTreeSet<_> = exclusions.iter().cloned().collect();
+        let original_root = root
+            .to_str()
+            .ok_or("workspace root must be UTF-8")?
+            .to_owned();
+        let dir = open_root(root, check)?;
+        let stage = tempfile::Builder::new()
+            .prefix("0sec-workspace-")
+            .tempdir()
+            .map_err(|e| e.to_string())?;
+        let source = stage.path().join("source");
+        fs::create_dir(&source).map_err(|e| e.to_string())?;
+        let destination = open_root(&source, check)?;
+        let mut files = Vec::new();
+        let mut total = 0;
+        walk_selected(
+            &dir,
+            "",
+            &mut |path, file| {
+                check()?;
+                if files.len() >= limits.max_files {
+                    return Err("snapshot file count limit exceeded".into());
+                }
+                let (bytes, executable) = read(file, None, limits.max_bytes - total, check)?;
+                total += bytes.len() as u64;
+                let mut output = create_selected_file(&destination, &path, check)?;
+                let mut digest = Sha256::new();
+                for chunk in bytes.chunks(65536) {
+                    check()?;
+                    output.write_all(chunk).map_err(|e| e.to_string())?;
+                    digest.update(chunk);
+                }
+                check()?;
+                output
+                    .set_permissions(fs::Permissions::from_mode(if executable {
+                        0o555
+                    } else {
+                        0o444
+                    }))
+                    .map_err(|e| e.to_string())?;
+                files.push(SnapshotFile {
+                    path,
+                    digest: format!("sha256:{:x}", digest.finalize()),
+                    bytes: bytes.len() as u64,
+                });
+                Ok(())
+            },
+            &excluded,
+            check,
+        )?;
+        let pin = finish_pin(&source, files, check)?;
+        let receipt = zero_protocol::workspace::WorkspaceSelectionReceipt {
+            schema_version: 1,
+            original_root,
+            policy: policy.clone(),
+            exclusions,
+            snapshot_sha256: pin.digest.clone(),
+            file_count: pin.files.len() as u32,
+            bytes: total,
+        };
+        check()?;
+        receipt.validate_pin(&pin)?;
+        check()?;
+        Ok((StagedSnapshot { root: stage.keep() }, pin, receipt))
+    }
+
+    fn create_selected_file(
+        destination: &File,
+        path: &str,
+        check: &dyn Fn() -> Result<(), String>,
+    ) -> Result<File, String> {
+        let mut dir = File::from(dup(destination).map_err(|e| e.to_string())?);
+        let mut parts = Path::new(path).components().peekable();
+        while let Some(part) = parts.next() {
+            check()?;
+            let Component::Normal(name) = part else {
+                return Err("workspace path contains non-normal components".into());
+            };
+            if parts.peek().is_none() {
+                return openat(
+                    &dir,
+                    name,
+                    OFlag::O_WRONLY
+                        | OFlag::O_CREAT
+                        | OFlag::O_EXCL
+                        | OFlag::O_NOFOLLOW
+                        | OFlag::O_CLOEXEC,
+                    Mode::from_bits_truncate(0o600),
+                )
+                .map(File::from)
+                .map_err(|e| e.to_string());
+            }
+            match mkdirat(&dir, name, Mode::from_bits_truncate(0o700)) {
+                Ok(()) | Err(nix::errno::Errno::EEXIST) => {}
+                Err(error) => return Err(error.to_string()),
+            }
+            dir = File::from(
+                openat(
+                    &dir,
+                    name,
+                    OFlag::O_RDONLY | OFlag::O_DIRECTORY | OFlag::O_NOFOLLOW | OFlag::O_CLOEXEC,
+                    Mode::empty(),
+                )
+                .map_err(|e| e.to_string())?,
+            );
+        }
+        Err("workspace path is empty".into())
     }
 
     pub(super) fn verify(

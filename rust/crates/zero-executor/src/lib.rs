@@ -7,8 +7,8 @@ mod process;
 mod snapshot;
 pub use process::EventSink;
 pub use snapshot::{
-    SnapshotLimits, StagedSnapshot, pin_snapshot, pin_snapshot_checked, snapshot_digest,
-    stage_snapshot, verify_snapshot,
+    SnapshotLimits, StagedSnapshot, capture_workspace, pin_snapshot, pin_snapshot_checked,
+    snapshot_digest, stage_snapshot, verify_snapshot,
 };
 
 use std::{

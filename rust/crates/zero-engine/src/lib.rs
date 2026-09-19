@@ -432,6 +432,7 @@ impl Engine {
                 input_path,
                 profile,
                 snapshot,
+                workspace_selection,
             } => {
                 return self
                     .run_review(
@@ -439,6 +440,7 @@ impl Engine {
                         input_path,
                         profile,
                         *snapshot,
+                        workspace_selection,
                         event_tx,
                         progress_tx,
                     )

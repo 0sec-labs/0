@@ -160,6 +160,29 @@ fn tool_output(request: &Value, id: &str) -> Value {
     serde_json::from_str(item["output"].as_str().unwrap()).unwrap()
 }
 
+async fn submit_cited(f: &Fixture, mut command: Command, digest: &str) -> Value {
+    let mut child = command.spawn().unwrap();
+    let (socket, _) = tokio::select! {
+        pair = f.next() => pair,
+        status = child.wait() => {
+            let out = finish(child).await;
+            panic!("review exited before submission: {status:?}; {} {}", String::from_utf8_lossy(&out.stdout), String::from_utf8_lossy(&out.stderr));
+        }
+    };
+    respond(socket, "submit", "submit_source_hypotheses", json!({"selected_files":["app.rs"],"hypotheses":[{
+        "title":"Captured source","claimed_severity":"low","explanation":"A retained source observation, not a security conclusion.",
+        "citations":[{"path":"app.rs","sha256":digest,"start_line":1,"end_line":3}]
+    }]})).await;
+    let out = finish(child).await;
+    assert!(
+        out.status.success(),
+        "{} {}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+    decoded(&out)
+}
+
 #[tokio::test]
 async fn cited_local_review_retains_report_and_retries_without_source_or_configuration() {
     use std::os::unix::fs::PermissionsExt;
@@ -662,8 +685,30 @@ async fn owner_loss_recovery_retains_unknown_and_never_replays_a_paid_inference(
 #[tokio::test]
 async fn review_current_directory_stages_before_creating_default_state_and_retries_in_place() {
     let f = Fixture::new().await;
+    std::fs::create_dir_all(f.source.join(".0sec/native")).unwrap();
+    std::fs::write(
+        f.source.join(".0sec/native/notes.rs"),
+        b"// adjacent source, never excluded\n",
+    )
+    .unwrap();
+    std::fs::write(
+        f.source.join(".0sec/native/state.db.backup"),
+        b"ordinary source despite similar name",
+    )
+    .unwrap();
+    std::fs::write(
+        f.source.join("untracked.rs"),
+        b"// current untracked source\n",
+    )
+    .unwrap();
     let original = zero_executor::pin_snapshot(&f.source).unwrap();
-    let digest = original.files[0].digest.clone();
+    let digest = original
+        .files
+        .iter()
+        .find(|file| file.path == "app.rs")
+        .unwrap()
+        .digest
+        .clone();
     let default_state = f.source.join(".0sec/native/state.db");
     assert!(!default_state.exists());
     let cli = || {
@@ -748,6 +793,98 @@ async fn review_current_directory_stages_before_creating_default_state_and_retri
         std::fs::read_to_string(f.source.join("app.rs")).unwrap(),
         SOURCE
     );
+    let scope = &run["review"]["review"]["workspace_selection"];
+    assert_eq!(scope["original_root"], f.source.to_str().unwrap());
+    assert_eq!(scope["policy"]["kind"], "exclude_native_state");
+    assert_eq!(
+        scope["policy"]["state_relative_path"],
+        ".0sec/native/state.db"
+    );
+    assert_eq!(scope["exclusions"].as_array().unwrap().len(), 5);
+    let second_args = [
+        "review",
+        ".",
+        "--profile",
+        "local",
+        "--command-id",
+        "default-state-review-2",
+        "--format",
+        "json",
+    ];
+    let second = submit_cited(
+        &f,
+        {
+            let mut c = cli();
+            c.args(second_args);
+            c
+        },
+        &digest,
+    )
+    .await;
+    assert_eq!(second["duplicate"], false);
+    assert_ne!(
+        second["review"]["review"]["id"],
+        run["review"]["review"]["id"]
+    );
+    assert_eq!(
+        second["review"]["review"]["snapshot_sha256"],
+        original.digest
+    );
+    assert_eq!(second["review"]["review"]["workspace_selection"], *scope);
+    {
+        let store = zero_store::Store::open_read_only(&default_state).unwrap();
+        let first_archive = store
+            .review_source_archive(run["review"]["review"]["id"].as_str().unwrap())
+            .unwrap()
+            .unwrap();
+        let second_archive = store
+            .review_source_archive(second["review"]["review"]["id"].as_str().unwrap())
+            .unwrap()
+            .unwrap();
+        assert_eq!(first_archive, second_archive);
+        let paths: Vec<_> = first_archive
+            .manifest
+            .files
+            .iter()
+            .map(|file| file.path.as_str())
+            .collect();
+        for path in [
+            "app.rs",
+            "untracked.rs",
+            ".0sec/native/notes.rs",
+            ".0sec/native/state.db.backup",
+        ] {
+            assert!(paths.contains(&path));
+        }
+        for rule in scope["exclusions"].as_array().unwrap() {
+            assert!(!paths.contains(&rule.as_str().unwrap()));
+        }
+    }
+    for format in ["terminal", "markdown", "html"] {
+        let out = finish(
+            cli()
+                .args([
+                    "review",
+                    "report",
+                    "--command-id",
+                    "default-state-review-2",
+                    "--format",
+                    format,
+                ])
+                .spawn()
+                .unwrap(),
+        )
+        .await;
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        let rendered = String::from_utf8(out.stdout).unwrap();
+        assert!(rendered.contains("Workspace root:"));
+        assert!(rendered.contains("Configured exclusion rules (including absent paths):"));
+        assert!(rendered.contains(".0sec/native/state.db"));
+    }
     std::fs::remove_file(f.source.join("app.rs")).unwrap();
     std::fs::remove_file(&f.providers).unwrap();
     std::fs::remove_file(&f.profiles).unwrap();
@@ -799,4 +936,83 @@ async fn review_current_directory_stages_before_creating_default_state_and_retri
     );
     assert_eq!(report["report"]["security_conclusion"], "not_established");
     f.no_request().await;
+}
+
+#[tokio::test]
+async fn workspace_selection_supports_custom_external_state_and_explicit_full_tree() {
+    for in_source in [false, true] {
+        let mut f = Fixture::new().await;
+        if in_source {
+            f.state = f.source.join("control/native.sqlite");
+        }
+        let original = zero_executor::pin_snapshot(&f.source).unwrap();
+        let digest = original
+            .files
+            .iter()
+            .find(|file| file.path == "app.rs")
+            .unwrap()
+            .digest
+            .clone();
+        let first = submit_cited(&f, f.run("selected-first"), &digest).await;
+        let second = submit_cited(&f, f.run("selected-second"), &digest).await;
+        assert_eq!(
+            first["review"]["review"]["snapshot_sha256"],
+            original.digest
+        );
+        assert_eq!(
+            second["review"]["review"]["snapshot_sha256"],
+            original.digest
+        );
+        let selection = &second["review"]["review"]["workspace_selection"];
+        assert_eq!(selection["original_root"], f.source.to_str().unwrap());
+        assert_eq!(
+            selection["policy"]["kind"],
+            if in_source {
+                "exclude_native_state"
+            } else {
+                "full_tree"
+            }
+        );
+        if in_source {
+            assert_eq!(
+                selection["policy"]["state_relative_path"],
+                "control/native.sqlite"
+            );
+            assert_eq!(selection["exclusions"].as_array().unwrap().len(), 5);
+            let mut profile: Value =
+                serde_json::from_slice(&std::fs::read(&f.profiles).unwrap()).unwrap();
+            profile["local"]["workspace_selection"] = json!("full_tree");
+            std::fs::write(&f.profiles, serde_json::to_vec(&profile).unwrap()).unwrap();
+            let full = submit_cited(&f, f.run("explicit-full-tree"), &digest).await;
+            assert_eq!(
+                full["review"]["review"]["workspace_selection"]["policy"]["kind"],
+                "full_tree"
+            );
+            assert!(
+                full["review"]["review"]["workspace_selection"]["exclusions"]
+                    .as_array()
+                    .unwrap()
+                    .is_empty()
+            );
+            let archive = zero_store::Store::open_read_only(&f.state)
+                .unwrap()
+                .review_source_archive(full["review"]["review"]["id"].as_str().unwrap())
+                .unwrap()
+                .unwrap();
+            assert!(
+                archive
+                    .manifest
+                    .files
+                    .iter()
+                    .any(|file| file.path == "control/native.sqlite")
+            );
+        } else {
+            assert!(selection["exclusions"].as_array().unwrap().is_empty());
+        }
+        assert_eq!(
+            std::fs::read_to_string(f.source.join("app.rs")).unwrap(),
+            SOURCE
+        );
+        f.no_request().await;
+    }
 }

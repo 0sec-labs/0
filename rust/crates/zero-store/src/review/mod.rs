@@ -35,6 +35,8 @@ pub struct ReviewAdmission {
     pub profile_name: String,
     pub profile: ReviewProfile,
     pub snapshot: SnapshotPin,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workspace_selection: Option<zero_protocol::workspace::WorkspaceSelectionReceipt>,
     pub root_payload: Value,
     pub provider_context: BTreeMap<String, CampaignProviderContext>,
 }
@@ -112,9 +114,16 @@ fn validate(a: &ReviewAdmission) -> Result<()> {
         return Err(bad("admission identity or intent bounds"));
     }
     integer(a.profile.budget_limit)?;
+    if let Some(selection) = &a.workspace_selection {
+        selection.validate_pin(&a.snapshot).map_err(bad)?;
+    }
     let expected = a
         .profile
-        .request(a.snapshot.clone(), &a.root_operation_id)
+        .request_with_selection(
+            a.snapshot.clone(),
+            &a.root_operation_id,
+            a.workspace_selection.as_ref(),
+        )
         .map_err(bad)?;
     let request = zero_protocol::agent::validate_actor_payload(&a.root_payload).map_err(bad)?;
     if serde_json::to_value(&expected)? != serde_json::to_value(&request)? {
@@ -347,6 +356,7 @@ impl Store {
             input_path: a.input_path.clone(),
             canonical_path: a.canonical_path.clone(),
             snapshot_sha256: a.snapshot.digest.clone(),
+            workspace_selection: a.workspace_selection.clone(),
             profile_name: a.profile_name.clone(),
             intent_sha256: digest.clone(),
             profile_sha256: hash(&a.profile)?,

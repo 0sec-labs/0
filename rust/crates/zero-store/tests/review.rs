@@ -36,6 +36,7 @@ fn prepared() -> ReviewAdmission {
         profile_name: "local".into(),
         profile,
         snapshot,
+        workspace_selection: None,
         root_payload: json!({"kind":"offline_snapshot_agent","request":request,"endpoint":pins["p"]["endpoint"],"rates":pins["p"]["rates"],"review_template":template}),
         provider_context: serde_json::from_value(pins).unwrap(),
     }
@@ -356,4 +357,186 @@ fn unknown_recovery_preserves_absence_and_independent_completed_actor() {
     );
     assert_eq!(recovered.controller_status, OperationStatus::Unknown);
     assert_eq!(recovered.root_status, OperationStatus::Succeeded);
+}
+
+#[test]
+fn historical_admission_without_selection_preserves_its_serialized_identity() {
+    let (dir, mut store, a) = setup();
+    let legacy = serde_json::to_value(&a).unwrap();
+    assert!(legacy.get("workspace_selection").is_none());
+    assert!(legacy["profile"].get("workspace_selection").is_none());
+    let decoded: ReviewAdmission = serde_json::from_value(legacy.clone()).unwrap();
+    assert!(decoded.workspace_selection.is_none());
+    assert_eq!(serde_json::to_value(decoded).unwrap(), legacy);
+    let admitted = store.admit_review("legacy", "owner", &a).unwrap();
+    let record = serde_json::to_value(&admitted.review).unwrap();
+    assert!(record.get("workspace_selection").is_none());
+    let expected = json!({
+        "schema_version":1,"kind":"native_review_intent","command_id":"legacy",
+        "created_at_ms":admitted.review.created_at_ms,
+        "deadline_at_ms":admitted.review.deadline_at_ms,"admission":legacy
+    });
+    assert_eq!(hash(&expected), admitted.review.intent_sha256);
+    assert_eq!(
+        store.artifact(&admitted.review.intent_sha256).unwrap(),
+        serde_json::to_vec(&expected).unwrap()
+    );
+    drop(store);
+    let retained = Store::open_read_only(dir.path().join("db"))
+        .unwrap()
+        .review_by_command("legacy")
+        .unwrap()
+        .unwrap();
+    assert_eq!(serde_json::to_value(retained).unwrap(), record);
+}
+
+fn selected(a: &mut ReviewAdmission, original_root: &str) {
+    use zero_protocol::workspace::{WorkspaceSelectionPolicy, WorkspaceSelectionReceipt};
+    let policy = WorkspaceSelectionPolicy::ExcludeNativeState {
+        state_relative_path: ".0sec/native/state.db".into(),
+    };
+    a.workspace_selection = Some(WorkspaceSelectionReceipt {
+        schema_version: 1,
+        original_root: original_root.into(),
+        exclusions: policy.exclusions().unwrap(),
+        policy,
+        snapshot_sha256: a.snapshot.digest.clone(),
+        file_count: a.snapshot.files.len() as u32,
+        bytes: a.snapshot.files.iter().map(|f| f.bytes).sum(),
+    });
+    a.root_payload["request"] = serde_json::to_value(
+        a.profile
+            .request_with_selection(
+                a.snapshot.clone(),
+                &a.root_operation_id,
+                a.workspace_selection.as_ref(),
+            )
+            .unwrap(),
+    )
+    .unwrap();
+}
+
+#[test]
+fn fresh_workspace_scope_requires_exact_snapshot_and_derived_control_exclusions() {
+    for mutation in 0..8 {
+        let (dir, mut store, mut a) = setup();
+        selected(&mut a, "/original/workspace");
+        let receipt = a.workspace_selection.as_mut().unwrap();
+        match mutation {
+            0 => receipt.snapshot_sha256 = format!("sha256:{}", "0".repeat(64)),
+            1 => receipt.file_count += 1,
+            2 => receipt.bytes += 1,
+            3 => receipt.exclusions.push("src/security.rs".into()),
+            4 => receipt.original_root = "relative/workspace".into(),
+            5 => receipt.exclusions.clear(),
+            6 => {
+                receipt.policy =
+                    zero_protocol::workspace::WorkspaceSelectionPolicy::ExcludeNativeState {
+                        state_relative_path: "app.rs".into(),
+                    };
+                receipt.exclusions = receipt.policy.exclusions().unwrap();
+            }
+            _ => {
+                a.profile.workspace_selection =
+                    zero_protocol::workspace::WorkspaceSelectionMode::FullTree
+            }
+        }
+        assert!(
+            store.admit_review("run", "owner", &a).is_err(),
+            "mutation{mutation}"
+        );
+        let conn = rusqlite::Connection::open(dir.path().join("db")).unwrap();
+        assert_eq!(
+            conn.query_row("SELECT count(*) FROM sessions", [], |r| r.get::<_, u64>(0))
+                .unwrap(),
+            0
+        );
+        assert!(store.review_by_command("run").unwrap().is_none());
+    }
+}
+
+#[test]
+fn selected_scope_and_cached_retry_remain_original_after_source_deletion() {
+    let (dir, mut store, mut a) = setup();
+    let original = tempfile::tempdir().unwrap();
+    let root = original
+        .path()
+        .canonicalize()
+        .unwrap()
+        .to_string_lossy()
+        .into_owned();
+    selected(&mut a, &root);
+    let admitted = store.admit_review("selected", "owner", &a).unwrap();
+    let receipt = a.workspace_selection.clone().unwrap();
+    assert_eq!(admitted.review.workspace_selection.as_ref(), Some(&receipt));
+    assert!(
+        admitted.root.payload["request"]["prompt"]
+            .as_str()
+            .unwrap()
+            .contains(&root)
+    );
+    assert_ne!(receipt.original_root, admitted.review.canonical_path);
+    drop(original);
+    store.claim_engine_epoch("next-owner").unwrap();
+    let mut retry = prepared();
+    retry.profile.provider = "missing-config".into();
+    retry.snapshot.files.clear();
+    retry.snapshot.root = "/deleted/current-capture".into();
+    retry.workspace_selection = Some(receipt.clone());
+    retry.workspace_selection.as_mut().unwrap().original_root =
+        "invalid newly supplied scope".into();
+    let cached = store
+        .admit_review("selected", "unconfigured-owner", &retry)
+        .unwrap();
+    assert!(cached.duplicate);
+    assert_eq!(cached.review, admitted.review);
+    retry.workspace_selection = None;
+    assert_eq!(
+        store
+            .admit_review("selected", "other", &retry)
+            .unwrap()
+            .review,
+        admitted.review
+    );
+    drop(store);
+    let read = Store::open_read_only(dir.path().join("db")).unwrap();
+    assert_eq!(
+        read.review_snapshot(&admitted.review.id)
+            .unwrap()
+            .review
+            .workspace_selection,
+        Some(receipt.clone())
+    );
+    assert_eq!(
+        read.review_read_snapshot(&admitted.review.id)
+            .unwrap()
+            .review_record(&admitted.review.id)
+            .unwrap()
+            .workspace_selection,
+        Some(receipt)
+    );
+}
+
+#[test]
+fn scope_projection_and_creation_witness_cannot_override_the_immutable_intent() {
+    for remove in [false, true] {
+        let (dir, mut store, mut a) = setup();
+        selected(&mut a, "/original/workspace");
+        store.admit_review("selected", "owner", &a).unwrap();
+        let sql = rusqlite::Connection::open(dir.path().join("db")).unwrap();
+        if remove {
+            sql.execute(
+                "UPDATE reviews SET record=json_remove(record,'$.workspace_selection')",
+                [],
+            )
+            .unwrap();
+            sql.execute("UPDATE events SET payload=json_remove(payload,'$.workspace_selection') WHERE kind='review_created'",[]).unwrap();
+        } else {
+            sql.execute("UPDATE reviews SET record=json_set(record,'$.workspace_selection.original_root','/different')",[]).unwrap();
+            sql.execute("UPDATE events SET payload=json_set(payload,'$.workspace_selection.original_root','/different') WHERE kind='review_created'",[]).unwrap();
+        }
+        assert!(store.review_record(&a.review_id).is_err());
+        assert!(store.review_by_command("selected").is_err());
+        assert!(store.admit_review("selected", "owner", &a).is_err());
+    }
 }

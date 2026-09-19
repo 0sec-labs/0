@@ -65,7 +65,25 @@ mod tests {
             serde_json::to_vec(&serde_json::json!({"local":value})).unwrap(),
         )
         .unwrap();
-        assert_eq!(load(&path).await.unwrap().len(), 1);
+        let profiles = load(&path).await.unwrap();
+        assert_eq!(profiles.len(), 1);
+        assert!(
+            serde_json::to_value(&profiles[0].1)
+                .unwrap()
+                .get("workspace_selection")
+                .is_none()
+        );
+        let mut full = value.clone();
+        full["workspace_selection"] = serde_json::json!("full_tree");
+        std::fs::write(
+            &path,
+            serde_json::to_vec(&serde_json::json!({"local":full})).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            serde_json::to_value(&load(&path).await.unwrap()[0].1).unwrap()["workspace_selection"],
+            "full_tree"
+        );
         let text = serde_json::to_string(&value).unwrap();
         std::fs::write(&path, format!("{{\"local\":{text},\"local\":{text}}}")).unwrap();
         assert!(load(&path).await.is_err());
@@ -73,6 +91,10 @@ mod tests {
             ("http_profile", serde_json::json!("unauthorized")),
             ("max_turns", serde_json::json!(33)),
             ("deadline_ms", serde_json::json!(0)),
+            (
+                "workspace_selection",
+                serde_json::json!("ignore_everything"),
+            ),
         ] {
             let mut invalid = value.clone();
             invalid[key] = bad;

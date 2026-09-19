@@ -135,11 +135,12 @@ Existing portable campaign/scan evidence cannot silently omit review membership.
 The CLI resolves exact retained retries before reading current configuration or
 the source path. A fresh command performs bounded cancellable local capture
 before opening the engine, with a preparation deadline of the smaller of the
-profile deadline and 60 seconds. It verifies and copies the captured tree into a private preflight directory,
-then reanchors the same manifest to that copy. This prevents a state database
+profile deadline and 60 seconds. It selects and copies the source into a private
+preflight directory, then pins the complete private tree. This prevents a state database
 inside the requested directory from invalidating the investigation when the
 engine opens. The original caller path remains the retry identity; the captured
-canonical root identifies the private copy. No files are silently excluded.
+canonical root identifies the private copy. A retained workspace selection receipt
+records the original canonical directory and the exact exclusion rules.
 It drains the blocking capture worker on a signal or timeout. Admission then starts the separate durable investigation
 deadline and freezes intent, manifest, provider identity and rates. Source capture
 is preflight, not an admitted model operation. The actor independently verifies
@@ -228,10 +229,31 @@ attack/control expectations, execution limits, cancellation and lineage to the
 original review. They must bind source identity independently of a temporary
 execution path and must not reopen the completed review's authority.
 
-Workspace selection remains unfinished. Capture currently includes every file in
-the requested directory, including an existing native state database if it is
-inside that directory. New commands can therefore capture prior archives and
-reach the source-size limit. Keep `--state` outside the selected source tree for
-repeated fresh reviews until an explicit, retained exclusion policy is wired.
-Exact retries do not capture source again. The default-state fixture proves the
-first run and its retained retry, not repeated fresh whole-workspace captures.
+### Explicit workspace selection
+
+Fresh CLI reviews default to the profile mode `"workspace_selection":
+"exclude_native_state"`. If the configured state file is inside the source tree,
+capture excludes only that exact regular file and its `-wal`, `-shm`, `-journal`
+and `.engine-lock` siblings. The receipt records all five rules even when the
+files do not exist. Directories, symlinks, multiply linked files and special files
+at excluded paths are rejected. No `.0sec` subtree is excluded: adjacent notes,
+backups, dirty and untracked source, and Git metadata remain in scope and count
+against the source limits. In-source state aliases and parent traversal are
+rejected instead of guessing which file to omit.
+
+External state uses full-tree selection. A profile can explicitly request
+`"workspace_selection": "full_tree"`; this includes in-source state and prior
+archives, which can reach the source-size limit. The default mode is omitted
+from profile serialization so historical profile identities stay unchanged.
+
+The receipt binds the original canonical root, policy, exact rules, selected
+snapshot digest, file count and byte count to admission and retained status.
+The host prompt and CLI status/report display this scope. Full-tree snapshot
+verification and archive reconstruction remain exact; they have no exclusion
+exceptions. Two fresh reviews with default in-source state therefore capture the
+same source identity when only the native state files change.
+
+Exact retries return the original receipt without recapturing source or reading
+current profiles. Historical admissions without a receipt remain readable and
+retain their original serialization; their original workspace scope is reported
+as unrecorded, rather than inferred from a private snapshot path.
