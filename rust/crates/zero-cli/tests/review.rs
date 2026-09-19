@@ -13,6 +13,8 @@ use tokio::{
 };
 #[path = "support/review_repair.rs"]
 mod review_repair;
+#[path = "support/review_repair_docker.rs"]
+mod review_repair_docker;
 #[path = "support/review_reproduce.rs"]
 mod review_reproduce;
 

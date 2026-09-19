@@ -401,3 +401,29 @@ process backend, source/config/backend deletion, offline retry/report/export,
 patch application to a fixture, corruption rejection, cancellation and setup
 failure cleanup. They do not establish real Docker isolation or production
 backend qualification.
+
+### Real Docker archive/repair qualification
+
+The opt-in `review_repair_docker` CLI test passed on 2026-09-19 using the
+preinstalled immutable image
+`sha256:0461844e338a379bd3379976a753e5467dce5361a471fbecff593fa477e3d7f6`
+with Python, on the local Linux Docker host. It performs four baseline and eight
+repair executions of a harmless marker program. The candidate changes one
+expected marker and preserves a separate control output. This tests workflow
+mechanics, not vulnerability detection or general repair quality.
+
+```sh
+cargo +1.85 test --manifest-path rust/Cargo.toml --locked -p zero-cli \
+  --test review actual_docker_native_review_archive_reproduction_repair_and_export \
+  -- --ignored --nocapture
+```
+
+The reviewed source and provider configuration are deleted before reproduction.
+The retained archive supplies baseline, candidate and independently reconstructed
+candidate roots. The fixture verifies the exact outputs, two distinct fresh repair
+roots, unchanged original checkout, confirmed staging/container cleanup, offline
+retry/report and exported patch application. A transparent wrapper records Docker
+arguments before executing the real Docker binary; no container image is pulled.
+The test also checks the explicit shell entrypoint for this image. Other images,
+platforms, smolvm native archive repair and production rollout remain separate
+qualification gates.
