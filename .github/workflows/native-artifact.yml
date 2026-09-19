@@ -1,0 +1,132 @@
+name: Experimental native artifact
+
+# Deliberately manual-only. This creates a short-lived Actions artifact, not a
+# release, signed distribution, production installation or deployment.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: experimental-native-artifact-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  package:
+    name: Experimental ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Qualify this Linux host only; no cross-compilation/platform claim.
+          - os: ubuntu-24.04
+            target: x86_64-unknown-linux-gnu
+    env:
+      SOURCE_COMMIT: ${{ github.sha }}
+      NATIVE_TARGET: ${{ matrix.target }}
+      CARGO_TERM_COLOR: always
+      RUST_BACKTRACE: '1'
+      PYTHONDONTWRITEBYTECODE: '1'
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Check out the exact dispatch commit
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Check source identity and Linux build prerequisites
+        run: |
+          test "$(git rev-parse HEAD)" = "$SOURCE_COMMIT"
+          test "$(uname -s)" = Linux
+          command -v python3
+          command -v cc
+
+      - name: Install the packaging toolchain and check its host
+        run: |
+          rustup toolchain install 1.85 --profile minimal --no-self-update
+          actual_host="$(rustc +1.85 -vV | sed -n 's/^host: //p')"
+          test "$actual_host" = "$NATIVE_TARGET"
+
+      - name: Run native distribution boundary tests
+        run: python3 -m unittest discover -s scripts/tests -p 'test_*native*.py' -v
+
+      - name: Build and independently verify the experimental archive
+        id: package
+        run: |
+          artifact_dir="$(mktemp -d "$RUNNER_TEMP/experimental-native.XXXXXX")"
+          archive_name="0sec-native-${SOURCE_COMMIT}-${NATIVE_TARGET}.tar.gz"
+          python3 scripts/package-native.py \
+            --ref "$SOURCE_COMMIT" \
+            --profile release \
+            --output "$artifact_dir/$archive_name" > "$artifact_dir/packaging.json"
+          archive_sha="$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["sha256"])' "$artifact_dir/packaging.json")"
+          python3 scripts/verify-native-package.py "$artifact_dir/$archive_name" \
+            --expected-sha256 "$archive_sha" \
+            --expected-source-commit "$SOURCE_COMMIT" > "$artifact_dir/verification.json"
+          printf '%s  %s\n' "$archive_sha" "$archive_name" > "$artifact_dir/SHA256SUMS"
+          printf 'directory=%s\narchive=%s\n' "$artifact_dir" "$archive_name" >> "$GITHUB_OUTPUT"
+
+      - name: Record the workflow context without claiming signed provenance
+        env:
+          ARTIFACT_DIRECTORY: ${{ steps.package.outputs.directory }}
+          WORKFLOW_REF: ${{ github.workflow_ref }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          directory = Path(os.environ["ARTIFACT_DIRECTORY"])
+          verified = json.loads((directory / "verification.json").read_text())
+          record = {
+              "schema_version": 1,
+              "channel": "experimental",
+              "source_commit": os.environ["SOURCE_COMMIT"],
+              "target": os.environ["NATIVE_TARGET"],
+              "profile": "release",
+              "archive_sha256": verified["archive_sha256"],
+              "manifest_sha256": verified["manifest_sha256"],
+              "binary_sha256": verified["binary_sha256"],
+              "workflow_ref": os.environ["WORKFLOW_REF"],
+              "workflow_run_url": (
+                  os.environ["GITHUB_SERVER_URL"] + "/" + os.environ["GITHUB_REPOSITORY"]
+                  + "/actions/runs/" + os.environ["GITHUB_RUN_ID"]
+              ),
+              "run_attempt": os.environ["GITHUB_RUN_ATTEMPT"],
+              "runner_os": os.environ["RUNNER_OS"],
+              "runner_arch": os.environ["RUNNER_ARCH"],
+              "runner_image": os.environ.get("ImageOS"),
+              "runner_image_version": os.environ.get("ImageVersion"),
+              "qualification": [
+                  "Python native distribution boundary tests",
+                  "host --version",
+                  "host --help",
+                  "bounded archive verification with expected digest and source commit",
+              ],
+              "signed": False,
+              "hermetic": False,
+              "production_promoted": False,
+          }
+          (directory / "ci-provenance.json").write_text(json.dumps(record, indent=2, sort_keys=True) + "\n")
+          PY
+
+      - name: Upload only the verified experimental artifact and records
+        uses: actions/upload-artifact@v4
+        with:
+          name: experimental-0sec-native-${{ matrix.target }}-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ steps.package.outputs.directory }}/${{ steps.package.outputs.archive }}
+            ${{ steps.package.outputs.directory }}/SHA256SUMS
+            ${{ steps.package.outputs.directory }}/packaging.json
+            ${{ steps.package.outputs.directory }}/verification.json
+            ${{ steps.package.outputs.directory }}/ci-provenance.json
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 0
