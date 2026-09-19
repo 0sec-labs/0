@@ -39,15 +39,27 @@ fn read_request(stream: &mut TcpStream) -> Value {
         }
     }
 }
-fn exercise(wire: &str, overflow: bool) {
+#[derive(Clone, Copy, PartialEq)]
+enum Accounting {
+    Missing,
+    Overflow,
+    OverBudget,
+}
+fn exercise(wire: &str, accounting: Accounting) {
+    let over_budget = accounting == Accounting::OverBudget;
     let dir = TempDir::new().unwrap();
+    let docker = dir.path().join("docker");
+    std::fs::write(&docker, "#!/usr/bin/env python3\nfrom pathlib import Path\nPath(__file__ + '.called').touch()\nraise SystemExit(77)\n").unwrap();
+    use std::os::unix::fs::PermissionsExt;
+    std::fs::set_permissions(&docker, std::fs::Permissions::from_mode(0o700)).unwrap();
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     listener.set_nonblocking(true).unwrap();
     let url = format!("http://{}/fixture", listener.local_addr().unwrap());
     let body = match wire {
         "responses" => {
             let mut event = json!({"type":"response.completed","response":{"id":"r1","status":"completed","output":[{"type":"function_call","call_id":"call1","name":"execute_snapshot","arguments":"{\"argv\":[\"true\"]}"}]}});
-            if overflow { event["response"]["usage"] = json!({"input_tokens":u64::MAX,"output_tokens":1}); }
+            if accounting == Accounting::Overflow { event["response"]["usage"] = json!({"input_tokens":u64::MAX,"output_tokens":1}); }
+            if over_budget { event["response"]["usage"] = json!({"input_tokens":200,"output_tokens":1}); }
             format!("data: {event}\n\n")
         }
         "chat_completions" => format!("data: {}\n\ndata: [DONE]\n\n", json!({"id":"c1","choices":[{"index":0,"delta":{"role":"assistant","tool_calls":[{"index":0,"id":"call1","type":"function","function":{"name":"execute_snapshot","arguments":"{\"argv\":[\"true\"]}"}}]},"finish_reason":"tool_calls"}]})),
@@ -98,6 +110,8 @@ fn exercise(wire: &str, overflow: bool) {
     for duplicate in [false, true] {
         let mut command = cli(&dir);
         command
+            .arg("--docker-bin")
+            .arg(&docker)
             .arg("--providers")
             .arg(&config)
             .arg("agent")
@@ -119,8 +133,13 @@ fn exercise(wire: &str, overflow: bool) {
         );
         let reply: Value = serde_json::from_slice(&output.stdout).unwrap();
         assert_eq!(reply["duplicate"], duplicate);
-        assert_eq!(reply["operation"]["status"], "unknown");
-        assert_eq!(reply["result"]["status"], "unknown");
+        let expected = if over_budget { "failed" } else { "unknown" };
+        assert_eq!(reply["operation"]["status"], expected, "{reply}");
+        assert_eq!(reply["result"]["status"], expected);
+        assert!(
+            !dir.path().join("docker.called").exists(),
+            "over-budget/uncertain response launched a tool"
+        );
         assert_eq!(reply["result"]["turns"], 1);
         assert_eq!(reply["result"]["tool_calls"], 0);
         let store = zero_store::Store::open_read_only(dir.path().join("state.db")).unwrap();
@@ -129,12 +148,19 @@ fn exercise(wire: &str, overflow: bool) {
             .get_operation_by_command(session, &format!("{parent}:model:0"))
             .unwrap();
         let outcome = child.outcome.unwrap();
-        assert_eq!(outcome["status"], "incomplete");
-        assert_eq!(outcome["content"], json!([]));
-        assert_eq!(
-            outcome["error"],
-            "provider completion lacks final representable accounting; reservation retained"
-        );
+        if over_budget {
+            assert_eq!(child.status, zero_protocol::OperationStatus::Succeeded);
+            assert_eq!(outcome["status"], "completed");
+            assert_eq!(outcome["content"].as_array().unwrap().len(), 1);
+            assert!(outcome["error"].is_null());
+        } else {
+            assert_eq!(outcome["status"], "incomplete");
+            assert_eq!(outcome["content"], json!([]));
+            assert_eq!(
+                outcome["error"],
+                "provider completion lacks final representable accounting; reservation retained"
+            );
+        }
 
         assert!(
             store
@@ -158,22 +184,33 @@ fn exercise(wire: &str, overflow: bool) {
         .output()
         .unwrap();
     let budget: Value = serde_json::from_slice(&budget.stdout).unwrap();
-    assert_eq!(budget["budget"]["reserved"], 10);
-    assert_eq!(budget["budget"]["charged"], 0);
+    assert_eq!(
+        budget["budget"]["reserved"],
+        if over_budget { 0 } else { 10 }
+    );
+    assert_eq!(
+        budget["budget"]["charged"],
+        if over_budget { 201 } else { 0 }
+    );
 }
 #[test]
 fn responses_missing_usage_blocks_tool_admission_and_retry() {
-    exercise("responses", false);
+    exercise("responses", Accounting::Missing);
 }
 #[test]
 fn chat_missing_usage_blocks_tool_admission_and_retry() {
-    exercise("chat_completions", false);
+    exercise("chat_completions", Accounting::Missing);
 }
 #[test]
 fn anthropic_provisional_usage_blocks_tool_admission_and_retry() {
-    exercise("anthropic_messages", false);
+    exercise("anthropic_messages", Accounting::Missing);
 }
 #[test]
 fn unrepresentable_charge_blocks_tool_admission_and_retry() {
-    exercise("responses", true);
+    exercise("responses", Accounting::Overflow);
+}
+
+#[test]
+fn known_provider_overage_records_charge_without_authorizing_tools_or_retry() {
+    exercise("responses", Accounting::OverBudget);
 }

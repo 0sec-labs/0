@@ -6,6 +6,7 @@ mod agent_context;
 mod agent_context_history;
 mod agent_delegation;
 mod agent_http;
+mod agent_interactive;
 mod agent_plugins;
 mod agent_questions;
 mod agent_source;

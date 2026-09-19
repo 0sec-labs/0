@@ -238,6 +238,14 @@ pub(super) async fn run_agent_shared(
                     payload["wire_api"] = serde_json::to_value(profile.client.wire_api())?;
                 }
                 profile.stamp(&mut payload)?;
+                if let Some(policy) = &request.interactive_policy {
+                    let capture: zero_protocol::interactive::InteractiveCapture =
+                        serde_json::from_value(prior.payload["interactive_capture"].clone())?;
+                    capture
+                        .validate(policy)
+                        .map_err(|e| EngineError::State(e.to_string()))?;
+                    payload["interactive_capture"] = serde_json::to_value(capture)?;
+                }
                 if let Some(version) = prior.payload.get("http_output_version") {
                     payload["http_output_version"] = version.clone();
                 }
@@ -373,6 +381,14 @@ pub(super) fn prepare_actor(
     plugins: Option<agent_plugins::Context>,
     checkpoint: bool,
 ) -> Result<(serde_json::Value, PreparedActor), EngineError> {
+    if request.interactive_policy.is_some()
+        && (store.scan_by_session(session_id)?.is_some()
+            || store.review_by_session(session_id)?.is_some())
+    {
+        return Err(EngineError::State(
+            "interactive sessions cannot join scan or review controllers".into(),
+        ));
+    }
     let source = agent_source::capture(store, session_id, &request)?;
     let http = agent_http::capture(shared, store, session_id, command_id, &request)?;
     // A context lineage keeps its original offered schemas across upgrades.
@@ -410,6 +426,16 @@ pub(super) fn prepare_actor(
         payload["wire_api"] = serde_json::to_value(profile.client.wire_api())?;
     }
     profile.stamp(&mut payload)?;
+    if let Some(policy) = &request.interactive_policy {
+        let created_at_ms = agent_interactive::now()?;
+        payload["interactive_capture"] =
+            serde_json::to_value(zero_protocol::interactive::InteractiveCapture {
+                created_at_ms,
+                deadline_at_ms: created_at_ms
+                    .checked_add(policy.deadline_ms)
+                    .ok_or_else(|| EngineError::State("interactive deadline overflow".into()))?,
+            })?;
+    }
     if let Some(context) = &delegation {
         payload["delegation_context"] = context.identity.clone();
     }
@@ -498,6 +524,7 @@ fn continuation_input(
             || prior.web_experiment_policy != request.web_experiment_policy
             || prior.source_snapshot_tools != request.source_snapshot_tools
             || prior.source_review_operation_id != request.source_review_operation_id
+            || prior.interactive_policy.is_some()
             || prior.plugin_tools != request.plugin_tools
             || parent.payload.get("plugin_context") != plugins.map(|p| &p.identity)
             || prior.provider != request.provider
@@ -645,6 +672,11 @@ fn model_request(
             model.tools.push(tool);
         }
     }
+    if let Some(policy) = &request.interactive_policy {
+        model
+            .tools
+            .extend(zero_protocol::interactive::definitions(policy));
+    }
     if let Some(plugins) = plugins {
         model.tools.extend(plugins.tools.clone());
     }
@@ -687,6 +719,7 @@ async fn run_rounds(
     delegation: Option<agent_delegation::Context>,
     joined: &mut agent_delegation::JoinedTasks,
     workers: &mut plugin_workers::WorkerPool,
+    interactive: &mut agent_interactive::Sessions,
 ) -> Result<(AgentResult, Vec<serde_json::Value>), EngineError> {
     let review_owned = lock(&shared.store)?.review_by_session(session)?.is_some();
     let mut input = history.input;
@@ -866,6 +899,20 @@ async fn run_rounds(
                 _ => None,
             })
             .collect();
+        // Final provider usage can exceed its estimate. Keep that known charge,
+        // but it cannot authorize a subsequent effect beyond the original account.
+        if !calls.is_empty() {
+            let budget = lock(&shared.store)?.budget(session)?;
+            if budget
+                .charged
+                .checked_add(budget.reserved)
+                .is_none_or(|used| used > budget.limit)
+            {
+                output.status = AgentStatus::Failed;
+                output.error=Some("original session budget exceeded after final provider usage; tool dispatch stopped".into());
+                break;
+            }
+        }
         let mut web_submission_rejection = None;
         if let Some(max) = request.web_submission_max_hypotheses {
             if calls
@@ -1021,6 +1068,26 @@ async fn run_rounds(
         input.extend(completion.replay.clone());
         let outputs_start = input.len();
         for (index, (id, name, arguments)) in calls.into_iter().enumerate() {
+            if name.starts_with("interactive_") && request.interactive_policy.is_some() {
+                match interactive
+                    .call(
+                        shared, parent, &request, turn, index, &id, &name, &arguments, &cancel,
+                    )
+                    .await
+                {
+                    Ok(value) => {
+                        output.tool_calls += 1;
+                        input.push(serde_json::json!({"type":"function_call_output","call_id":id,"output":serde_json::to_string(&value)?}));
+                    }
+                    Err(error) => {
+                        output.status = AgentStatus::Unknown;
+                        output.error = Some(error.to_string());
+                        break 'turns;
+                    }
+                }
+                continue;
+            }
+
             if cancel.is_cancelled() {
                 output.status = AgentStatus::Cancelled;
                 break 'turns;
@@ -1763,6 +1830,23 @@ pub(super) fn run_actor<'a>(
         });
         let mut joined = agent_delegation::JoinedTasks::new();
         let mut workers = plugin_workers::WorkerPool::new();
+        let mut interactive = agent_interactive::Sessions::default();
+        let checkpoint = checkpoint && request.interactive_policy.is_none();
+        let interactive_deadline = if request.interactive_policy.is_some() {
+            let captured: zero_protocol::interactive::InteractiveCapture = serde_json::from_value(
+                lock(&shared.store)?.get_operation(parent)?.payload["interactive_capture"].clone(),
+            )?;
+            let token = cancel.clone();
+            Some(tokio::spawn(async move {
+                let remaining = captured
+                    .deadline_at_ms
+                    .saturating_sub(agent_interactive::now().unwrap_or(u64::MAX));
+                tokio::time::sleep(std::time::Duration::from_millis(remaining)).await;
+                token.cancel();
+            }))
+        } else {
+            None
+        };
         let work = if let Some(error) = preparation_error {
             Ok((
                 empty(
@@ -1793,6 +1877,7 @@ pub(super) fn run_actor<'a>(
                 delegation,
                 &mut joined,
                 &mut workers,
+                &mut interactive,
             ))
             .catch_unwind()
             .await
@@ -1813,6 +1898,11 @@ pub(super) fn run_actor<'a>(
         }
         let drained = joined.drain(shared, &cancel).await;
         let worker_drain = workers.drain(&cancel).await;
+        let interactive_drain = interactive.drain(shared, parent).await;
+        if let Some(timer) = interactive_deadline {
+            timer.abort();
+            let _ = timer.await;
+        }
         let cleanup = match source {
             Some(context) => {
                 tokio::task::spawn_blocking(move || match Arc::try_unwrap(context) {
@@ -1841,6 +1931,7 @@ pub(super) fn run_actor<'a>(
         let (mut output, input) = match work.and_then(|value| {
             sealed
                 .and(drained)
+                .and(interactive_drain)
                 .and(worker_drain.map(|_| ()))
                 .map(|_| value)
         }) {

@@ -209,6 +209,7 @@ fn agent(dir: &std::path::Path) -> zero_protocol::agent::AgentRequest {
         max_output_bytes: 2048,
     };
     zero_protocol::agent::AgentRequest {
+        interactive_policy: None,
         provider: "hosted".into(),
         context_policy: None,
         delegation_policy: None,

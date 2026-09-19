@@ -178,6 +178,7 @@ impl ReviewProfile {
         let execution = self.execution.request(snapshot, execution_id);
         execution.validate()?;
         let request = AgentRequest {
+            interactive_policy: None,
             provider: self.provider.clone(),
             model: self.model.clone(),
             instructions: self.instructions.clone(),

@@ -15,6 +15,7 @@ pub mod discovery;
 pub mod execution;
 pub mod history;
 pub mod http;
+pub mod interactive;
 pub mod managed_scan;
 pub mod microvm;
 pub mod model;

@@ -178,6 +178,7 @@ impl Setup {
         Self {
             dir,
             request: AgentRequest {
+                interactive_policy: None,
                 plugin_tools: vec![],
                 continuation_of: None,
                 source_review_operation_id: None,

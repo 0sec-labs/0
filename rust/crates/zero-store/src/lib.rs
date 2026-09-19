@@ -6,6 +6,7 @@ mod bounded_read;
 mod budget;
 mod campaign;
 mod campaign_snapshot;
+mod interactive;
 pub use campaign_snapshot::CampaignSnapshotData;
 mod discovery;
 mod history;

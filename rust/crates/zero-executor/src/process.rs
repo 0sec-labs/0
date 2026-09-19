@@ -178,8 +178,16 @@ pub(crate) async fn run_input(
     let writer = async move {
         stdin.write_all(input).await?;
         if let Some(ref mut input) = interactive {
-            while let Some(bytes) = input.receive().await {
-                stdin.write_all(&bytes).await?;
+            while let Some(frame) = input.receive().await {
+                let sent = async {
+                    stdin.write_all(&frame.bytes).await?;
+                    stdin.flush().await
+                }
+                .await;
+                if let Some(ack) = frame.ack {
+                    let _ = ack.send(sent.as_ref().map(|_| ()).map_err(|e| e.to_string()));
+                }
+                sent?;
             }
         }
         stdin.shutdown().await

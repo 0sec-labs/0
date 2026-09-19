@@ -25,7 +25,10 @@ billing retains the reservation. A completed wire response with missing final
 usage, an unrepresentable charge, or an accompanying error becomes an unknown
 engine operation with no executable content. It cannot authorize a subsequent
 tool or model turn; exact retry returns the retained result without another
-provider request. CLI fixtures cover Responses, Chat and Anthropic, alongside
+provider request. Known final charges remain recorded. If charges plus outstanding reservations
+exceed the original session limit, the actor stops before dispatching returned
+tools. Already owned guests are drained, and retries do not repeat work.
+CLI fixtures cover Responses, Chat and Anthropic, alongside
 the Gemini adapter fixture. This is durable accounting, not a guarantee
 against a provider exceeding the requested or reserved amount.
 
