@@ -2,7 +2,7 @@
 
 ## Reporting a vulnerability
 
-Report vulnerabilities in 0 to **security@0sec.ai**. Do not open a public
+Report vulnerabilities in 0 to **security@0.security**. Do not open a public
 issue for a suspected security flaw.
 
 Include:

@@ -490,8 +490,8 @@ function persistCredentials(host: string, token: string, homeDirOverride?: strin
     const cloudDir = join(home, ".0cloud");
     mkdirSync(cloudDir, { recursive: true });
     const cloudCredsPath = join(cloudDir, "credentials.json");
-    // 0sec only knows the dashboard host (cloud.0sec.ai); the 0cloud
-    // orchestrator API lives under /api on it. `api.0sec.ai` has no DNS
+    // 0sec only knows the dashboard host (cloud.0.security); the 0cloud
+    // orchestrator API lives under /api on it. `api.0.security` has no DNS
     // (#508), so derive the API base as `${host}/api` for 0cloud's
     // endpoint. orgId stays empty — 0cloud resolves org from its own
     // config / --org.

@@ -2940,7 +2940,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
         headers["Authorization"] = `Bearer ${this.apiKey}`;
       }
       if (this.provider === "openrouter") {
-        headers["HTTP-Referer"] = "https://0sec.ai";
+        headers["HTTP-Referer"] = "https://0.security";
         headers["X-Title"] = "0sec Security Scanner";
       }
       return headers;
@@ -3199,7 +3199,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
       case "opencode": return "OpenCode Zen";
       case "copilot": return "GitHub Copilot";
       case "google": return "Google Gemini (Code Assist)";
-      case "hosted": return "0sec Cloud";
+      case "hosted": return "0.security Cloud";
     }
   }
 

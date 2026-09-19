@@ -2693,7 +2693,7 @@ Sign in to 0cloud through the browser. This uses the same login flow as `auth lo
 0 login [options]
 ```
 
-Signing in authenticates the CLI; it does not establish credit eligibility or model access. The development launcher `0dev` defaults to `https://dev.0sec.ai` and keeps its Cloud credentials separate from normal CLI credentials.
+Signing in authenticates the CLI; it does not establish credit eligibility or model access. The development launcher `0dev` defaults to `https://dev.0.security` and keeps its Cloud credentials separate from normal CLI credentials.
 
 Guide: [Cloud authentication](/api-keys/).
 
