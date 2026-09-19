@@ -34,6 +34,20 @@ export type {
   CreditAccountPurchasePreset,
   CreditAccountAdmission,
   InferenceUsageResponse,
+  AuditSkillSource,
+  AuditSkillFile,
+  AuditSkillSnapshot,
+  AuditSkillSummary,
+  AuditSkillsListResponse,
+  AuditSkillDetailResponse,
+  AuditSkillCreateInput,
+  AuditSkillImportInput,
+  AuditSkillRevisionInput,
+  AuditSkillSyncInput,
+  AuditSkillAssignInput,
+  AuditSkillCreateResponse,
+  AuditSkillBindResponse,
+  AuditSkillsByProjectResponse,
 } from "./client.js";
 
 export {

@@ -95,6 +95,113 @@ export interface InferenceUsageResponse {
   requests: Record<string, unknown>[];
 }
 
+// ── Audit-skills API types ──
+
+/** Source metadata for an audit skill. */
+export interface AuditSkillSource {
+  type: "markdown" | "github";
+  repository?: string;
+  ref?: string;
+  commit?: string;
+  path?: string;
+}
+
+/** A single file in an audit-skill snapshot. */
+export interface AuditSkillFile {
+  path: string;
+  content: string;
+}
+
+/** Full snapshot of a specific revision of an audit skill. */
+export interface AuditSkillSnapshot {
+  skillId: string;
+  revisionId: string;
+  revision: number;
+  name: string;
+  description: string;
+  sha256: string;
+  entrypoint: string;
+  files: AuditSkillFile[];
+  source?: AuditSkillSource;
+}
+
+/** Lightweight summary of an audit skill (list view). */
+export interface AuditSkillSummary {
+  id: string;
+  name: string;
+  description: string;
+  latestRevision: number;
+  source: AuditSkillSource;
+  createdAt: string;
+  updatedAt: string;
+  projectCount: number;
+}
+
+/** Skills list response from GET /api/audit-skills. */
+export interface AuditSkillsListResponse {
+  skills: AuditSkillSummary[];
+  projects: Array<{ id: string; fullName: string }>;
+}
+
+/** Single-skill detail response from GET /api/audit-skills/:id. */
+export interface AuditSkillDetailResponse {
+  skill: AuditSkillSummary;
+  revisions: AuditSkillSnapshot[];
+  assignments: Array<{ projectId: string; revisionId: string }>;
+}
+
+/** Create skill request body. */
+export interface AuditSkillCreateInput {
+  name: string;
+  description?: string;
+  files: AuditSkillFile[];
+}
+
+/** GitHub import request body. */
+export interface AuditSkillImportInput {
+  repository: string;
+  ref?: string;
+  path?: string;
+  name?: string;
+}
+
+/** Create revision request body. */
+export interface AuditSkillRevisionInput {
+  expectedRevision: number;
+  files: AuditSkillFile[];
+  name?: string;
+  description?: string;
+}
+
+/** Sync request body. */
+export interface AuditSkillSyncInput {
+  expectedRevision: number;
+}
+
+/** Assign request body. */
+export interface AuditSkillAssignInput {
+  revisionId: string;
+}
+
+/** Response from create or import. */
+export interface AuditSkillCreateResponse {
+  skill: AuditSkillSummary;
+  revision: AuditSkillSnapshot;
+}
+
+/** Response from assign/unassign. */
+export interface AuditSkillBindResponse {
+  projectId: string;
+  revisionId: string;
+}
+
+/** Response from GET /api/audit-skills/by-project/:projectId. */
+export interface AuditSkillsByProjectResponse {
+  project: { id: string; fullName: string };
+  assignments: Array<{ skillId: string; skillName: string; revisionId: string; revision: number }>;
+  availableSkills: AuditSkillSummary[];
+}
+
 // ── Credit account types (v1 direct /account DTO) ──
 
 /**
@@ -421,6 +528,101 @@ export class CloudClient {
    */
   async getInferenceUsage(): Promise<InferenceUsageResponse> {
     return this.getJson<InferenceUsageResponse>("/api/inference/usage");
+  }
+
+  // ── Audit-skills helpers (#audit-skills) ──
+
+  /** List all audit skills for the authenticated organization. */
+  async listAuditSkills(): Promise<AuditSkillsListResponse> {
+    return this.getJson<AuditSkillsListResponse>("/api/audit-skills");
+  }
+
+  /**
+   * Get a single audit skill with its revision history and project
+   * assignments.
+   */
+  async getAuditSkill(id: string): Promise<AuditSkillDetailResponse> {
+    return this.getJson<AuditSkillDetailResponse>(`/api/audit-skills/${encodeURIComponent(id)}`);
+  }
+
+  /** Create a new markdown-based audit skill. */
+  async createAuditSkill(
+    input: AuditSkillCreateInput,
+  ): Promise<AuditSkillCreateResponse> {
+    return this.postJson<AuditSkillCreateResponse>("/api/audit-skills", input);
+  }
+
+  /** Import an audit skill from a GitHub repository. */
+  async importAuditSkillFromGithub(
+    input: AuditSkillImportInput,
+  ): Promise<AuditSkillCreateResponse> {
+    return this.postJson<AuditSkillCreateResponse>(
+      "/api/audit-skills/import",
+      input,
+    );
+  }
+
+  /** Create a new revision of an audit skill (CAS — 409 on stale expectedRevision). */
+  async createAuditSkillRevision(
+    id: string,
+    input: AuditSkillRevisionInput,
+  ): Promise<AuditSkillCreateResponse> {
+    return this.postJson<AuditSkillCreateResponse>(
+      `/api/audit-skills/${encodeURIComponent(id)}/revisions`,
+      input,
+    );
+  }
+
+  /** Re-fetch the skill from its original GitHub source. */
+  async syncAuditSkill(
+    id: string,
+    expectedRevision: number,
+  ): Promise<AuditSkillCreateResponse> {
+    return this.postJson<AuditSkillCreateResponse>(
+      `/api/audit-skills/${encodeURIComponent(id)}/sync`,
+      { expectedRevision } satisfies AuditSkillSyncInput,
+    );
+  }
+
+  /** Pin an audit skill revision to a project for future scans. */
+  async assignAuditSkill(
+    id: string,
+    projectId: string,
+    revisionId: string,
+  ): Promise<AuditSkillBindResponse> {
+    return this.postJson<AuditSkillBindResponse>(
+      `/api/audit-skills/${encodeURIComponent(id)}/projects/${encodeURIComponent(projectId)}`,
+      { revisionId } satisfies AuditSkillAssignInput,
+    );
+  }
+
+  /** Unpin an audit skill from a project (future scans no longer use it). */
+  async unassignAuditSkill(
+    id: string,
+    projectId: string,
+  ): Promise<AuditSkillBindResponse> {
+    return this.deleteJson<AuditSkillBindResponse>(
+      `/api/audit-skills/${encodeURIComponent(id)}/projects/${encodeURIComponent(projectId)}`,
+    );
+  }
+
+  /** Archive an audit skill (disables future bindings, preserves history). */
+  async archiveAuditSkill(id: string): Promise<void> {
+    await this.deleteJson<void>(
+      `/api/audit-skills/${encodeURIComponent(id)}`,
+    );
+  }
+
+  /**
+   * List audit skills available to a specific project, along with current
+   * assignments for that project. The project must belong to the caller's org.
+   */
+  async listAuditSkillsByProject(
+    projectId: string,
+  ): Promise<AuditSkillsByProjectResponse> {
+    return this.getJson<AuditSkillsByProjectResponse>(
+      `/api/audit-skills/by-project/${encodeURIComponent(projectId)}`,
+    );
   }
 
   /**
