@@ -76,7 +76,7 @@ export function registerSecureCommand(program: Command): void {
       process.once("SIGTERM", cancel);
       const cloudOutput = process.env["0SEC_EMIT_RESULT_LINE"] === "1" || Boolean(process.env["0SEC_CLOUD_SINK"]);
       const onEvent = (event: SecureEvent) => {
-        if (cloudOutput) process.stdout.write(`0SEC_SECURE_EVENT=${JSON.stringify(event)}\n`);
+        if (cloudOutput) process.stdout.write(`0SEC_SECURE_EVENT=${JSON.stringify({ ...event, timestamp: Date.now() })}\n`);
         else process.stderr.write(`[secure:${event.phase}] ${event.message}\n`);
       };
       try {
