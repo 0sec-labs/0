@@ -18,7 +18,7 @@ concurrency:
 
 jobs:
   npm:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64]
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v6
@@ -35,13 +35,21 @@ jobs:
         run: pnpm audit --audit-level=high
 
   cargo:
-    if: ${{ hashFiles('**/Cargo.lock') != '' }}
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64]
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v6
       - uses: actions-rust-lang/setup-rust-toolchain@v1
+        if: ${{ hashFiles('**/Cargo.lock') != '' }}
+        with:
+          toolchain: stable
       - name: Install cargo-audit
+        if: ${{ hashFiles('**/Cargo.lock') != '' }}
         run: cargo install cargo-audit --locked
       - name: Audit Rust dependencies
-        run: cargo audit --all
+        if: ${{ hashFiles('**/Cargo.lock') != '' }}
+        run: |
+          set -euo pipefail
+          while IFS= read -r -d '' lockfile; do
+            cargo audit --file "$lockfile"
+          done < <(git ls-files -z -- Cargo.lock '**/Cargo.lock')
