@@ -25,7 +25,11 @@
   <a href="#status"><img src="https://img.shields.io/badge/status-research%20preview-FD802E?style=flat-square&labelColor=1A1815" alt="Status: research preview"></a>
 </p>
 
-0sec is a multi-model, open-source cybersecurity CLI. Connect a model, run
+## Meet Zero
+
+**The best security tool is one you don’t have to use.**
+
+Zero is a multi-model, open-source cybersecurity CLI. Connect a model, run
 authorized reviews and scans, inspect the evidence, and decide what happens
 next. Local CLI work runs with your credentials and execution environment; this
 repository is not a fully managed security service.
