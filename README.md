@@ -27,7 +27,7 @@
 
 ## Meet Zero
 
-**The best security tool is one you don’t have to use.**
+**Your AI security engineer.**
 
 Zero is a multi-model, open-source cybersecurity CLI. Connect a model, run
 authorized reviews and scans, inspect the evidence, and decide what happens
