@@ -17,6 +17,7 @@ import { estimateCost } from "./agent/cost.js";
 import { getCloudSinkConfig, postFinding } from "./cloud-sink.js";
 import { analyticsPipeline } from "./telemetry/analytics-pipeline.js";
 import { reportUnsupportedContributionMode } from "./telemetry/run-contribution.js";
+import { parseProjectObservations, type ProposedProjectObservation } from "./secure/project-context.js";
 
 // ── Types ──
 
@@ -45,6 +46,7 @@ export interface AnalysisAgentOptions {
    * conversation), and a single finding shouldn't need 15 turns to reproduce.
    */
   purpose?: "research" | "verify";
+  collectProjectContext?: boolean;
 }
 
 /**
@@ -78,6 +80,7 @@ export interface AnalysisAgentResult {
    * CLI runtime path when the structured output includes them.
    */
   questions?: string[];
+  projectObservations?: ProposedProjectObservation[];
 }
 
 // ── Depth → maxTurns mapping ──
@@ -576,6 +579,7 @@ export async function runAnalysisAgent(opts: AnalysisAgentOptions): Promise<Anal
         estimatedCostUsd: agentState.estimatedCostUsd,
         turns: agentState.turnCount,
         costCeilingExceeded: agentState.costCeilingExceeded,
+        ...(opts.collectProjectContext ? { projectObservations: parseProjectObservations(agentState.summary) } : {}),
       };
     }
 
@@ -682,7 +686,8 @@ export async function runAnalysisAgent(opts: AnalysisAgentOptions): Promise<Anal
   // Legacy loop doesn't track token usage / cost — those are populated
   // only by the native API loop branch above. It does count turns, so those
   // are still attributable per-phase.
-  return { findings: agentState.findings, usage: undefined, estimatedCostUsd: undefined, turns: agentState.turnCount };
+  return { findings: agentState.findings, usage: undefined, estimatedCostUsd: undefined, turns: agentState.turnCount,
+    ...(opts.collectProjectContext ? { projectObservations: parseProjectObservations(agentState.summary) } : {}) };
 }
 
 /**

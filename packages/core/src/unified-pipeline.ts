@@ -4,6 +4,7 @@ import { join, basename } from "node:path";
 import { randomUUID } from "node:crypto";
 import { tmpdir } from "node:os";
 import { mapWithConcurrency } from "./concurrency.js";
+import { PROJECT_OBSERVATION_PROMPT, type PreparedProjectContext, type ProposedProjectObservation } from "./secure/project-context.js";
 import type {
   ScanDepth,
   OutputFormat,
@@ -157,6 +158,9 @@ export interface PipelineOptions {
     description?: string;
     location?: string;
   }>;
+  /** Approved immutable project preferences, rendered as untrusted context. */
+  projectContext?: PreparedProjectContext;
+  onProjectObservations?: (observations: ProposedProjectObservation[]) => void;
   apiKey?: string;
   model?: string;
   timeout?: number;
@@ -668,6 +672,7 @@ function buildCliPrompt(
   changedFiles?: string[],
   changedOnly = false,
   priorFindings?: PipelineOptions["priorFindings"],
+  projectContext = "",
 ): string {
   const semgrepContext = semgrepFindings.length > 0
     ? semgrepFindings
@@ -694,7 +699,7 @@ function buildCliPrompt(
 
 Read the source code, look for: prototype pollution, ReDoS, path traversal, injection, unsafe deserialization, missing validation. Map data flow from untrusted input to sensitive operations. Report any security findings with severity and PoC suggestions.
 Start by reading the ecosystem manifest and entry points when present: package.json, pyproject.toml, setup.cfg, setup.py, Cargo.toml, go.mod, composer.json, or /etc/os-release for extracted images.
-${changedFilesContext}${priorFindingsContext}
+${changedFilesContext}${priorFindingsContext}${projectContext ? `\n${projectContext}\n` : ""}
 ${changedOnly ? "\nThis is a diff-aware review. Focus findings on vulnerabilities introduced by or reachable from the changed files above. You may inspect surrounding files for context.\n" : ""}
 
 The static scanner already found these leads:
@@ -1962,10 +1967,11 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineReport
         : agentSystemPrompt;
       const priorFindingsContext =
         prepared.resolvedType === "source-code" ? buildPriorFindingsContext(opts.priorFindings) : "";
-      const effectiveSystemPrompt =
-        prepared.resolvedType === "source-code" && priorFindingsContext
-          ? `${baseSystemPrompt}\n\n${priorFindingsContext}`
-          : baseSystemPrompt;
+      const projectContext = prepared.resolvedType === "source-code" ? opts.projectContext?.prompt ?? "" : "";
+      const effectiveSystemPrompt = baseSystemPrompt
+        + (priorFindingsContext ? `\n\n${priorFindingsContext}` : "")
+        + (projectContext ? `\n\n${projectContext}` : "")
+        + (opts.projectContext && opts.onProjectObservations ? `\n\n${PROJECT_OBSERVATION_PROMPT}` : "");
 
       // Per-file research loop (#285). When `perItemOrchestration` is on,
       // we run one agent session per source file with a focused per-file
@@ -2013,6 +2019,7 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineReport
                 changedFiles,
                 !!opts.changedOnly,
                 opts.priorFindings,
+                projectContext,
               ),
               agentSystemPrompt: effectiveSystemPrompt,
               cliSystemPrompt:
@@ -2059,6 +2066,7 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineReport
                     changedFiles,
                     !!opts.changedOnly,
                     opts.priorFindings,
+                    projectContext,
                   ),
                   agentSystemPrompt: systemPrompt,
                   cliSystemPrompt,
@@ -2104,13 +2112,16 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineReport
               changedFiles,
               !!opts.changedOnly,
               opts.priorFindings,
+              projectContext,
             ),
             agentSystemPrompt: effectiveSystemPrompt,
+            collectProjectContext: !!opts.projectContext && !!opts.onProjectObservations,
             cliSystemPrompt:
               "You are a security researcher performing an authorized source code audit. For EACH vulnerability you find, output it using the exact ---FINDING--- / ---END--- format specified in the prompt. Do NOT write prose analysis — only output structured finding blocks. If you find no vulnerabilities, say 'No vulnerabilities found.' and nothing else.",
           });
           recordUsage(agentResult);
           findings = agentResult.findings;
+          if (opts.projectContext && agentResult.projectObservations) opts.onProjectObservations?.(agentResult.projectObservations);
         }
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);

@@ -148,6 +148,8 @@ import {
   matchTriggers,
   loadSkillRegistry,
 } from "./skills/index.js";
+import type { SkillDefinition } from "./skills/index.js";
+import { loadSkillBundleFromManifest } from "./skills/markdown-bundle.js";
 import { eventBus } from "../events/bus.js";
 import type {
   SubagentLifecyclePayload,
@@ -601,6 +603,9 @@ const SCOPED_SOURCE_AUDIT_TOOLS: Record<string, true> = {
   list_files: true,
   search_files: true,
   intel: true,
+  // Methodology reads return bounded registry text, never execute its contents.
+  list_skills: true,
+  load_skill: true,
   query_findings: true,
   save_finding: true,
   update_finding: true,
@@ -2945,6 +2950,13 @@ export class ToolExecutor {
    * See GitHub issue #82.
    */
   private _rejectedDecoyFlags: Set<string>;
+
+  /**
+   * Lazily loaded cloud audit-skill bundle from 0SEC_AUDIT_SKILLS_MANIFEST.
+   * null = env not set (no cloud skills); Map = already loaded and cached.
+   * Populated on first listSkills/loadSkill call that finds the env var.
+   */
+  private _cloudSkillBundle: Map<string, SkillDefinition> | null | undefined;
 
   /**
    * Per-session memory for the scoped-source-audit escalation gate
@@ -8824,6 +8836,25 @@ export class ToolExecutor {
 
   // ── JIT Skill tools (#457) ──
 
+  /**
+   * Lazily load and cache the cloud audit-skills bundle from the
+   * 0SEC_AUDIT_SKILLS_MANIFEST environment variable. Returns null when
+   * the env var is unset (no cloud skills configured); returns an empty
+   * Map for valid manifests with zero skills; returns the loaded Map for
+   * a populated bundle. Cache lives for the lifetime of this ToolExecutor.
+   */
+  private ensureCloudSkillBundle(): Map<string, SkillDefinition> | null {
+    // undefined = not yet checked; null = env unset; Map = loaded
+    if (this._cloudSkillBundle !== undefined) return this._cloudSkillBundle;
+    const manifestPath = process.env["0SEC_AUDIT_SKILLS_MANIFEST"];
+    if (!manifestPath) {
+      this._cloudSkillBundle = null;
+      return null;
+    }
+    this._cloudSkillBundle = loadSkillBundleFromManifest(manifestPath);
+    return this._cloudSkillBundle;
+  }
+
   private listSkills(args: Record<string, unknown>): ToolResult {
     if (!featureFlags.jitSkills) {
       return { success: false, output: null, error: "JIT skills are not enabled." };
@@ -8831,15 +8862,34 @@ export class ToolExecutor {
     const tag = typeof args.tag === "string" ? args.tag : undefined;
     const summaries = listSkillSummaries({ tag, role: this.ctx.role });
 
+    // Merge cloud audit skills from env manifest if configured
+    const cloudBundle = this.ensureCloudSkillBundle();
+    const cloudSummaries = cloudBundle
+      ? [...cloudBundle.values()].map((s) => ({
+          id: s.id,
+          name: s.name,
+          description: s.description,
+          tags: s.tags,
+          estimated_tokens: s.estimated_tokens,
+          suggested: false,
+          source: "cloud" as const,
+        }))
+      : [];
+    const mergedSummaries = tag
+      ? summaries.filter((s) => s.tags.includes(tag)).concat(
+          cloudSummaries.filter((s) => s.tags.includes(tag)),
+        )
+      : summaries.concat(cloudSummaries);
+
     // Compute suggested flags from recent tool output context
     const registry = loadSkillRegistry();
-    const allSkills = [...registry.values()];
+    const allSkills = [...registry.values(), ...(cloudBundle ? [...cloudBundle.values()] : [])];
     const suggestedIds = matchTriggers(
       this.ctx.recentToolResultTexts ?? [],
       allSkills,
     );
 
-    const enriched = summaries.map((s) => ({
+    const enriched = mergedSummaries.map((s) => ({
       ...s,
       suggested: suggestedIds.has(s.id),
     }));
@@ -8883,7 +8933,16 @@ export class ToolExecutor {
       };
     }
 
-    const skill = getSkillById(skillId);
+    let skill = getSkillById(skillId);
+
+    // Fall through to cloud audit skills bundle if not found in built-in registry
+    if (!skill) {
+      const cloudBundle = this.ensureCloudSkillBundle();
+      if (cloudBundle?.has(skillId)) {
+        skill = cloudBundle.get(skillId)!;
+      }
+    }
+
     if (!skill) {
       return {
         success: false,
@@ -9397,7 +9456,8 @@ export function getToolsForRole(role: string, opts?: { hasScope?: boolean; webMo
     && ((featureFlags.cveAdapt && opts?.hasScope) || !CVE_ADAPT_TOOL_NAMES.includes(name)),
   );
   const scopedSourceTools = Object.keys(SCOPED_SOURCE_AUDIT_TOOLS).filter((name) =>
-    name !== "remember_codebase" && (featureFlags.zeroverse || name !== "analyze_binary"),
+    name !== "remember_codebase" && (featureFlags.zeroverse || name !== "analyze_binary")
+    && (featureFlags.jitSkills || (name !== "list_skills" && name !== "load_skill")),
   );
 
 

@@ -42,6 +42,24 @@ interface GuideServiceStates {
 
 const CAPABILITIES: Capability[] = [
   {
+    id: "project-setup",
+    summary: "Read and edit a codebase's context, operating plan and revisions through the same API as the dashboard.",
+    when: "An agent needs to propose configuration for review, save an approved revision, or explicitly request its execution.",
+    command: "0sec project setup https://github.com/org/repo --json",
+    layer: "service",
+    requiresAuth: true,
+    limitations: "Requires a matching deployed project-setup API and an already-enrolled codebase. JSON setup does not save or start a scan. Starting requires an approved revision, an idempotency key and server-authorized credit funding. Observations are suggestions, not automatically accepted instructions.",
+  },
+  {
+    id: "audit-skills",
+    summary: "Manage versioned audit-methodology bundles and pin their revisions to codebases.",
+    when: "You want the CLI and dashboard to share editable review methodology.",
+    command: "0sec skills list --json",
+    layer: "service",
+    requiresAuth: true,
+    limitations: "Requires matching deployed audit-skills APIs; mutations need owner or administrator authority. Runs capture immutable bundles, and workers must use an engine with the manifest consumer. Methodology does not authorize additional scope, spending or publication.",
+  },
+  {
     id: "hosted-inference",
     summary: "Use 0cloud model access while the harness and its tools execute locally. Provider credentials remain on the service.",
     when: "You want hosted models without setting up a supplier account, rather than moving tool execution into a managed run.",
@@ -60,12 +78,12 @@ const CAPABILITIES: Capability[] = [
   },
   {
     id: "connect",
-    summary: "Request managed repository security work and recurring runs after repository readiness checks and explicit policy approval.",
-    when: "Point 0cloud by 0.security at a repository and let it work continuously.",
-    command: "0sec connect https://github.com/org/repo",
+    summary: "Verify repository access without creating work; explicitly opt into a managed scan or recurrence.",
+    when: "Check access before requesting execution with --run or --schedule.",
+    command: "0sec connect https://github.com/org/repo --setup-only",
     layer: "service",
     requiresAuth: true,
-    limitations: "Unavailable enrollment APIs block dispatch. GitHub App approval is an action-required browser handoff, not an implemented polling session. In JSON mode, --yes is required before new work starts. A created scan with failed recurrence returns action-required with its scan id, not ready.",
+    limitations: "Unavailable enrollment APIs block dispatch. GitHub App approval is an action-required browser handoff, not a polling session. Neither --yes nor a readiness success starts work without --run or --schedule. JSON dispatch also requires --yes. A created scan with failed recurrence returns action-required with its scan id.",
   },
   {
     id: "service-start",

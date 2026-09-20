@@ -69,6 +69,32 @@ from the older root checkout; neither local revision establishes what is
 currently deployed. Public website and login observations were made on
 2026-09-19. No authenticated execution or billing request was performed.
 
+## Agent-operated codebase setup
+
+The source implementation shares saved configuration between the dashboard and
+the `project` CLI group. Check `0sec guide --json` and `0sec project --help` in
+the installed version before using these commands:
+
+```bash
+0sec project setup owner/repository --json
+0sec project show owner/repository --json
+0sec project history owner/repository --json
+```
+
+A coding agent reads source-backed observations, asks about conventions, test
+commands, repair preferences and the budget, then saves an approved revision.
+The dashboard can edit the same context. Starting a scan requires separate
+approval and confirmed credit-backed admission; setup alone does not spend.
+
+Use `0sec skills --help` for versioned methodology files and codebase
+assignments. Bundle file paths are relative to the working directory, with
+`SKILL.md` as the entrypoint. A queued scan keeps its captured configuration
+and methodology revisions even when a later revision is saved.
+
+Scan-derived observations stay suggestions until explicitly reviewed and saved.
+They are not automatic training. Slack notification setup remains optional.
+Source/fixture qualification does not establish endpoint or engine deployment.
+
 ## Draft material
 
 These pages remain excluded from public navigation/search while the managed
