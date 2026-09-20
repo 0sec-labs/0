@@ -32,10 +32,9 @@
   <img src="assets/security-cycle-diagram.webp" alt="Zero studies, finds, fixes, reports, and improves." width="100%">
 </p>
 
-Zero is a multi-model, open-source cybersecurity CLI. Connect a model, run
-authorized reviews and scans, inspect the evidence, and decide what happens
-next. Local CLI work runs with your credentials and execution environment; this
-repository is not a fully managed security service.
+Zero is a multi-model, open-source cybersecurity CLI. Connect a model and run
+authorized reviews and scans. Local CLI work runs with your credentials and
+execution environment; this repository is not a fully managed security service.
 
 ## Get started
 
