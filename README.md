@@ -33,6 +33,8 @@
 
 ## Get started
 
+Give this to your AI agent, or run `0 console --mode standard`:
+
 > Install 0, then use 0 to test this repository for security issues.
 
 ## License
