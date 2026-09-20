@@ -18,6 +18,9 @@ type OutputOptions = { json?: boolean };
 
 function client() { const credentials = loadCloudCredentials(); return new CloudClient({ host: credentials.host, token: credentials.token }); }
 function output(value: unknown, options: OutputOptions) { process.stdout.write(JSON.stringify(value, null, options.json ? undefined : 2) + "\n"); }
+function withNext<T>(value: T, next: string[]): T {
+  return value && typeof value === "object" && !Array.isArray(value) ? { ...(value as Record<string, unknown>), next } as T : value;
+}
 function repositoryInput(value?: string): string {
   return !value || value === "." ? execFileSync("git", ["remote", "get-url", "origin"], { encoding: "utf8", timeout: 5000, stdio: ["ignore", "pipe", "pipe"] }).trim() : value;
 }
@@ -53,9 +56,8 @@ async function enroll(value: string | undefined, options: OutputOptions) {
   const repo = repositoryUrl(value);
   const status = enrollmentSchema.parse(await api.getJson<unknown>(`/api/enrollment/status?target=${encodeURIComponent(repo)}`));
   if (!status.repo_accessible) throw new Error(`0security cannot access this repository through the connected GitHub App. Install or update the App, then retry${status.installation?.install_url ? `: ${status.installation.install_url}` : "."}`);
-  output(await api.postJson<unknown>(endpoint, { action: "enroll", repositoryId: status.repository_id }), options);
+  output(withNext(await api.postJson<unknown>(endpoint, { action: "enroll", repositoryId: status.repository_id }), ["Run project setup <repository> --json to review the source-backed proposal."]), options);
 }
-
 async function setup(value: string | undefined, options: OutputOptions) {
   const api = client();
   const saved = await project(api, value);
@@ -106,7 +108,7 @@ export function registerProjectSetupCommand(program: Command): void {
   root.command("save <project>").description("Save an edited operating-plan JSON file. Does not start a scan.").requiredOption("--file <path>", "Operating-plan JSON file")
     .requiredOption("--revision <number>", "Expected current revision, including 0 for first save").requiredOption("--source <sha>", "Reviewed immutable source commit").option("--json", "Emit machine-readable JSON")
     .action((value: string, options: OutputOptions & { file: string; revision: string; source: string }) => run(async () => { const api = client(); const saved = await project(api, value);
-      output(await api.postJson<unknown>(endpoint, { action: "save", repositoryId: saved.repository.id, expectedRevision: revision.parse(options.revision), sourceRevision: commit.parse(options.source), plan: await planFile(options.file) }), options); }, options));
+      output(withNext(await api.postJson<unknown>(endpoint, { action: "save", repositoryId: saved.repository.id, expectedRevision: revision.parse(options.revision), sourceRevision: commit.parse(options.source), plan: await planFile(options.file) }), ["Review the saved revision, then run project start <project> --revision <revision> --idempotency-key <uuid> when execution is approved."]), options); }, options));
   root.command("history <project> [revision]").option("--json", "Emit machine-readable JSON")
     .action((value: string, requested: string | undefined, options: OutputOptions) => run(async () => { const api = client(); const saved = await project(api, value);
       output(await api.getJson<unknown>(`${endpoint}?repository_id=${saved.repository.id}&view=history${requested === undefined ? "" : `&revision=${z.coerce.number().int().positive().parse(requested)}`}`), options); }, options));
@@ -115,11 +117,11 @@ export function registerProjectSetupCommand(program: Command): void {
       output(await api.getJson<unknown>(`${endpoint}?repository_id=${saved.repository.id}&view=suggestions`), options); }, options));
   root.command("restore <project> <revision>").requiredOption("--expected-revision <number>", "Current revision to replace").option("--json", "Emit machine-readable JSON")
     .action((value: string, previous: string, options: OutputOptions & { expectedRevision: string }) => run(async () => { const api = client(); const saved = await project(api, value);
-      output(await api.postJson<unknown>(endpoint, { action: "restore", repositoryId: saved.repository.id, expectedRevision: revision.parse(options.expectedRevision), revision: z.coerce.number().int().positive().parse(previous) }), options); }, options));
+      output(withNext(await api.postJson<unknown>(endpoint, { action: "restore", repositoryId: saved.repository.id, expectedRevision: revision.parse(options.expectedRevision), revision: z.coerce.number().int().positive().parse(previous) }), ["Review the restored revision, then run project start <project> --revision <revision> --idempotency-key <uuid> when execution is approved."]), options); }, options));
   root.command("start <project>").description("Explicitly request credit-funded execution of an approved saved revision.").requiredOption("--revision <number>", "Approved configuration revision")
     .requiredOption("--idempotency-key <uuid>", "Reuse this key when recovering a lost response").option("--json", "Emit machine-readable JSON")
     .action((value: string, options: OutputOptions & { revision: string; idempotencyKey: string }) => run(async () => { const api = client(); const saved = await project(api, value);
-      output(await api.postJson<unknown>(endpoint, { action: "start", repositoryId: saved.repository.id, expectedRevision: z.coerce.number().int().positive().parse(options.revision), idempotencyKey: z.string().uuid().parse(options.idempotencyKey) }), options); }, options));
+      output(withNext(await api.postJson<unknown>(endpoint, { action: "start", repositoryId: saved.repository.id, expectedRevision: z.coerce.number().int().positive().parse(options.revision), idempotencyKey: z.string().uuid().parse(options.idempotencyKey) }), ["Follow the returned scan with service status <scan-id> or service wait <scan-id>."]), options); }, options));
   const slack = root.command("slack").description("Inspect or change optional workspace notifications.");
   slack.command("channels").option("--json", "Emit machine-readable JSON").action((options: OutputOptions) => run(async () => output(await client().getJson<unknown>(`${endpoint}?view=slack-channels`), options), options));
   slack.command("channel <channel-id>").option("--json", "Emit machine-readable JSON").action((channelId: string, options: OutputOptions) => run(async () => output(await client().postJson<unknown>(endpoint, { action: "slack-channel", channelId }), options), options));

@@ -30,6 +30,7 @@ interface Capability {
   layer: "engine" | "service";
   requiresAuth?: boolean;
   limitations?: string;
+  next?: string[];
 }
 
 type ServiceProbe = "unknown" | "ok" | "unauthenticated" | "unreachable";
@@ -39,6 +40,17 @@ interface GuideServiceStates {
   service: { status: ServiceProbe; note: string };
   account: unknown;
 }
+const ONBOARDING = {
+  summary: "First-run path: authenticate, enroll the repository, review source-backed context, save an approved plan, then explicitly start and follow the scan.",
+  steps: [
+    "0sec auth login",
+    "0sec project enroll <repository> --json",
+    "0sec project setup <repository> --json",
+    "Review the proposal and budget; save with project save.",
+    "Start only after approval with project start --revision <revision> --idempotency-key <uuid>.",
+    "Follow the returned scan with service status <scan-id> or service wait <scan-id>.",
+  ],
+};
 
 const CAPABILITIES: Capability[] = [
   {
@@ -49,6 +61,7 @@ const CAPABILITIES: Capability[] = [
     layer: "service",
     requiresAuth: true,
     limitations: "Enrollment checks the connected GitHub App and adds the repository to the current workspace; it does not save configuration or start a scan. After enrollment, use project setup --json. Starting requires an approved revision, an idempotency key and server-authorized credit funding. Observations are suggestions, not automatically accepted instructions.",
+    next: ["Run project setup --json to review the source-backed proposal.", "Save only an approved plan; saving never starts a scan."],
   },
   {
     id: "audit-skills",
@@ -265,7 +278,9 @@ function printHuman(topic: string | undefined, service: GuideServiceStates, comm
   const out: string[] = [];
   out.push(`0.security guide (installed ${VERSION})`);
   out.push("");
-  out.push(ARCHITECTURE.summary);
+    out.push(`Onboarding: ${ONBOARDING.summary}`);
+    for (const [index, step] of ONBOARDING.steps.entries()) out.push(`  ${index + 1}. ${step}`);
+    out.push("");
   out.push("");
   if (!topic) {
     out.push("Capabilities:");
@@ -309,6 +324,10 @@ function printHuman(topic: string | undefined, service: GuideServiceStates, comm
       if (cap.command) out.push(`Run: ${cap.command}`);
       if (cap.requiresAuth) out.push("Requires: 0sec auth login and the relevant service access");
       if (cap.limitations) out.push(`Limitations: ${cap.limitations}`);
+      if (cap.next?.length) {
+        out.push("Next:");
+        for (const step of cap.next) out.push(`  - ${step}`);
+      }
     }
     if (command) out.push(command.helpInformation());
   }
@@ -335,7 +354,6 @@ export function registerGuideCommand(program: Command): void {
       }
       const service = states(await probeService(), {
         status: "unknown",
-        note: "Health does not verify account identity or entitlement. Product access is resolved by its service endpoint.",
       });
       if (format === "json") {
         process.stdout.write(
@@ -343,6 +361,7 @@ export function registerGuideCommand(program: Command): void {
             {
               version: VERSION,
               product: "0.security (open engine + CLI); 0cloud by 0.security (hosted platform)",
+              onboarding: ONBOARDING,
               capabilities: topic ? (capability ? [capability] : []) : CAPABILITIES,
               commands: (topic && topic !== "commands" ? (command ? [command] : []) : commands).map(commandMetadata),
               architecture: !topic || topic === "architecture" ? ARCHITECTURE : undefined,
