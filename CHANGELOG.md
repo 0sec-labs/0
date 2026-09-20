@@ -12,6 +12,24 @@ on the published npm package and the GitHub Release tag.
 
 ## [Unreleased]
 
+## [0.21.0] - 2026-09-20
+
+### Added
+
+- Enroll repositories through `0sec project enroll`, with browser handoff when
+  GitHub App access is required and agent-readable setup guidance.
+
+### Changed
+
+- Managed project setup uses per-run credit limits. The published `0sec` CLI
+  can select development or production with `auth login --host`; the `0dev`
+  wrapper remains a contributor convenience, not an installation requirement.
+
+### Fixed
+
+- Keep source inventory requests within the process argument-size limit.
+- Include C# and .NET source in deep-review and audit inventory.
+
 ## [0.20.0] - 2026-09-20
 
 ### Added
