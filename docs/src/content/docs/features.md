@@ -109,8 +109,8 @@ Set `ZERO_JEV_FEATURES` to the selected comma-separated features: `browser`,
 
 | Setting | Behavior |
 | --- | --- |
-| `ZERO_JEV_PROVIDER` | `vercel` by default; `typesafe` for direct access or `cloud` for a managed scan capability |
-| `AI_GATEWAY_API_KEY` / `TYPESAFE_API_KEY` | Credential for the selected direct provider; keep it out of command history |
+| `ZERO_JEV_PROVIDER` | `vercel` by default (your own gateway key); `cloud` routes through the managed endpoint and bills workspace credits |
+| `AI_GATEWAY_API_KEY` / `ZERO_JEV_CLOUD_TOKEN` | Credential for the selected provider; keep it out of command history |
 | `ZERO_JEV_TIMEOUT_MS` | Per-request timeout; default `10000` |
 | `ZERO_JEV_MAX_REQUESTS` | Per-evaluator request limit; default `100` |
 | `ZERO_JEV_MAX_COST_USD` | Per-evaluator estimated budget; default `0.10`, not a customer invoice or whole-scan ceiling |
@@ -147,8 +147,8 @@ retry or substitute chat-model fallback. Evaluator usage is separate from
 main-model usage; the cost ceiling reserves estimated request cost and is not a
 whole-engagement accounting limit.
 
-The shared evaluator API also recognizes `kernel` and a kernel-only
-`classifier` provider. That configuration support alone does not wire an
+The shared evaluator API also recognizes the `kernel` feature, used by the
+`0sec kernel jev-prepass` command. That support alone does not wire an
 automatic kernel prepass into the assessment commands described here.
 
 Managed workers receive a separate scan-bound capability and endpoint from
