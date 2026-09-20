@@ -125,9 +125,6 @@ separate advisory integrations are not automatically covered by this ledger.
 
 Other commands have different stop boundaries:
 
-- `file-review --max-cost-usd` checks after inventory and completed
-  investigation/revalidation batches. It can overshoot with in-flight batches
-  and returns resumable exit code `3`, not the scan/review ceiling exit code.
 - `deep-review --cost-ceiling` shares a ledger across its planner and finders;
   it is likewise an estimated-cost stop, not a reservation for outstanding work.
 - `secure --cost-ceiling` must **not** be treated as a whole-workflow hard cap.

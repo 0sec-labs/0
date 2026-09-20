@@ -7,7 +7,7 @@ tableOfContents:
 ---
 
 Find the command, arguments, and options for your task. This reference covers
-**65 top-level commands** and their registered subcommands.
+**64 top-level commands** and their registered subcommands.
 
 For a worked example, start with [Scan Workflows](/scan-workflows/),
 [Console](/console/), or [Research Workflows](/research-workflows/).
@@ -18,7 +18,7 @@ For a worked example, start with [Scan Workflows](/scan-workflows/),
   <section class="docs-task-card">
     <h3>Scan and review</h3>
     <p>Assess a live target, a repository, or a package.</p>
-    <p><a href="#scan">scan</a> · <a href="#review">review</a> · <a href="#audit">audit</a> · <a href="#file-review">file-review</a></p>
+    <p><a href="#scan">scan</a> · <a href="#review">review</a> · <a href="#audit">audit</a></p>
   </section>
   <section class="docs-task-card">
     <h3>Work interactively</h3>
@@ -636,35 +636,6 @@ Guide: [Scope & Authorization](/scope/).
 | `--publish` | `false` | Publish verified patches as PRs using authorized repository credentials; never merge or deploy |
 | `--rules <text>` | — | Plain-English team repair standards (e.g. "minimal diffs, no new dependencies") |
 | `--format <format>` | `json` | Output format: json |
-
-### file-review
-
-Review repository files with regex scanning, a coverage gate, batched AI investigation (refusal audit and field repair), and optional static revalidation. Exit code 3 marks a cost or duration checkpoint; rerun the same command to continue.
-
-```text
-0 file-review [options] <target>
-```
-
-Guide: [Read the workflow](/research-workflows/).
-
-| Argument | Required | Description |
-| --- | --- | --- |
-| `target` | Yes |  |
-
-| Option | Registered default | Description |
-| --- | --- | --- |
-| `--project-id <id>` | — | Project id (defaults to the target basename) |
-| `--data-dir <path>` | — | Record store directory (default &lt;target&gt;/.0sec-review) |
-| `--runtime <mode>` | — | Engine runtime: api\|claude\|codex\|gemini\|ollama (default api) |
-| `-m, --model <model>` | — | Model for the investigation/revalidation agents |
-| `--timeout <ms>` | `600000` | Per-invocation timeout in milliseconds |
-| `--max-cost-usd <usd>` | — | Estimated-cost stop at resumable checkpoints; in-flight inventory, batches, and revalidation can overshoot. |
-| `--max-duration <dur>` | — | Wall-clock cap: 30m / 2h / ms (resumable stop) |
-| `--batch-size <n>` | — | Files per investigation batch (default 5) |
-| `--concurrency <n>` | — | Batches in flight (default 2) |
-| `--inventory` | — | Generate the AI surface inventory + INFO.md first (requires claude, codex, or gemini) |
-| `--revalidate` | — | Run the static adversarial revalidation on HIGH+ findings |
-| `--json` | — | Emit the pipeline result as JSON |
 
 ### deep-review
 
@@ -3290,6 +3261,7 @@ Saving does not authorize or start execution.
 | `--revision <number>` **required** | — | Expected current revision, including 0 for first save |
 | `--source <sha>` **required** | — | Reviewed immutable source commit |
 | `--json` | — | Emit machine-readable JSON |
+| `--enable-schedule` | — | Explicitly approve recurring checks at the saved daily/weekly cadence and per-run credit limit |
 
 ### project history
 

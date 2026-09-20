@@ -45,14 +45,6 @@ describe("0sec review --profile validator", () => {
     expect(runUnifiedMock.mock.calls[0]![0].reviewProfile).toBe("default");
   });
 
-  it("routes --depth deep through the validated lens strategy", async () => {
-    await runCli(["review", "./somerepo", "--depth", "deep"]);
-    expect(runUnifiedMock).toHaveBeenCalledTimes(1);
-    expect(runUnifiedMock.mock.calls[0]![0]).toMatchObject({
-      depth: "deep",
-      reviewStrategy: "lenses",
-    });
-  });
 
   it("accepts --profile c-library and forwards it", async () => {
     await runCli(["review", "./somerepo", "--profile", "c-library"]);

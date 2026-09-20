@@ -83,6 +83,22 @@ function makeFinding(overrides: Partial<Finding> = {}): Finding {
   };
 }
 
+it("scan-local context excludes persisted global history, including an empty admitted context", async () => {
+  const db = createFakeDb();
+  const finding = makeFinding();
+  const memory: TriageMemory = {
+    id: "cloud:reviewed", scope: "target", scopeValue: "/workspace/repo",
+    category: finding.category, pattern: finding.title, reasoning: "Check the current content type.",
+    createdAt: 1, appliedCount: 0,
+  };
+  db.insertTriageMemory({ ...memory, id: "local:unrelated", scope: "global", scopeValue: null });
+  const contextual = new MemoryStore(db, { contextMemories: [memory] });
+  expect((await contextual.getRelevantMemories(finding, "/workspace/repo")).map(row => row.id))
+    .toEqual(["cloud:reviewed"]);
+  expect(await new MemoryStore(db, { contextMemories: [] }).getRelevantMemories(finding, "/workspace/repo"))
+    .toEqual([]);
+});
+
 describe("inferPackage", () => {
   it("extracts host from http URLs", () => {
     expect(inferPackage("https://api.example.com/v1/users")).toBe("api.example.com");

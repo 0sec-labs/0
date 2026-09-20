@@ -474,6 +474,10 @@ export interface ToolContext {
    * test fixtures that construct `ToolContext` literals directly.
    */
   role?: AgentRole;
+  /** Parent-advertised built-ins; delegated agents cannot widen this capability set. */
+  delegationTools?: readonly ToolDefinition[];
+  /** Current parent instructions, inherited by delegated agent sessions. */
+  delegationSystemPrompt?: string;
   scopePath?: string;
   /** Session policy registry and durable, isolated executable implementation. */
   selfExtension?: SelfExtensionRegistry;

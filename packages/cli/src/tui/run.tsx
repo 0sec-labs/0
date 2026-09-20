@@ -1016,7 +1016,6 @@ function ConsoleApp({
         await runUnified({
           target: plan.target,
           targetType: plan.targetType,
-          reviewStrategy: plan.kind === "source" && depth === "deep" ? plan.reviewStrategy : "pipeline",
           reviewPackageEcosystem: plan.ecosystem,
           depth,
           format: "terminal",

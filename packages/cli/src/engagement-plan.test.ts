@@ -28,20 +28,18 @@ describe("resolveEngagement", () => {
           kind: "source",
           target,
           targetType: "source-code",
-          reviewStrategy: "lenses",
         },
       });
     }
   });
 
-  it("plans source targets through the validated-lens review strategy", () => {
+  it("plans explicitly prefixed local source targets", () => {
     expect(resolveEngagement("source:./repo")).toEqual({
       ok: true,
       plan: {
         kind: "source",
         target: "./repo",
         targetType: "source-code",
-        reviewStrategy: "lenses",
         label: "source review ./repo",
       },
     });

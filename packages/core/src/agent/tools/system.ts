@@ -141,9 +141,9 @@ export const systemToolDefinitions: Record<string, ToolDefinition> = {
   spawn_agent: {
     name: "spawn_agent",
     description:
-      "Spawn a focused sub-agent with fresh context for a specific exploitation task. Use when you've found a vulnerability and need deep exploitation (e.g., SQLi table enumeration, multi-step auth chain). The sub-agent gets its own turn budget and returns findings.",
+      "Delegate a focused task to an agent with fresh context and the parent's role, scope, tools and shared budget. Use for source investigation or an independent security lead. Children may delegate within the shared worker/depth bounds. Returns findings and a summary.",
     parameters: {
-      task: { type: "string", description: "What the sub-agent should do. Be specific: include the target URL, the vulnerability found, and what to extract." },
+      task: { type: "string", description: "Self-contained task: target files or URL, objective, constraints and evidence required." },
       max_turns: { type: "number", description: "Turn budget for the sub-agent (default 40, max 120)" },
       role: { type: "string", description: "Optional operator-configured worker model role." },
       model: { type: "string", description: "Optional model id for this sub-agent. Under an operator-configured auto-routing role you may name any model the session can reach (a provider whose credentials are present); otherwise it must be one of the parent's operator-approved pins." },
@@ -154,7 +154,7 @@ export const systemToolDefinitions: Record<string, ToolDefinition> = {
   spawn_agents: {
     name: "spawn_agents",
     description:
-      "Spawn MULTIPLE focused sub-agents that run CONCURRENTLY (bounded), each with fresh context and its own turn budget. Use to fan out independent exploitation tasks in parallel (e.g. probe several endpoints or leads at once) instead of one-at-a-time spawn_agent. Returns each sub-agent's findings and summary. Max 8 tasks per call.",
+      "Delegate independent tasks CONCURRENTLY (bounded), with fresh context and separate turn budgets but the same role, scope, tools and scan-wide cost budget. Use for source subsystems or independent security leads. Returns each agent's findings and summary. Max 8 tasks per call; descendants share the audit's worker/depth bounds.",
     parameters: {
       context: {
         type: "string",
@@ -171,7 +171,7 @@ export const systemToolDefinitions: Record<string, ToolDefinition> = {
             task: {
               type: "string",
               description:
-                "What this sub-agent should do. Be specific and self-contained. Author it as Markdown with these H1 headings:\n# Target — exact files and symbols; explicit non-goals\n# Change — step-by-step add/remove/rename; APIs and patterns\n# Acceptance — the observable result. Include the target URL, the vulnerability, and what to extract.",
+                "What this sub-agent should do. Be specific and self-contained. Author it as Markdown with these H1 headings:\n# Target — exact files, symbols or URLs; explicit non-goals\n# Change — required investigation or implementation\n# Acceptance — observable results and evidence required.",
             },
             max_turns: {
               type: "number",

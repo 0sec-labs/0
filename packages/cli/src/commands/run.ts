@@ -11,8 +11,6 @@ import type { CostBreakdownEntry } from "@0sec/core";
 import { formatAuditReport, formatReviewReport, formatReport, generatePdfReport } from "../formatters/index.js";
 import { buildShareUrl, checkRuntimeAvailability, getRuntimeAvailability } from "../utils.js";
 import { formatCrossValidatedLeads, type CrossValidatedLeadsSummary } from "./cross-validated-leads.js";
-import { resolveOsecRunStorage, writeOsecRunReport } from "@0sec/db";
-import { runDeepReview } from "./deep-review.js";
 
 interface ScanCompletedCost {
   cost_usd: number;
@@ -59,11 +57,6 @@ export interface RunOptions {
   format: OutputFormat;
   runtime: RuntimeMode;
   mode?: ScanMode;
-  /**
-   * Source review execution strategy. The primary control plane uses
-   * `lenses`, which is the validated self-evolving source-review path.
-   */
-  reviewStrategy?: "pipeline" | "lenses";
   timeout: number;
   verbose: boolean;
   dbPath?: string;
@@ -416,33 +409,6 @@ async function postFinalResultToCloud(report: unknown): Promise<void> {
     process.stderr.write(`[0sec cloud-sink] report POST ${url} failed: ${msg}\n`);
   }
 }
-/**
- * A skipped lens review still needs a canonical terminal record so the unified
- * session, formatter, and persistence paths do not fork around a missing
- * report. Its nonzero runner exit code remains authoritative.
- */
-function skippedLensReviewReport(target: string, message: string): ScanReport {
-  const now = new Date().toISOString();
-  return {
-    target,
-    scanDepth: "deep",
-    startedAt: now,
-    completedAt: now,
-    durationMs: 0,
-    summary: {
-      totalAttacks: 0,
-      totalFindings: 0,
-      critical: 0,
-      high: 0,
-      medium: 0,
-      low: 0,
-      info: 0,
-    },
-    findings: [],
-    warnings: [{ stage: "attack", message }],
-  };
-}
-
 export async function runUnified(opts: RunOptions): Promise<void> {
   const { target, depth, format, runtime, timeout } = opts;
   const core = await loadCoreModule();
@@ -568,49 +534,9 @@ export async function runUnified(opts: RunOptions): Promise<void> {
   }
 
   try {
-    let runnerExitCode = 0;
     let report: unknown;
 
-    if (opts.targetType === "source-code" && opts.reviewStrategy === "lenses") {
-      eventHandler({
-        type: "stage:start",
-        stage: "source-analysis",
-        message: "capturing the validated finder-lens snapshot",
-      });
-      const outcome = await runDeepReview({
-        target,
-        profile: opts.reviewProfile,
-        subsystem: opts.subsystem,
-        models: opts.model ? [opts.model] : undefined,
-        runtime,
-        timeoutMs: timeout,
-        costCeilingUsd: opts.costCeilingUsd,
-        log: (message) => eventHandler({
-          type: "stage:start",
-          stage: "attack",
-          message,
-        }),
-      });
-      runnerExitCode = outcome.exitCode;
-      const lensReport = outcome.report ?? skippedLensReviewReport(
-        target,
-        typeof outcome.result === "object" && outcome.result !== null && "note" in outcome.result
-          ? String(outcome.result.note)
-          : `lens review ended with exit code ${outcome.exitCode}`,
-      );
-      report = lensReport;
-      writeOsecRunReport(
-        resolveOsecRunStorage({ ...(opts.dbPath ? { dbPath: opts.dbPath } : {}) }),
-        lensReport,
-      );
-      eventHandler({
-        type: "stage:end",
-        stage: "attack",
-        message: outcome.exitCode === 0
-          ? "validated finder-lens review completed"
-          : `validated finder-lens review ended with exit code ${outcome.exitCode}`,
-      });
-    } else if (opts.targetType === "url" || opts.targetType === "web-app") {
+    if (opts.targetType === "url" || opts.targetType === "web-app") {
       report = await core.agenticScan({
         config: {
           target,
@@ -735,7 +661,7 @@ export async function runUnified(opts: RunOptions): Promise<void> {
     }
     unsubscribeCost();
 
-    let exitCode = runnerExitCode;
+    let exitCode = 0;
     const estimatedCostUsd = getEstimatedCost(reportAny);
     const usage = getUsage(reportAny);
 

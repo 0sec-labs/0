@@ -189,6 +189,10 @@ For the exhaustive flag reference, see [Commands — hunt](/commands/#hunt).
 Enumerates files in a prepared source tree, applies specialized finder lenses,
 and checks survivors through a multi-lens quorum. No seed fix is required.
 
+This is an explicit evaluated-method research workflow. Ordinary source
+investigation uses `review`, including `review --depth deep`, with scoped
+agent delegation rather than this fixed lens sweep.
+
 ```bash
 0 deep-review ./target-repo --max-candidates 16 --profile default
 ```

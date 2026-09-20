@@ -375,6 +375,7 @@ export interface NativeAgentConfig {
   /** Sandboxed TypeScript tools, skills, and agent programs; never enabled for verifier roles. */
   allowModelSelfExtension?: boolean;
   autonomyMode?: ToolContext["autonomyMode"];
+  publicNetwork?: ToolContext["publicNetwork"];
   executablePlugins?: ExecutablePluginConfiguration;
   executableEvolutionProfiles?: Record<string, EvolutionConfig>;
   /**
@@ -687,7 +688,9 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
     target: config.target,
     scanId: config.scanId,
     role: config.role,
+    delegationSystemPrompt: config.systemPrompt,
     autonomyMode: config.autonomyMode ?? DEFAULT_AUTONOMY_MODE,
+    publicNetwork: config.publicNetwork,
     findings: [],
     attackResults: [],
     targetInfo: {},
@@ -840,6 +843,7 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
     }
     return t;
   })();
+  toolCtx.delegationTools = tools;
 
   // Convert ToolDefinitions to native API format. `nativeTools` is a `let` and
   // the base (built-in) portion is captured separately: after a successful
