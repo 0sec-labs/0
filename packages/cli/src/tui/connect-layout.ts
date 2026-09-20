@@ -55,7 +55,7 @@
 import { PROVIDER_DEVICE_AUTH } from "./device-auth.js";
 import { PROVIDERS, providerStates, type ProviderState } from "./provider-status.js";
 import type { DialogItem } from "./dialog-select-layout.js";
-import type { CreditAccount } from "@0sec/core";
+import type { UsageAccount } from "@0sec/core";
 import { formatBalanceDetail } from "./hosted-balance.js";
 import {
   DIALOG_HOST_FOOTER_ROWS,
@@ -402,7 +402,7 @@ export function connectDialogItems({
           case "verified": {
             const account = hostedVerification.account;
             meta = account && account.state !== "ready"
-              ? `connected · credits ${account.state}`
+              ? `connected · usage ${account.state}`
               : "connected";
             current = true;
             tone = tones?.connected;
@@ -521,7 +521,7 @@ export interface ConnectDetailLine {
  */
 export type HostedVerificationStatus =
   | { readonly kind: "pending" }
-  | { readonly kind: "verified"; readonly account?: CreditAccount | null }
+  | { readonly kind: "verified"; readonly account?: UsageAccount | null }
   | { readonly kind: "rejected" }
   | { readonly kind: "unreachable" };
 
@@ -564,7 +564,7 @@ export function connectDetailLines(
     push("0cloud", "title");
     separate();
     push("Sign in once to use the 0.security-managed model catalog.", "text");
-    push("Model access and credits are checked when used.", "muted");
+    push("Included usage and prepaid API balance are checked when used.", "muted");
     separate();
     if (connected) {
       const v = hostedVerification;

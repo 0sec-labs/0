@@ -12,6 +12,11 @@ on the published npm package and the GitHub Release tag.
 
 ## [Unreleased]
 
+### Changed
+
+- Hosted accounts report monthly included usage as a percentage and prepaid API
+  funds in USD; owners control fallback with `0sec prepaid on|off`.
+
 ## [0.21.0] - 2026-09-20
 
 ### Added

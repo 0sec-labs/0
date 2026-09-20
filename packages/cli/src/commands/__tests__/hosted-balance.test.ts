@@ -1,20 +1,20 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { Command } from "commander";
-import type { CreditAccount } from "@0sec/core";
+import type { UsageAccount } from "@0sec/core";
 import { registerHostedCommand } from "../hosted.js";
 
 const output = vi.hoisted(() => ({ stdout: vi.fn(), stderr: vi.fn() }));
 vi.mock("../../presentation/process-output.js", () => ({ consolePresentationOutput: output }));
 const originalExitCode = process.exitCode;
 
-function account(): CreditAccount {
+function account(): UsageAccount {
   return {
-    schemaVersion: "credits-v1", snapshotAt: "2026-09-18T12:00:00.000Z", policyVersion: "credits-v1",
+    schemaVersion: "usage-v2", snapshotAt: "2026-09-18T12:00:00.000Z",
     scope: { orgId: "fixture-org" }, state: "ready", reason: null,
-    free: { state: "active", claimableCreditNanos: "0", spendableCreditNanos: "1", heldCreditNanos: null, resetAt: null },
-    subscription: { state: "none", priceCents: 1500, periodStart: null, periodEnd: null, windows: [] },
-    prepaid: { spendableCreditNanos: "123456789012345678", heldCreditNanos: "0", settledDeficitCreditNanos: "0", holdShortfallCreditNanos: "0", consentEnabled: false },
-    purchase: { enabled: false, presets: [], customMinCents: 1000, customMaxCents: 100000, stepCents: 100, currency: "usd" },
+    plan: { id: "pro", name: "Pro", monthlyPriceUsd: "39.00" },
+    included: { state: "active", usedPercent: 37.5, resetsAt: "2026-10-18T12:00:00.000Z" },
+    prepaid: { balanceUsd: "123456789.012345678", fallbackEnabled: false },
+    canManageBilling: true,
     admission: { eligible: true, reason: null },
   };
 }
@@ -40,10 +40,10 @@ async function run(args: string[], body: unknown, status = 200): Promise<string>
   return String(output.stdout.mock.lastCall?.[0] ?? "");
 }
 
-it("shows exact credits without rounding a spendable nano to zero", async () => {
+it("shows included percentage and exact prepaid money", async () => {
   const text = await run(["balance"], account());
-  expect(text).toContain("0.000000001 credits");
-  expect(text).toContain("123456789.012345678 credits");
+  expect(text).toContain("37.5%");
+  expect(text).toContain("$123456789.012345678");
   expect(process.exitCode).toBe(0);
 });
 
@@ -51,8 +51,7 @@ it("keeps JSON amounts as exact wire strings and excludes private extensions", a
   const parsed = JSON.parse(await run(["balance", "--json"], {
     ...account(), supplierCostUsd: "private-cost-value",
   }));
-  expect(parsed.prepaid.spendableCreditNanos).toBe("123456789012345678");
-  expect(parsed.free.spendableCreditNanos).toBe("1");
+  expect(parsed.prepaid.balanceUsd).toBe("123456789.012345678");
   expect(JSON.stringify(parsed)).not.toContain("private-cost-value");
 });
 

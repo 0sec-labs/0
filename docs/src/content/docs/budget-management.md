@@ -1,10 +1,10 @@
 ---
 title: Budget Management
-description: Workflow-specific turn limits, shared cost ceilings, model-price estimates, hosted credits, and separate Jev budgets.
+description: Workflow-specific turn limits, shared cost ceilings, model-price estimates, monthly hosted usage, and separate Jev budgets.
 ---
 
 0 has several independent limits: agent turns, request timeouts, estimated model
-cost, and (for hosted access) service-side credit admission. None is a substitute
+cost, and (for hosted access) service-side usage admission. None is a substitute
 for the others. The open-source harness has no software charge; provider,
 subscription and execution-infrastructure costs still apply.
 
@@ -161,11 +161,18 @@ Important boundaries:
 - Failed or cancelled requests can consume provider work without complete usage
   reaching the CLI. Reconcile with the provider invoice or service ledger.
 
-For hosted access, `0 balance` reports a separate `credits-v1` account.
-Claimable free credits are not spendable credits; overlapping subscription
-windows must not be added together; held credits are not available balance.
-Neither login nor a local dollar ceiling authorizes prepaid spending or managed
-security execution. See [hosted billing and interrupted requests](/api-keys/#charging-and-interrupted-requests).
+For hosted access, `0 balance` reports a `usage-v2` account: included monthly
+usage as a percentage, its next reset, and a separate prepaid API balance in USD.
+The service supplies the percentage and reset time; the CLI does not infer them
+from token estimates. Unknown usage remains unavailable rather than becoming zero.
+
+Included allowance is used first. An organization owner can opt in to prepaid
+fallback with `0 prepaid on`, or disable it with `0 prepaid off`. A request that
+cannot reserve enough included allowance is denied unless fallback is enabled and
+the prepaid balance covers it. Login and a local cost ceiling are not spending
+consent. A reservation can exceed the remaining allowance before the displayed
+usage reaches 100%; held funds are not a final charge. See
+[hosted billing and interrupted requests](/api-keys/#charging-and-interrupted-requests).
 
 ## Jev advisory budgets
 

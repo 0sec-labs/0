@@ -4,7 +4,7 @@
 // Subcommands:
 //   - login        alias for `0sec auth login` (opens browser/polls)
 //   - models       list available hosted inference models
-//   - balance      show credit account balance
+//   - balance      show included usage and prepaid API balance
 //
 // All use CloudClient from @0sec/core, which reads scoped creds from
 // env or ~/.0sec/cloud.env. 401 → clear auth error, not silent fallback.
@@ -55,10 +55,34 @@ export function registerHostedCommand(program: Command): void {
   // ── 0sec balance ──
   program
     .command("balance")
-    .description("Show 0.security Cloud credit account balance")
-    .option("--json", "Output the validated credit account as JSON")
+    .description("Show included usage and prepaid API balance")
+    .option("--json", "Output the validated usage account as JSON")
     .action(async (opts: { json?: boolean }) => {
       await runBalance(opts);
+    });
+
+  program
+    .command("prepaid")
+    .description("Enable or disable prepaid API fallback (organization owner only)")
+    .argument("<setting>", "on or off")
+    .action(async (setting: string) => {
+      if (setting !== "on" && setting !== "off") {
+        consolePresentationOutput.stderr("Use: 0sec prepaid on|off", "hosted.prepaid-invalid");
+        process.exitCode = EXIT_USER_ERROR;
+        return;
+      }
+      let client: CloudClient;
+      try { client = await loadClient(); } catch { return; }
+      try {
+        const result = await client.patchInferenceAccountPrepaid(setting === "on");
+        consolePresentationOutput.stdout(
+          `Prepaid API fallback ${result.enabled ? "on" : "off"}.`,
+          "hosted.prepaid",
+        );
+        process.exitCode = EXIT_OK;
+      } catch (err) {
+        handleApiError(err);
+      }
     });
 }
 
