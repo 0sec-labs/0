@@ -69,6 +69,7 @@ describe("startCodexDeviceAuth", () => {
     startCodexDeviceAuth({
       env,
       homeDir: home,
+      probe: () => true,
       spawn: (command, args) => {
         expect(command).toBe("codex");
         expect(args).toEqual(["login", "--device-auth"]);
@@ -87,11 +88,55 @@ describe("startCodexDeviceAuth", () => {
     expect(connected).toBe(1);
   });
 
+  it("reports missing Codex before starting device sign-in", () => {
+    const updates: Array<{ phase: string; message: string }> = [];
+    let launched = false;
+
+    startCodexDeviceAuth({
+      env: { PATH: "/definitely-missing" },
+      spawn: () => {
+        launched = true;
+        return fakeProcess().process;
+      },
+      onUpdate: (update) => updates.push(update),
+      onConnected: () => {},
+    });
+
+    expect(launched).toBe(false);
+    expect(updates).toEqual([{
+      phase: "unavailable",
+      message: "Codex CLI is not available on this console's PATH. Install Codex, or add its directory to PATH and restart 0sec.",
+      lines: [],
+    }]);
+  });
+
+  it("turns a launch ENOENT into setup guidance", () => {
+    const updates: Array<{ phase: string; message: string }> = [];
+    startCodexDeviceAuth({
+      env: {},
+      probe: () => true,
+      spawn: () => {
+        const error = new Error("spawn codex ENOENT") as NodeJS.ErrnoException;
+        error.code = "ENOENT";
+        throw error;
+      },
+      onUpdate: (update) => updates.push(update),
+      onConnected: () => {},
+    });
+
+    expect(updates).toEqual([{
+      phase: "unavailable",
+      message: "Codex CLI is not available on this console's PATH. Install Codex, or add its directory to PATH and restart 0sec.",
+      lines: [],
+    }]);
+  });
+
   it("cancels the device flow without treating it as an API-key failure", () => {
     const child = fakeProcess();
     const phases: string[] = [];
     const session = startCodexDeviceAuth({
       env: {},
+      probe: () => true,
       spawn: () => child.process,
       onUpdate: (update) => phases.push(update.phase),
       onConnected: () => {},

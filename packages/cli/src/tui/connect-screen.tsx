@@ -171,6 +171,7 @@ function toneColor(theme: Theme, tone: ConnectDetailTone): string {
 function oauthStateTone(theme: Theme, phase: CodexDeviceAuthUpdate["phase"]): string {
   switch (phase) {
     case "failed":
+    case "unavailable":
       return theme.ERROR;
     case "connected":
       return theme.SUCCESS;
@@ -191,6 +192,8 @@ function oauthStateTitle(
       return standalone ? `${label} connected` : "connected";
     case "failed":
       return standalone ? `${label} sign-in failed` : "sign-in failed";
+    case "unavailable":
+      return standalone ? `${label} CLI unavailable` : "CLI unavailable";
     case "cancelled":
       return standalone ? `${label} sign-in cancelled` : "sign-in cancelled";
     default:
@@ -206,6 +209,8 @@ function oauthStateMeta(phase: CodexDeviceAuthUpdate["phase"]): string {
       return "connected";
     case "failed":
       return "failed";
+    case "unavailable":
+      return "setup required";
     default:
       return "cancelled";
   }
@@ -217,6 +222,8 @@ function oauthRecoveryHint(phase: CodexDeviceAuthUpdate["phase"]): string {
       return "Complete the sign-in in your browser. Keep this pane open; Esc cancels.";
     case "failed":
       return "Review the sign-in output, then press Enter to try again or use ↑/↓ to choose another provider.";
+    case "unavailable":
+      return "Install Codex or add its directory to PATH, then restart 0sec. Use ↑/↓ to choose another provider.";
     case "connected":
       return "The credential is loaded for this session.";
     default:
@@ -785,7 +792,7 @@ export function ConnectScreen({ frame, onBack, onSkip, onExit, recovery, onConne
       meta = oauthStateMeta(oauth.phase);
       metaFg = tone;
       lines.push(...wrap(oauthStateTitle(oauth.phase, headerRows === 0, provider.label), tone, true), blank());
-      lines.push(...wrap(oauth.message, oauth.phase === "failed" ? theme.TEXT : theme.MUTED));
+      lines.push(...wrap(oauth.message, oauth.phase === "failed" || oauth.phase === "unavailable" ? theme.TEXT : theme.MUTED));
       if (oauth.lines.length > 0) {
         lines.push(blank(), ...wrap(provider.label.toUpperCase(), theme.MUTED));
         for (const line of oauth.lines) lines.push(...wrap(line, theme.TEXT));
@@ -912,7 +919,7 @@ export function ConnectScreen({ frame, onBack, onSkip, onExit, recovery, onConne
     : hostedVisible && hosted
       ? hostedStateTone(theme, hosted.phase)
       : oauthVisible && oauth
-        ? oauth.phase === "failed" ? theme.ERROR : oauth.phase === "connected" ? theme.SUCCESS : theme.ACCENT
+        ? oauth.phase === "failed" || oauth.phase === "unavailable" ? theme.ERROR : oauth.phase === "connected" ? theme.SUCCESS : theme.ACCENT
         : recovery ? theme.ERROR : inInput ? theme.ACCENT : isCloudRow && cloudState.warning ? theme.WARNING : theme.MUTED;
 
   const hint = onSkip && mode === "browse" && !filter

@@ -3,7 +3,7 @@ import { DesktopCodexAuthController } from "./codex-auth-controller.js";
 
 describe("DesktopCodexAuthController", () => {
   it("keeps OAuth tokens daemon-side while publishing lifecycle status", () => {
-    let onUpdate: ((update: { phase: "running" | "connected" | "cancelled" | "failed"; message: string; lines: readonly string[] }) => void) | undefined;
+    let onUpdate: ((update: { phase: "running" | "connected" | "cancelled" | "failed" | "unavailable"; message: string; lines: readonly string[] }) => void) | undefined;
     const cancel = vi.fn();
     const controller = new DesktopCodexAuthController({
       start: (options) => {
