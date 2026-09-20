@@ -38,3 +38,25 @@ it("still counts nested source and detects when the review cap is exceeded", () 
   expect(collectScopeFiles(root)).toEqual([join(root, "first.ts"), join(root, "nested", "second.ts")]);
   expect(countScopeFilesUpTo(root, 1)).toBe(2);
 });
+
+it("collects C#/.NET source (issue #74) alongside other languages", () => {
+  const dir = mkdtempSync(join(tmpdir(), "srcfiles-cs-"));
+  roots.push(dir);
+  writeFileSync(join(dir, "HttpClientHandler.cs"), "namespace System.Net.Http;\n");
+  writeFileSync(join(dir, "Program.fs"), "module Program\n");
+  writeFileSync(join(dir, "Legacy.vb"), "Module Legacy\n");
+  writeFileSync(join(dir, "View.swift"), "import Foundation\n");
+  writeFileSync(join(dir, "init.lua"), "return {}\n");
+  writeFileSync(join(dir, "notes.md"), "# not source\n");
+
+  const found = collectScopeFiles(dir).map((f) => f.split("/").pop()).sort();
+
+  expect(found).toEqual([
+    "HttpClientHandler.cs",
+    "Legacy.vb",
+    "Program.fs",
+    "View.swift",
+    "init.lua",
+  ]);
+});
+

@@ -17,8 +17,10 @@ const DEFAULT_SOURCE_EXTS = new Set([
   ".go",
   ".rb",
   ".php",
-  ".java", ".kt",
+  ".java", ".kt", ".swift",
   ".c", ".h", ".cc", ".cpp", ".cxx", ".hpp",
+  ".cs", ".fs", ".vb",
+  ".lua",
   ".sol",
 ]);
 
