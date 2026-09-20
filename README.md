@@ -28,6 +28,9 @@
 ## Meet Zero
 
 **Your AI security engineer.**
+<p align="center">
+  <img src="assets/security-cycle-diagram.webp" alt="Zero studies, finds, fixes, reports, and improves." width="100%">
+</p>
 
 Zero is a multi-model, open-source cybersecurity CLI. Connect a model, run
 authorized reviews and scans, inspect the evidence, and decide what happens
