@@ -41,13 +41,14 @@ interface GuideServiceStates {
   account: unknown;
 }
 const ONBOARDING = {
-  summary: "First-run path: authenticate, enroll the repository, review source-backed context, save an approved plan, then explicitly start and follow the scan.",
+  summary: "First-run path: authenticate, enroll the repository, review source-backed context, then approve automatic checks or request a one-off scan.",
   steps: [
     "0sec auth login",
     "0sec project enroll <repository> --json",
     "0sec project setup <repository> --json",
-    "Review the proposal and budget; save with project save.",
-    "Start only after approval with project start --revision <revision> --idempotency-key <uuid>.",
+    "Review the proposal and per-run credit limit; save with project save. Saving alone leaves recurring checks paused.",
+    "For approved daily or weekly checks, use project save --enable-schedule. Read automation.nextRunAt for the next check.",
+    "For an approved one-off run, use project start --revision <revision> --idempotency-key <uuid>.",
     "Follow the returned scan with service status <scan-id> or service wait <scan-id>.",
   ],
 };
@@ -61,7 +62,7 @@ const CAPABILITIES: Capability[] = [
     layer: "service",
     requiresAuth: true,
     limitations: "Enrollment checks the connected GitHub App and adds the repository to the current workspace; it does not save configuration or start a scan. After enrollment, use project setup --json. Starting requires an approved revision, an idempotency key and server-authorized credit funding. Observations are suggestions, not automatically accepted instructions.",
-    next: ["Run project setup --json to review the source-backed proposal.", "Save only an approved plan; saving never starts a scan."],
+    next: ["Run project setup --json to review the source-backed proposal.", "Save only an approved plan; saving never starts an immediate scan.", "Use project save --enable-schedule only after approval for recurring checks. Plain save leaves recurring checks paused."],
   },
   {
     id: "audit-skills",
