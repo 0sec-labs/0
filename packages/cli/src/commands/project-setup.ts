@@ -5,6 +5,7 @@ import { createInterface } from "node:readline/promises";
 import type { Command } from "commander";
 import { z } from "zod";
 import { CloudClient, loadCloudCredentials } from "@0sec/core";
+import { defaultOpenBrowser } from "./auth.js";
 
 const endpoint = "/api/project-setup";
 const commit = z.string().regex(/^[a-f0-9]{40}$/);
@@ -14,7 +15,7 @@ const recordSchema = z.object({ repository: z.object({ id: z.string().uuid(), fu
 const discoverySchema = z.object({ sourceRevision: commit, context: z.object({ summary: z.string(), instructions: z.string(), observations: z.array(z.unknown()) }),
   suggestedTestCommand: z.string().nullable(), unavailablePaths: z.array(z.string()) }).passthrough();
 const enrollmentSchema = z.object({ repo_accessible: z.boolean(), repository_id: z.string().uuid().nullable(), installation: z.object({ installed: z.boolean(), install_url: z.string().url().optional() }).optional() }).passthrough();
-type OutputOptions = { json?: boolean };
+type OutputOptions = { json?: boolean; open?: boolean };
 
 function client() { const credentials = loadCloudCredentials(); return new CloudClient({ host: credentials.host, token: credentials.token }); }
 function output(value: unknown, options: OutputOptions) { process.stdout.write(JSON.stringify(value, null, options.json ? undefined : 2) + "\n"); }
@@ -55,7 +56,11 @@ async function enroll(value: string | undefined, options: OutputOptions) {
   const api = client();
   const repo = repositoryUrl(value);
   const status = enrollmentSchema.parse(await api.getJson<unknown>(`/api/enrollment/status?target=${encodeURIComponent(repo)}`));
-  if (!status.repo_accessible) throw new Error(`0security cannot access this repository through the connected GitHub App. Install or update the App, then retry${status.installation?.install_url ? `: ${status.installation.install_url}` : "."}`);
+  if (!status.repo_accessible) {
+    const installUrl = status.installation?.install_url;
+    if (options.open && installUrl) await defaultOpenBrowser(installUrl).catch(() => {});
+    throw new Error(`0security cannot access this repository through the connected GitHub App. Install or update the App, then retry${installUrl ? `: ${installUrl}` : "."}`);
+  }
   output(withNext(await api.postJson<unknown>(endpoint, { action: "enroll", repositoryId: status.repository_id }), ["Run project setup <repository> --json to review the source-backed proposal."]), options);
 }
 async function setup(value: string | undefined, options: OutputOptions) {
@@ -101,7 +106,7 @@ export function registerProjectSetupCommand(program: Command): void {
     .action((value: string | undefined, options: OutputOptions) => run(async () => output(await project(client(), value), options), options));
   root.command("setup [project]").description("Review source-backed context, approve configuration, then optionally start a scan. JSON mode is read-only.").option("--json", "Return an editable proposal without saving or starting")
     .action((value: string | undefined, options: OutputOptions) => run(() => setup(value, options), options));
-  root.command("enroll [repository]").description("Enroll a GitHub repository so Zero can configure and scan it. Does not start a scan.").option("--json", "Emit machine-readable JSON")
+  root.command("enroll [repository]").description("Enroll a GitHub repository so Zero can configure and scan it. Does not start a scan.").option("--open", "Open the GitHub App installation link when access is missing").option("--json", "Emit machine-readable JSON")
     .action((value: string | undefined, options: OutputOptions) => run(() => enroll(value, options), options));
   root.command("discover [project]").description("Read repository metadata at a pinned commit; never executes repository code.").option("--json", "Emit machine-readable JSON")
     .action((value: string | undefined, options: OutputOptions) => run(async () => { const api = client(); const saved = await project(api, value); output(await api.postJson<unknown>(endpoint, { action: "discover", repositoryId: saved.repository.id }), options); }, options));
