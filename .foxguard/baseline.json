@@ -4208,16 +4208,16 @@
       "line": 1994
     },
     {
-      "fingerprint": "688e6ce2de6e7a4e0302f44ae42fa06d4ec3bd1dcd27f2a600e645b29c1d8c19",
+      "fingerprint": "d2e578f876a0a6df2b21a20bf8c089779ffd9ccd60d4e13e412d152a05d2d0c8",
       "rule_id": "js/no-command-injection",
       "file": "packages/core/src/runtime/process.ts",
-      "line": 399
+      "line": 420
     },
     {
-      "fingerprint": "ae336482be5c344323029e0903e5f0b0836e62d5456e93bb129337cb851c5c65",
+      "fingerprint": "e5f8eaec5797c41607540744ad93f5664aff9e65824124e4569d76c19f114565",
       "rule_id": "js/no-command-injection",
       "file": "packages/core/src/runtime/process.ts",
-      "line": 523
+      "line": 556
     },
     {
       "fingerprint": "ad19052e7d7b13173a58ae49c0273522673951df9db0d99677802c729af7350c",
