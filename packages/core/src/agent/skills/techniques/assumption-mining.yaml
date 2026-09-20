@@ -48,6 +48,6 @@ content: |
     violating path is a hypothesis. Verify it: trace the concrete path from a
     real entry point to the site and confirm the assumption is genuinely
     unenforced there (not enforced by a wrapper or an earlier guard).
-  - Complements `variant_hunt` (same bug elsewhere) and `deep_source_review`
-    (lens-driven depth): use `assumption_hunt` when the risk is a subtle broken
+  - Complements `variant_hunt` (same bug elsewhere) and agent-led source review
+    (independent scoped investigation): use `assumption_hunt` when the risk is a subtle broken
     contract rather than a keyword-visible dangerous sink.

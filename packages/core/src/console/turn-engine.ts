@@ -1944,6 +1944,7 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
 
   const tools =
     config.tools ?? getToolsForRole(role, { allowScanners: config.allowScanners });
+  toolContext.delegationTools = tools;
   const baseNativeTools = tools.map(toNativeToolDef);
 
   // `self_extend` is never advertised by getToolsForRole; inject it into the
@@ -2781,6 +2782,7 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
     allowScopeExpansion = true,
     assertAuthority?: () => void,
   ): Promise<ToolResult> {
+    toolContext.delegationSystemPrompt = systemPrompt;
     const capture = contribution;
     if (!capture) return dispatchAuthorizedInternal(call, notify, signal, allowScopeExpansion, assertAuthority);
     const callId = randomUUID();

@@ -65,6 +65,7 @@ export async function runAgentLoop(opts: AgentLoopOptions): Promise<AgentState> 
     target: config.target,
     scanId: config.scanId,
     role: config.role,
+    delegationSystemPrompt: config.systemPrompt,
     findings: [],
     attackResults: [],
     targetInfo: {},
@@ -92,6 +93,7 @@ export async function runAgentLoop(opts: AgentLoopOptions): Promise<AgentState> 
 
   const executor = new ToolExecutor(toolCtx, db, undefined, runtime.forkForSubagent?.bind(runtime));
   const tools = config.tools.length > 0 ? config.tools : getToolsForRole(config.role, { hasScope: !!config.scopePath, allowScanners: config.allowScanners });
+  toolCtx.delegationTools = tools;
   const hasJitSkillTools =
     features.jitSkills &&
     tools.some((tool) => tool.name === "list_skills") &&

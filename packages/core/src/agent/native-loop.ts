@@ -303,6 +303,10 @@ export interface NativeAgentConfig {
    * independently. Omit to keep the legacy per-session accounting.
    */
   costLedger?: ScanCostLedger;
+  /** Root policy inherited by descendants without accumulating ancestor tasks.
+   * Defaults to systemPrompt for a non-delegated root.
+   */
+  delegationSystemPrompt?: string;
   /**
    * Programmatic engagement scope (0sec#215). When set, every URL the
    * agent touches is checked against this policy and out-of-scope URLs
@@ -375,6 +379,7 @@ export interface NativeAgentConfig {
   /** Sandboxed TypeScript tools, skills, and agent programs; never enabled for verifier roles. */
   allowModelSelfExtension?: boolean;
   autonomyMode?: ToolContext["autonomyMode"];
+  publicNetwork?: ToolContext["publicNetwork"];
   executablePlugins?: ExecutablePluginConfiguration;
   executableEvolutionProfiles?: Record<string, EvolutionConfig>;
   /**
@@ -422,11 +427,9 @@ export interface NativeAgentLoopOptions {
    */
   inlineValidationOracle?: InlineOracle;
   /**
-   * Cross-scan hunt-memory store override. Normally left unset — the loop lazily
-   * constructs a single {@link HuntMemoryStore} (defaulting to
-   * ~/.0sec/hunt-memory) for the run. Tests inject a deterministic store here so
-   * the memory path never touches the real per-user state dir. Ignored when the
-   * memory integration is disabled via `0SEC_DISABLE_HUNT_MEMORY`.
+   * Optional store override; supplying one opts into cross-scan hunt memory.
+   * Otherwise persistent hunt memory is disabled unless codebaseLearning is
+   * true. 0SEC_DISABLE_HUNT_MEMORY=1/true vetoes either opt-in.
    */
   huntMemoryStore?: HuntMemoryStore;
 }
@@ -687,7 +690,9 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
     target: config.target,
     scanId: config.scanId,
     role: config.role,
+    delegationSystemPrompt: config.delegationSystemPrompt ?? config.systemPrompt,
     autonomyMode: config.autonomyMode ?? DEFAULT_AUTONOMY_MODE,
+    publicNetwork: config.publicNetwork,
     findings: [],
     attackResults: [],
     targetInfo: {},
@@ -769,9 +774,10 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
     ? resolveExecutableEvolutionProfiles(config.executableEvolutionProfiles)
     : {};
 
+  const disableHuntMemory = process.env["0SEC_DISABLE_HUNT_MEMORY"];
   const huntMemoryEnabled =
-    process.env["0SEC_DISABLE_HUNT_MEMORY"] !== "1" &&
-    process.env["0SEC_DISABLE_HUNT_MEMORY"] !== "true";
+    (opts.huntMemoryStore !== undefined || config.codebaseLearning === true) &&
+    disableHuntMemory !== "1" && disableHuntMemory !== "true";
   // Single store instance for the run. When a store is injected (tests) it is
   // used as-is; otherwise it is lazily constructed on first use so a scan that
   // never saves a finding pays no store-open cost.
@@ -840,6 +846,7 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
     }
     return t;
   })();
+  toolCtx.delegationTools = tools;
 
   // Convert ToolDefinitions to native API format. `nativeTools` is a `let` and
   // the base (built-in) portion is captured separately: after a successful
@@ -1510,7 +1517,7 @@ async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise
   }
 
   // ── Hunt memory (cross-scan pattern DB) ──
-  // Default ON, opt out with 0SEC_DISABLE_HUNT_MEMORY=1. On each saved finding
+  // Explicit opt-in only; 0SEC_DISABLE_HUNT_MEMORY vetoes it. On each saved finding
   // we append a REDACTED HuntRecord (the store redacts every persisted string;
   // `evidenceRef` is a POINTER, never raw evidence), and once at loop start we
   // surface a concise "prior findings for similar targets" count via `onEvent`

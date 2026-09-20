@@ -369,7 +369,6 @@ export function registerReviewCommand(program: Command): void {
         diffBase: opts.diffBase as string | undefined,
         changedOnly: opts.changedOnly as boolean,
         depth,
-        reviewStrategy: depth === "deep" ? "lenses" : "pipeline",
         format: (opts.format === "md" ? "markdown" : opts.format) as OutputFormat,
         runtime: (opts.runtime as RuntimeMode) ?? "auto",
         timeout: parseInt(opts.timeout as string, 10),

@@ -40,9 +40,6 @@ const agenticScanMock = vi.fn();
 const runPipelineMock = vi.fn();
 const createRuntimeMock = vi.fn();
 const loadAppsecFinderLensesMock = vi.fn(() => []);
-const runDeepReviewMock = vi.fn();
-const resolveOsecRunStorageMock = vi.fn(() => ({ runId: "test-run" }));
-const writeOsecRunReportMock = vi.fn();
 let eventBusListener:
   | { emit: (type: string, payload: unknown) => void }
   | null = null;
@@ -63,14 +60,6 @@ vi.mock("@0sec/core", () => ({
   loadAppsecFinderLenses: loadAppsecFinderLensesMock,
 }));
 
-vi.mock("../deep-review.js", () => ({
-  runDeepReview: runDeepReviewMock,
-}));
-
-vi.mock("@0sec/db", () => ({
-  resolveOsecRunStorage: resolveOsecRunStorageMock,
-  writeOsecRunReport: writeOsecRunReportMock,
-}));
 
 // `runUnified` calls `checkRuntimeAvailability` for terminal format. We
 // stub it to a no-op so tests don't probe the user's environment.
@@ -167,10 +156,7 @@ describe("runUnified — runtime gating", () => {
     agenticScanMock.mockReset();
     runPipelineMock.mockReset();
     createRuntimeMock.mockReset();
-    runDeepReviewMock.mockReset();
     eventBusListener = null;
-    resolveOsecRunStorageMock.mockClear();
-    writeOsecRunReportMock.mockClear();
     tracker = {};
     exitSpy = makeExitMock(tracker);
     errSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
@@ -243,35 +229,6 @@ describe("runUnified — runtime gating", () => {
     expect(agenticScanMock).toHaveBeenCalledOnce();
   });
 
-  it("routes a source engagement through the lens strategy inside the unified runner", async () => {
-    runDeepReviewMock.mockResolvedValueOnce({
-      exitCode: 0,
-      report: {
-        ...cleanReport({ target: "/repo", scanDepth: "deep" }),
-        findings: [],
-      },
-      result: { mode: "deep_review" },
-    });
-
-    await runUnified({
-      target: "/repo",
-      targetType: "source-code",
-      reviewStrategy: "lenses",
-      depth: "deep",
-      format: "json",
-      runtime: "auto",
-      timeout: 30000,
-      verbose: false,
-    });
-
-    expect(runDeepReviewMock).toHaveBeenCalledWith(expect.objectContaining({
-      target: "/repo",
-      runtime: "auto",
-      timeoutMs: 30000,
-    }));
-    expect(writeOsecRunReportMock).toHaveBeenCalledOnce();
-    expect(runPipelineMock).not.toHaveBeenCalled();
-  });
 
   it("returns a findings outcome to the hosting TUI instead of terminating its process", async () => {
     const stdoutDescriptor = Object.getOwnPropertyDescriptor(process.stdout, "isTTY");

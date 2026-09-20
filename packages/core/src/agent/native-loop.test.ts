@@ -14,7 +14,7 @@ import { ScanCostLedger } from "./cost-ledger.js";
 import { detectPlaybooks, buildPlaybookInjection, PLAYBOOKS } from "./playbooks.js";
 import type { NativeRuntime, NativeRuntimeResult, NativeMessage, NativeToolDef } from "../runtime/types.js";
 import type { Finding } from "@0sec/shared";
-import { chmodSync, existsSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { eventBus } from "../events/bus.js";
@@ -23,7 +23,7 @@ import {
   UNTRUSTED_CLOSE,
 } from "../untrusted-sanitizer.js";
 import { HuntMemoryStore } from "../memory/index.js";
-import { buildSubagentMessage, getToolsForRole } from "./tools.js";
+import { buildSubagentMessage, getToolsForRole, ToolExecutor } from "./tools.js";
 import { setWorkspaceHarnessTrust } from "../plugins/harness-trust.js";
 
 const scopedTransport = vi.hoisted(() => vi.fn<typeof import("../http.js").fetchScoped>());
@@ -2496,6 +2496,31 @@ describe("runNativeAgentLoop — hunt memory integration", () => {
     };
   }
 
+  it("keeps local findings ephemeral until memory is explicitly enabled", async () => {
+    vi.stubEnv("HOME", tmp);
+    const finding = {
+      title: "Reflected XSS in search", severity: "high", category: "xss",
+      evidence_request: "GET /?q=<script>", evidence_response: "<script>",
+    };
+    const config = {
+      role: "attack" as const, systemPrompt: "Inspect the target", tools: [],
+      maxTurns: 2, target: "https://shop.example.com", scanId: "local-cold",
+      allowModelSelfExtension: false,
+    };
+    const cold = await runNativeAgentLoop({
+      config, runtime: saveThenDone(finding), db: null,
+    });
+    expect(cold.findings.map(record => record.title)).toEqual([finding.title]);
+    expect(existsSync(join(tmp, ".0sec", "hunt-memory"))).toBe(false);
+
+    await runNativeAgentLoop({
+      config: { ...config, codebaseLearning: true, scanId: "explicit-memory" },
+      runtime: saveThenDone(finding), db: null,
+    });
+    expect(new HuntMemoryStore({ home: tmp }).all().map(record => record.title))
+      .toEqual([finding.title]);
+  });
+
   it("appends a redacted HuntRecord to an injected store on a saved finding", async () => {
     const store = new HuntMemoryStore({ path: join(tmp, "patterns.jsonl") });
     const runtime = saveThenDone({
@@ -2882,5 +2907,130 @@ describe("toolFailureText", () => {
       meta: { kind: "command", exitCode: 2, stdout: "boom" },
     });
     expect(text.match(/exited 2/g)).toHaveLength(1);
+  });
+});
+
+describe("recursive subagents", () => {
+  it("returns a grandchild's finding once, charges shared usage, and denies tool escalation", async () => {
+    const home = mkdtempSync(join(tmpdir(), "0sec-recursive-review-"));
+    const source = join(home, "route.ts");
+    writeFileSync(source, "export const authorize = false;\n");
+    vi.stubEnv("HOME", home);
+    const ledger = new ScanCostLedger();
+    const edges: Array<{ agent_id: string; parent_scan_id: string }> = [];
+    const unsubscribe = eventBus.subscribe({ emit(type, payload) {
+      if (type === "subagent_lifecycle" && payload.status === "running") edges.push(payload);
+    } });
+    const captured: { system?: string; messages: NativeMessage[] } = { messages: [] };
+    const runtimeAt = (depth: number): NativeRuntime => {
+      let turn = 0;
+      return {
+        type: "api",
+        isAvailable: async () => true,
+        forkForSubagent: async () => runtimeAt(depth + 1),
+        executeNative: async (system, messages) => {
+          turn++;
+          if (depth === 2 && turn === 2) {
+            captured.system = system;
+            captured.messages.push(...messages);
+          }
+          return {
+            content: turn > 1 ? [{ type: "text", text: "Evidence inspection complete." }] :
+              depth === 0 ? [{ type: "tool_use", id: "delegate-0", name: "spawn_agent", input: { task: "PARENT_TASK: Examine file structure", max_turns: 2 } }] :
+              depth === 1 ? [{ type: "tool_use", id: "delegate-1", name: "spawn_agent", input: { task: "CHILD_TASK: Inspect route.ts", max_turns: 2 } }] : [
+                { type: "tool_use", id: "read", name: "read_file", input: { path: "route.ts" } },
+                { type: "tool_use", id: "restricted", name: "query_findings", input: {} },
+                { type: "tool_use", id: "write", name: "str_replace", input: { path: "route.ts", old_string: "false", new_string: "true" } },
+                { type: "tool_use", id: "finding", name: "save_finding", input: {
+                  title: "Authorization disabled", description: "route.ts exports a disabled authorization guard.",
+                  category: "broken-access-control", severity: "high", source_path: "route.ts", source_start_line: 1,
+                  evidence_request: "route.ts:1", evidence_response: "export const authorize = false;",
+                } },
+              ],
+            stopReason: turn > 1 ? "end_turn" : "tool_use",
+            durationMs: 0, usage: { inputTokens: 10, outputTokens: 1 },
+          };
+        },
+      };
+    };
+    try {
+      const state = await runNativeAgentLoop({
+        config: {
+          role: "review", systemPrompt: "ROOT_POLICY: Review without modifications.", target: home,
+          scopePath: home, workspaceRoot: home, scanId: "recursive-root", maxTurns: 2,
+          tools: getToolsForRole("review", { hasScope: true }).filter(tool => tool.name !== "query_findings"),
+          costLedger: ledger,
+          allowModelSelfExtension: false, codebaseLearning: false,
+        },
+        runtime: runtimeAt(0), db: null,
+      });
+      expect(state.findings.map(finding => finding.title)).toEqual(["Authorization disabled"]);
+      expect(readFileSync(source, "utf8")).toBe("export const authorize = false;\n");
+      expect(captured.messages.flatMap(message => message.content)).toContainEqual(
+        expect.objectContaining({ type: "tool_result", tool_use_id: "write", is_error: true }),
+      );
+      expect(captured.messages.flatMap(message => message.content)).toContainEqual(
+        expect.objectContaining({ type: "tool_result", tool_use_id: "restricted", is_error: true }),
+      );
+      expect(captured.system).toContain("ROOT_POLICY: Review without modifications.");
+      expect(captured.system).toContain("CHILD_TASK: Inspect route.ts");
+      expect(captured.system).not.toContain("PARENT_TASK: Examine file structure");
+      expect(edges).toHaveLength(2);
+      expect(edges[0].parent_scan_id).toBe("recursive-root");
+      expect(edges[1].parent_scan_id).toBe(edges[0].agent_id);
+      expect(ledger.tokenUsage()).toMatchObject({ inputTokens: 60, outputTokens: 6 });
+    } finally {
+      unsubscribe();
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  it("stops a running recursive subtree only after descendant execution drains", async () => {
+    const home = mkdtempSync(join(tmpdir(), "0sec-recursive-stop-"));
+    vi.stubEnv("HOME", home);
+    const { promise: running, resolve: started } = Promise.withResolvers<void>();
+    const { promise: cleanup, resolve: release } = Promise.withResolvers<void>();
+    const { promise: interrupted, resolve: interrupt } = Promise.withResolvers<void>();
+    let descendantDrained = false;
+    const runtimeAt = (depth: number): NativeRuntime => ({
+      type: "api",
+      isAvailable: async () => true,
+      forkForSubagent: async () => runtimeAt(depth + 1),
+      executeNative: async (_system, _messages, _tools, _callbacks, signal) => {
+        if (depth === 1) return {
+          content: [{ type: "tool_use", id: "delegate", name: "spawn_agent", input: { task: "Wait for cancellation", max_turns: 1 } }],
+          stopReason: "tool_use", durationMs: 0,
+        };
+        started();
+        if (signal?.aborted) interrupt();
+        else signal!.addEventListener("abort", () => interrupt(), { once: true });
+        await interrupted;
+        await cleanup;
+        descendantDrained = true;
+        throw signal!.reason;
+      },
+    });
+    const executor = new ToolExecutor({
+      role: "review", target: home, scopePath: home, scanId: "recursive-stop",
+      findings: [], attackResults: [], targetInfo: {},
+    }, null, undefined, async () => runtimeAt(1));
+    const task = executor.execute({ name: "spawn_agent", arguments: { task: "Delegate bounded work", max_turns: 1 } });
+    try {
+      await running;
+      let stopped = false;
+      const stop = executor.stopPersistentAgents().then(() => { stopped = true; });
+      await interrupted;
+      expect(stopped).toBe(false);
+      expect(descendantDrained).toBe(false);
+      release();
+      await stop;
+      expect(descendantDrained).toBe(true);
+      expect((await task).success).toBe(false);
+    } finally {
+      release();
+      await task;
+      await executor.cleanup();
+      rmSync(home, { recursive: true, force: true });
+    }
   });
 });

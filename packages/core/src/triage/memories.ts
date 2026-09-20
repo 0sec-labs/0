@@ -244,10 +244,10 @@ export class MemoryStore {
    *   - scope=package and scopeValue === inferPackage(target)
    */
   async getRelevantMemories(finding: Finding, target: string): Promise<TriageMemory[]> {
-    const db = await this.db();
     const pkg = inferPackage(target);
-    const rows = [...db.listTriageMemories({ category: finding.category, limit: 500 }),
-      ...(this.options.contextMemories ?? []).filter(memory => memory.category === finding.category)];
+    const rows = this.options.contextMemories !== undefined
+      ? this.options.contextMemories.filter(memory => memory.category === finding.category)
+      : (await this.db()).listTriageMemories({ category: finding.category, limit: 500 });
 
     const applicable = rows.filter((row) => {
       if (row.scope === "global") return true;

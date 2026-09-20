@@ -12,6 +12,20 @@ on the published npm package and the GitHub Release tag.
 
 ## [Unreleased]
 
+### Changed
+
+- Source-review agents can delegate recursively through the normal agent runtime.
+  Descendants retain scoped tool restrictions, share scan-wide accounting, and
+  publish findings once; stopping a subtree waits for its descendants to drain.
+- Ordinary deep reviews use the same agent runner as other source reviews;
+  remove the opaque `file_security_review` and `deep_source_review` agent tools.
+- Managed reviews consume scan-bound human feedback as untrusted context, without
+  mixing it with persistent local history or treating prior dismissals as proof.
+- Local native agents keep cross-run hunt memory off unless explicitly enabled;
+  managed source research opts in through the Cloud sink. Session history is separate.
+- Recursive descendants inherit root policy and their own task without accumulating
+  ancestor task prompts.
+
 ### Fixed
 
 - Onboarding Escape returns to the previous decision; skipping setup enters

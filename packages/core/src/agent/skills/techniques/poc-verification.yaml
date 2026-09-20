@@ -49,7 +49,7 @@ content: |
     category before discarding.
 
   ### Where it sits
-  - Every lead from `deep_source_review`, `variant_hunt`, `assumption_hunt`, or
+  - Every lead from source-review agents, `variant_hunt`, `assumption_hunt`, or
     a scanner should pass through here before it is treated as real.
   - A verified finding is the right input to `generate_fix` (remediation) and
     `assemble_advisory` (disclosure draft).

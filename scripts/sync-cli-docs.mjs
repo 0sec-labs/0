@@ -22,7 +22,6 @@ const optionDescriptions = new Map([
   ["0sec review|--cost-ceiling", "Soft estimated-model-cost ceiling; partial findings are retained when enforcement trips. In-flight work may overshoot. Overrides 0SEC_COST_CEILING_USD."],
   ["0sec ingest|--expected-signature", "Registered but not forwarded to kernel verification; do not rely on this option as a required crash-signature match."],
   ["0sec deep-review|--cost-ceiling", "Shared estimated-model-cost ceiling for planner and finder work. Checks can stop further work after recorded usage reaches the threshold; in-flight calls can overshoot."],
-  ["0sec file-review|--max-cost-usd", "Estimated-cost stop at resumable checkpoints; in-flight inventory, batches, and revalidation can overshoot."],
   ["0sec ingest|--cost-ceiling", "Estimated model-cost ceiling for subsystem review, not a guaranteed whole-job billing cap."],
   ["0sec console|--role", "Tool set to expose: audit, review, discovery, attack, verify, or report. Defaults to audit; role selection is not authorization or OS isolation."],
   ["0sec console|--finding-intent", "Finding workflow: investigate, verify, draft_fix, or impact. These instructions do not independently enforce tool permissions."],
