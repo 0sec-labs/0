@@ -7,7 +7,7 @@ tableOfContents:
 ---
 
 Find the command, arguments, and options for your task. This reference covers
-**63 top-level commands** and their registered subcommands.
+**64 top-level commands** and their registered subcommands.
 
 For a worked example, start with [Scan Workflows](/scan-workflows/),
 [Console](/console/), or [Research Workflows](/research-workflows/).
@@ -1419,7 +1419,68 @@ Kernel security workflows
 
 Guide: [Read the workflow](/research-workflows/).
 
-Subcommands: [syzbot-mine](#kernel-syzbot-mine) · [weights](#kernel-weights) · [variant-hunt](#kernel-variant-hunt).
+Subcommands: [jev-prepass](#kernel-jev-prepass) · [jev-commit-prepass](#kernel-jev-commit-prepass) · [jev-source-prepass](#kernel-jev-source-prepass) · [crash-triage](#kernel-crash-triage) · [syzbot-mine](#kernel-syzbot-mine) · [weights](#kernel-weights) · [variant-hunt](#kernel-variant-hunt).
+
+#### kernel jev-prepass
+
+Ranks source-review hypotheses before kernel verification. Requires `0SEC_JEV_FEATURES=kernel` and a configured Jev provider. Scores are advisory; verification runs only when `--verify-top` is greater than `0`.
+
+```text
+0 kernel jev-prepass [options]
+```
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--tree <path>` **required** | — | Path to the exact Linux source tree |
+| `--upstream-tree <path>` | — | Current upstream Linux tree used to exclude already-fixed bugs before Jev spend |
+| `--findings <path>` **required** | — | Finding[] or scan-report JSON from a kernel source review |
+| `--verify-top <n>` | `0` | Run the existing kernel oracle for the top N ranked hypotheses |
+| `--attempts <n>` | `5` | Maximum kernel_run attempts per selected hypothesis |
+| `-o, --out <path>` | — | Write the exhaustive ranked result to a file |
+
+#### kernel jev-commit-prepass
+
+Ranks commit diffs from a bounded Linux Git history for deeper review. Requires `0SEC_JEV_FEATURES=kernel` and a configured Jev provider. A score is not a confirmed vulnerability.
+
+```text
+0 kernel jev-commit-prepass [options]
+```
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--tree <path>` **required** | — | Path to a Linux git tree |
+| `--since <git-date>` | `14 days ago` | Enumerate commits since this git date |
+| `--paths <csv>` | — | Optional repo-relative path prefixes |
+| `--limit <n>` | `400` | Maximum commits to enumerate |
+| `-o, --out <path>` | — | Write ranked commit ledger to a file |
+
+#### kernel jev-source-prepass
+
+Extracts C functions from a kernel subtree or source file and ranks them with Jev. Requires `0SEC_JEV_FEATURES=kernel` and a configured provider. The JSON ledger reports evaluated and unscored functions separately.
+
+```text
+0 kernel jev-source-prepass [options]
+```
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--tree <path>` **required** | — | Path to the Linux source tree |
+| `--subtree <path>` **required** | — | Repo-relative kernel subtree or C source file |
+| `-o, --out <path>` | — | Write the exhaustive function ranking ledger to a file |
+
+#### kernel crash-triage
+
+Ranks supplied crash records for further investigation. Requires `0SEC_JEV_FEATURES=crash` and a configured Jev provider. This command does not reproduce a crash or prove exploitability.
+
+```text
+0 kernel crash-triage [options]
+```
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--crashes <path>` **required** | — | Path to crash JSON (array of CrashRecord or { crashes: CrashRecord[] }) |
+| `-o, --out <path>` | — | Write ranked crash triage JSON to a file |
+| `--summary-out <path>` | — | Write compact markdown crash summary to a file |
 
 #### kernel syzbot-mine
 
@@ -1448,6 +1509,7 @@ Generate an LLM-derived syzkaller choice_weights.json for a kernelCTF target
 | --- | --- | --- |
 | `--target <version>` **required** | — | Target kernel version, e.g. 6.12.101 |
 | `--crash-summary <path>` | — | File with recent crash descriptions to inform weighting |
+| `--jev-prepass <path>` | — | Jev commit/finding prepass JSON used as ranked weighting evidence |
 | `--enabled-syscalls <path>` | — | JSON array file of manager-enabled syscall names to constrain the plan |
 | `--from-file <path>` | — | Validate/normalize a raw model JSON plan instead of calling the API |
 | `-m, --model <model>` | — | Override model (default: env/auto-detected) |
@@ -1473,6 +1535,23 @@ Run foxguard-backed kernel advisory variant hunting
 | `--timeout <ms>` | `120000` | Foxguard timeout in milliseconds |
 | `-o, --output <format>` | `terminal` | Output format: terminal \| json \| sarif |
 | `-v, --verbose` | — | Verbose terminal output |
+
+### radar
+
+Ranks recent repository commits for possible silent security fixes. Requires `0SEC_JEV_FEATURES=radar` and a configured Jev provider. Optional seed output feeds later investigation; ranking does not verify or dismiss vulnerabilities.
+
+```text
+0 radar [options]
+```
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--repo <path>` **required** | — | Path to a valid git working tree |
+| `--since <date-or-ref>` | — | Git since-format constraint (e.g. '7 days ago', 'HEAD~50') |
+| `--path <paths...>` | — | Restrict scanning to specific file paths (repeatable) |
+| `--limit <N>` | — | Maximum commits to enumerate (default 200) |
+| `--out <path>` | — | Write ranked JSON results to file instead of stdout |
+| `--seeds-out <path>` | — | Write SeedFindings JSON for variant-hunt candidates to file |
 
 ### exploit
 
