@@ -1,3 +1,4 @@
+import assert from "node:assert/strict";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -124,7 +125,8 @@ describe("computeMarketLayout — the sweep", () => {
    * box one row short of its content paints its own border through that content.
    * Both are silent at compile time.
    */
-  it("never lets a pane, a row or a column exceed what it was given", { timeout: 30000 }, () => {
+  it("never lets a pane, a row or a column exceed what it was given", () => {
+    // Keep the exhaustive grid without constructing millions of matcher objects.
     for (let width = 0; width <= 200; width++) {
       for (let height = 0; height <= 80; height++) {
         for (const noticeRows of [0, 1]) {
@@ -132,32 +134,23 @@ describe("computeMarketLayout — the sweep", () => {
           const at = `${width}x${height} (notice ${noticeRows})`;
 
           for (const [name, value] of layoutNumbers(layout)) {
-            expect(isInteger(value), `${name} was ${value} at ${at}`).toBe(true);
+            assert.ok(isInteger(value), `${name} was ${value} at ${at}`);
           }
 
           // -- horizontal --
-          expect(layout.contentWidth, `contentWidth exceeded width at ${at}`).toBeLessThanOrEqual(
-            Math.max(0, width),
-          );
+          assert.ok(layout.contentWidth <= Math.max(0, width), `contentWidth exceeded width at ${at}`);
           if (layout.stacked) {
-            expect(layout.list.width, `stacked list too wide at ${at}`).toBeLessThanOrEqual(
-              layout.contentWidth,
-            );
-            expect(layout.detail.width, `stacked detail too wide at ${at}`).toBeLessThanOrEqual(
-              layout.contentWidth,
-            );
-            expect(layout.paneGap, `stacked panes had a horizontal gap at ${at}`).toBe(0);
+            assert.ok(layout.list.width <= layout.contentWidth, `stacked list too wide at ${at}`);
+            assert.ok(layout.detail.width <= layout.contentWidth, `stacked detail too wide at ${at}`);
+            assert.equal(layout.paneGap, 0, `stacked panes had a horizontal gap at ${at}`);
           } else {
             const claimed = layout.list.width + layout.paneGap + layout.detail.width;
-            expect(
-              claimed,
-              `panes claimed ${claimed} of ${layout.contentWidth} at ${at}`,
-            ).toBeLessThanOrEqual(layout.contentWidth);
+            assert.ok(claimed <= layout.contentWidth, `panes claimed ${claimed} of ${layout.contentWidth} at ${at}`);
           }
 
           // -- list row columns --
           const row = layout.row;
-          expect(row.width, `row wider than the list pane at ${at}`).toBe(layout.list.innerWidth);
+          assert.equal(row.width, layout.list.innerWidth, `row wider than the list pane at ${at}`);
           const rowClaimed =
             row.markerWidth +
             row.markerGap +
@@ -166,63 +159,46 @@ describe("computeMarketLayout — the sweep", () => {
             row.versionWidth +
             row.stateGap +
             row.stateWidth;
-          expect(rowClaimed, `row claimed ${rowClaimed} of ${row.width} at ${at}`).toBe(row.width);
+          assert.equal(rowClaimed, row.width, `row claimed ${rowClaimed} of ${row.width} at ${at}`);
 
           // -- kind heading columns --
           const heading = layout.heading;
-          expect(heading.width, `heading wider than the list pane at ${at}`).toBe(
-            layout.list.innerWidth,
-          );
+          assert.equal(heading.width, layout.list.innerWidth, `heading wider than the list pane at ${at}`);
           const headingClaimed = heading.labelWidth + heading.gap + heading.countWidth;
-          expect(
-            headingClaimed,
-            `heading claimed ${headingClaimed} of ${heading.width} at ${at}`,
-          ).toBe(heading.width);
+          assert.equal(headingClaimed, heading.width, `heading claimed ${headingClaimed} of ${heading.width} at ${at}`);
           if (heading.countWidth > 0) {
-            expect(heading.gap, `heading count had no gap at ${at}`).toBe(1);
-            expect(heading.labelWidth, `heading label squeezed out at ${at}`).toBeGreaterThan(0);
+            assert.equal(heading.gap, 1, `heading count had no gap at ${at}`);
+            assert.ok(heading.labelWidth > 0, `heading label squeezed out at ${at}`);
           }
           if (row.versionWidth === 0) {
-            expect(row.versionGap, `version gap outlived the version at ${at}`).toBe(0);
+            assert.equal(row.versionGap, 0, `version gap outlived the version at ${at}`);
           }
           if (row.stateWidth === 0) {
-            expect(row.stateGap, `state gap outlived the state at ${at}`).toBe(0);
+            assert.equal(row.stateGap, 0, `state gap outlived the state at ${at}`);
           }
 
           // -- vertical --
-          expect(layout.list.height, `list taller than the body at ${at}`).toBeLessThanOrEqual(
-            layout.bodyRows,
-          );
-          expect(layout.detail.height, `detail taller than the body at ${at}`).toBeLessThanOrEqual(
-            layout.bodyRows,
-          );
+          assert.ok(layout.list.height <= layout.bodyRows, `list taller than the body at ${at}`);
+          assert.ok(layout.detail.height <= layout.bodyRows, `detail taller than the body at ${at}`);
           if (layout.stacked) {
             const rows = layout.list.height + layout.detail.height;
-            expect(
-              rows,
-              `stacked panes claimed ${rows} of ${layout.bodyRows} rows at ${at}`,
-            ).toBeLessThanOrEqual(layout.bodyRows);
+            assert.ok(rows <= layout.bodyRows, `stacked panes claimed ${rows} of ${layout.bodyRows} rows at ${at}`);
           }
-          expect(
-            layout.visibleRows,
-            `visibleRows exceeded the list body at ${at}`,
-          ).toBeLessThanOrEqual(layout.list.bodyRows);
+          assert.ok(layout.visibleRows <= layout.list.bodyRows, `visibleRows exceeded the list body at ${at}`);
 
           for (const pane of [layout.list, layout.detail]) {
             if (pane.width > 0) {
-              expect(pane.innerWidth, `zero-width pane at ${at}`).toBeGreaterThan(0);
+              assert.ok(pane.innerWidth > 0, `zero-width pane at ${at}`);
             }
             if (pane.height > 0) {
-              expect(pane.bodyRows, `zero-body pane at ${at}`).toBeGreaterThan(0);
+              assert.ok(pane.bodyRows > 0, `zero-body pane at ${at}`);
             }
-            expect(pane.innerWidth).toBeLessThanOrEqual(pane.width);
-            expect(pane.bodyRows).toBeLessThanOrEqual(pane.height);
+            assert.ok(pane.innerWidth <= pane.width, `pane inner width exceeded width at ${at}`);
+            assert.ok(pane.bodyRows <= pane.height, `pane body exceeded height at ${at}`);
             if (pane.height > 0) {
               const paneChromeRows = (layout.bordered ? 2 : 0) + (pane.hasTitle ? 1 : 0);
-              expect(pane.height - pane.bodyRows, `pane chrome miscounted at ${at}`).toBe(
-                paneChromeRows,
-              );
-              expect(pane.width - pane.innerWidth).toBe(layout.bordered ? 4 : 0);
+              assert.equal(pane.height - pane.bodyRows, paneChromeRows, `pane chrome miscounted at ${at}`);
+              assert.equal(pane.width - pane.innerWidth, layout.bordered ? 4 : 0, `pane horizontal chrome miscounted at ${at}`);
             }
           }
         }
