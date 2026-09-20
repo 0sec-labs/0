@@ -45,154 +45,12 @@ import { runLlmIpiAudit } from "./llm-ipi-audit.js";
 import { z } from "zod";
 import { layerVerdictArraySchema, formatZodError } from "./schemas.js";
 import { createScanContext, finalize } from "./context.js";
-import { generateRemediation, generateRemediationWithLLM } from "./remediation.js";
-import { assessImpact, parseImpactAssessment } from "./triage/impact-assessment.js";
-import type { RemediationObservation } from "./remediation.js";
-import { mapWithConcurrency } from "./concurrency.js";
+import { generateRemediation } from "./remediation.js";
+import { parseImpactAssessment } from "./triage/impact-assessment.js";
+import { attachRemediation, attachImpactAssessment, countFlagsInFindings } from "./agentic/report-enrichment.js";
+import { getOrCreateRateLimiter, resolveEngagementForConfig, attachEngagementPosture, resolveEnforcementForConfig, attachEnforcementSummary, resolveScopeForConfig, buildAttributionForConfig, cacheScopePolicy } from "./agentic/scan-config.js";
 
-/**
- * How many model-written remediation calls may be in flight at once.
- *
- * The static knowledge-base path is a synchronous map lookup, so the call sites
- * are plain `for` loops. Swapping in an LLM call would turn those into one
- * sequential round-trip per finding — a 50-finding scan would serialise 50
- * model calls at report-assembly time, after the user already believes the scan
- * is done. Bounded fan-out keeps the wall-clock flat without letting a noisy
- * scan open an unbounded number of sessions. Override with
- * `0SEC_REMEDIATION_CONCURRENCY`.
- */
-const REMEDIATION_CONCURRENCY = 4;
 
-function remediationConcurrency(): number {
-  const raw = process.env["0SEC_REMEDIATION_CONCURRENCY"];
-  if (raw !== undefined) {
-    const parsed = Number.parseInt(raw, 10);
-    if (Number.isFinite(parsed) && parsed > 0) return parsed;
-  }
-  return REMEDIATION_CONCURRENCY;
-}
-
-/**
- * Attach remediation guidance to every finding that should carry it.
- *
- * Default path is the static knowledge base — a synchronous category lookup,
- * byte-identical to the behaviour before the LLM path was wired. When
- * `0SEC_FEATURE_LLM_REMEDIATION` is on AND a live runtime is actually
- * reachable, each finding instead gets model-written guidance that can cite its
- * own evidence rather than a generic category snippet.
- *
- * Two properties this function is responsible for:
- *
- *  - **Never regress on a keyless run.** `generateRemediationWithLLM` is
- *    fail-open: with no credentials it quietly returns the KB answer for every
- *    finding, which looks identical to success. So availability is checked here
- *    rather than discovered per-call, and the outcome is logged — a 100%
- *    fallback rate is a misconfiguration, and it must be visible as one.
- *  - **Do not spend silently.** The LLM path bills tokens that the scan's
- *    stage-level cost accounting does not see, so the observed usage is summed
- *    and logged explicitly instead of vanishing.
- *
- * `select` decides which findings are eligible; callers differ on that.
- */
-async function attachRemediation(
-  findings: Finding[],
-  select: (f: Finding) => boolean,
-  deps: {
-    llmEnabled: boolean;
-    runtime: NativeRuntime | null;
-    // Structural rather than the file's usual `db: any` — this helper needs
-    // exactly one method, and using the real event type keeps the payload
-    // shape checked instead of silently accepting a malformed event.
-    db: { logEvent: (event: Omit<PipelineEvent, "id">) => unknown } | null;
-    scanId: string;
-    stage: string;
-  },
-): Promise<void> {
-  const targets = findings.filter(select);
-  if (targets.length === 0) return;
-
-  if (!deps.llmEnabled || !deps.runtime) {
-    for (const finding of targets) finding.remediation = generateRemediation(finding);
-    return;
-  }
-
-  let llmCount = 0;
-  let inputTokens = 0;
-  let outputTokens = 0;
-  const fallbackReasons: Record<string, number> = {};
-
-  await mapWithConcurrency(targets, remediationConcurrency(), async (finding) => {
-    const onObservation = (observation: RemediationObservation): void => {
-      if (observation.source === "llm") llmCount++;
-      else if (observation.fallbackReason) {
-        fallbackReasons[observation.fallbackReason] =
-          (fallbackReasons[observation.fallbackReason] ?? 0) + 1;
-      }
-      inputTokens += observation.usage?.inputTokens ?? 0;
-      outputTokens += observation.usage?.outputTokens ?? 0;
-    };
-    // Never let an enrichment failure take down report assembly: the finding
-    // is already confirmed, and shipping it with KB guidance beats losing it.
-    try {
-      finding.remediation = await generateRemediationWithLLM(finding, deps.runtime!, { onObservation });
-    } catch {
-      finding.remediation = generateRemediation(finding);
-      fallbackReasons["error"] = (fallbackReasons["error"] ?? 0) + 1;
-    }
-  });
-
-  deps.db?.logEvent({
-    scanId: deps.scanId,
-    stage: deps.stage,
-    eventType: "llm_remediation",
-    payload: {
-      findings: targets.length,
-      llm: llmCount,
-      baseline: targets.length - llmCount,
-      fallbackReasons,
-      inputTokens,
-      outputTokens,
-    },
-    timestamp: Date.now(),
-  });
-}
-
-/**
- * Populate `finding.impactAssessment` for eligible findings.
- *
- * Gated on `0SEC_FEATURE_IMPACT_ASSESSMENT` and a reachable runtime. `assessImpact`
- * is total (never throws; falls back to the deterministic heuristic when no
- * model is available), so the only failure mode to guard here is the wave
- * itself. Bounded fan-out shares the remediation concurrency knob — both are
- * per-finding report-time LLM calls with the same cost profile.
- */
-async function attachImpactAssessment(
-  findings: Finding[],
-  select: (f: Finding) => boolean,
-  deps: { enabled: boolean; runtime: NativeRuntime | null; db: { logEvent: (event: Omit<PipelineEvent, "id">) => unknown } | null; scanId: string; stage: string },
-): Promise<void> {
-  if (!deps.enabled || !deps.runtime) return;
-  const targets = findings.filter(select);
-  if (targets.length === 0) return;
-
-  await mapWithConcurrency(targets, remediationConcurrency(), async (finding) => {
-    try {
-      finding.impactAssessment = await assessImpact(finding, { runtime: deps.runtime! });
-    } catch {
-      // assessImpact is already total; this is belt-and-suspenders so a
-      // surprise never takes down report assembly for a confirmed finding.
-    }
-  });
-
-  const assessed = targets.filter((f) => f.impactAssessment).length;
-  deps.db?.logEvent({
-    scanId: deps.scanId,
-    stage: deps.stage,
-    eventType: "impact_assessment",
-    payload: { findings: targets.length, assessed },
-    timestamp: Date.now(),
-  });
-}
 import { parseApiSpec } from "./api-spec.js";
 import { raceWithDefaults } from "./racing.js";
 import type { RaceResult } from "./racing.js";
@@ -265,166 +123,7 @@ import { runEnsembleCraft, resolveEnsembleModels } from "./stages/ensemble-craft
 import { runReportStage } from "./agentic/stages/report.js";
 import { applyFindingPostProcess, loadPriorScanAnchors, type DedupeItem } from "./agentic/finding-postprocess.js";
 
-/**
- * Per-scan rate-limiter cache (#214). The limiter is stateful — buckets
- * track per-host token availability and 429 cool-offs across the entire
- * scan — so we build one instance keyed on the ScanConfig object and
- * thread it into every agent loop and every stage that fetches.
- *
- * Default 5 rps when the operator did not pass `--rate-limit`. The
- * issue body is explicit on this: the primitive should default
- * conservative even without an explicit operator flag, so an
- * unconfigured `0sec scan` can't accidentally hammer a target.
- */
-const RATE_LIMITER_CACHE = new WeakMap<ScanConfig, RateLimiter>();
-function getOrCreateRateLimiter(config: ScanConfig): RateLimiter {
-  let rl = RATE_LIMITER_CACHE.get(config);
-  if (!rl) {
-    // In http_audit mode the per-host rps comes from the env-bridge
-    // (0SEC_TARGET_RATE_LIMIT_RPS, default 5) rather than the --rate-limit
-    // flag; the flag form isn't part of the worker contract. Otherwise we
-    // honour the parsed --rate-limit spec with the usual 5 rps default.
-    const modeFallbackRps = config.mode === "http_audit"
-      ? (config.httpAuditRateLimitRps ?? 5)
-      : 5;
-    // Engagement hardening: an active profile lowers the default rps and adds
-    // full jitter so the request train stops being periodic. It can only ever
-    // make the scan QUIETER — we take the min, never the profile's number when
-    // the operator already configured something slower. An explicit
-    // `--rate-limit` default still wins (parseRateLimitFlag only consumes the
-    // fallback when the spec carries no default).
-    const posture = resolveEngagementForConfig(config);
-    const cfg = parseRateLimitFlag(
-      config.rateLimit ?? "",
-      effectiveFallbackRps(posture, modeFallbackRps),
-    );
-    if (posture.jitter) cfg.jitter = { baseMs: posture.jitter.baseMs };
-    // Wire the throttle observer into the http_audit enforcement tracker so
-    // every blocked acquire / 429 park bumps `rate_limited_count`. No-op for
-    // every other mode (tracker is undefined).
-    const enforcement = resolveEnforcementForConfig(config);
-    rl = new RateLimiter(cfg, {
-      onThrottle: enforcement ? () => enforcement.noteRateLimited() : undefined,
-    });
-    RATE_LIMITER_CACHE.set(config, rl);
-  }
-  return rl;
-}
 
-/**
- * Per-scan engagement-posture cache. The posture is pure config (no I/O beyond
- * the already-cached scope file) but it is read at several call sites — the
- * rate limiter, the web-recon pre-pass, every agent config, and the report —
- * so resolve it once per ScanConfig and hand the same object around.
- *
- * Returns the `standard` posture (unchanged engine behaviour) when nothing is
- * configured, so this is safe to call unconditionally.
- */
-const ENGAGEMENT_CACHE = new WeakMap<ScanConfig, EngagementPosture>();
-function resolveEngagementForConfig(config: ScanConfig): EngagementPosture {
-  const cached = ENGAGEMENT_CACHE.get(config);
-  if (cached) return cached;
-  const scope = resolveScopeForConfig(config);
-  const posture = resolveEngagementProfile({
-    scopeFileBlock: scope ? extractEngagementFromScopeJson(scope.raw) : undefined,
-    env: process.env,
-    cliProfile: config.engagementProfile,
-    cliWafEvasion: config.wafEvasion,
-  });
-  ENGAGEMENT_CACHE.set(config, posture);
-  return posture;
-}
-
-/**
- * Attach the engagement-posture audit record to a report. Only present when a
- * hardening profile was actually applied, so default scans emit byte-for-byte
- * identical reports. Mutates `report` in place; called on every report return
- * path so the evidence is always there when it applies.
- */
-function attachEngagementPosture(report: ScanReport, config: ScanConfig): void {
-  const posture = resolveEngagementForConfig(config);
-  if (!posture.active) return;
-  report.engagementPosture = describeEngagementPosture(posture);
-}
-
-/**
- * Per-scan enforcement-tracker cache (http_audit only). Created lazily the
- * first time any helper needs it and reused for the whole scan so the
- * scope/rate counters and the kill-switch clock aggregate across discovery +
- * attack + verify stages. Returns undefined for every non-http_audit scan,
- * leaving the legacy behaviour untouched.
- *
- * The tracker owns the path-prefix allowlist (PathPolicy) and the auth mode;
- * the host allowlist is enforced separately via the ScopePolicy built in
- * `resolveScopeForConfig`.
- */
-const ENFORCEMENT_CACHE = new WeakMap<ScanConfig, EnforcementTracker>();
-function resolveEnforcementForConfig(config: ScanConfig): EnforcementTracker | undefined {
-  if (config.mode !== "http_audit") return undefined;
-  const cached = ENFORCEMENT_CACHE.get(config);
-  if (cached) return cached;
-  const tracker = new EnforcementTracker({
-    pathPolicy: new PathPolicy(config.httpAuditAllowedPaths ?? []),
-    auth: config.auth,
-    killAfterSec: config.httpAuditKillAfterSec ?? 1800,
-  });
-  ENFORCEMENT_CACHE.set(config, tracker);
-  return tracker;
-}
-
-/**
- * Attach the frozen `enforcement_summary` block to a report when the scan ran
- * in http_audit mode. No-op for every other mode (tracker is undefined), so
- * non-http_audit reports are byte-for-byte unchanged. Mutates `report` in
- * place; called on every http_audit report return path (happy, kill-switch,
- * cost-ceiling) so the block is always present.
- */
-function attachEnforcementSummary(report: ScanReport, config: ScanConfig): void {
-  const enforcement = resolveEnforcementForConfig(config);
-  if (!enforcement) return;
-  report.enforcementSummary = enforcement.summarize();
-}
-
-/**
- * Count distinct `FLAG{...}` matches across a finding set. Used by
- * `emitScanCompleted` to derive `cost_per_flag` for the
- * `scan_completed` event (0sec#231).
- *
- * Mirrors the regex in `agent/flag-validator.ts` (`FLAG_WRAPPER_RE`)
- * so anything the validator would accept counts here. Walks
- * `title` / `description` / evidence fields — the agent normally
- * commits a flag into one of these when `save_finding` fires after a
- * successful exploit. Dedupes by inner content so retries that save the
- * same flag twice don't double-count.
- *
- * Note: this does NOT validate flag shape — a decoy `FLAG{Im_a_Script_Kiddie}`
- * would still increment the counter. The triage pipeline already
- * downgrades decoy flags to `false-positive` / `info`; the cost-per-flag
- * metric is honest about cost-per-claimed-flag, not cost-per-real-flag.
- * Cleaner separation than guessing which findings are "real" here.
- */
-const FLAG_PATTERN = /FLAG\{([^}]+)\}/gi;
-function countFlagsInFindings(findings: Finding[]): number {
-  if (!Array.isArray(findings) || findings.length === 0) return 0;
-  const seen = new Set<string>();
-  for (const f of findings) {
-    if (!f) continue;
-    const haystack = [
-      typeof f.title === "string" ? f.title : "",
-      typeof f.description === "string" ? f.description : "",
-      typeof f.evidence?.request === "string" ? f.evidence.request : "",
-      typeof f.evidence?.response === "string" ? f.evidence.response : "",
-      typeof f.evidence?.analysis === "string" ? f.evidence.analysis : "",
-    ].join("\n");
-    const matches = haystack.matchAll(FLAG_PATTERN);
-    for (const m of matches) {
-      // Normalize on inner content so `FLAG{abc}` and `flag{abc}` collapse.
-      const inner = (m[1] ?? "").trim().toLowerCase();
-      if (inner) seen.add(inner);
-    }
-  }
-  return seen.size;
-}
 
 export interface AgenticScanOptions {
   config: ScanConfig;
@@ -908,7 +607,7 @@ export async function agenticScan(opts: AgenticScanOptions): Promise<ScanReport>
     // exact policy instance instead of re-reading the JSON file. See
     // `resolveScopeForConfig` for the TOCTOU rationale (0sec#218
     // review).
-    scopePolicyCache.set(config, scope);
+    cacheScopePolicy(config, scope);
     const verdict = scope.match(config.target);
     if (!verdict.allowed) {
       throw new Error(
@@ -946,7 +645,7 @@ export async function agenticScan(opts: AgenticScanOptions): Promise<ScanReport>
   const detectedConfig = await detectScanMode(config);
   if (detectedConfig !== config) {
     // Keep the admitted scope snapshot across the mode-only config copy.
-    if (scope) scopePolicyCache.set(detectedConfig, scope);
+    if (scope) cacheScopePolicy(detectedConfig, scope);
     config = detectedConfig;
   }
 
@@ -3635,61 +3334,6 @@ export interface AgentOutput {
 
 // ── Native (Claude API) stage runners ──
 
-/**
- * Per-scan cache of parsed scope policies (0sec#218 review). The first
- * helper that needs a policy parses the JSON file once; every subsequent
- * helper for the same `ScanConfig` reuses the same `ScopePolicy`
- * instance.
- *
- * Why a WeakMap instead of a plain `Map` keyed by path: callers can
- * construct multiple `ScanConfig`s pointing at the same scope file, and
- * we want each top-level `agenticScan()` call to see a consistent
- * snapshot — but we also don't want to leak parsed policies for the
- * lifetime of the process. Tying lifetime to the `ScanConfig` object
- * itself fixes both.
- *
- * Why this matters: without it, every stage helper called
- * `loadScope(config.scopeFile)` again, which is a TOCTOU window. If the
- * file changed mid-scan, later tool calls would run under a different
- * policy than the one that admitted `--target` at scan start.
- */
-const scopePolicyCache = new WeakMap<ScanConfig, ScopePolicy>();
-
-function resolveScopeForConfig(config: ScanConfig): ScopePolicy | undefined {
-  const cached = scopePolicyCache.get(config);
-  if (cached) return cached;
-  // http_audit mode synthesises an in-memory host-allowlist ScopePolicy from
-  // the env-bridge `httpAuditAllowedHosts` rather than reading a scope file.
-  // This is the host half of the enforcement; the path half lives on the
-  // EnforcementTracker's PathPolicy.
-  if (config.mode === "http_audit") {
-    const hosts = config.httpAuditAllowedHosts ?? [];
-    const policy = ScopePolicy.fromJson({ in_scope: hosts });
-    scopePolicyCache.set(config, policy);
-    return policy;
-  }
-  if (!config.scopeFile) return undefined;
-  const policy = loadScope(config.scopeFile);
-  scopePolicyCache.set(config, policy);
-  return policy;
-}
-
-/**
- * Resolve the attribution config (0sec#216) from a ScanConfig. Called
- * inline at every helper-function call site that constructs an
- * `AgentConfig`/`NativeAgentConfig`. Reuses the cached `ScopePolicy`
- * via `resolveScopeForConfig` so the scope file isn't reparsed.
- * Returns `undefined` when no source contributed anything.
- */
-function buildAttributionForConfig(config: ScanConfig): AttributionConfig | undefined {
-  const scope = resolveScopeForConfig(config);
-  return resolveAttribution({
-    scopeFileBlock: scope ? extractAttributionFromScopeJson(scope.raw) : undefined,
-    env: process.env,
-    cliHeaders: config.attributionHeaders,
-    cliUaToken: config.attributionUaToken,
-  });
-}
 
 async function runNativeDiscovery(
   runtime: NativeRuntime,

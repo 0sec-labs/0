@@ -345,6 +345,16 @@ export interface AgentConfig {
   systemPrompt: string;
   tools: ToolDefinition[];
   maxTurns: number;
+  /**
+   * Hard cost ceiling in USD for the whole loop. When set, the loop reprices
+   * running token usage after every turn (via `estimateCost`) and stops cleanly
+   * once the estimate reaches the ceiling — mirroring the native loop
+   * (`native-loop.ts`). `maxTurns` stays the runaway backstop. When unset, only
+   * the turn cap applies.
+   */
+  costCeilingUsd?: number;
+  /** Pricing model id for `estimateCost`; defaults to the shared default rates. */
+  costModel?: string;
   target: string;
   scanId: string;
   scopePath?: string;
@@ -452,6 +462,8 @@ export interface AgentState {
   targetInfo: Partial<TargetInfo>;
   done: boolean;
   summary: string;
+  /** True when the loop stopped because the cost ceiling was reached (vs `done` or max turns). */
+  costCeilingExceeded?: boolean;
 }
 
 // ── Tool Execution Context ──

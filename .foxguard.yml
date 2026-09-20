@@ -1,3 +1,16 @@
+# PR security policy (foxguard v2 contract).
+#
+# Diff scope: a pull request is judged by the lines it changes, not by the
+# whole tree. Under repository scope the standing backlog blocked PRs that
+# introduced nothing, and every merge that shifted a fingerprint re-blocked
+# the next one. The baseline below still records that debt for any surface
+# evaluating repository scope, and #2061-style triage is unaffected.
+pr_security_policy:
+  version: v2
+  scope: diff
+  reporting_threshold: medium
+  blocking_threshold: high
+
 # FoxGuard configuration for the 0sec repository.
 #
 # Refreshed with Foxguard 0.14.0 against released 0sec 0.17.0:
