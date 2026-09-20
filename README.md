@@ -25,9 +25,7 @@
   <a href="#status"><img src="https://img.shields.io/badge/status-research%20preview-FD802E?style=flat-square&labelColor=1A1815" alt="Status: research preview"></a>
 </p>
 
-## Meet Zero
-
-**Your AI security engineer.**
+## Meet Zero, your AI security team.
 <p align="center">
   <img src="assets/security-cycle-diagram.webp" alt="Zero studies, finds, fixes, reports, and improves." width="100%">
 </p>
