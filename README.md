@@ -39,7 +39,6 @@
   <img src="assets/security-cycle-diagram.webp" alt="Illustrative five-step workflow: Zero studies the codebase, finds problems, proposes fixes, reports results and improves the next run." width="100%">
 </p>
 
-An illustrated workflow, not an unattended outcome guarantee:
 
 1. **Study.** Read the repository and its conventions. Check retained notes against the current source.
 2. **Find.** Investigate code and authorized targets. Reproduce findings with the checks supported by each workflow.
