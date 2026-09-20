@@ -118,6 +118,13 @@ crash is a **confirmed PoV** (PoV-is-truth).
 
 ## Reproduce
 
+These are the retained campaign commands. `magma-afl-campaign.sh` was a
+campaign-local script and is not shipped in this checkout; the first command
+therefore needs that original campaign environment. The checked-in synthetic
+runner is `benchmarks/fuzzbench/compare.py`. Run it from `0verse/` only after
+provisioning AFL++ and an explicitly trusted execution environment. Record a
+new output artifact instead of overwriting the retained measurements.
+
 ```sh
 # Real Magma targets (build the isan images first — see EVAL-GROUNDTRUTH.md):
 BUDGET=300 ./magma-afl-campaign.sh    # -> magma-afl-results.ndjson

@@ -3,7 +3,13 @@ title: "2026-05-08 Cost per Flag: A Missing Axis in Autonomous-Pentest Reporting
 description: "Historical XBOW cost accounting: $0.48 per recorded run and $5.20 per verified flag in the gpt-5.4 cohort."
 ---
 
-> **Historical research log (2026-05-08).** Dated figures reflect the benchmark ledger at the time; see the [Benchmarks](/benchmark/) page for current numbers.
+> **Historical research log (2026-05-08).** Dated figures and the original
+> interpretation below are preserved. The current consolidator groups any
+> successful retained result by model without separating mode or enforcing one
+> attempt; repeat rows contribute mean rather than total repeated cost.
+> The referenced benchmark workflow is absent from this checkout, so “every CI
+> sweep” is historical, not a current refresh guarantee.
+> See [Methodology](/methodology/) for the corrected interpretation.
 
 *Published 2026-05-08. Numbers come from the canonical [benchmark ledger](https://github.com/0sec-labs/0sec/blob/main/packages/benchmark/results/benchmark-ledger.json) and are recomputed on every CI consolidation run.*
 
@@ -26,7 +32,8 @@ Four candidate cost denominators:
 
 Report the number of configurations and attempts in best-of-N comparisons.
 
-## 0sec's number
+<span id="0secs-number"></span>
+## 0's number
 
 The recorded Azure gpt-5.4 cohort used up to three retries per challenge and a $5.00 ceiling:
 

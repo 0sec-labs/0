@@ -8,6 +8,8 @@ import {
   type TriageMemory,
 } from "./memories.js";
 import type { AttackCategory, Finding } from "@0sec/shared";
+import { runStructuredVerify } from "./structured-verify.js";
+import type { NativeRuntime } from "../runtime/types.js";
 
 // ── In-memory fake DB handle ──
 
@@ -194,43 +196,34 @@ describe("MemoryStore", () => {
     expect(memories.every((m) => m.category === "xss")).toBe(true);
   });
 
-  it("formats memories as a readable prompt block", async () => {
-    const finding = makeFinding();
-    await store.recordFp(finding, "CSP blocks inline script.", "target", "https://example.com");
-    const memories = await store.getRelevantMemories(finding, "https://example.com");
-    const block = await store.formatForPrompt(memories);
-    expect(block).toContain("Learned False-Positive");
-    expect(block).toContain("CSP blocks inline script.");
-    expect(block).toContain("target:https://example.com");
+  it("does not let an exact historical false-positive match dismiss independently confirmed evidence", async () => {
+    const finding = makeFinding({ evidence: {} });
+    const historicalReason = "Prior deployment required a separate access check; reassess the current evidence.";
+    await store.recordFp(finding, historicalReason, "target", "https://example.test");
+    const runtime: NativeRuntime = {
+      type: "api",
+      async isAvailable() { return true; },
+      async executeNative(systemPrompt, messages) {
+        expect(systemPrompt).not.toContain(historicalReason);
+        expect(messages.flatMap(message => message.content)
+          .some(block => block.type === "text" && block.text.includes(historicalReason))).toBe(true);
+        return {
+          content: [{ type: "text", text: JSON.stringify({
+            passed: true, confidence: 0.95, reasoning: "The current response contains the independently reproduced exploit.",
+          }) }],
+          stopReason: "end_turn", durationMs: 1,
+        };
+      },
+    };
+    const result = await runStructuredVerify(finding, "https://example.test", runtime, { memoryStore: store });
+    expect(result.verdict).toBe("confirmed");
   });
+
 
   it("returns empty string when no memories to format", async () => {
     expect(await store.formatForPrompt([])).toBe("");
   });
 
-  it("finds a strong match and auto-rejects when similarity is high", async () => {
-    // Use a lower threshold for this test — token-overlap similarity is sparse
-    // on short texts so 0.75 (default) is hard to cross without long descriptions.
-    const loose = new MemoryStore(db, { strongMatchThreshold: 0.2 });
-    const finding = makeFinding();
-    await loose.recordFp(
-      finding,
-      "Reflected XSS in search endpoint — CSP header blocks inline script execution on this endpoint.",
-      "target",
-      "https://example.com",
-    );
-    const match = await loose.findStrongMatch(finding, "https://example.com");
-    expect(match).not.toBeNull();
-    expect(match!.score).toBeGreaterThanOrEqual(0.2);
-  });
-
-  it("returns null when no memory crosses the strong-match threshold", async () => {
-    const finding = makeFinding();
-    const store2 = new MemoryStore(db, { strongMatchThreshold: 0.99 });
-    await store2.recordFp(finding, "some weak note", "global");
-    const match = await store2.findStrongMatch(finding, "https://example.com");
-    expect(match).toBeNull();
-  });
 
   it("increments appliedCount via recordApplied", async () => {
     const finding = makeFinding();

@@ -12,8 +12,9 @@ already have *aliases* but no `Abi` — wiring one up is a clean, self-contained
 ## Why
 
 The high-P-Code SSA slice is arch-agnostic and carries over unchanged — the ABI is
-the small missing piece the dynamic/firmware lane needs (which registers hold args,
-the return register, the return-address register). One `Abi` unlocks a whole arch.
+the small missing piece that identifies argument, return, and return-address
+registers. A new `Abi` does **not** by itself supply a decompiler, QEMU CPU
+backend, executable harness, or confirmation oracle for that architecture.
 
 ## How
 

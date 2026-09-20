@@ -58,6 +58,7 @@ import type { Finding, ScanDepth, TokenUsageForPricing } from "@0sec/shared";
 import type { PipelineOptions } from "../unified-pipeline.js";
 import { runPipeline } from "../unified-pipeline.js";
 import { recallRepairLearnings, recordRepairLearning } from "./project-memory.js";
+import { captureProjectSuggestions, prepareProjectContext, type PreparedProjectContext, type ProjectContextSuggestions } from "./project-context.js";
 import { cloneGitRepo, parseRepoRef } from "../repo-clone.js";
 import { ScanCostLedger } from "../agent/cost-ledger.js";
 import type { NativeRuntime, NativeRuntimeResult, NativeMessage, NativeToolDef, NativeStreamCallbacks, RuntimeType } from "../runtime/types.js";
@@ -293,6 +294,7 @@ interface InvestigationResult {
   error: string | null;
   /** Investigation-phase model cost (USD), real metered usage or null. */
   costUsd: number | null;
+  contextSuggestions?: ProjectContextSuggestions;
 }
 
 async function investigateSource(
@@ -301,13 +303,20 @@ async function investigateSource(
   costCeilingUsd: number | undefined,
   timeoutMs: number,
   signal: AbortSignal | undefined,
+  projectContext: PreparedProjectContext | undefined,
+  sourceRevision: string,
 ): Promise<InvestigationResult> {
+  let contextSuggestions: ProjectContextSuggestions | undefined;
   const opts: PipelineOptions = {
     target: checkoutPath,
     targetType: "source-code",
     depth: depth ?? "default",
     format: "json",
     timeout: timeoutMs,
+    projectContext,
+    onProjectObservations: projectContext ? observations => {
+      contextSuggestions = captureProjectSuggestions(observations, checkoutPath, sourceRevision, projectContext);
+    } : undefined,
   };
 
   // Forward cost ceiling so the pipeline can self-limit during investigation.
@@ -371,6 +380,7 @@ async function investigateSource(
     costCeilingExceeded: report.costCeilingExceeded === true,
     researchFailed: report.researchFailed === true,
     costUsd: investigationCostUsd,
+    contextSuggestions: report.researchFailed ? undefined : contextSuggestions,
     error: report.researchFailed ? "Pipeline research failed — findings may be partial." : null,
   };
 
@@ -604,6 +614,14 @@ export async function runSecureProject(
   } = options;
 
   const runId = randomUUID();
+  let projectContext: PreparedProjectContext | undefined;
+  try {
+    projectContext = prepareProjectContext(process.env["0SEC_PROJECT_CONTEXT"]);
+  } catch (error) {
+    return resultFromPhase(runId, repoRoot, "prepare", "blocked", [
+      error instanceof Error ? error.message : "Invalid project context.",
+    ]);
+  }
 
   // Only "api" and "auto" are wired through the secure lifecycle; reject any
   // other RuntimeMode up front (also narrows the type for resolveNativeRuntime).
@@ -699,6 +717,7 @@ export async function runSecureProject(
         maxAttempts,
         maxTurns,
         depth: depth ?? "default",
+        projectContextDigest: projectContext?.digest,
       };
       const configIdentity = computeConfigIdentity(configFields);
 
@@ -748,6 +767,7 @@ export async function runSecureProject(
         maxAttempts,
         maxTurns,
         depth: depth ?? "default",
+        projectContextDigest: projectContext?.digest,
       };
       state = createInitialState(runId, repoRoot, revision, configFields);
       writeState(stateDir, state);
@@ -809,6 +829,8 @@ export async function runSecureProject(
 
       const investigation = await investigateSource(
         checkoutPath, depth, costCeilingUsd, workflowTimeoutMs, combinedSignal,
+        projectContext,
+        revision,
       );
 
       if (investigation.error) {
@@ -827,6 +849,7 @@ export async function runSecureProject(
         // Real metered investigation cost joins the repair-phase ledger.
         state.costUsd += investigation.costUsd;
       }
+      state.projectContextSuggestions = investigation.contextSuggestions;
       if (investigation.costCeilingExceeded) {
         addError(state,
           "Investigation pipeline hit its cost ceiling; findings may be partial. " +
@@ -926,6 +949,7 @@ export async function runSecureProject(
           maxTurns,
           timeoutMs: perFindingTimeout,
           signal: findingSignal,
+          projectContext,
           onEvent: (event) => { emit(event); },
         };
 
@@ -1128,6 +1152,7 @@ function buildResult(state: SecureProjectState): SecureProjectResult {
     errors: state.errors,
     pullRequests: state.pullRequests,
     costUsd: state.costUsd,
+    projectContextSuggestions: state.projectContextSuggestions,
   };
 }
 

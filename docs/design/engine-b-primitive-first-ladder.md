@@ -4,6 +4,13 @@
 > plan `docs/operations/llm-lpe-innovation-plan.md`). NOT a merge — a
 > PR-ready branch (`feat/engine-b-primitive-first-ladder`) with a driver
 > skeleton + worked-example test. Prototype: `packages/core/src/kernel/exploit/ladder-driver.ts`.
+>
+> **Historical design snapshot.** “Current”, “shipped”, branch status and test
+> counts below refer to the July survey/prototype. They do not qualify today's
+> end-to-end CLI or establish an autonomous root exploit. Current execution
+> entry points and prerequisites are documented in
+> `docs/src/content/docs/research-workflows.md`; retain this design's scientific
+> claims separately from subsequent runtime evidence.
 
 ## The thesis (U2, verbatim from the plan)
 

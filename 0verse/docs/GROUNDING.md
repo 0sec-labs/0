@@ -5,8 +5,13 @@ rating against the call graph already recovered from the binary. Enable the G1
 gate with:
 
 ```sh
-ZEROVERSE_GROUND=1 0verse target.bin
+ZEROVERSE_GROUND=1 uv run --frozen 0verse run target.bin --llm codex
 ```
+
+Run from `0verse/` after installing a decompiler backend and configuring the
+selected provider. `--llm codex` sends model requests using local Codex
+credentials; omit it for the deterministic mock lane. This opt-in static gate
+does not enable target execution.
 
 The gate is disabled when the variable is unset, empty, `0`, `false`, or `no`.
 It does not run Ghidra a second time and it does not replace dynamic

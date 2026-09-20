@@ -21,7 +21,7 @@ Save this as `scope.json`, replacing the example host with your authorized targe
 Then pass the file explicitly:
 
 ```bash
-0sec scan --target https://app.example.com --mode web \
+0 scan --target https://app.example.com --mode web \
   --scope ./scope.json --depth quick --cost-ceiling 2
 ```
 
@@ -54,6 +54,10 @@ Do not put `https://`, a path, or `:443` into an exact-host rule. Use the hostna
 alone. An exact-host rule allows matching on any path/port; it cannot express a
 path-only or port-only authorization boundary. If you need those constraints,
 agree on a workflow that enforces them rather than encoding them as host rules.
+
+DNS root dots are normalized (`app.example.com.` equals `app.example.com`).
+Exact IPv6 address rules are supported and normalized across bare/bracketed
+forms; that does **not** add IPv6 CIDR support.
 
 ## Exclusions win
 
@@ -96,6 +100,23 @@ and WAF behavior. Generic scanner tools are suppressed on scoped scan paths by
 default. `--allow-scanners` relaxes that particular gate; use it only with explicit
 permission for the additional traffic. It does not expand the host allowlist.
 
+### Requirements differ by command
+
+| Entry point | Current authorization control |
+| --- | --- |
+| `scan` with HTTP(S)/MCP | Requires a matching engagement policy before starting, including localhost. |
+| `recon --active` | Requires `--scope`; checks active DNS brute-force candidates before resolving them. |
+| `recon` without `--active` | Still performs CT/DNS lookups and HTTP probes. Its scope option is not a universal guard over those paths. |
+| `identity` | Scope is optional; when supplied it must allow `graph.microsoft.com`. The Graph token determines the actual tenant queried. |
+| `adgraph` / `entragraph` | Analyze supplied exports offline; do not collect or authorize access to a directory. |
+| `review`, `fix`, `secure` | Source/tool execution boundaries, not live-target scope-file enforcement. `fix` and `secure` do not accept `--scope`. |
+
+In particular, `recon --scope` is currently forwarded only to active subdomain
+enumeration, not to passive discovery, HTTP spec/MCP probes, or their redirects.
+If an engagement requires a hard destination boundary for all traffic, enforce
+it outside the process before running recon. Do not assume `scan`'s refusal
+contract applies to every command.
+
 ## Local workflows and strict scope mode
 
 Local source and package workflows do not activate scope-dependent shell
@@ -127,6 +148,13 @@ paths have separate prerequisites in [Configuration](/configuration/) and
 
 Confirm the target, scope, credentials, and allowed side effects are still
 valid before resuming. Persisted state is not continuing authorization.
+
+For `secure`, setup commands, regression tests, and generated behavioral probes
+run in disposable checkouts **inside the current worker**. They can access that
+worker's network and credentials; `--publish` additionally authorizes the
+workflow to attempt GitHub branch/PR writes. Neither selecting hosted model
+transport nor passing a state directory provisions isolation. See
+[repository lifecycle](/scan-workflows/#repository-lifecycle-with-secure).
 
 ## Diagnose a scope refusal
 

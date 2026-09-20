@@ -2,8 +2,9 @@ import type { Command } from "commander";
 import chalk from "chalk";
 import { readFileSync, writeFileSync } from "node:fs";
 import { generateSyzChoiceWeights, syzChoiceWeightsFromPlan } from "@0sec/core";
-import type { KernelVariantHuntReport } from "@0sec/core";
-import type { ScanReport, Severity } from "@0sec/shared";
+import type { CrashRecord, KernelVariantHuntReport, SyzJevPrepassInput } from "@0sec/core";
+import { createJevEvaluator, findingSchema, jevConfigFromEnvironment } from "@0sec/shared";
+import type { Finding, ScanReport, Severity } from "@0sec/shared";
 import { formatSarif } from "../formatters/sarif.js";
 
 const VALID_OUTPUT_FORMATS = ["terminal", "json", "sarif"] as const;
@@ -30,12 +31,65 @@ interface SyzbotMineOpts {
 interface WeightsOpts {
   target: string;
   crashSummary?: string;
+  jevPrepass?: string;
   enabledSyscalls?: string;
   fromFile?: string;
   model?: string;
   maxEntries: string;
   dryRun?: boolean;
   out?: string;
+}
+
+interface JevPrepassOpts {
+  tree: string;
+  upstreamTree?: string;
+  findings: string;
+  out?: string;
+  verifyTop: string;
+  attempts: string;
+}
+
+interface JevCommitPrepassOpts {
+  tree: string;
+  since: string;
+  paths?: string;
+  limit: string;
+  out?: string;
+}
+
+interface JevSourcePrepassOpts {
+  tree: string;
+  subtree: string;
+  out?: string;
+}
+
+interface CrashTriageOpts {
+  crashes: string;
+  out?: string;
+  summaryOut?: string;
+}
+
+function parseNonNegativeInt(value: string, name: string, max: number): number {
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isSafeInteger(parsed) || parsed < 0 || parsed > max) {
+    throw new Error(`Invalid ${name} '${value}'; expected 0..${max}`);
+  }
+  return parsed;
+}
+
+function readFindings(path: string): Finding[] {
+  const parsed: unknown = JSON.parse(readFileSync(path, "utf8"));
+  const values = Array.isArray(parsed)
+    ? parsed
+    : parsed && typeof parsed === "object" && Array.isArray((parsed as { findings?: unknown }).findings)
+      ? (parsed as { findings: unknown[] }).findings
+      : undefined;
+  if (!values) throw new Error("Findings input must be a Finding[] or an object with a findings array");
+  return values.map((value, index) => {
+    const result = findingSchema.safeParse(value);
+    if (!result.success) throw new Error(`Invalid finding at index ${index}: ${result.error.issues[0]?.message ?? "schema mismatch"}`);
+    return result.data as Finding;
+  });
 }
 
 function parsePositiveInt(value: string, name: string, max: number): number {
@@ -140,6 +194,178 @@ export function registerKernelCommand(program: Command): void {
     .description("Kernel security workflows");
 
   kernel
+    .command("jev-prepass")
+    .description("Rank kernel hypotheses with Jev before expensive oracle verification")
+    .requiredOption("--tree <path>", "Path to the exact Linux source tree")
+    .option("--upstream-tree <path>", "Current upstream Linux tree used to exclude already-fixed bugs before Jev spend")
+    .requiredOption("--findings <path>", "Finding[] or scan-report JSON from a kernel source review")
+    .option("--verify-top <n>", "Run the existing kernel oracle for the top N ranked hypotheses", "0")
+    .option("--attempts <n>", "Maximum kernel_run attempts per selected hypothesis", "5")
+    .option("-o, --out <path>", "Write the exhaustive ranked result to a file")
+    .action(async (opts: JevPrepassOpts) => {
+      try {
+        const findings = readFindings(opts.findings);
+        const config = jevConfigFromEnvironment("kernel", process.env);
+        if (!config) {
+          throw new Error("Jev kernel prepass requires 0SEC_JEV_FEATURES=kernel and a configured provider");
+        }
+        const {
+          applyVerificationToFinding, checkAlreadyFixed,
+          rankKernelHypothesesWithJev, verifyStaticKernelFinding,
+        } = await import("@0sec/core");
+        const noveltyExcluded = opts.upstreamTree ? findings.flatMap((finding) => {
+          const path = finding.reviewAnnotation?.path ?? finding.evidence.request.match(/([^\s:]+\.[ch]):\d+/)?.[1];
+          if (!path) return [];
+          const functionName = finding.title.match(/^([A-Za-z_][A-Za-z0-9_]*)\s*:/)?.[1]
+            ?? finding.evidence.analysis?.match(/\bFunction\s+([A-Za-z_][A-Za-z0-9_]*)/)?.[1];
+          const gate = checkAlreadyFixed({
+            tree: opts.upstreamTree!, filePath: path,
+            ...(functionName ? { faultingFunction: functionName } : {}),
+          });
+          return gate.functionLevelMatch ? [{ finding, gate }] : [];
+        }) : [];
+        const excludedIds = new Set(noveltyExcluded.map((item) => item.finding.id));
+        const eligible = findings.filter((finding) => !excludedIds.has(finding.id));
+        const result = await rankKernelHypothesesWithJev(opts.tree, eligible, createJevEvaluator(config));
+        const verifyTop = parseNonNegativeInt(opts.verifyTop, "--verify-top", findings.length);
+        const attempts = parsePositiveInt(opts.attempts, "--attempts", 25);
+        const verification = [];
+        const verificationQueue = result.candidates.filter((item) => item.nextAction === "verify");
+        for (const candidate of verificationQueue.slice(0, verifyTop)) {
+          const oracle = await verifyStaticKernelFinding(candidate.finding, {
+            kernelTree: opts.tree,
+            attempts,
+          });
+          verification.push({
+            rank: candidate.rank,
+            findingId: candidate.finding.id,
+            result: oracle,
+            finding: applyVerificationToFinding(candidate.finding, oracle),
+          });
+        }
+        const output = JSON.stringify({ ...result, noveltyExcluded, verification }, null, 2) + "\n";
+        if (opts.out) {
+          writeFileSync(opts.out, output);
+          console.error(chalk.green(`wrote ${opts.out} (${result.evaluated} evaluated, ${result.unscored} unscored)`));
+        } else {
+          console.log(output.trimEnd());
+        }
+      } catch (err) {
+        console.error(chalk.red(`Error: ${err instanceof Error ? err.message : String(err)}`));
+        process.exitCode = 1;
+      }
+    });
+
+  kernel
+    .command("jev-commit-prepass")
+    .description("Exhaustively rank kernel commit diffs for deep security review")
+    .requiredOption("--tree <path>", "Path to a Linux git tree")
+    .option("--since <git-date>", "Enumerate commits since this git date", "14 days ago")
+    .option("--paths <csv>", "Optional repo-relative path prefixes")
+    .option("--limit <n>", "Maximum commits to enumerate", "400")
+    .option("-o, --out <path>", "Write ranked commit ledger to a file")
+    .action(async (opts: JevCommitPrepassOpts) => {
+      try {
+        const config = jevConfigFromEnvironment("kernel", process.env);
+        if (!config) throw new Error("Jev commit prepass requires 0SEC_JEV_FEATURES=kernel and a configured provider");
+        const { rankKernelCommitsWithJev } = await import("@0sec/core");
+        const result = await rankKernelCommitsWithJev({
+          tree: opts.tree,
+          evaluator: createJevEvaluator(config),
+          since: opts.since,
+          limit: parsePositiveInt(opts.limit, "--limit", 10_000),
+          ...(opts.paths ? { paths: opts.paths.split(",").map((path) => path.trim()).filter(Boolean) } : {}),
+        });
+        const output = JSON.stringify(result, null, 2) + "\n";
+        if (opts.out) {
+          writeFileSync(opts.out, output);
+          console.error(chalk.green(`wrote ${opts.out} (${result.evaluated}/${result.commitsEnumerated} evaluated)`));
+        } else {
+          console.log(output.trimEnd());
+        }
+      } catch (err) {
+        console.error(chalk.red(`Error: ${err instanceof Error ? err.message : String(err)}`));
+        process.exitCode = 1;
+      }
+    });
+
+  kernel
+    .command("jev-source-prepass")
+    .description("Extract and directly Jev-rank every C function in a kernel subtree")
+    .requiredOption("--tree <path>", "Path to the Linux source tree")
+    .requiredOption("--subtree <path>", "Repo-relative kernel subtree or C source file")
+    .option("-o, --out <path>", "Write the exhaustive function ranking ledger to a file")
+    .action(async (opts: JevSourcePrepassOpts) => {
+      try {
+        const config = jevConfigFromEnvironment("kernel", process.env);
+        if (!config) throw new Error("Jev source prepass requires 0SEC_JEV_FEATURES=kernel and a configured provider");
+        const { runKernelSourceJevPrepass } = await import("@0sec/core");
+        const result = await runKernelSourceJevPrepass({
+          tree: opts.tree,
+          subtree: opts.subtree,
+          evaluator: createJevEvaluator(config),
+        });
+        const output = JSON.stringify(result, null, 2) + "\n";
+        if (opts.out) {
+          writeFileSync(opts.out, output);
+          console.error(chalk.green(`wrote ${opts.out} (${result.evaluated}/${result.functionsEnumerated} functions evaluated from ${result.filesEnumerated.length} files)`));
+        } else console.log(output.trimEnd());
+      } catch (err) {
+        console.error(chalk.red(`Error: ${err instanceof Error ? err.message : String(err)}`));
+        process.exitCode = 1;
+      }
+    });
+
+  kernel
+    .command("crash-triage")
+    .description("Rank fuzzer crashes with Jev for exploit-pipeline spend prioritisation")
+    .requiredOption("--crashes <path>", "Path to crash JSON (array of CrashRecord or { crashes: CrashRecord[] })")
+    .option("-o, --out <path>", "Write ranked crash triage JSON to a file")
+    .option("--summary-out <path>", "Write compact markdown crash summary to a file")
+    .action(async (opts: CrashTriageOpts) => {
+      try {
+        const config = jevConfigFromEnvironment("crash", process.env);
+        if (!config) {
+          throw new Error("Jev crash triage requires 0SEC_JEV_FEATURES=crash and a configured provider");
+        }
+        const parsed: unknown = JSON.parse(readFileSync(opts.crashes, "utf8"));
+        let crashes: unknown[];
+        if (Array.isArray(parsed)) {
+          crashes = parsed;
+        } else if (parsed && typeof parsed === "object" && "crashes" in parsed) {
+          crashes = Array.isArray(parsed.crashes) ? parsed.crashes : [];
+        } else {
+          crashes = [];
+        }
+        if (crashes.length === 0) throw new Error("Crash input must be a CrashRecord[] or an object with a crashes array");
+        const records = crashes.filter((c): c is CrashRecord =>
+          !!c && typeof c === "object" && "id" in c && "summary" in c
+          && typeof c.id === "string" && typeof c.summary === "string");
+        if (records.length !== crashes.length) throw new Error("Every crash record requires string id and summary fields");
+        const { rankCrashesWithJev, crashSummaryFromTriage } = await import("@0sec/core");
+        const result = await rankCrashesWithJev(
+          records,
+          createJevEvaluator(config),
+        );
+        const output = JSON.stringify(result, null, 2) + "\n";
+        if (opts.out) {
+          writeFileSync(opts.out, output);
+          console.error(chalk.green(`wrote ${opts.out} (${result.evaluated} evaluated, ${result.unscored} unscored)`));
+        } else {
+          console.log(output.trimEnd());
+        }
+        if (opts.summaryOut) {
+          const summary = crashSummaryFromTriage(result);
+          writeFileSync(opts.summaryOut, summary);
+          console.error(chalk.green(`wrote ${opts.summaryOut}`));
+        }
+      } catch (err) {
+        console.error(chalk.red(`Error: ${err instanceof Error ? err.message : String(err)}`));
+        process.exitCode = 1;
+      }
+    });
+
+  kernel
     .command("syzbot-mine")
     .description("Mine and LPE-rank syzbot's invalid/auto-closed queue")
     .option("--subsystems <csv>", "Subsystem labels to keep", "net,net/sched,net/tls,xfrm,crypto,vsock,nfc")
@@ -175,6 +401,7 @@ export function registerKernelCommand(program: Command): void {
     .description("Generate an LLM-derived syzkaller choice_weights.json for a kernelCTF target")
     .requiredOption("--target <version>", "Target kernel version, e.g. 6.12.101")
     .option("--crash-summary <path>", "File with recent crash descriptions to inform weighting")
+    .option("--jev-prepass <path>", "Jev commit/finding prepass JSON used as ranked weighting evidence")
     .option("--enabled-syscalls <path>", "JSON array file of manager-enabled syscall names to constrain the plan")
     .option("--from-file <path>", "Validate/normalize a raw model JSON plan instead of calling the API")
     .option("-m, --model <model>", "Override model (default: env/auto-detected)")
@@ -184,6 +411,16 @@ export function registerKernelCommand(program: Command): void {
     .action(async (opts: WeightsOpts) => {
       try {
         const crashSummary = opts.crashSummary ? readFileSync(opts.crashSummary, "utf8") : undefined;
+        let jevPrepass: SyzJevPrepassInput | undefined;
+        if (opts.jevPrepass) {
+          const parsed = JSON.parse(readFileSync(opts.jevPrepass, "utf8")) as Record<string, unknown>;
+          jevPrepass = "commits" in parsed || "hypotheses" in parsed
+            ? parsed as SyzJevPrepassInput
+            : Array.isArray(parsed.candidates) && parsed.candidates.some((candidate) =>
+              typeof candidate === "object" && candidate !== null && "sha" in candidate)
+              ? { commits: parsed as unknown as SyzJevPrepassInput["commits"] }
+              : { hypotheses: parsed as unknown as SyzJevPrepassInput["hypotheses"] };
+        }
         const enabledSyscalls = opts.enabledSyscalls
           ? (JSON.parse(readFileSync(opts.enabledSyscalls, "utf8")) as string[])
           : undefined;
@@ -197,6 +434,7 @@ export function registerKernelCommand(program: Command): void {
               target: opts.target,
               crashSummary,
               enabledSyscalls,
+              jevPrepass,
               model: opts.model,
               maxEntries: parsePositiveInt(opts.maxEntries, "--max-entries", 128),
               log: (message) => console.error(message),

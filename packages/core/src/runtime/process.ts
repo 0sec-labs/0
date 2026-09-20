@@ -1,4 +1,5 @@
-import { spawn } from "node:child_process";
+import { type ChildProcessByStdio, spawn } from "node:child_process";
+import type { Readable } from "node:stream";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { writeFileSync } from "node:fs";
@@ -111,6 +112,24 @@ function buildClaudeMcpConfig(context: RuntimeContext): string {
       },
     },
   });
+}
+
+/**
+ * Turn a spawn failure into something a caller can act on.
+ *
+ * The runtime prompt travels as a single argv entry, so on a large enough
+ * target the kernel rejects the exec with E2BIG before the CLI starts — Bun
+ * throws that synchronously out of `spawn`, so it escaped the process error
+ * handler and surfaced as a raw stack trace (#72).
+ */
+export function describeSpawnFailure(err: unknown, command: string, argv: readonly string[]): string {
+  const code = (err as { code?: string } | undefined)?.code;
+  const message = err instanceof Error ? err.message : String(err);
+  if (code === "E2BIG" || message.includes("E2BIG")) {
+    const bytes = argv.reduce((total, arg) => total + Buffer.byteLength(arg, "utf8") + 1, 0);
+    return `${command} could not be started: the prompt is too large for one command line (${bytes} bytes of arguments, over this system's limit). Narrow the run — a smaller --subsystem or scope, or a lower --batch-size — so less content is sent in a single request.`;
+  }
+  return message;
 }
 
 export class ProcessRuntime implements Runtime {
@@ -396,11 +415,25 @@ export class ProcessRuntime implements Runtime {
       let timedOut = false;
       const isJsonStream = args.includes("stream-json") || args.includes("--json");
 
-      const proc = spawn(this.command, args, {
-        cwd: this.config.cwd ?? process.cwd(),
-        env: { ...process.env, ...env },
-        stdio: ["ignore", "pipe", "pipe"],
-      });
+      let proc: ChildProcessByStdio<null, Readable, Readable>;
+      try {
+        proc = spawn(this.command, args, {
+          cwd: this.config.cwd ?? process.cwd(),
+          env: { ...process.env, ...env },
+          stdio: ["ignore", "pipe", "pipe"],
+        });
+      } catch (err) {
+        // E2BIG and friends throw synchronously, so they never reach the
+        // "error" listener below.
+        resolve({
+          output: "",
+          exitCode: 1,
+          timedOut: false,
+          durationMs: Date.now() - start,
+          error: describeSpawnFailure(err, this.command, args),
+        });
+        return;
+      }
 
       proc.stdout.on("data", (chunk: Buffer) => {
         const text = chunk.toString();
@@ -498,7 +531,7 @@ export class ProcessRuntime implements Runtime {
           exitCode: 1,
           timedOut: false,
           durationMs: Date.now() - start,
-          error: err.message,
+          error: describeSpawnFailure(err, this.command, args),
         });
       });
     });

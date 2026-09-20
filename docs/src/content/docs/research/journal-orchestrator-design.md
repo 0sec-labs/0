@@ -4,6 +4,11 @@ description: Historical design for an execution journal, specialist dispatch, re
 ---
 
 > Historical proposal tracked in [0sec#224](https://github.com/0sec-labs/0sec/issues/224). The commands and recovery behavior below describe the design.
+> `0SEC_FEATURE_JOURNAL_LOOP`, `scan --resume`, `--branch`, and `run gc`
+> below are proposal vocabulary, not current command instructions. The referenced
+> journal-ablation workflow is absent from this checkout. Journal primitives
+> alone do not establish a wired alternate loop or durable recovery semantics;
+> use the current [command reference](/commands/) for supported resume operations.
 
 <span id="the-problem-in-one-paragraph"></span>
 ## Motivation
@@ -125,7 +130,7 @@ Specialists receive raw output from their selected entries.
 ## Resume semantics
 
 ```bash
-0sec scan --resume <run-id>
+0 scan --resume <run-id>
 ```
 
 Replays the journal from disk, reconstructs in-memory state (open hypotheses, findings, current specialist if mid-dispatch), and continues from the last `handoff` entry. If a `dispatch` exists with no matching handoff, the resume kicks off the specialist again from scratch (specialists are idempotent on re-run by contract — they read the journal slice and append).
@@ -149,7 +154,7 @@ Phase 4 — once stable, remove the legacy code path. Not before two consecutive
 - **Non-deterministic specialists:** replay restores recorded state; branches
   can produce different subsequent decisions.
 - **Storage growth:** long investigations need bounded context slices and artifact
-  retention. The proposed `0sec run gc <run-id>` prunes superseded blobs.
+  retention. The proposed `0 run gc <run-id>` prunes superseded blobs.
 - **Schema changes:** version entries and test migrations against earlier journals.
 
 <span id="what-were-explicitly-not-doing"></span>

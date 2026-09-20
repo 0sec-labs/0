@@ -1,5 +1,6 @@
 import type { Finding, RuntimeMode, ScanDepth } from "@0sec/shared";
 import type { NativeRuntime } from "../runtime/types.js";
+import type { PreparedProjectContext, ProjectContextSuggestions } from "./project-context.js";
 
 export type SecurePhase = "prepare" | "investigate" | "reproduce" | "repair" | "test" | "verify" | "deliver" | "complete";
 
@@ -57,6 +58,7 @@ export interface BehavioralRepairOptions {
   maxTurns: number;
   timeoutMs: number;
   signal?: AbortSignal;
+  projectContext?: PreparedProjectContext;
   /**
    * Developer-choice learnings: how this tenant responded to past repairs.
    * Rendered to the model as UNTRUSTED guidance (preferences, never facts
@@ -114,4 +116,5 @@ export interface SecureProjectResult {
   /** Real metered model cost (USD) from provider-reported usage; 0 when the
    *  runtime surfaces no usage. Never an estimate. */
   costUsd: number;
+  projectContextSuggestions?: ProjectContextSuggestions;
 }

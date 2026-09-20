@@ -17,7 +17,7 @@
  * whole pass in try/catch so a post-process error can never fail the scan.
  */
 
-import type { Finding } from "@0sec/shared";
+import type { Finding, JevEvaluator } from "@0sec/shared";
 import type { NativeRuntime } from "../runtime/types.js";
 import { semanticDedupe, rankIncremental, type DedupeItem } from "../triage/index.js";
 
@@ -52,6 +52,9 @@ export interface FindingPostProcessOptions {
   scanId?: string;
   /** Anchors from prior runs — already-canonical findings presented as immutable. */
   anchors?: DedupeItem[];
+  /** Optional bounded pair scorer; ambiguous pairs retain the stronger-model path. */
+  jevEvaluator?: JevEvaluator;
+  signal?: AbortSignal;
 }
 
 /**
@@ -170,14 +173,17 @@ export async function applyFindingPostProcess(
   opts: FindingPostProcessOptions = {},
 ): Promise<number> {
   if (findings.length === 0) return 0;
+  opts.signal?.throwIfAborted();
 
   let duplicateCount = 0;
 
-  if (opts.semanticDedupe) {
+  if (opts.semanticDedupe || opts.jevEvaluator) {
     const items = findings.map(toDedupeItem);
     const result = await semanticDedupe(items, runtime, {
       scanId: opts.scanId,
       anchors: opts.anchors,
+      jevEvaluator: opts.jevEvaluator,
+      signal: opts.signal,
     });
     for (const f of findings) {
       const m = result.mappings[f.id];

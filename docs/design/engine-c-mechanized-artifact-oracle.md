@@ -3,6 +3,12 @@
 > Status: 2026-07-13. Design + prototype. Implements 0sec#1228, part of the
 > LLM-native-LPE EPIC (0sec#1227). Plan:
 > `docs/operations/llm-lpe-innovation-plan.md`.
+>
+> **Historical design/prototype contract.** Production runner descriptions below
+> are intended wiring, not proof that both platform runners are connected.
+> Structural text matches alone do not establish reachability, impact, novelty
+> or disclosure readiness; “disclosure-grade” below is the prototype's proposed
+> terminology, not a bypass of current evidence and publishability gates.
 
 ## Why
 

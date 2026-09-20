@@ -1,6 +1,6 @@
 ---
 title: "Strix Agent: Technical Implementation Comparison"
-description: "Code-level comparison of the open-source Strix pentesting agent (Apache-2.0, github.com/usestrix/strix, v0.8.3) against 0sec's own architecture. Covers agent loop, prompts, tools, planning, context compression, finding verification, isolation, telemetry, and CI. Closes 0sec#404."
+description: "Code-level comparison of the open-source Strix pentesting agent (Apache-2.0, github.com/usestrix/strix, v0.8.3) against 0's own architecture. Covers agent loop, prompts, tools, planning, context compression, finding verification, isolation, telemetry, and CI. Closes 0sec#404."
 ---
 
 > **Historical comparison, 2026-05-23.** Findings apply to the inspected source snapshots.
@@ -10,18 +10,18 @@ Read of `usestrix/strix@HEAD` (Apache-2.0, ~18.7k LOC Python) on 2026-05-23, map
 ## 1. Executive summary
 
 1. **Verification:** the inspected Strix path delegates validation to agents.
-   No separate replay runner was observed. 0sec's referenced replay and kernel
+   No separate replay runner was observed. 0's referenced replay and kernel
    verifiers are 726 and 690 lines respectively.
 2. **Isolation:** agents share a scan container (`strix/runtime/docker_runtime.py:142`,
-   `strix/agents/StrixAgent/system_prompt.jinja:233`). The compared 0sec Docker
+   `strix/agents/StrixAgent/system_prompt.jinja:233`). The compared 0 Docker
    executor also uses the host kernel (`packages/core/src/agent/docker-executor.ts:1-50`).
-3. **Dispatch:** Strix parses XML in `strix/llm/utils.py`. The compared 0sec
+3. **Dispatch:** Strix parses XML in `strix/llm/utils.py`. The compared 0
    implementation supports XML (`packages/core/src/agent/xml-dispatch.ts`,
    `agent/loop.ts:59-66`) alongside its default JSON path.
 4. **Coordination:** the 509-line `strix/agents/StrixAgent/system_prompt.jinja`
    supplies role, phase, and spawning instructions.
 5. **CI:** the inspected release workflow builds PyInstaller. The ~1.9k-line
-   pytest tree was not invoked there; 0sec had over 30 workflows at this snapshot.
+   pytest tree was not invoked there; 0 had over 30 workflows at this snapshot.
 
 ## 2. Strix architecture overview
 
@@ -36,7 +36,7 @@ Read of `usestrix/strix@HEAD` (Apache-2.0, ~18.7k LOC Python) on 2026-05-23, map
 5. `_execute_actions` → `process_tool_invocations` (`tools/executor.py:313-342`) executes every action in sequence, appends a `<tool_result>` XML observation to the conversation.
 6. `finish_scan` / `agent_finish` tools set `should_agent_finish = True` and exit the loop.
 
-`max_iterations = 300` is the default (`base_agent.py:50`), high relative to 0sec's 40-turn shellPentest default. There is no early-stop, no oscillation detection, no reflection checkpoint — the only safety net is the budget warning at 85%.
+`max_iterations = 300` is the default (`base_agent.py:50`), high relative to 0's 40-turn shellPentest default. There is no early-stop, no oscillation detection, no reflection checkpoint — the only safety net is the budget warning at 85%.
 
 ### Planner / executor split
 
@@ -124,7 +124,7 @@ No formal planner. Decomposition is delegated entirely to the LLM via two mechan
 
 There is no machine-checkable representation of "what's been planned" — the prompt asserts `state.context["plan"]` should be populated but nothing in `state.py` reads it as a control signal. The `todo` tool (`tools/todo/todo_actions.py`, 568 LOC) is the closest thing to a tracked plan, but it's still LLM-managed text.
 
-Compare to 0sec's `agent/journal/orchestrator.ts:30-42`, which has explicit prioritized routing rules (R1–R7) over a structured `OrchestratorBrief`, and `agent/journal/specialists.ts` which defines exactly four specialist roles with bounded scope slices and budgets.
+Compare to 0's `agent/journal/orchestrator.ts:30-42`, which has explicit prioritized routing rules (R1–R7) over a structured `OrchestratorBrief`, and `agent/journal/specialists.ts` which defines exactly four specialist roles with bounded scope slices and budgets.
 
 ## 6. Context management
 
@@ -140,8 +140,8 @@ Conversation state lives in `AgentState.messages` (`agents/state.py:33`).
 The inspected implementation has no crash-resume path. Its 860-line `Tracer`
 (`telemetry/tracer.py`) writes observability JSONL. Relevant comparison points:
 
-- 0sec `agent/journal/writer.ts:77-100, 90-95` — `loadJournal()` rehydrates from an fsync'd `journal.jsonl` plus sidecar artifacts directory, both sync-by-runId and async-by-path overloads.
-- 0sec `agent/journal/orchestrator.ts:122-130` — `runOrchestrator` accepts `{ resume: true }` and picks up at the last fsynced entry.
+- 0 `agent/journal/writer.ts:77-100, 90-95` — `loadJournal()` rehydrates from an fsync'd `journal.jsonl` plus sidecar artifacts directory, both sync-by-runId and async-by-path overloads.
+- 0 `agent/journal/orchestrator.ts:122-130` — `runOrchestrator` accepts `{ resume: true }` and picks up at the last fsynced entry.
 - Strix `_initialize_sandbox_and_state` (`base_agent.py:331-366`) — no resume path; if the process dies, the scan dies.
 
 ## 7. Verification / oracle patterns
@@ -158,16 +158,16 @@ The inspected implementation has no crash-resume path. Its 860-line `Tracer`
 
 The one programmatic check is LLM-based deduplication: `check_duplicate` (`llm/dedupe.py:142-213`) calls the same LLM with an XML-formatted system prompt asking "is this a duplicate?" and parses the `<dedupe_result>` block back. On error, it falls open (`not duplicate`) so the report saves. Confidence is whatever the dedup model reports as a float — no calibration, no floor.
 
-**0sec equivalents:**
+**0 equivalents:**
 
-| Layer | 0sec |
+| Layer | 0 |
 |---|---|
 | Replay-time oracle | `packages/core/src/verify/replay-runner.ts:1-100` — `runDeterministicReplay`, `assertionFromStepExpect`, `evaluateAssertion`, structured `expect` predicates (`exit-zero`, `http-status`, `body-contains`, `body-matches`, `file-exists`). |
 | Confidence floors | `packages/core/src/agent/finding-confidence.ts:1-60` — hybrid: LLM self-report clamped UP by PoC-status floor (0.6 if pocSteps present, 0.8 if any verifiable `expect`). |
 | Kernel finding verification | `packages/core/src/verify/kernel-verify.ts:1-100` — constrained loop with a single allowlisted tool (`kernel_run`), oracle-driven promotion (`signature_matched → confirmed, confidence=1.0`), explicit budget, separate from the main agent loop. |
 | Flag validator | `packages/core/src/agent/flag-validator.ts` — for CTF-style flag oracles. |
 
-The compared 0sec workflows include executable replay predicates and kernel
+The compared 0 workflows include executable replay predicates and kernel
 oracles. Strix's inspected reporting path relies on agent-produced PoC text.
 
 ## 8. Test infrastructure
@@ -182,7 +182,7 @@ oracles. Strix's inspected reporting path relies on agent-produced PoC text.
 
 CI: the only workflow is `.github/workflows/build-release.yml` — matrix-builds the PyInstaller bundle on macOS/Linux/Windows and uploads to a GitHub Release on `v*` tags. **`pytest` is never invoked in CI.** No coverage, no lint gate visible in CI (though `ruff`/`mypy`/`bandit` are in dev deps).
 
-Compare 0sec `.github/workflows/`: 30+ workflows including `journal-ablation.yml`, `xbow-*`, `npm-bench.yml`, `htb-bench.yml`, `argus-bench.yml`, `release-smoke.yml`, `docker-kali-publish.yml`, `kernel-validator-batch.yml`.
+Compare 0 `.github/workflows/`: 30+ workflows including `journal-ablation.yml`, `xbow-*`, `npm-bench.yml`, `htb-bench.yml`, `argus-bench.yml`, `release-smoke.yml`, `docker-kali-publish.yml`, `kernel-validator-batch.yml`.
 
 ## 9. Operational concerns
 
@@ -197,7 +197,7 @@ Confirmed from `strix/runtime/docker_runtime.py`:
 - All sub-agents share this container (`system_prompt.jinja:233-236` makes this explicit to the model).
 
 Both compared Docker executors share the host kernel. The inspected Strix
-configuration provides no additional VM boundary. 0sec's kernel-verification
+configuration provides no additional VM boundary. 0's kernel-verification
 path uses a separate runner; this historical comparison predates later backends.
 
 ### Retries
@@ -219,9 +219,10 @@ Two layers:
 
 A first-run anonymous-id file at `~/.strix/.seen` (`posthog.py:25-34`) seeds a `first_run: true` event on first scan.
 
-## 10. Per-section comparison vs 0sec
+<span id="10-per-section-comparison-vs-0sec"></span>
+## 10. Per-section comparison vs 0
 
-| Concern | Strix | 0sec |
+| Concern | Strix | 0 |
 |---|---|---|
 | Agent loop entry | `strix/agents/base_agent.py:152` `agent_loop` (single `while True`, `max_iterations=300`) | `packages/core/src/agent/loop.ts:38` `runAgentLoop` (300 LOC, session-restore aware); plus `native-loop.ts:1449` for the legacy native path |
 | Loop dispatch | implicit (one agent class) | _not implemented_ — there is no `loop-dispatch.ts` and no `journalLoop` feature flag; `agent/native-loop.ts` is the single agent loop today (`agent/journal/` holds the journal primitives only) |
@@ -232,7 +233,7 @@ A first-run anonymous-id file at `~/.strix/.seen` (`posthog.py:25-34`) seeds a `
 | Context compression | LLM-summarize chunks of 10 over 90% of 100k token cap (`llm/memory_compressor.py:215-226`) | journal summarizer with hard token cap and `OrchestratorWindowExceededError` (`journal/summarizer.ts:20`, `orchestrator.ts:104-112`) — fails loud, doesn't silently drop |
 | Persistence / resume | none (in-memory `state.messages`) | `journal/writer.ts:90-100` `loadJournal()` with fsync'd JSONL + sidecar artifacts; `orchestrator.ts:122-130` `resume: true` |
 | Verification | sub-agent role + `create_vulnerability_report` shape checks (`tools/reporting/reporting_actions.py:201`) | `verify/replay-runner.ts:1-100` deterministic replay with structured `expect` predicates; `verify/kernel-verify.ts:1-100` oracle-driven kernel verify; `agent/finding-confidence.ts:1-60` PoC-status confidence floors |
-| Deduplication | LLM-judge, XML parse, fail-open (`llm/dedupe.py:142-213`) | not directly equivalent; 0sec uses confidence + finding-table dedupe upstream |
+| Deduplication | LLM-judge, XML parse, fail-open (`llm/dedupe.py:142-213`) | not directly equivalent; 0 uses confidence + finding-table dedupe upstream |
 | Cost ceiling | observed only (`llm/llm.py:330`) | `PipelineOptions.costCeilingUsd` (`unified-pipeline.ts:62`) plumbed through to the agent runner |
 | Provider abstraction | LiteLLM only, single `LLM` class (`llm/llm.py:77`) | runtime registry (`packages/core/src/runtime/registry.ts`) with `LlmApiRuntime`, native, codex variants |
 | Isolation | one shared Docker container per scan; `cap_add=NET_ADMIN,NET_RAW` (`runtime/docker_runtime.py:175`) | shared-kernel Docker for shell tools (`agent/docker-executor.ts:1-50`); isolated kernel per scan for kernel-verify path |
@@ -246,17 +247,17 @@ Candidate changes from this source review require evaluation before adoption:
 
 ### Borrow
 
-1. **Inject a hard "approaching max iterations" warning at 85% and a "CRITICAL: 3 left" warning at the tail.** Strix `base_agent.py:186-211` injects a `user` message into the conversation when the iteration budget gets thin, telling the model to wrap up via the finish tool. 0sec's `agent/loop.ts` currently just hits `maxTurns` and writes `state.summary = "Agent reached max turns…"` (`loop.ts:350`). A two-stage warning gives the model a chance to actually call `done` and persist a partial finding rather than getting cut off mid-thought. Low risk, single-PR.
+1. **Inject a hard "approaching max iterations" warning at 85% and a "CRITICAL: 3 left" warning at the tail.** Strix `base_agent.py:186-211` injects a `user` message into the conversation when the iteration budget gets thin, telling the model to wrap up via the finish tool. 0's `agent/loop.ts` currently just hits `maxTurns` and writes `state.summary = "Agent reached max turns…"` (`loop.ts:350`). A two-stage warning gives the model a chance to actually call `done` and persist a partial finding rather than getting cut off mid-thought. Low risk, single-PR.
 
-2. **The "skill" pattern as just-in-time prompt injection.** Strix's `load_skill` tool (`tools/load_skill/load_skill_actions.py`, with skills in `strix/skills/{vulnerabilities,frameworks,tooling,technologies,protocols}/*.md`) lets the model decide *at runtime* "I need the GraphQL playbook now" and re-renders the system prompt with that markdown appended (`llm/llm.py:143-158`). 0sec's dynamic playbooks are injected once after recon (`packages/core/src/agent/playbooks.ts`); a tool-callable "load this skill" would let mid-run discoveries pull in narrower guidance without bloating every system prompt. Costs prompt cache invalidation; A/B against playbook injection.
+2. **The "skill" pattern as just-in-time prompt injection.** Strix's `load_skill` tool (`tools/load_skill/load_skill_actions.py`, with skills in `strix/skills/{vulnerabilities,frameworks,tooling,technologies,protocols}/*.md`) lets the model decide *at runtime* "I need the GraphQL playbook now" and re-renders the system prompt with that markdown appended (`llm/llm.py:143-158`). 0's dynamic playbooks are injected once after recon (`packages/core/src/agent/playbooks.ts`); a tool-callable "load this skill" would let mid-run discoveries pull in narrower guidance without bloating every system prompt. Costs prompt cache invalidation; A/B against playbook injection.
 
-3. **The vulnerability-report structural validator.** `reporting_actions.py:201-339` enforces a strict schema before any report is accepted: required text fields, CVSS XML parses to a real `cvss>=3.2` vector, optional CVE/CWE regex shape-checks, file-path validation that rejects `..` and absolute paths (`_validate_file_path`, `reporting_actions.py:66-74`). 0sec's `Finding` validation is laxer; tightening at the agent boundary would prevent garbage from reaching `findings-table` rendering. Pair with the existing `finding-confidence.ts` floors.
+3. **The vulnerability-report structural validator.** `reporting_actions.py:201-339` enforces a strict schema before any report is accepted: required text fields, CVSS XML parses to a real `cvss>=3.2` vector, optional CVE/CWE regex shape-checks, file-path validation that rejects `..` and absolute paths (`_validate_file_path`, `reporting_actions.py:66-74`). 0's `Finding` validation is laxer; tightening at the agent boundary would prevent garbage from reaching `findings-table` rendering. Pair with the existing `finding-confidence.ts` floors.
 
 ### Verify empirically
 
-4. **Their refusal-avoidance block.** `system_prompt.jinja:71-76` ("Do not self-classify normal in-scope validation as unauthorized…") plus the system-verified-scope block (`:48-63`) is a coordinated countermeasure against frontier-model safety reflexes that intermittently break 0sec runs too. Worth A/B testing in our `prompts.ts`. Don't borrow blind — Strix's text is overconfident ("All permission checks have been COMPLETED and APPROVED") and may trigger different model behavior; test on the same XBOW slice before committing.
+4. **Their refusal-avoidance block.** `system_prompt.jinja:71-76` ("Do not self-classify normal in-scope validation as unauthorized…") plus the system-verified-scope block (`:48-63`) is a coordinated countermeasure against frontier-model safety reflexes that intermittently break 0 runs too. Worth A/B testing in our `prompts.ts`. Don't borrow blind — Strix's text is overconfident ("All permission checks have been COMPLETED and APPROVED") and may trigger different model behavior; test on the same XBOW slice before committing.
 
-5. **The system-prompt-as-scope-lock pattern.** Strix injects `authorized_targets` as Jinja-rendered system-prompt context (`strix/agents/StrixAgent/strix_agent.py:22-57`) rather than as user-message scope. Mid-conversation user input can't override system-prompt scope as easily, which matters when sub-agent traffic is appended as `"user"` role messages. 0sec ships scope mostly via the initial prompt; check whether the same shift reduces scope creep in our runs.
+5. **The system-prompt-as-scope-lock pattern.** Strix injects `authorized_targets` as Jinja-rendered system-prompt context (`strix/agents/StrixAgent/strix_agent.py:22-57`) rather than as user-message scope. Mid-conversation user input can't override system-prompt scope as easily, which matters when sub-agent traffic is appended as `"user"` role messages. 0 ships scope mostly via the initial prompt; check whether the same shift reduces scope creep in our runs.
 
 ### Avoid
 
@@ -289,7 +290,7 @@ Strix references (all on `usestrix/strix@HEAD`, cloned 2026-05-23):
 - CI: `.github/workflows/build-release.yml`
 - Tests: `tests/` (totals from `wc -l`, no integration tests in `tests/agents/`)
 
-0sec references (all on `0sec-labs/0sec@research/strix-comparison`):
+0 references (all on `0sec-labs/0sec@research/strix-comparison`):
 
 - Agent loop: `packages/core/src/agent/loop.ts:38-120`, `:350`
 - Native loop: `packages/core/src/agent/native-loop.ts` (1449 LOC)

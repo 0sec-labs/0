@@ -140,7 +140,7 @@ export function Masthead({
       ) : (
         <box flexDirection="row" width={contentWidth} flexShrink={0} minWidth={0}>
           <text width={contentWidth} height={1} wrapMode="none" truncate fg={TEXT}>
-            {fitTuiText("0SECURITY · OPERATOR CONSOLE", contentWidth, { mode: "middle" })}
+            {fitTuiText("0.SECURITY · OPERATOR CONSOLE", contentWidth, { mode: "middle" })}
           </text>
         </box>
       )}

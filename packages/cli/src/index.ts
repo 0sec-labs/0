@@ -7,6 +7,7 @@ import { VERSION } from "@0sec/shared";
 import {
   analyticsPipeline,
   createHerdrEventSink,
+  configureRunContributionsFromEnvironment,
   eventBus,
   maybeSubscribeCloudEventSink,
   maybeSubscribeOperationalEventSink,
@@ -49,6 +50,9 @@ try {
 } catch {
   analyticsPipeline.setLevel("off");
 }
+// Independent, purpose-specific enrollment. Missing configuration does not enroll.
+try { configureRunContributionsFromEnvironment(); }
+catch { process.stderr.write("[0sec] Run contribution unavailable: invalid private enrollment configuration.\n"); }
 
 // Operational NDJSON stderr sink (0SEC_LOG_FORMAT=json). Opt-in metadata-
 // only logging — writes one NDJSON line per allowlisted lifecycle / cost
@@ -130,6 +134,7 @@ async function buildProgram(): Promise<Command> {
   c.registerProtocolCheckCommand(program);
   c.registerCveCommand(program);
   c.registerUpgradeCommand(program);
+  c.registerDepsCommand(program);
   c.registerH1Command(program);
   c.registerAuthCommand(program);
   c.registerHostedCommand(program);
@@ -144,6 +149,7 @@ async function buildProgram(): Promise<Command> {
   c.registerCloudCommand(program);
   c.registerXnuFuzzCommand(program);
   c.registerResearchCommand(program);
+  c.registerRadarCommand(program);
   c.registerTimelineCommand(program);
   c.registerFileReviewCommand(program);
   c.registerAgentAssureCommand(program);
@@ -153,6 +159,8 @@ async function buildProgram(): Promise<Command> {
   c.registerEvolveCommand(program);
   c.registerConfigCommand(program);
   c.registerServiceCommand(program);
+  c.registerProjectSetupCommand(program);
+  c.registerAuditSkillsCommand(program);
   c.registerHackstoreCommand(program);
   return program;
 }
@@ -195,7 +203,7 @@ process.once("beforeExit", () => {
 
 // ── Entry point ──
 const userArgs = process.argv.slice(2);
-const knownCommands = ["scan", "resume", "replay", "history", "findings", "secure", "connect", "guide", "review", "fix", "file-review", "audit", "doctor", "dashboard", "tui", "watch", "orchestrate", "db", "mcp-server", "eval", "bench", "ingest", "kernel", "disclose", "verify", "exploit", "hunt", "recency-hunt", "deep-review", "lens-synth", "memsafety", "assumption-hunt", "specdrift", "protocol-check", "cve", "upgrade", "update", "h1", "auth", "login", "models", "balance", "intel", "recon", "js-recon", "npm-discovery", "identity", "adgraph", "entragraph", "cloud", "service", "xnu-fuzz", "research", "timeline", "console", "agent-assure", "binary", "plugin", "theme", "config", "evolve", "hackstore", "hack", "store", "help"];
+const knownCommands = ["scan", "resume", "replay", "history", "findings", "secure", "connect", "guide", "review", "fix", "file-review", "audit", "deps", "doctor", "dashboard", "tui", "watch", "orchestrate", "db", "mcp-server", "triage", "eval", "bench", "ingest", "kernel", "disclose", "verify", "exploit", "hunt", "recency-hunt", "deep-review", "lens-synth", "memsafety", "assumption-hunt", "specdrift", "protocol-check", "cve", "upgrade", "update", "h1", "auth", "login", "models", "balance", "intel", "recon", "js-recon", "npm-discovery", "identity", "adgraph", "entragraph", "cloud", "service", "project", "skills", "xnu-fuzz", "research", "radar", "timeline", "console", "agent-assure", "binary", "plugin", "theme", "config", "evolve", "hackstore", "hack", "store", "help"];
 
 if (userArgs.length === 0) {
   // Fast path: straight into the TUI without ever importing the command barrel.

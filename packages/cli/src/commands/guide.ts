@@ -30,6 +30,7 @@ interface Capability {
   layer: "engine" | "service";
   requiresAuth?: boolean;
   limitations?: string;
+  next?: string[];
 }
 
 type ServiceProbe = "unknown" | "ok" | "unauthenticated" | "unreachable";
@@ -39,8 +40,38 @@ interface GuideServiceStates {
   service: { status: ServiceProbe; note: string };
   account: unknown;
 }
+const ONBOARDING = {
+  summary: "First-run path: authenticate, enroll the repository, review source-backed context, save an approved plan, then explicitly start and follow the scan.",
+  steps: [
+    "0sec auth login",
+    "0sec project enroll <repository> --json",
+    "0sec project setup <repository> --json",
+    "Review the proposal and budget; save with project save.",
+    "Start only after approval with project start --revision <revision> --idempotency-key <uuid>.",
+    "Follow the returned scan with service status <scan-id> or service wait <scan-id>.",
+  ],
+};
 
 const CAPABILITIES: Capability[] = [
+  {
+    id: "project-setup",
+    summary: "Enroll a repository, then read and edit its context, operating plan and revisions through the same API as the dashboard.",
+    when: "An agent needs to connect a GitHub repository, propose configuration for review, save an approved revision, or explicitly request its execution.",
+    command: "0sec project enroll https://github.com/org/repo --json",
+    layer: "service",
+    requiresAuth: true,
+    limitations: "Enrollment checks the connected GitHub App and adds the repository to the current workspace; it does not save configuration or start a scan. After enrollment, use project setup --json. Starting requires an approved revision, an idempotency key and server-authorized credit funding. Observations are suggestions, not automatically accepted instructions.",
+    next: ["Run project setup --json to review the source-backed proposal.", "Save only an approved plan; saving never starts a scan."],
+  },
+  {
+    id: "audit-skills",
+    summary: "Manage versioned audit-methodology bundles and pin their revisions to codebases.",
+    when: "You want the CLI and dashboard to share editable review methodology.",
+    command: "0sec skills list --json",
+    layer: "service",
+    requiresAuth: true,
+    limitations: "Requires matching deployed audit-skills APIs; mutations need owner or administrator authority. Runs capture immutable bundles, and workers must use an engine with the manifest consumer. Methodology does not authorize additional scope, spending or publication.",
+  },
   {
     id: "hosted-inference",
     summary: "Use 0cloud model access while the harness and its tools execute locally. Provider credentials remain on the service.",
@@ -60,12 +91,12 @@ const CAPABILITIES: Capability[] = [
   },
   {
     id: "connect",
-    summary: "Request managed repository security work and recurring runs after repository readiness checks and explicit policy approval.",
-    when: "Point 0cloud by 0security at a repository and let it work continuously.",
-    command: "0sec connect https://github.com/org/repo",
+    summary: "Verify repository access without creating work; explicitly opt into a managed scan or recurrence.",
+    when: "Check access before requesting execution with --run or --schedule.",
+    command: "0sec connect https://github.com/org/repo --setup-only",
     layer: "service",
     requiresAuth: true,
-    limitations: "Unavailable enrollment APIs block dispatch. GitHub App approval is an action-required browser handoff, not an implemented polling session. In JSON mode, --yes is required before new work starts. A created scan with failed recurrence returns action-required with its scan id, not ready.",
+    limitations: "Unavailable enrollment APIs block dispatch. GitHub App approval is an action-required browser handoff, not a polling session. Neither --yes nor a readiness success starts work without --run or --schedule. JSON dispatch also requires --yes. A created scan with failed recurrence returns action-required with its scan id.",
   },
   {
     id: "service-start",
@@ -157,7 +188,7 @@ const CAPABILITIES: Capability[] = [
 ];
 
 const ARCHITECTURE = {
-  summary: "0security is the open engine and CLI brand; the executable remains 0sec. 0cloud by 0security offers two paths: hosted inference with local tools, or managed security execution using the same engine. These paths have separate access and funding.",
+  summary: "0.security is the open engine and CLI brand; the executable remains 0sec. 0cloud by 0.security offers two paths: hosted inference with local tools, or managed security execution using the same engine. These paths have separate access and funding.",
   lifecycle: [
     "prepare — pin a clean managed checkout of your repository",
     "investigate — source review with tool-using agents under budgets",
@@ -245,9 +276,11 @@ function commandMetadata(command: Command) {
 
 function printHuman(topic: string | undefined, service: GuideServiceStates, commands: Command[]): void {
   const out: string[] = [];
-  out.push(`0security guide (installed ${VERSION})`);
+  out.push(`0.security guide (installed ${VERSION})`);
   out.push("");
-  out.push(ARCHITECTURE.summary);
+    out.push(`Onboarding: ${ONBOARDING.summary}`);
+    for (const [index, step] of ONBOARDING.steps.entries()) out.push(`  ${index + 1}. ${step}`);
+    out.push("");
   out.push("");
   if (!topic) {
     out.push("Capabilities:");
@@ -291,6 +324,10 @@ function printHuman(topic: string | undefined, service: GuideServiceStates, comm
       if (cap.command) out.push(`Run: ${cap.command}`);
       if (cap.requiresAuth) out.push("Requires: 0sec auth login and the relevant service access");
       if (cap.limitations) out.push(`Limitations: ${cap.limitations}`);
+      if (cap.next?.length) {
+        out.push("Next:");
+        for (const step of cap.next) out.push(`  - ${step}`);
+      }
     }
     if (command) out.push(command.helpInformation());
   }
@@ -317,14 +354,14 @@ export function registerGuideCommand(program: Command): void {
       }
       const service = states(await probeService(), {
         status: "unknown",
-        note: "Health does not verify account identity or entitlement. Product access is resolved by its service endpoint.",
       });
       if (format === "json") {
         process.stdout.write(
           JSON.stringify(
             {
               version: VERSION,
-              product: "0security (open engine + CLI); 0cloud by 0security (hosted platform)",
+              product: "0.security (open engine + CLI); 0cloud by 0.security (hosted platform)",
+              onboarding: ONBOARDING,
               capabilities: topic ? (capability ? [capability] : []) : CAPABILITIES,
               commands: (topic && topic !== "commands" ? (command ? [command] : []) : commands).map(commandMetadata),
               architecture: !topic || topic === "architecture" ? ARCHITECTURE : undefined,

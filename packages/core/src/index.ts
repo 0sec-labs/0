@@ -88,6 +88,18 @@ export type {
   AppFixVariantHuntResult,
   AppFixVariantHuntOptions,
 } from "./review/app-fix-variants.js";
+export { rankKernelHypothesesWithJev } from "./research/kernel-jev-prepass.js";
+export type { KernelJevSignals, KernelJevCandidate, KernelJevPrepassResult } from "./research/kernel-jev-prepass.js";
+export { rankKernelCommitsWithJev } from "./research/kernel-jev-commit-prepass.js";
+export type { KernelCommitSignals, KernelCommitCandidate, KernelCommitPrepassOptions, KernelCommitPrepassResult } from "./research/kernel-jev-commit-prepass.js";
+export { runKernelSourceJevPrepass, KERNEL_FUNCTION_BATCH_SIZE, KERNEL_FUNCTION_LABELS, extractKernelFunctions } from "./research/kernel-source-jev-prepass.js";
+export type { ExtractedKernelFunction, KernelFunctionSignals, RankedKernelFunction, KernelSourceJevLedger, KernelSourceJevPrepassOptions } from "./research/kernel-source-jev-prepass.js";
+export { checkAlreadyFixed } from "./kernel/fix-commit-intel.js";
+export type { AlreadyFixedResult, CheckAlreadyFixedOptions } from "./kernel/fix-commit-intel.js";
+export { scanRepoCommitsWithJev, radarCandidatesToSeedFindings } from "./research/commit-radar.js";
+export type { RadarSignals, RadarCommit, RadarCommitCandidate, ScanRepoCommitsOptions, ScanRepoCommitsResult } from "./research/commit-radar.js";
+export { rankCrashesWithJev, crashSummaryFromTriage } from "./kernel/index.js";
+export type { CrashRecord, CrashSignals, CrashTriageCandidate, CrashTriageResult } from "./kernel/index.js";
 // FoxGuard cross-validation: ranked/deduped lead helpers + the typed result
 // surfaced on the review report (0sec FoxGuard cross-validation, Phase 2).
 export {
@@ -1426,11 +1438,13 @@ export {
   mineSyzbotQueue,
   generateSyzChoiceWeights,
   syzChoiceWeightsFromPlan,
+  syzWeightingContextFromJev,
 } from "./kernel/index.js";
 export type {
   SyzChoiceWeightsOptions,
   SyzChoiceWeightsFile,
   SyzChoiceWeightsResult,
+  SyzJevPrepassInput,
 } from "./kernel/index.js";
 export type {
   SyzbotFetcher,
@@ -1816,6 +1830,16 @@ export {
   levelAtLeast,
   type AnalyticsLevel,
 } from "./telemetry/analytics-level.js";
+export {
+  RunContributionClient, RunCapture, CONTRIBUTION_ENDPOINT,
+  contributionReceiptSchema, contributionManifestSchema, contributionTransitionSchema, contributionChunkSchema,
+  contributionPurposeSchema, contributionClientPolicySchema,
+  configureRunContributionsFromEnvironment, getConfiguredRunContributionClient,
+  currentRunContribution, withRunContribution,
+  type ContributionReceipt, type RunManifest, type RunTransition, type ContributionChunk,
+  type ContributionPurpose, type ContributionClientPolicy, type RunContributionClientConfig,
+  type BeginContribution, type ContributionUploadResult,
+} from "./telemetry/run-contribution.js";
 // Operational NDJSON stderr sink (0SEC_LOG_FORMAT=json). Writes one
 // NDJSON line per allowlisted lifecycle/cost event to stderr, stripped
 // of all sensitive fields (prompts, responses, reasoning, tool args,

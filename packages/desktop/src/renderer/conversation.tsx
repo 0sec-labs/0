@@ -267,7 +267,7 @@ function EmptyState({
 }): JSX.Element {
   return (
     <div className="conversation-empty">
-      <h2>0security Desktop</h2>
+      <h2>0.security Desktop</h2>
       <p>
         Run security engagements through the local console daemon. Start a new
         session to begin scanning, auditing, or reviewing a target.

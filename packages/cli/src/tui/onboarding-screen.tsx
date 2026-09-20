@@ -207,7 +207,7 @@ const BLANK: StepLine = { text: "", tone: "muted" };
 
 function welcomeLines(width: number): StepLine[] {
   return [
-    ...paragraph("Welcome to 0security", "title", width),
+    ...paragraph("Welcome to 0.security", "title", width),
     BLANK,
     ...paragraph(
       "This console is your command center for self-improving, open-source security workflows.",

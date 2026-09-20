@@ -18,6 +18,7 @@ import { validatePluginManifest, type PluginCapability, type PluginManifest } fr
 import { FrameReader, decodePluginMessage, MAX_RESULT_CHARS, type PluginMessage, type PluginToolResultMessage } from "./protocol.js";
 import type { SelfExtensionRegistry } from "./self-extension.js";
 import { analyticsPipeline } from "../telemetry/analytics-pipeline.js";
+import { currentRunContribution } from "../telemetry/run-contribution.js";
 
 const MAX_SOURCE_BYTES = 2 * 1024 * 1024;
 const MAX_VERSIONS = 32;
@@ -302,6 +303,7 @@ export class ExecutablePluginManager {
         throw error;
       }
       this.exposed.set(manifest.id, version.manifestDigest);
+      currentRunContribution()?.record("routing", { origin: "executable", pluginId: manifest.id, versionId: id, manifestDigest: version.manifestDigest, evidenceStatus: version.evidenceStatus });
       context.onEvent?.({ type: "executable_activated", pluginId: manifest.id, versionId: id, evidenceStatus: version.evidenceStatus });
       return { success: true, output: { pluginId: manifest.id, versionId: id, kind: version.kind, tools: manifest.tools.map(t => t.name), evidenceStatus: version.evidenceStatus } };
     } finally { release(); }

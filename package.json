@@ -1,7 +1,7 @@
 {
   "name": "0sec",
   "type": "module",
-  "version": "0.19.0",
+  "version": "0.21.0",
   "description": "Your self-improving, open-source cybersecurity team.",
   "bin": {
     "0sec": "dist/0sec.js",
@@ -28,6 +28,7 @@
     "test:bundle-skills": "node --test scripts/bundle-skills-assets.test.mjs",
     "test:dsh-mcp:e2e": "node scripts/dsh-0sec-mcp.e2e.mjs",
     "test:install-e2e": "bash scripts/install-e2e.sh",
+    "test:cloud-e2e": "bash scripts/smoke-cloud-account.sh",
     "test:evolution:e2e": "node scripts/smoke-source-evolution.mjs && node scripts/smoke-lens-evolution.mjs && node scripts/smoke-codebase-learning.mjs && node scripts/smoke-source-citation.mjs",
     "test:smolvm:e2e": "node scripts/smoke-smolvm.mjs",
     "test:smolvm:toolbox": "node scripts/smoke-smolvm-toolbox.mjs",
@@ -62,7 +63,7 @@
     "autonomous-agents",
     "security-research"
   ],
-  "author": "0security",
+  "author": "0.security",
   "homepage": "https://0.security",
   "bugs": {
     "url": "https://0.security/contact"
@@ -98,6 +99,7 @@
       "svgo": "^4.0.2",
       "ip-address": "^10.2.1",
       "nanoid@<3.3.18": "3.3.18",
+      "devalue@<5.9.2": "^5.9.2",
       "hono": "^4.13.5",
       "@hono/node-server": "^1.19.15",
       "dompurify": "^3.4.13",

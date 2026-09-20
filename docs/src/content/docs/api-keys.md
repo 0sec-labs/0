@@ -3,41 +3,67 @@ title: API Keys
 description: Supported LLM providers, environment variables, credential priority, model routing, and provider failover.
 ---
 
-0cloud offers hosted model access and end-to-end managed security work through one platform.
-Hosted inference uses a shared inference-credit balance without supplier-account setup;
-managed security has separate access and billing.
-Alternatively, use your own API key or supported subscription without a Cloud account.
+The local 0 CLI can use your own provider key or a supported provider
+subscription without a 0cloud account. Hosted model access routes inference
+through 0cloud; it does not move your local tools into a managed sandbox.
+Managed security work has separate authorization, access and billing.
 
 <a id="hosted-inference-draft"></a>
 <a id="0sec-hosted-inference-draft"></a>
 
 ## Hosted inference
 
-For access to the hosted test service, follow [Cloud setup](/getting-started/#hosted-models-draft).
+Hosted model access and managed execution are separate service contracts.
+The public site describes hosted plans by inquiry; an available login page,
+successful authentication or model listing is not proof of production-paid
+readiness or permission to dispatch managed work. Use a compatible CLI and
+service revision; follow [Cloud setup](/getting-started/#hosted-models).
+
 The `api` runtime's `hosted` provider uses a scoped organization credential.
-The gateway holds supplier keys and forwards model context, including tool
+The service holds supplier keys and receives model context, including tool
 results. Tools execute on your configured local executor.
+The managed service additionally distinguishes organization product modes:
+an inference-only organization cannot submit security scans, and a review-only
+organization is limited to its review workflow. A hosted inference credential
+does not confer general managed-security execution rights.
 
 ### Account, models and usage
 
-`0sec models --json` lists hosted aliases, providers, wire protocols, limits and
-customer rates. Select an exact alias; otherwise the first catalog entry is used.
+`0 models --json` returns an array of model IDs, context limits and maximum
+output limits: `id`, `contextTokens` and `maxOutputTokens`. It does not print
+supplier details, wire protocols or prices. Select an exact ID from this list;
+otherwise the hosted runtime selects the first catalog entry.
 
-`0sec balance --json` reads organization inference credit, separately from
-0review or local cost estimates. The dashboard and usage endpoint show model,
-provider, tokens, billed amount, cancellation and settlement status.
-There is no `0sec usage` command.
+`0 balance` displays the service's credit account, separately from the
+CLI's estimated model cost. It distinguishes:
 
-Autumn reserves credit before dispatch and settles measured usage afterward.
-Login adds no credit. Funding requires confirmed payment through configured
-top-ups or allowances. Requests exceeding available reserve credit are rejected;
-postpaid overage is unavailable.
+| Source | What to check |
+| --- | --- |
+| Free credits | Eligibility, claimable credits, spendable credits, held credits and the reset time. Claimable is not spendable. |
+| Subscription | Subscription state and each reported monthly, weekly or five-hour window. These windows overlap; do not add them together. |
+| Prepaid | Spendable and held credits, settled deficit, hold shortfall and whether prepaid use is permitted. |
+| Admission | Whether the service currently reports the account eligible to make a request, with its reason when unavailable. |
+
+`0 balance --json` returns a validated `credits-v1` account or `null`.
+Credit amounts are decimal integer strings in nanocredits, with 1 credit equal
+to 1,000,000,000 nanocredits. Missing amounts stay unavailable, never zero.
+Unsupported or malformed account data displays **Credit data unavailable**;
+this is not evidence that your credentials are invalid or your balance is empty.
+Use a compatible CLI and service before attempting a paid request.
+
+Login does not itself claim credits, buy a subscription or authorize prepaid
+spending. Availability and enabled purchase options come from the service.
+Use only the account controls provided by the approved deployment; the CLI
+does not create a checkout or promise that an offer is available.
+
+The usage endpoint returns recent request metadata. There is no top-level
+`0 usage` command; the console's `/usage` describes the current chat.
 
 | Endpoint on the selected cloud host | Required token scope | Purpose |
 | --- | --- | --- |
-| `GET /api/inference/v1/models` | `inference:read` | Hosted aliases and rate metadata |
-| `GET /api/inference/account` | `billing:read` | Organization inference balance |
-| `GET /api/inference/usage` | `inference:read` | Up to 50 recent request records |
+| `GET /api/inference/v1/models` | `inference:read` | Model catalog for the selected service |
+| `GET /api/inference/account` | `billing:read` | Versioned credit account and admission state |
+| `GET /api/inference/usage` | `inference:read` | Recent request records |
 | `POST /api/inference/v1/chat/completions` | `inference:invoke` | Catalog-selected Chat Completions route |
 | `POST /api/inference/v1/responses` | `inference:invoke` | Catalog-selected Responses route |
 
@@ -46,22 +72,22 @@ these scopes. The catalog controls the provider endpoint and wire protocol.
 
 ### Charging and interrupted requests
 
-The reserve covers the catalog context window and bounded output at the configured
-multiplier. Charges use measured usage and snapshotted customer rates; supplier
-receipts establish usage and supplier cost, not retail pricing.
+The service determines reservation, usage settlement and admission policy.
+Do not treat the CLI's dollar cost estimate or `--cost-ceiling` as the hosted
+credit balance, a subscription allowance or a retail price.
 
-Both wire APIs support server-sent events. Cancellation can still incur charges:
-the gateway may drain the bounded provider stream to collect usage. Missing usage
-or uncertain settlement stays unresolved and blocks further spending.
-Check request status and balance before resubmitting.
+Both wire APIs support server-sent events. A cancelled or interrupted request
+may already have consumed model work. Check the service's request record and
+account state before resubmitting; a disconnected stream does not establish a
+refund or prove that no work ran.
 
 | Failure | Action |
 | --- | --- |
 | HTTP 401 | Missing, invalid or revoked credential. Sign in again. |
-| HTTP 403 | Required scope missing. Reauthorize the CLI for the intended organization. |
-| HTTP 402 | Insufficient reserve credit; no provider call. Check balance and funding. |
-| HTTP 429 | Concurrency, unresolved charge or provider throttling. Inspect the error and request history. |
-| HTTP 503 | Hosted service, provider or billing unavailable. |
+| HTTP 403 | Missing scope, organization access or service entitlement. Read the returned reason before reauthorizing. |
+| HTTP 402 | A payment or credit admission check rejected the request. Check account state and the deployment's supported billing flow. |
+| HTTP 429 | A usage window, concurrency limit, unresolved request or provider throttle blocked the request. Inspect the reason and retry timing. |
+| HTTP 503 | Hosted service, provider or account state unavailable. |
 | Transport failure or hosted HTTP 5xx | The CLI doesn't automatically replay a potentially consumed request. Inspect usage before trying again. |
 
 The gateway rejects detected model substitution. `0SEC_LLM_FALLBACK` configures
@@ -73,8 +99,11 @@ Hosted HTTP 429 permits retry or configured fallback only with
 Provider throttling and unresolved charges are unmarked and aren't replayed.
 
 Plugin evolution's SDK model calls use the parent runtime's accounting when
-routed through `hosted`. Subagents resolve new runtimes; trusted host code can
-use external clients. Keep model and route fixed when comparing evolution results.
+routed through `hosted`. Subagents fork through the parent runtime's
+child-inference factory and inherit its resolved account and route, subject to
+the role-model and single-model policy. Workspace-trusted code can use external
+clients outside SDK accounting. Keep model and route fixed when comparing
+evolution results.
 
 ## Supported providers
 
@@ -82,19 +111,35 @@ use external clients. Keep model and route fixed when comparing evolution result
 |----------|-----------|---------------|------|
 | **ChatGPT Codex** | `0SEC_CHATGPT_ACCESS_TOKEN` (read first) / `0SEC_CHATGPT_OAUTH_REFRESH_TOKEN` | `gpt-5.5` | Responses (OAuth bearer) |
 | **DeepSeek** | `DEEPSEEK_API_KEY` | `deepseek-flash` (V4.1 Flash) | Responses |
-| **OpenRouter** | `OPENROUTER_API_KEY` | `anthropic/claude-sonnet-4.6` | Chat completions |
-| **Azure OpenAI** | `AZURE_OPENAI_API_KEY` | `gpt-4o` (override with `AZURE_OPENAI_MODEL`) | Chat completions (default) or Responses |
-| **OpenAI** | `OPENAI_API_KEY` | `gpt-4o` | Chat completions |
+| **OpenRouter** | `OPENROUTER_API_KEY` | `anthropic/claude-sonnet-4.6` | Chat completions by default; optional Responses |
+| **Azure OpenAI** | `AZURE_OPENAI_API_KEY` plus endpoint/deployment configuration | Explicit deployment required; do not rely on the internal `gpt-4o` fallback | Chat completions by default; optional or model-required Responses |
+| **OpenAI** | `OPENAI_API_KEY` | `gpt-4o` | Chat completions by default; optional or model-required Responses |
 | **Z.ai GLM** | `Z_AI_API_KEY` | `glm-5.3` | Anthropic Messages |
 | **Moonshot Kimi** | `KIMI_API_KEY` | `k3` | Anthropic Messages |
 | **Alibaba Qwen** | `QWEN_API_KEY` | `qwen3.8-max` | Chat completions |
-| **xAI Grok** | `XAI_API_KEY` | `grok-4.6` | Chat completions |
+| **xAI Grok** | `XAI_API_KEY` | `grok-4.6` | Chat completions by default; optional Responses |
 | **OpenCode Zen** | `OPENCODE_API_KEY` | `muse-spark-1.3-contributor-free` | Per-model (Responses, Anthropic Messages, Google generateContent, or Chat completions) |
+| **GitHub Copilot** | `0SEC_COPILOT_GITHUB_TOKEN` | `gpt-4o` | Chat completions (device sign-in) |
+| **Google Gemini Code Assist** | `0SEC_GEMINI_ACCESS_TOKEN` / `0SEC_GEMINI_OAUTH_REFRESH_TOKEN` | `gemini-2.5-pro` | Code Assist generateContent (browser sign-in) |
 | **Anthropic** | `ANTHROPIC_API_KEY` | `claude-sonnet-4-6` | Anthropic Messages |
 
-These eleven are the only providers the runtime detects from the environment.
-Model families with no direct path (Meta, Mistral, Google Gemini) are reachable
-through OpenRouter or OpenCode Zen.
+These direct connections are separate from [hosted inference](#hosted-inference).
+Model families without a direct connection, such as Meta and Mistral, remain
+available through gateways where your account permits them. Provider support
+does not establish a subscription entitlement or guarantee a model is available.
+
+OpenAI, OpenRouter, xAI and Azure accept `OPENAI_WIRE_API`,
+`OPENROUTER_WIRE_API`, `XAI_WIRE_API` and `AZURE_OPENAI_WIRE_API`, respectively,
+with values `chat_completions` or `responses`. Other values are errors.
+The exact Azure `gpt-5.6-sol` and OpenAI `gpt-5.6-luna` routes upgrade to Responses
+for tool support. OpenCode determines its wire by model family: GPT/Grok/Muse
+use Responses, Claude/Qwen use Messages, Gemini uses generateContent, and
+DeepSeek/GLM/Kimi/MiMo/Ling/Nemotron/MiniMax use Chat Completions.
+
+Provider credentials do not authorize sending arbitrary source, secrets or
+customer data to that provider. Model context includes selected source and tool
+results. Establish data-handling permission separately from target-testing
+authorization.
 
 ### Current model choices
 
@@ -115,11 +160,13 @@ Select the exact API id, for example:
 
 ```bash
 env 0SEC_SELECTED_PROVIDER=openai 0SEC_MODEL=gpt-6-astra \
-  0sec review ./authorized-repo
+  0 review ./authorized-repo --runtime api
 ```
 
-Gemini still requires a gateway: use `opencode/gemini-3.8-flash` with OpenCode
-Zen, or the gateway's documented model id with OpenRouter.
+Gemini can use the Google Code Assist subscription connection, OpenCode Zen
+or OpenRouter. These are different accounts and routes. Pin the provider and
+select an ID supported by that connection; a gateway catalog entry is not
+evidence that the same model is available through Code Assist.
 
 Displayed prices are estimates; reconcile charges against provider invoices.
 [Astra's published base rates](https://developers.openai.com/api/docs/models/gpt-6-astra)
@@ -130,8 +177,9 @@ price. Gateway prices and subscription billing can differ from direct API rates.
 
 ## Credential priority
 
-When no `--model` flag is given, the runtime selects a provider by checking
-environment variables in this order. The **first variable found** wins:
+Within the API runtime, when there is no provider pin or model-to-provider match,
+the following ambient credential order applies. `--model` takes precedence over
+`0SEC_MODEL`; loading a credential is not the same as selecting that provider.
 
 1. **ChatGPT Codex** — `0SEC_CHATGPT_ACCESS_TOKEN` or `0SEC_CHATGPT_OAUTH_REFRESH_TOKEN`
 2. **DeepSeek** — `DEEPSEEK_API_KEY`
@@ -143,59 +191,94 @@ environment variables in this order. The **first variable found** wins:
 8. **Alibaba Qwen** — `QWEN_API_KEY`
 9. **xAI Grok** — `XAI_API_KEY`
 10. **OpenCode Zen** — `OPENCODE_API_KEY`
-11. **Anthropic** — `ANTHROPIC_API_KEY`
+11. **GitHub Copilot** — `0SEC_COPILOT_GITHUB_TOKEN`
+12. **Google Gemini Code Assist** — `0SEC_GEMINI_ACCESS_TOKEN` or `0SEC_GEMINI_OAUTH_REFRESH_TOKEN`
+13. **Anthropic** — `ANTHROPIC_API_KEY`
+14. **Hosted** — configured Cloud credentials, after the direct providers above.
 
-Without a key, the runtime selects Anthropic and reports a missing-credential failure.
+Without a usable provider or Cloud credential, the runtime selects Anthropic
+and reports a missing-credential failure.
 
 **Two things override this fallback chain:**
 - A `--model` (or `0SEC_MODEL`) value that maps to a specific provider — see
   [model routing](#model-routing) below — causes that provider's key to be used
-  regardless of its position in the priority list.
-- `0SEC_SELECTED_PROVIDER` / `0SEC_FORCE_PROVIDER` (see [provider
-  pinning](#provider-pinning)) pins the provider for the entire run.
+  when that provider is configured, regardless of its ambient priority.
+- Explicit provider selection or forcing changes routing as described under
+  [provider pinning](#provider-pinning).
+
+An explicit `--api-key` is another input: without a provider pin, `sk-or-`
+selects OpenRouter, `sk-ant-` selects Anthropic, and other key shapes select
+OpenAI-compatible access **before** natural-model routing. Prefer environment
+credentials plus an explicit provider/model pair; command-line secrets can
+appear in process listings and shell history. `hosted` and `chatgpt-codex`
+require their own authentication and reject a generic runtime API key.
 
 ## Model routing
 
-Set `--model <id>` or run a command through `env 0SEC_MODEL=<id> 0sec <command>`
+Set `--model <id>` or run a command through `env 0SEC_MODEL=<id> 0 <command>`
 when more than one credential is present.
-0sec routes recognized model prefixes to the configured provider:
+0 routes recognized model prefixes to the configured provider:
 
-| Model prefix | Provider | Notes |
+| Model prefix / identifier | Provider | Notes |
 |---|---|---|
-| `glm-*`, `z-ai/*`, `*glm*` | Z.ai GLM | Anthropic-compatible Messages wire |
-| `qwen*` | Alibaba Qwen | OpenAI-compatible `chat/completions` wire |
-| `k3`, `kimi*` | Moonshot Kimi | Anthropic-compatible Messages wire |
-| `grok*`, `xai/*`, `x-ai/*` | xAI Grok | OpenAI-compatible `chat/completions` wire |
-| `opencode/<model-id>` | OpenCode Zen | Wire per upstream model family |
-| `muse-spark*`, `mimo*`, `ling*`, `big-pickle`, `nemotron*`, `minimax*` | OpenCode Zen | Chat completions wire |
-| `claude*`, `anthropic/*`, `*sonnet*`, `*opus*`, `*haiku*` | Anthropic (preferred), OpenRouter (fallback) | Anthropic Messages wire |
-| `gpt-*`, `o1`-`o4` | ChatGPT Codex (when configured), OpenAI (fallback) | Responses (Codex) or Chat completions (OpenAI) |
-| `deepseek-flash`, `deepseek-v4-flash` | DeepSeek | Responses wire; V4.1 uses `deepseek-flash` |
-| Azure Foundry deployment ids | Azure | Chat completions or Responses |
+| `openrouter/*` | OpenRouter | Requires its own key |
+| `glm-*`, `z-ai/*`, IDs containing `glm` | Z.ai GLM | Messages wire |
+| `qwen*`, exact `deepseek-v4-flash-0731` | Alibaba Qwen | Token Plan by default; separate account from direct DeepSeek |
+| `k3*`, `kimi*` | Moonshot Kimi | Messages wire |
+| `grok*`, `xai/*`, `x-ai/*` | xAI Grok | Configured compatible wire |
+| `opencode/<model-id>` | OpenCode Zen | Prefix stripped; wire chosen by model family |
+| `muse-spark*`, `mimo*`, `ling*`, `big-pickle`, `nemotron*`, `minimax*` | OpenCode Zen | Muse uses Responses; the other listed families use Chat Completions |
+| `copilot/*` | GitHub Copilot | Prefix stripped; independently authenticated connection |
+| `gemini*`, `google/*` | Google Gemini Code Assist | Requires Google OAuth; not the public Gemini API-key route |
+| `claude*`, `anthropic/*`, IDs containing `sonnet`, `opus`, `haiku` | Anthropic, then OpenRouter | OpenRouter fallback requires its key |
+| `gpt-*`, `o1`–`o4` | ChatGPT Codex, then OpenAI | Configured Codex auth wins this family match |
+| Exact `deepseek-flash`, `deepseek-v4-flash` | Direct DeepSeek | Responses; checked before Azure deployment aliases |
+| Recognized Foundry deployment IDs | Azure | Checked before general model-family routing |
 
-Without an explicit model, 0sec follows the [credential priority](#credential-priority)
-chain. Pin a model for predictable selection.
+These are routing heuristics, not entitlement checks or a model availability
+catalog. A family match without its credential falls through to ambient
+priority; a request can then fail at the selected provider. Use a provider pin
+for a deterministic route, especially with arbitrary Azure deployment names.
 
-### Free OpenRouter model
+The Azure routing allowlist includes `DeepSeek-V4-Pro`, `DeepSeek-V4-Flash`,
+`Kimi-K2.7-Code`, `gpt-oss-120b`, `gpt-5.4` and the GPT-5.6 Sol/Luna/Terra IDs
+(case-insensitive). The exact lowercase `deepseek-v4-flash` is first treated as
+direct DeepSeek. Pin `azure` rather than depending on casing to choose a bill.
+Azure V4.1 pricing aliases do not themselves add a natural-provider route.
 
-When `OPENROUTER_API_KEY` is set, `--model free` maps to
-`nvidia/nemotron-3-super-120b-a12b:free` — a no-cost tier for testing:
+For multiple models **inside one console audit**, use the
+[role-model picker](/configuration/#multi-model-role-routing). Children retain
+the parent's account and transport: choose models in that provider's catalog.
+That is distinct from independently created workflow runtimes, which can route
+different model IDs to different configured providers.
+
+<span id="free-openrouter-model"></span>
+### OpenRouter `free` alias
+
+When the selected API provider is OpenRouter, `--model free` maps to
+`nvidia/nemotron-3-super-120b-a12b:free`. The alias is not an entitlement or an
+availability guarantee; provider limits and current terms still apply.
 
 ```bash
-env OPENROUTER_API_KEY="sk-or-v1-..." \
-  0sec scan --target https://example.com --scope ./scope.json --model free
+env OPENROUTER_API_KEY="sk-or-v1-..." 0SEC_SELECTED_PROVIDER=openrouter \
+  0 scan --target https://example.com --scope ./scope.json --runtime api --model free
 ```
 
 ## Provider pinning
 
-`0SEC_SELECTED_PROVIDER` pins the provider for the current chat or run,
-bypassing the ambient credential priority. Accepts one of: `openrouter`,
-`anthropic`, `openai`, `azure`, `deepseek`, `chatgpt-codex`, `z-ai`, `kimi`,
-`qwen`, `xai`, `opencode`.
+`0SEC_SELECTED_PROVIDER` selects the primary provider, bypassing ambient
+credential priority. It accepts `openrouter`, `anthropic`, `openai`, `azure`,
+`deepseek`, `chatgpt-codex`, `z-ai`, `kimi`, `qwen`, `xai`, `opencode`,
+`copilot`, `google` and `hosted`.
+
+Set `0SEC_MODEL` alongside an environment provider selection; only `hosted`
+can defer its model to the service catalog. A separately configured explicit
+model can use another route, for example a cross-model verification call.
+Use the selected provider's own credentials and account-supported model ID.
 
 ```bash
 env 0SEC_SELECTED_PROVIDER=deepseek 0SEC_MODEL=deepseek-flash \
-  0sec scan --target https://example.com --scope ./scope.json --mode web
+  0 scan --target https://example.com --scope ./scope.json --mode web --runtime api
 ```
 
 `0SEC_FORCE_PROVIDER` is an unconditional override for benchmark control. It
@@ -213,8 +296,8 @@ export QWEN_API_KEY="..."
 export DEEPSEEK_API_KEY="..."
 
 # Select its matching model at run time.
-0sec scan --target https://api.example.com --scope ./scope.json --model glm-5.3
-0sec scan --target https://api.example.com --scope ./scope.json --model qwen3.8-max
+0 scan --target https://api.example.com --scope ./scope.json --runtime api --model glm-5.3
+0 scan --target https://api.example.com --scope ./scope.json --runtime api --model qwen3.8-max
 
 # Or use OpenRouter.
 export OPENROUTER_API_KEY="sk-or-v1-..."
@@ -222,21 +305,21 @@ export OPENROUTER_API_KEY="sk-or-v1-..."
 # ChatGPT Codex subscription auth. `0SEC_*` names begin with a digit, so
 # pass the token with `env` rather than a shell `export`.
 env 0SEC_CHATGPT_OAUTH_REFRESH_TOKEN="..." \
-  0sec review ./authorized-repo --runtime api
+  0 review ./authorized-repo --runtime api
 # Or use 0SEC_CHATGPT_ACCESS_TOKEN; it is read first when both are present.
 ```
 
 ### GitHub Actions
 
 Add the key as a repository secret and pass it as `env` on the step. The dedicated
-composite action is still [planned](/ci/github-action/), so today you invoke the
-CLI through the container image:
+composite action is still [planned](/ci/github-action/); one supported approach
+is invoking the CLI through the container image:
 
 ```yaml
 - run: |
     docker run --rm -v "$PWD:/work" -w /work \
       -e OPENROUTER_API_KEY \
-      ghcr.io/0sec-labs/0sec:latest review .
+      ghcr.io/0sec-labs/0sec:latest review . --runtime api
   env:
     OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
 ```
@@ -261,15 +344,15 @@ into `0SEC_CHATGPT_*` env vars if no token is present. A logged-in `codex`
 session takes priority over stale `AZURE_OPENAI_API_KEY` / `OPENAI_API_KEY`
 left in a dev shell.
 
-In the hosted-enabled CLI candidate, open `/connect` and select **ChatGPT
-Codex** under **Provider subscription**. 0sec runs `codex login --device-auth`,
+In the interactive console, open `/connect` and select **ChatGPT
+Codex** under **Provider subscription**. 0 runs `codex login --device-auth`,
 shows the device instructions, and reloads `~/.codex/auth.json` after success.
 Choose **OpenAI** under **Use my own API key** for `OPENAI_API_KEY` access.
 The separate **0cloud → Sign in** choice authorizes a Cloud organization.
 
-Every `0sec` run loads that file into the environment before any subcommand
+Every `0` run loads that file into the environment before any subcommand
 runs, so a codex-login file is picked up everywhere — the console `/providers`
-view, `0sec doctor`, and scans/reviews/audits. An explicit environment value always wins,
+view, `0 doctor`, and scans/reviews/audits. An explicit environment value always wins,
 and a missing or malformed file is ignored quietly. The `/providers` table
 never checks the filesystem: anything reading it without the CLI's startup
 load (for example, embedded in a custom tool) shows "not configured".
@@ -284,8 +367,10 @@ Keys are written to `credentials.json` in the [state
 directory](/configuration/#state-directory) (`~/.0sec/` by default), re-tightened
 to owner-only (`0600` file, `0700` dir) on every save.
 
-**An explicit environment value always wins over the stored value.** The store
-only fills a variable the environment doesn't already carry.
+**A nonblank environment credential wins over the stored account.** Empty or
+whitespace-only values do not block loading a stored credential. For a provider
+with multiple auth variables, any usable environment credential keeps that
+provider's stored account from being mixed into the connection.
 
 **Stored credentials are not encrypted.** They're plaintext, protected only by
 file permissions. Treat `credentials.json` like an exported secret in a shell
@@ -296,8 +381,41 @@ catalog; typing a query searches the full catalog from either view.
 Check credentials and account access before use. The detail pane shows setup
 hints and credential sources; missing prices remain unknown.
 Use `/connect` to add credentials and `/providers` to inspect them.
-In the hosted-enabled CLI candidate, connection and model changes take effect
-with `/new-chat` when a runtime already exists; they leave the current chat intact.
+Model selections apply to the current audit while idle or after its active
+turn finishes. A selection requiring an unconnected provider remains staged:
+connect the provider, then select the model again. A normal `/connect` choice
+alone prepares the next chat rather than switching a healthy current runtime.
+See [Model picker](/console/#model-picker).
+
+### Other browser and subscription connections
+
+`/connect` also offers browser/device flows for xAI, Kimi, GitHub Copilot,
+Google Gemini Code Assist and OpenRouter. Their account semantics differ:
+
+| Connection | Authentication behavior |
+| --- | --- |
+| xAI / Kimi | Device-code sign-in; stores an OAuth account |
+| GitHub Copilot | GitHub device-code token, used for the Copilot endpoint; an eligible Copilot account and model access are still required |
+| Google Gemini Code Assist | Google browser PKCE flow with loopback callback; stores OAuth access/refresh tokens; resolves project/tier at request time |
+| OpenRouter | Browser PKCE flow provisions an API key; it is not an unlimited subscription |
+| ChatGPT Codex | Official `codex login --device-auth`; tokens remain in the Codex auth file |
+
+The console store supports active accounts per provider and stores API keys or
+OAuth records in plaintext with the same owner-only permissions. This store is
+used by console connection flows; do not assume a saved console credential is
+exported to an unrelated shell or every headless command. For automation,
+provide the required environment credentials explicitly. Subscription access
+is governed by the supplier, not by 0's displayed token-dollar estimate.
+
+### Jev credentials are separate
+
+Jev assistance is off until `0SEC_JEV_FEATURES` explicitly names a workflow.
+It does not reuse your chat-provider selection: Vercel needs
+`AI_GATEWAY_API_KEY`, Typesafe needs `TYPESAFE_API_KEY`, and the Cloud adapter
+needs both `0SEC_JEV_CLOUD_TOKEN` and `0SEC_JEV_CLOUD_URL`. The kernel-only
+`classifier` route needs no key but still sends data to an external service.
+See [opt-in Jev assistance](/configuration/#opt-in-jev-assistance) before
+enabling data egress and [separate budgets](/budget-management/#jev-advisory-budgets).
 
 ## When to use OpenRouter
 
@@ -313,40 +431,71 @@ primary exhausts its retry budget or hits a plan-quota limit:
 
 ```bash
 env 0SEC_LLM_FALLBACK=deepseek:deepseek-flash,azure:gpt-5-deployment \
-  0sec review ./authorized-repo
+  0 review ./authorized-repo --runtime api
 ```
 
 Each entry is `<providerId>:<model>`, comma-separated. The runtime advances
-through the chain sequentially, skipping entries whose auth env var is absent.
-Supported provider ids: `openrouter`, `anthropic`, `openai`, `azure`, `deepseek`,
-`chatgpt-codex`, `z-ai`, `kimi`, `qwen`, `xai`, `opencode`.
+through eligible routes sequentially and skips entries without the required
+credentials. Supported IDs are `openrouter`, `anthropic`, `openai`, `azure`,
+`deepseek`, `chatgpt-codex`, `z-ai`, `kimi`, `qwen`, `xai`, `opencode`,
+`copilot`, `google` and `hosted`. Hosted replay restrictions still apply;
+adding a fallback is not permission to retry a potentially consumed request.
 
 ## Azure OpenAI configuration
 
-0sec needs an Azure base URL and deployment/model name in addition to the API
-key, either from env vars or from `~/.codex/config.toml` when Codex is
-configured against Azure.
-
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `AZURE_OPENAI_API_KEY` | Yes | Your Azure OpenAI API key |
-| `AZURE_OPENAI_BASE_URL` | Yes, unless 0sec can read it from Codex config | Base URL for your Azure deployment. For the Responses API this should include `/openai/v1`. |
-| `AZURE_OPENAI_MODEL` | Yes, unless 0sec can read it from Codex config | Azure deployment/model name (not just a generic model family string) |
-| `AZURE_OPENAI_WIRE_API` | No | Wire API format: `chat_completions` (default) or `responses` |
+Configure an Azure API key, endpoint and actual deployment ID. The most
+repeatable setup supplies all three and pins the provider:
 
 ```bash
 export AZURE_OPENAI_API_KEY="your-azure-key"
 export AZURE_OPENAI_BASE_URL="https://your-resource.openai.azure.com/openai/v1"
-export AZURE_OPENAI_MODEL="gpt-4o"
 export AZURE_OPENAI_WIRE_API="responses"
+env 0SEC_SELECTED_PROVIDER=azure 0SEC_MODEL="your-deployment-id" \
+  0 review ./authorized-repo --runtime api --cost-ceiling 5
 ```
 
-If you rely on Codex config, make sure `~/.codex/config.toml` points at Azure with
-a usable base URL and model/deployment. Incomplete Azure config stops with a
-configuration error before any scan starts.
+| Setting | Resolution |
+| --- | --- |
+| API key | `AZURE_OPENAI_API_KEY` (or explicit runtime API key with Azure selected) |
+| Endpoint, unpinned detection | `AZURE_OPENAI_BASE_URL`, then `OPENAI_BASE_URL`, then the Azure provider section of `~/.codex/config.toml` |
+| Endpoint, explicit pin / fallback entry | `AZURE_OPENAI_BASE_URL`, then `OPENAI_BASE_URL`; no Codex-file endpoint fallback in this resolver |
+| Model | Explicit `--model`, then `0SEC_MODEL`; ambient Azure detection can use `AZURE_OPENAI_MODEL` or an Azure-backed Codex config model |
+| Wire | `AZURE_OPENAI_WIRE_API` accepts `chat_completions` or `responses`; ambient detection can inherit Codex's Azure `wire_api`, otherwise Chat Completions |
+
+An environment provider pin requires an explicit model; `AZURE_OPENAI_MODEL`
+alone is not that pin's model argument. The Azure config parser accepts the
+Azure section's model or a top-level model only when Codex's active provider is
+Azure. It does not borrow an unrelated provider's model. Incomplete configuration
+fails readiness rather than intentionally using a guessed endpoint/deployment.
+
+Include `/openai/v1` in a Responses base URL. `gpt-5.6-sol` automatically
+upgrades from Chat Completions to Responses for function-tool support.
 
 The runtime probes the Azure endpoint once per process to resolve the deployment
 region for diagnostics.
+An unavailable region probe is not a residency guarantee.
+
+The bundled estimator distinguishes Foundry deployment tariffs from direct
+supplier APIs. Current Azure rows, in USD per million tokens, include:
+
+| Deployment pricing key | Input | Cached input | Output |
+| --- | ---: | ---: | ---: |
+| `deepseek-v4.1-flash` | 0.375 | 0.008 | 1.50 |
+| `DeepSeek-V4-Pro` | 1.74 | Not separately represented | 3.48 |
+| `DeepSeek-V4-Flash` | 0.19 | Not separately represented | 0.51 |
+| `Kimi-K2.7-Code` | 0.95 | 0.19 | 4.00 |
+| `gpt-oss-120b` | 0.15 | Not separately represented | 0.60 |
+| `gpt-5.6-sol` | 5.00 | 0.50 | 30.00 |
+| `gpt-5.6-luna` | 1.00 | 0.10 | 6.00 |
+| `gpt-5.6-terra` | 2.50 | 0.25 | 15.00 |
+
+The V4.1 row follows the repository's September 17 Azure Retail Prices snapshot
+for Fireworks-on-Foundry Global meters, not direct DeepSeek's $0.30/$1.20 tariff.
+`fw-deepseek-v4.1-flash`, supported case variants and version-suffixed aliases
+resolve to the same pricing row. Custom deployment names may fall back to a
+generic estimate. This table is not a live quotation: Azure Cost Management
+and the invoice remain authoritative for region, deployment type, cache writes,
+long context and actual usage. See [cost estimate limits](/budget-management/#interpreting-cost-estimates).
 
 ## Alternative: CLI runtimes
 
@@ -355,30 +504,32 @@ subscription loop; Codex and Gemini are source-review oriented:
 
 ```bash
 # Use Claude Code CLI for an authorized live target
-0sec scan --target https://api.example.com/chat --scope ./scope.json --runtime claude
+0 scan --target https://api.example.com/chat --scope ./scope.json --runtime claude
 # Use Codex CLI for source review
-0sec review ./my-repo --runtime codex
+0 review ./my-repo --runtime codex
 
 # Use Gemini CLI
-0sec review ./my-repo --runtime gemini
+0 review ./my-repo --runtime gemini
 ```
 
-Source-review CLI runtimes need no API key — the CLI handles auth. Codex live
-scans use the direct ChatGPT Codex provider, so they need
-`0SEC_CHATGPT_OAUTH_REFRESH_TOKEN` rather than the Codex CLI.
+Source-review CLI runtimes use their CLI's authentication. Codex live scans use
+the direct ChatGPT Codex provider instead of a Codex CLI target-tool wrapper;
+the CLI bootstrap can load `~/.codex/auth.json`, or you can explicitly supply
+`0SEC_CHATGPT_ACCESS_TOKEN` / `0SEC_CHATGPT_OAUTH_REFRESH_TOKEN`.
 
-## `0sec doctor` — credential readiness
+<span id="0sec-doctor--credential-readiness"></span>
+## `0 doctor` — credential readiness
 
 Inspect runtime and credential configuration:
 
 ```bash
-0sec doctor
+0 doctor
 ```
 
 Authenticated model access requires a separate request; `doctor` checks configuration.
 
 It reports:
-- Node.js version compatibility (20+ required).
+- Runtime version compatibility. The npm package requires Node.js 24+; the native installer supplies a Bun-based binary.
 - **API runtime** status: `configured` (credential found), `bad` (configured but
   unusable), or `missing` (no credential).
 - **CLI runtimes** found on `PATH` (claude, codex, gemini).

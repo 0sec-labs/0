@@ -20,7 +20,7 @@ export function EntityList({
   children: ReactNode;
 }) {
   return (
-    <Card className="flex min-h-[36rem] flex-col overflow-hidden">
+    <Card className="flex h-[36rem] min-h-0 max-h-[calc(100vh-8rem)] flex-col overflow-hidden">
       <CardHeader className="space-y-3">
         <div>
           <CardEyebrow>Queue</CardEyebrow>

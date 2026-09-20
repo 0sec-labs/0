@@ -28,6 +28,10 @@ useful (slice + oracle still confirm).
    def-use / per-sink addresses, the angr reachability stage will skip — say so.
 4. Add a `tests/test_backend_contract.py` case (mock the toolchain; assert the
    adapter shape + that the slicer consumes it).
+5. Update the closed backend choices in `src/zeroverse/cli.py` and, if the
+   backend is exposed through 0's `analyze_binary` tool, its backend enum in
+   `packages/core/src/agent/tools/0verse.ts` (monorepo-root path).
+   Registry membership alone does not make a new name selectable everywhere.
 
 ## Definition of done
 

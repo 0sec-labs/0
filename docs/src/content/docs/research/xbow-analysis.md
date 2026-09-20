@@ -1,25 +1,30 @@
 ---
 title: XBOW Analysis
-description: Where 0sec's XBOW score comes from, its caveats, and what the benchmark does and doesn't tell you.
+description: Where 0's XBOW score comes from, its caveats, and what the benchmark does and doesn't tell you.
 ---
 
-XBOW is a web-CTF substrate. A benchmark score is not the product — real disclosed CVEs at **[0.security](https://0.security)** are the proof. This page explains how 0sec's XBOW number is built and where its limits are.
+XBOW is a web-CTF substrate, not a qualification for arbitrary production targets.
+Public [research and disclosure records](https://0.security/research/) document
+separate investigations with their own evidence and limitations.
 
-## How 0sec scores on XBOW, and the caveats
+<span id="how-0sec-scores-on-xbow-and-the-caveats"></span>
+## How 0 scores on XBOW, and the caveats
 
-**93 / 95 = 97.9% black-box on the gpt-5.4 model-specific cohort.**
-Across the 95 XBOW challenges where 0sec has a retained gpt-5.4 attempt within the
-live CI window, 93 are solved, at ~$0.48/run and $5.20/flag. The per-model number is
-the headline because it is a stable single-model solve rate, not a best-of-N union
-over an aging artifact window.
+**The 2026-05-06 ledger snapshot records 93 / 95 = 97.9% for gpt-5.4.**
+It records ~$0.48 per result and $5.20 per solved challenge. These are historical
+estimates, not current scan pricing or a measured one-attempt success probability.
 
 Caveats:
 
-- **Single model, single-shot.** The cohort is one model (Azure gpt-5.4) with a
-  fixed feature stack and targeted retries, not a multi-model ensemble.
-- **Retained-artifact aggregate is rotation-volatile.** GitHub
-  Actions retains only a 90-day window of run artifacts, so older "unknown"-model
-  proofs age out as new sweeps land. The per-model cohort is the defensible surface.
+- **One model ID does not mean one attempt or one configuration.**
+  `packages/benchmark/src/scripts/consolidate-xbow.ts` counts a challenge solved
+  if any retained result for that model has `flagFound`. Its per-model grouping
+  does not separate white-box and black-box modes. The ledger's original
+  single-shot/black-box interpretation is not established by that aggregation.
+- **Retained-artifact aggregate is rotation-volatile.** The committed snapshot
+  is dated; a later artifact collection can contain a different evidence window.
+  Preserve receipts and compare explicit attempt/mode cohorts instead of treating
+  the checked-in ledger as a live score.
 - **CTF ≠ real repo.** XBOW challenges are small, single-vuln web apps with a
   planted flag. Solving them says nothing about
   finding a novel bug in a million-line kernel tree.
@@ -32,8 +37,8 @@ benchmark ledger.
 
 ## Where the remaining gaps are
 
-At the retained-artifact layer the unsolved set clusters into a few
-recurring problem types:
+The snapshot's any-model, any-mode unresolved set contains only `XBEN-030-24`.
+The following are broader historical failure themes, not that unresolved list:
 
 | Class | Why it's still hard |
 |-------|---------------------|
@@ -42,16 +47,16 @@ recurring problem types:
 | Complex stateful auth workflows | Multi-step auth chains still degrade reliability. |
 | Long-horizon exploit planning | Remaining tasks punish retries that don't materially pivot. |
 
-## Design decisions the benchmark validated
+## Design hypotheses and implemented mechanisms
 
-- **Shell-first.** A `bash` tool plus a tiny result/save interface outperforms
-  structured HTTP wrappers — the agent uses curl, python3, and real tools directly.
-- **Plan then execute, with reflection checkpoints.** The agent writes a brief
-  attack plan before touching the target and is prompted to reassess at ~60% of its
-  turn budget rather than repeating a failing approach.
-- **Turn budget.** Deep mode runs 40 tool calls with LLM-based context compaction
-  (effectively more via re-compaction), in line with published findings that ~40
-  calls is the practical sweet spot.
+- **Shell-first.** The [small early comparison](/research/shell-first/) motivated
+  a compact shell interface; it does not establish universal superiority over
+  structured tools.
+- **Budget-aware execution.** The native loop implements reflection and budget
+  warnings, loop detection, and feature-gated compaction. Compaction preserves
+  context capacity; it does not add turns to the configured limit.
+- **Explicit budgets.** Use the harness's `--max-turns` for comparable runs
+  (canonical bench default: 40). A turn can contain multiple tool calls.
 - **Concurrent subagents.** `spawn_agents` lets the lead agent fan
   out focused children concurrently (bounded fan-out, default concurrency 4) and a
   child can coordinate with its parent.
@@ -61,24 +66,24 @@ recurring problem types:
 
 ## Framework vs. model
 
-Score improvement comes from getting the framework out of the model's way — a small
-tool surface, a lean prompt, and letting the model's training do the work. The
-framework handles scope enforcement, context
-compaction, loop detection, concurrent subagent fan-out, retry/handoff, and the
-separate blind-verify step that decides which findings survive.
+The framework provides scope controls, context management, subagent fan-out,
+retry/handoff, and workflow-specific verification. This benchmark does not
+isolate which mechanism caused a gain, rank models for every task, or demonstrate
+automatic optimal model selection. See [Research Workflows](/research-workflows/)
+for explicit model diversity and execution boundaries.
 
 ## Other benchmarks in scope
 
-| Benchmark | Domain | Scale | 0sec relevance |
+| Benchmark | Domain | Scale | 0 relevance |
 |-----------|--------|-------|----------------|
-| [Cybench](https://github.com/andyzorigin/cybench) | Broad CTF (web/crypto/pwn/rev) | 40 challenges | Scored: 36/40 = 90.0% single-config |
+| [Cybench](https://github.com/andyzorigin/cybench) | Broad CTF (web/crypto/pwn/rev) | 40 challenges | 2026-05-06 snapshot: 36/40 = 90.0%, one configuration with retries |
 | [AutoPenBench](https://github.com/lucagioacchini/auto-pen-bench) | Network / CVE pentesting | 33 Docker tasks | Harness built; shell-first maps to its `execute_bash` |
 | [HarmBench](https://github.com/centerforaisafety/HarmBench) | LLM red-teaming | 510 behaviors | Lightweight `sendPrompt()` harness |
 | npm audit (self-published) | Package auditing | 81 packages | F1 = 0.973; see [ablation log](/research/2026-04-11-ablation/) |
 
 ## Related
 
-- **[0.security](https://0.security)**
+- **[0](https://0.security)**
 - [Benchmark](/benchmark/)
 - [Methodology](/methodology/)
 - [Competitive Landscape](/research/competitive-landscape/)

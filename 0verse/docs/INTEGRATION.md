@@ -4,6 +4,10 @@
 > evidence-producer/notary, not a generic dispatch engine. This document
 > distinguishes implemented seams from live-proven and operational integration
 > using the [canonical maturity vocabulary](../ARCHITECTURE.md#scope-decision-and-maturity-vocabulary).
+>
+> Current checkout correction: 0 now has an **opt-in local `analyze_binary`
+> bridge**. The managed generic-dispatch lane remains separate and parked;
+> the historical scope decision must not be read as absence of the local tool.
 
 ## The product line
 
@@ -31,10 +35,37 @@ planned and gated. foxguard is reused *inside* 0verse. The source-side engine's
 oracle *concepts* are reimplemented in 0verse; its *learned/tuned/private-state*
 versions stay the moat.
 
-The generic binary job type, engine template, and agent-callable binary tool are
-**parked** until the blind known-CVE stripped-ELF gate passes. The machine
-contract and reference adapters below are implemented integration seams, not an
-operational dispatch lane.
+The generic managed binary job type and execution template remain **parked**
+until the blind known-CVE stripped-ELF gate passes. The local harness tool below
+is implemented; it is not registration, deployment, or qualification of that
+managed lane.
+
+## Local 0 harness integration
+
+0verse lives under `0verse/` in this monorepo but is a separate Python 3.11+
+package. Neither the 0 npm package nor its standalone installer installs it.
+From `0verse/`, run `uv sync --frozen` for the core package; install the selected
+backend separately (see [Ghidra setup](GHIDRA-SETUP.md)). Make `.venv/bin/0verse`
+available on the launching process's `PATH`, for example by activating that
+virtual environment before starting 0.
+
+Set `0SEC_FEATURE_ZEROVERSE=1` when launching 0 and use an authorized local source
+scope. The agent's `analyze_binary` tool accepts `binary_path`, `bug_class`,
+`backend`, and `timeout_s`; the executor resolves the path within that scope and
+requires a regular file. It runs one bounded `0verse scan ... --format ndjson`
+with an eight-minute default and a thirty-minute maximum.
+
+The child receives a sanitized environment, not the parent model credentials,
+`GHIDRA_HOME`, or `ZEROVERSE_*` execution settings. The bridge does not pass
+`--llm`, install engines, or enable target execution. A backend that depends on
+those variables must be configured in its own launch environment; use the
+standalone Python/CLI workflow for advanced execution and model configuration.
+Do not interpret missing-backend output as a clean security result.
+
+Sources: `packages/core/src/agent/features.ts`,
+`packages/core/src/agent/tools.ts::analyzeBinary`,
+`packages/core/src/agent/tools/0verse.ts`, and
+`packages/core/src/agent/sanitized-env.ts` (paths relative to the monorepo root).
 
 ---
 
@@ -124,37 +155,28 @@ not implied by the local API, MCP server, cloud sink, or reference adapter.
 
 ## CI: the PoV-reproduction gate (#9)
 
-Two gates, by design:
+The exported monorepo's current workflow is
+[`../../.github/workflows/0verse.yml`](../../.github/workflows/0verse.yml).
+It runs on relevant main pushes and same-repository pull requests, on a
+self-hosted Linux x64 runner with Python 3.11 and `uv` 0.11.2. Fork checkouts
+are not executed. It syncs `--frozen --extra dev`, runs Ruff, strict mypy and
+pytest, then builds and smoke-installs the Python wheel. Heavy engines and
+privileged Windows execution are not part of that workflow.
 
-* **`ci.yml` — lightweight, always-on.** `ruff` + `mypy --strict` + `pytest` +
-  wheel build/install smoke on the dedicated self-hosted Linux pool (no engines).
-  The commands remain portable; the private repository's GitHub-hosted allocation
-  is currently unavailable. Every push/PR retains evidence for three days: the
-  JUnit report plus a `package-manifest.txt` of SHA-256 digests for the built
-  wheel and sdist. The binaries themselves are *not* retained — they rebuild
-  byte-for-byte from the pinned commit with `uv build --out-dir dist`, and
-  keeping ~5.3 MB per run exhausted the org-wide Actions storage quota, which
-  then failed the upload step on every PR. Engine extras (Ghidra/angr/CASR)
-  aren't installed here, so the heavy stages are import-guarded and skipped.
-  Privileged Windows checks run only for protected-
-  main pushes in the separate, non-required `windows-capability.yml` and require
-  the explicit `ZEROVERSE_WINDOWS_CAPABILITY_ENABLED=true` repository variable.
-  With the variable unset, an unavailable Windows label cannot queue or block CI.
-* **`benchmark-gate.yml` — heavy, authoritative.** Builds the engine image
-  (`Dockerfile`: Ghidra + angr + AFL++) and runs the whole corpus through the real
-  pipeline, asserting every planted bug still reproduces with a confirmed PoV.
-  `benchmarks/run.sh` exits non-zero on any regression, so the job fails the moment
-  a known PoV stops reproducing. Runs on push-to-main, manual dispatch, and PRs
-  labelled `benchmark` (so the ~20-min image build doesn't block unrelated PRs).
+The older standalone-repository `ci.yml`, `benchmark-gate.yml`,
+`windows-capability.yml`, and their retained Actions receipts describe historical
+CI, not workflows shipped under `0verse/.github/` in this checkout.
+The local `make benchmark` recipe still builds the engine image and invokes
+`benchmarks/run.sh`; it is a separate toolchain-dependent check, not an
+always-on monorepo gate.
 
 **`benchmarks/run.sh` is the source of truth for the gate.** It compiles each
 corpus program and asserts the pipeline confirms the expected `source:sink` with a
-reproducing PoV. Run it three ways:
+reproducing PoV. Run it in either environment:
 
 ```sh
 make benchmark                       # build the image + run the corpus (portable)
 bash benchmarks/run.sh               # native, when Ghidra is already on the host
-# self-hosted CI: flip `runs-on: ubuntu-latest` → `runs-on: self-hosted`
 ```
 
 LLM triage runs in deterministic **mock mode** for the gate (zero API spend, no
@@ -300,10 +322,11 @@ operational platform lane.
 
 Under ADR-066, the only wired 0verse-to-platform seam today is the specific
 signed Hyper-V evidence importer. A provider-neutral PoV importer remains planned.
-A platform-dispatched 0verse container, generic binary job type, E2B template,
-and agent-callable binary tool are **parked** until the blind known-CVE stripped-
-ELF gate passes. Until then, generic dispatch is operationally **unsupported**,
-and `confirmed=true` in local output does not by itself make a platform finding.
+A platform-dispatched 0verse container, generic binary job type, and E2B template
+are **parked** until the blind known-CVE stripped-ELF gate passes. Until then,
+generic managed dispatch is operationally **unsupported**. This does not remove
+the opt-in local `analyze_binary` tool described above, and `confirmed=true` in
+local output does not by itself make a platform finding.
 
 The reference adapter is dependency-free (`scan_lane()` + `parse_ndjson()`) and
 remains useful for contract tests. Nothing in this repository registers,
@@ -311,13 +334,27 @@ deploys, or authorizes a production scan lane.
 
 ### MCP bridge (#29) — external agents drive the engine
 
-`python -m zeroverse.mcp` runs a stdio MCP server exposing `scan_binary`,
-`list_findings`, `get_pov(finding_id)`, `get_report(format)` — thin wrappers over
-the #28 API, so the MCP surface and the cloud lane share one engine + one contract.
-It prefers the official MCP Python SDK (`pip install mcp`) and falls back to a
-minimal JSON-RPC-2.0-over-stdio loop (`initialize`/`tools/list`/`tools/call`) when
-the SDK is absent. Example Claude Desktop / Cursor config:
+From `0verse/`, `uv run --frozen --extra mcp python -m zeroverse.mcp` runs a stdio
+MCP server exposing `scan_binary`, `list_findings`, `get_pov(finding_id)`, and
+`get_report(format)`. These are wrappers over the local API, not the 0 CLI's
+own MCP server or a hosted binary-analysis service. The optional `mcp` extra
+installs the official SDK; without it the module uses a minimal
+JSON-RPC-2.0-over-stdio loop (`initialize`/`tools/list`/`tools/call`).
+
+An MCP client must launch the correct environment rather than an arbitrary
+system Python. For example, replace the absolute checkout path below:
 
 ```json
-{ "mcpServers": { "0verse": { "command": "python", "args": ["-m", "zeroverse.mcp"] } } }
+{
+  "mcpServers": {
+    "0verse": {
+      "command": "uv",
+      "args": ["run", "--directory", "/absolute/path/to/0sec/0verse", "--frozen", "--extra", "mcp", "python", "-m", "zeroverse.mcp"]
+    }
+  }
+}
 ```
+
+The server sees files and credentials available to that process. Choose its
+working environment and execution policy deliberately; MCP is not a sandbox
+or a substitute for authorization.

@@ -208,8 +208,23 @@ describe("fail-closed enrollment", () => {
     expect(observed.exitCode).toBeUndefined();
   });
 
+  it("does not start work without a trigger opt-in, even with approval", async () => {
+    const observed = await connect(undefined, { schedule: false, yes: true });
+    expect(observed.result).toMatchObject({ state: "ready" });
+    expect(observed.result?.scan_id).toBeUndefined();
+    expect(observed.result?.schedule).toBeUndefined();
+    expect(observed.writes).toEqual([]);
+  });
+
+  it("rejects setup-only combined with a scan request before dispatch", async () => {
+    const observed = await connect(undefined, { setupOnly: true, run: true, schedule: false });
+    expect(observed.result).toMatchObject({ state: "action-required", reason: "invalid-options" });
+    expect(observed.writes).toEqual([]);
+    expect(observed.exitCode).toBe(1);
+  });
+
   it("allows an explicitly approved one-shot without creating recurrence", async () => {
-    const observed = await connect(undefined, { schedule: false });
+    const observed = await connect(undefined, { schedule: false, run: true });
     expect(observed.result).toMatchObject({ state: "ready", scan_id: "scan-1" });
     expect(observed.result?.schedule).toBeUndefined();
     expect(observed.writes).toEqual([{ path: "/api/scans", method: "POST" }]);

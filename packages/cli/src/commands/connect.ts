@@ -1,17 +1,16 @@
-// `0sec connect` — one-command onboarding: point 0sec at a repository and the
-// managed cloud starts working on it. Verifies cloud auth + org + GitHub App
-// enrollment, detects the project's test command from local checkout (preferred)
-// or a shallow clone, enqueues the first secure run immediately, and installs
-// a recurring schedule.
+// `0sec connect` verifies Cloud membership and GitHub repository access.
+// Scans and recurring schedules require explicit --run or --schedule consent.
+// Test-command detection, publication policy, and confirmation apply only
+// after the operator requests work.
 //
 // Usage:
 //   0sec connect                                   ← use cwd git remote origin
 //   0sec connect https://github.com/org/repo      ← explicit repo URL
 //   0sec connect --format json                     ← machine-readable output
-//   0sec connect --yes                             ← skip interactive confirm
+//   0sec connect --schedule --yes                  ← explicitly approve recurrence
 //
 // States (--format json):
-//   ready             — everything ok, first run scheduled
+//   ready             — access verified, or explicitly requested work created
 //   no-open           — no changes needed (repo already connected)
 //   action-required   — operator must resolve something before proceeding
 //                       (includes reason + action_url)
@@ -43,6 +42,9 @@ interface ConnectOptions {
   costCeiling?: number;
   cron: string;
   schedule: boolean;
+  run?: boolean;
+  setupOnly?: boolean;
+  cronSpecified?: boolean;
   format: ConnectFormat;
   publicationPolicy?: PublicationPolicy;
   yes: boolean;
@@ -75,8 +77,8 @@ interface ConnectJsonResult {
 }
 
 /**
- * Shape returned by the proposed cloud enrollment-readiness endpoint.
- * PROPOSED: GET /api/enrollment/status?target=<repo>
+ * Shape returned by the cloud enrollment-readiness endpoint.
+ * GET /api/enrollment/status?target=<repo>
  * Expected 200: { authenticated: true, org: { id, name, slug }, installation: { installed, install_url? }, repo_accessible: boolean }
  * Missing or failed checks block enrollment; health alone is not authorization.
  */
@@ -213,7 +215,7 @@ function detectTestCommandClone(repoUrl: string): { command: string; source: str
 /**
  * Check enrollment readiness: auth, org, repo accessibility.
  *
- * PROPOSED CLOUD ENDPOINT: GET /api/enrollment/status?target=<repo>
+ * GET /api/enrollment/status?target=<repo>
  * This endpoint resolves the repo URL, checks the operator's org membership,
  * verifies the org's GitHub App installation covers the repo, and returns
  * the combined status. Missing, failed or malformed readiness responses block
@@ -304,7 +306,7 @@ export function registerConnectCommand(program: Command): void {
   program
     .command("connect")
     .description(
-      "Connect a repository: 0sec starts securing it now and keeps it secure on a schedule\n"
+      "Verify GitHub repository access; scans and schedules require explicit opt-in\n"
         + "  With no arguments, reads the git remote origin URL from the current directory.",
     )
     .argument("[repo]", "HTTPS git URL of the repository (default: current directory's git remote origin)")
@@ -316,8 +318,10 @@ export function registerConnectCommand(program: Command): void {
       if (!Number.isFinite(n) || n <= 0) throw new InvalidArgumentError("Must be a positive dollar amount.");
       return n;
     })
-    .option("--cron <expression>", "Recurring schedule (cron). Default: daily at 03:00 UTC", "0 3 * * *")
-    .option("--no-schedule", "Only run once, do not install a recurring schedule")
+    .option("--setup-only", "Verify access without creating a scan or schedule", false)
+    .option("--run", "Request one managed scan after verifying repository access", false)
+    .option("--schedule", "Request a managed scan and a recurring schedule", false)
+    .option("--cron <expression>", "Schedule frequency in UTC; requires --schedule", "0 3 * * *")
     .option("--format <fmt>", "Output format: terminal | json", "terminal")
     .option("--publication-policy <policy>", "Publication policy: off | manual | auto. Default: off", (v: string) => {
       if (!["off", "manual", "auto"].includes(v)) {
@@ -326,8 +330,8 @@ export function registerConnectCommand(program: Command): void {
       return v as PublicationPolicy;
     }, "off" as PublicationPolicy)
     .option("--yes", "Skip interactive confirmation before scheduling")
-    .action(async (repo: string | undefined, options: ConnectOptions) => {
-      await runConnect(repo, options);
+    .action(async (repo: string | undefined, options: ConnectOptions, command: Command) => {
+      await runConnect(repo, { ...options, cronSpecified: command.getOptionValueSource("cron") === "cli" });
     });
 }
 
@@ -354,6 +358,15 @@ export async function runConnect(repoArg: string | undefined, opts: ConnectActio
   const isJson = opts.format === "json";
   const out = opts.stdout ?? ((line: string) => process.stdout.write(line + "\n"));
   const err = opts.stderr ?? ((line: string) => process.stderr.write(line + "\n"));
+  const invalidOptions = opts.setupOnly && (opts.run || opts.schedule)
+    ? "--setup-only cannot be combined with --run or --schedule."
+    : opts.cronSpecified && !opts.schedule ? "--cron requires --schedule." : null;
+  if (invalidOptions) {
+    if (isJson) out(JSON.stringify({ state: "action-required", repo: repoArg ?? "", reason: "invalid-options", message: invalidOptions } satisfies ConnectJsonResult));
+    else err(invalidOptions);
+    process.exitCode = 1;
+    return;
+  }
 
   // ── 1. Resolve repo URL ──
   const resolved = resolveRepo(repoArg, opts.cwd);
@@ -417,28 +430,7 @@ export async function runConnect(repoArg: string | undefined, opts: ConnectActio
 
   const client = new CloudClient({ host: creds.host, token: creds.token, fetchImpl: opts.fetchImpl });
 
-  // ── 3. Verify auth health ──
-  try {
-    await client.pingHealth();
-  } catch (error) {
-    if (error instanceof CloudUnauthorizedError) {
-      if (isJson) {
-        out(JSON.stringify({
-          state: "action-required",
-          repo: repoUrl,
-          message: "Cloud token rejected. Run `0sec auth login` again.",
-          reason: "token-rejected",
-        } satisfies ConnectJsonResult));
-      } else {
-        err(` ${chalk.red("Cloud token rejected.")} Run ${chalk.bold("0sec auth login")} again.\n`);
-      }
-      process.exitCode = 2;
-      return;
-    }
-    throw error;
-  }
-
-  // ── 4. Check enrollment readiness ──
+  // Verify current tenant and repository authority before any work.
   const enrollment = await checkEnrollmentReadiness(client, repoUrl);
   if (!enrollment.ok) {
     if (isJson) {
@@ -458,11 +450,17 @@ export async function runConnect(repoArg: string | undefined, opts: ConnectActio
     process.exitCode = 2;
     return;
   }
+  if (!opts.run && !opts.schedule) {
+    const message = "Repository access verified. No scan or schedule was created. Use --run for one scan or --schedule for recurring scans.";
+    if (isJson) out(JSON.stringify({ state: "ready", repo: repoUrl, message } satisfies ConnectJsonResult));
+    else out(message);
+    return;
+  }
 
   // ── 5. Check for existing schedule (idempotent reconnect) ──
   let existingSchedule: ExistingSchedule | null;
   try {
-    existingSchedule = await findExistingSchedule(client, repoUrl);
+    existingSchedule = opts.schedule ? await findExistingSchedule(client, repoUrl) : null;
   } catch (lookupError) {
     const message = `Could not check existing schedules: ${lookupError instanceof Error ? lookupError.message : String(lookupError)}. No scan was started.`;
     if (isJson) {
@@ -568,11 +566,10 @@ export async function runConnect(repoArg: string | undefined, opts: ConnectActio
     ...(opts.setupCommand ? { setup_command: opts.setupCommand } : {}),
     ...(opts.model ? { model: opts.model } : {}),
     ...(opts.costCeiling ? { cost_ceiling_usd: opts.costCeiling } : {}),
-    // publication_policy: coordinate exact field name with ExcellentSkink
     publication_policy: publicationPolicy,
   };
 
-  if (!isJson) err("Starting the first secure run…\n");
+  if (!isJson) err("Starting a managed scan…\n");
 
   let scan: { id: string; target_id: string | null };
   try {
@@ -632,7 +629,7 @@ export async function runConnect(repoArg: string | undefined, opts: ConnectActio
   }
 
   // ── 10. Output result ──
-  const scanUrl = `${creds.host}/cloud/scans/${scan.id}`;
+  const scanUrl = new URL(`/${encodeURIComponent(enrollment.status.org.slug)}/scans/${encodeURIComponent(scan.id)}`, creds.host).href;
 
   if (isJson) {
     const result: ConnectJsonResult = {

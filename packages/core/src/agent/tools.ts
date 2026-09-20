@@ -15,7 +15,7 @@ import type {
   VerificationBehaviorStep,
   NamedIdentity,
 } from "@0sec/shared";
-import { resolveIdentities, compareRoles, DEFAULT_AUTONOMY_MODE } from "@0sec/shared";
+import { resolveIdentities, compareRoles, DEFAULT_AUTONOMY_MODE, createJevEvaluator, jevConfigFromEnvironment, type JevEvaluator } from "@0sec/shared";
 import type { ToolDefinition, ToolCall, ToolResult, ToolResultMeta, ToolContext, AgentRole } from "./types.js";
 import type {
   OperatorQuestion,
@@ -148,6 +148,8 @@ import {
   matchTriggers,
   loadSkillRegistry,
 } from "./skills/index.js";
+import type { SkillDefinition } from "./skills/index.js";
+import { loadSkillBundleFromManifest } from "./skills/markdown-bundle.js";
 import { eventBus } from "../events/bus.js";
 import type {
   SubagentLifecyclePayload,
@@ -601,6 +603,9 @@ const SCOPED_SOURCE_AUDIT_TOOLS: Record<string, true> = {
   list_files: true,
   search_files: true,
   intel: true,
+  // Methodology reads return bounded registry text, never execute its contents.
+  list_skills: true,
+  load_skill: true,
   query_findings: true,
   save_finding: true,
   update_finding: true,
@@ -1253,7 +1258,7 @@ function executePipeline(
         // trailing `| head`/`| wc` still produces a bounded, useful result.
         stdin = partial;
         if (segments[segments.length - 1] === tokens) {
-          return { success: true, output: partial.slice(0, 10_000) + note };
+          return { success: true, output: formatTruncated(partial, { mode: "bytes", limit: 10_000 - Buffer.byteLength(note, "utf8") }) + note };
         }
         continue;
       }
@@ -1287,7 +1292,7 @@ function executePipeline(
       return {
         success: false,
         output: null,
-        error: output.slice(0, 2_000) || `Command exited with status ${result.status}`,
+        error: formatTruncated(output, { mode: "bytes", limit: 2_000 }) || `Command exited with status ${result.status}`,
       };
     }
 
@@ -1296,7 +1301,7 @@ function executePipeline(
 
   return {
     success: true,
-    output: typeof stdin === "string" ? stdin.slice(0, 10_000) : "",
+    output: typeof stdin === "string" ? formatTruncated(stdin, { mode: "bytes", limit: 10_000 }) : "",
   };
 }
 
@@ -2917,6 +2922,8 @@ export class ToolExecutor {
    * old single-page `_browser`/`_browserPage`/`_browserActionContext` fields.
    */
   private _browserHost: BrowserDriverHost = {};
+  private _browserJev: JevEvaluator | null | undefined;
+  private _browserReadOnlyUrls: ReadonlySet<string> = new Set();
   private _playwrightAvailable: boolean | null = null;
   private _ptyManager: PtySessionManager | null = null;
   private _pyKernel: PythonKernelManager | null = null;
@@ -2943,6 +2950,13 @@ export class ToolExecutor {
    * See GitHub issue #82.
    */
   private _rejectedDecoyFlags: Set<string>;
+
+  /**
+   * Lazily loaded cloud audit-skill bundle from 0SEC_AUDIT_SKILLS_MANIFEST.
+   * null = env not set (no cloud skills); Map = already loaded and cached.
+   * Populated on first listSkills/loadSkill call that finds the env var.
+   */
+  private _cloudSkillBundle: Map<string, SkillDefinition> | null | undefined;
 
   /**
    * Per-session memory for the scoped-source-audit escalation gate
@@ -6005,12 +6019,30 @@ export class ToolExecutor {
       : "0sec-browser/1.0";
     const extraHeaders =
       attribution && Object.keys(attribution.headers).length > 0 ? attribution.headers : undefined;
+    if (this._browserJev === undefined) {
+      // Misconfiguration (enabled feature without a key, malformed read-only URL)
+      // must degrade to assist-handoff, never break unrelated browser actions.
+      try {
+        const config = jevConfigFromEnvironment("browser", process.env);
+        this._browserJev = config ? createJevEvaluator(config) : null;
+        this._browserReadOnlyUrls = new Set((process.env["0SEC_JEV_BROWSER_READ_ONLY_URLS"] ?? "")
+          .split(",").map(url => url.trim()).filter(Boolean).map(url => new URL(url).href));
+      } catch {
+        this._browserJev = null;
+        this._browserReadOnlyUrls = new Set();
+      }
+    }
+    const execution = this._executionContext.getStore();
 
     const result = await executeBrowser(this.ctx, args, {
       host: this._browserHost,
       userAgent,
       extraHeaders,
       interceptor: this._browserInterceptor,
+      jev: this._browserJev ?? undefined,
+      readOnlyUrls: this._browserReadOnlyUrls,
+      signal: execution?.signal,
+      assertAuthority: execution?.assertAuthority,
     });
 
     // Evidence trail: persist the action + resulting URL, as the old handler did.
@@ -8804,6 +8836,25 @@ export class ToolExecutor {
 
   // ── JIT Skill tools (#457) ──
 
+  /**
+   * Lazily load and cache the cloud audit-skills bundle from the
+   * 0SEC_AUDIT_SKILLS_MANIFEST environment variable. Returns null when
+   * the env var is unset (no cloud skills configured); returns an empty
+   * Map for valid manifests with zero skills; returns the loaded Map for
+   * a populated bundle. Cache lives for the lifetime of this ToolExecutor.
+   */
+  private ensureCloudSkillBundle(): Map<string, SkillDefinition> | null {
+    // undefined = not yet checked; null = env unset; Map = loaded
+    if (this._cloudSkillBundle !== undefined) return this._cloudSkillBundle;
+    const manifestPath = process.env["0SEC_AUDIT_SKILLS_MANIFEST"];
+    if (!manifestPath) {
+      this._cloudSkillBundle = null;
+      return null;
+    }
+    this._cloudSkillBundle = loadSkillBundleFromManifest(manifestPath);
+    return this._cloudSkillBundle;
+  }
+
   private listSkills(args: Record<string, unknown>): ToolResult {
     if (!featureFlags.jitSkills) {
       return { success: false, output: null, error: "JIT skills are not enabled." };
@@ -8811,15 +8862,34 @@ export class ToolExecutor {
     const tag = typeof args.tag === "string" ? args.tag : undefined;
     const summaries = listSkillSummaries({ tag, role: this.ctx.role });
 
+    // Merge cloud audit skills from env manifest if configured
+    const cloudBundle = this.ensureCloudSkillBundle();
+    const cloudSummaries = cloudBundle
+      ? [...cloudBundle.values()].map((s) => ({
+          id: s.id,
+          name: s.name,
+          description: s.description,
+          tags: s.tags,
+          estimated_tokens: s.estimated_tokens,
+          suggested: false,
+          source: "cloud" as const,
+        }))
+      : [];
+    const mergedSummaries = tag
+      ? summaries.filter((s) => s.tags.includes(tag)).concat(
+          cloudSummaries.filter((s) => s.tags.includes(tag)),
+        )
+      : summaries.concat(cloudSummaries);
+
     // Compute suggested flags from recent tool output context
     const registry = loadSkillRegistry();
-    const allSkills = [...registry.values()];
+    const allSkills = [...registry.values(), ...(cloudBundle ? [...cloudBundle.values()] : [])];
     const suggestedIds = matchTriggers(
       this.ctx.recentToolResultTexts ?? [],
       allSkills,
     );
 
-    const enriched = summaries.map((s) => ({
+    const enriched = mergedSummaries.map((s) => ({
       ...s,
       suggested: suggestedIds.has(s.id),
     }));
@@ -8863,7 +8933,16 @@ export class ToolExecutor {
       };
     }
 
-    const skill = getSkillById(skillId);
+    let skill = getSkillById(skillId);
+
+    // Fall through to cloud audit skills bundle if not found in built-in registry
+    if (!skill) {
+      const cloudBundle = this.ensureCloudSkillBundle();
+      if (cloudBundle?.has(skillId)) {
+        skill = cloudBundle.get(skillId)!;
+      }
+    }
+
     if (!skill) {
       return {
         success: false,
@@ -9377,7 +9456,8 @@ export function getToolsForRole(role: string, opts?: { hasScope?: boolean; webMo
     && ((featureFlags.cveAdapt && opts?.hasScope) || !CVE_ADAPT_TOOL_NAMES.includes(name)),
   );
   const scopedSourceTools = Object.keys(SCOPED_SOURCE_AUDIT_TOOLS).filter((name) =>
-    name !== "remember_codebase" && (featureFlags.zeroverse || name !== "analyze_binary"),
+    name !== "remember_codebase" && (featureFlags.zeroverse || name !== "analyze_binary")
+    && (featureFlags.jitSkills || (name !== "list_skills" && name !== "load_skill")),
   );
 
 

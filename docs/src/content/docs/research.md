@@ -1,12 +1,14 @@
 ---
 title: Research
-description: Design decisions, experiments, and technical rationale behind the 0sec engine.
+description: Design decisions, experiments, and technical rationale behind the 0 engine.
 ---
 
-Design decisions, experiments, and technical rationale for the 0sec engine. Real
-disclosed CVEs at [0.security](https://0.security). Most experiments run against
-the [XBOW benchmark](https://github.com/xbow-engineering/validation-benchmarks)
-(104 Docker CTF challenges) as a reproducible harness.
+Design decisions, experiments, and technical rationale for the 0 engine.
+The [public research index](https://0.security/research/) links investigation and
+disclosure records; those records make target-specific claims, not universal
+reproduction or production-readiness guarantees. Many early experiments used the
+[XBOW benchmark](https://github.com/xbow-engineering/validation-benchmarks)
+(104 Docker CTF challenges).
 
 For benchmark scores, methodology, and competitor comparisons, see
 [Benchmarks](/benchmark/). For mechanism docs (agent loop, triage, verification),
@@ -17,6 +19,12 @@ specification checks, fuzzing, kernel evidence, binary analysis, and the
 distinction between live execution and imported evidence), start with
 [Research Workflows](/research-workflows/). The pages below
 document design rationale and experiment history.
+
+Read each page's status before applying it: a dated run is empirical evidence for
+that configuration, a blank ablation template contains no results, and a proposal
+is not a shipped workflow. Benchmark figures here remain dated snapshots.
+Multi-model research informs explicit configuration and role diversity; it does
+not establish automatic optimal discovery/verification/fix model routing.
 
 ## Essays & rationale
 
@@ -41,7 +49,7 @@ False-positive reduction stack, measured effects per benchmark slice, layer orde
 
 ### [TypeScript/Rust Boundary](/research/typescript-rust-boundary/)
 
-Why 0sec uses TypeScript for orchestration while moving deterministic engines such as FoxGuard into Rust behind stable contracts.
+Why 0 uses TypeScript for orchestration while moving deterministic engines such as FoxGuard into Rust behind stable contracts.
 
 ## Self-evolving harnesses
 
@@ -51,15 +59,15 @@ retain useful learned skills, and recover when an experiment fails. See
 [Architecture](/architecture/#plugin-first-self-evolution) for runtime boundaries.
 
 These sources address complementary mechanisms and are not interchangeable
-proofs that 0sec improves autonomously:
+proofs that 0 improves autonomously:
 
 | Source | What informs the design | What it does not establish |
 | --- | --- | --- |
 | [A Programming Paradigm for Spatiotemporal Composability](https://arxiv.org/abs/2608.25512) and [Cordis](https://github.com/cordiverse/cordis) | Reversible component effects, reactive dependencies, configuration reconciliation, and hot replacement | A security-quality benchmark, automatic compensation for external effects, or durable campaign recovery |
-| [Self-Harness, v3](https://arxiv.org/abs/2606.09498v3) | Same-model weakness mining, diverse targeted code proposals, and held-in/held-out regression-gated selection | Open-ended self-improvement, live hot swapping, multi-day recovery, or security-quality gains in 0sec |
-| [Evo-Harness, v2](https://arxiv.org/abs/2608.15071v2) | Failure-grounded natural-language skill curation, separate general/topic guidance, and bounded retrieval for a frozen solver | Executable self-rewriting, multi-agent validation, universal solver transfer, or measured gains in 0sec |
+| [Self-Harness, v3](https://arxiv.org/abs/2606.09498v3) | Same-model weakness mining, diverse targeted code proposals, and held-in/held-out regression-gated selection | Open-ended self-improvement, live hot swapping, multi-day recovery, or security-quality gains in 0 |
+| [Evo-Harness, v2](https://arxiv.org/abs/2608.15071v2) | Failure-grounded natural-language skill curation, separate general/topic guidance, and bounded retrieval for a frozen solver | Executable self-rewriting, multi-agent validation, universal solver transfer, or measured gains in 0 |
 | [DeepSeek Harness architecture](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/architecture.md) | Replaceable agent-loop, tool, model, and session services rather than only fixed tool extension points | Live reload in its shipped headless/SDK profiles or first-class Python plugin hosting |
-| [Hermes Python plugins](https://hermes-agent.nousresearch.com/docs/developer-guide/plugins) | Python-native tools, hooks, commands, bundled skills, and memory/context provider interfaces | A language-neutral live-generation implementation for 0sec |
+| [Hermes Python plugins](https://hermes-agent.nousresearch.com/docs/developer-guide/plugins) | Python-native tools, hooks, commands, bundled skills, and memory/context provider interfaces | A language-neutral live-generation implementation for 0 |
 | [Voyager's skill manager](https://github.com/MineDojo/Voyager/blob/main/voyager/agents/skill.py) | Retaining executable skill code and retrieving reusable programs by description | General-purpose harness replacement or evidence of cybersecurity effectiveness |
 | [Darwin Gödel Machine](https://arxiv.org/abs/2505.22954) | Evaluated agent-code changes and alternative implementations | Guaranteed monotonic improvement or a substitute for independent evaluation |
 | [Chord's lifecycle plan](https://github.com/earendil-works/pi/blob/main/packages/chord/PLANNING.md) | Explicit dependency ordering, stable service handles, and resource ownership | Graph-transactional reload or post-cutover rollback; its plan explicitly excludes both for shape-preserving replacement |
@@ -72,7 +80,7 @@ natural-language-only learning loop turns failed or negatively reviewed executio
 into candidates carrying a lesson, trigger, evidence, and scope hint. A curator
 chooses ADD, MERGE, REVISE, or SKIP; later tasks
 receive bounded relevant guidance. General cross-task lessons remain distinct
-from topic-specific procedures. For 0sec, this informs curation within the existing
+from topic-specific procedures. For 0, this informs curation within the existing
 skills and [revision-aware hunt memory](/improvement-plane/#revision-aware-codebase-learning),
 not another registry or a claim that this curator is already implemented.
 Retain provenance and scope, invalidate stale codebase knowledge, and evaluate
@@ -82,7 +90,7 @@ three-run averages: Opus 4.6 on TerminalBench2 improved from 62.92% to
 and SWE-bench Lite from 63.67% to 61.67%. External feedback is not uniformly
 beneficial, and solver/evolver pairings can regress.
 Neither these aggregate results nor individual retained skills establish causal
-gains in 0sec, executable-code safety, or a free evolution allowance.
+gains in 0, executable-code safety, or a free evolution allowance.
 
 For a long-horizon experiment, report the task and harness versions, measured
 outcomes, model/tool cost, generation transitions, retained capabilities, and
@@ -111,7 +119,8 @@ How benchmark runs and verified findings are converted into labeled JSONL for tr
 
 ### [Feature Extractor](/research/feature-extractor/)
 
-The 45 handcrafted features exposed by `extractFeatures()` and how they fit into the hybrid triage direction.
+The current 55 handcrafted features exposed by `extractFeatures()` (45 original
+web/finding features plus 10 kernel-crash features) and their heuristic limits.
 
 ### [Journal + Orchestrator Design](/research/journal-orchestrator-design/)
 
@@ -130,7 +139,7 @@ thesis, and the five deterministic-chokepoint fixes it produced.
 
 ### [2026-05-08 Cost per Flag](/research/2026-05-08-cost-per-flag/)
 
-Why autonomous-pentest reporting should publish a dollar-per-flag axis alongside the solve percentage, and how 0sec computes its number.
+Why autonomous-pentest reporting should publish a dollar-per-flag axis alongside the solve percentage, and how 0 computes its number.
 
 ### [2026-05-06 HackerOne Program Audit](/research/2026-05-06-h1-ai-readiness/)
 

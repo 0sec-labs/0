@@ -4,7 +4,7 @@ description: Benchmarking gpt-5.4, Kimi K2.5, Qwen3, DeepSeek, and free models f
 ---
 
 Historical benchmark observations. Prices and provider access describe these
-runs; they are not a current 0sec Cloud catalog or retail offer.
+runs; they are not a current 0 Cloud catalog or retail offer.
 
 <span id="model-comparison-xben-053-jinja-rce"></span>
 ## XBEN-053 (Jinja RCE)
@@ -38,10 +38,17 @@ Only gpt-5.4 solved the blind-SQLi case in these runs. Kimi K2.5 solved the IDOR
 and Jinja cases; Qwen3 Coder had the lowest listed time per turn.
 This small sample supplies no general model ranking.
 
+Model diversity is an explicit workflow choice, not a benchmark-trained
+automatic optimum. `deep-review --models` adds a finder fan-out axis; it defaults
+to one provider model. Hunt refutation can select a distinct model family when
+credentials and known finder families allow it, with recorded fallback states.
+Neither mechanism infers a globally best discovery/verification/fix model from
+these few challenges. See [Research Workflows](/research-workflows/).
+
 <span id="model-comparison-matters"></span>
 ## Effect of model choice
 
 Reported external results use different models and protocols: KinoSec with
 Claude Sonnet (92.3% black-box), Shannon with Claude Opus (96.15% white-box),
-and deadend-cli with Kimi K2.5 (78%). See [Benchmark](/benchmark/) for 0sec's
+and deadend-cli with Kimi K2.5 (78%). See [Benchmark](/benchmark/) for 0's
 retained-artifact results and comparison conditions.

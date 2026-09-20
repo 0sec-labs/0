@@ -131,4 +131,8 @@ Inspection is not extraction or analysis. A container signature is not proof
 that decompression is safe or complete; an architecture candidate is not a
 decompiler configuration; a code region is not a vulnerability finding. Binwalk
 carving and Qiling execution remain in `zeroverse.firmware` and are optional,
-later stages. The user-facing `scout inspect` CLI remains issue `#73`.
+later stages. The shipped `0verse scout inspect <bundle>` CLI invokes inspection
+only after acquisition validation and sealed Scout evidence replay. It is not a
+raw-firmware-file entrypoint: use `inspect_firmware()` above for that case.
+`0verse scout report <bundle> --format json|md` exports the same
+observed/inferred/unknown taxonomy without mutating the retained bundle.

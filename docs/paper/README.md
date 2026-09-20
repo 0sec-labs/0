@@ -6,6 +6,12 @@ This folder mirrors the noeris paper workflow pattern:
 - one submission-oriented LaTeX draft (`0sec-submission.tex`)
 - split support notes for evaluation and related work
 
+**Status:** unsubmitted research drafts and dated evidence notes, not current
+runtime documentation. `evaluation.md` retains an April snapshot while `0sec.md`
+also quotes May results; align provenance explicitly before submission rather
+than overwriting historical tables. Current commands and score interpretation
+live in the documentation site's benchmark and methodology pages.
+
 ## Files
 
 - `0sec.md` - canonical long-form draft with repo-grounded claims

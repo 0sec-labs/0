@@ -16,6 +16,8 @@ import { parseFindingsFromCliOutput } from "./findings-parser.js";
 import { estimateCost } from "./agent/cost.js";
 import { getCloudSinkConfig, postFinding } from "./cloud-sink.js";
 import { analyticsPipeline } from "./telemetry/analytics-pipeline.js";
+import { reportUnsupportedContributionMode } from "./telemetry/run-contribution.js";
+import { parseProjectObservations, type ProposedProjectObservation } from "./secure/project-context.js";
 
 // ── Types ──
 
@@ -44,6 +46,7 @@ export interface AnalysisAgentOptions {
    * conversation), and a single finding shouldn't need 15 turns to reproduce.
    */
   purpose?: "research" | "verify";
+  collectProjectContext?: boolean;
 }
 
 /**
@@ -77,6 +80,7 @@ export interface AnalysisAgentResult {
    * CLI runtime path when the structured output includes them.
    */
   questions?: string[];
+  projectObservations?: ProposedProjectObservation[];
 }
 
 // ── Depth → maxTurns mapping ──
@@ -288,6 +292,7 @@ export async function runAnalysisAgent(opts: AnalysisAgentOptions): Promise<Anal
 
   // ── Branch 1: CLI runtime fast path (claude/codex/etc.) ──
   if (!scopedSourceAudit && CLI_RUNTIME_TYPES.has(runtimeType) && available.has(runtimeType)) {
+    reportUnsupportedContributionMode("external CLI runtime");
     emit({
       type: "stage:start",
       stage: "attack",
@@ -574,11 +579,13 @@ export async function runAnalysisAgent(opts: AnalysisAgentOptions): Promise<Anal
         estimatedCostUsd: agentState.estimatedCostUsd,
         turns: agentState.turnCount,
         costCeilingExceeded: agentState.costCeilingExceeded,
+        ...(opts.collectProjectContext ? { projectObservations: parseProjectObservations(agentState.summary) } : {}),
       };
     }
 
     // ── Single-shot fallback for API runtimes without native tool_use ──
     if (directApiPrompt) {
+      reportUnsupportedContributionMode("single-response analysis");
       const result = await apiRuntime.execute(directApiPrompt, {
         systemPrompt: cliSystemPrompt,
       });
@@ -621,6 +628,7 @@ export async function runAnalysisAgent(opts: AnalysisAgentOptions): Promise<Anal
   }
 
   // ── Branch 3: Legacy fallback — text-based agent loop ──
+  reportUnsupportedContributionMode("legacy text loop");
   const maxTurns = getMaxTurns(role, config.depth, "legacy", purpose);
 
   const runtimeConfig = {
@@ -678,7 +686,8 @@ export async function runAnalysisAgent(opts: AnalysisAgentOptions): Promise<Anal
   // Legacy loop doesn't track token usage / cost — those are populated
   // only by the native API loop branch above. It does count turns, so those
   // are still attributable per-phase.
-  return { findings: agentState.findings, usage: undefined, estimatedCostUsd: undefined, turns: agentState.turnCount };
+  return { findings: agentState.findings, usage: undefined, estimatedCostUsd: undefined, turns: agentState.turnCount,
+    ...(opts.collectProjectContext ? { projectObservations: parseProjectObservations(agentState.summary) } : {}) };
 }
 
 /**

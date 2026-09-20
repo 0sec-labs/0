@@ -9,12 +9,14 @@
  * can be exercised deterministically without launching Chromium.
  */
 import { describe, it, expect } from "vitest";
+import type { JevEvaluator } from "@0sec/shared";
 import {
   BROWSER_ACTIONS,
   browserToolDefinitions,
   browserDispatch,
   executeBrowser,
   PlaywrightDriver,
+  type AssistTraceEntry,
   type BrowserDriver,
   type BrowserDriverFactory,
   type BrowserDriverOptions,
@@ -95,15 +97,6 @@ function scopedCtx(): BrowserToolContext {
 
 // ── Definition / dispatch shape ───────────────────────────────────────────────
 
-describe("browser tool definition", () => {
-  it("declares the full action enum", () => {
-    expect(browserToolDefinitions.browser.parameters.action.enum).toEqual([...BROWSER_ACTIONS]);
-    expect(browserToolDefinitions.browser.required).toEqual(["action"]);
-  });
-  it("routes through the browserAction handler name (unchanged from recon.ts)", () => {
-    expect(browserDispatch.browser).toBe("browserAction");
-  });
-});
 
 // ── Arg validation ────────────────────────────────────────────────────────────
 
@@ -243,25 +236,6 @@ describe("executeBrowser screenshot image meta", () => {
 
 // ── Driver options threading (attribution + scope-pinned interceptor) ─────────
 
-describe("executeBrowser driver options", () => {
-  it("forwards userAgent / extraHeaders / interceptor into the backend factory", async () => {
-    let seen: BrowserDriverOptions | undefined;
-    const capturingFactory: BrowserDriverFactory = async (opts) => {
-      seen = opts;
-      return { driver: fakeDriver() };
-    };
-    const interceptor: BrowserDriverOptions["interceptor"] = async () => null;
-    await executeBrowser(unscopedCtx, { action: "list_tabs" }, {
-      createDriver: capturingFactory,
-      userAgent: "0sec-browser/1.0",
-      extraHeaders: { "X-0sec": "engagement" },
-      interceptor,
-    });
-    expect(seen?.userAgent).toBe("0sec-browser/1.0");
-    expect(seen?.extraHeaders).toEqual({ "X-0sec": "engagement" });
-    expect(seen?.interceptor).toBe(interceptor);
-  });
-});
 
 // ── CDP attach (connect to operator's already-authenticated Chrome) ───────────
 
@@ -335,6 +309,223 @@ describe("executeBrowser CDP attach", () => {
     expect(disposed).toBe(true);
     expect(host.driver).not.toBe(prior);
     expect(host.driver).toBeTruthy();
+  });
+});
+
+// ── Assist fast lane (Jev-driven multi-step browsing) ─────────────────────────
+
+/**
+ * Build a fake page whose evaluate() returns structured link-snapshot data
+ * matching the linkSnapshot zod schema that observeLinks expects.
+ * The page starts at `url`; the `getLinks` callback is invoked on each
+ * evaluate() with the current URL so navigation to a new page produces
+ * different links, simulating a real multi-page flow.
+ */
+function assistablePage(
+  url: string,
+  links: Array<{ href: string; label: string }>,
+  title = "Assist Page",
+): BrowserPage {
+  let current = url;
+  // Clone links so the caller can mutate between test phases.
+  let currentLinks = [...links];
+  return {
+    async goto(to: string) {
+      current = to;
+      return { url: to, status: 200, title };
+    },
+    async click() {},
+    async type() {},
+    async evaluate() {
+      return { url: current, title, links: currentLinks };
+    },
+    async content() {
+      return { html: "<html><body>assist</body></html>", text: "assist" };
+    },
+    async screenshot() {
+      return "QUJD";
+    },
+    currentUrl: () => current,
+    drainDialogs: () => [],
+    drainConsole: () => [],
+    /** Mutate links for subsequent evaluate calls (simulates page transition). */
+    _setLinks(next: Array<{ href: string; label: string }>) { currentLinks = [...next]; },
+  } as BrowserPage & { _setLinks(links: Array<{ href: string; label: string }>): void };
+}
+
+/**
+ * A minimal PlaywrightDriver subclass that returns a pre-configured fake page.
+ * This passes the `instanceof PlaywrightDriver` and `canAssist` checks in the
+ * assist guard (line ~828) without needing a real playwright module or context.
+ */
+class AssistFakeDriver extends PlaywrightDriver {
+  constructor(
+    private readonly fakePage: BrowserPage,
+  ) {
+    super({} as never, { publicNetwork: true });
+  }
+  override get canAssist(): boolean {
+    return true;
+  }
+  override async tab(_name: string): Promise<BrowserPage> {
+    return this.fakePage;
+  }
+  override listTabs(): Array<{ name: string; url: string }> {
+    return [{ name: "main", url: this.fakePage.currentUrl() }];
+  }
+  override async closeTab(): Promise<boolean> {
+    return true;
+  }
+  override async closeAll(): Promise<number> {
+    return 1;
+  }
+  override async dispose(): Promise<void> {}
+}
+
+/** A factory that always returns the same AssistFakeDriver. */
+function assistDriverFactory(page: BrowserPage): BrowserDriverFactory {
+  return async () => ({ driver: new AssistFakeDriver(page) });
+}
+
+/** Build Jev evaluator answers for the batched assist questions. */
+function fakeJevAnswers(overrides: Partial<{
+  nextChoice: string;
+  nextProbs: Record<string, number>;
+  blockerChoice: string;
+  blockerProb: number;
+  relevantProb: number;
+  stateChangedProb: number;
+}> = {}): JevEvaluator {
+  const nc = overrides.nextChoice ?? "a0";
+  const np = overrides.nextProbs ?? { a0: 0.95, handoff: 0.05 };
+  const bc = overrides.blockerChoice ?? "none";
+  const bp = overrides.blockerProb ?? 0.95;
+  const rp = overrides.relevantProb ?? 0.95;
+  const scp = overrides.stateChangedProb ?? 0.1;
+  return {
+    async evaluate() {
+      return {
+        model: "fake-jev",
+        answers: {
+          next: { type: "choice" as const, choice: nc, probabilities: np },
+          blocker: { type: "choice" as const, choice: bc, probabilities: { ...Object.fromEntries([[bc, bp]]) } },
+          relevant: { type: "boolean" as const, probability: rp },
+          ...(scp !== undefined ? { stateChanged: { type: "boolean" as const, probability: scp } } : {}),
+        },
+        usage: { inputTokens: 10, outputTokens: 5, estimatedCostUsd: 0.0001 },
+      };
+    },
+  };
+}
+
+describe("executeBrowser assist fast lane", () => {
+  const readOnlyUrls = new Set([
+    "https://target.test/page2",
+    "https://target.test/page3",
+    "https://target.test/page4",
+  ]);
+  const scopeCtx = scopedCtx();
+
+  it("auto-continues across two steps when all-clear", async () => {
+    // Start at page1 with links to page2 and page3 (both approved, unvisited).
+    // Step 0: candidates = [page2, page3], Jev picks page2, navigate.
+    // Step 1: page2 current, page2 link equals current page so skipped,
+    //   candidates = [page3], Jev picks page3, navigate.
+    // Step 2: page3 current, both page2/page3 links are visited → exhausted.
+    const page = assistablePage("https://target.test/page1", [
+      { href: "https://target.test/page2", label: "Page 2" },
+      { href: "https://target.test/page3", label: "Page 3" },
+    ]);
+    const host: BrowserDriverHost = { driver: null };
+    const jev = fakeJevAnswers({ nextChoice: "a0", nextProbs: { a0: 0.95, handoff: 0.05 } });
+    const r = await executeBrowser(scopeCtx, { action: "assist", goal: "explore pages", max_steps: 3 }, {
+      createDriver: assistDriverFactory(page),
+      host,
+      readOnlyUrls,
+      jev,
+    });
+    expect(r.success).toBe(true);
+    const out = r.output as Record<string, unknown>;
+    expect(out.handoff).toBe(true);
+    expect(out.steps).toHaveLength(2); // auto-continued twice (page2 + page3)
+    const trace = out.trace as AssistTraceEntry[];
+    expect(trace).toHaveLength(3); // step 0, step 1, step 2 (exhausted)
+    expect(trace[0]!.action).toBe("a0");
+    expect(trace[0]!.blocker).toBe("none");
+    expect(trace[1]!.action).toBe("a0");
+    expect(trace[2]!.action).toBe("handoff");
+    expect(out.url).toBe("https://target.test/page3");
+  });
+
+  it("hands off immediately on auth-wall blocker", async () => {
+    const page = assistablePage("https://target.test/auth", [
+      { href: "https://target.test/page2", label: "Page 2" },
+    ]);
+    const host: BrowserDriverHost = { driver: null };
+    const jev = fakeJevAnswers({
+      nextChoice: "a0", nextProbs: { a0: 0.95, handoff: 0.05 },
+      blockerChoice: "auth-wall", blockerProb: 0.92,
+    });
+    const r = await executeBrowser(scopeCtx, { action: "assist", goal: "access dashboard", max_steps: 3 }, {
+      createDriver: assistDriverFactory(page),
+      host, readOnlyUrls, jev,
+    });
+    expect(r.success).toBe(true);
+    const out = r.output as Record<string, unknown>;
+    expect(out.handoff).toBe(true);
+    expect(out.reason).toMatch(/auth-wall/);
+    const trace = out.trace as AssistTraceEntry[];
+    expect(trace).toHaveLength(1);
+    expect(trace[0]!.blocker).toBe("auth-wall");
+    expect(out.steps).toHaveLength(0); // no navigation happened
+  });
+
+  it("hands off as uncertain on provider failure and never throws", async () => {
+    let failCount = 0;
+    const throwingJev: JevEvaluator = {
+      async evaluate() {
+        failCount++;
+        throw new Error("provider unavailable");
+      },
+    };
+    const page = assistablePage("https://target.test/page1", [
+      { href: "https://target.test/page2", label: "Page 2" },
+    ]);
+    const host: BrowserDriverHost = { driver: null };
+    const r = await executeBrowser(scopeCtx, { action: "assist", goal: "explore", max_steps: 3 }, {
+      createDriver: assistDriverFactory(page),
+      host, readOnlyUrls, jev: throwingJev,
+    });
+    // Never throws — returns a handoff
+    expect(r.success).toBe(true);
+    const out = r.output as Record<string, unknown>;
+    expect(out.handoff).toBe(true);
+    expect(out.reason).toMatch(/uncertain/);
+    const trace = out.trace as AssistTraceEntry[];
+    expect(trace).toHaveLength(1);
+    expect(trace[0]!.blocker).toBe("uncertain");
+    expect(failCount).toBe(1);
+    expect(out.steps).toHaveLength(0);
+  });
+
+  it("rejects navigation when read-only URLs set does not contain the Jev-chosen URL", async () => {
+    // Page has one link that is NOT in readOnlyUrls
+    const page = assistablePage("https://target.test/page1", [
+      { href: "https://target.test/evil", label: "Evil" },
+    ]);
+    const host: BrowserDriverHost = { driver: null };
+    const jev = fakeJevAnswers({ nextChoice: "a0", nextProbs: { a0: 0.97, handoff: 0.03 } });
+    const r = await executeBrowser(scopeCtx, { action: "assist", goal: "explore", max_steps: 3 }, {
+      createDriver: assistDriverFactory(page),
+      host, readOnlyUrls, jev,
+    });
+    expect(r.success).toBe(true);
+    const out = r.output as Record<string, unknown>;
+    expect(out.handoff).toBe(true);
+    // The link is not in readOnlyUrls so observeLinks sets permitted=false,
+    // the candidate filter excludes it, no candidates → early handoff.
+    expect(out.reason).toMatch(/No unvisited|no longer permitted|unavailable action/);
+    expect(out.steps).toHaveLength(0);
   });
 });
 

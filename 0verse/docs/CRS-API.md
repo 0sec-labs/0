@@ -1,10 +1,10 @@
 # 0verse CRS-API / SARIF adapter (M7 #47)
 
-> The pipe that runs 0verse on a **real external scoreboard** — the public
-> AIxCyberChallenge `example-crs-architecture` OSS-Fuzz corpus — instead of only
-> 0verse's own self-benchmarks, and the load-bearing **foxguard → 0verse** seam
-> ("a source scanner broadcasts a SARIF location; the binary engine proves it with
-> a PoV"). Implemented in `src/zeroverse/crs_api.py`.
+> A **fixture-proven adapter** for an external scoreboard's contract — the public
+> AIxCyberChallenge `example-crs-architecture` OSS-Fuzz corpus — and a
+> **foxguard → 0verse** SARIF matching seam. It accepts a pre-built target;
+> it does not fetch/build the corpus or establish live competition operation.
+> Implemented in `src/zeroverse/crs_api.py`.
 
 ## What this is
 

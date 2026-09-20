@@ -198,39 +198,37 @@ describe("development Cloud authentication", () => {
     const privatePath = join(privateDir, "credentials.json");
     writeFileSync(privatePath, '{"token":"private-production-token"}', { mode: 0o600 });
     const privateBytes = readFileSync(privatePath);
+    const io = captureIO();
     vi.stubEnv("0SEC_DEV_SOURCE_ROOT", "/fixture/engine");
-    vi.stubEnv("0SEC_CLOUD_HOST", "https://dev.0sec.ai");
+    vi.stubEnv("0SEC_CLOUD_HOST", "https://dev.cloud.0.security");
     vi.stubEnv("0SEC_CLOUD_TOKEN", undefined);
     const opened: string[] = [];
-    const polled: string[] = [];
-    const io = captureIO();
-    try {
-      await runLogin({
-        homeDir: home,
-        pollAttempts: 1,
-        pollIntervalMs: 0,
-        openBrowser: (url) => { opened.push(url); },
-        fetchImpl: async (url) => {
-          polled.push(String(url));
-          return jsonResponse({ status: "ready", token: SECRET });
-        },
-      });
-      expect(process.exitCode).toBe(0);
-      expect(opened.map((url) => new URL(url).origin)).toEqual(["https://dev.0sec.ai"]);
-      expect(polled.map((url) => new URL(url).origin)).toEqual(["https://dev.0sec.ai"]);
-      const devPath = join(home, ".0sec", "dev", "cloud.env");
-      expect(readFileSync(devPath, "utf8")).toContain(`0SEC_CLOUD_TOKEN=${SECRET}`);
-      expect(statSync(devPath).mode & 0o777).toBe(0o600);
-      expect(readFileSync(productionPath)).toEqual(productionBytes);
-      expect(readFileSync(privatePath)).toEqual(privateBytes);
-      runLogout({ homeDir: home });
-      expect(existsSync(devPath)).toBe(false);
-      expect(readFileSync(productionPath)).toEqual(productionBytes);
-      expect(readFileSync(privatePath)).toEqual(privateBytes);
-      expect(io.stdout.join("\n") + io.stderr.join("\n")).not.toContain(SECRET);
-    } finally {
-      io.restore();
-    }
+    const fetchImpl = (async (url: string | URL | Request) => {
+      expect(String(url)).toMatch(/\/cli-auth\/sessions\//);
+      return jsonResponse({ status: "ready", token: SECRET });
+    }) as typeof fetch;
+    await runLogin({
+      homeDir: home,
+      openBrowser: (url) => { opened.push(url); },
+      fetchImpl,
+      pollAttempts: 1,
+      pollIntervalMs: 0,
+      sleep: async () => {},
+    });
+    expect(process.exitCode).toBe(0);
+    expect(opened).toHaveLength(1);
+    expect(new URL(opened[0]).origin).toBe("https://dev.cloud.0.security");
+    const devPath = join(home, ".0sec", "dev", "cloud.env");
+    expect(readFileSync(devPath, "utf8")).toContain(`0SEC_CLOUD_TOKEN=${SECRET}`);
+    expect(statSync(devPath).mode & 0o777).toBe(0o600);
+    expect(readFileSync(productionPath)).toEqual(productionBytes);
+    expect(readFileSync(privatePath)).toEqual(privateBytes);
+    runLogout({ homeDir: home });
+    expect(existsSync(devPath)).toBe(false);
+    expect(readFileSync(productionPath)).toEqual(productionBytes);
+    expect(readFileSync(privatePath)).toEqual(privateBytes);
+    expect(io.stdout.join("\n") + io.stderr.join("\n")).not.toContain(SECRET);
+    io.restore();
   });
 });
 

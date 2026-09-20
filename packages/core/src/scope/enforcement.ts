@@ -86,6 +86,9 @@ export class PathPolicy {
     return !this.prefixes || this.prefixes.length === 0;
   }
 
+  /** Serializable effective prefixes, not constructor inputs. Empty means unrestricted. */
+  snapshot(): string[] { return [...this.prefixes]; }
+
   /**
    * Decide whether a URL's pathname is admitted by the prefix allowlist.
    * Empty allowlist always allows. Unparseable URL → blocked (defensive;
@@ -165,6 +168,11 @@ export class EnforcementTracker {
     this.killAfterSec = opts.killAfterSec;
     this.nowFn = opts.nowFn ?? (() => Date.now());
     this.startedAtMs = this.nowFn();
+  }
+
+  /** Static effective controls, separated from changing request counters and elapsed time. */
+  policySnapshot(): { pathPrefixes: string[]; killAfterSec: number; authMode: EnforcementSummary["auth_mode_used"] } {
+    return { pathPrefixes: this.pathPolicy.snapshot(), killAfterSec: this.killAfterSec, authMode: this.authMode };
   }
 
   /** Record a request that passed host + path scope and was dispatched. */

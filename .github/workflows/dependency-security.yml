@@ -1,0 +1,58 @@
+name: "0sec: Dependency Security"
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  schedule:
+    - cron: "17 4 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dependency-security-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  npm:
+    runs-on: [self-hosted, Linux, X64]
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.9
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: pnpm
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Audit JavaScript dependencies
+        run: pnpm audit --audit-level=high
+
+  cargo:
+    runs-on: [self-hosted, Linux, X64]
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+        if: ${{ hashFiles('**/Cargo.lock') != '' }}
+        with:
+          toolchain: stable
+      - name: Install cargo-deny
+        if: ${{ hashFiles('**/Cargo.lock') != '' }}
+        run: cargo install cargo-deny --version 0.20.2 --locked
+      # Lockfiles retain disabled optional backends. Check every resolved
+      # workspace feature and platform, without advisory exceptions.
+      - name: Audit resolved Rust dependencies
+        if: ${{ hashFiles('**/Cargo.lock') != '' }}
+        run: |
+          set -euo pipefail
+          while IFS= read -r -d '' lockfile; do
+            cargo deny --manifest-path "${lockfile%Cargo.lock}Cargo.toml" \
+              --workspace --all-features --locked check advisories
+          done < <(git ls-files -z -- Cargo.lock '**/Cargo.lock')

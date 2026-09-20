@@ -7,9 +7,11 @@ export default defineConfig({
   },
   test: {
     include: ["src/**/*.test.ts"],
-    // The suite contains CPU-heavy property and integration tests. Two workers
-    // keep SQLite and native-addon tests below their five-second behavioral
-    // deadlines on the shared CI runner; four still starved unrelated tests.
+    // Keep native-addon and SQLite work bounded on the shared CI runner.
     maxWorkers: 2,
+    // Persistence suites perform real fsync/SQLite round trips, not mocked I/O.
+    // Their default deadline must tolerate shared-runner disk contention;
+    // tests of actual runtime deadlines retain their explicit timeouts.
+    testTimeout: 30_000,
   },
 });

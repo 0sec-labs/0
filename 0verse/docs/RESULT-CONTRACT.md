@@ -88,6 +88,25 @@ an otherwise complete scan to `infra-failed`. Consumers must not infer success f
 an empty `findings` array; only `confirmed` and `no-findings` are successful terminal
 states.
 
+**CLI exit status is not the terminal contract.** The current local `scan`
+handler prints the result and returns `0` even when that result is
+`infra-failed` or `unsupported`. An unavailable explicitly selected backend
+fails earlier with exit `2`, but exit zero alone is insufficient for automation.
+Read the result's terminal fields after parsing the supported major version.
+The cloud sink has a separate failure/completion policy.
+
+```python
+from zeroverse import api
+
+result = api.scan("./target")
+if result.terminal_state not in {"confirmed", "no-findings"}:
+    raise RuntimeError(f"{result.terminal_state}: {result.status_reason}")
+confirmed = [finding for finding in result.findings if finding.confirmed]
+```
+
+Even `no-findings` is a completed bounded analysis, not a guarantee of absence
+of vulnerabilities. Retain `note` and the per-stage outcomes alongside findings.
+
 Each `StageOutcome` has `stage`, `status` (`completed`, `skipped`, `unavailable`,
 `failed`, or `cancelled`), `required`, `reason`, and a string-valued `provenance`
 object identifying the component and, when applicable, backend.
@@ -150,3 +169,38 @@ to `rizin` (radare2 + r2ghidra `pdg`, no Java) then `angr` (pure-Python) when a
 higher backend is unavailable. The non-Ghidra backends mine a lower-fidelity IL
 from pseudo-C — `note` says so, and the angr reachability stage is skipped for
 them (no per-sink addresses).
+
+## Requesting a complete lane
+
+The Python `ScanOptions` API also exposes `profile`, `budget`, and `output_dir`.
+The local CLI `scan` currently uses the default `analysis` profile; its
+`--timeout` option is a **cloud HTTP request timeout in milliseconds**, not a
+whole-analysis deadline.
+
+| Profile | Required capability intent |
+|---|---|
+| `analysis` (default) | Target format, decompiler backend, and deadline; dynamic lanes may be unavailable |
+| `confirmation` | Also requires a compatible confirmation target/architecture, executor, oracle, and writable artifact store |
+| `fuzz` | Also requires the selected fuzz route's tools; native AFL routes may need QEMU or compiler/libdl support |
+
+For callers that require proof attempts rather than best-effort static analysis:
+
+```python
+from zeroverse import api
+from zeroverse.preflight import RunBudget
+
+options = api.ScanOptions(
+    backend="ghidra",
+    profile="confirmation",
+    budget=RunBudget(attempt_limit=16, wall_clock_seconds=300),
+    output_dir="./0verse-out",
+)
+result = api.scan("./target", options)
+print(api.format_result(result, "json"))
+```
+
+This request still needs an explicitly configured trusted executor or injected
+`execution_backend`; choosing a profile grants no authorization. A missing
+required capability is an infrastructure/unsupported outcome, not zero
+vulnerabilities. The budget is run-local; increasing an outer process timeout
+does not increase this Python budget.

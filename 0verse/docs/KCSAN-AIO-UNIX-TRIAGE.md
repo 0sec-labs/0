@@ -1,5 +1,10 @@
 # KCSAN AIO and AF_UNIX evidence gate
 
+> **Historical operator record for the 2026-07-18 campaign.** Manager names,
+> ports, `/root/` paths, and the word “active” below describe that retained
+> environment; they are not services or replay prerequisites provisioned by a
+> fresh checkout. Preserve the snapshot and exact-title evidence rules.
+
 The `wd-kcsan-aio` and `wd-kcsan-unix` managers are active discovery lanes,
 not adjudicators. Their crash directories are monitored by
 `audit-live-crash-buckets.sh`, their execution and coverage counters are

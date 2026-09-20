@@ -205,6 +205,35 @@ function extractJson(text: string): unknown {
 }
 
 /**
+ * Cap on the bytes of file paths embedded in the inventory prompt.
+ *
+ * The prompt reaches the runtime CLI as a single argv entry, so an unbounded
+ * listing fails the spawn itself with E2BIG before the model is ever called
+ * (#72: `dotnet/sdk` has deeply nested paths, so 2000 of them alone run past
+ * what the argv budget tolerates once the rest of the prompt is added).
+ * Truncation is stated in the prompt so the model treats the listing as a
+ * sample rather than the whole repository.
+ */
+const FILE_UNIVERSE_MAX_PATHS = 2000;
+const FILE_UNIVERSE_MAX_BYTES = 128_000;
+
+export function renderFileUniverse(repositoryFiles: readonly string[]): string {
+  const included: string[] = [];
+  let bytes = 0;
+  for (const file of repositoryFiles.slice(0, FILE_UNIVERSE_MAX_PATHS)) {
+    const cost = Buffer.byteLength(file, "utf8") + 1;
+    if (bytes + cost > FILE_UNIVERSE_MAX_BYTES) break;
+    included.push(file);
+    bytes += cost;
+  }
+  const omitted = repositoryFiles.length - included.length;
+  const header = omitted > 0
+    ? `File universe (${repositoryFiles.length} files, showing the first ${included.length}; ${omitted} omitted for prompt size — treat this as a representative sample, not the complete tree):`
+    : `File universe (${repositoryFiles.length} files):`;
+  return `${header}\n${included.join("\n")}`;
+}
+
+/**
  * Run the read-only repository-analysis agent to produce INFO.md + the
  * surface inventory. One repair attempt on validation failure.
  */
@@ -216,7 +245,7 @@ export async function generateSurfaceInventory(params: {
   log?: (msg: string) => void;
 }): Promise<GenerateInventoryResult> {
   const { invoker, repositoryFiles, log } = params;
-  const context = `Repository root: ${params.rootPath}\nFile universe (${repositoryFiles.length} files):\n${repositoryFiles.slice(0, 2000).join("\n")}`;
+  const context = `Repository root: ${params.rootPath}\n${renderFileUniverse(repositoryFiles)}`;
 
   let attempt = 0;
   let lastError = "";

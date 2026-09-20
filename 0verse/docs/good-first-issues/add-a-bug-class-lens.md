@@ -6,8 +6,11 @@
 ## What
 
 Add a new static **detection lens** — a high-recall hypothesis source over the
-decompiled C. Candidates not yet covered: **off-by-one / array-index**, **signed/
-unsigned confusion**, **path traversal**, **uninitialized-memory use**, **TOCTOU**.
+decompiled C. Candidate gaps include **path traversal**, **uninitialized-memory
+use**, and **TOCTOU**. Inspect the existing lens first: signed/unsigned size
+confusion is already covered by `intoverflow_lens`, off-by-one shapes by
+`logic_lens`, and loop-index writes by `loop_oob_lens`. Extend those where
+appropriate instead of registering a duplicate detector.
 
 ## Why
 

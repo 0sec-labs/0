@@ -1,6 +1,6 @@
 ---
 title: Research Workflows
-description: Which 0sec research command solves which task, their input/output contracts, scope and verification boundaries, evidence tiers, and paths to specialized references.
+description: Which 0 research command solves which task, their input/output contracts, scope and verification boundaries, evidence tiers, and paths to specialized references.
 ---
 
 Choose a command by input, execution requirements, and evidence output.
@@ -17,7 +17,7 @@ Before disclosure, inspect its verifier result, execution origin, and retained a
 | Spec vs implementation drift | `specdrift` | No (`--spec`) | Spec text + source tree | Invariant mappings / drift hypotheses |
 | HTTP protocol conformance | `protocol-check` | No (`--spec` + `--impl`) | Live HTTP target | Confirmed/refuted divergences |
 | Memory-safety fuzz | `memsafety` | No | Source tree (git URL or path) | Reproduced mem-corruption findings |
-| Kernel advisory variant | `kernel variant-hunt` | Advisory URL | Kernel tree | Foxguard-gated variant candidates |
+| Kernel advisory variant | `kernel variant-hunt` | Optional advisory URL/file | Kernel tree or supplied SARIF | FoxGuard static variant candidates |
 | Syzbot LPE mining | `kernel syzbot-mine` | No | syzbot | Ranked exploitability candidates |
 | Syzkaller weights | `kernel weights` | No | kernelCTF target | LLM-derived `choice_weights.json` |
 | XNU IOKit fuzzing | `xnu-fuzz` | No (kext) | Kext Mach-O | Target model / gate-passing inputs |
@@ -29,6 +29,7 @@ Before disclosure, inspect its verifier result, execution origin, and retained a
 | Research pipeline | `research pipeline` | No | URL/path/repo/package | Evidence-backed findings |
 | Research mobile | `research mobile` | No | APK/IPA | Passive indicators |
 | Research Linux kernel | `research linux` | Reproducer + finding | Kernel tree | N-boot verified evidence |
+| External kernel boot matrix | `research linux-matrix` | Matrix + finding | Retained boot logs | Validated, hashed imported evidence (no boots) |
 
 ## Evidence tiers
 
@@ -40,9 +41,28 @@ native commands define their own result fields. See
 [Verification Results](/verification-result/) for replay contracts and
 [Kernel VM Verification](/kernel-vm/) for privilege and provenance limits.
 
+### Model diversity is not automatic optimal routing
+
+`deep-review` defaults to one provider model and one attempt; `--models` adds
+finder runs for every candidate × lens × model × attempt. Start with a bounded
+candidate set and cost ceiling before increasing these multipliers:
+
+```bash
+0 deep-review ./target-repo --max-candidates 8 \
+  --models YOUR_MODEL_A,YOUR_MODEL_B --attempts 1 --cost-ceiling 5
+```
+
+Configure access to each selected model first. Hunt's cross-family refuter tries
+to use a family different from all known finder families; absent credentials,
+unknown families, or a failed alternate call can retain/fall back to same-family
+refutation. Inspect the recorded pairing/degradation status rather than assuming
+independence. This is a role-selection policy, not a learned optimal-model router
+or proof that a finding was dynamically reproduced. Local tools and VM execution
+remain local even when model calls use a hosted transport.
+
 ## Input and artifact contracts
 
-`0sec research` subcommands accept `--artifact-root` (default `.0sec-research`).
+`0 research` subcommands accept `--artifact-root` (default `.0sec-research`).
 Other research commands have their own `--output`, artifact-retention, and
 cache options; do not assume they share one directory layout or accept
 `--artifact-root`. The [command reference](/commands/) lists each contract.
@@ -62,7 +82,7 @@ Names beginning with a digit cannot be assigned using POSIX `export`. Pass
 them through `env`, for example:
 
 ```bash
-env 0SEC_DEEP_REVIEW_MAX_CANDIDATES=16 0sec deep-review ./target-repo
+env 0SEC_DEEP_REVIEW_MAX_CANDIDATES=16 0 deep-review ./target-repo
 ```
 
 ## Scope and host-execution boundaries
@@ -78,9 +98,11 @@ env 0SEC_DEEP_REVIEW_MAX_CANDIDATES=16 0sec deep-review ./target-repo
 - Kernel verification and dynamic-witness paths require real VM tooling.
   QEMU guests have their own kernel; host mounts and networking still depend
   on the selected runner. Do not infer isolation guarantees from the word “VM.”
-- `evolve` evaluates source candidates in credential-free, network-none Docker
-  containers. `lens-synth` manages prompt lenses; it is not the same execution
-  boundary. See [Improvement Plane](/improvement-plane/).
+- `evolve` evaluates source candidates with the configured isolated executor:
+  Docker by default, or opt-in local smolvm with a pinned local image archive.
+  `lens-synth` manages prompt lenses; it is not the same execution boundary.
+  See [Improvement Plane](/improvement-plane/) for network, credential and
+  executor prerequisites.
 - Research commands can write models, caches, build products, and configured
   outputs. Artifact directories do not constrain all host filesystem writes.
 
@@ -106,7 +128,7 @@ Takes a proven fix diff (`--seed .patch`) and source tree (`--source`), searches
 for variants, and passes candidate findings through an adversarial skeptic.
 
 ```bash
-0sec hunt \
+0 hunt \
   --source /root/linux-6.12.93 \
   --seed ./nfc-fix.patch \
   --ref CVE-2025-XXXXX \
@@ -133,7 +155,7 @@ for variants, and passes candidate findings through an adversarial skeptic.
 | `--reachable-only` | env `HUNT_REACHABLE_ONLY` | Restrict to kernelCTF-reachable paths |
 | `--reachable-prefer` | env `HUNT_REACHABLE_PREFER` | Sort reachable first, drop none |
 | `--no-verify` | — | Skip skeptic gate (triage only, never disclosure) |
-| `--novelty` | — | Require lore.kernel.org duplicate suppression |
+| `--novelty` | — | Check lore.kernel.org duplicate evidence; use `--novelty-required` to abort when that evidence is unavailable |
 | `--methodology` | — | kernel-LPE methodology preset |
 
 **Lens flags:**
@@ -168,7 +190,7 @@ Enumerates files in a prepared source tree, applies specialized finder lenses,
 and checks survivors through a multi-lens quorum. No seed fix is required.
 
 ```bash
-0sec deep-review ./target-repo --max-candidates 16 --profile default
+0 deep-review ./target-repo --max-candidates 16 --profile default
 ```
 
 ### Profiles
@@ -229,10 +251,10 @@ classifier → refined invariant engine → adversarial verify → ranked report
 
 ```bash
 # Last 24 hours, default detectors (dataflow + refcount + race)
-0sec recency-hunt --tree /root/linux-next
+0 recency-hunt --tree /root/linux-next
 
 # Explicit git range with dynamic witness (KASAN VM boots)
-0sec recency-hunt \
+0 recency-hunt \
   --tree /root/linux-next \
   --since HEAD~48..HEAD \
   --model gpt-5.5 \
@@ -240,11 +262,11 @@ classifier → refined invariant engine → adversarial verify → ranked report
   --dynamic-witness \
   --witness-candidates 5
 
-# Scheduler mode: write dated reports to a directory
-0sec recency-hunt \
+# One run with explicit report paths (schedule repeated invocations externally)
+0 recency-hunt \
   --tree /root/linux-next \
   --hours 24 \
-  --report-dir /var/reports/recency
+  --output ./recency-report.json --md ./recency-report.md
 ```
 
 ### Key flags
@@ -259,7 +281,7 @@ classifier → refined invariant engine → adversarial verify → ranked report
 | `--max-hunt-files <N>` | 25 | Cap files run through the engine |
 | `--detectors <list>` | `dataflow,refcount,race` | Detectors per semantic file. `dual-view` is opt-in |
 | `--dynamic-witness` | Off | KASAN VM boot oracle (implies `dual-view`). Expensive |
-| `--report-dir <dir>` | — | Write dated YYYY-MM-DD.{json,md} reports |
+| `--output <path>` / `--md <path>` | stdout / none | Write JSON / optional Markdown report; repeated runs require an external scheduler |
 | `--remine-assumptions` | Off | Force fresh assumption mine each run |
 
 **Detector types:**
@@ -287,19 +309,19 @@ skeptic gate.
 
 ```bash
 # Basic run: mine assumptions in net/unix, scan callers
-0sec assumption-hunt /root/linux-6.12.93 \
+0 assumption-hunt /root/linux-6.12.93 \
   --files net/unix/af_unix.c,net/unix/garbage.c \
   --subsystem net/unix
 
 # With dynamic witness (KASAN VM boots for dual-view candidates)
-0sec assumption-hunt /root/linux-6.12.93 \
+0 assumption-hunt /root/linux-6.12.93 \
   --files net/unix/af_unix.c \
   --subsystem net/unix \
   --dynamic-witness \
   --witness-candidates 5
 
 # Stop after deterministic caller-scan (no LLM finder/skeptic gate)
-0sec assumption-hunt /root/project \
+0 assumption-hunt /root/project \
   --files src/main.c \
   --skip-hunt
 ```
@@ -358,7 +380,7 @@ to candidate implementation code.
 Extract invariants only (no source tree needed):
 
 ```bash
-0sec specdrift extract \
+0 specdrift extract \
   --spec ./rfc-9110-excerpt.txt \
   --max-invariants 40 \
   --output invariants.json
@@ -369,7 +391,7 @@ Extract invariants only (no source tree needed):
 Extract invariants and map them to implementation code:
 
 ```bash
-0sec specdrift scan \
+0 specdrift scan \
   --spec ./rfc-9110.txt \
   --source /path/to/http-server \
   --max-files 400
@@ -380,7 +402,7 @@ Extract invariants and map them to implementation code:
 Extract invariants, map candidates, and emit drift hypotheses:
 
 ```bash
-0sec specdrift plan \
+0 specdrift plan \
   --spec ./rfc-9110.txt \
   --source /path/to/http-server \
   --max-hypotheses 20
@@ -408,7 +430,7 @@ implementation diverges from the spec, then exercises each hypothesis against
 a live target with a deterministic oracle.
 
 ```bash
-0sec protocol-check \
+0 protocol-check \
   --spec ./rfc-9110-excerpt.txt \
   --impl ./server-parse.c \
   --target http://127.0.0.1:8080 \
@@ -449,13 +471,13 @@ sanitizer/fuzz harness, run a closed fuzz loop, and emit crashed findings.
 
 ```bash
 # C/C++ with CMake
-0sec memsafety https://github.com/user/repo.git --fuzz-timeout 120
+0 memsafety https://github.com/user/repo.git --fuzz-timeout 120
 
 # Rust with cargo-fuzz
-0sec memsafety /path/to/rust-crate --language rust --miri
+0 memsafety /path/to/rust-crate --language rust --miri
 
 # Narrow to a subdirectory with artifact retention
-0sec memsafety /path/to/repo \
+0 memsafety /path/to/repo \
   --subsystem src/network \
   --artifact-dir ./memsafety-evidence \
   --artifact-max-bytes 4194304
@@ -506,7 +528,7 @@ Mine and LPE-rank syzbot's invalid/auto-closed queue for kernelCTF-eligible
 candidates:
 
 ```bash
-0sec kernel syzbot-mine \
+0 kernel syzbot-mine \
   --subsystems net,net/sched,xfrm \
   --limit 30 \
   --details 15
@@ -517,7 +539,7 @@ candidates:
 Foxguard-backed advisory variant hunting:
 
 ```bash
-0sec kernel variant-hunt \
+0 kernel variant-hunt \
   --tree /root/linux-6.12.93 \
   --advisory ./advisory.txt \
   --rules rules/kernel/dirty-frag-class \
@@ -528,7 +550,7 @@ Foxguard-backed advisory variant hunting:
 Or reuse an existing Foxguard SARIF:
 
 ```bash
-0sec kernel variant-hunt \
+0 kernel variant-hunt \
   --tree /root/linux-6.12.93 \
   --sarif-input ./foxguard-results.sarif \
   --output terminal
@@ -539,7 +561,7 @@ Or reuse an existing Foxguard SARIF:
 Generate LLM-derived `choice_weights.json` for syzkaller on a kernelCTF target:
 
 ```bash
-0sec kernel weights \
+0 kernel weights \
   --target 6.12.101 \
   --crash-summary ./recent-crashes.txt \
   --max-entries 48 \
@@ -553,14 +575,14 @@ See [Commands — kernel](/commands/#kernel).
 ## XNU IOKit fuzzer (`xnu-fuzz`)
 
 Three-part workflow for IOKit user-client fuzzing on macOS. Operates
-offline (model + generate locally); the VM run lane requires an Apple Silicon
-macOS VM.
+offline (model + generate locally); `harness-plan` describes prerequisites for
+an Apple Silicon macOS VM but does not launch it.
 
 ### `enumerate` — kext → target model
 
 ```bash
-0sec xnu-fuzz enumerate \
-  --kext ./IOSurface.kext \
+0 xnu-fuzz enumerate \
+  --kext ./IOSurface.macho \
   --bundle com.apple.iokit.IOSurface \
   --out target-model.json
 ```
@@ -568,7 +590,7 @@ macOS VM.
 ### `gen` — model → gate-passing inputs
 
 ```bash
-0sec xnu-fuzz gen \
+0 xnu-fuzz gen \
   --model target-model.json \
   --seed 42 \
   --json
@@ -577,7 +599,7 @@ macOS VM.
 ### `harness-plan` — VM run plan
 
 ```bash
-0sec xnu-fuzz harness-plan \
+0 xnu-fuzz harness-plan \
   --golden "<golden-macos-vm>" \
   --oracle kasan
 ```
@@ -592,13 +614,13 @@ Delegates to the in-repo 0verse engine (Python, `uv run --frozen 0verse`):
 
 ```bash
 # Triage a compiled ELF
-0sec binary ./target.elf --mode triage
+0 binary ./target.elf --mode triage
 
 # Run full scan with a specific backend
-0sec binary ./target.elf --mode scan --backend ghidra
+0 binary ./target.elf --mode scan --backend ghidra
 
 # Forward extra args to 0verse
-0sec binary ./target.elf --mode triage -- --format ndjson
+0 binary ./target.elf --mode triage -- --format ndjson
 ```
 
 ### Modes
@@ -632,19 +654,19 @@ execute the target; inspect their runner requirements before use.
 
 ```bash
 # Default weaponization runner (requires its kernel-VM prerequisites)
-0sec exploit --finding ./finding.json --reproducer ./repro.c
+0 exploit --finding ./finding.json --reproducer ./repro.c
 
 # Engine-driven root climb with real QEMU boots
-0sec exploit --finding ./finding.json --climb --loop-boots 8 \
+0 exploit --finding ./finding.json --climb --loop-boots 8 \
   --vmlinux ./vmlinux --freed-struct snd_rawmidi_runtime
 
 # Autonomous LLM-composed weaponization
-0sec exploit --autoclimb \
+0 exploit --autoclimb \
   --bug-spec ./bug-spec.json \
   --boot-script ./boot.sh
 
 # Agentic weaponization loop (model gets a shell)
-0sec exploit --agent \
+0 exploit --agent \
   --task ./vuln-description.json \
   --container my-exploit-env \
   --flag-pattern '^flag\{'
@@ -674,7 +696,7 @@ Drive an agent endpoint, MCP endpoint, and an oracle under a scoped policy, then
 write a replayable evidence bundle.
 
 ```bash
-0sec agent-assure \
+0 agent-assure \
   --agent-endpoint http://localhost:8080/agent \
   --mcp-endpoint http://localhost:8081/mcp \
   --oracle-endpoint http://localhost:8082/state \
@@ -715,22 +737,22 @@ durable overlay registry (`~/.0sec/lenses/appsec-archetypes.json`).
 
 ```bash
 # One-shot: process miss-input, validate, optionally promote
-0sec lens-synth \
+0 lens-synth \
   --miss-input ./misses.json \
   --promote \
   --model gpt-5.5
 
 # Watch mode: poll the miss-input file, process each revision
-0sec lens-synth \
+0 lens-synth \
   --miss-input ./misses.json \
   --watch \
   --poll-interval 5000
 
 # Inspect the durable overlay registry
-0sec lens-synth --status
+0 lens-synth --status
 
 # Retire a promoted lens
-0sec lens-synth --rollback memcpy-overrun-v1
+0 lens-synth --rollback memcpy-overrun-v1
 ```
 
 ### Key flags
@@ -756,7 +778,7 @@ invocations. See [Improvement Plane](/improvement-plane/#self-evolving-finder-le
 
 ## Research pipeline (`research`)
 
-Four subcommands under `0sec research` for importing, executing, and binding
+Four subcommands under `0 research` for importing, executing, and binding
 research evidence:
 
 ### `research pipeline`
@@ -765,7 +787,7 @@ Run the existing web/AI/source/package pipeline through the shared evidence
 research plane:
 
 ```bash
-0sec research pipeline \
+0 research pipeline \
   --target https://example.com \
   --target-type web-app \
   --depth deep
@@ -785,16 +807,16 @@ Passive mobile intake (APK/IPA). Indicators remain hypotheses; only scoped
 adapters may hand off targets:
 
 ```bash
-0sec research mobile --target ./extracted-apk
+0 research mobile --target ./extracted-apk
 ```
 
 ### `research linux-matrix`
 
-Import externally executed vulnerable-vs-patched boot logs. 0sec validates and
+Import externally executed vulnerable-vs-patched boot logs. 0 validates and
 hashes them but does not execute boots:
 
 ```bash
-0sec research linux-matrix \
+0 research linux-matrix \
   --matrix ./boot-matrix.json \
   --finding ./finding.json
 ```
@@ -804,7 +826,7 @@ hashes them but does not execute boots:
 Run a supplied kernel reproducer through the shared N-boot evidence gate:
 
 ```bash
-0sec research linux \
+0 research linux \
   --kernel-tree /root/linux-6.12.93 \
   --reproducer ./repro.c \
   --finding ./finding.json \
@@ -832,13 +854,13 @@ boundary, and promotion gates.
 
 ```bash
 # One-off evolution run
-0sec evolve run --config ./evolution.json --allow-source-access
+0 evolve run --config ./evolution.json --allow-source-access
 
 # Watch mode: sequential passes, stop on any failed pass
-0sec evolve run --config ./evolution.json --watch --auto-promote
+0 evolve run --config ./evolution.json --watch --auto-promote
 
 # Execute the active version against a specific input
-0sec evolve exec --config ./evolution.json --run-id <id> --input '{"n": 4}'
+0 evolve exec --config ./evolution.json --run-id <id> --input '{"n": 4}'
 ```
 
 See [Commands — evolve](/commands/#evolve).

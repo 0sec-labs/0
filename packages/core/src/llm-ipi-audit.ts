@@ -5,14 +5,21 @@
  * maps each confirmed break onto a 0sec Finding so it flows through the normal
  * triage/report pipeline. Kept as a focused module (not another branch in
  * agentic-scanner.ts) per the engineering rules.
+ *
+ * When configured with a JevEvaluator, non-broken attempts receive advisory
+ * intermediate feedback labels (explicit-refusal, partial-compliance,
+ * attempted-prohibited, ambiguous). These are reported in the per-attempt
+ * reports but never change broken/not-broken.
  */
-import type { Finding, Severity } from "@0sec/shared";
+import type { Finding, JevEvaluator, Severity } from "@0sec/shared";
+import { createJevEvaluator, jevConfigFromEnvironment } from "@0sec/shared";
 import {
   chatTarget,
   runIterativeCampaign,
   builtinBehaviors,
   regexJudge,
   llmJudge,
+  jevAttemptFeedback,
   type AskFn,
   type Behavior,
   type BreakRecord,
@@ -60,6 +67,24 @@ export interface LlmIpiAuditOptions {
   /** Optional judge-model call; enables the LLM judge for semantic behaviours
    *  (exfil, deanonymize, weak-policy). Without it those fall back to regex. */
   judgeAsk?: AskFn;
+  /**
+   * Optional Jev evaluator for advisory intermediate attempt feedback.
+   * When provided, each non-broken attempt receives an intermediate label
+   * (explicit-refusal, partial-compliance, attempted-prohibited, ambiguous).
+   * The feedback is purely advisory — the regex/LLM judge alone determines
+   * broken/not-broken.
+   */
+  jevEvaluator?: JevEvaluator;
+  /**
+   * Enable bandit-steered strategy selection using Jev feedback.
+   * When set AND a Jev evaluator is resolved, per-strategy rewards from
+   * advisory feedback bias which strategies generate the next generation's
+   * attempts. Steering never alters broken/not-broken — attempts still run
+   * through the identical judge path.
+   */
+  banditSteering?: boolean;
+  /** Optional AbortSignal for cancellation/timeout across all behaviours. */
+  signal?: AbortSignal;
   onProgress?: (msg: string) => void;
 }
 
@@ -72,13 +97,36 @@ export async function runLlmIpiAudit(opts: LlmIpiAuditOptions): Promise<{ findin
   const target = chatTarget({ baseUrl: opts.baseUrl, apiKey: opts.apiKey, models: opts.models });
   const behaviors = opts.behaviors ?? builtinBehaviors;
   const findings: Finding[] = [];
+  const jevConfig = opts.jevEvaluator ? undefined : jevConfigFromEnvironment("redteam", process.env);
+  const evaluator = opts.jevEvaluator ?? (jevConfig ? createJevEvaluator(jevConfig) : undefined);
 
   const judge = (b: Behavior, r: Parameters<typeof regexJudge>[1]) =>
     b.goal.criteria && opts.judgeAsk ? llmJudge(b, r, opts.judgeAsk) : regexJudge(b, r);
 
   for (const behavior of behaviors) {
+    opts.signal?.throwIfAborted();
     opts.onProgress?.(`IPI: behaviour "${behavior.id}" across ${opts.models.length} model(s)`);
-    const result = await runIterativeCampaign(behavior, target, { maxAttempts: opts.maxAttempts, judge });
+    const hasBandit = !!(opts.banditSteering && evaluator);
+    const result = await runIterativeCampaign(behavior, target, {
+      maxAttempts: opts.maxAttempts,
+      judge,
+      jevFeedback: evaluator
+        ? (b, r, s) => jevAttemptFeedback(evaluator, b, r, s)
+        : undefined,
+      banditSteering: hasBandit,
+      onSteering: hasBandit
+        ? (weights) => {
+            const lines = Object.entries(weights)
+              .sort(([, a], [, b]) => b - a)
+              .slice(0, 7)
+              .map(([s, w]) => `${s} ${w.toFixed(2)}`);
+            opts.onProgress?.(`IPI bandit steering weights: ${lines.join("; ")}`);
+          }
+        : undefined,
+      onFeedback: (feedback, model) => opts.onProgress?.(
+        `IPI feedback (${model ?? "target"}, advisory): ${feedback.label}${feedback.unavailable ? " — evaluator unavailable" : ""}`),
+      signal: opts.signal,
+    });
     for (const record of result.breaks) findings.push(breakRecordToFinding(record, behavior));
     opts.onProgress?.(`IPI: "${behavior.id}" → ${result.brokenModels.length}/${opts.models.length} broken`);
   }
