@@ -33,7 +33,7 @@
 
 ## Get started
 
-Give this to your agent to start.
+> Install 0, then use 0 to test this repository for security issues.
 
 ## License
 
