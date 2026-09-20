@@ -3130,8 +3130,8 @@ Guide: [Cloud authentication](/api-keys/).
 ## Codebase configuration and methodology
 
 These commands use the same authenticated cloud APIs as the dashboard. They
-require a matching deployed service and current organization access. Add the
-codebase in the dashboard first; `project setup` does not enroll repositories.
+require a matching deployed service and current organization access. Enroll with
+`project enroll` or the dashboard's Add action before running `project setup`.
 Saving configuration and binding a methodology do not start a scan or grant
 credits. New runs capture immutable revisions; edits do not change queued work.
 
@@ -3144,7 +3144,7 @@ Slack notification settings. Mutations require server-authorized access.
 0 project
 ```
 
-Subcommands: [list](#project-list) · [show](#project-show) · [setup](#project-setup) · [discover](#project-discover) · [save](#project-save) · [history](#project-history) · [suggestions](#project-suggestions) · [restore](#project-restore) · [start](#project-start) · [slack](#project-slack).
+Subcommands: [list](#project-list) · [show](#project-show) · [setup](#project-setup) · [enroll](#project-enroll) · [discover](#project-discover) · [save](#project-save) · [history](#project-history) · [suggestions](#project-suggestions) · [restore](#project-restore) · [start](#project-start) · [slack](#project-slack).
 
 ### project list
 
@@ -3192,6 +3192,26 @@ mode return the proposal without saving or starting work.
 | Option | Registered default | Description |
 | --- | --- | --- |
 | `--json` | — | Return an editable proposal without saving or starting |
+
+### project enroll
+
+Enroll a GitHub repository through the connected GitHub App. Pass its URL or omit
+the argument to use the current checkout's origin. Enrollment does not start a
+scan or grant credits. If App access is missing, `--open` opens the installation
+link; complete that step and retry before running `project setup`.
+
+```text
+0 project enroll [options] [repository]
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `repository` | No |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--open` | — | Open the GitHub App installation link when access is missing |
+| `--json` | — | Emit machine-readable JSON |
 
 ### project discover
 
