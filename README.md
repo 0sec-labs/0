@@ -33,7 +33,7 @@
 
 ## Get started
 
-Give this to your AI agent, or run `0 console --mode standard`:
+Give this to your AI agent, or run the following in your terminal:
 
 > Install 0 with `curl -fsSL https://raw.githubusercontent.com/0sec-labs/0sec/main/install.sh | bash`, then use 0 to test this repository for security issues.
 
