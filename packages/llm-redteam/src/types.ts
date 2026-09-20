@@ -164,4 +164,7 @@ export interface CampaignResult {
   brokenModels: string[];
   /** Per-attempt reports including advisory Jev feedback. */
   attemptReports: AttemptReport[];
+  /** Per-strategy steering weights from the final generation of bandit
+   *  steering. Present when banditSteering was active. */
+  steeringWeights?: Record<string, number>;
 }

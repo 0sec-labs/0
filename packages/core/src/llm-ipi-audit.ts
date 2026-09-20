@@ -75,6 +75,14 @@ export interface LlmIpiAuditOptions {
    * broken/not-broken.
    */
   jevEvaluator?: JevEvaluator;
+  /**
+   * Enable bandit-steered strategy selection using Jev feedback.
+   * When set AND a Jev evaluator is resolved, per-strategy rewards from
+   * advisory feedback bias which strategies generate the next generation's
+   * attempts. Steering never alters broken/not-broken — attempts still run
+   * through the identical judge path.
+   */
+  banditSteering?: boolean;
   /** Optional AbortSignal for cancellation/timeout across all behaviours. */
   signal?: AbortSignal;
   onProgress?: (msg: string) => void;
@@ -98,11 +106,22 @@ export async function runLlmIpiAudit(opts: LlmIpiAuditOptions): Promise<{ findin
   for (const behavior of behaviors) {
     opts.signal?.throwIfAborted();
     opts.onProgress?.(`IPI: behaviour "${behavior.id}" across ${opts.models.length} model(s)`);
+    const hasBandit = !!(opts.banditSteering && evaluator);
     const result = await runIterativeCampaign(behavior, target, {
       maxAttempts: opts.maxAttempts,
       judge,
       jevFeedback: evaluator
         ? (b, r, s) => jevAttemptFeedback(evaluator, b, r, s)
+        : undefined,
+      banditSteering: hasBandit,
+      onSteering: hasBandit
+        ? (weights) => {
+            const lines = Object.entries(weights)
+              .sort(([, a], [, b]) => b - a)
+              .slice(0, 7)
+              .map(([s, w]) => `${s} ${w.toFixed(2)}`);
+            opts.onProgress?.(`IPI bandit steering weights: ${lines.join("; ")}`);
+          }
         : undefined,
       onFeedback: (feedback, model) => opts.onProgress?.(
         `IPI feedback (${model ?? "target"}, advisory): ${feedback.label}${feedback.unavailable ? " — evaluator unavailable" : ""}`),
