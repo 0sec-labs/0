@@ -45,7 +45,9 @@ jobs:
           toolchain: stable
       - name: Install cargo-deny
         if: ${{ hashFiles('**/Cargo.lock') != '' }}
-        run: cargo install cargo-deny --version 0.20.2 --locked
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-deny@0.20.2
       # Lockfiles retain disabled optional backends. Check every resolved
       # workspace feature and platform, without advisory exceptions.
       - name: Audit resolved Rust dependencies
