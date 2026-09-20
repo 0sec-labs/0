@@ -70,7 +70,7 @@ async function setup(value: string | undefined, options: OutputOptions) {
   const savedContext = saved.plan?.context;
   const context = savedContext && typeof savedContext === "object" && !Array.isArray(savedContext) ? savedContext : discovery.context;
   const proposal: Record<string, unknown> = { testCommand: saved.plan?.testCommand ?? discovery.suggestedTestCommand,
-    setupCommand: saved.plan?.setupCommand ?? "", costCeilingUsd: saved.plan?.costCeilingUsd ?? null,
+    setupCommand: saved.plan?.setupCommand ?? "", creditCeiling: saved.plan?.creditCeiling ?? null,
     cadence: saved.plan?.cadence ?? "manual", publicationPolicy: saved.plan?.publicationPolicy ?? "manual", context };
   if (options.json || !process.stdin.isTTY) {
     output({ repositoryId: saved.repository.id, expectedRevision: saved.revision, sourceRevision: discovery.sourceRevision, proposal,
@@ -83,7 +83,7 @@ async function setup(value: string | undefined, options: OutputOptions) {
     const ask = async (label: string, current: unknown) => (await questions.question(`${label}${current === null || current === undefined ? "" : ` [${String(current)}]`}: `)).trim() || current;
     proposal.testCommand = z.string().trim().min(1).max(1000).parse(await ask("Test command", proposal.testCommand));
     proposal.setupCommand = z.string().max(1000).parse(await ask("Setup command", proposal.setupCommand));
-    proposal.costCeilingUsd = z.coerce.number().finite().positive().max(10000).parse(await ask("Execution cost ceiling (USD, not a credit quote)", proposal.costCeilingUsd));
+    proposal.creditCeiling = z.coerce.number().int().positive().max(1_000_000).parse(await ask("Per-run credit limit", proposal.creditCeiling));
     const parsedContext = discoverySchema.shape.context.parse(context);
     proposal.context = { ...parsedContext, summary: String(await ask("Project summary", parsedContext.summary)), instructions: String(await ask("Instructions for Zero", parsedContext.instructions)) };
     proposal.publicationPolicy = z.enum(["off", "manual", "auto"]).parse(await ask("Fix PR policy (off/manual/auto)", proposal.publicationPolicy));
