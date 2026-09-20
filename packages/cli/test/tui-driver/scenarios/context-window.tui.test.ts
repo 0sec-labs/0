@@ -6,16 +6,16 @@ import { updateSetting } from "../../../src/tui/settings-store.js";
 const captured = vi.hoisted(() => ({
   windows: [] as Array<number | null | undefined>,
   execute: undefined as NativeRuntime["executeNative"] | undefined,
-  credentials: "normal" as "normal" | "missing" | "changed",
+  accountScenario: "normal" as "normal" | "missing" | "changed",
 }));
 vi.mock("@0sec/core", async (original) => {
   const actual = await original<typeof import("@0sec/core")>();
   return {
     ...actual,
     loadCloudCredentials: (...args: Parameters<typeof actual.loadCloudCredentials>) => {
-      if (captured.credentials === "missing") throw new actual.CloudAuthMissingError("synthetic logout");
+      if (captured.accountScenario === "missing") throw new actual.CloudAuthMissingError("synthetic logout");
       const credentials = actual.loadCloudCredentials(...args);
-      return captured.credentials === "changed" ? { ...credentials, token: "synthetic-replacement-account" } : credentials;
+      return captured.accountScenario === "changed" ? { ...credentials, token: "synthetic-replacement-account" } : credentials;
     },
   };
 });
@@ -37,7 +37,7 @@ vi.mock("../../../src/console-session.js", async (original) => {
 });
 
 let tui: TuiHandle | undefined;
-afterEach(async () => { await tui?.close(); tui = undefined; vi.restoreAllMocks(); captured.windows.length = 0; captured.execute = undefined; captured.credentials = "normal"; });
+afterEach(async () => { await tui?.close(); tui = undefined; vi.restoreAllMocks(); captured.windows.length = 0; captured.execute = undefined; captured.accountScenario = "normal"; });
 
 test.each([
   [true, "transport"], [false, "transport"], [false, "null"], [false, "missing"], [false, "changed"],
@@ -76,7 +76,7 @@ test.each([
   const priorRequests = models.mock.calls.length;
   models.mockReturnValue(refresh.promise);
   captured.windows.length = 0;
-  if (failure === "missing" || failure === "changed") captured.credentials = failure;
+  if (failure === "missing" || failure === "changed") captured.accountScenario = failure;
   try {
     await tui.sendKeys("synthetic check");
     await tui.sendKey("return");
