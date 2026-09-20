@@ -2359,6 +2359,7 @@ export * from "./bench/index.js";
 // ── Interactive operator console: unified conversational front-end that drives
 // the full tool registry through the real ToolExecutor + LlmApiRuntime. ──
 export {
+  DEFAULT_MAX_TOOL_ITERATIONS,
   createConsoleSession,
   createConsoleRuntime,
   buildConsoleSystemPrompt,

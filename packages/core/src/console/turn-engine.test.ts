@@ -1363,13 +1363,13 @@ describe("Console turn budget — token guard and iteration backstop", () => {
   }
 
   it("stops with max_turn_tokens and reports used vs limit when the budget is overrun", async () => {
-    // One round costs 150 tokens against a 100-token budget.
+    // One round costs 150k tokens against a 100k-token budget.
     const runtime = new ScriptedRuntime(
-      Array.from({ length: 10 }, () => toolCallWithUsage({ inputTokens: 120, outputTokens: 30 })),
+      Array.from({ length: 10 }, () => toolCallWithUsage({ inputTokens: 120_000, outputTokens: 30_000 })),
     );
     const session = createConsoleSession({
       runtime,
-      maxTurnTokens: 100,
+      maxTurnTokens: 100_000,
       maxToolIterations: 50, // high ceiling — the budget must be what trips
     });
 
@@ -1379,30 +1379,29 @@ describe("Console turn budget — token guard and iteration backstop", () => {
     expect(outcome.stopReason).toBe("max_turn_tokens");
     expect(outcome.toolCalls).toHaveLength(1);
     // The outcome carries the numbers the operator needs to decide.
-    expect(outcome.budget.tokensUsed).toBe(150);
-    expect(outcome.budget.tokenBudget).toBe(100);
+    expect(outcome.budget.tokensUsed).toBe(150_000);
+    expect(outcome.budget.tokenBudget).toBe(100_000);
     expect(outcome.budget.iterations).toBe(1);
     expect(outcome.budget.maxToolIterations).toBe(50);
-    expect(outcome.usage).toEqual({ inputTokens: 120, outputTokens: 30 });
+    expect(outcome.usage).toEqual({ inputTokens: 120_000, outputTokens: 30_000 });
     // The notice is honest about spend, not a bare "cap reached".
     expect(notices).toHaveLength(1);
-    expect(notices[0]).toContain("150");
-    expect(notices[0]).toContain("100");
+    expect(notices[0]).toContain("150000");
+    expect(notices[0]).toContain("100000");
   });
 
   it("stops before a model call that would demonstrably overrun the budget", async () => {
-    // Each round costs 400 (300 in / 100 out) against a 1000 budget. After two
-    // rounds 800 is spent; a third call costs at least another 300 input, which
-    // would land at 1100 — so the turn stops at 800 rather than overshooting.
+    // Each round costs 400k against a 1m budget. After two rounds 800k is
+    // spent; another 300k input would overrun the allowance.
     const runtime = new ScriptedRuntime(
-      Array.from({ length: 10 }, () => toolCallWithUsage({ inputTokens: 300, outputTokens: 100 })),
+      Array.from({ length: 10 }, () => toolCallWithUsage({ inputTokens: 300_000, outputTokens: 100_000 })),
     );
-    const session = createConsoleSession({ runtime, maxTurnTokens: 1000, maxToolIterations: 50 });
+    const session = createConsoleSession({ runtime, maxTurnTokens: 1_000_000, maxToolIterations: 50 });
 
     const outcome = await session.send("keep going");
     expect(outcome.stopReason).toBe("max_turn_tokens");
     expect(outcome.budget.iterations).toBe(2);
-    expect(outcome.budget.tokensUsed).toBe(800);
+    expect(outcome.budget.tokensUsed).toBe(800_000);
     expect(outcome.budget.tokensUsed).toBeLessThanOrEqual(outcome.budget.tokenBudget);
   });
 
@@ -1425,16 +1424,15 @@ describe("Console turn budget — token guard and iteration backstop", () => {
     expect(outcome.budget.tokensUsed).toBe(18); // nowhere near the budget
   });
 
-  it("trips the iteration backstop when rounds cost nothing measurable", async () => {
-    // A runtime that reports no usage at all cannot move the token budget, so
-    // the backstop is the ONLY thing that can end this turn. This is exactly
-    // the pathological case the iteration ceiling is retained for.
+  it("estimates missing usage and still applies the independent iteration backstop", async () => {
+    // Missing usage is estimated for an explicit finite budget. With ample
+    // allowance, the independent round ceiling still ends this turn.
     const runtime = new ScriptedRuntime(Array.from({ length: 20 }, () => toolCallWithUsage()));
     const session = createConsoleSession({ runtime, maxTurnTokens: 5_000_000, maxToolIterations: 4 });
 
     const outcome = await session.send("go");
     expect(outcome.stopReason).toBe("max_tool_iterations");
-    expect(outcome.budget.tokensUsed).toBe(0);
+    expect(outcome.budget.tokensUsed).toBeGreaterThan(0); // Missing usage is estimated for finite budgets.
     expect(outcome.budget.iterations).toBe(4);
   });
 
@@ -1454,16 +1452,16 @@ describe("Console turn budget — token guard and iteration backstop", () => {
 
   it("honours an explicit maxTurnTokens independently of the iteration ceiling", async () => {
     const runtime = new ScriptedRuntime(
-      Array.from({ length: 30 }, () => toolCallWithUsage({ inputTokens: 100, outputTokens: 0 })),
+      Array.from({ length: 30 }, () => toolCallWithUsage({ inputTokens: 100_000, outputTokens: 0 })),
     );
-    // Budget allows 5 rounds (5*100 = 500, and a 6th would need 100 more);
-    // the ceiling is far away.
-    const session = createConsoleSession({ runtime, maxTurnTokens: 500, maxToolIterations: 1000 });
+    // Budget allows five 100k rounds with room for pending input and output;
+    // the independent iteration ceiling is far away.
+    const session = createConsoleSession({ runtime, maxTurnTokens: 510_000, maxToolIterations: 1000 });
 
     const outcome = await session.send("go");
     expect(outcome.stopReason).toBe("max_turn_tokens");
     expect(outcome.toolCalls).toHaveLength(5);
-    expect(outcome.budget.tokensUsed).toBe(500);
+    expect(outcome.budget.tokensUsed).toBe(500_000);
   });
 
   it("completes normally with end_turn when well inside both guards", async () => {
@@ -1485,11 +1483,10 @@ describe("Console turn budget — token guard and iteration backstop", () => {
     expect(outcome.budget.iterations).toBe(1);
   });
 
-  it("uses generous defaults: the observed 780k / 30-round audit does not trip either guard", async () => {
-    // Replay the shape of the real session that motivated this change: 30 tool
-    // rounds totalling ~780k tokens. With the defaults it must run to a natural
-    // end_turn instead of being dead-ended.
-    const perRound = { inputTokens: 26_000, outputTokens: 0 }; // 30 * 26k = 780k
+  it("keeps the default unlimited beyond 2m cumulative tokens in one turn", async () => {
+    // Thirty rounds cross the old 2m cumulative cap while each prompt fits
+    // independently. The unlimited default must reach a natural end.
+    const perRound = { inputTokens: 100_000, outputTokens: 0 }; // 30 * 100k = 3m
     const runtime = new ScriptedRuntime([
       ...Array.from({ length: 30 }, () => toolCallWithUsage(perRound)),
       endTurn("Audit complete."),
@@ -1499,7 +1496,7 @@ describe("Console turn budget — token guard and iteration backstop", () => {
     const outcome = await session.send("audit this repo");
     expect(outcome.stopReason).toBe("end_turn");
     expect(outcome.toolCalls).toHaveLength(30);
-    expect(outcome.budget.tokensUsed).toBe(780_000);
+    expect(outcome.budget.tokensUsed).toBe(3_000_000);
   });
 
   it("fires onUsage per model call, not only at turn end, with running totals against the budget", async () => {
@@ -1572,10 +1569,10 @@ describe("Console turn budget — token guard and iteration backstop", () => {
     // from the SAME conversation: the model sees the prior tool results, no
     // tool is dispatched again, and nothing auto-continued in between.
     const runtime = new ScriptedRuntime([
-      toolCallWithUsage({ inputTokens: 400, outputTokens: 0 }), // turn 1: spends the budget
+      toolCallWithUsage({ inputTokens: 40_000, outputTokens: 360_000 }), // turn 1: spends the budget
       { ...endTurn("Continuing: here is the summary."), usage: { inputTokens: 50, outputTokens: 10 } }, // turn 2
     ]);
-    const session = createConsoleSession({ runtime, maxTurnTokens: 300, maxToolIterations: 50 });
+    const session = createConsoleSession({ runtime, maxTurnTokens: 300_000, maxToolIterations: 50 });
 
     const first = await session.send("audit this repo");
     expect(first.stopReason).toBe("max_turn_tokens");
@@ -3372,8 +3369,8 @@ describe("createConsoleSession — context compaction", () => {
     expect(events).toHaveLength(1);
     const ev = events[0]!;
     expect(ev.degraded).toBe(false);
-    expect(ev.tokensBefore).toBe(90_000);
-    expect(ev.tokensAfter).toBeUndefined();
+    expect(ev.tokensBefore).toBeGreaterThanOrEqual(90_000);
+    expect(ev.tokensAfter).toBeLessThan(ev.tokensBefore);
     expect(ev.contextWindowTokens).toBe(100_000);
     expect(ev.compactionNumber).toBe(1);
     expect(ev.summaryText.length).toBeGreaterThan(0);
@@ -3406,7 +3403,7 @@ describe("createConsoleSession — context compaction", () => {
     expect(hasSummaryMarker(session.messages)).toBe(false);
   });
 
-  it("never compacts on the first turn (occupancy still zero)", async () => {
+  it("does not compact small initial history before any usage sample", async () => {
     const runtime = new CompactionRuntime(90_000);
     const session = createConsoleSession(baseConfig(runtime));
     await session.ready;
@@ -3441,7 +3438,7 @@ describe("createConsoleSession — context compaction", () => {
     expect(hasSummaryMarker(session.messages)).toBe(false);
   });
 
-  it("leaves history unchanged and reports degraded=true when the summarizer throws", async () => {
+  it("leaves history unchanged and stops on a generic summarizer failure", async () => {
     const runtime = new CompactionRuntime(90_000, { summarizerThrows: true });
     const session = createConsoleSession(baseConfig(runtime));
     await session.ready;
@@ -3450,14 +3447,11 @@ describe("createConsoleSession — context compaction", () => {
 
     await session.send("first operator line", cbs);
     // Snapshot the anchor set that must survive an un-applied (degraded) attempt.
-    await session.send("second operator line", cbs);
-
-    expect(events).toHaveLength(1);
-    const ev = events[0]!;
-    expect(ev.degraded).toBe(true);
-    // The compaction was NOT applied: counts equal, no summary marker inserted,
-    // and the original anchor is still present.
-    expect(ev.messagesAfter).toBe(ev.messagesBefore);
+    const outcome = await session.send("second operator line", cbs);
+    expect(outcome.stopReason).toBe("error");
+    expect(outcome.error).toContain("summarizer unavailable");
+    expect(runtime.plannerCalls).toBe(1);
+    expect(events).toHaveLength(0);
     expect(hasSummaryMarker(session.messages)).toBe(false);
     expect(session.messages.some((m) => m.content.some((b) => b.type === "text" && b.text.includes("FIRST-ANCHOR")))).toBe(true);
   });

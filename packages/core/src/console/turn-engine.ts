@@ -4,12 +4,8 @@ import { homedir } from "node:os";
 import { basename, dirname, isAbsolute, resolve, sep } from "node:path";
 
 import { LlmApiRuntime } from "../runtime/llm-api.js";
-import {
-  compactMessagesWithLLM,
-  dropOldestMessages,
-  isContextWindowError,
-  resolveCompactionThresholds,
-} from "../agent/native-loop.js";
+import { resolveCompactionThresholds } from "../agent/native-loop.js";
+import { contextOverflow, estimatePromptTokens, maintainContext, outputHeadroom } from "./context-maintenance.js";
 import { diag } from "../diagnostics/channel.js";
 import { DEFAULT_AUTONOMY_MODE, DEFAULT_ALLOW_MODEL_SELF_EXTENSION, homeStateDir, type HarnessSnapshot } from "@0sec/shared";
 import type {
@@ -106,12 +102,11 @@ import { registerSignalCleanup } from "../agent/signal-cleanup.js";
  * renderer — do not reshape it.
  */
 export interface ConsoleCompactionEvent {
-  /** Planner input tokens that tripped the trigger (the pre-compaction occupancy). */
+  /** Estimated current prompt occupancy, anchored to usage when available. */
   tokensBefore: number;
   /**
-   * Post-compaction planner input tokens. Left `undefined` at emit time — the
-   * rewrite has not been sent to the model yet, so the true post size is only
-   * known on the next planner sample, which Stream B patches in.
+   * Local post-compaction prompt estimate. A later planner usage sample can
+   * replace it with measured occupancy. Undefined when history was not reduced.
    */
   tokensAfter?: number;
   /** The model's context window in tokens, when known. */
@@ -481,9 +476,9 @@ export interface ConsoleSessionConfig {
    * meaningful unit is tokens, not rounds.
    *
    * The turn stops when the accumulated usage has reached the budget, or when
-   * the next model call would push it past — the last call's input tokens are a
-   * conservative lower bound on the next call's, since the conversation only
-   * grows. Independent of {@link maxToolIterations}: either guard can trip
+   * the next request's estimated input and output allowance would push it past.
+   * Summarization spend is included; missing usage is estimated for finite budgets.
+   * Independent of {@link maxToolIterations}: either guard can trip
    * first, and each is separately configurable.
    */
   maxTurnTokens?: number;
@@ -653,9 +648,9 @@ export interface ConsoleSessionConfig {
   /**
    * Console-loop context compaction. Off unless `enabled` is true. When on and
    * {@link contextWindowTokens} is known, the loop rewrites its middle history
-   * into a summary at a turn boundary once planner input occupancy crosses
-   * `thresholdFraction` of the context window (default 0.80). Mirrors the
-   * autonomous scan loop's compaction, reusing the same machinery.
+   * into a summary at paired request boundaries once estimated prompt occupancy
+   * crosses `thresholdFraction` of the context window (default 0.80), reserving
+   * output headroom. Includes initial/resumed input and pending tool results.
    */
   compaction?: { enabled: boolean; thresholdFraction: number };
 }
@@ -699,8 +694,9 @@ export interface ConsoleSession {
      * The new model's context window in prompt tokens. When provided, the
      * console-loop compaction trigger is re-based on it, so a `/model` switch
      * to a smaller- or larger-window model compacts at the right point.
+     * Pass null to clear it. A model/provider change without a window also clears it.
      */
-    contextWindowTokens?: number;
+    contextWindowTokens?: number | null;
   }): void;
   /**
    * Clear all conversation messages while preserving session identity, target,
@@ -739,17 +735,9 @@ export interface ConsoleSession {
 /**
  * Runaway backstop for tool-call rounds in one turn.
  *
- * Raised from the original 20 because 20 was doing the job of a COST guard and
- * doing it badly: a real repo audit was cut off mid-investigation at 20 rounds
- * even though the model was making genuine progress. With
- * {@link DEFAULT_MAX_TURN_TOKENS} now holding the cost line, this number only
- * has to stop a loop that is somehow free — one where the runtime reports no
- * usage, or every tool fails instantly — so it is set well above any plausible
- * legitimate investigation depth (the observed real audit ran 30 rounds) while
- * still terminating a pathological loop in bounded time. In any realistic turn
- * the token budget trips long before this does.
+ * Independent of the optional cumulative token budget. Shared with CLI launchers.
  */
-const DEFAULT_MAX_TOOL_ITERATIONS = 100;
+export const DEFAULT_MAX_TOOL_ITERATIONS = 100;
 
 /**
  * Default per-turn token budget (input + output across every model call).
@@ -2104,15 +2092,13 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
   const hasTurnTokenCap = Number.isFinite(maxTurnTokens);
 
   // ── Console-loop context compaction state (persists ACROSS turns) ──
-  // Mirrors the autonomous scan loop's compaction bookkeeping. `contextWindowTokens`
-  // is mutable so a `/model` switch can re-base the trigger. `lastPlannerInputTokens`
-  // is the prompt occupancy the most recent planner call reported — the signal the
-  // trigger measures against; it starts at 0 so the very first turn never compacts.
-  let contextWindowTokens = config.contextWindowTokens;
+  let contextWindowTokens = config.contextWindowTokens && Number.isFinite(config.contextWindowTokens) && config.contextWindowTokens > 0
+    ? config.contextWindowTokens : undefined;
   const compactionEnabled = config.compaction?.enabled ?? false;
   const compactionThresholdFraction = config.compaction?.thresholdFraction ?? 0.80;
   let lastPlannerInputTokens = 0;
-  let tokensAtLastCompaction = 0;
+  let tokensAtLastCompaction: number | undefined;
+  let plannerEstimateAtUsage: number | undefined;
   let compactionCount = 0;
 
   // Seed conversation history from checkpoint or caller-supplied initialMessages.
@@ -2929,9 +2915,11 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
         // Collection must never break the authorized tool path.
       }
     };
-    // Bounded context-window overflow recoveries within this turn (scan-loop
-    // parity). Only used if the provider rejects a request for its window.
+    // Bounded context-window overflow recoveries within this turn. Only used
+    // if the planner's provider rejects a request for its window.
     let contextOverflowRecoveries = 0;
+    let maintenanceError: unknown;
+    let maintenanceCancelled = false;
     try {
     await ready;
     if (callbacks?.onHarnessUpdate) unsubscribeHarness = harness?.subscribe(callbacks.onHarnessUpdate);
@@ -2952,7 +2940,8 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
       // Collection must never block a console turn.
     }
 
-    messages.push({ role: "user", content: [{ type: "text", text: userText }] });
+    const operatorMessage: NativeMessage = { role: "user", content: [{ type: "text", text: userText }] };
+    messages.push(operatorMessage);
 
     // Derive/emit the session objective from the first message (no-op on later
     // turns once seeded). Synchronous + cheap for the heuristic; the optional
@@ -3092,111 +3081,91 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
       }, { ...toolContext.pluginExecutionContext?.(), signal: effectiveSignal });
     };
 
-    // ── Console-loop context compaction (turn boundary) ──
-    // Reuse the scan loop's machinery (compactMessagesWithLLM). This is a clean
-    // boundary: the user line is on history and no model call has run this turn.
-    // Fire when planner occupancy has crossed the configured fraction of the
-    // context window AND enough new context has accrued since the last
-    // compaction. A failure here must NEVER break the turn: on any throw we keep
-    // `messages` unchanged and continue with a degraded notice. Stands down when
-    // the runtime compacts server-side, exactly as the scan loop does.
-    if (
-      compactionEnabled
-      && contextWindowTokens
-      && !runtimeUsesServerSideCompaction(config.runtime)
-    ) {
-      const envThresholds = resolveCompactionThresholds(process.env);
-      const envThresholdSet = process.env["0SEC_COMPACTION_THRESHOLD"] !== undefined;
-      const envRegrowSet = process.env["0SEC_COMPACTION_REGROW"] !== undefined;
-      // Fraction-of-window trigger, with the scan loop's absolute env threshold
-      // honoured as a floor for parity: an operator who sets
-      // 0SEC_COMPACTION_THRESHOLD gets it as a lower bound here too.
-      const triggerThreshold = envThresholdSet
-        ? Math.max(contextWindowTokens * compactionThresholdFraction, envThresholds.threshold)
-        : contextWindowTokens * compactionThresholdFraction;
-      // Regrow gate: ~15% of the window, or the env-tuned value when set.
-      const regrow = envRegrowSet
-        ? envThresholds.regrow
-        : Math.max(Math.round(contextWindowTokens * 0.15), 1);
-
-      if (
-        lastPlannerInputTokens >= triggerThreshold
-        && lastPlannerInputTokens - tokensAtLastCompaction > regrow
-        && messages.length > 12
-      ) {
-        const messagesBefore = messages.length;
-        const tokensBefore = lastPlannerInputTokens;
-        const preCompactionMessages = structuredClone(messages);
-        let summaryUsage: { inputTokens: number; outputTokens: number } | undefined;
-        try {
-          const compacted = await compactMessagesWithLLM(messages, config.runtime, systemPrompt, {
-            summarizerInstruction: CONSOLE_SUMMARIZER_INSTRUCTION,
-            onSummaryUsage: (u) => { summaryUsage = u; },
-          });
-          // Only a REAL LLM summary is applied. A degraded result (the summarizer
-          // threw or returned too little, so compactMessagesWithLLM fell back to
-          // regex extraction) is NOT applied: for an interactive console a regex
-          // dump is low-value and risks losing conversational nuance, and the
-          // context-overflow recovery below is the hard safety net if the model
-          // later rejects the request. History is left UNCHANGED in that case.
-          if (!compacted.degraded) {
-            // Rewrite history IN PLACE so the persistent `messages` reference the
-            // session exposes (and every closure over it) stays valid. Copy first
-            // to avoid any aliasing with the returned array.
-            const rebuilt = [...compacted.messages];
-            messages.length = 0;
-            messages.push(...rebuilt);
-          }
-          // Advance the regrow baseline either way, so a persistently failing
-          // summarizer is not re-invoked on every subsequent turn.
-          tokensAtLastCompaction = lastPlannerInputTokens;
-          compactionCount++;
-          // First real use of the reserved "compaction" usage kind: attribute
-          // the summarizer call's tokens to the turn (0 when it failed).
-          recordModelUsage("compaction", summaryUsage);
-          const event: ConsoleCompactionEvent = {
-            tokensBefore,
-            // Left undefined at emit: the rewrite has not hit the model yet, so
-            // the true post size is only known on the next planner sample, which
-            // Stream B patches in.
-            tokensAfter: undefined,
-            contextWindowTokens,
-            messagesBefore,
-            messagesAfter: messages.length,
-            summaryText: compacted.summaryText,
-            preCompactionMessages,
-            compactionNumber: compactionCount,
-            degraded: compacted.degraded,
-          };
-          callbacks?.onCompaction?.(event);
-          if (compacted.degraded) {
-            callbacks?.onNotice?.(
-              "Context compaction produced a degraded summary (LLM summarizer unavailable); continuing.",
-            );
-          }
-          // Mirror native-loop.ts's context_compacted event for telemetry parity.
-          config.db?.logEvent({
-            scanId,
-            stage: "console",
-            eventType: "context_compacted",
-            agentRole: role,
-            payload: {
-              tokensBefore,
-              messagesBefore,
-              messagesAfter: messages.length,
-              compactionNumber: compactionCount,
-              degraded: compacted.degraded,
-            },
-            timestamp: Date.now(),
-          });
-        } catch (error) {
-          // A failed compaction leaves history UNCHANGED and the turn proceeds.
-          callbacks?.onNotice?.(
-            `Context compaction failed; continuing without it (${describeCaughtError(error)}).`,
-          );
+    const promptEstimate = () => estimatePromptTokens(systemPrompt, messages, nativeTools);
+    const occupancy = () => {
+      const estimate = promptEstimate();
+      return plannerEstimateAtUsage === undefined ? estimate
+        : Math.max(estimate, lastPlannerInputTokens + estimate - plannerEstimateAtUsage);
+    };
+    const budgetExhausted = () => {
+      const used = usage.inputTokens + usage.outputTokens;
+      return hasTurnTokenCap && (used >= maxTurnTokens || used + occupancy() + outputHeadroom(config.runtime.outputTokenLimit) > maxTurnTokens);
+    };
+    const maintenance = async (recovery: boolean): Promise<boolean> => {
+      if (signal?.aborted || runtimeUsesServerSideCompaction(config.runtime)) return false;
+      const tokensBefore = occupancy();
+      if (!recovery) {
+        if (!compactionEnabled || !contextWindowTokens) return false;
+        const thresholds = resolveCompactionThresholds(process.env);
+        const regrow = process.env["0SEC_COMPACTION_REGROW"] !== undefined
+          ? thresholds.regrow : Math.max(Math.round(contextWindowTokens * 0.15), 1);
+        const requested = process.env["0SEC_COMPACTION_THRESHOLD"] !== undefined
+          ? Math.max(contextWindowTokens * compactionThresholdFraction, thresholds.threshold)
+          : contextWindowTokens * compactionThresholdFraction;
+        const trigger = Math.min(requested, contextWindowTokens - outputHeadroom(config.runtime.outputTokenLimit));
+        if (tokensBefore < trigger || (tokensAtLastCompaction !== undefined && tokensBefore - tokensAtLastCompaction < Math.max(regrow, 1))) return false;
+      }
+      const preCompactionMessages = structuredClone(messages);
+      // Try progressively narrower complete tails, even when a wider tail
+      // offers no reduction. Overflow retries are additionally bounded per turn.
+      const attempts = [10, 4, 0];
+      for (const tail of attempts) {
+        if (recovery && contextOverflowRecoveries >= 3) break;
+        if (recovery) contextOverflowRecoveries++;
+        const compacted = await maintainContext({
+          messages, latestUserMessage: operatorMessage, runtime: config.runtime, instruction: CONSOLE_SUMMARIZER_INSTRUCTION,
+          preserveTail: tail,
+          toolOutputLimit: recovery ? [16_000, 4_000, 1_000][contextOverflowRecoveries - 1]
+            : Math.max(1000, Math.floor((contextWindowTokens ?? 100_000) * 0.3)),
+          allowLossy: recovery, window: contextWindowTokens,
+          remainingTokens: maxTurnTokens - usage.inputTokens - usage.outputTokens,
+          signal, onUsage: (delta) => recordModelUsage("compaction", delta),
+        });
+        if (signal?.aborted || compacted.cancelled) { maintenanceCancelled = true; return false; }
+        if (compacted.error) { maintenanceError = compacted.error; return false; }
+        if (compacted.budgetBlocked) break;
+        const changed = compacted.messages !== messages;
+        if (changed) {
+          messages.splice(0, messages.length, ...compacted.messages);
+          // The new history has no provider measurement yet. Re-arm from its
+          // actual reduced estimate, never the pre-compaction occupancy.
+          plannerEstimateAtUsage = undefined;
+          lastPlannerInputTokens = 0;
+          lastCallInputTokens = 0;
+          tokensAtLastCompaction = promptEstimate();
+        }
+        compactionCount++;
+        const event: ConsoleCompactionEvent = {
+          tokensBefore, tokensAfter: changed ? promptEstimate() : undefined,
+          contextWindowTokens,
+          messagesBefore: preCompactionMessages.length, messagesAfter: messages.length,
+          summaryText: compacted.summaryText, preCompactionMessages,
+          compactionNumber: compactionCount, degraded: compacted.degraded,
+        };
+        callbacks?.onCompaction?.(event);
+        config.db?.logEvent({ scanId, stage: "console", eventType: "context_compacted", agentRole: role,
+          payload: { tokensBefore, messagesBefore: event.messagesBefore, messagesAfter: event.messagesAfter,
+            compactionNumber: compactionCount, degraded: compacted.degraded }, timestamp: Date.now() });
+        if (changed) {
+          callbacks?.onNotice?.(recovery ? "Context overflow recovered; continuing with reduced history." : "Context compacted; continuing.");
+          return true;
         }
       }
-    }
+      // Cool down unsuccessful attempts until meaningful growth, without
+      // treating their pre-compaction occupancy as a successful baseline.
+      tokensAtLastCompaction = tokensBefore;
+      callbacks?.onNotice?.("Context maintenance could not reduce this history; preserving user instructions.");
+      return false;
+    };
+    const boundaryStop = (): ConsoleTurnOutcome | undefined => {
+      const stopReason = signal?.aborted || maintenanceCancelled ? "cancelled"
+        : maintenanceError ? "error" : budgetExhausted() ? "max_turn_tokens" : undefined;
+      if (!stopReason) return undefined;
+      if (stopReason === "max_turn_tokens") callbacks?.onNotice?.(`Token budget for this turn is spent — used ${usage.inputTokens + usage.outputTokens} of ${maxTurnTokens} tokens; the next request would exceed the allowance.`);
+      return { assistantText, toolCalls: runCalls, usage, budget: budgetSnapshot(), stopReason,
+        error: maintenanceError ? describeCaughtError(maintenanceError) : undefined,
+        contextInputTokens: lastPlannerInputTokens || undefined };
+    };
 
     // Turn cycle: plan → run tools → feed results back → repeat until the model
     // stops requesting tools (end_turn), the turn's token budget is spent, or
@@ -3221,10 +3190,8 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
       // harmless; on later iterations it is what stops the loop AFTER a round
       // has been fully closed out (every tool_use matched by a tool_result and
       // the tool_result message pushed), so history is well-formed and the next
-      // send() resumes from it. We cannot abort an executeNative call that is
-      // already in flight — the runtime takes no AbortSignal (see the honest
-      // note where executeNative is called), so the signal is honoured here,
-      // before the request is issued, not during it.
+      // send() resumes from it. The signal also reaches planner and summary
+      // requests; late responses are discarded before history is rewritten.
       if (signal?.aborted) {
         callbacks?.onNotice?.(
           `Turn cancelled by operator after ${iterations} tool round(s) — used ${usage.inputTokens + usage.outputTokens}${hasTurnTokenCap ? ` of ${maxTurnTokens}` : ""} tokens. Conversation is intact; send another message to continue.`,
@@ -3241,14 +3208,19 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
       const messaging = config.agentMessaging as MessagingRuntime | undefined;
       if (messaging?.projectPath && messaging.selfId) {
         const batch = renderInboundBatch(drainInbox(messaging.projectPath, messaging.selfId, messaging.homeDir));
-        const last = messages[messages.length - 1];
         for (const message of batch.rendered) {
-          if (last?.role === "user") last.content.push({ type: "text", text: message.text });
-          else messages.push({ role: "user", content: [{ type: "text", text: message.text }] });
+          // Keep pending output separate from the immutable operator instruction
+          // so maintenance can summarize it without losing that instruction.
+          messages.push({ role: "user", content: [{ type: "text", text: message.text }] });
         }
       }
+      await maintenance(false);
+      const boundaryOutcome = boundaryStop();
+      if (boundaryOutcome) return boundaryOutcome;
       streamedUsage = undefined;
+      const requestEstimate = promptEstimate();
       let result: NativeRuntimeResult;
+      let recoverableOverflow: boolean | undefined;
       let driven = false;
       driverResult = undefined;
       try {
@@ -3267,34 +3239,31 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
           try {
             result = await runtime.executeNative(systemPrompt, messages, nativeTools, streamCallbacks, signal);
           } catch (error) {
-            if (streamedUsage) recordModelUsage("planner", streamedUsage);
+            if (streamedUsage) {
+              recordModelUsage("planner", streamedUsage);
+              plannerEstimateAtUsage = requestEstimate;
+            }
             throw error;
           }
-          recordModelUsage("planner", result.usage ?? streamedUsage);
+          const plannerUsage = result.usage ?? streamedUsage;
+          recordModelUsage("planner", plannerUsage ?? (hasTurnTokenCap && result.stopReason !== "error"
+            ? { inputTokens: requestEstimate, outputTokens: estimatePromptTokens("", [{ role: "assistant", content: result.content }]) } : undefined));
+          plannerEstimateAtUsage = plannerUsage ? requestEstimate : undefined;
         }
       } catch (error) {
-        // Capture the FULL stack to the diagnostics channel by default (no env
-        // flag) so a runtime failure is learnable even though the outcome's
-        // `error` string below is deliberately bounded. Not emitted for an
-        // operator cancel (that is not a failure). Local-only; the channel
-        // never crosses a network wire.
-        if (!signal?.aborted) {
-          diag.error(
-            "turn_runtime_error",
-            `${describeCaughtError(error)}`,
-            error instanceof Error
-              ? { name: error.name, stack: error.stack ?? "" }
-              : { value: String(error) },
-          );
-        }
-        return {
-          assistantText, toolCalls: runCalls, usage,
-          contextInputTokens: lastPlannerInputTokens > 0 ? lastPlannerInputTokens : undefined,
-          budget: budgetSnapshot(),
-          stopReason: signal?.aborted ? "cancelled" : "error",
-          error: signal?.aborted ? "turn cancelled by operator" : describeCaughtError(error),
-        };
+        if (!signal?.aborted) diag.error("turn_runtime_error", describeCaughtError(error),
+          error instanceof Error ? { name: error.name, stack: error.stack ?? "" } : { value: String(error) });
+        // Normalize thrown failures through the same bounded recovery path.
+        result = { content: [], stopReason: "error", durationMs: 0,
+          error: describeCaughtError(error), cancelled: signal?.aborted };
+        // Structured SDK errors can carry their context code outside message.
+        // A harness driver may already have performed SDK tool effects before
+        // throwing. Never replay that driver as an overflow recovery.
+        recoverableOverflow = !directDriver && contextOverflow(error);
+        if (recoverableOverflow) result.error = `context_length_exceeded: ${result.error}`;
       } finally { directDriver = false; }
+
+      if (signal?.aborted) return { assistantText, toolCalls: runCalls, usage, budget: budgetSnapshot(), stopReason: "cancelled" };
 
       if (result.stopReason === "error") {
         // The runtime reports an operator abort structurally via `cancelled`
@@ -3309,30 +3278,11 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
             stopReason: "cancelled",
           };
         }
-        // Context-window overflow recovery (scan-loop parity): if the provider
-        // rejected the request for its window, prune the oldest messages and
-        // retry the round rather than failing the turn. Bounded to 2 attempts;
-        // narrows the preserved tail each time. Only a real context-window
-        // error qualifies — other runtime errors still fail fast.
-        if (
-          result.error
-          && isContextWindowError(result.error)
-          && contextOverflowRecoveries < 2
-        ) {
-          const beforeCount = messages.length;
-          const preserveTailCount = Math.max(2, 10 - contextOverflowRecoveries * 4);
-          const pruned = dropOldestMessages(messages, preserveTailCount);
-          if (pruned.length < beforeCount) {
-            contextOverflowRecoveries++;
-            messages.length = 0;
-            messages.push(...pruned);
-            tokensAtLastCompaction = lastPlannerInputTokens;
-            callbacks?.onNotice?.(
-              `Context overflow: pruned ${beforeCount - pruned.length} old messages `
-              + `(recovery ${contextOverflowRecoveries}/2); retrying.`,
-            );
-            continue;
-          }
+        if (!driven && (recoverableOverflow ?? contextOverflow(result.error)) && contextOverflowRecoveries < 3) {
+          const recovered = await maintenance(true);
+          const stopped = boundaryStop();
+          if (stopped) return stopped;
+          if (recovered) continue;
         }
         return {
           assistantText,
@@ -3471,9 +3421,9 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
       // PRIMARY GUARD: token budget. Checked before the iteration backstop
       // because it is the guard that reflects real cost; the outcome carries
       // the iteration count too, so nothing is hidden when both are at their
-      // limits. Stops either when the budget is already spent, or when one more
-      // model call would demonstrably overrun it.
-      if (tokensUsed >= maxTurnTokens || tokensUsed + lastCallInputTokens > maxTurnTokens) {
+      // limits. Stop here when already spent; the next request's estimate is
+      // checked at the top of the loop, after maintenance can reduce it.
+      if (tokensUsed >= maxTurnTokens) {
         callbacks?.onNotice?.(
           `Token budget for this turn is spent — used ${tokensUsed} of ${maxTurnTokens} tokens over ${iterations} tool round(s). Pausing for operator input; send another message to continue from here.`,
         );
@@ -3609,13 +3559,18 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
       // Re-base the compaction trigger on the new model's window when provided.
       // Reset the regrow baseline so the fresh window governs the next trigger
       // cleanly rather than inheriting the prior model's accrual.
-      if (newWindow !== undefined) {
-        contextWindowTokens = newWindow;
-        tokensAtLastCompaction = 0;
+      if ("contextWindowTokens" in sel || sel.model !== undefined || sel.provider !== undefined) {
+        contextWindowTokens = newWindow && Number.isFinite(newWindow) && newWindow > 0 ? newWindow : undefined;
+        tokensAtLastCompaction = undefined;
+        plannerEstimateAtUsage = undefined;
+        lastPlannerInputTokens = 0;
       }
     },
     clearConversation: () => {
       messages.length = 0;
+      tokensAtLastCompaction = undefined;
+      plannerEstimateAtUsage = undefined;
+      lastPlannerInputTokens = 0;
       contribution?.record("truncation", { reason: "operator_clear_conversation", retainedMessages: 0 }, contributionAgentId, contributionParentId);
     },
     send,

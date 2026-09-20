@@ -1,19 +1,5 @@
-/**
- * Guided onboarding — the step machine and its two load-bearing invariants.
- *
- * These assertions exercise the machine and its persistence contract WITHOUT
- * rendering the dialog (there is no OpenTUI test renderer in this suite): the
- * step order and transitions are pure exports, and completion/cancel are
- * verified through the real settings store pointed at a temp home, exactly the
- * way `settings-store.test.ts` drives it. The single completion writer
- * (`finalizeOnboarding`) and every preference write go through the same
- * `updateSetting` the live component calls, so what passes here is what the
- * component's handlers do.
- *
- * NOTE ON DISCOVERY: `vitest.config.ts` restricts `include` to
- * `src/**\/*.test.ts`, so this `.test.tsx` file is not auto-collected by a
- * plain `vitest run`. Widen the include to `src/**\/*.test.{ts,tsx}` (or run
- * this file by path) to execute it. It is authored per the task's file list.
+/** Pure ordering and persistence contracts. Rendered navigation coverage lives
+ * in test/tui-driver/scenarios/onboarding-navigation.tui.test.ts.
  */
 
 import { mkdtempSync, rmSync } from "node:fs";
@@ -36,6 +22,7 @@ import {
   finalizeOnboarding,
   recordAnalyticsConsent,
   stepAfter,
+  stepBefore,
   type OnboardingStep,
 } from "./onboarding-screen.js";
 
@@ -93,6 +80,15 @@ describe("guided step machine", () => {
     expect(stepAfter("preferences")).toBe("analytics");
     expect(stepAfter("analytics")).toBe("done");
     expect(stepAfter("done")).toBeUndefined();
+  });
+
+  it("can revisit every previous decision", () => {
+    expect(stepBefore("welcome")).toBeUndefined();
+    expect(stepBefore("connect")).toBe("welcome");
+    expect(stepBefore("models")).toBe("connect");
+    expect(stepBefore("preferences")).toBe("models");
+    expect(stepBefore("analytics")).toBe("preferences");
+    expect(stepBefore("done")).toBe("analytics");
   });
 
   it("never mounts the full Settings catalogue — preferences are two safe Display cosmetics", () => {

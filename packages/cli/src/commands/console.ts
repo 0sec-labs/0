@@ -8,6 +8,7 @@ import {
   loadScope,
   parseMcpConfig,
   connectMcpServers,
+  DEFAULT_MAX_TOOL_ITERATIONS,
 } from "@0sec/core";
 import type {
   ConsoleAutonomyMode,
@@ -145,13 +146,13 @@ export function registerConsoleCommand(program: Command): void {
     .option("--mode <mode>", "Autonomy mode to start in: standard|recon|copilot|yolo (default yolo). YOLO drops per-action prompts but stays target/scope-anchored; cycle live with Shift+Tab.")
     .option("--yolo", "Shortcut for --mode yolo — start the console in YOLO autonomy (no per-action prompts; still target-anchored and SSRF-railed).")
     .option("--autonomy <mode>", "Alias of --mode (standard|copilot|yolo|recon); --mode/--yolo take precedence.")
-    .option("--max-tool-calls <n>", "Safety cap on tool-call rounds per operator message", "20")
+    .option("--max-tool-calls <n>", "Safety cap on tool-call rounds per operator message", String(DEFAULT_MAX_TOOL_ITERATIONS))
     .option("--allow-scanners", "Expose generic-scanner tool wrappers (sqlmap/nikto/…); default off")
     .option("--resume [id]", "Reopen a saved console session by id (or unique prefix); with no id, opens a session picker. Also reachable as `0 -r [id]`.")
     .option("--continue", "Reopen the most recent console session, no picker. Also reachable as `0 -c`.")
     .option("-p, --print [prompt]", "Non-interactive: run ONE prompt through the engine, print the result, and exit (no TUI). Reads the prompt from the argument or piped stdin. Combine with --continue/--resume to query a saved session. Also reachable as `0 -p <prompt>`.")
     .action(async (opts: ConsoleOptions) => {
-      let maxToolIterations = 20;
+      let maxToolIterations = DEFAULT_MAX_TOOL_ITERATIONS;
       if (opts.maxToolCalls !== undefined) {
         const parsed = Number(opts.maxToolCalls);
         if (!Number.isFinite(parsed) || parsed <= 0) {

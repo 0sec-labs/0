@@ -211,6 +211,8 @@ export interface ModelScreenProps {
   onSelect: (id: string) => void;
   /** Leave the screen — Esc, once any filter has been cleared. */
   onBack: () => void;
+  /** Wizard-only: skip this decision with Ctrl+N when unfiltered. */
+  onSkip?: () => void;
   /** Leave the console entirely — ctrl+c. */
   onExit: () => void;
   /**
@@ -261,6 +263,7 @@ export function ModelScreen({
   onSingleModelChange,
   onSelect,
   onBack,
+  onSkip,
   onExit,
   env,
 }: ModelScreenProps) {
@@ -640,6 +643,7 @@ export function ModelScreen({
     }
 
     if (key.ctrl && key.name === "u") return setQuery("");
+    if (key.ctrl && key.name === "n" && onSkip && !filterRef.current) return onSkip();
     // Role targeting, single-model policy and inheritance exist only while
     // their callbacks do; without them these keys are not bound at all.
     if (rolesLive && key.ctrl && (key.name === "left" || key.name === "right")) {
@@ -804,7 +808,9 @@ export function ModelScreen({
   // is used only on the BYOK path. The hosted path without a role layer is
   // neither, and is listed explicitly rather than borrowing a line that
   // advertises a key it does not implement.
-  const hint = rolesLive && singleModelLive
+  const hint = onSkip && !filter
+    ? "[esc] back · [⌃N] skip · [⏎] select · [↑↓] move · type to filter · [⌃C] quit"
+    : rolesLive && singleModelLive
     ? modelDialogHint({ scope, role, hasFilter: filter.length > 0, canReload: loadHosted })
     : isByok
       ? modelFooterHint(mode, filter.length > 0)

@@ -91,7 +91,7 @@ Guide: [Read the workflow](/console/).
 | `--mode <mode>` | — | Autonomy mode: standard, recon, copilot, yolo. YOLO accepts absolute public-network targets without a launch target; explicit restrictions and exclusions still apply. |
 | `--yolo` | — | Shortcut for --mode yolo. Omits per-action approval prompts; explicit restrictions and exclusions still apply. |
 | `--autonomy <mode>` | — | Alias of --mode (standard\|copilot\|yolo\|recon); --mode/--yolo take precedence. |
-| `--max-tool-calls <n>` | `20` | Safety cap on tool-call rounds per operator message |
+| `--max-tool-calls <n>` | `100` | Safety cap on tool-call rounds per operator message |
 | `--allow-scanners` | — | Expose generic-scanner tool wrappers (sqlmap/nikto/…); default off |
 | `--resume [id]` | — | Reopen a saved console session by id (or unique prefix); with no id, opens a session picker. Also reachable as `0 -r [id]`. |
 | `--continue` | — | Reopen the most recent console session, no picker. Also reachable as `0 -c`. |

@@ -126,6 +126,8 @@ export interface ConnectScreenProps {
   frame: (input: ConnectFrameInput) => React.ReactNode;
   /** Leave the screen — Esc once any filter is cleared. */
   onBack: () => void;
+  /** Wizard-only: skip this decision with Ctrl+N when browsing. */
+  onSkip?: () => void;
   /** Leave the console entirely — ctrl+c. */
   onExit: () => void;
   /** Provider/authentication failure that opened this screen, if any. */
@@ -298,7 +300,7 @@ function hostedRecoveryHint(phase: HostedDeviceAuthUpdate["phase"]): string {
   }
 }
 
-export function ConnectScreen({ frame, onBack, onExit, recovery, onConnected, env, homeDir }: ConnectScreenProps) {
+export function ConnectScreen({ frame, onBack, onSkip, onExit, recovery, onConnected, env, homeDir }: ConnectScreenProps) {
   const theme = useTheme();
   const symbols = useSymbols();
   const { width, height } = useSurfaceDimensions();
@@ -590,7 +592,7 @@ export function ConnectScreen({ frame, onBack, onExit, recovery, onConnected, en
     hostedSessionRef.current?.cancel();
     hostedSessionRef.current = undefined;
     applyHosted(undefined);
-    onBack();
+    // Cancel only the login attempt. A second Escape can leave the provider list.
   };
 
   const commitInput = () => {
@@ -661,6 +663,12 @@ export function ConnectScreen({ frame, onBack, onExit, recovery, onConnected, en
       if (chunk) applyInputValue((current) => current + chunk);
       return;
     }
+
+    if (key.ctrl && key.name === "n" && onSkip && !filteringRef.current && !filterRef.current) {
+      onSkip();
+      return;
+    }
+    if (key.ctrl || key.meta || key.option) return;
 
     // ── movement (browse and filter) ──
     if (key.name === "up") return move(-1);
@@ -907,7 +915,9 @@ export function ConnectScreen({ frame, onBack, onExit, recovery, onConnected, en
         ? oauth.phase === "failed" ? theme.ERROR : oauth.phase === "connected" ? theme.SUCCESS : theme.ACCENT
         : recovery ? theme.ERROR : inInput ? theme.ACCENT : isCloudRow && cloudState.warning ? theme.WARNING : theme.MUTED;
 
-  const hint = connectFooterHint(mode, filter.length > 0);
+  const hint = onSkip && mode === "browse" && !filter
+    ? "[esc] back · [⌃N] skip · [⏎] connect · [↑↓] move · [/] filter · [⌃C] quit"
+    : connectFooterHint(mode, filter.length > 0);
   const counts = connectConnectedCounts(rows, hostedVerification);
   const titleText = `${operatorIcon(SCREEN_KEY, symbols)} ${operatorTitle(SCREEN_KEY)}`;
   const titleMeta = counts.total === 0 ? "" : `${counts.connected}/${counts.total} connected`;
