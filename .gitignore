@@ -20,3 +20,7 @@ pnpm-publish-summary.json
 services/
 # Local build artifacts
 *.tgz
+# Local secrets
+.env
+.env.*
+!.env.example
