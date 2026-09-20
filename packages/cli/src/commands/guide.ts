@@ -43,12 +43,12 @@ interface GuideServiceStates {
 const CAPABILITIES: Capability[] = [
   {
     id: "project-setup",
-    summary: "Read and edit a codebase's context, operating plan and revisions through the same API as the dashboard.",
-    when: "An agent needs to propose configuration for review, save an approved revision, or explicitly request its execution.",
-    command: "0sec project setup https://github.com/org/repo --json",
+    summary: "Enroll a repository, then read and edit its context, operating plan and revisions through the same API as the dashboard.",
+    when: "An agent needs to connect a GitHub repository, propose configuration for review, save an approved revision, or explicitly request its execution.",
+    command: "0sec project enroll https://github.com/org/repo --json",
     layer: "service",
     requiresAuth: true,
-    limitations: "Requires a matching deployed project-setup API and an already-enrolled codebase. JSON setup does not save or start a scan. Starting requires an approved revision, an idempotency key and server-authorized credit funding. Observations are suggestions, not automatically accepted instructions.",
+    limitations: "Enrollment checks the connected GitHub App and adds the repository to the current workspace; it does not save configuration or start a scan. After enrollment, use project setup --json. Starting requires an approved revision, an idempotency key and server-authorized credit funding. Observations are suggestions, not automatically accepted instructions.",
   },
   {
     id: "audit-skills",

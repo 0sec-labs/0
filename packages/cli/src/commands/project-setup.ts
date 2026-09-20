@@ -13,17 +13,29 @@ const recordSchema = z.object({ repository: z.object({ id: z.string().uuid(), fu
   revision, plan: z.record(z.unknown()).nullable(), canEdit: z.boolean() }).passthrough();
 const discoverySchema = z.object({ sourceRevision: commit, context: z.object({ summary: z.string(), instructions: z.string(), observations: z.array(z.unknown()) }),
   suggestedTestCommand: z.string().nullable(), unavailablePaths: z.array(z.string()) }).passthrough();
+const enrollmentSchema = z.object({ repo_accessible: z.boolean(), repository_id: z.string().uuid().nullable() }).passthrough();
 type OutputOptions = { json?: boolean };
 
 function client() { const credentials = loadCloudCredentials(); return new CloudClient({ host: credentials.host, token: credentials.token }); }
 function output(value: unknown, options: OutputOptions) { process.stdout.write(JSON.stringify(value, null, options.json ? undefined : 2) + "\n"); }
+function repositoryInput(value?: string): string {
+  return !value || value === "." ? execFileSync("git", ["remote", "get-url", "origin"], { encoding: "utf8", timeout: 5000, stdio: ["ignore", "pipe", "pipe"] }).trim() : value;
+}
+function repositoryUrl(value?: string): string {
+  const raw = repositoryInput(value);
+  const normalized = raw.replace(/^git@github\.com:/, "https://github.com/").replace(/^ssh:\/\/git@github\.com\//, "https://github.com/");
+  if (z.string().uuid().safeParse(raw).success) throw new Error("Enrollment requires a GitHub repository URL, not a project UUID.");
+  const url = new URL(normalized);
+  if (url.protocol !== "https:" || url.hostname !== "github.com" || url.username || url.password || url.port || url.search || url.hash || !/^\/[\w.-]+\/[\w.-]+\/?$/.test(url.pathname)) throw new Error("Use a GitHub repository URL.");
+  return url.toString().replace(/\/$/, "");
+}
 function target(value?: string): string {
-  const raw = !value || value === "." ? execFileSync("git", ["remote", "get-url", "origin"], { encoding: "utf8", timeout: 5000, stdio: ["ignore", "pipe", "pipe"] }).trim() : value;
+  const raw = repositoryInput(value);
   if (z.string().uuid().safeParse(raw).success) return `repository_id=${encodeURIComponent(raw)}`;
   const normalized = raw.replace(/^git@github\.com:/, "https://github.com/").replace(/^ssh:\/\/git@github\.com\//, "https://github.com/");
   const url = new URL(normalized);
-  if (url.protocol !== "https:" || url.hostname !== "github.com" || url.username || url.password || url.port || url.search || url.hash || !/^\/[\w.-]+\/[\w.-]+\/?$/.test(url.pathname)) throw new Error("Use an enrolled project UUID or a GitHub repository URL.");
-  return `target=${encodeURIComponent(url.toString())}`;
+  if (url.protocol !== "https:" || url.hostname !== "github.com" || url.username || url.password || url.port || url.search || url.hash || !/^\/[\w.-]+\/[\w.-]+\/?$/.test(url.pathname)) throw new Error("Use a project UUID or GitHub repository URL.");
+  return `target=${encodeURIComponent(url.toString().replace(/\/$/, ""))}`;
 }
 async function project(api: CloudClient, value?: string) { return recordSchema.parse(await api.getJson<unknown>(`${endpoint}?${target(value)}`)); }
 async function planFile(path: string): Promise<unknown> {
@@ -33,8 +45,17 @@ async function planFile(path: string): Promise<unknown> {
 function run(action: () => Promise<void>, options: OutputOptions): Promise<void> {
   return action().catch(error => { const message = error instanceof Error ? error.message : "Project operation failed.";
     if (options.json) output({ error: message }, options); else process.stderr.write(message + "\n");
+
     process.exitCode = 1;
   });
+}
+async function enroll(value: string | undefined, options: OutputOptions) {
+  const api = client();
+  const repo = repositoryUrl(value);
+  const status = enrollmentSchema.parse(await api.getJson<unknown>(`/api/enrollment/status?target=${encodeURIComponent(repo)}`));
+  if (!status.repo_accessible) throw new Error("0security cannot access this repository through the connected GitHub App. Install or update the App, then retry.");
+  if (!status.repository_id) throw new Error("The repository is accessible but is not in the synced GitHub inventory yet. Refresh Integrations, then retry.");
+  output(await api.postJson<unknown>(endpoint, { action: "enroll", repositoryId: status.repository_id }), options);
 }
 
 async function setup(value: string | undefined, options: OutputOptions) {
@@ -80,6 +101,8 @@ export function registerProjectSetupCommand(program: Command): void {
     .action((value: string | undefined, options: OutputOptions) => run(async () => output(await project(client(), value), options), options));
   root.command("setup [project]").description("Review source-backed context, approve configuration, then optionally start a scan. JSON mode is read-only.").option("--json", "Return an editable proposal without saving or starting")
     .action((value: string | undefined, options: OutputOptions) => run(() => setup(value, options), options));
+  root.command("enroll [repository]").description("Enroll a GitHub repository so Zero can configure and scan it. Does not start a scan.").option("--json", "Emit machine-readable JSON")
+    .action((value: string | undefined, options: OutputOptions) => run(() => enroll(value, options), options));
   root.command("discover [project]").description("Read repository metadata at a pinned commit; never executes repository code.").option("--json", "Emit machine-readable JSON")
     .action((value: string | undefined, options: OutputOptions) => run(async () => { const api = client(); const saved = await project(api, value); output(await api.postJson<unknown>(endpoint, { action: "discover", repositoryId: saved.repository.id }), options); }, options));
   root.command("save <project>").description("Save an edited operating-plan JSON file. Does not start a scan.").requiredOption("--file <path>", "Operating-plan JSON file")
