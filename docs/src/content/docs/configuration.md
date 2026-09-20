@@ -494,14 +494,16 @@ updates** in global settings only for a trusted source checkout. Project setting
 cannot grant it. Loading that code runs with the console process's host
 permissions, including credential access.
 
-Start a new development console from the built checkout:
+Build the checkout and start a development console explicitly:
 
 ```bash
-./scripts/0dev.sh console
+./scripts/0dev.sh --build console
 ```
 
-The `0dev` launcher targets `https://dev.cloud.0.security` and sets
-`0SEC_DEV_SOURCE_ROOT` to its checkout. Cloud login, reads and logout use
+Without `--build`, `0dev` uses the installed packaged `0sec` release, so Cloud
+reads remain available while workspace packages are unfinished. `--build`
+rebuilds Core/CLI and sets `0SEC_DEV_SOURCE_ROOT` to the checkout.
+Both modes target `https://dev.cloud.0.security`. Cloud login, reads and logout use
 `~/.0sec/dev/cloud.env`; production `~/.0sec/cloud.env` and private CLI
 `~/.0cloud/credentials.json` are not changed. Inherited Cloud tokens are ignored.
 HOME, BYOK credentials and other console settings remain unchanged.
