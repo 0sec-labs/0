@@ -1,23 +1,24 @@
 <p align="center">
-  <a href="https://0.security/harness/">
-    <img src="https://raw.githubusercontent.com/0sec-labs/0sec/main/assets/readme-cover.png" alt="0, your multi-model, open-source cybersecurity team. An ivory paper sculpture with an orange edge." width="100%">
+  <a href="https://0.security/">
+    <img src="assets/readme-cover.png" alt="Software already builds software. Now it can secure itself, too. Zero looks over a mountain landscape." width="100%">
   </a>
 </p>
 
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/0sec-labs/0sec/main/assets/0sec-aperture-white.svg">
-    <img src="https://raw.githubusercontent.com/0sec-labs/0sec/main/assets/0sec-aperture-ink.svg" alt="0.security" width="320">
+    <source media="(prefers-color-scheme: dark)" srcset="assets/0sec-aperture-white.svg">
+    <img src="assets/0sec-aperture-ink.svg" alt="0security" width="320">
   </picture>
 </p>
 
 <p align="center">
-  <strong>Your multi-model, open-source cybersecurity team.</strong><br/>
-  Install 0, connect your models, hack &amp; fix your systems. <a href="#research-preview">Research Preview</a>.
+  <strong>We make software secure software.</strong><br/>
+  Your self-improving, open-source cybersecurity team.
 </p>
 
 <p align="center">
-  <sub>The Swiss Applied AI &amp; Cybersecurity Research Lab · <a href="https://0.security">0.security</a></sub>
+  <a href="https://0.security/"><strong>0.security</strong></a><br/>
+  <sub>The Swiss Applied AI &amp; Cybersecurity Research Lab</sub>
 </p>
 
 <p align="center">
@@ -32,8 +33,27 @@
   <a href="#research-preview"><img src="https://img.shields.io/badge/status-research%20preview-FD802E?style=flat-square&amp;labelColor=1A1815" alt="Status: research preview"></a>
 </p>
 
+## How it works
+
 <p align="center">
-  <img src="https://raw.githubusercontent.com/0sec-labs/0sec/main/assets/demo-intro.gif" alt="0 interactive CLI demonstration" width="840">
+  <img src="assets/security-cycle-diagram.webp" alt="Illustrative five-step workflow: Zero studies the codebase, finds problems, proposes fixes, reports results and improves the next run." width="100%">
+</p>
+
+An illustrated workflow, not an unattended outcome guarantee:
+
+1. **Study.** Read the repository and its conventions. Check retained notes against the current source.
+2. **Find.** Investigate code and authorized targets. Reproduce findings with the checks supported by each workflow.
+3. **Fix.** Propose scoped source fixes and test candidates against an explicit regression command.
+4. **Tell.** Review the findings, evidence and proposed changes.
+5. **Improve.** Retain revision-aware codebase notes for later research. Tool and harness improvement workflows remain a research preview.
+
+The local CLI runs on demand. Managed recurring work needs separate service
+access and configuration. Slack and GitLab delivery are planned.
+
+<p align="center">
+  <a href="https://0.security/research/">
+    <img src="assets/proof-action-scenes.webp" alt="Illustrations of Zero striking a phone, smashing a laptop at his gray desk, and bracing against physical server hardware." width="100%">
+  </a>
 </p>
 
 ## Get started
@@ -49,7 +69,7 @@ export PATH="$HOME/.0sec/bin:$PATH"
 Add the `export` line to your shell profile. In the console, use `/connect` to
 configure a supported model connection and `/model` to select a model. The
 example selects Standard mode explicitly; plain `0` defaults to YOLO.
-Approval behavior depends on the launcher and mode—see the
+Approval behavior depends on the launcher and mode; see the
 [console guide](https://docs.0.security/console/). No mode grants testing
 authorization or provides OS isolation. Only assess systems you own or have
 permission to test.
