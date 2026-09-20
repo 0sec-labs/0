@@ -33,6 +33,7 @@ export { registerSpecdriftCommand } from "./specdrift.js";
 export { registerProtocolCheckCommand } from "./protocol-check.js";
 export { registerCveCommand } from "./cve.js";
 export { registerUpgradeCommand } from "./upgrade.js";
+export { registerDepsCommand } from "./deps.js";
 export { registerH1Command } from "./h1.js";
 export { registerAuthCommand } from "./auth.js";
 export { registerHostedCommand } from "./hosted.js";
