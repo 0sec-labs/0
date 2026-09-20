@@ -31,6 +31,7 @@ import {
   BUDGET_WARNING_SOFT,
   BUDGET_WARNING_HARD,
 } from "./native-loop.js";
+import { estimateCost } from "./cost.js";
 
 export interface AgentLoopOptions {
   config: AgentConfig;
@@ -204,6 +205,11 @@ export async function runAgentLoop(opts: AgentLoopOptions): Promise<AgentState> 
   let lastToolName: string | null = null;
   let lastHeartbeatAt = 0;
 
+  // Running token usage for cost-ceiling termination (#S1, mirrors
+  // native-loop.ts). RuntimeResult.usage carries no cached-token field, so
+  // cached stays 0; estimateCost tolerates that.
+  const totalUsage = { inputTokens: 0, outputTokens: 0, cachedInputTokens: 0 };
+
   // Two-stage budget warnings (Strix-inspired, 0sec#408). Same
   // closure-state pattern as native-loop.ts so unit tests share the
   // computeBudgetWarningTurns helper.
@@ -217,6 +223,17 @@ export async function runAgentLoop(opts: AgentLoopOptions): Promise<AgentState> 
 
   try {
   while (!state.done && state.turnCount < config.maxTurns) {
+    // Budget-bound termination (#S1): before spending another turn, stop if the
+    // running cost estimate has reached the ceiling. `maxTurns` (the while
+    // guard) stays the runaway backstop. Mirrors native-loop.ts:1042.
+    if (
+      config.costCeilingUsd &&
+      estimateCost(totalUsage, config.costModel) >= config.costCeilingUsd
+    ) {
+      state.costCeilingExceeded = true;
+      state.summary = `Agent reached cost ceiling ($${config.costCeilingUsd}) after ${state.turnCount} turns.`;
+      break;
+    }
     state.turnCount++;
 
     if (heartbeatEnabled) {
@@ -280,6 +297,13 @@ export async function runAgentLoop(opts: AgentLoopOptions): Promise<AgentState> 
         persistSession(db, state, config, sessionId, "paused");
       }
       break;
+    }
+
+    // Accumulate this turn's token usage for the cost-ceiling gate at the top
+    // of the next iteration (#S1). RuntimeResult.usage has no cached field.
+    if (result.usage) {
+      totalUsage.inputTokens += result.usage.inputTokens;
+      totalUsage.outputTokens += result.usage.outputTokens;
     }
 
     const assistantContent = result.output;
@@ -456,7 +480,7 @@ export async function runAgentLoop(opts: AgentLoopOptions): Promise<AgentState> 
   state.attackResults = toolCtx.attackResults;
   state.targetInfo = toolCtx.targetInfo;
 
-  if (!state.done) {
+  if (!state.done && !state.costCeilingExceeded) {
     state.summary = `Agent reached max turns (${config.maxTurns}) without completing.`;
   }
 

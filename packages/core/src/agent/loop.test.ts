@@ -465,3 +465,66 @@ describe("runAgentLoop — finding persistence callback", () => {
     expect(delivered).toEqual([]);
   });
 });
+describe("runAgentLoop budget-bound termination (#S1)", () => {
+  // Runtime that never emits a flag (so the loop would otherwise run to
+  // maxTurns) and reports heavy fixed token usage each turn.
+  function heavyUsageRuntime(): Runtime {
+    return {
+      type: "api",
+      async execute(): Promise<RuntimeResult> {
+        return {
+          output: "thinking, no flag yet",
+          exitCode: 0,
+          timedOut: false,
+          durationMs: 1,
+          usage: { inputTokens: 1_000_000, outputTokens: 1_000_000 },
+        };
+      },
+      async isAvailable() {
+        return true;
+      },
+    };
+  }
+
+  it("stops on the cost ceiling before max turns and sets the cost summary", async () => {
+    const state = await runAgentLoop({
+      config: {
+        role: "audit",
+        systemPrompt: "test",
+        tools: [],
+        maxTurns: 50,
+        target: "http://example.test",
+        scanId: "scan-cost-ceiling-1",
+        costCeilingUsd: 5,
+      },
+      runtime: heavyUsageRuntime(),
+      db: null,
+    });
+
+    expect(state.costCeilingExceeded).toBe(true);
+    expect(state.done).toBe(false);
+    expect(state.summary).toContain("cost ceiling");
+    // Tripped the budget bound, not the runaway backstop.
+    expect(state.turnCount).toBeGreaterThan(0);
+    expect(state.turnCount).toBeLessThan(50);
+  });
+
+  it("falls back to the max-turns cap when no cost ceiling is set", async () => {
+    const state = await runAgentLoop({
+      config: {
+        role: "audit",
+        systemPrompt: "test",
+        tools: [],
+        maxTurns: 3,
+        target: "http://example.test",
+        scanId: "scan-cost-ceiling-2",
+      },
+      runtime: heavyUsageRuntime(),
+      db: null,
+    });
+
+    expect(state.costCeilingExceeded).toBeFalsy();
+    expect(state.turnCount).toBe(3);
+    expect(state.summary).toContain("max turns");
+  });
+});
