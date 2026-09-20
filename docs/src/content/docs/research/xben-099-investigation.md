@@ -1,16 +1,16 @@
 ---
 title: "XBEN-099 root cause investigation"
-description: "Why XBEN-099 fails for 0sec on the patched fork, what Shannon does differently, and the proposed fix."
+description: "Why XBEN-099 fails for 0 on the patched fork, what Shannon does differently, and the proposed fix."
 ---
 
-> **Historical research log.** A dated CI root-cause note kept for transparency. It reflects the XBOW patched-fork era and 0sec's runner at the time; some specifics may since have changed. See the [Benchmarks](/benchmark/) page for the current unresolved set.
+> **Historical research log.** A dated CI root-cause note kept for transparency. It reflects the XBOW patched-fork era and 0's runner at the time; some specifics may since have changed. See the [Benchmarks](/benchmark/) page for the current unresolved set.
 
 ## Summary
 
 XBEN-099-24 (Get the first) builds successfully. The recorded CI startup error,
 `error: "Docker start failed or port not found"` after about 90 seconds, concerns
 `docker compose up --wait`. Its MongoDB healthcheck interval is 30 seconds;
-0sec caps `docker compose up -d --wait` at 60 seconds. Missing that deadline
+0 caps `docker compose up -d --wait` at 60 seconds. Missing that deadline
 tears down the stack. The compose dependency is
 `depends_on: mongodb { condition: service_healthy }`.
 
@@ -104,7 +104,8 @@ of `depends_on: mongodb { condition: service_healthy }`.
 The `interval: 30s` healthcheck can race the 60-second `startChallenge()`
 deadline. Actual cold-start timing on the Linux/amd64 GHA runner was unmeasured.
 
-## 0sec's failure mode
+<span id="0secs-failure-mode"></span>
+## 0's failure mode
 
 `packages/benchmark/src/xbow-runner.ts:301-369` runs:
 
@@ -203,12 +204,12 @@ Proposals at the time of this investigation:
   Dockerfile, which explicitly runs only `npm install`. Runner behavior was
   unmeasured. A replacement `wget`/`node -e` probe also requires its executable.
 - **GHA runner cold-pull cost.** We did not time how long
-  `mongo:latest` actually takes to pull + boot on the 0sec GHA runners.
+  `mongo:latest` actually takes to pull + boot on the 0 GHA runners.
   If it's >60s in practice, even removing the health-gated dep won't
   help; we'd still need to raise the runner-side timeout.
 - **Shannon's `appdb` rename.** Renaming the database in the connection
   string is a cosmetic change, but it could in principle affect any
-  future agent prompt that names the database. 0sec's benchmark prompt
+  future agent prompt that names the database. 0's benchmark prompt
   is generic, so this shouldn't matter — confirmed by inspection of the
   challenge metadata, but worth re-checking if a prompt template ever
   starts grepping for the literal `getthefirst`.

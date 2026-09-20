@@ -43,6 +43,7 @@ import { enumerateAttackSurfaces, formatAttackSurfaceForPrompt } from "./kernel/
 import { researchPrompt, researchPromptSingleFile, blindVerifyPrompt } from "./agent/prompts.js";
 import { isDisclosureWorthy, evidenceKindForFinding } from "./triage/verify-verdict.js";
 import type { VerifyVerdict } from "./triage/verify-verdict.js";
+import { createScanMemoryStore } from "./triage/memories.js";
 import { runNpmDynamicDiscovery } from "./stages/npm-dynamic-discovery.js";
 import { createSandboxPackageRunner } from "./stages/npm-detectors/sandbox-probe.js";
 import type { NpmPackageRunner } from "./stages/npm-detectors/sandbox-probe.js";
@@ -2288,6 +2289,7 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineReport
         logPipelineEvent("verify", "stage_skipped", { reason: "cost_ceiling" });
       } else {
       try {
+        const memoryStore = db ? createScanMemoryStore(db) : undefined;
         const verifyResults = await mapWithConcurrency(
           findings,
           verifyConcurrency(),
@@ -2298,12 +2300,18 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineReport
             const poc = finding.evidence.response || finding.evidence.analysis || "";
             const claimedSeverity = finding.severity;
 
-            const verifySystemPrompt = blindVerifyPrompt(
+            let verifySystemPrompt = blindVerifyPrompt(
               filePath,
               poc,
               claimedSeverity,
               prepared.scopePath,
             );
+            if (memoryStore) {
+              try {
+                const memories = await memoryStore.getRelevantMemories(finding, opts.target);
+                verifySystemPrompt += "\n\n" + await memoryStore.formatForPrompt(memories);
+              } catch { /* Current evidence verification remains independent of historical context. */ }
+            }
 
             // #416 Bug C: the inner verifyEmit previously re-fired
             // `verify:result` on every `finding` event from the verify
@@ -2337,7 +2345,7 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineReport
                 emit: verifyEmit,
                 cliPrompt: `Verify this vulnerability in ${filePath}:\n\nPoC:\n${poc}\n\nClaimed severity: ${claimedSeverity}\n\nRead the file, trace data flow, confirm or reject.`,
                 agentSystemPrompt: verifySystemPrompt,
-                cliSystemPrompt: "You are a blind verification agent. Read the file, trace the PoC, confirm or reject the vulnerability.",
+                cliSystemPrompt: verifySystemPrompt,
               });
               // Attribute this verify agent's tokens/turns to the verify phase.
               // Safe under the concurrent findings.map: these are return-value

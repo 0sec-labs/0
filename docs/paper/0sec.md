@@ -2,6 +2,16 @@
 
 **Draft - work in progress.** Not yet submitted.
 
+> **Provenance/status:** this is an unsubmitted historical draft built around
+> April–May 2026 snapshots, not current product guidance. Its measured numbers
+> are preserved. The current consolidator unions successes per model across
+> retained runs and modes; it does not establish the draft's “single-shot” or
+> black-box-only cohort labels. Retry-enabled Cybench also is not one attempt.
+> “Productionized”, “field-leading”, and universal layer descriptions below
+> remain draft claims requiring evidence, not qualification of the current
+> research-preview runtime. Use the current benchmark/methodology docs before
+> citing this draft. No submission or new measurement is implied.
+
 ---
 
 ## Abstract
@@ -12,7 +22,9 @@ Autonomous pentesting agents are usually communicated through single benchmark p
 
 The key result is methodological: for non-deterministic autonomous security agents, protocol disclosure and retained-evidence lineage are not reporting accessories; they are part of the core technical contribution.
 
-Code and artifacts: proprietary, 0sec Labs. The GitHub repo is archived and private.
+Current source/license pointer: <https://github.com/0sec-labs/0sec>, dual-licensed
+MIT OR Apache-2.0 (see root `LICENSE` and `LICENSE-MIT`). This does not imply
+that private research artifacts or expired CI receipts are publicly recoverable.
 
 ---
 
@@ -193,10 +205,15 @@ Representative commands:
 ```bash
 pnpm lint
 pnpm test
-pnpm --filter @0sec/benchmark xbow --help
+0 bench run --help
 pnpm --filter @0sec/benchmark xbow --repeat 10 --json
 pnpm run consolidate-xbow
 ```
+
+The specialized `xbow` script has no help-only `--help` parser; inspect its source
+or package README before invoking it. Execution commands above can build targets,
+call models, and incur costs. Consolidation recovers available historical
+artifacts; it does not run new benchmark attempts or repair expired receipts.
 
 Primary artifacts and code:
 

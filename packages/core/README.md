@@ -4,7 +4,7 @@
 
 # @0sec/core
 
-The engine behind the [0sec CLI](../../README.md): agent loops, tools,
+The engine behind the [0 CLI](../../README.md): agent loops, tools,
 model runtimes, source review, verification and self-extension. The CLI package
 is named `0sec-cli`; it registers the `0` and `0sec` commands.
 
@@ -51,19 +51,28 @@ Feature flags are declared in `src/agent/features.ts`. Each flag maps to a
 also accepts a `--features` flag that sets those env vars automatically:
 
 ```bash
-pnpm 0sec scan --target https://example.com --features wp_fingerprint
-pnpm 0sec scan --target https://example.com --features wp_fingerprint,web_search
+0 scan --target https://app.example.test --scope ./scope.json --features web_search
+env 0SEC_FEATURE_POV_GATE=0 \
+  0 scan --target https://app.example.test --scope ./scope.json --features fp-moat
 ```
 
-Any token passed to `--features` is upcased, non-alphanumeric chars are
-replaced with `_`, and the result is set as `0SEC_FEATURE_<TOKEN>=1`. For
-most flags the value is captured at module-import time — setting env vars in
-your shell is the most reliable approach. Flags that are declared as getters
-(e.g. `wpFingerprint`) re-read the env at access time and therefore honour
-`--features` even though the flag is applied inside the command action.
+Use the exact environment-variable suffix from `src/agent/features.ts`, not a
+guessed camelCase property name. The current feature properties are getters:
+they re-read the environment when accessed. Explicit `0` or `false` disables a
+flag; an unset flag uses its declared default (or a recognized preset).
+Enabling a flag does not bypass tool availability, scope, engagement policy or
+workflow-specific prerequisites.
 
 Named presets (e.g. `fp-moat`) are defined in `src/agent/feature-presets.ts`.
 Applying a preset never overwrites a flag already set in the environment.
+
+Jev advisory evaluation uses a **separate** opt-in configuration:
+`0SEC_JEV_FEATURES=browser,memory,dedupe,redteam`, with a selected provider and
+credential. Browser assistance only navigates operator-approved read-only URLs;
+memory ranking supplies untrusted review context; duplicate assessment adds
+cluster mappings without erasing evidence; red-team feedback never decides a
+break. See the [feature guide](https://docs.0.security/features/#advisory-evaluations)
+for data egress, request/cost limits and which callers wire these capabilities.
 
 ## Playbooks
 
@@ -71,24 +80,27 @@ Playbooks live in `src/agent/playbooks.ts`. Each playbook is a string keyed by
 vulnerability type (`sqli`, `ssti`, `idor`, `xss`, `cve_exploitation`, …) plus
 a set of regex `INDICATORS` that pattern-match against recent tool-result text.
 When `0SEC_FEATURE_DYNAMIC_PLAYBOOKS=1`, the native agent loop matches
-indicators at ~30% of the turn budget and injects the top 3 matching playbooks
-as a user message.
+indicators from about 30% of the turn budget onward and injects matching
+playbooks. It tracks injected content and can re-inject after compaction;
+this is not a mandatory one-shot phase of every loop.
 
 <details>
 <summary>Tool-specific developer reference</summary>
 
 ## WordPress fingerprinter (`wp_fingerprint`)
 
-Opt-in tool exposed behind the `wp_fingerprint` feature flag. Implemented in
-`src/agent/wp-fingerprint.ts`.
+The `wp_fingerprint` tool is enabled by default where the workflow exposes it.
+Disable with `0SEC_FEATURE_WP_FINGERPRINT=0`. Implemented in
+`src/agent/wp-fingerprint.ts`; availability is not permission to probe a target.
 
 ### What it does
 
 1. **Detects WordPress** by fetching `wp-login.php`, `wp-admin/`, `readme.html`,
    `wp-includes/version.php`, `feed/`, and `wp-json/`. Extracts the core
-   version from `wp-includes/version.php` (authoritative), `readme.html`, or
-   the RSS feed's `<generator>` tag.
-2. **Enumerates plugins** from four independent sources in parallel:
+   version from exposed `wp-includes/version.php` source, `readme.html`, or
+   the RSS feed's `<generator>` tag. An ordinary PHP response need not expose
+   the version; missing markers remain unknown.
+2. **Enumerates plugins** from parallel sources:
    - Rendered HTML on `/`, `/?p=1`, `/?page_id=1` (any `/wp-content/plugins/<slug>/…` URL in asset tags)
    - `/wp-json/` namespace index and `/wp-json/wp/v2/posts` rendered content
    - `/wp-content/plugins/` Apache/nginx autoindex listings
@@ -98,22 +110,28 @@ Opt-in tool exposed behind the `wp_fingerprint` feature flag. Implemented in
 4. **Enumerates themes** the same way.
 5. **Probes versions** by fetching each plugin's `readme.txt` (parsing the
    `Stable tag:` header) and each theme's `style.css` (parsing the `Version:`
-   header). Both are WordPress conventions and ship with nearly every
-   plugin/theme on wordpress.org.
+   header). These metadata hints can be absent or stale and are not proof of
+   the deployed vulnerable code path.
 6. **Matches CVEs** using a built-in high-impact WordPress plugin vulnerability
    catalog, queries the no-key WPVulnerability API for current plugin/theme
    advisories, optionally queries WPScan's API when `WPSCAN_API_TOKEN` (or
    `0SEC_WPSCAN_API_TOKEN`) is set, then optionally POSTs each `(slug, version)`
    pair to `https://api.osv.dev/v1/query` for broader OSV coverage.
-7. **Returns structured findings** — a list of `(kind, slug, version, cves, exploit_hints)`
-   tuples plus a human-readable summary the agent can act on.
+7. **Returns structured findings** — entries with `kind`, `slug`, `version`,
+   `cves` and `exploitHints`, plus a human-readable summary in the tool wrapper.
+
+Advisory matches are investigation leads, not independently reproduced exploits.
+The target fetch path and advisory-service fetch path are separate; inspect
+egress policy before enabling live advisory lookups.
+`skip_osv` skips OSV only; WPVulnerability and an enabled WPScan lookup can
+still make external requests.
 
 ### CLI usage
 
 ```bash
-pnpm 0sec scan \
-  --target https://wordpress-target.example.com \
-  --features wp_fingerprint
+0 scan \
+  --target https://wordpress-target.example.test \
+  --scope ./scope.json
 ```
 
 ### Tool invocation (from the agent)
@@ -194,7 +212,7 @@ sometimes plant decoy flags in obvious locations to catch script kiddies."*
 ### Configuration
 
 - Env var: `0SEC_FEATURE_DECOY_DETECTION=0` to disable.
-- CLI flag: `0sec scan --no-decoy-detection <target>`.
+- CLI flag: `0 scan --no-decoy-detection <target>`.
 
 ### Tests
 
@@ -227,13 +245,26 @@ Provider metadata does not establish credentials or account access.
 
 ## Verification
 
-`src/verify/` contains kernel replay, patch validation, reproduction bundles and
-reproducer minimization. Each workflow has its own tooling and execution
-prerequisites. A reported finding can remain unverified when those prerequisites
-are unavailable.
+`src/verify/` contains deterministic replay runners (local, Docker and QEMU),
+kernel replay, patch validation, reproduction bundles and minimization. Each
+workflow has its own prerequisites. Local shell replay is host execution, not an
+OS sandbox.
 
-See the [verification guide](https://docs.0.security/blind-verification/) for
-prerequisites and limits.
+Use the canonical `VerificationResultSchema` from `@0sec/shared` for ordinary
+replay JSON: `reproduced`, `not_reproduced`, `skipped`, or `error`, with declared
+assertions and hashed artifact descriptors. Kernel and bundle outputs have
+separate contracts. A source finding, model consensus or a saved candidate is
+not automatically runtime proof.
+
+The agentic scanner's native verifier gives each candidate a five-turn session
+with the original evidence and analysis excerpts. The structured four-step
+verifier is a tool-free assessment used for opt-in consensus; it does not execute
+a PoC. `stages/runtime-verify.ts` remains an E2B skeleton behind an injectable
+hunt gate, not a provisioned runtime verifier.
+
+See [blind verification](https://docs.0.security/blind-verification/) and
+[replay results](https://docs.0.security/verification-result/) for contracts and
+limits.
 
 ## Plugin system
 

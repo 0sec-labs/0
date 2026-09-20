@@ -1,19 +1,31 @@
 # Changelog
 
-All notable changes to 0security (the open-source CLI + agent harness) are tracked
+All notable changes to 0 (the open-source CLI + agent harness) are tracked
 here. The history before v0.11.0 lives in the git log and on the GitHub
 Releases page; this file starts the human-readable summary from v0.11.0
 onwards. Entries before v0.13.0 predate the pwnkit → 0sec rename and keep the
 old product name as written.
 
 The format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
-and 0security adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
+and 0 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 on the published npm package and the GitHub Release tag.
 
 ## [Unreleased]
 
+### Added
+
+- Opt-in Jev assistance for bounded read-only browser exploration, memory
+  ranking, duplicate assessment, and red-team feedback. Evaluations remain
+  advisory; managed requests use a separate scan capability, and credentials
+  alone never enable the feature.
+
 ### Changed
 
+- Refresh the documentation and README against current source: multi-model
+  configuration, console behavior, find/verify/fix workflows, managed-service
+  compatibility, extensions, 0verse, and research provenance. Clarify evidence,
+  cost-accounting, and execution boundaries without changing engine behavior
+  or treating retained benchmark attempts as single-shot results.
 - Cloud balance and connection views consume the versioned credit account with
   exact credit amounts, separate free/subscription/prepaid states, and no inferred
   totals or zero balances for unavailable data. Cloud model views expose public
@@ -21,6 +33,14 @@ on the published npm package and the GitHub Release tag.
   remains unchanged.
 - `0dev` defaults to the development Cloud host and stores Cloud credentials
   separately, without changing normal `0sec` credentials or BYOK configuration.
+
+### Fixed
+
+- Initialize and upgrade local SQLite schemas in one transaction, avoiding
+  repeated durable commits on slow disks and rolling back interrupted upgrades.
+- Use Azure's DeepSeek V4.1 Flash rates for exact, mixed-case and versioned
+  deployment names instead of the generic cost-estimation fallback. Direct
+  DeepSeek API pricing is unchanged; this does not rewrite recorded spend.
 
 ## [0.19.0] - 2026-09-18
 

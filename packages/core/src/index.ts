@@ -1816,6 +1816,16 @@ export {
   levelAtLeast,
   type AnalyticsLevel,
 } from "./telemetry/analytics-level.js";
+export {
+  RunContributionClient, RunCapture, CONTRIBUTION_ENDPOINT,
+  contributionReceiptSchema, contributionManifestSchema, contributionTransitionSchema, contributionChunkSchema,
+  contributionPurposeSchema, contributionClientPolicySchema,
+  configureRunContributionsFromEnvironment, getConfiguredRunContributionClient,
+  currentRunContribution, withRunContribution,
+  type ContributionReceipt, type RunManifest, type RunTransition, type ContributionChunk,
+  type ContributionPurpose, type ContributionClientPolicy, type RunContributionClientConfig,
+  type BeginContribution, type ContributionUploadResult,
+} from "./telemetry/run-contribution.js";
 // Operational NDJSON stderr sink (0SEC_LOG_FORMAT=json). Writes one
 // NDJSON line per allowlisted lifecycle/cost event to stderr, stripped
 // of all sensitive fields (prompts, responses, reasoning, tool args,

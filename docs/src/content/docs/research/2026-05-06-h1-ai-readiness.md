@@ -41,7 +41,7 @@ We then scored each program on six axes:
 2. **Bounty offered** — paid programmes weighted higher than VDPs.
 3. **Submission state** — `open` weighted higher than `paused`.
 4. **Automation-policy verdict** — regex classification over the policy markdown looking for terms like *automated*, *scanner*, *tool*, *fuzz*, and surrounding modifiers (*prohibited*, *not allowed*, *encouraged*, *with rate-limit*). Each program was bucketed into one of four classes: `banned`, `discouraged-or-cautious`, `silent`, or `allowed-with-rate-limit`.
-5. **0sec-strength bug-class fit** — mentions of XSS, IDOR, SSRF, RCE, or SQLi in the policy markdown.
+5. **Bug-class fit for 0** — mentions of XSS, IDOR, SSRF, RCE, or SQLi in the policy markdown.
 6. **Gold Standard Safe Harbor** — the program-level flag indicating adoption of the GSSH legal-protection wording.
 
 Scores are normalized to 0–100: ≥80 is the study's high-readiness threshold;
@@ -168,7 +168,8 @@ pie showData
   paid/open/web-shaped high-score group contains 21.
 - Resolve missing structured scope before execution or submission.
 
-## What 0sec does about it
+<span id="what-0sec-does-about-it"></span>
+## What 0 does about it
 
 The historical [PR #206](https://github.com/0sec-labs/0sec/pull/206) proposal covered:
 
@@ -178,7 +179,7 @@ The historical [PR #206](https://github.com/0sec-labs/0sec/pull/206) proposal co
 - Hold reports whose referenced URLs fail the scope allowlist.
 - Apply a per-program request cap, defaulting to 2 RPS.
 
-At the time of this record, no 0sec report had been submitted through the
+At the time of this record, no 0 report had been submitted through the
 disclose pipeline. Submission success rates were unmeasured.
 
 <span id="closer"></span>
@@ -193,5 +194,5 @@ submitting a report. Consult current policies; this audit is a historical sample
 - HackerOne API documentation — <https://docs.hackerone.com/en/articles/8475119-hackerone-api>
 - The New Stack on the curl programme closure — <https://thenewstack.io/curl-bug-bounty-flooded-by-ai-slop/>
 - BleepingComputer on AI-slop bug reports — <https://www.bleepingcomputer.com/news/security/curl-project-founder-snaps-over-ai-slop-bug-reports/>
-- 0sec disclose command (PR #206) — <https://github.com/0sec-labs/0sec/pull/206>
+- 0 disclose command (PR #206) — <https://github.com/0sec-labs/0sec/pull/206>
 - Gold Standard Safe Harbor wording — <https://www.hackerone.com/security-compliance/gold-standard-safe-harbor>

@@ -43,6 +43,8 @@ import {
 } from "./trust-graph-runtime.js";
 import { createShadowJournal, type ShadowJournal } from "./journal/shadow.js";
 import { analyticsPipeline } from "../telemetry/analytics-pipeline.js";
+import { captureNativeRuntime, currentContributionAgent, currentRunContribution, getConfiguredRunContributionClient, withRunContribution, type RunCapture } from "../telemetry/run-contribution.js";
+import { authSecretValues } from "./auth-redaction.js";
 import { loadJournal, rehydrateContext, renderSeedMessages } from "./journal/index.js";
 import { detectPlaybooks, buildPlaybookInjection } from "./playbooks.js";
 import { detectDoomLoop, doomLoopNudge, toolCallSignature } from "./doom-loop.js";
@@ -394,6 +396,8 @@ export interface NativeAgentLoopOptions {
   config: NativeAgentConfig;
   runtime: NativeRuntime;
   db: osecDB | null;
+  /** Explicit permissioned fixture or enrolled run. Absent: only configured enrollment can capture. */
+  contribution?: RunCapture;
   /** Cancels model requests, executable guests, and subsequent tool dispatch. */
   signal?: AbortSignal;
   onTurn?: (
@@ -477,7 +481,7 @@ export interface NativeAgentState {
    * `completed` path. Carries the raw error message and the turn at which
    * the loop bailed out.
    */
-  errorExit?: { error: string; turn: number };
+  errorExit?: { error: string; turn: number; source?: "provider" | "harness" };
   /**
    * Inline-validation outcomes (#554), one per high/critical finding that the
    * onFindingSaved hook validated. Empty when `features.inlineValidation` is
@@ -517,6 +521,62 @@ export interface NativeAgentState {
 export async function runNativeAgentLoop(
   opts: NativeAgentLoopOptions,
 ): Promise<NativeAgentState> {
+  const parent = currentRunContribution();
+  const enrollment = opts.contribution ?? parent ?? getConfiguredRunContributionClient();
+  const secrets = enrollment ? [
+    ...authSecretValues(opts.config.authConfig),
+    ...(opts.config.identities ?? []).flatMap(identity => authSecretValues(identity.auth)),
+  ] : [];
+  let capture = opts.contribution ?? parent;
+  if (!capture) {
+    try {
+      capture = getConfiguredRunContributionClient()?.begin({
+        runId: opts.config.scanId, model: opts.runtime.resolvedModel?.() ?? opts.config.costModel ?? "unknown",
+        scope: { target: opts.config.target, scopePath: opts.config.scopePath ?? null, policy: opts.config.scope?.raw ?? null, enforcement: opts.config.enforcement?.policySnapshot() ?? null, autonomyMode: opts.config.autonomyMode ?? DEFAULT_AUTONOMY_MODE, allowScanners: opts.config.allowScanners ?? false, engagement: opts.config.engagement ?? null },
+        objective: opts.config.systemPrompt, versions: { loop: "native-v1", runtime: opts.runtime.type },
+        authSecretValues: secrets,
+      }) ?? undefined;
+    } catch { process.stderr.write("[0sec] Run contribution unavailable: private spool or enrollment could not be opened.\n"); }
+  }
+  if (!capture) return runNativeAgentLoopInternal(opts);
+  capture.protectSecrets(secrets);
+  if (!parent) capture.setInitialScope({ context: capture.manifest.scope, target: opts.config.target, scopePath: opts.config.scopePath ?? null, policy: opts.config.scope?.raw ?? null, enforcement: opts.config.enforcement?.policySnapshot() ?? null, autonomyMode: opts.config.autonomyMode ?? DEFAULT_AUTONOMY_MODE, allowScanners: opts.config.allowScanners ?? false, engagement: opts.config.engagement ?? null });
+  const agentId = randomUUID();
+  const parentAgentId = parent === capture ? currentContributionAgent() ?? null : null;
+  return withRunContribution(capture, agentId, parentAgentId, async () => {
+    capture.record("routing", { role: opts.config.role, model: opts.runtime.resolvedModel?.() ?? opts.config.costModel ?? "unknown", runtime: opts.runtime.type });
+    const onEvent: NativeAgentLoopOptions["onEvent"] = (kind, payload) => {
+      if (kind === "session_resumed" || kind === "journal_rehydrated") capture.record("resume", { ...payload, source: kind === "journal_rehydrated" ? "journal" : "persisted_session", sideEffectsReplayed: false });
+      opts.onEvent?.(kind, payload);
+    };
+    const unregister = registerSignalCleanup(() => {
+      if (!parentAgentId) capture.finish("interrupted", "operator_cancelled");
+    });
+    try {
+      const state = await runNativeAgentLoopInternal({ ...opts, runtime: captureNativeRuntime(opts.runtime, capture), onEvent });
+      const termination = opts.signal?.aborted ? "operator_cancelled"
+        : state.killSwitchTriggered ? "timeout"
+        : state.costCeilingExceeded ? "run_resource_limit"
+        : state.errorExit ? state.errorExit.source === "harness" ? "harness_error" : "provider_error"
+        : state.earlyStopNoProgress ? "no_progress"
+        : state.done ? "plan_exhausted"
+        : state.turnCount >= opts.config.maxTurns ? "run_resource_limit" : "unknown";
+      const execution = opts.signal?.aborted ? "interrupted" : state.errorExit ? "failed" : state.done ? "completed" : "interrupted";
+      // Completion is not an independently verified security outcome.
+      if (parentAgentId) capture.record("termination", { execution, termination });
+      else capture.finish(execution, termination);
+      if (!parentAgentId && !opts.contribution) void capture.client.upload(capture);
+      return state;
+    } catch (error) {
+      capture.record("termination", { execution: "failed", termination: "harness_error", error: error instanceof Error ? error.message : String(error) });
+      if (!parentAgentId) capture.finish(opts.signal?.aborted ? "interrupted" : "failed", opts.signal?.aborted ? "operator_cancelled" : "harness_error");
+      if (!parentAgentId && !opts.contribution) void capture.client.upload(capture);
+      throw error;
+    } finally { unregister(); }
+  });
+}
+
+async function runNativeAgentLoopInternal(opts: NativeAgentLoopOptions): Promise<NativeAgentState> {
   const {
     config,
     runtime,
@@ -1051,9 +1111,11 @@ export async function runNativeAgentLoop(
         tool: name, turn: state.turnCount, args_preview: toolCallPreview(call).slice(0, 200), ts: startedAt,
       });
       shadowJournal.append({ kind: "tool_call", tool: name, arguments: args, turn: state.turnCount, callId: correlationId });
+      currentRunContribution()?.record("tool_call", { callId: correlationId, tool: name, arguments: args, origin: "executable" });
       let result: ToolResult;
       try { result = await executor.execute(call, { correlationId, signal: effectiveSignal, assertAuthority }); }
       catch (error) { result = { success: false, output: null, error: error instanceof Error ? error.message : String(error) }; }
+      currentRunContribution()?.record("tool_result", { callId: correlationId, tool: name, result, durationMs: Date.now() - startedAt, origin: "executable" });
       // Normalize a failed result to a NON-EMPTY, informative reason at the
       // source, so every downstream consumer (model-facing content below, the
       // action log, the shadow journal, the bus event, and the TUI card) sees
@@ -1704,6 +1766,17 @@ export async function runNativeAgentLoop(
           const outcome = await validateFindingInline(saved, config.target, {
             oracle: inlineValidationOracle,
           });
+          const contribution = currentRunContribution();
+          if (contribution && Object.values(contribution.receipt.capture).every(Boolean) && contribution.client.permission(contribution.receipt)) {
+            const verification = outcome.inconclusive ? "inconclusive" : outcome.confirmed ? "reproduced" : "not_reproduced";
+            const previous = contribution.manifest.verification;
+            try {
+              contribution.recordSignal("verification", {
+                adjudicator: "inline-category-oracle", evidenceRef: `finding:${outcome.findingId}`,
+                source: "inline_validation", outcome, durationMs: Date.now() - inlineStartedAt,
+              }, { verification: previous === "not_run" || previous === verification ? verification : "inconclusive" });
+            } catch { /* Capture failure never changes the real oracle verdict. */ }
+          }
           // Stamp the verdict on the finding so EGATS scoreEvidence and the
           // batch oracle/PoV gate can read it (skip the redundant re-run).
           saved.inlineValidation = {
@@ -2045,6 +2118,7 @@ export async function runNativeAgentLoop(
       && state.messages.length > 15
     ) {
       const beforeCount = state.messages.length;
+      currentRunContribution()?.record("compaction", { phase: "before", messagesBefore: beforeCount, inputTokens: state.totalUsage.inputTokens, strategy: "llm_with_regex_fallback" });
 
       // Use LLM-based compaction if we have the runtime, otherwise regex.
       // Default opts preserve the scan loop's original behavior (tail count 10,
@@ -2055,6 +2129,7 @@ export async function runNativeAgentLoop(
       tokensAtLastCompaction = state.totalUsage.inputTokens;
 
       const afterCount = state.messages.length;
+      currentRunContribution()?.record("compaction", { phase: "after", messagesAfter: afterCount, compactionNumber: compactionCount });
       onEvent?.("context_compacted", {
         turn: state.turnCount,
         inputTokens: state.totalUsage.inputTokens,
@@ -2095,6 +2170,7 @@ export async function runNativeAgentLoop(
         if (pruned.length < beforeCount) {
           contextOverflowRecoveries++;
           state.messages = pruned;
+          currentRunContribution()?.record("truncation", { reason: "context_overflow", messagesBefore: beforeCount, messagesAfter: pruned.length, preserveTailCount });
           tokensAtLastCompaction = state.totalUsage.inputTokens;
           process.stderr.write(
             `[0sec] context overflow: pruned ${beforeCount - pruned.length} old messages `
@@ -2132,7 +2208,7 @@ export async function runNativeAgentLoop(
       // bailout from a clean completion.
       state.done = false;
       state.summary = `Error: ${errorMsg}`;
-      state.errorExit = { error: errorMsg, turn: state.turnCount };
+      state.errorExit = { error: errorMsg, turn: state.turnCount, source: driven ? "harness" : "provider" };
       if (driverCalls?.length) onTurn?.(state.turnCount, driverCalls, driverResults!, state.summary, { usage: { ...state.totalUsage } });
       if (db) {
         db.logEvent({
@@ -2345,7 +2421,14 @@ export async function runNativeAgentLoop(
         callId: block.id,
       });
 
-      const toolResult = await executor.execute(call, { correlationId, signal: executionSignal, assertAuthority });
+      currentRunContribution()?.record("tool_call", { callId: block.id, correlationId, tool: call.name, arguments: call.arguments });
+      let toolResult: ToolResult;
+      try { toolResult = await executor.execute(call, { correlationId, signal: executionSignal, assertAuthority }); }
+      catch (error) {
+        currentRunContribution()?.record("tool_result", { callId: block.id, correlationId, tool: call.name, error: error instanceof Error ? error.message : String(error), durationMs: Date.now() - toolStartedAt });
+        throw error;
+      }
+      currentRunContribution()?.record("tool_result", { callId: block.id, correlationId, tool: call.name, result: toolResult, durationMs: Date.now() - toolStartedAt });
       // Normalize a failed result to a NON-EMPTY, informative reason at the
       // source (see the direct-driver path above): folds any captured exit
       // code / stdout tail into `error` so the model, the action log, the
@@ -2531,7 +2614,7 @@ export async function runNativeAgentLoop(
     if (authorityFailure) {
       state.done = false;
       state.summary = `Error: ${authorityFailure}`;
-      state.errorExit = { error: authorityFailure, turn: state.turnCount };
+      state.errorExit = { error: authorityFailure, turn: state.turnCount, source: "harness" };
       onEvent?.("agent_error", { turn: state.turnCount, error: authorityFailure });
       onTurn?.(state.turnCount, toolCalls, toolResults, textContent, turnTelemetry);
       break;
@@ -2845,6 +2928,7 @@ export async function runNativeAgentLoop(
     // Persist session state periodically
     if (db && state.turnCount % 2 === 0) {
       persistSession(db, state, config, "running");
+      currentRunContribution()?.record("checkpoint", { sessionId: state.sessionId, turn: state.turnCount, storage: "session", storedMessages: Math.min(state.messages.length, 40), sideEffectsReplayed: false });
     }
 
     // ── Cost ceiling check ──
@@ -2981,6 +3065,7 @@ export async function runNativeAgentLoop(
   // Final session save
   if (db) {
     persistSession(db, state, config, state.done ? "completed" : "paused");
+    currentRunContribution()?.record("checkpoint", { sessionId: state.sessionId, turn: state.turnCount, storage: "session", status: state.done ? "completed" : "paused", storedMessages: Math.min(state.messages.length, 40) });
     db.logEvent({
       scanId: config.scanId,
       stage: config.role,
@@ -3259,13 +3344,14 @@ export async function compactMessagesWithLLM(
   const middle = messages.slice(1, tailStart);
 
   // Serialize middle messages for summarization
-  const conversationText = middle
+  const fullConversationText = middle
     .map((m) => {
       const prefix = m.role === "assistant" ? "[Assistant]" : "[Tool Output]";
       return `${prefix}\n${serializeMessageToText(m)}`;
     })
-    .join("\n\n")
-    .slice(0, 50_000); // Cap to avoid overwhelming the summary call
+    .join("\n\n");
+  if (fullConversationText.length > 50_000) currentRunContribution()?.record("truncation", { reason: "compaction_input", originalChars: fullConversationText.length, retainedChars: 50_000 });
+  const conversationText = fullConversationText.slice(0, 50_000);
 
   // Also extract regex findings as fallback / supplement
   const regexFindings = extractKeyFindings(middle);
@@ -3465,13 +3551,14 @@ async function generateProgressSummary(
   runtime: NativeRuntime,
 ): Promise<string> {
   // Serialize all messages into a conversation transcript for the summarizer
-  const conversationText = messages
+  const fullConversationText = messages
     .map((m) => {
       const prefix = m.role === "assistant" ? "[Assistant]" : "[Tool Output]";
       return `${prefix}\n${serializeMessageToText(m)}`;
     })
-    .join("\n\n")
-    .slice(0, 60_000); // Cap input to avoid token limits on the summary call
+    .join("\n\n");
+  if (fullConversationText.length > 60_000) currentRunContribution()?.record("truncation", { reason: "progress_summary_input", originalChars: fullConversationText.length, retainedChars: 60_000 });
+  const conversationText = fullConversationText.slice(0, 60_000);
 
   const summaryResult = await runtime.executeNative(
     "You are a concise technical summarizer for a security penetration testing session.",
@@ -3870,4 +3957,5 @@ function persistSession(
     toolContext,
     status,
   });
+  if (state.messages.length > maxStoredMessages) currentRunContribution()?.record("truncation", { reason: "session_storage", originalMessages: state.messages.length, retainedMessages: maxStoredMessages });
 }

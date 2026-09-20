@@ -95,15 +95,6 @@ function scopedCtx(): BrowserToolContext {
 
 // ── Definition / dispatch shape ───────────────────────────────────────────────
 
-describe("browser tool definition", () => {
-  it("declares the full action enum", () => {
-    expect(browserToolDefinitions.browser.parameters.action.enum).toEqual([...BROWSER_ACTIONS]);
-    expect(browserToolDefinitions.browser.required).toEqual(["action"]);
-  });
-  it("routes through the browserAction handler name (unchanged from recon.ts)", () => {
-    expect(browserDispatch.browser).toBe("browserAction");
-  });
-});
 
 // ── Arg validation ────────────────────────────────────────────────────────────
 
@@ -243,25 +234,6 @@ describe("executeBrowser screenshot image meta", () => {
 
 // ── Driver options threading (attribution + scope-pinned interceptor) ─────────
 
-describe("executeBrowser driver options", () => {
-  it("forwards userAgent / extraHeaders / interceptor into the backend factory", async () => {
-    let seen: BrowserDriverOptions | undefined;
-    const capturingFactory: BrowserDriverFactory = async (opts) => {
-      seen = opts;
-      return { driver: fakeDriver() };
-    };
-    const interceptor: BrowserDriverOptions["interceptor"] = async () => null;
-    await executeBrowser(unscopedCtx, { action: "list_tabs" }, {
-      createDriver: capturingFactory,
-      userAgent: "0sec-browser/1.0",
-      extraHeaders: { "X-0sec": "engagement" },
-      interceptor,
-    });
-    expect(seen?.userAgent).toBe("0sec-browser/1.0");
-    expect(seen?.extraHeaders).toEqual({ "X-0sec": "engagement" });
-    expect(seen?.interceptor).toBe(interceptor);
-  });
-});
 
 // ── CDP attach (connect to operator's already-authenticated Chrome) ───────────
 

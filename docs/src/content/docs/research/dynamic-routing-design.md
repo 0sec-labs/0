@@ -4,6 +4,11 @@ description: Learned layer selection, training objectives, model tradeoffs, and 
 ---
 
 > Historical design and April 2026 results, tracked in [0sec#113](https://github.com/0sec-labs/0sec/issues/113). See [rule-based v0](/research/dynamic-triage-routing/) for the implementation record.
+> The original 45-feature proposal below predates the current 55-feature
+> extractor. Keep feature revisions aligned when reusing its datasets.
+> Current hand-coded TP/FP scoring and rule-based layer selection are separate,
+> default-off mechanisms; the trained artifacts do not imply a deployed learned
+> layer-selector or optimal routing among LLM providers.
 
 <span id="the-problem-in-one-paragraph"></span>
 ## Motivation
@@ -192,7 +197,7 @@ And a recall metric: **per-category recall breakdown**. No category should lose 
 
 ## Open questions
 
-- **How do we handle the imbalance on the v1 dataset?** 91.2% TP is way outside the range the VulnBERT paper's focal-loss tuning was validated on. We may need to undersample TP rows during training, or move to a more TP/FP-balanced dataset (possibly by running 0sec against more benign npm packages to generate more FPs).
+- **How do we handle the imbalance on the v1 dataset?** 91.2% TP is way outside the range the VulnBERT paper's focal-loss tuning was validated on. We may need to undersample TP rows during training, or move to a more TP/FP-balanced dataset (possibly by running 0 against more benign npm packages to generate more FPs).
 - **Does the router get to see the attack agent's conversation history?** Right now the 45 features only see the finding itself. The agent's reasoning trail (which strategies it tried, what signals it followed, what it gave up on) might contain useful signal for the router. But including it risks making the router effectively a full LLM call, which defeats the sub-millisecond goal.
 - **Can the router bypass layers the agent already implicitly covered?** For example, if the attack agent successfully exploited an SQLi and captured a flag, the oracle layer would re-attempt the exploit and presumably succeed. Running it is redundant. The router could learn "if the finding has a flag-shaped response, skip all oracles."
 - **How do we avoid benchmark overfitting?** XBOW is 104 challenges. npm-bench is 81 packages. If the router learns the specific finding shapes of these two benchmarks, it won't generalize to production targets. We need a held-out slice that isn't in any training set — possibly a fresh sweep against production bug bounty programs with manual ground-truth labeling.
@@ -204,7 +209,7 @@ And a recall metric: **per-category recall breakdown**. No category should lose 
 - [FP Reduction Moat](/research/fp-reduction-moat/) — the static triage stack this design replaces
 - [Finding Triage ML](/research/finding-triage-ml/) — the original hybrid ML design doc, this page supersedes its routing section
 - [Triage Dataset](/research/triage-dataset/) — the JSONL schema the router trains on
-- [Feature Extractor](/research/feature-extractor/) — the 45 handcrafted features
+- [Feature Extractor](/research/feature-extractor/) — the current 55-feature reference (45 in the original proposal)
 - [0sec#72](https://github.com/0sec-labs/0sec/issues/72) — the ablation data, with run IDs and per-comment result tables
 - [0sec#112](https://github.com/0sec-labs/0sec/issues/112) — per-finding `layerVerdicts` telemetry (prerequisite, shipped 2026-04-11)
 - [0sec#113](https://github.com/0sec-labs/0sec/issues/113) — this tracking issue

@@ -3,20 +3,23 @@ title: Architecture
 description: "One harness, two evidence engines, and one rule: reproduce before trusting."
 ---
 
-0sec is an open cybersecurity harness built on one rule: **reproduce before
+0 is an open cybersecurity harness built on one rule: **reproduce before
 trusting.**
 
 For practical setup, start with [Scan Workflows](/scan-workflows/),
 [Console](/console/), or [Research Workflows](/research-workflows/).
 This page describes the engine's structure.
 
-Two engines produce evidence:
+The harness has several workflow-specific evidence paths:
 
-- **0sec** runs the agentic hunt against source and live targets — repos,
-  packages, web apps, AI endpoints, MCP servers. Agents explore in parallel
-  and chain exploits together.
-- **0verse** produces evidence for compiled programs when no source is
-  available.
+- **0** orchestrates source and live-target assessments, package audits,
+  AI/agent evaluations and research workflows. Parallel discovery, verification
+  and fix generation depend on the selected command and configuration.
+- **0verse** is the separate in-repo compiled-program evidence producer.
+  Its explicit integration is opt-in, not a stage of every scan.
+
+The diagram below describes the research-adapter contract, not the execution
+order of all CLI commands.
 
 ```mermaid
 flowchart LR
@@ -41,9 +44,10 @@ flowchart LR
     I --> ENV[Evidence envelope]
 ```
 
-Only **discover** and **verify** are mandatory. Unsupported optional stages are
-marked `skipped`; failed or unavailable proof stays `inconclusive`. Discovery
-output cannot promote itself.
+In that research contract, **discover** and **verify** are mandatory stages.
+Unsupported optional stages are marked `skipped`; failed or unavailable proof
+stays `inconclusive`. A mandatory verification stage means a result is evaluated,
+not that it necessarily reproduces. Discovery output cannot promote itself.
 
 Research evidence envelopes track independent dimensions:
 
@@ -103,7 +107,7 @@ is a separate contract, not the schema for every research envelope.
 
 `0verse` is an in-repo Python evidence producer (the `0verse/` directory), not
 an `@0sec/*` package. It handles compiled-program evidence with its own Ghidra,
-angr, AFL++, PoV, and notary contracts. 0sec consumes only explicit, versioned
+angr, AFL++, PoV, and notary contracts. 0 consumes only explicit, versioned
 interfaces — the opt-in `0verse` binary/NDJSON contract and verified external
 receipts. It never bundles 0verse into `@0sec/*`, schedules it as a generic
 scan worker, or promotes a hypothesis without the matching proof gate.
@@ -121,12 +125,12 @@ schema. Managed storage and access are outside this repository.
 Two import paths handle kernel proofs the generic VM runner can't safely
 rebuild:
 
-- `0sec research linux-matrix` imports externally executed boots. The versioned
+- `0 research linux-matrix` imports externally executed boots. The versioned
   manifest binds build IDs, literal crash/completion oracles, per-boot markers,
-  thresholds, and log paths; 0sec hashes the manifest, every log, and its
-  verdict. The envelope says `executionOrigin: external` and never claims 0sec
+  thresholds, and log paths; 0 hashes the manifest, every log, and its
+  verdict. The envelope says `executionOrigin: external` and never claims 0
   ran the boots.
-- `0sec research linux` runs natively, bound to a required literal crash oracle
+- `0 research linux` runs natively, bound to a required literal crash oracle
   (`--expected-signature`). A different KASAN/oops/GPF is recorded but can't
   satisfy the N-boot gate. Each boot contributes its own hashed dmesg artifact,
   so a 2-of-3 claim carries the full three-boot audit trail.
@@ -135,13 +139,15 @@ rebuild:
 
 For web pentesting the agent is shell-first: `bash` (curl, python3, sqlmap, …)
 is the primary tool, not a fixed set of HTTP tools. LLM and code targets get
-specialized tools like `send_prompt` and `read_file`. Raw findings pass through
-triage and blind validation before they reach a report.
+specialized tools like `send_prompt` and `read_file`. The agentic scan path
+applies triage and a separate verification pass; source, template, replay and
+research paths have different evidence contracts. Reports can retain candidates
+without independent runtime proof.
 
 ```mermaid
 flowchart TB
     subgraph Entry[Entry points]
-        CLI[0sec]
+        CLI[0]
         API[Node SDK / CI]
     end
 
@@ -191,7 +197,9 @@ flowchart TB
     style FX fill:#16213e,stroke:#10b981,color:#fff
 ```
 
-The pipeline has six stages grouped into two agent sessions:
+The six labels below are a conceptual workflow, not a promise of six separate
+agents or exactly two sessions. Native agentic verification uses one bounded
+session per candidate; optional discovery fan-out adds other sessions.
 
 ```
 Plan -> Discover -> Attack -> Triage -> Verify -> Report
@@ -199,31 +207,31 @@ Plan -> Discover -> Attack -> Triage -> Verify -> Report
 
 ### 1. Research agent (Plan + Discover + Attack + PoC)
 
-One agent session that:
+The research session is instructed to:
 
-1. **Plans** — estimates difficulty, picks likely vuln classes, prioritizes
-   vectors. The plan goes into the system prompt so the agent starts with a
-   strategy. (Planning-before-execution is a shared trait of the strongest
-   pentest agents — [KinoSec](https://kinosec.ai), [XBOW](https://xbow.com),
-   [MAPTA](https://arxiv.org/abs/2508.20816).)
-2. **Discovers** — maps endpoints, detects models, fingerprints tech,
-   enumerates exposed paths.
-3. **Attacks** — multi-turn prompt injection, jailbreaks, tool poisoning, data
-   exfil (LLM); CORS, SSRF, XSS, path traversal, header injection (web); supply
-   chain and malicious-code analysis (npm); vuln patterns (source).
-4. **Writes PoC code** demonstrating each vulnerability.
+1. **Plan** — choose likely vulnerability classes and prioritize vectors.
+2. **Discover** — map endpoints, detect models, fingerprint technology and
+   inspect source when provided.
+3. **Attack** — test hypotheses with the target-specific tools.
+4. **Record evidence and PoCs** — save the observed request/response or source
+   path and, where applicable, executable reproduction steps.
+
+These are model tasks, not a guarantee that every target gets comprehensive
+coverage or every saved finding includes a working PoC. Deterministic recon and
+specialized pipeline stages can also contribute findings.
 
 When a scope document or challenge description exists, it's passed to the agent
 as context — the same way a real pentester receives a brief.
 
 Tool set depends on target type:
 
-- **Web:** `bash` (primary), `browser` (Playwright headless), `save_finding`,
-  `done`. Structured `crawl_page`/`submit_form`/`http_request` are optional —
-  benchmarking showed the agent does better with just a shell.
-- **LLM:** `send_prompt`, `bash`, `save_finding`, `done`.
-- **Source/npm:** `read_file`, `search_code`, `list_files`, `run_command`,
-  `save_finding`.
+- **Web:** shell-first instructions favor `bash`, `save_finding` and `done`.
+  Role tool sets can also include `crawl`, `submit_form`, `http_request` and
+  other gated capabilities; `browser` depends on browser availability.
+- **LLM:** `send_prompt` plus the applicable network-role tools.
+- **Scoped source/npm review:** `read_file`, literal `search_files`,
+  `list_files` and finding tools. Broader execution tools depend on the caller's
+  tool profile; a scoped read-only review is not the full console tool set.
 
 **Budget-aware reflection.** As the turn budget is consumed, the loop can inject
 continue prompts so the agent does not spend every turn on one dead end.
@@ -233,10 +241,12 @@ The budget depends on the workflow, role, and depth; it is not one universal
 
 ### 2. Triage stage
 
-Between raw findings and the report, findings flow through a multi-layer triage
-pipeline. Each layer rejects, downgrades, or confirms based on an independent
-signal, and most layers are cheap deterministic checks that run before any LLM
-token is spent. Full detail: [Finding Triage](/triage/).
+The agentic scanner applies default-on holding-it-wrong and evidence-completeness
+filters, category oracles, and optional source/PoV/consensus gates. Routing,
+tooling and category determine which checks run; several checks make live
+requests or model calls. Guarded heuristic rejection can hold protected findings
+for verification. See [Finding Triage](/triage/) for actual defaults, evidence
+limits and per-finding provenance.
 
 > **EGATS caveat.** The 2026-04-11 ablation found `egatsTreeSearch` regresses
 > solve rate on hard challenges at ~10× the cost of the next-worst layer. It's
@@ -246,11 +256,12 @@ token is spent. Full detail: [Finding Triage](/triage/).
 
 ### 3. Verify agent (blind validation)
 
-Independent verification receives a bounded reproduction task rather than the
-original conversation. The exact input and verifier differ by workflow.
-An unavailable or inconclusive verifier is not proof that a finding is false.
-See [Blind Verification](/blind-verification/) for the distinctions between
-model-assisted validation, deterministic replay, and unverified candidates.
+Native agentic verification receives one finding with request/response excerpts,
+original analysis, target/authentication and optional review-memory context,
+with five turns per finding. It is separate from the original full conversation,
+but not blind to all reasoning. Structured consensus is a tool-free model
+assessment; template-scan fallback can confirm without replaying.
+See [Blind Verification](/blind-verification/) for these distinct contracts.
 
 ### 4. Report
 
@@ -259,13 +270,31 @@ not assume every row has the same proof grade. Formats vary by command and
 include terminal, HTML, PDF, SARIF, Markdown, and JSON. A local report is not
 automatically published or assigned a public share URL.
 
+### Multi-model roles and advisory evaluators
+
+Different models can serve discovery, review, refutation and fix roles when the
+workflow and configured route support them. Multiple sessions do not imply
+different providers or statistically independent errors. API child runtimes keep
+the parent provider, credential and base URL; a role-model name must work on
+that route rather than triggering automatic cross-provider credential discovery.
+
+Opt-in Jev assistance handles bounded browser navigation, memory relevance,
+duplicate assessment and red-team attempt feedback. It does not authorize tools
+or verify an exploit. Browser decisions return to the main model on ambiguity;
+memory context cannot reject a finding; dedupe preserves original evidence;
+red-team break detection remains with its judge/oracle. See
+[Features](/features/#advisory-evaluations) for explicit data-egress consent,
+provider settings and per-evaluator budgets.
+
 ## Plugin-first self-evolution
 
 Executable plugins provide versioned guest execution, composition, next-call
-activation, source evolution, and rollback. The live-harness candidate adds
-`agent.driver` and `ui.view` replacement during a task. Its
+activation, source evolution and rollback. The **wired research-preview**
+live-harness path adds `agent.driver` and `ui.view` replacement during a task,
+with console/tool and TUI host integration. Its
 [local measurements](/improvement-plane/#local-candidate-measurements) cover
-specific lifecycle paths; release and hosted end-to-end qualification remain pending.
+specific lifecycle paths, not universal security improvement or hosted
+end-to-end qualification.
 
 A generation graph declares providers and dependencies. The runtime owns
 preparation, migration, activation, and resource disposal. Browser, TUI, and
@@ -294,21 +323,24 @@ and long-horizon recovery requirements.
 
 ### Hosted inference and evolution accounting
 
-The optional hosted provider integration is a **candidate, disabled in
-production**. Its parent-session SDK path connects plugin model calls through
+The optional hosted provider is model transport, not managed tool execution.
+The parent-session SDK path connects plugin model calls through
 `invokePluginModel` to the parent `runtime.executeNative`; executable-plugin
 candidate generation uses the same broker and configured `costModel`.
-When the parent uses hosted inference, those calls consume the organization's
-inference wallet. Self-evolution does not carry a free inference allowance.
+Local integration and historical candidate receipts do not establish what a
+production service has enabled. Model requests remain subject to the selected
+account's access and terms; self-evolution does not imply free inference.
 
-`runOneSubagent` and `runPersistentLoopOnce` create fresh `LlmApiRuntime`
-instances without an explicit model. Their route must be checked independently.
+Subagents fork through the parent runtime's child-inference factory. They
+inherit its resolved account and route; the configured role-model and
+single-model policy controls child selection.
 Workspace-trusted ESM can use external clients outside SDK accounting.
 
-Customer pricing uses an immutable catalog token-rate snapshot. Orca receipts
-verify usage and supplier cost. Inference credit is separate from review,
-compute, and engagement accounting. Hosted lifecycle end-to-end qualification
-and security-performance measurements remain pending.
+Hosted request admission and settlement belong to the service; local token-cost
+estimates do not establish remaining spend or commercial terms. Inference is
+separate from review, compute and engagement accounting. See
+[hosted account interpretation](/api-keys/#hosted-inference). Hosted lifecycle
+qualification and security-performance claims require separate evidence.
 
 ## Presentation contract
 
@@ -355,21 +387,23 @@ options are documented in [Configuration](/configuration/).
 
 ## Runtime adapters
 
-0sec decouples the pipeline from the LLM backend. Each adapter implements one
+0 decouples the pipeline from the LLM backend. Each adapter implements one
 interface over a different provider:
 
 | Adapter | Backend | How |
 |---------|---------|-----|
-| `ApiRuntime` | OpenRouter / Anthropic / OpenAI | Direct HTTP to the provider |
-| `ClaudeRuntime` | Claude Code CLI | Spawns `claude` as a subprocess |
-| `CodexRuntime` | Codex CLI | Spawns `codex` as a subprocess |
-| `GeminiRuntime` | Gemini CLI | Spawns the Gemini CLI |
-| `McpRuntime` | MCP servers | Connects to MCP servers |
-| `AutoRuntime` | Best available | Detects installed CLIs, picks the best per stage |
+| `LlmApiRuntime` | Configured API provider / hosted model transport | Direct provider requests and native tool calls |
+| `ProcessRuntime` | Claude, Codex or Gemini CLI | Subprocess adapter; distinct from a tool sandbox |
+| `CliNativeRuntime` | Supported installed coding CLI | CLI-native session execution |
+| `OpenRouterRuntime` | OpenRouter | Separate adapter with ensemble support |
+| `OllamaRuntime` | Ollama | Local model inference |
 
-`--runtime` selects an adapter. Auto-selection and direct-provider fallback are
-path-specific; see [Configuration](/configuration/) and [API Keys](/api-keys/)
-for the current resolution rules.
+`createRuntime(config)` constructs API, process or Ollama runtimes from
+`config.type`; registry helpers and CLI entry points perform their own selection.
+`auto` is selection policy, not an `AutoRuntime` class. MCP target/client/server
+integration is separate from the model-runtime factory. See
+[Configuration](/configuration/) and [API Keys](/api-keys/) for path-specific
+resolution and fallback.
 
 ## Execution isolation and toolbox packaging
 
@@ -377,7 +411,7 @@ The LLM adapter above is not an execution sandbox. Keep three separate choices:
 
 | Layer | Responsibility | Current choice |
 |---|---|---|
-| Controller | Provider authentication, scope, budgets, approvals, evidence and version selection | 0sec's TypeScript harness |
+| Controller | Provider authentication, scope, budgets, approvals, evidence and version selection | 0's TypeScript harness |
 | Toolbox artifact | Filesystem containing tools, runtimes and dependencies | OCI image, provisioned before execution |
 | Execution engine | Host/guest boundary, mounts, networking, resource limits and teardown | Docker or opt-in local smolvm for evolution workers |
 
@@ -388,7 +422,7 @@ archive avoids a registry or Docker daemon during smolvm execution.
 
 [Upstream smolvm](https://github.com/smol-machines/smolvm) also supports unpacked
 root filesystems, Smolfiles and packed `.smolmachine` artifacts. Those are viable
-upstream provisioning options, not additional formats qualified by 0sec's
+upstream provisioning options, not additional formats qualified by 0's
 current archive-pinning adapter. A hand-maintained mutable VM is not a substitute
 for an immutable, reproducible worker artifact.
 
@@ -397,7 +431,7 @@ for an immutable, reproducible worker artifact.
 - **Small runtime image:** useful for bounded Node source-evolution fixtures.
   It is not the pentest toolbox.
 - **Toolbox image:** the Dockerfile's `toolbox` target contains the declared
-  static-analysis, web-testing and identity tools without the 0sec application.
+  static-analysis, web-testing and identity tools without the 0 application.
 - **Distribution image:** the `runtime` target adds the bundled CLI to that same
   toolbox. This remains the default Dockerfile output.
 
@@ -442,7 +476,7 @@ changing languages improves security findings or model reasoning.
 
 The current [TypeScript Codex SDK](https://github.com/openai/codex/tree/main/sdk/typescript)
 still provides a TypeScript integration surface by spawning the native CLI and
-exchanging JSONL events. The useful lesson for 0sec is a stable protocol boundary
+exchanging JSONL events. The useful lesson for 0 is a stable protocol boundary
 between clients, orchestration and execution—not that every component must be
 rewritten together.
 
@@ -458,19 +492,19 @@ controller CPU, worker preparation, cancellation latency and sustained output
 handling. Separate provider wait time and image import from controller overhead.
 Require behavior parity for scope, credentials, sessions, evidence and rollback,
 then demonstrate a measured improvement or a concrete OS capability the current
-implementation lacks. No 0sec-versus-Rust performance benchmark has established
+implementation lacks. No 0-versus-Rust performance benchmark has established
 that a full harness rewrite is currently warranted.
 
 ## MCP integration
 
-0sec speaks MCP three ways:
+0 integrates with MCP in three roles:
 
-- **As a client** — `McpRuntime` connects to MCP servers and uses their tools as
-  the LLM backend.
-- **As a server** — `0sec mcp-server` exposes a scoped subset of tools over
+- **As a client** — selected agent/console paths connect to external MCP servers
+  to expose their tools. The model still uses its configured inference runtime.
+- **As a server** — `0 mcp-server` exposes a scoped subset of tools over
   stdio to an external host. `--tools` is an allowlist, not a capability grant:
-  every exposed tool still runs through 0sec's execution and engagement guards,
-  and 0sec keeps ownership of scope, rate limiting, persistence, and verifier
+  every exposed tool still runs through 0's execution and engagement guards,
+  and 0 keeps ownership of scope, rate limiting, persistence, and verifier
   state. External hosts (DSH, Codex, Claude Code) are optional clients; they
   don't replace the native scan loop. See
   [Improvement Plane](/improvement-plane/) for the separate future-worker
@@ -479,7 +513,7 @@ that a full harness rewrite is currently warranted.
   abuse, and permission escalation.
 
 ```bash
-0sec mcp-server \
+0 mcp-server \
   --target https://example.com \
   --scan-id engagement-001 \
   --scope ./scope.json \
@@ -490,15 +524,17 @@ that a full harness rewrite is currently warranted.
 
 Two execution surfaces, one public documentation home:
 
-- **0sec CLI** — local runs, CI, replay, exports, and console.
+- **0 CLI** — local runs, CI, replay, exports, and console.
 - **Managed control plane** — a separately operated engagement layer (not in
   this repo) that is still in development. See [Roadmap](/roadmap/#0cloud) for
   status.
 
-Every fresh local run owns `~/.0sec/runs/<scan-id>/state.db`, its journal, and
-its report. The local dashboard can inspect one run via `--db-path`; it is not a
-shared worker database. Managed findings, verification state, budgets, and org
-ownership live in the managed store.
+Fresh CLI scan/review/audit workflows normally allocate a run-local
+`~/.0sec/runs/<scan-id>/state.db`, journal and report; explicit database paths,
+resume, console and SDK callers have different storage choices. The dashboard
+can inspect a selected database via `--db-path`, not every worker database at
+once. Managed persistence and organization ownership are separate service
+concerns.
 
 ## Shell-first web mode
 
@@ -515,11 +551,11 @@ results.
 |------|---------|---------|
 | `bash` | Web, LLM, Verify | Shell commands subject to tool, scope, and engagement restrictions; host execution by default. |
 | `browser` | Web | Playwright headless browser for XSS and JS-rendered pages. |
-| `save_finding` | All | Record a vulnerability with PoC. |
+| `save_finding` | Finding-producing roles | Record a candidate and evidence; does not independently verify it. |
 | `done` | All | Signal completion. |
 | `send_prompt` | LLM | Send prompts to AI/LLM apps. |
 | `read_file` | Source, npm | Read source for code review. |
-| `run_command` | Source, npm | Run an allowlisted command on the host (not a sandbox). |
+| `run_command` | Profiles that expose local execution | Run an allowlisted command on the host (not a sandbox); not part of every scoped read-only review. |
 | `list_files` | Source, npm | Enumerate a directory. |
-| `search_code` | Source, npm | Search patterns across a codebase. |
-| `crawl_page` / `submit_form` / `http_request` | Web (optional) | Structured HTTP — `bash` + curl is preferred. |
+| `search_files` | Scoped source, npm | Literal search in regular text files, subject to scope and size limits. |
+| `crawl` / `submit_form` / `http_request` | Network roles | Structured HTTP alongside shell-first workflows. |

@@ -11,3 +11,4 @@ export * from "./agent-assurance.js";
 export * from "./presentation.js";
 export * from "./desktop-console.js";
 export * from "./live-harness.js";
+export * from "./jev.js";

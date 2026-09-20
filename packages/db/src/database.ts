@@ -407,10 +407,12 @@ export class osecDB {
     ensureDatabaseHealthy(this.sqlite);
     this.db = createDrizzleFromShim(this.sqlite, { schema });
 
-    // Create base tables first, then migrate older schemas before adding indexes.
-    this.sqlite.exec(SCHEMA_TABLES_SQL);
-    this.migrate();
-    this.sqlite.exec(SCHEMA_INDEXES_SQL);
+    // Keep schema upgrades atomic and avoid a durable commit per table/index.
+    this.sqlite.transaction(() => {
+      this.sqlite.exec(SCHEMA_TABLES_SQL);
+      this.migrate();
+      this.sqlite.exec(SCHEMA_INDEXES_SQL);
+    })();
   }
 
   private initializeReadOnlyDatabase(path: string): void {

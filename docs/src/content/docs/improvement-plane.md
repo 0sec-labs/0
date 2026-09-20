@@ -1,13 +1,16 @@
 ---
 title: Improvement Plane
-description: Source evolution, executable plugins, and the live self-evolving harness contract.
+description: Source-backed workflows for evaluated source versions, executable tools, and live harness changes.
 ---
 
-> Status: 2026-09-13. Living document.
+> Source audit: 2026-09-19. Research-preview workflows; dated measurements below
+> retain their original scope and are not release or hosted-production qualification.
 
-0sec retains codebase notes, evaluates source changes, and runs versioned
-executable plugins. The live-harness candidate extends these mechanisms to
-reasoning and presentation components during a session.
+0 has several different improvement mechanisms. They do not form an unattended
+system that discovers its own ground truth, rewrites itself, and proves that it
+became better at cybersecurity. The useful contract is narrower: retain
+observations, propose changes, evaluate them against operator-owned criteria,
+and select exact versions for later work.
 
 - **Learning** retains revision-aware notes and execution feedback.
 - **Source evolution** proposes edits to copies of source snapshots, evaluates
@@ -15,11 +18,11 @@ reasoning and presentation components during a session.
 - **Executable plugins** let an enabled agent submit, run, compose, evolve, and
   roll back its own TypeScript tools, skills, and agent-like programs. New calls
   can use a new version without restarting the session.
-- **Live harness generations** extend this to the active `agent.driver` and
-  `ui.view`, including view, command, and settings contributions. The shared
-  contract exists; runtime and frontend integration are under implementation
-  and are not yet an end-to-end qualification claim. See
-  [Live harness component contract](#live-harness-component-contract).
+- **Live harness generations** can replace the active `agent.driver` and
+  `ui.view`, including view, command, and settings contributions. Core and
+  OpenTUI consumers are wired; this is not merely a wire-type proposal, nor
+  does that wiring establish crash-safe or hosted end-to-end qualification.
+  See [Live harness component contract](#live-harness-component-contract).
 
 Source candidates execute in fresh Docker containers or local smolvm guests
 with bounded resources. Activation changes subsequent work at a defined boundary
@@ -34,6 +37,29 @@ task observations and development feedback
   -> activation at the consuming runtime's boundary
   -> continued work, further feedback, or rollback
 ```
+
+## Choose an improvement workflow
+
+| Need | Entry point | Default and activation boundary |
+|---|---|---|
+| Retain source-grounded notes | Eligible native research runs and `remember_codebase` | Untrusted revision-aware hints, not verified findings |
+| Evaluate a source worker | `0 evolve run --config evolution.json` | Source access and automatic promotion default off; accepted versions serve future pinned executions |
+| Deploy an evolved finder | `0 deep-review ./repo --evolution-config evolution.json` | Opt-in per review; independent verification remains separate |
+| Create an executable tool or skill | Agent's `self_extend` tool | Enabled by default for non-verifier sessions; Docker/smolvm prerequisites still required |
+| Install community code | `0 plugin install`, then project `enable` | Separate [Hackstore](/hackstore/) child-process contract; not sandboxed self-extension |
+| Replace a session driver/view | `self_extend` harness actions and OpenTUI live-harness controls | Session boundary activation; trusted ESM requires separate workspace consent |
+| Evolve finder prompts | `0 lens-synth`, or the opt-in TUI watcher | Curated corpus and promotion approval; changes future hunts, not FoxGuard |
+
+Start with [the complete source-worker config](#config-shape) for offline
+evaluation or [executable-plugin setup](/integrations/#model-authored-executable-plugins-self-extension)
+for session tools. Model credentials configure proposal generation; guest
+images configure execution. Neither substitutes for the other.
+
+**Implementation map:** [`improvement/config.ts`](https://github.com/0sec-labs/0sec/blob/main/packages/core/src/improvement/config.ts),
+[`improvement/loop.ts`](https://github.com/0sec-labs/0sec/blob/main/packages/core/src/improvement/loop.ts),
+[`commands/evolve.ts`](https://github.com/0sec-labs/0sec/blob/main/packages/cli/src/commands/evolve.ts),
+[`plugins/executable.ts`](https://github.com/0sec-labs/0sec/blob/main/packages/core/src/plugins/executable.ts),
+[`console/turn-engine.ts`](https://github.com/0sec-labs/0sec/blob/main/packages/core/src/console/turn-engine.ts).
 
 ## Engagement boundary
 
@@ -177,16 +203,16 @@ The default is `false`.
 ### Future-worker version pinning
 
 Every promoted version produces a content-addressed snapshot in the evolution
-store (`storePath`). The **`0sec evolve exec`** command pins and executes that
+store (`storePath`). The **`0 evolve exec`** command pins and executes that
 snapshot against arbitrary JSON input, with the stored backend's offline,
 credential-free isolation:
 
 ```bash
-0sec evolve exec --config ./evolution.json --run-id <id> --input '{"file": "src/main.ts"}'
+0 evolve exec --config ./evolution.json --run-id <id> --input '{"file": "src/main.ts"}'
 ```
 
 The command:
-1. reads the active version's snapshot from the registry;
+1. pins the active version for a new run ID, or reuses that ID's existing version;
 2. copies its files into a fresh isolated worker;
 3. runs the config's `command` with the provided input;
 4. for known config cases, validates stdout against the stored `expected`
@@ -197,13 +223,20 @@ The command:
 Unknown inputs have no ground truth and are never auto-labelled. Execution is
 always offline — no provider credentials, no network, no engagement tokens.
 
+Choose a fresh `--run-id` for a new input or to pick up a later promotion.
+Reusing an ID retains its original code **and input digest**, even after
+promotion or rollback; changing the input under the same ID is rejected.
+The ID is your execution identity, not a candidate UUID to select. Editing the
+supplied config cannot change the stored command/image/limits of an existing
+version.
+
 ### Deploying an evolved source finder
 
 `deep-review` can opt into the active source version instead of its native
 prompt-backed finders:
 
 ```bash
-0sec deep-review ./target-repo --evolution-config ./evolution.json
+0 deep-review ./target-repo --evolution-config ./evolution.json
 ```
 
 The evolution config must evaluate the same source-finder protocol used by the
@@ -264,7 +297,7 @@ After evaluation passes, a candidate enters canary:
 - Acceptance of successive candidates leaks a weak signal about a reused held-out set.
   This is not proof against adaptive overfitting over many generations. Operators
   should periodically supply fresh, independently curated cases to each lane.
-- **`0sec evolve rollback --store <path> --version <id>`** retires the
+- **`0 evolve rollback --store <path> --version <id>`** retires the
   specified version (must be the current active or canary version) and restores
   its parent. `--version` names the version to retire, not a desired historical
   destination. Rollback preserves the retired version's snapshot and receipt in
@@ -476,6 +509,16 @@ Within an evolution pass, the next attempt receives the previous proposal and
 bounded development-lane stdout/stderr. Held-out inputs, expected answers, and
 negative-control observations are not supplied to the proposal model.
 
+`maxAlternativeParents` optionally enables bounded archive-parent selection for
+ordinary source evolution as well as executable-plugin evolution. Omitted or
+`0` disables it; `1`–`10` bounds inspected retained candidates/retired versions.
+Selection checks compatible configuration and artifact/receipt integrity, then
+ranks **development** match fractions only. The chosen archived source is a
+proposal starting point, not an active worker. Its edited candidate still has to
+beat the **current active baseline** across every evaluation gate. `parentId`
+records that baseline; `alternativeParentId` records the source provenance.
+This is not open-ended archive search or permission to tune against held-out scores.
+
 ## Research basis and remaining limits
 
 [A Programming Paradigm for Spatiotemporal Composability
@@ -502,7 +545,7 @@ uses services for the agent loop, tools, model adapters, and session log.
 - This is a composability paper, not a benchmark demonstrating autonomous
   security-quality improvement or crash-safe, multi-day agent operation.
 
-The candidate integration pins `@deepseek-ai/cordis@4.0.2`, with 0sec generation,
+The current source pins `@deepseek-ai/cordis@4.0.2`, with 0 generation,
 guest-bridge, accounting, and frontend contracts. Component cleanup and external
 effects require separate qualification.
 
@@ -518,15 +561,15 @@ Research informing evaluator-driven iteration:
 - [Darwin Gödel Machine (Zhang et al., 2025)](https://arxiv.org/abs/2505.22954)
   searches an archive of modified coding agents. Reported
   [objective hacking and fabricated logs](https://sakana.ai/dgm/) motivate
-  controller-produced receipts. 0sec has no equivalent open-ended archive search.
+  controller-produced receipts. 0 has no equivalent open-ended archive search.
 - [AlphaEvolve (Google DeepMind, 2025)](https://deepmind.google/blog/alphaevolve-a-gemini-powered-coding-agent-for-designing-advanced-algorithms/)
   pairs generated programs with automated evaluators. Cybersecurity gains require
   separate measurement.
 - [GEPA (Agrawal et al., 2025)](https://arxiv.org/abs/2507.19457) reflects on
-  execution trajectories and combines candidates. 0sec retains development
+  execution trajectories and combines candidates. 0 retains development
   feedback and source history; GEPA's Pareto search is unimplemented.
 - [The reusable holdout (Dwork et al., 2015)](https://doi.org/10.1126/science.aaa9375)
-  addresses adaptive evaluation-data reuse. 0sec's canaries measure repeatability
+  addresses adaptive evaluation-data reuse. 0's canaries measure repeatability
   on the configured corpus. Independent generalization and the paper's
   privacy-based mechanism remain outside this implementation.
 - [Hierarchical Self-Improvement (Zhou, 2026)](https://arxiv.org/abs/2608.08466)
@@ -548,7 +591,7 @@ Research informing evaluator-driven iteration:
   studies transformer depth and expressivity. It supplies no equivalent result
   for repeated API calls. Measure task outcomes, latency, and cost.
 
-0sec uses fixed acceptance criteria, independently labelled controls, restricted
+0 uses fixed acceptance criteria, independently labelled controls, restricted
 execution, and versioned rollout. Operators supply fresh evaluation cases.
 Automatic ground-truth curation, held-out rotation, and general security-quality
 gains remain unestablished.
@@ -564,7 +607,7 @@ Tracked implementation work:
 ## Autonomy and hot-reload boundaries
 
 These paths are distinct; an accepted source candidate is not automatically a
-replacement for the stock target-facing 0sec process.
+replacement for the stock target-facing 0 process.
 
 | Path | What changes | What remains fixed |
 | --- | --- | --- |
@@ -575,7 +618,7 @@ replacement for the stock target-facing 0sec process.
 | Skill/router installation | Training loops install exact authorized artifact bytes. | Authorization does not hot-swap a model already loaded by another process. |
 | Executable plugin | An enabled agent submits or evolves actual code; later calls select the active retained version. | An invocation pins its version and declared capabilities; structural admission is not measured improvement. |
 | Development engine replacement | An explicitly enabled development console loads changed Core source between turns without losing the session. | Trusted host execution; UI shell, injected clients and shared dependencies stay pinned. Build and checkpoint failures retain the current engine. |
-| Live harness generation (integration in progress) | Replace `agent.driver` and `ui.view`, including namespaced UI commands/settings, in the same session. | Session history and accounting survive; generation changes wait for a defined checkpoint. |
+| Live harness generation | Core/OpenTUI support replacing `agent.driver` and `ui.view`, including namespaced UI commands/settings, in the same session. | Session history and accounting survive; generation changes wait for a defined checkpoint. This is not durable campaign recovery. |
 
 Observation capture is not independent truth: source consent and operator-curated
 positive, held-out, and clean-control fixtures still gate automatic synthesis.
@@ -587,9 +630,16 @@ and detection quality require their own checks.
 
 ## Live harness component contract
 
-The shared live-harness contract is unreleased. Runtime and frontend consumers
-use one catalog. The local candidate measurements below cover specific paths;
-desktop installation and hosted end-to-end qualification remain pending.
+The live-harness implementation has core and OpenTUI consumers, including
+host-owned recovery controls. Treat it as a research-preview extension surface.
+The historical candidate measurements below cover particular executions, not
+every current frontend, desktop installation, real-provider route, or hosted
+deployment.
+
+**Sources:** [`plugins/live-harness.ts`](https://github.com/0sec-labs/0sec/blob/main/packages/core/src/plugins/live-harness.ts),
+[`console/turn-engine.ts`](https://github.com/0sec-labs/0sec/blob/main/packages/core/src/console/turn-engine.ts),
+[`tui/harness-context.tsx`](https://github.com/0sec-labs/0sec/blob/main/packages/cli/src/tui/harness-context.tsx),
+[`tui/harness-trust-controls.tsx`](https://github.com/0sec-labs/0sec/blob/main/packages/cli/src/tui/harness-trust-controls.tsx).
 
 ### Composition and language support
 
@@ -639,6 +689,40 @@ dispatch against a replacement provider. Returned `requestedPrompt` content is
 for an explicit interaction, **never automatic submission while rendering**.
 Sandboxed view data is not host JavaScript. Trusted UI modules require the
 separate workspace grant and must not remove the host-owned recovery controls.
+
+### Use and recover a live generation
+
+Start an OpenTUI chat with self-extension enabled and a provisioned
+[executable backend](/integrations/#backend). If it was disabled when the chat
+was created, enable it in Settings and use `/new-chat`; changing a setting does
+not reconstruct that live session.
+
+The model-facing `self_extend` actions are:
+
+| Action | Input | Result |
+|---|---|---|
+| `harness_submit` | `generation: {label, providers: [...]}` | Retains the complete provider graph and queues activation |
+| `harness_list` | No generation required | Current, previous and pending identities plus the contribution catalog |
+| `harness_rollback` | Optional `generation_id` | Selects a retained generation; omission selects the previous one |
+| `harness_disable` | No generation required | Queues restoration of built-in behavior |
+
+A sandboxed provider references an exact retained executable version, not
+whichever plugin version is active later. Its `run` receives
+`{phase: "activate" | "driver" | "view" | "dispose", state, input}` and returns
+`{state, output}`. This interface is separate from a normal tool's arguments.
+`self_extend` refuses harness actions where the caller has not supplied a live
+harness host; the ordinary native-agent tool being present is not sufficient.
+
+In the OpenTUI, `/harness` (default shortcut **Ctrl+G**) opens the host-owned
+controls. Inspect current/pending generation details, show the conversation,
+roll back, or disable a contributed generation there. The `t` action requests
+workspace trust and requires explicit confirmation of the canonical workspace;
+leave it off for sandboxed components. It authorizes **arbitrary host ESM for
+that workspace**, not just one tool call. Revoking it does not undo external
+effects already performed.
+
+Source: [`agent/tools/system.ts`](https://github.com/0sec-labs/0sec/blob/main/packages/core/src/agent/tools/system.ts)
+and [`agent/tools.ts`](https://github.com/0sec-labs/0sec/blob/main/packages/core/src/agent/tools.ts).
 
 ### Autonomy without a second permission system
 
@@ -701,10 +785,13 @@ holdout and needs separate exposure management. These are optimizer
 requirements, not features supplied automatically by Cordis or by the current
 generation wire types.
 
-Multi-day operation and crash-safe campaign recovery remain development goals.
+Multi-day operation and crash-safe **campaign** recovery remain development
+goals. Ordinary session history, task ledgers, retained plugin versions and
+development-engine checkpoints are useful but do not constitute durable
+evolution spending, holdout-exposure accounting, or exactly-once tool effects.
 See [feedback across passes](#feedback-across-evolution-passes) and the
-[campaign work](https://github.com/0sec-labs/0sec/issues/41). Persistent recovery
-and first-class Python components require further implementation.
+[campaign work](https://github.com/0sec-labs/0sec/issues/41).
+First-class Python components require further implementation.
 
 ### Local candidate measurements
 
@@ -741,10 +828,11 @@ apply to the earlier candidate, independently of frontend and installation check
 
 ## CLI reference
 
-### 0sec evolve
+<span id="0sec-evolve"></span>
+### 0 evolve
 
 ```text
-0sec evolve                      Autonomous self-improvement
+0 evolve                      Autonomous self-improvement
   run          --config <path>   Run evolution: propose, evaluate, and optionally promote
                  [--watch]          source candidates. Watch mode iterates sequential passes;
                  [--json]           stops on any failed pass (cannot safely retry unmetered
@@ -792,12 +880,13 @@ apply to the earlier candidate, independently of frontend and installation check
 
 **Error codes:** 0 = success, 1 = user error, 2 = runtime error, 3 = interrupt.
 
-### 0sec lens-synth
+<span id="0sec-lens-synth"></span>
+### 0 lens-synth
 
 Finder-lens evolution remains a separate command — see [lens-synth help](/commands/#lens-synth).
 
 ```text
-0sec lens-synth                   Evolve appsec finder coverage from curated misses
+0 lens-synth                   Evolve appsec finder coverage from curated misses
   --miss-input <path>                Curated miss-input JSON ({ misses, corpus })
   --registry <path>                  Durable overlay path (~/.0sec/lenses/...)
   --max-register <n>                 Cap promoted champions per input revision
@@ -812,7 +901,7 @@ Finder-lens evolution remains a separate command — see [lens-synth help](/comm
 
 ## Config shape
 
-An evolution config is a JSON file passed to `0sec evolve run --config <path>`.
+An evolution config is a JSON file passed to `0 evolve run --config <path>`.
 Fields with defaults may be omitted.
 
 This small example exercises the lifecycle; it is **not a cybersecurity
@@ -830,7 +919,7 @@ console.log(JSON.stringify({ classification }));
 
 Save this as `evolution.json` **alongside**, not inside, `worker/`. Install
 `node:22-alpine` locally with Docker before running; evolution never pulls
-an image automatically. Configure the usual 0sec model credentials separately.
+an image automatically. Configure the usual 0 model credentials separately.
 
 ```json
 {
@@ -908,6 +997,7 @@ larger independently curated positive, held-out, and clean-control corpora.
 | `maxSourceBytes` | `67108864` | Max total source size in a snapshot. |
 | `maxChangedBytes` | `262144` | Max total changed bytes across all edits in a proposal. |
 | `promotionPolicy` | `{}` | Promotion gate thresholds (defaults use conservative values from `DEFAULT_IMPROVEMENT_PROMOTION_POLICY`). |
+| `maxAlternativeParents` | Disabled when omitted or `0` | Inspect up to 1–10 retained alternative parents; rank development results only and re-evaluate against the active baseline. |
 
 ### Promotion policy defaults
 
@@ -931,13 +1021,33 @@ larger independently curated positive, held-out, and clean-control corpora.
 
 ## Example: run the config above
 
+Start with explicit approval rather than unattended promotion:
+
 ```bash
-# One-off run with source access and auto-promotion
-0sec evolve run --config ./evolution.json \
-  --allow-source-access \
-  --auto-promote \
-  --json
+docker pull node:22-alpine
+0 evolve run --config ./evolution.json --allow-source-access --no-auto-promote --json
+0 evolve status --store ./.evolution-store --json
 ```
+
+Inspect each iteration's `state`, decision and `receiptPath`. A successful
+command can retain rejected proposals or an `awaiting_approval` candidate;
+exit code 0 does not mean a promotion occurred. For a candidate that passed
+evaluation, use its exact `candidateId`:
+
+```bash
+0 evolve promote --store ./.evolution-store --version <candidate-id> --json
+0 evolve exec --config ./evolution.json --run-id example-after-approval --input '{"n":12}' --json
+```
+
+`promote` reuses the stored candidate/config and runs required canaries; it does
+not ask the model to generate a replacement. A later
+`0 evolve rollback --store ./.evolution-store --version <active-version-id>`
+retires that active version, not a selected destination.
+
+For deliberate automatic selection, replace `--no-auto-promote` with
+`--auto-promote`. Add `--watch --max-passes 3` for bounded sequential passes.
+Watch costs accumulate only in that process; restarting is not durable campaign
+budget recovery. No successful candidate is guaranteed for this toy fixture.
 
 ## Sealed evaluation lanes
 
@@ -955,8 +1065,10 @@ Three independent case lanes must be populated in every config:
 For each iteration:
 
 1. **Snapshot** the current source into a content-addressed, immutable directory
-   under `storePath/snapshots/<id>/`. Symlinks, special files, secrets, and
-   nested store paths are rejected.
+   under `storePath/snapshots/<id>/`. Symlinks, hardlinked/special files,
+   credential-like filenames, and nested store paths are rejected. Filename
+   checks are not content redaction: secrets embedded in ordinary source still
+   need to be removed by the operator before selection.
 2. **Propose** edits via the model (isolated, source-text only, no live path
    access). The proposal must carry a rationale, individual file edits with
    before/after digests, and a model-cost receipt.
@@ -992,12 +1104,16 @@ storePath/
   configs/             -- content-addressed evolution configs
   snapshots/<id>/      -- immutable source snapshots
   receipts/            -- evaluation receipts keyed by candidate ID
+  history/             -- retained pass results and recorded costs/errors
+  pins/                -- run IDs bound to exact versions
+  inputs/              -- run IDs bound to input digests
+  executions/          -- individual worker execution receipts
   controller.lock      -- exclusive controller lease (PID-bound)
 ```
 
 ## Schema version and receipts
 
-Every persistent record carries a `schemaVersion` field:
+The principal evolution records carry a `schemaVersion` field:
 
 - **`EvolutionConfig`** — `schemaVersion: 1`
 - **`EvolutionEvaluation`** — `schemaVersion: 1`, contains `receiptDigest` for
@@ -1007,8 +1123,14 @@ Every persistent record carries a `schemaVersion` field:
 - **`EvolutionRegistry`** — `schemaVersion: 1`, carries a hash-chained `events`
   array
 
-All artifacts are published atomically with O_EXCL creation, fsync, and
-tamper-evident overwrite detection.
+Immutable JSON artifacts are published once through an exclusive temporary
+file, fsync and atomic link; replaying identical bytes is allowed, replacing
+them is not. The mutable registry instead uses a serialized temporary-file
+write and rename. Its event chain and artifact digests detect inconsistent
+local changes, not an attacker who can rewrite the entire store.
+
+Sources: [`artifacts.ts`](https://github.com/0sec-labs/0sec/blob/main/packages/core/src/improvement/artifacts.ts)
+and [`registry.ts`](https://github.com/0sec-labs/0sec/blob/main/packages/core/src/improvement/registry.ts).
 
 ## Promotion gates
 
@@ -1052,7 +1174,7 @@ runner executes candidate code separately under this worker contract:
 
 ## Self-evolving finder lenses
 
-Finder-lens evolution (`0sec lens-synth`) works alongside the evolve system but
+Finder-lens evolution (`0 lens-synth`) works alongside the evolve system but
 remains a separate command. It evolves **additive appsec finder lenses** from
 curated misses into a user-owned registry. Promotions go to
 `~/.0sec/lenses/appsec-archetypes.json`, never the bundled registry. Each
@@ -1060,21 +1182,33 @@ promotion or retirement is recorded in the registry's hash-linked ledger.
 
 ### TUI automatic mode
 
-The OpenTUI can own the lens-synth watcher, so launching `0` or `0sec tui`
-continuously processes the curated inbox while the TUI remains open. It is
-deliberately disabled by default and requires two **Security** settings:
+The OpenTUI can own the lens-synth watcher while the TUI remains open. It is
+disabled by default. The two **Security** settings control different decisions:
+`autoEvolveFinderLenses` starts evaluation; `autoPromoteFinderLenses` separately
+permits installation of validated champions. Start in validation-only mode:
 
 ```json
 {
   "autoEvolveFinderLenses": true,
-  "autoPromoteFinderLenses": true
+  "autoPromoteFinderLenses": false
 }
 ```
 
-Import with `0sec config import evolution.json --yes` or enable in the TUI.
+Save that settings object as `lens-settings.json`, then run
+`0 config import lens-settings.json --yes`, or set the values in the TUI.
+This is a TUI settings file, **not** the source-worker `evolution.json` above.
+Evaluation can consume model usage even with promotion disabled.
 
-The chat status reports `evolve:auto`, `evolve:waiting input`,
-`evolve:promoted`, or `evolve:error`.
+The watcher reads the curated inbox at
+`~/.0sec/lens-synthesis/miss-input.json` and approved observations from the
+feedback queue. Enabling it does not manufacture fixtures or approve captured
+misses. Use `0 evolve feedback capture`, then operator-curated
+`0 evolve feedback approve`, as described in the [CLI reference](#0-evolve).
+After reviewing validation evidence, enable `autoPromoteFinderLenses` if desired.
+
+Status distinguishes `evolve:dry-run`, `evolve:auto`, `evolve:waiting input`,
+`evolve:promoted`, and `evolve:error`. Source:
+[`tui/lens-evolution.ts`](https://github.com/0sec-labs/0sec/blob/main/packages/cli/src/tui/lens-evolution.ts).
 
 ### Lens corpus and receipts
 
@@ -1127,8 +1261,8 @@ legacy, or different-scope claims are not automatically released. Stop the old
 worker before manually recovering those claims with:
 
 ```bash
-0sec evolve feedback status --json
-0sec evolve feedback release --id <observation-id> --claim-token <token>
+0 evolve feedback status --json
+0 evolve feedback release --id <observation-id> --claim-token <token>
 ```
 
 Queue and overlay writers fail promptly on lock contention. If a process dies
@@ -1200,17 +1334,27 @@ Key differences from standalone evolution:
   `manager.rollback()` like any other version; the evolved snapshot and receipt
   are retained.
 
-The `evolve` method accepts an optional `maxAlternativeParents` field in the
-profile to explore bounded compatible retired and rejected/staged candidates as
-offline source parents, ranking development outcomes only. When set, iteration
-refreshes source after promotion; the `parentId` tracks the active baseline,
-`alternativeParentId` records source provenance.
+The profile's optional `maxAlternativeParents` uses the same bounded
+[development-only archive selection](#model-for-proposal-generation) as
+standalone evolution. It is not a plugin-only API. When a candidate is promoted,
+subsequent iterations use the new active baseline; `alternativeParentId`
+preserves any distinct archived source origin.
+
+The manager publishes a new executable version only after source promotion and
+fresh executable admission succeed. An evaluated but unpromoted candidate
+returns `state: "not_promoted"` and leaves the plugin active version unchanged.
+A measured label describes the configured fixture evidence, not general tool
+correctness. Unlike `evolve rollback --version`, `manager.rollback(pluginId,
+versionId)` selects the retained executable version **to restore**.
 
 ## External hosts
 
-DSH, Codex, and Claude Code are optional MCP clients. They may present a narrow
-0sec tool profile, but they don't own promotion, scope, evidence, or replay. See
-[Architecture](/architecture/#mcp-integration) and
+An external coding agent can launch the CLI for complete workflows, or connect
+as a stdio MCP client for a narrow live-target tool set. Those are separate paths:
+the MCP tool roster does not expose source evolution or every CLI command.
+The client owns its reasoning and configuration; 0 retains the applicable
+tool-side scope and evidence checks. See [Integrations](/integrations/#coding-agent-workflows),
+[Architecture](/architecture/#mcp-integration), and
 [Benchmark methodology](/methodology/).
 
 ## Live lifecycle checks
@@ -1246,13 +1390,14 @@ Those need their own real integration scenarios, including a task that
 continues across generation changes without reconstructing its session.
 
 A local plugin smoke or a provider-backed candidate-generation check does not
-qualify the new lifecycle with hosted inference. That integration remains
-candidate-stage and production-disabled. Hosted parent SDK calls consume
-inference credit, including evolution calls; child-route inheritance and
-arbitrary trusted ESM clients are not covered by a blanket parent-broker
-guarantee. See [hosted inference and evolution accounting](/architecture/#hosted-inference-and-evolution-accounting)
-for the routing, pricing, and qualification boundaries. Self-Harness's
-model-specific results establish neither universal gains nor launched billing.
+qualify this lifecycle with hosted inference. Hosted model transport is separate
+from local Docker/smolvm execution and from a managed worker service. Parent SDK
+model calls use the parent's configured runtime; that is not a blanket guarantee
+for arbitrary trusted ESM clients or every child route. See
+[hosted inference and evolution accounting](/architecture/#hosted-inference-and-evolution-accounting)
+for routing, pricing and qualification boundaries. The historical checks here
+establish neither current production availability nor launched billing, and
+Self-Harness's model-specific results establish no universal gains.
 
 If the account already has approved Docker group membership but a persistent
 process predates it, the Docker backend can use that existing group through

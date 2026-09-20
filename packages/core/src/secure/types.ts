@@ -111,4 +111,7 @@ export interface SecureProjectResult {
   repairs: BehavioralRepairResult[];
   errors: string[];
   pullRequests: string[];
+  /** Real metered model cost (USD) from provider-reported usage; 0 when the
+   *  runtime surfaces no usage. Never an estimate. */
+  costUsd: number;
 }

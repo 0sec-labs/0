@@ -3,57 +3,82 @@ title: Verification Results
 description: Stable JSON contract emitted by deterministic replay verifiers.
 ---
 
-Deterministic verification emits a `verification_result` JSON object. The open-source engine runs a replay harness, checks concrete assertions, and records the outcome here. It is separate from human triage and a finding's lifecycle state.
+The replay paths of `0 verify` emit the canonical `VerificationResult` from
+`packages/shared/src/verification.ts`. This is separate from human triage,
+research evidence envelopes, kernel-finding verification and the aggregate
+reproduction-bundle result. It describes what the selected runner observed;
+it does not imply that every finding in a scan was replayed.
 
 ## Result schema
 
 ```typescript
-type VerificationStatus =
-  | "reproduced"
-  | "not_reproduced"
-  | "inconclusive"
-  | "error";
+type VerificationStatus = "reproduced" | "not_reproduced" | "error" | "skipped";
 
 interface VerificationCommand {
   argv: string[];
   exit_code: number | null;
-  stdout_excerpt: string;
-  stderr_excerpt: string;
+  stdout_excerpt?: string;
+  stderr_excerpt?: string;
+  duration_ms: number;
 }
 
 interface VerificationAssertion {
-  kind: string;
+  kind: "file_exists" | "http_status" | "string_in_output" | "exit_code";
+  target: string;
+  expected: string | number | boolean;
+  actual: string | number | boolean | null;
   passed: boolean;
-  detail: string;
 }
 
 interface VerificationResult {
   status: VerificationStatus;
-  mode: "deterministic_replay";
+  mode: "deterministic_replay" | "agent_assisted";
   finding_id: string;
   engine_version: string;
   started_at: string;
   completed_at: string;
+  duration_ms: number;
   commands: VerificationCommand[];
   assertions: VerificationAssertion[];
-  artifacts: Record<string, string>;
-  summary: string;
-  error_reason: string | null;
+  evidence_artifacts: Array<{
+    kind: string;
+    path: string;
+    sha256: string;
+    bytes?: number;
+  }>;
+  engine_metadata: { os: string; arch: string; runner: "local" | "docker" | "qemu" };
+  summary?: string;
+  error_reason?: string | null;
+  evidence_kind?: "reproduced-poc" | "source-only" | "reproduced-memcorruption-poc";
+  oast_confirmed?: boolean;
 }
 ```
 
-Fields may be added over time. Treat the fields above as the minimum stable contract and ignore unknown fields.
+`agent_assisted` is a schema-reserved mode, not an automatic fallback promised
+by the deterministic runner. Import `VerificationResultSchema` from
+`@0sec/shared` for runtime validation. Artifact SHA-256 values are 64 hex
+characters; paths alone are not integrity evidence.
 
 ## Status semantics
 
 | Status | Meaning |
 |--------|---------|
-| `reproduced` | Replay ran far enough to evaluate the concrete assertions, and the required exploit assertions passed. |
-| `not_reproduced` | Replay evaluated the assertions, but the exploit condition wasn't observed. A secure CLI that rejects malicious input can exit non-zero and still land here when filesystem assertions prove no escape happened. |
-| `inconclusive` | The verifier reached the target but lacked assertion evidence to prove or disprove the finding. |
-| `error` | The verifier failed before a reliable assertion result — malformed input, setup failure, an unlaunchable command, or a timeout. |
+| `reproduced` | The producer's required assertions passed. Review whether those assertions actually establish the exploit. |
+| `not_reproduced` | The exploit condition was not established. The general replay runner also uses this when steps run but no assertions were declared. |
+| `skipped` | No replay was performed, such as a finding without `pocSteps`. |
+| `error` | An execution/setup failure prevented a reliable result, such as an unsupported executable step or timeout. |
 
 **`status` is not the finding's human triage state.** It's an automated proof signal; a maintainer can still accept, suppress, or reopen after reviewing the evidence.
+
+The canonical statuses do **not** include `inconclusive`. The older fixture
+helper uses that status internally; the CLI converts it to `skipped`. Other
+verification families can legitimately use `inconclusive` in their own schemas.
+Replay CLI exits are `0` reproduced, `1` not reproduced, `2` skipped and `3` error.
+
+`evidence_kind` and `oast_confirmed` are optional provenance signals. An
+out-of-band callback is different from an in-band replay assertion; absence of
+these fields is not a negative verdict. A consumer must validate the producing
+path and retained evidence rather than trusting user-authored JSON as proof.
 
 ## Commands
 
@@ -72,7 +97,8 @@ Each record captures the real command the verifier ran:
   ],
   "exit_code": 0,
   "stdout_excerpt": "wrote /tmp/0sec-verify-a1b2/escaped-marker\n",
-  "stderr_excerpt": ""
+  "stderr_excerpt": "",
+  "duration_ms": 287
 }
 ```
 
@@ -80,7 +106,12 @@ Each record captures the real command the verifier ran:
 
 ## Assertions
 
-Assertions are the machine-checkable facts that turn a replay into a verdict. The CLI path-traversal fixture uses filesystem assertions:
+Assertions are machine-checkable observations, not model confidence scores.
+The general runner evaluates each `pocSteps[].expect` and any SDK-supplied
+assertions. No assertions means no reproduced verdict, even for exit code zero.
+
+The older CLI path-traversal fixture evaluates these additional internal
+predicates before the CLI converts them to the shared assertion shape:
 
 | Kind | Purpose |
 |------|---------|
@@ -94,29 +125,46 @@ Deterministic code evaluates the final assertions.
 
 ## Artifacts
 
-`artifacts` holds references a maintainer can use to inspect or reproduce the run — paths for local runs, storage keys or other references for cloud runs:
+The current JSON contract uses `evidence_artifacts`, not an `artifacts` map.
+Each descriptor has a kind, path and SHA-256; retained stream captures from the
+general runner live under `<runDir>/artifacts/`. Command excerpts are capped at
+8 KiB and captures at 1 MiB per stream, so a saved capture is not necessarily
+unbounded output.
 
-| Key | Meaning |
-|-----|---------|
-| `sandbox_ref` | Root directory for the isolated replay sandbox. |
-| `harness_ref` | Harness metadata (fixture name, expanded command argv). |
-| `stdout_ref` | Full stdout log. |
-| `stderr_ref` | Full stderr log. |
-| `export_ref` | Fixture-specific export directory or output root. |
+Choose the invocation and storage contract deliberately:
 
-The CLI cleans temporary sandboxes by default. Use `--retain-artifacts` or `--artifact-dir` when logs and harness files need to survive the run.
+```bash
+# Execute a reviewed finding's PoC on the host and retain the replay directory
+0 verify ./finding.json --runner local --out ./replay --output ./verification.json
+
+# Isolated container replay; provision the required images beforehand
+0 verify ./finding.json --runner docker --out ./replay-docker
+```
+
+`local` runs shell steps on the host; a temporary working directory is **not**
+an OS sandbox. Docker uses fresh restricted containers and no network by default.
+Explicit networked Docker HTTP replay requires `--scope` and `--docker-network`;
+arbitrary shell commands do not receive that network access. QEMU requires a
+kernel and static BusyBox and runs shell steps in an offline guest.
+
+The fixture path cleans its temporary sandbox by default. Its
+`--retain-artifacts` / `--artifact-dir` flags apply **only to `--fixture`**.
+For the general replay runner use `--out`; use `--output` for the result JSON.
 
 ## CLI path traversal example
 
 The `cli-path-traversal` fixture starts a malicious local API, creates a sandboxed export directory, and runs the real CLI argv from `--fixture-command`.
 
 ```bash
-0sec verify --fixture cli-path-traversal \
+0 verify --fixture cli-path-traversal \
   --fixture-command '["paperclip","company","export","--api","{{apiUrl}}","--output","{{exportDir}}"]' \
   --retain-artifacts
 ```
 
-Example result:
+Historical fixture-helper example (engine `0.7.13`, 2026-05-06), retained below
+as an example of the **legacy internal fixture shape**, not a new run or the
+current CLI schema. The CLI now adds duration/engine metadata, converts
+assertions and hashes surviving fixture files into `evidence_artifacts`.
 
 ```json
 {
@@ -173,4 +221,6 @@ Example result:
 
 ## Cloud ingestion
 
-Cloud consumers can schedule runs, store `verification_result` payloads, display evidence, and gate workflows on explicit results. Use the engine's replay implementation and schema.
+Consumers can validate and store the canonical shared result and retained
+artifacts. Scheduling, authorization, storage access and promotion policy belong
+to the integrating service; emitting JSON locally does not upload or publish it.

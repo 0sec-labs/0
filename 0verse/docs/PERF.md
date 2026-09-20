@@ -1,5 +1,11 @@
 # Performance: the optional Rust/PyO3 fast-path (#31)
 
+> **Historical microbenchmark record.** The measurements below retain their
+> original host and synthetic workload. The referenced `.bench_native.py` was a
+> local campaign script and is not shipped in this checkout, so that command
+> is provenance, not a reproducible current entrypoint. The optional extension
+> build instructions at the end remain applicable from `0verse/`.
+
 0verse's CPU-bound stages (ingest/triage, the bug-class lens scan, NDJSON
 emission) are pure-Python and work everywhere with zero native dependencies. #31
 adds an **optional** Rust extension (`zeroverse._native`) that accelerates the one
@@ -127,8 +133,15 @@ install never requires a Rust toolchain.
 
 ## Building the optional extension
 
+Run from `0verse/` with the package installed and its environment activated
+(`uv sync --frozen`, then `source .venv/bin/activate` in a POSIX shell).
+Install Rust (`cargo`/`rustc`) and `unzip` separately. The helper is a Bash script
+that extracts a Unix `.so` from the maturin wheel and copies it into the
+importable `zeroverse` package; it is not a Windows-native installer. Match the
+`python` used by the helper to the environment that runs 0verse.
+
 ```
-pip install maturin
+uv pip install maturin
 ./rust/build.sh          # builds zeroverse._native and drops it into the package
 ```
 

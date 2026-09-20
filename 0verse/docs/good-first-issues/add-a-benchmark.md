@@ -25,9 +25,11 @@ cherry-picked picture of where the engine wins, ties, or loses to plain AFL++.
    differential-allocator oracle can confirm — see `benchmarks/fuzzbench/targets/`).
 2. For a PoV-gate benchmark: add it to `benchmarks/run.sh` with its expected
    `source:sink`. For a comparison target: add `(name, func, decl)` to `TARGETS`.
-3. Run it and record the **honest** numbers in `docs/BENCHMARKS.md`. If baseline
-   AFL++ ties or wins, that's a valid result — say so, and note it in
-   `NEGATIVE-RESULTS.md`.
+3. Run it in an explicitly authorized execution environment and record a new
+   dated result with host, revision, backend, model, budget, and trial count.
+   Preserve prior measurements in `docs/BENCHMARKS.md` rather than overwriting
+   them with new-run numbers. A baseline AFL++ tie or win is a valid result;
+   note limitations in `NEGATIVE-RESULTS.md`.
 
 ## Definition of done
 

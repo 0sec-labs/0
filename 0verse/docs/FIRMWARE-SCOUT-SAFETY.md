@@ -39,6 +39,31 @@ when its source recorded that declaration, not a physical target observation.
 A future #77 safety policy is the sole outbound authorization owner; sharing a
 `profile_id` cannot promote profile knowledge into permission.
 
+### Shipped operator entrypoints
+
+The `scout` CLI is hardware-free. From `0verse/` after `uv sync --frozen`:
+
+```sh
+uv run --frozen 0verse scout capture --fixture standard --output ./scout-example
+uv run --frozen 0verse scout inspect ./scout-example
+uv run --frozen 0verse scout report ./scout-example --format md
+```
+
+`capture` requires a new directory and accepts only the standard virtual fixture;
+it has no live-interface option. `inspect` and `report` verify the acquisition
+bundle **and** replay its sealed Scout logs before producing observations,
+inferences, and unknowns. Arbitrary firmware files or a generic acquisition
+manifest without Scout replay artifacts are not accepted by these CLI commands;
+use the [bundle](FIRMWARE-BUNDLE-INTAKE.md) and
+[inspection](FIRMWARE-INSPECTION.md) Python APIs instead.
+
+The optional `scout` dependency extra supplies `python-can` for the separate
+library-only `capture_socketcan` adapter. It is not needed by the offline CLI
+and does not add active diagnostics, ECU discovery, firmware readout, or a
+transmission authorization path. Receive-only application code also does not
+configure the hardware controller's electrical listen-only mode; that is a
+separate operator/hardware safety responsibility.
+
 ## Operating modes
 
 | Mode | Meaning | Transmission |

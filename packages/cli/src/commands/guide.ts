@@ -61,7 +61,7 @@ const CAPABILITIES: Capability[] = [
   {
     id: "connect",
     summary: "Request managed repository security work and recurring runs after repository readiness checks and explicit policy approval.",
-    when: "Point 0cloud by 0security at a repository and let it work continuously.",
+    when: "Point 0cloud by 0.security at a repository and let it work continuously.",
     command: "0sec connect https://github.com/org/repo",
     layer: "service",
     requiresAuth: true,
@@ -157,7 +157,7 @@ const CAPABILITIES: Capability[] = [
 ];
 
 const ARCHITECTURE = {
-  summary: "0security is the open engine and CLI brand; the executable remains 0sec. 0cloud by 0security offers two paths: hosted inference with local tools, or managed security execution using the same engine. These paths have separate access and funding.",
+  summary: "0.security is the open engine and CLI brand; the executable remains 0sec. 0cloud by 0.security offers two paths: hosted inference with local tools, or managed security execution using the same engine. These paths have separate access and funding.",
   lifecycle: [
     "prepare — pin a clean managed checkout of your repository",
     "investigate — source review with tool-using agents under budgets",
@@ -245,7 +245,7 @@ function commandMetadata(command: Command) {
 
 function printHuman(topic: string | undefined, service: GuideServiceStates, commands: Command[]): void {
   const out: string[] = [];
-  out.push(`0security guide (installed ${VERSION})`);
+  out.push(`0.security guide (installed ${VERSION})`);
   out.push("");
   out.push(ARCHITECTURE.summary);
   out.push("");
@@ -324,7 +324,7 @@ export function registerGuideCommand(program: Command): void {
           JSON.stringify(
             {
               version: VERSION,
-              product: "0security (open engine + CLI); 0cloud by 0security (hosted platform)",
+              product: "0.security (open engine + CLI); 0cloud by 0.security (hosted platform)",
               capabilities: topic ? (capability ? [capability] : []) : CAPABILITIES,
               commands: (topic && topic !== "commands" ? (command ? [command] : []) : commands).map(commandMetadata),
               architecture: !topic || topic === "architecture" ? ARCHITECTURE : undefined,

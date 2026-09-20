@@ -39,6 +39,12 @@ Each archetype carries a `route` saying *how* (or whether) 0verse acts on it:
 | `firmware-static` | static-only (backdoor, hardcoded key, update crypto) | constant extraction / call-graph |
 | `firmware-detect-only` | baseband — detect, hand off to specialist emulator | FirmWire/ShannonEmu (hand-off) |
 
+Routes describe **catalog intent**, not provisioned workers or proof of runtime
+availability. `implemented` means an `engine_lens` is recorded; it does not mean
+the host has that backend or a confirming oracle. KASAN and specialist-emulator
+hand-offs remain separately configured research environments. Check the run's
+terminal state and stage outcomes before treating a routed candidate as analyzed.
+
 `engine_lens` names the implementing component, e.g. `bugclass:cmdi`,
 `bugclass:overflow`, `seed:linux-ko:selector-index`, `seed:firmware:cgi-cmdi`, or
 `null` (catalogued but no binary lens — an honest hand-off).

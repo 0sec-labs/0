@@ -63,6 +63,8 @@ import { shellTokens } from "../agent/shell-tokens.js";
 import { drainInbox } from "../hub/mailbox.js";
 import { renderInboundBatch } from "../agent/agent-messaging.js";
 import type { MessagingRuntime } from "../agent/agent-messaging.js";
+import { captureNativeRuntime, currentContributionAgent, currentRunContribution, getConfiguredRunContributionClient, withRunContribution, type RunCapture, type RunManifest } from "../telemetry/run-contribution.js";
+import { registerSignalCleanup } from "../agent/signal-cleanup.js";
 
 /**
  * Unified interactive chat console — engine-side turn driver.
@@ -423,6 +425,8 @@ export interface ConsoleSessionConfig {
    * passes an `LlmApiRuntime`. Build one with {@link createConsoleRuntime}.
    */
   runtime: NativeRuntime;
+  /** Explicit fixture capture; ordinary console runs require configured enrollment. */
+  contribution?: RunCapture;
   /**
    * Prior conversation to seed the session with. When provided, the session's
    * history starts as a DEFENSIVE COPY of these native messages instead of
@@ -662,6 +666,7 @@ export interface ConsoleSession {
   /** Restored executable tools and harness providers are usable after this resolves. */
   readonly ready: Promise<void>;
   readonly harness?: LiveHarnessHost;
+  readonly contribution?: RunCapture;
   readonly systemPrompt: string;
   readonly tools: ToolDefinition[];
   /** Full conversation so far (native content blocks). Grows with each turn. */
@@ -1814,6 +1819,34 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
   // retries the same (or a covered) path. Seeded from checkpoint.
   const deniedLocalPaths = new Set<string>(cp?.deniedLocalPaths);
 
+  let contribution = config.contribution ?? currentRunContribution();
+  const contributionParentId = currentContributionAgent() ?? null;
+  const contributionAgentId = `console-${randomUUID()}`;
+  let contributionStop: RunManifest["termination"] = "unknown";
+  let contributionExecution: RunManifest["execution"] = "running";
+  let unregisterContribution: (() => void) | undefined;
+  let capturedRuntime: NativeRuntime | undefined;
+  const pendingModelCalls = new Set<Promise<NativeRuntimeResult>>();
+  const runtime = new Proxy(config.runtime, {
+    get(target, key) {
+      if (key === "executeNative") return (...args: Parameters<NativeRuntime["executeNative"]>) => {
+        if (!contribution) return target.executeNative(...args);
+        capturedRuntime ??= captureNativeRuntime(target, contribution);
+        const request = withRunContribution(contribution, contributionAgentId, contributionParentId, () => capturedRuntime!.executeNative(...args));
+        pendingModelCalls.add(request);
+        return request.finally(() => pendingModelCalls.delete(request));
+      };
+      const value = Reflect.get(target, key, target);
+      return typeof value === "function" ? value.bind(target) : value;
+    },
+  });
+  const effectiveContributionScope = () => ({
+    target: sessionTarget, scopePath: sessionScopePath ?? null, policy: sessionScope?.raw ?? null,
+    configuredPolicy: configuredScope?.raw ?? null, deniedHosts: [...deniedHosts],
+    deniedLocalPaths: [...deniedLocalPaths], deniedShellPayloads: [...deniedShellPayloads],
+    autonomyMode, allowScanners: config.allowScanners ?? false,
+  });
+
   const toolContext: ToolContext = {
     target: sessionTarget,
     scanId,
@@ -1919,7 +1952,7 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
   // this pass (findings live in `toolContext.findings` for the session). When
   // the CLI/TUI provides a DB handle, save_finding persists there and
   // query_findings can read current, prior, or all sessions.
-  const executor = new ToolExecutor(toolContext, config.db ?? null, undefined, config.runtime.forkForSubagent?.bind(config.runtime), cp?.executor);
+  const executor = new ToolExecutor(toolContext, config.db ?? null, undefined, runtime.forkForSubagent?.bind(runtime), cp?.executor);
 
   const tools =
     config.tools ?? getToolsForRole(role, { allowScanners: config.allowScanners });
@@ -2099,7 +2132,7 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
   // Published on the SAME event bus the TUI already watches for todos/subagents,
   // keyed by scanId so a renderer can filter to its own session.
   const objectiveService = createSessionObjectiveService({
-    runtime: config.runtime,
+    runtime,
     refine: config.refineObjective,
     emit: (objective, refined) => {
       eventBus.emit("session_objective", { scanId, objective, refined });
@@ -2762,6 +2795,22 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
     allowScopeExpansion = true,
     assertAuthority?: () => void,
   ): Promise<ToolResult> {
+    const capture = contribution;
+    if (!capture) return dispatchAuthorizedInternal(call, notify, signal, allowScopeExpansion, assertAuthority);
+    const callId = randomUUID();
+    const startedAt = Date.now();
+    capture.record("tool_call", { callId, tool: call.name, arguments: call.arguments, effectiveScope: effectiveContributionScope() });
+    try {
+      const result = await dispatchAuthorizedInternal(call, notify, signal, allowScopeExpansion, assertAuthority);
+      capture.record("tool_result", { callId, tool: call.name, result, durationMs: Date.now() - startedAt, effectiveScope: effectiveContributionScope() });
+      return result;
+    } catch (error) {
+      capture.record("tool_result", { callId, tool: call.name, error: describeCaughtError(error), durationMs: Date.now() - startedAt });
+      throw error;
+    }
+  }
+
+  async function dispatchAuthorizedInternal(call: ToolCall, notify?: (message: string) => void, signal?: AbortSignal, allowScopeExpansion = true, assertAuthority?: () => void): Promise<ToolResult> {
     assertAuthority?.();
     if (signal?.aborted) return { success: false, output: null, error: "Tool call cancelled before dispatch." };
     const recon = maybeAllowReconCapability(call);
@@ -2793,6 +2842,38 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
     callbacks?: ConsoleRenderCallbacks,
     opts?: ConsoleSendOptions,
   ): Promise<ConsoleTurnOutcome> {
+    if (!contribution && !opts?.signal?.aborted && !closing && !turnInProgress) {
+      try {
+        contribution = getConfiguredRunContributionClient()?.begin({
+          runId: scanId, model: runtime.resolvedModel?.() ?? config.costModel ?? "unknown",
+          scope: effectiveContributionScope(), objective: userText, versions: { loop: "console-v1" },
+        }) ?? undefined;
+      } catch { process.stderr.write("[0sec] Console contribution unavailable: private spool or enrollment could not be opened.\n"); }
+    }
+    if (!contribution) return sendInternal(userText, callbacks, opts);
+    const capture = contribution;
+    if (!contributionParentId) capture.setInitialScope({ context: capture.manifest.scope, ...effectiveContributionScope() });
+    unregisterContribution ??= registerSignalCleanup(() => {
+      if (!contributionParentId) withRunContribution(capture, contributionAgentId, contributionParentId, () => capture.finish("interrupted", "operator_cancelled"));
+    });
+    return withRunContribution(capture, contributionAgentId, contributionParentId, async () => {
+      capture.record("routing", { source: "console_turn", model: runtime.resolvedModel?.() ?? config.costModel ?? "unknown", effectiveScope: effectiveContributionScope() });
+      if (cp || config.initialMessages?.length) capture.record("resume", { source: cp ? "console_checkpoint" : "console_history", scanId, messageCount: messages.length, sideEffectsReplayed: false });
+      try {
+        const outcome = await sendInternal(userText, callbacks, opts);
+        contributionStop = outcome.stopReason === "cancelled" ? "operator_cancelled" : outcome.stopReason === "error" ? "provider_error" : outcome.stopReason === "end_turn" ? "plan_exhausted" : "run_resource_limit";
+        contributionExecution = outcome.stopReason === "error" ? "failed" : outcome.stopReason === "cancelled" ? "interrupted" : "completed";
+        capture.record("checkpoint", { source: "console_turn", scanId, messageCount: messages.length, stopReason: outcome.stopReason, effectiveScope: effectiveContributionScope(), durable: false });
+        return outcome;
+      } catch (error) {
+        contributionStop = "harness_error"; contributionExecution = "failed";
+        capture.record("termination", { source: "console_turn", error: describeCaughtError(error), termination: contributionStop });
+        throw error;
+      }
+    });
+  }
+
+  async function sendInternal(userText: string, callbacks?: ConsoleRenderCallbacks, opts?: ConsoleSendOptions): Promise<ConsoleTurnOutcome> {
     const signal = opts?.signal;
 
     // Checkpoint — already aborted before any work. Return immediately with the
@@ -2945,7 +3026,7 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
       const effectiveSignal = signal && requestSignal ? AbortSignal.any([signal, requestSignal]) : signal ?? requestSignal;
       effectiveSignal?.throwIfAborted();
       let delta: { inputTokens: number; outputTokens: number } | undefined;
-      const response = await config.runtime.executeNative(
+      const response = await runtime.executeNative(
         parsed.system, parsed.messages, parsed.tools,
         { onUsage: (value) => { delta = value; } }, effectiveSignal,
       );
@@ -3184,7 +3265,7 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
           // Actual SDK model calls already recorded their usage through invokePluginModel.
         } else {
           try {
-            result = await config.runtime.executeNative(systemPrompt, messages, nativeTools, streamCallbacks, signal);
+            result = await runtime.executeNative(systemPrompt, messages, nativeTools, streamCallbacks, signal);
           } catch (error) {
             if (streamedUsage) recordModelUsage("planner", streamedUsage);
             throw error;
@@ -3482,8 +3563,17 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
       catch (error) { warnings.push(`Executable plugins close: ${String(error)}`); }
       await executor.cleanup();
     })());
+    const modelTrack = contribution ? settleWithin("Contribution model drain", Promise.allSettled([...pendingModelCalls])) : Promise.resolve();
     retirement = (async () => {
-      await Promise.all([harnessTrack, executorTrack]);
+      await Promise.all([harnessTrack, executorTrack, modelTrack]);
+      if (contribution) {
+        withRunContribution(contribution, contributionAgentId, contributionParentId, () => {
+          if (contributionParentId) contribution!.record("termination", { source: "console", execution: contributionExecution, termination: contributionStop });
+          else contribution!.finish(warnings.length ? "interrupted" : contributionExecution === "running" ? "interrupted" : contributionExecution, warnings.length ? "harness_error" : contributionStop);
+        });
+        unregisterContribution?.();
+        if (!contributionParentId && !config.contribution && pendingModelCalls.size === 0) await contribution.client.upload(contribution);
+      }
       return warnings.length ? { warnings } : {};
     })();
     return retirement;
@@ -3493,6 +3583,7 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
     scanId,
     ready,
     harness,
+    get contribution(): RunCapture | undefined { return contribution; },
     get systemPrompt(): string { return systemPrompt; },
     tools,
     messages,
@@ -3514,7 +3605,7 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
       // Mutate the existing runtime in place; the engine reads config.runtime
       // per turn and binds forkForSubagent per fork, so no teardown is needed.
       const { contextWindowTokens: newWindow, ...runtimeSel } = sel;
-      config.runtime.reconfigure?.(runtimeSel);
+      runtime.reconfigure?.(runtimeSel);
       // Re-base the compaction trigger on the new model's window when provided.
       // Reset the regrow baseline so the fresh window governs the next trigger
       // cleanly rather than inheriting the prior model's accrual.
@@ -3525,6 +3616,7 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
     },
     clearConversation: () => {
       messages.length = 0;
+      contribution?.record("truncation", { reason: "operator_clear_conversation", retainedMessages: 0 }, contributionAgentId, contributionParentId);
     },
     send,
     stopPersistentAgent: (agentId) => executor.stopPersistentAgent(agentId),
@@ -3533,6 +3625,7 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
       if (!initialized || turnInProgress || closing) {
         throw new Error("Cannot export checkpoint before readiness, during a turn, or after retirement.");
       }
+      contribution?.record("checkpoint", { source: "console_export_checkpoint", scanId, messageCount: messages.length, effectiveScope: effectiveContributionScope(), durable: false }, contributionAgentId, contributionParentId);
       return Object.freeze<ConsoleSessionCheckpoint>({
         version: 1,
         scanId,

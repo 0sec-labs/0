@@ -1,8 +1,8 @@
 # R0 reproducible baseline
 
-This is the starting contract for Firmware Scout work. It records what 0verse can
-prove today, which checks are portable, and which capabilities are absent from the
-core development profile. The machine-readable record is
+This is the **historical R0 starting contract**, not a report for the current
+checkout. It records what the audited revision could prove, which checks were
+portable, and which capabilities were absent from its core profile. The machine-readable record is
 [`baselines/r0-2026-07-17.json`](baselines/r0-2026-07-17.json).
 
 ## Supported development profile
@@ -107,6 +107,13 @@ The #78 follow-on adds an optional library-only, receive-only classical-CAN
 SocketCAN adapter, but no hardware acceptance has run: it remains gated on an
 authorized Linux interface. ISO-TP transport, UDS discovery, an ECU profile, and
 a hardware-backed dump path remain unavailable capabilities, not implicit promises.
+
+The current checkout also exposes hardware-free `scout capture --fixture
+standard`, `scout inspect`, and `scout report` commands; see
+[Firmware Scout safety](FIRMWARE-SCOUT-SAFETY.md). Their presence does not update
+the historical counts or hardware acceptance above. Current exported CI lives
+at `../../.github/workflows/0verse.yml`, not the standalone repository's
+historical workflow paths.
 
 ## Updating the baseline
 

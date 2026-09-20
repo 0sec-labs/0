@@ -9,8 +9,10 @@ Independent verification re-tests candidate findings. This design investigates
 how features, classifiers, and additional checks affect recall, false positives,
 and cost.
 
-> **April 2026 record:** implementation and planning coexist below. Neural fusion
-> and adversarial debate remain proposals. See [measured triage results](/research/fp-reduction-moat/).
+> **April 2026 design record:** implementation and planning coexist below.
+> The original 45-feature design and historical targets are preserved; today's
+> extractor has 55 features. Neural fusion and debate remain proposals.
+> Current runtime boundaries are in [False-positive reduction](/research/fp-reduction-moat/).
 
 ## Research Landscape (April 2026)
 
@@ -54,7 +56,7 @@ The hybrid achieved the best reported result in that ablation.
 
 - **D2A (IBM)** — static analyzer findings labeled as true/false positive via differential analysis. Closest to our use case. [github.com/IBM/D2A](https://github.com/IBM/D2A)
 - **BigVul** — 188K labeled C/C++ functions from CVEs
-- **0sec's own data** — XBOW benchmark runs with flag extraction as ground truth
+- **0's own data** — XBOW benchmark runs with flag extraction as ground truth
 
 ## Our Approach: Hybrid Triage Model
 
@@ -129,7 +131,7 @@ A blocklist-driven filter that rejects findings where the "vulnerability" is sim
 
 ### Layer 1.75: Reachability Gate ("Endor Labs moat") — SHIPPED
 
-Reachability checks assess paths from application entry points to vulnerable sinks. Endor Labs reports 95% false-positive elimination with its proprietary Code API; 0sec's pattern-based implementation has separate evidence.
+Reachability checks assess paths from application entry points to vulnerable sinks. Endor Labs reports 95% false-positive elimination with its proprietary Code API; 0's pattern-based implementation has separate evidence.
 
 **Implementation:** `packages/core/src/triage/reachability.ts` — zero-dependency grep/pattern-based first pass. Conservative: when uncertain it returns `reachable: true` with low confidence so the rest of the pipeline still runs. Public API: `checkReachability(finding, repoPath)` returning a `ReachabilityResult`.
 
@@ -139,7 +141,8 @@ Category-specific oracles check SQLi, reflected XSS, SSRF, RCE, path traversal, 
 
 **Implementation:** `packages/core/src/triage/oracles.ts` plus the dispatcher `verifyOracleByCategory(finding, target)`. Oracles bypass the LLM entirely on the happy path; the LLM verify pipeline is the fallback.
 
-### Layer 1.95: Multi-Modal Agreement (foxguard × 0sec) — SHIPPED
+<span id="layer-195-multi-modal-agreement-foxguard--0sec--shipped"></span>
+### Layer 1.95: Multi-Modal Agreement (foxguard × 0) — SHIPPED
 
 The optional [foxguard](https://github.com/0sec-labs/foxguard) check adds evidence
 from a second scanner on the same tree. Agreement and silence feed the triage
@@ -164,13 +167,18 @@ Fuse the 45-feature vector with CodeBERT embeddings via cross-attention:
 
 ### Layer 4: Structured LLM Verification (GitHub Security Lab-style) — SHIPPED
 
-For findings that the hybrid model classifies as "likely true positive" (high confidence), we run a structured multi-step LLM verification:
+The implemented structured verifier can run without the proposed neural fusion
+model. Its four model-judgment steps assess supplied evidence:
 1. **Reachability analysis** — can the vulnerability actually be triggered from user input?
 2. **Payload validation** — does the PoC actually demonstrate the claimed vulnerability?
 3. **Impact assessment** — what's the real-world impact? Information disclosure vs RCE?
-4. **Exploit confirmation** — independently reproduce the exploit (the original blind verify).
+4. **Exploit confirmation** — judge the exploit claim from the supplied evidence.
 
 Each step uses domain-specific prompts with category-specific addendums (SQLi, XSS, SSTI, IDOR, SSRF, command injection, file upload, deserialization, auth bypass). Any step failure marks the finding as a false positive.
+
+This function calls the runtime for text judgments; it is not itself the
+executable replay runner. A positive vote must not be relabeled as fresh dynamic
+reproduction. Native tool-based verification and replay have separate paths.
 
 **Implementation:** `packages/core/src/triage/structured-verify.ts` — `runStructuredVerify(finding, target, runtime, memoryOptions)`.
 
@@ -188,7 +196,10 @@ Following *All You Need Is A Fuzzing Brain* (arXiv:2509.07225), a scoped `bash` 
 
 ### Layer 5: Triage Memories (Semgrep-style) — SHIPPED
 
-Per-target persistent FP context that learns from human triage decisions. When a user marks a finding as a false positive and gives a reason, the reason is stored as a `TriageMemory` scoped to `global`, `package`, or `target`. On future scans, memories are injected as few-shot examples into the verify prompt; a sufficiently strong match auto-rejects the finding without spending a verification call.
+Per-target persistent explanations supply historical context for review.
+Current `structured-verify.ts` treats retrieved memories as untrusted context:
+a close text match or old label cannot reject fresh evidence without running
+the verification steps. Keep provenance and do not use model agreement as truth.
 
 **Implementation:** `packages/core/src/triage/memories.ts` — `MemoryStore`, `scoreMemory`, `inferPackage`. Feature flag: `0SEC_FEATURE_TRIAGE_MEMORIES`.
 
@@ -211,7 +222,7 @@ The proposed prosecutor/defender design uses fresh contexts and a judge, inspire
 > **Measured update, 2026-04-11:** the [21-run ablation](https://github.com/0sec-labs/0sec/issues/72#issuecomment-4229956469) found mode- and slice-dependent effects. See [results](/research/fp-reduction-moat/).
 
 The table below preserves historical design targets drawn from SAST references.
-It contains no measured 0sec performance:
+It contains no measured 0 performance:
 
 | Metric (design target, NOT measured) | Features only (est.) | + Oracles + Reachability | + Consensus LLM verify | + Memories + PoV gate |
 |--------|---------------------|--------------------------|------------------------|------------------------|
@@ -220,7 +231,7 @@ It contains no measured 0sec performance:
 | Latency | <1ms | ~100ms | ~20s (parallel) | ~30s |
 | Cost | $0 | $0 | ~$0.05/finding | ~$0.10/finding |
 
-The actual measured effect on 0sec (2026-04-11 ablation, gpt-5.4):
+The actual measured effect on 0 (2026-04-11 ablation, gpt-5.4):
 - XBOW white-box @ limit=50: `moat` reduced findings 63% (67 → 25), with 41/50 flags (82%) versus `none` at 43/50 and `no-triage` at 44/50. Cost per flag was $0.53 versus `none` at $0.33 (1.6×).
 - XBOW black-box @ limit=25: `moat` produced 19 versus 18 flags, 14 versus 27 findings (48% fewer), and $0.53 versus $0.76 per flag.
 - npm-bench (81 packages): TPR was 100% across profiles; `default` and `moat` matched at F1=0.956. FPR rose from 0.11 (`none`) to 0.19 (`default`) in batch 1. Batch-2 variation prevents confident subsystem attribution.
@@ -260,4 +271,4 @@ The measured tradeoffs motivate [learned dynamic routing](https://github.com/0se
 
 ## Collaboration
 
-Met Guanni Qu (Pebblebed Ventures) in Zurich, April 2026. Her VulnBERT pipeline (data collection, feature engineering, hybrid model training) maps directly to 0sec's finding triage problem. Potential joint work on adapting the approach from kernel commits to web pentesting findings.
+Met Guanni Qu (Pebblebed Ventures) in Zurich, April 2026. Her VulnBERT pipeline (data collection, feature engineering, hybrid model training) maps directly to 0's finding triage problem. Potential joint work on adapting the approach from kernel commits to web pentesting findings.

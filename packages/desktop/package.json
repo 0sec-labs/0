@@ -1,8 +1,8 @@
 {
   "name": "@0sec/desktop",
   "version": "0.15.0",
-  "description": "Native desktop workspace for the 0security cybersecurity team.",
-  "author": "0security",
+  "description": "Native desktop workspace for the 0.security cybersecurity team.",
+  "author": "0.security",
   "repository": {
     "type": "git",
     "url": "https://github.com/0sec-labs/0sec.git"
@@ -57,7 +57,7 @@
         "deb"
       ],
       "category": "Development",
-      "maintainer": "0security",
+      "maintainer": "0.security",
       "syncDesktopName": true
     },
     "mac": {
