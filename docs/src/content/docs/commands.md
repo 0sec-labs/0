@@ -3040,8 +3040,10 @@ Guide: [Cloud authentication](/api-keys/).
 | `--setup-command <command>` | — | Setup/build command run before tests (e.g. pnpm install) |
 | `-m, --model <model>` | — | Model for the managed runs; defaults to the cloud routing default |
 | `--cost-ceiling <usd>` | — | Per-run model cost ceiling in USD |
-| `--cron <expression>` | `0 3 * * *` | Recurring schedule (cron). Default: daily at 03:00 UTC |
-| `--no-schedule` | — | Only run once, do not install a recurring schedule |
+| `--setup-only` | `false` | Verify access without creating a scan or schedule |
+| `--run` | `false` | Request one managed scan after verifying repository access |
+| `--schedule` | `false` | Request a managed scan and a recurring schedule |
+| `--cron <expression>` | `0 3 * * *` | Schedule frequency in UTC; requires --schedule |
 | `--format <fmt>` | `terminal` | Output format: terminal \| json |
 | `--publication-policy <policy>` | `off` | Publication policy: off \| manual \| auto. Default: off |
 | `--yes` | — | Skip interactive confirmation before scheduling |
