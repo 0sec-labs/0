@@ -1,6 +1,6 @@
 {
   "name": "0sec-cli",
-  "version": "0.19.0",
+  "version": "0.20.0",
   "description": "0.security CLI — the self-improving, open-source cybersecurity harness for agent-driven security research and verification.",
   "type": "module",
   "bin": {

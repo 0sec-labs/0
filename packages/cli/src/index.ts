@@ -202,7 +202,7 @@ process.once("beforeExit", () => {
 
 // ── Entry point ──
 const userArgs = process.argv.slice(2);
-const knownCommands = ["scan", "resume", "replay", "history", "findings", "secure", "connect", "guide", "review", "fix", "file-review", "audit", "doctor", "dashboard", "tui", "watch", "orchestrate", "db", "mcp-server", "eval", "bench", "ingest", "kernel", "disclose", "verify", "exploit", "hunt", "recency-hunt", "deep-review", "lens-synth", "memsafety", "assumption-hunt", "specdrift", "protocol-check", "cve", "upgrade", "update", "h1", "auth", "login", "models", "balance", "intel", "recon", "js-recon", "npm-discovery", "identity", "adgraph", "entragraph", "cloud", "service", "project", "skills", "xnu-fuzz", "research", "radar", "timeline", "console", "agent-assure", "binary", "plugin", "theme", "config", "evolve", "hackstore", "hack", "store", "help"];
+const knownCommands = ["scan", "resume", "replay", "history", "findings", "secure", "connect", "guide", "review", "fix", "file-review", "audit", "doctor", "dashboard", "tui", "watch", "orchestrate", "db", "mcp-server", "triage", "eval", "bench", "ingest", "kernel", "disclose", "verify", "exploit", "hunt", "recency-hunt", "deep-review", "lens-synth", "memsafety", "assumption-hunt", "specdrift", "protocol-check", "cve", "upgrade", "update", "h1", "auth", "login", "models", "balance", "intel", "recon", "js-recon", "npm-discovery", "identity", "adgraph", "entragraph", "cloud", "service", "project", "skills", "xnu-fuzz", "research", "radar", "timeline", "console", "agent-assure", "binary", "plugin", "theme", "config", "evolve", "hackstore", "hack", "store", "help"];
 
 if (userArgs.length === 0) {
   // Fast path: straight into the TUI without ever importing the command barrel.

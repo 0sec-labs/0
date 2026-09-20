@@ -12,6 +12,8 @@ on the published npm package and the GitHub Release tag.
 
 ## [Unreleased]
 
+## [0.20.0] - 2026-09-20
+
 ### Added
 
 - Opt-in Jev assistance for bounded read-only browser exploration, memory
@@ -41,6 +43,8 @@ on the published npm package and the GitHub Release tag.
 - Use Azure's DeepSeek V4.1 Flash rates for exact, mixed-case and versioned
   deployment names instead of the generic cost-estimation fallback. Direct
   DeepSeek API pricing is unchanged; this does not rewrite recorded spend.
+- Keep the `triage` command on the explicit command path so it opens its
+  registered subcommands instead of being misclassified as a scan target.
 
 ## [0.19.0] - 2026-09-18
 
