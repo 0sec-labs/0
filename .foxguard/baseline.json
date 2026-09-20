@@ -3326,12 +3326,6 @@
       "line": 194
     },
     {
-      "fingerprint": "c87e3766b54d5dbf41c4ce7659c88bba323dd15a08517374e60003da717d141e",
-      "rule_id": "js/no-ssrf",
-      "file": "packages/benchmark/src/portswigger-runner.ts",
-      "line": 132
-    },
-    {
       "fingerprint": "4d616c65bb1ff9313c67adc0d6f78f8318f2e8805e3aa71d484b69170777f058",
       "rule_id": "js/no-ssrf",
       "file": "packages/benchmark/src/portswigger-runner.ts",
@@ -3530,12 +3524,6 @@
       "line": 61
     },
     {
-      "fingerprint": "2523fcb261de02dfb2fb848a2dd971e7020315d1213e348242e3945e530e8c0c",
-      "rule_id": "js/no-hardcoded-secret",
-      "file": "packages/cli/src/tui/feedback.test.ts",
-      "line": 607
-    },
-    {
       "fingerprint": "84776d24d7dd7bfe6947206b077e0044c4dd068d00c1f5f8d6b51ffd9c3685aa",
       "rule_id": "js/no-hardcoded-secret",
       "file": "packages/cli/src/tui/git-status.ts",
@@ -3576,12 +3564,6 @@
       "rule_id": "js/no-unsafe-regex",
       "file": "packages/cli/src/utils/update-check.ts",
       "line": 43
-    },
-    {
-      "fingerprint": "bdff81090e72f9c07ddf10dc9644768c827945bfeb27339f163c9d5723f88c5c",
-      "rule_id": "js/no-ssrf",
-      "file": "packages/cli/src/utils/update-check.ts",
-      "line": 123
     },
     {
       "fingerprint": "6b1054a00f72a5bedebee37bc955ea765152d555d5c4f2270da95009a9f81b00",
@@ -3668,10 +3650,10 @@
       "line": 1437
     },
     {
-      "fingerprint": "5023077af19d4ef053074520059d078e17e7c3e25f8a810588518b7859351eca",
+      "fingerprint": "8dbdbfa497353834a502efe824978ac7a1dcb191fabe554717a702bf60721950",
       "rule_id": "js/no-command-injection",
       "file": "packages/core/src/agent/tools.ts",
-      "line": 1227
+      "line": 1232
     },
     {
       "fingerprint": "c569bac014b3983c18f2ceecb96a012d474c4950f1822cb19d77663add16c4fc",
@@ -3728,16 +3710,16 @@
       "line": 120
     },
     {
-      "fingerprint": "17cb188be90d7460abec3deea0f871c6b916fec695be855b834ab20c8def7f9f",
+      "fingerprint": "e3d6bc9f218f7b2edf488cd74e3bdcdab5a8017274209bb25a2a5af3ff261278",
       "rule_id": "js/no-hardcoded-secret",
       "file": "packages/core/src/cloud/client.test.ts",
-      "line": 10
+      "line": 11
     },
     {
-      "fingerprint": "1a0b5c889ee3f030fe83e7a90b9a48f370277002d272a4a0695b6e5430e80464",
+      "fingerprint": "abe146f53159332f8a70660ffcf99e1eb575929a328d5f53e0513d36c0aff315",
       "rule_id": "js/no-hardcoded-secret",
       "file": "packages/core/src/cloud/credentials.test.ts",
-      "line": 118
+      "line": 132
     },
     {
       "fingerprint": "674a997e4250734bab0b697ec669292a7fe152baa1455e69ab00117c65315c72",
@@ -3836,28 +3818,28 @@
       "line": 54
     },
     {
-      "fingerprint": "142969cb24aaa073db28abc78a93fbd1749e4fc9bd99dd958a50a2d9a6953847",
+      "fingerprint": "f5fec6612e3f2f983ccf6833999551506fcfbcb834adfd176fcc14f85788866e",
       "rule_id": "js/no-sql-injection",
       "file": "packages/core/src/improvement/sandbox.ts",
-      "line": 62
+      "line": 63
     },
     {
-      "fingerprint": "8858433ad40841f3a84f0d1537373ca6d903be583b7a1687194c12631bc07cae",
+      "fingerprint": "5ee98d9447801c2f8713367ffb7db7f9d320538be3ce4a959250c52e45f962cc",
       "rule_id": "js/no-command-injection",
       "file": "packages/core/src/improvement/sandbox.ts",
-      "line": 95
+      "line": 96
     },
     {
-      "fingerprint": "9f1256714c15fc7735dd45f5b22eafea8f73c16869684ec2f13071eeab5a5de5",
+      "fingerprint": "d7bb4f5eb816775d4562d620a427874a2819c957be4c7a6fb9191cd430dd21ee",
       "rule_id": "js/no-sql-injection",
       "file": "packages/core/src/improvement/sandbox.ts",
-      "line": 163
+      "line": 164
     },
     {
-      "fingerprint": "16d5ef9c3d9b6457e2152908755cd8de67b9267f906182b6906524541116cd84",
+      "fingerprint": "8cc74e0969021c459a8136fb07fcf9a6d76edaa6e4322bf6f5604afccbcfc288",
       "rule_id": "js/no-command-injection",
       "file": "packages/core/src/improvement/sandbox.ts",
-      "line": 219
+      "line": 225
     },
     {
       "fingerprint": "550e72081277a46a8128dc337f5d6d1fd3be31bafc2e423a88d01565a58277fa",
@@ -4226,102 +4208,6 @@
       "line": 1994
     },
     {
-      "fingerprint": "fad1679fc47610dd98dfc8235c6ebeee0598c704dca913455fd58bb2cf71824d",
-      "rule_id": "js/no-hardcoded-secret",
-      "file": "packages/core/src/runtime/llm-api.test.ts",
-      "line": 2172
-    },
-    {
-      "fingerprint": "b13ebb8b777d056a5ce2b66eeee9c0b7fbd2df7334fe3a30d9bc74418ea61166",
-      "rule_id": "js/no-hardcoded-secret",
-      "file": "packages/core/src/runtime/llm-api.test.ts",
-      "line": 2180
-    },
-    {
-      "fingerprint": "c8093d4aa195c7084c5f682588e42e89d5efb8ffeb59ae50fafedc310f7efff0",
-      "rule_id": "js/no-hardcoded-secret",
-      "file": "packages/core/src/runtime/llm-api.test.ts",
-      "line": 2188
-    },
-    {
-      "fingerprint": "2dbdcf4269e29bc2a26ee1d9299ec4511e21e37e3af4dd8360bb7db9f7f538e8",
-      "rule_id": "js/no-hardcoded-secret",
-      "file": "packages/core/src/runtime/llm-api.test.ts",
-      "line": 2197
-    },
-    {
-      "fingerprint": "3aeb805eab7e3fa504230fd4cf641f3ba6018728b2331a2dc64ba45a677f9d6b",
-      "rule_id": "js/no-hardcoded-secret",
-      "file": "packages/core/src/runtime/llm-api.test.ts",
-      "line": 2204
-    },
-    {
-      "fingerprint": "88a71ea20af7b5efa18a3914ba92eada4c1feb824a719b45500dcf68e0bb910b",
-      "rule_id": "js/no-hardcoded-secret",
-      "file": "packages/core/src/runtime/llm-api.test.ts",
-      "line": 2316
-    },
-    {
-      "fingerprint": "a5a7a0e16ababc3e2872e4f40101f1e63fa1af775261d5edcfffe253a92e7ee6",
-      "rule_id": "js/no-hardcoded-secret",
-      "file": "packages/core/src/runtime/llm-api.test.ts",
-      "line": 2317
-    },
-    {
-      "fingerprint": "e9f017a798d812a5f45aba710934809abf736793b7eee910653e62789844fa84",
-      "rule_id": "js/no-hardcoded-secret",
-      "file": "packages/core/src/runtime/llm-api.test.ts",
-      "line": 2424
-    },
-    {
-      "fingerprint": "d6bb9bca8cefe96e78a407d3f4f8d920743c6017dc390838bb2f50ee38b5a921",
-      "rule_id": "js/no-hardcoded-secret",
-      "file": "packages/core/src/runtime/llm-api.test.ts",
-      "line": 2425
-    },
-    {
-      "fingerprint": "1a5a8f944883dacd084d37aaf36a18826dbb9b9c687c592c12c7f4af1d6a108b",
-      "rule_id": "js/no-hardcoded-secret",
-      "file": "packages/core/src/runtime/llm-api.test.ts",
-      "line": 2480
-    },
-    {
-      "fingerprint": "3163196bde9df3bed74ed8565d6e95e99a2655621b13e611a6510b02f5f2e212",
-      "rule_id": "js/no-hardcoded-secret",
-      "file": "packages/core/src/runtime/llm-api.test.ts",
-      "line": 2481
-    },
-    {
-      "fingerprint": "4b64a2e12272d7667fba21fd24d83ff06d240a52bde469bee4836623a98c4256",
-      "rule_id": "js/no-hardcoded-secret",
-      "file": "packages/core/src/runtime/llm-api.ts",
-      "line": 768
-    },
-    {
-      "fingerprint": "5749b02ff92960053c41ddd07be5fa6c9aa6ae43190f151ce173867d90872994",
-      "rule_id": "js/no-ssrf",
-      "file": "packages/core/src/runtime/llm-api.ts",
-      "line": 1378
-    },
-    {
-      "fingerprint": "56a67c48a63fbd83e7ee2438b1a03c0a9718e8ccee5928dd49afa75a80d9b281",
-      "rule_id": "js/no-ssrf",
-      "file": "packages/core/src/runtime/llm-api.ts",
-      "line": 1708
-    },
-    {
-      "fingerprint": "a8fa22091d28291d395c73e8cd6b3d2c8c93cbbc8d82283cf2a90ef3e3b531ab",
-      "rule_id": "js/no-ssrf",
-      "file": "packages/core/src/runtime/llm-api.ts",
-      "line": 1791
-    },
-    {
-      "fingerprint": "b7d02d6efbf44ac1b09663134abe8a0b492b0b03967e5abb331fec681107cdfc",
-      "rule_id": "js/no-ssrf",
-      "file": "packages/core/src/runtime/llm-api.ts",
-      "line": 3361
-    },
-    {
       "fingerprint": "688e6ce2de6e7a4e0302f44ae42fa06d4ec3bd1dcd27f2a600e645b29c1d8c19",
       "rule_id": "js/no-command-injection",
       "file": "packages/core/src/runtime/process.ts",
@@ -4358,22 +4244,22 @@
       "line": 159
     },
     {
-      "fingerprint": "ef1dac2848daebe7a14b2daeb86388355af4cff968004eae9e698502239b5ae6",
+      "fingerprint": "79bba27e8bdd44f705e475905b0f5c6c7cd969d856445df66999a6eb579bc113",
       "rule_id": "js/no-command-injection",
       "file": "packages/core/src/runtime/smolvm.ts",
-      "line": 110
+      "line": 113
     },
     {
-      "fingerprint": "bd8829d391e7c6f9202f870831345534eca90f22d8b175493e42d74188e2d3a7",
-      "rule_id": "js/no-path-traversal",
-      "file": "packages/core/src/runtime/smolvm.ts",
-      "line": 127
-    },
-    {
-      "fingerprint": "d38c4d147eb4e891c46462bb0b8907fafbe1ec8a2884b168d2cb4383bc6b8a9b",
+      "fingerprint": "bdefd420f884f72cd2c2e1c1c8440fe07ad1b72702661de768d555e1b88c93f2",
       "rule_id": "js/no-path-traversal",
       "file": "packages/core/src/runtime/smolvm.ts",
       "line": 130
+    },
+    {
+      "fingerprint": "fd58de10f4d56730b505051963c4afa9be756abd5368fdeae292103c77498f93",
+      "rule_id": "js/no-path-traversal",
+      "file": "packages/core/src/runtime/smolvm.ts",
+      "line": 133
     },
     {
       "fingerprint": "aee50b3fed7bec0f1212cfb878ef1f40b15835285baa524e4b82eeae4ff3a047",
@@ -4532,22 +4418,10 @@
       "line": 372
     },
     {
-      "fingerprint": "b45eea3132751fc246c2ab1195d2de012c0aa82062f5a61f45edd8bd9712d326",
-      "rule_id": "js/no-hardcoded-secret",
-      "file": "packages/core/src/telemetry/analytics-pipeline.test.ts",
-      "line": 52
-    },
-    {
-      "fingerprint": "8673a5da49ea47322e09c6f595cce483491ef6ab29a66c3b60f570e769539730",
-      "rule_id": "js/no-hardcoded-secret",
-      "file": "packages/core/src/telemetry/redaction.test.ts",
-      "line": 124
-    },
-    {
-      "fingerprint": "3288eace297bfaa4bbb1c69b027f0335a4de486c81ce395f3adca99c9384071b",
-      "rule_id": "js/no-hardcoded-secret",
-      "file": "packages/core/src/telemetry/redaction.ts",
-      "line": 46
+      "fingerprint": "74eb9859ee9fb9908bd870463b5651b3a03dd06f7466aa67fbb0a0235ae5607b",
+      "rule_id": "js/no-command-injection",
+      "file": "packages/core/src/telemetry/run-contribution.test.ts",
+      "line": 192
     },
     {
       "fingerprint": "cf32f108b8858739060bb447d918c244fe09943ab17d2ba5ad0baa7873abfc9a",
@@ -4676,34 +4550,34 @@
       "line": 27
     },
     {
-      "fingerprint": "6a6e6933ef8d2e0f01f637650108ff8b9c65584e6fa1ccc4cf67937db30b2666",
+      "fingerprint": "fc2034607bfd3675c309d65496cdeecc7615ae5ed17b0270e5d1244e422c9993",
       "rule_id": "js/no-sql-injection",
       "file": "packages/db/src/database.ts",
-      "line": 1675
+      "line": 1677
     },
     {
-      "fingerprint": "57c1d45b4d95a4999cb5ab3a1c9e36aa7b8648ee92ea150bdf44aa53c1e36966",
+      "fingerprint": "133df4942eb534c7b5a7c5401791c1d29a634719cd80f474e95f47421075b62d",
       "rule_id": "js/no-sql-injection",
       "file": "packages/db/src/database.ts",
-      "line": 1876
+      "line": 1878
     },
     {
-      "fingerprint": "6a0376ea6a1e44aa6a8fc7bbee8c5e37e56ea95b68a7fe0f94148215b5b55c46",
+      "fingerprint": "4f2fd9f04796acae2024c4ae389bc7de729cf90468eb3f72a3fb88e46dde3e39",
       "rule_id": "js/no-sql-injection",
       "file": "packages/db/src/database.ts",
-      "line": 2126
+      "line": 2128
     },
     {
-      "fingerprint": "43dd64065516d9386dc34622429db866b3172eafa5e052316ae059758d524a58",
+      "fingerprint": "f9590667a54793ef4918e4fcae71362d9935bc4782ec5e820cc48bd077850418",
       "rule_id": "js/no-sql-injection",
       "file": "packages/db/src/database.ts",
-      "line": 2218
+      "line": 2220
     },
     {
-      "fingerprint": "ba4ee36afc19f83fbaaad89eee74fdad42fedf7626de70ab387cbbb30e3e482b",
+      "fingerprint": "a3142d50bf490091f02851c001044e40cbd4b865817ac1761cf4fb418fe132f9",
       "rule_id": "js/no-sql-injection",
       "file": "packages/db/src/database.ts",
-      "line": 2323
+      "line": 2325
     },
     {
       "fingerprint": "1a4bda2eb1e80fd76601173c62558f365362c8f7cdb6f23ea9203e71599504c8",
@@ -4724,16 +4598,16 @@
       "line": 33
     },
     {
-      "fingerprint": "b5e755a1aaad992c117a799b004bf17a0c90926dad60af09bb7cf5e2fdd6ae90",
+      "fingerprint": "36f0b573ed56180e4683faaa10aefe481c8e127e648a79f5fa7ad7908dbdca85",
       "rule_id": "manifest/pnpm-pq-vulnerable-dep",
       "file": "pnpm-lock.yaml",
-      "line": 2780
+      "line": 2816
     },
     {
-      "fingerprint": "97d496a0730bdf3a712e7284587d06b54385e36061ad258004dd5ebaace27367",
+      "fingerprint": "8bfc3a59089eaa9c44fd6ae8aa8d750b28ec321171641b860d18a799b5fb0ef7",
       "rule_id": "manifest/pnpm-pq-vulnerable-dep",
       "file": "pnpm-lock.yaml",
-      "line": 4051
+      "line": 4087
     },
     {
       "fingerprint": "052229fb1d42a341a2a94a570dd8b12f46aee53973de90f1fd5933d3e47f280e",
@@ -4784,10 +4658,10 @@
       "line": 120
     },
     {
-      "fingerprint": "bfaf12042c38e23b90fa0ea6c6c3c98cb6834bfc36a32fd565f5ee469f67549e",
+      "fingerprint": "5a88934822486f2b2ba959c0b4f7bc20b09ee0b184bf18953ec195edb255a8c9",
       "rule_id": "js/no-unsafe-regex",
       "file": "scripts/sync-cli-docs.mjs",
-      "line": 64
+      "line": 85
     },
     {
       "fingerprint": "f99c78b9b639cb97e21305b256d83c58d2b510da25b4d2330fb77f5463622616",
