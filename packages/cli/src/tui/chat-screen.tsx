@@ -999,6 +999,9 @@ export function ChatScreen({
   const cloudSource = useRef<{ owner: ConsoleSession; isHosted: () => boolean; env: NodeJS.ProcessEnv } | null>(null);
   const [cloudBalance, setCloudBalance] = useState<{ owner: ConsoleSession; state: HostedBalanceState } | null>(null);
   const [hostedCatalog, setHostedCatalog] = useState<{ owner: ConsoleSession; models: readonly HostedCatalogModel[]; expiresAt: number } | null>(null);
+  // Private cache identity: never rendered or logged. A retained window belongs
+  // to the account that supplied it, not merely to this runtime's model name.
+  const hostedCatalogAccount = useRef<{ owner: ConsoleSession; host: string; token: string } | null>(null);
   const [cloudConfigured, setCloudConfigured] = useState<boolean>();
   const [cloudHintDismissed, setCloudHintDismissed] = useState(false);
   const initialPromptRef = useRef(options?.initialPrompt?.trim() || null);
@@ -1947,6 +1950,7 @@ export function ChatScreen({
     if (!session || !source || source.owner !== session || !source.isHosted()) {
       setCloudBalance(null);
       setHostedCatalog(null);
+      hostedCatalogAccount.current = null;
       return;
     }
     let active = true;
@@ -1958,26 +1962,53 @@ export function ChatScreen({
       if (!source.isHosted()) { setCloudBalance(null); setHostedCatalog(null); return; }
       pending = true;
       setCloudBalance({ owner: session, state: { status: "loading" } });
+      const readCredentials = () => {
+        try {
+          const credentials = loadCloudCredentials({ env: source.env, warn: () => {} });
+          const cachedAccount = hostedCatalogAccount.current;
+          if (cachedAccount && (cachedAccount.owner !== session || cachedAccount.host !== credentials.host || cachedAccount.token !== credentials.token)) {
+            setHostedCatalog(null);
+            hostedCatalogAccount.current = null;
+          }
+          return credentials;
+        }
+        catch (error) {
+          setHostedCatalog(null);
+          hostedCatalogAccount.current = null;
+          throw error;
+        }
+      };
       try {
-        const credentials = loadCloudCredentials({ env: source.env, warn: () => {} });
+        const credentials = readCredentials();
         const client = new CloudClient({ host: credentials.host, token: credentials.token });
         const [account, catalog] = await Promise.all([
           client.getInferenceAccount(),
           // Model windows drive compaction even when the meter is hidden.
-          client.getInferenceModels().catch(() => null),
+          // Distinguish transport failure from a successful malformed payload.
+          client.getInferenceModels().then((value) => ({ ok: true as const, value }), () => ({ ok: false as const })),
         ]);
         if (!active || cloudSource.current !== source) return;
-        const current = loadCloudCredentials({ env: source.env, warn: () => {} });
+        const current = readCredentials();
         if (!source.isHosted()) { setCloudBalance(null); setHostedCatalog(null); return; }
         const sameCredentials = current.host === credentials.host && current.token === credentials.token;
         setCloudBalance({ owner: session, state: sameCredentials ? hostedBalanceState(account) : { status: "unavailable" } });
-        if (sameCredentials && catalog) {
+        if (sameCredentials && catalog.ok) {
           try {
-            setHostedCatalog({ owner: session, models: buildHostedModelCatalog(catalog.data), expiresAt: Date.now() + 60_000 });
-          } catch { setHostedCatalog(null); /* Malformed metadata cannot establish a limit. */ }
-        } else if (!sameCredentials) setHostedCatalog(null);
+            const models = buildHostedModelCatalog(catalog.value.data);
+            hostedCatalogAccount.current = { owner: session, host: credentials.host, token: credentials.token };
+            setHostedCatalog({ owner: session, models, expiresAt: Date.now() + 60_000 });
+          } catch {
+            hostedCatalogAccount.current = null;
+            setHostedCatalog(null); // Malformed metadata cannot establish a limit.
+          }
+        } else if (!sameCredentials) {
+          hostedCatalogAccount.current = null;
+          setHostedCatalog(null);
+        }
       } catch {
         if (active && cloudSource.current === source) {
+          // A transport failure may coincide with logout/account replacement.
+          try { readCredentials(); } catch { /* The reader invalidates the cache. */ }
           setCloudBalance(source.isHosted() ? { owner: session, state: { status: "unavailable" } } : null);
         }
       } finally { pending = false; }

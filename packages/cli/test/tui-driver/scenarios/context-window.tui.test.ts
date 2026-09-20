@@ -6,7 +6,19 @@ import { updateSetting } from "../../../src/tui/settings-store.js";
 const captured = vi.hoisted(() => ({
   windows: [] as Array<number | null | undefined>,
   execute: undefined as NativeRuntime["executeNative"] | undefined,
+  credentials: "normal" as "normal" | "missing" | "changed",
 }));
+vi.mock("@0sec/core", async (original) => {
+  const actual = await original<typeof import("@0sec/core")>();
+  return {
+    ...actual,
+    loadCloudCredentials: (...args: Parameters<typeof actual.loadCloudCredentials>) => {
+      if (captured.credentials === "missing") throw new actual.CloudAuthMissingError("synthetic logout");
+      const credentials = actual.loadCloudCredentials(...args);
+      return captured.credentials === "changed" ? { ...credentials, token: "synthetic-replacement-account" } : credentials;
+    },
+  };
+});
 vi.mock("../../../src/console-session.js", async (original) => {
   const actual = await original<typeof import("../../../src/console-session.js")>();
   return {
@@ -25,9 +37,11 @@ vi.mock("../../../src/console-session.js", async (original) => {
 });
 
 let tui: TuiHandle | undefined;
-afterEach(async () => { await tui?.close(); tui = undefined; vi.restoreAllMocks(); captured.windows.length = 0; captured.execute = undefined; });
+afterEach(async () => { await tui?.close(); tui = undefined; vi.restoreAllMocks(); captured.windows.length = 0; captured.execute = undefined; captured.credentials = "normal"; });
 
-test.each([true, false])("hosted compaction metadata survives meter visibility (initially %s)", async (showContextMeter) => {
+test.each([
+  [true, "transport"], [false, "transport"], [false, "null"], [false, "missing"], [false, "changed"],
+] as const)("hosted compaction metadata: meter=%s, refresh=%s", async (showContextMeter, failure) => {
   vi.spyOn(CloudClient.prototype, "getInferenceAccount").mockResolvedValue(null);
   const models = vi.spyOn(CloudClient.prototype, "getInferenceModels").mockResolvedValue({ object: "list", data: [{
     id: "fixture-private-model", object: "model", provider: "fixture", owned_by: "fixture", upstream_model: "fixture",
@@ -62,15 +76,25 @@ test.each([true, false])("hosted compaction metadata survives meter visibility (
   const priorRequests = models.mock.calls.length;
   models.mockReturnValue(refresh.promise);
   captured.windows.length = 0;
+  if (failure === "missing" || failure === "changed") captured.credentials = failure;
   try {
     await tui.sendKeys("synthetic check");
     await tui.sendKey("return");
-    await expect.poll(async () => { await tui!.settle(); return models.mock.calls.length; }).toBeGreaterThan(priorRequests);
-    expect(captured.windows).not.toContain(null);
-    // A failed refresh must retain the unexpired, same-account window too.
-    refresh.reject(new Error("synthetic catalog outage"));
-    await tui.settle();
-    expect(captured.windows).not.toContain(null);
+    if (failure === "missing" || failure === "changed") {
+      await expect.poll(async () => { await tui!.settle(); return captured.windows.at(-1); }).toBeNull();
+    } else {
+      await expect.poll(async () => { await tui!.settle(); return models.mock.calls.length; }).toBeGreaterThan(priorRequests);
+      expect(captured.windows).not.toContain(null);
+      if (failure === "null") {
+        refresh.resolve(null as unknown as Awaited<ReturnType<CloudClient["getInferenceModels"]>>);
+        await expect.poll(async () => { await tui!.settle(); return captured.windows.at(-1); }).toBeNull();
+      } else {
+        // A failed refresh retains the unexpired, same-account window.
+        refresh.reject(new Error("synthetic catalog outage"));
+        await tui.settle();
+        expect(captured.windows).not.toContain(null);
+      }
+    }
   } finally {
     planner.resolve();
     refresh.resolve({ object: "list", data: [] });
