@@ -74,7 +74,7 @@ async function setup(value: string | undefined, options: OutputOptions) {
     cadence: saved.plan?.cadence ?? "manual", publicationPolicy: saved.plan?.publicationPolicy ?? "manual", context };
   if (options.json || !process.stdin.isTTY) {
     output({ repositoryId: saved.repository.id, expectedRevision: saved.revision, sourceRevision: discovery.sourceRevision, proposal,
-      unavailablePaths: discovery.unavailablePaths, next: ["Review the source-backed context and set an execution budget.", "Use project save with the expected revision and source SHA. Saving does not start a scan.", "Use project start only after approving credit-funded execution. Use project history to resume."] }, options);
+      unavailablePaths: discovery.unavailablePaths, next: ["Set the maximum credits one managed run may use.", "Use project save with the expected revision and source SHA. Saving does not start a scan.", "Use project start only after approving one managed run. Use project history to resume."] }, options);
     return;
   }
   const questions = createInterface({ input: process.stdin, output: process.stderr });

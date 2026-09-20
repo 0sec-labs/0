@@ -26,4 +26,21 @@ if [[ $WARNED -eq 1 ]]; then
   echo "Review these files before committing. They may be from another branch."
 fi
 # Warn only, don't block — set exit 1 above to hard-block
+
+# TypeScript edits must pass the same check that gates main. This catches
+# incomplete edits before they can become a CI surprise.
+TYPECHECK=0
+for f in $STAGED_FILES; do
+  case "$f" in
+    *.ts|*.tsx|*.mts|*.cts) TYPECHECK=1 ;;
+  esac
+done
+if [[ $TYPECHECK -eq 1 ]]; then
+  echo "Running TypeScript check for staged source changes..."
+  pnpm lint || {
+    echo "TypeScript check failed; commit blocked."
+    exit 1
+  }
+fi
+
 exit 0
