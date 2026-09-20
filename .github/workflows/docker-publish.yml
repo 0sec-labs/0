@@ -83,11 +83,16 @@ jobs:
       # had merged 40min earlier, while looking green). The immutable :sha
       # tag is stamped on every build regardless, so any image's exact
       # content stays identifiable/testable.
-      - name: Resolve :latest eligibility
+      - name: Verify source and resolve :latest eligibility
         id: latest_eligible
         run: |
           set -euo pipefail
           CI_SHA="${{ github.event.workflow_run.head_sha }}"
+          if [ "$(git rev-parse HEAD)" != "$CI_SHA" ]; then
+            echo "::error::Checked-out source does not match successful main CI."
+            exit 1
+          fi
+          printf 'short_sha=%s\n' "${CI_SHA:0:7}" >> "$GITHUB_OUTPUT"
           TIP_SHA="$(git ls-remote origin refs/heads/main | cut -f1)"
           if [ "$CI_SHA" = "$TIP_SHA" ]; then
             echo "enabled=true" >> "$GITHUB_OUTPUT"
@@ -101,6 +106,8 @@ jobs:
         id: meta
         uses: docker/metadata-action@v6
         with:
+          # workflow_run's default SHA can advance beyond the checked-out CI
+          # source. Pin both the immutable tag and revision to verified CI.
           images: ${{ steps.image.outputs.name }}
           # Tag plan:
           #   - sha          (every trusted-main build)       abc1234
@@ -110,14 +117,17 @@ jobs:
           # path; a tag push must never execute arbitrary source on the
           # credentialed publisher.
           tags: |
-            type=sha,format=short,prefix=
+            type=raw,value=${{ steps.latest_eligible.outputs.short_sha }}
             type=ref,event=branch
             type=raw,value=latest,enable=${{ steps.latest_eligible.outputs.enabled }}
           labels: |
+            org.opencontainers.image.revision=${{ github.event.workflow_run.head_sha }}
             org.opencontainers.image.title=0sec
             org.opencontainers.image.description=Open-source security research harness for authorized targets
             org.opencontainers.image.source=https://github.com/0sec-labs/0sec
             org.opencontainers.image.licenses=MIT OR Apache-2.0
+          annotations: |
+            org.opencontainers.image.revision=${{ github.event.workflow_run.head_sha }}
 
       - name: Build and push
         id: build
