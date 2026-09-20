@@ -18,7 +18,7 @@ concurrency:
 
 jobs:
   npm:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64]
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v6
@@ -35,13 +35,24 @@ jobs:
         run: pnpm audit --audit-level=high
 
   cargo:
-    if: ${{ hashFiles('**/Cargo.lock') != '' }}
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64]
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v6
       - uses: actions-rust-lang/setup-rust-toolchain@v1
-      - name: Install cargo-audit
-        run: cargo install cargo-audit --locked
-      - name: Audit Rust dependencies
-        run: cargo audit --all
+        if: ${{ hashFiles('**/Cargo.lock') != '' }}
+        with:
+          toolchain: stable
+      - name: Install cargo-deny
+        if: ${{ hashFiles('**/Cargo.lock') != '' }}
+        run: cargo install cargo-deny --version 0.20.2 --locked
+      # Lockfiles retain disabled optional backends. Check every resolved
+      # workspace feature and platform, without advisory exceptions.
+      - name: Audit resolved Rust dependencies
+        if: ${{ hashFiles('**/Cargo.lock') != '' }}
+        run: |
+          set -euo pipefail
+          while IFS= read -r -d '' lockfile; do
+            cargo deny --manifest-path "${lockfile%Cargo.lock}Cargo.toml" \
+              --workspace --all-features --locked check advisories
+          done < <(git ls-files -z -- Cargo.lock '**/Cargo.lock')
