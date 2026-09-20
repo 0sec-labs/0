@@ -34,7 +34,7 @@ export function registerUpgradeCommand(program: Command): void {
         console.log(`  Download the latest ${chalk.cyan("0sec-windows-x64.exe")} from:`);
         console.log(`    ${chalk.cyan(RELEASES_URL)}`);
         console.log("");
-        console.log(`  Replace your current binary in place. Auto-upgrade is tracked in issue #46.`);
+        console.log(`  Replace your current binary in place.`);
         console.log("");
         process.exit(1);
       }
