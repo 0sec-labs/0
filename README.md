@@ -12,7 +12,7 @@
 </p>
 
 <p align="center">
-  <strong>Meet Zero, your AI security team.</strong><br/>
+  <strong>Meet Zero, your AI security <del>engineer</del> team.</strong><br/>
   <sub>The Swiss Applied AI &amp; Cybersecurity Research Lab</sub><br/>
   <a href="https://0.security/">0.security</a> ·
   <a href="https://docs.0.security/">Documentation</a> ·
