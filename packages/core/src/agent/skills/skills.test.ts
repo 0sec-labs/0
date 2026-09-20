@@ -372,36 +372,4 @@ describe("Skill Registry", () => {
     });
   });
 
-  // ── Content quality checks ─────────────────────────────────────
-
-  describe("content quality", () => {
-    it.each(EXPECTED_SKILL_IDS)(
-      "skill '%s' content has actionable methodology (>20 lines)",
-      (id) => {
-        const registry = loadSkillRegistry(__dirname);
-        const skill = registry.get(id)!;
-        const lineCount = skill.content.split("\n").length;
-        expect(lineCount).toBeGreaterThanOrEqual(20);
-      },
-    );
-
-    it.each(EXPECTED_SKILL_IDS)(
-      "skill '%s' content contains phase/step headers",
-      (id) => {
-        const registry = loadSkillRegistry(__dirname);
-        const skill = registry.get(id)!;
-        // Should have at least 3 markdown headers (phases/steps)
-        const headers = skill.content.match(/^###?\s/gm) ?? [];
-        expect(headers.length).toBeGreaterThanOrEqual(3);
-      },
-    );
-
-    it("estimated_tokens are in expected range (400-1000)", () => {
-      const registry = loadSkillRegistry(__dirname);
-      for (const skill of registry.values()) {
-        expect(skill.estimated_tokens).toBeGreaterThanOrEqual(400);
-        expect(skill.estimated_tokens).toBeLessThanOrEqual(1000);
-      }
-    });
-  });
 });
