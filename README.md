@@ -12,13 +12,13 @@
 </p>
 
 <p align="center">
-  <strong>We make software secure software.</strong><br/>
-  Your self-improving, open-source cybersecurity team.
+  <strong>Open-source cybersecurity research and tooling.</strong>
 </p>
+
 
 <p align="center">
   <a href="https://0.security/"><strong>0.security</strong></a><br/>
-  <sub>The Swiss Applied AI &amp; Cybersecurity Research Lab</sub>
+  <sub>Research preview</sub>
 </p>
 
 <p align="center">
