@@ -13,7 +13,7 @@ const recordSchema = z.object({ repository: z.object({ id: z.string().uuid(), fu
   revision, plan: z.record(z.unknown()).nullable(), canEdit: z.boolean() }).passthrough();
 const discoverySchema = z.object({ sourceRevision: commit, context: z.object({ summary: z.string(), instructions: z.string(), observations: z.array(z.unknown()) }),
   suggestedTestCommand: z.string().nullable(), unavailablePaths: z.array(z.string()) }).passthrough();
-const enrollmentSchema = z.object({ repo_accessible: z.boolean(), repository_id: z.string().uuid().nullable() }).passthrough();
+const enrollmentSchema = z.object({ repo_accessible: z.boolean(), repository_id: z.string().uuid().nullable(), installation: z.object({ installed: z.boolean(), install_url: z.string().url().optional() }).optional() }).passthrough();
 type OutputOptions = { json?: boolean };
 
 function client() { const credentials = loadCloudCredentials(); return new CloudClient({ host: credentials.host, token: credentials.token }); }
@@ -45,7 +45,6 @@ async function planFile(path: string): Promise<unknown> {
 function run(action: () => Promise<void>, options: OutputOptions): Promise<void> {
   return action().catch(error => { const message = error instanceof Error ? error.message : "Project operation failed.";
     if (options.json) output({ error: message }, options); else process.stderr.write(message + "\n");
-
     process.exitCode = 1;
   });
 }
@@ -53,8 +52,7 @@ async function enroll(value: string | undefined, options: OutputOptions) {
   const api = client();
   const repo = repositoryUrl(value);
   const status = enrollmentSchema.parse(await api.getJson<unknown>(`/api/enrollment/status?target=${encodeURIComponent(repo)}`));
-  if (!status.repo_accessible) throw new Error("0security cannot access this repository through the connected GitHub App. Install or update the App, then retry.");
-  if (!status.repository_id) throw new Error("The repository is accessible but is not in the synced GitHub inventory yet. Refresh Integrations, then retry.");
+  if (!status.repo_accessible) throw new Error(`0security cannot access this repository through the connected GitHub App. Install or update the App, then retry${status.installation?.install_url ? `: ${status.installation.install_url}` : "."}`);
   output(await api.postJson<unknown>(endpoint, { action: "enroll", repositoryId: status.repository_id }), options);
 }
 
