@@ -7,7 +7,7 @@ tableOfContents:
 ---
 
 Find the command, arguments, and options for your task. This reference covers
-**64 top-level commands** and their registered subcommands.
+**65 top-level commands** and their registered subcommands.
 
 For a worked example, start with [Scan Workflows](/scan-workflows/),
 [Console](/console/), or [Research Workflows](/research-workflows/).
@@ -355,8 +355,48 @@ Guide: [Read the workflow](/getting-started/).
 | --- | --- | --- |
 | `--version <tag>` | — | Pin a specific release tag (e.g. v0.10.0) |
 | `--install-dir <path>` | — | Override the install directory (default: ~/.0sec/bin) |
+| `--scan-dependencies` | — | Scan the current project before upgrading |
+| `--fix-dependencies` | — | Refuse upgrade when vulnerabilities are present; use `0 deps fix --yes` to remediate |
 
 Aliases: `update`.
+
+### deps
+
+Scan and remediate project dependencies for known vulnerabilities.
+
+```text
+0 deps
+```
+
+Subcommands: [scan](#deps-scan) · [fix](#deps-fix).
+
+#### deps scan
+
+Run the native advisory database scanner for the current project.
+
+```text
+0 deps scan [options]
+```
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--cwd <path>` | — | Project directory |
+| `--ecosystem <name>` | — | Override detected ecosystem: npm, pnpm, cargo, pypi |
+| `--json` | — | Emit machine-readable output |
+
+#### deps fix
+
+Apply the ecosystem package manager's supported vulnerability fixes.
+
+```text
+0 deps fix [options]
+```
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--cwd <path>` | — | Project directory |
+| `--ecosystem <name>` | — | Override detected ecosystem: npm, pnpm, cargo, pypi |
+| `--yes` | — | Apply changes; without this flag print the command only |
 
 ## Scan & source review
 

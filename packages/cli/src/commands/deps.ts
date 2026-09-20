@@ -103,11 +103,11 @@ export function registerDepsCommand(program: Command): void {
   const deps = program.command("deps").description("Scan and remediate project dependencies for known vulnerabilities");
   deps.command("scan")
     .description("Run the native advisory database scanner for the current project")
-    .option("--cwd <path>", "Project directory", process.cwd())
+    .option("--cwd <path>", "Project directory")
     .option("--ecosystem <name>", "Override detected ecosystem: npm, pnpm, cargo, pypi")
     .option("--json", "Emit machine-readable output")
-    .action(async (opts: { cwd: string; ecosystem?: Ecosystem; json?: boolean }) => {
-      const result = await scanDependencies(opts.cwd, opts.ecosystem);
+    .action(async (opts: { cwd?: string; ecosystem?: Ecosystem; json?: boolean }) => {
+      const result = await scanDependencies(opts.cwd ?? process.cwd(), opts.ecosystem);
       if (opts.json) console.log(JSON.stringify(result, null, 2));
       else {
         console.log(`${result.ecosystem}: ${result.findings.length} vulnerable dependencies`);
@@ -118,14 +118,13 @@ export function registerDepsCommand(program: Command): void {
     });
   deps.command("fix")
     .description("Apply the ecosystem package manager's supported vulnerability fixes")
-    .option("--cwd <path>", "Project directory", process.cwd())
+    .option("--cwd <path>", "Project directory")
     .option("--ecosystem <name>", "Override detected ecosystem: npm, pnpm, cargo, pypi")
     .option("--yes", "Apply changes; without this flag print the command only")
-    .action(async (opts: { cwd: string; ecosystem?: Ecosystem; yes?: boolean }) => {
-      const kind = opts.ecosystem ?? await detect(opts.cwd);
+    .action(async (opts: { cwd?: string; ecosystem?: Ecosystem; yes?: boolean }) => {
+      const kind = opts.ecosystem ?? await detect(opts.cwd ?? process.cwd());
       const command = kind === "pnpm" ? "pnpm audit --fix" : kind === "npm" ? "npm audit fix" : kind === "cargo" ? "cargo update" : "pip-audit --fix";
-      if (!opts.yes) { console.log(`Dry run. Re-run with --yes to execute: ${command}`); return; }
-      const result = await fixDependencies(opts.cwd, opts.ecosystem);
+      const result = await fixDependencies(opts.cwd ?? process.cwd(), opts.ecosystem);
       console.log(result.output || `${result.command} completed`);
       process.exitCode = result.exitCode;
     });
