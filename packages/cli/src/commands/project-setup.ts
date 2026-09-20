@@ -74,7 +74,7 @@ async function setup(value: string | undefined, options: OutputOptions) {
     cadence: saved.plan?.cadence ?? "manual", publicationPolicy: saved.plan?.publicationPolicy ?? "manual", context };
   if (options.json || !process.stdin.isTTY) {
     output({ repositoryId: saved.repository.id, expectedRevision: saved.revision, sourceRevision: discovery.sourceRevision, proposal,
-      unavailablePaths: discovery.unavailablePaths, next: ["Set the maximum credits one managed run may use.", "Use project save with the expected revision and source SHA. Saving does not start a scan.", "Use project start only after approving one managed run. Use project history to resume."] }, options);
+      unavailablePaths: discovery.unavailablePaths, next: ["Set the maximum credits one managed run may use.", "Use project save with the expected revision and source SHA. Saving does not start a scan.", "For approved daily or weekly checks, save with --enable-schedule. Plain save leaves recurring checks paused.", "Use project start only for an approved one-off run. Use project history to resume."] }, options);
     return;
   }
   const questions = createInterface({ input: process.stdin, output: process.stderr });
@@ -90,7 +90,7 @@ async function setup(value: string | undefined, options: OutputOptions) {
     output({ sourceRevision: discovery.sourceRevision, plan: proposal }, options);
     if (!/^y(?:es)?$/i.test(await questions.question("Save this configuration? [y/N] "))) return;
     const updated = recordSchema.parse(await api.postJson<unknown>(endpoint, { action: "save", repositoryId: saved.repository.id,
-      expectedRevision: saved.revision, sourceRevision: discovery.sourceRevision, plan: proposal }));
+      expectedRevision: saved.revision, sourceRevision: discovery.sourceRevision, plan: proposal, enableSchedule: false }));
     output(updated, options);
     if (!/^y(?:es)?$/i.test(await questions.question("Start a scan using the workspace's credits and approved budget? [y/N] "))) return;
     const idempotencyKey = randomUUID();
@@ -112,8 +112,11 @@ export function registerProjectSetupCommand(program: Command): void {
     .action((value: string | undefined, options: OutputOptions) => run(async () => { const api = client(); const saved = await project(api, value); output(await api.postJson<unknown>(endpoint, { action: "discover", repositoryId: saved.repository.id }), options); }, options));
   root.command("save <project>").description("Save an edited operating-plan JSON file. Does not start a scan.").requiredOption("--file <path>", "Operating-plan JSON file")
     .requiredOption("--revision <number>", "Expected current revision, including 0 for first save").requiredOption("--source <sha>", "Reviewed immutable source commit").option("--json", "Emit machine-readable JSON")
-    .action((value: string, options: OutputOptions & { file: string; revision: string; source: string }) => run(async () => { const api = client(); const saved = await project(api, value);
-      output(withNext(await api.postJson<unknown>(endpoint, { action: "save", repositoryId: saved.repository.id, expectedRevision: revision.parse(options.revision), sourceRevision: commit.parse(options.source), plan: await planFile(options.file) }), ["Review the saved revision, then run project start <project> --revision <revision> --idempotency-key <uuid> when execution is approved."]), options); }, options));
+    .option("--enable-schedule", "Explicitly approve recurring checks at the saved daily/weekly cadence and per-run credit limit")
+    .action((value: string, options: OutputOptions & { file: string; revision: string; source: string; enableSchedule?: boolean }) => run(async () => { const api = client(); const saved = await project(api, value);
+      output(withNext(await api.postJson<unknown>(endpoint, { action: "save", repositoryId: saved.repository.id, expectedRevision: revision.parse(options.revision), sourceRevision: commit.parse(options.source), plan: await planFile(options.file), enableSchedule: options.enableSchedule === true }), options.enableSchedule
+        ? ["Recurring checks are approved. Read automation.nextRunAt for the next check; no scan started during this save.", "Use project start only when an additional one-off run is wanted."]
+        : ["Recurring checks are paused. For approved daily or weekly checks, save the current revision with --enable-schedule.", "Use project start <project> --revision <revision> --idempotency-key <uuid> only when a one-off run is approved."]), options); }, options));
   root.command("history <project> [revision]").option("--json", "Emit machine-readable JSON")
     .action((value: string, requested: string | undefined, options: OutputOptions) => run(async () => { const api = client(); const saved = await project(api, value);
       output(await api.getJson<unknown>(`${endpoint}?repository_id=${saved.repository.id}&view=history${requested === undefined ? "" : `&revision=${z.coerce.number().int().positive().parse(requested)}`}`), options); }, options));
