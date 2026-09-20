@@ -7,13 +7,19 @@ const request: JevEvaluationRequest = {
   questions: { next: { type: "choice", instructions: "Select a supplied action or handoff.",
     criteria: { inspect: "Inspect the supplied item", handoff: "Uncertain or unsupported" } } },
 };
-const responseBody = (answers: unknown, usage: unknown = { input_tokens: 100, output_tokens: 10 }) => ({
+const responseBody = (answers: unknown, usage: unknown = { inputTokens: 100, outputTokens: 10 }) => ({
   model: "jev-1.13.0", answers, usage,
 });
 const validAnswer = { next: { type: "choice", choice: "handoff", probabilities: { inspect: 0.1, handoff: 0.9 } } };
 
+// The cloud provider is the org-billed path (orchestrator -> AI gateway ->
+// typesafe-ai/jev), and it speaks plain HTTP, so it is what these boundary
+// tests drive. `vercel` reaches the same upstream model through the AI SDK.
 function client(fetchImpl: typeof fetch, maxCostUsd = 0.10) {
-  return createJevEvaluator({ provider: "typesafe", apiKey: "test-only-key", fetch: fetchImpl, maxCostUsd });
+  return createJevEvaluator({
+    provider: "cloud", apiKey: "test-only-key", cloudUrl: "https://cloud.0.security/api/evaluations",
+    feature: "memory", fetch: fetchImpl, maxCostUsd,
+  });
 }
 
 describe("Jev evaluation trust boundaries", () => {
@@ -69,76 +75,33 @@ describe("Jev evaluation trust boundaries", () => {
     expect(fetchImpl).not.toHaveBeenCalled();
   });
 
-  it("allows the keyless classifier only for an explicitly enabled kernel prepass", () => {
-    expect(jevConfigFromEnvironment("kernel", {
-      "ZERO_JEV_FEATURES": "kernel", "ZERO_JEV_PROVIDER": "classifier",
-    })).toMatchObject({ provider: "classifier", feature: "kernel", maxClassifications: 1_000 });
-    expect(() => jevConfigFromEnvironment("memory", {
-      "ZERO_JEV_FEATURES": "memory", "ZERO_JEV_PROVIDER": "classifier",
-    })).toThrow("restricted to the kernel prepass");
+  it("accepts only vercel and cloud providers", () => {
+    expect(jevConfigFromEnvironment("memory", {
+      "ZERO_JEV_FEATURES": "memory", AI_GATEWAY_API_KEY: "test-only-key",
+    })).toMatchObject({ provider: "vercel" });
+    expect(jevConfigFromEnvironment("memory", {
+      "ZERO_JEV_FEATURES": "memory", "ZERO_JEV_PROVIDER": "cloud",
+      "ZERO_JEV_CLOUD_TOKEN": "test-only-key", "ZERO_JEV_CLOUD_URL": "https://cloud.0.security/api/evaluations",
+    })).toMatchObject({ provider: "cloud", feature: "memory" });
+    for (const provider of ["typesafe", "classifier"]) {
+      expect(() => jevConfigFromEnvironment("memory", {
+        "ZERO_JEV_FEATURES": "memory", "ZERO_JEV_PROVIDER": provider, AI_GATEWAY_API_KEY: "k",
+      })).toThrow("ZERO_JEV_PROVIDER must be vercel or cloud");
+    }
   });
 
-  it("maps classifier groups back to typed kernel answers without treating false confidence as true", async () => {
-    const fetchImpl = vi.fn<typeof fetch>().mockImplementation(async (_url, init) => {
-      const body = JSON.parse(String(init?.body)) as { labels: string[]; inputs: string[] };
-      expect(init?.headers).toMatchObject({ "User-Agent": "0-kernel-prepass/1.0" });
-      if (body.labels[0] === "true") {
-        return Response.json({ model: "jev-1.13.0", results: body.inputs.map(() => ({
-          label: "false", confidence: 0.88, scores: { true: 0.12, false: 0.88 }, model: "jev-1.13.0",
-        })) });
-      }
-      return Response.json({ model: "jev-1.13.0", results: body.inputs.map(() => ({
-        label: "defer", confidence: 0.7, scores: { high: 0.1, low: 0.2, defer: 0.7 }, model: "jev-1.13.0",
-      })) });
-    });
-    const evaluator = createJevEvaluator({ provider: "classifier", feature: "kernel", fetch: fetchImpl });
-    const result = await evaluator.evaluate({
-      state: [{ candidate: "c0", title: "candidate" }],
-      questions: {
-        c0_reachable: { type: "boolean", instructions: "Is this reachable?" },
-        c0_priority: { type: "choice", instructions: "Select priority.", criteria: {
-          high: "Strong evidence", low: "Weak evidence", defer: "Insufficient context",
-        } },
-      },
-    });
-    expect(fetchImpl).toHaveBeenCalledTimes(2);
-    expect(result.model).toBe("classifier.dev:jev-1.13.0");
-    expect(result.answers).toEqual({
-      c0_reachable: { type: "boolean", probability: 0.12 },
-      c0_priority: { type: "choice", choice: "defer", probabilities: { high: 0.1, low: 0.2, defer: 0.7 } },
-    });
-    expect(result.usage).toEqual({ inputTokens: 0, outputTokens: 0, estimatedCostUsd: 0 });
-  });
-
-  it("retains classifier failures and unscored inputs as sanitized evaluation failures", async () => {
-    const kernelRequest: JevEvaluationRequest = {
-      state: [{ id: "c0", diff: "04020000" }],
-      questions: { c0_risk: { type: "boolean", instructions: "Is risk evidenced?" } },
-    };
-    const unscored = vi.fn<typeof fetch>().mockResolvedValue(Response.json({ model: "jev-1.13.0", results: [{
-      label: "false", confidence: null, scores: null, unscored: "not natural language",
-    }] }));
-    await expect(createJevEvaluator({ provider: "classifier", feature: "kernel", fetch: unscored })
-      .evaluate(kernelRequest)).rejects.toThrow("Classifier evaluation unavailable");
-
-    const providerErrorBody = "provider-secret-body";
-    const failed = vi.fn<typeof fetch>().mockResolvedValue(new Response(providerErrorBody, { status: 429 }));
-    await expect(createJevEvaluator({ provider: "classifier", feature: "kernel", fetch: failed })
-      .evaluate(kernelRequest)).rejects.toThrow(/^Classifier provider returned HTTP 429$/);
-  });
-
-  it("reserves classifier classification budget before dispatch", async () => {
-    const fetchImpl = vi.fn<typeof fetch>();
+  it("reports usage so the org-billed path can charge the request", async () => {
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(Response.json(responseBody(validAnswer)));
+    const seen: { inputTokens: number; estimatedCostUsd: number }[] = [];
     const evaluator = createJevEvaluator({
-      provider: "classifier", feature: "kernel", fetch: fetchImpl, maxClassifications: 1,
+      provider: "cloud", apiKey: "test-only-key", cloudUrl: "https://cloud.0.security/api/evaluations",
+      feature: "memory", fetch: fetchImpl, onUsage: (usage) => seen.push(usage),
     });
-    await expect(evaluator.evaluate({
-      state: [{ id: "c0" }],
-      questions: {
-        c0_one: { type: "boolean", instructions: "One?" },
-        c0_two: { type: "boolean", instructions: "Two?" },
-      },
-    })).rejects.toThrow("budget exhausted");
-    expect(fetchImpl).not.toHaveBeenCalled();
+
+    const evaluation = await evaluator.evaluate(request);
+
+    expect(evaluation.usage.inputTokens).toBe(100);
+    expect(evaluation.usage.estimatedCostUsd).toBeCloseTo(100 * (0.042 / 1_000_000), 12);
+    expect(seen).toHaveLength(1);
   });
 });
