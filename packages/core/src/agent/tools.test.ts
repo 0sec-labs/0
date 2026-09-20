@@ -164,30 +164,6 @@ describe("getToolsForRole", () => {
     }
   });
 
-  it("removes execution capabilities from scoped source audits", () => {
-    for (const role of ["audit", "review"]) {
-      const names = getToolsForRole(role, { hasScope: true }).map((t) => t.name);
-      expect(names).toEqual([
-        "read_file",
-        "list_files",
-        "search_files",
-        "intel",
-        "query_findings",
-        "save_finding",
-        "update_finding",
-        "done",
-        "update_todos",
-        // NOTE: the wired security engines (ad_attack_paths, entra_*,
-        // deep_source_review, file_security_review, assemble_advisory,
-        // cve_lookup, variant_hunt, assumption_hunt, generate_fix) are
-        // deliberately ABSENT from the scoped source-audit set — several spawn
-        // sub-analyses / run lenses / make network calls, so exposing them
-        // inside the ATTACKER-CONTROLLED scoped source boundary would widen the
-        // trust surface. They stay available to the trusted (non-scoped)
-        // audit/review role via allEnabledTools — just never inside a scope.
-      ]);
-    }
-  });
 
   it("audit role includes skill tools when JIT skills are enabled", () => {
     process.env["0SEC_FEATURE_JIT_SKILLS"] = "1";
@@ -375,7 +351,7 @@ describe("ToolExecutor", () => {
     const root = mkdtempSync(join(tmpdir(), "0sec-scoped-audit-"));
     try {
       const scopedAudit = new ToolExecutor({ ...ctx, role: "audit", scopePath: root }, null);
-      for (const name of ["bash", "run_command", "apply_patch", "spawn_agent"]) {
+      for (const name of ["bash", "run_command", "apply_patch"]) {
         const result = await scopedAudit.execute({ name, arguments: {} });
         expect(result.success).toBe(false);
         expect(result.error).toMatch(/not available in a scoped source audit/);

@@ -2496,6 +2496,31 @@ describe("runNativeAgentLoop — hunt memory integration", () => {
     };
   }
 
+  it("keeps local findings ephemeral until memory is explicitly enabled", async () => {
+    vi.stubEnv("HOME", tmp);
+    const finding = {
+      title: "Reflected XSS in search", severity: "high", category: "xss",
+      evidence_request: "GET /?q=<script>", evidence_response: "<script>",
+    };
+    const config = {
+      role: "attack" as const, systemPrompt: "Inspect the target", tools: [],
+      maxTurns: 2, target: "https://shop.example.com", scanId: "local-cold",
+      allowModelSelfExtension: false,
+    };
+    const cold = await runNativeAgentLoop({
+      config, runtime: saveThenDone(finding), db: null,
+    });
+    expect(cold.findings.map(record => record.title)).toEqual([finding.title]);
+    expect(existsSync(join(tmp, ".0sec", "hunt-memory"))).toBe(false);
+
+    await runNativeAgentLoop({
+      config: { ...config, codebaseLearning: true, scanId: "explicit-memory" },
+      runtime: saveThenDone(finding), db: null,
+    });
+    expect(new HuntMemoryStore({ home: tmp }).all().map(record => record.title))
+      .toEqual([finding.title]);
+  });
+
   it("appends a redacted HuntRecord to an injected store on a saved finding", async () => {
     const store = new HuntMemoryStore({ path: join(tmp, "patterns.jsonl") });
     const runtime = saveThenDone({
@@ -2896,19 +2921,23 @@ describe("recursive subagents", () => {
     const unsubscribe = eventBus.subscribe({ emit(type, payload) {
       if (type === "subagent_lifecycle" && payload.status === "running") edges.push(payload);
     } });
-    const replies: NativeMessage[] = [];
+    const captured: { system?: string; messages: NativeMessage[] } = { messages: [] };
     const runtimeAt = (depth: number): NativeRuntime => {
       let turn = 0;
       return {
         type: "api",
         isAvailable: async () => true,
         forkForSubagent: async () => runtimeAt(depth + 1),
-        executeNative: async (_system, messages) => {
+        executeNative: async (system, messages) => {
           turn++;
-          if (depth === 2 && turn === 2) replies.push(...messages);
+          if (depth === 2 && turn === 2) {
+            captured.system = system;
+            captured.messages.push(...messages);
+          }
           return {
             content: turn > 1 ? [{ type: "text", text: "Evidence inspection complete." }] :
-              depth < 2 ? [{ type: "tool_use", id: `delegate-${depth}`, name: "spawn_agent", input: { task: "Inspect authorization in route.ts", max_turns: 2 } }] : [
+              depth === 0 ? [{ type: "tool_use", id: "delegate-0", name: "spawn_agent", input: { task: "PARENT_TASK: Examine file structure", max_turns: 2 } }] :
+              depth === 1 ? [{ type: "tool_use", id: "delegate-1", name: "spawn_agent", input: { task: "CHILD_TASK: Inspect route.ts", max_turns: 2 } }] : [
                 { type: "tool_use", id: "read", name: "read_file", input: { path: "route.ts" } },
                 { type: "tool_use", id: "restricted", name: "query_findings", input: {} },
                 { type: "tool_use", id: "write", name: "str_replace", input: { path: "route.ts", old_string: "false", new_string: "true" } },
@@ -2927,7 +2956,7 @@ describe("recursive subagents", () => {
     try {
       const state = await runNativeAgentLoop({
         config: {
-          role: "review", systemPrompt: "Inspect source without modifying it.", target: home,
+          role: "review", systemPrompt: "ROOT_POLICY: Review without modifications.", target: home,
           scopePath: home, workspaceRoot: home, scanId: "recursive-root", maxTurns: 2,
           tools: getToolsForRole("review", { hasScope: true }).filter(tool => tool.name !== "query_findings"),
           costLedger: ledger,
@@ -2937,12 +2966,15 @@ describe("recursive subagents", () => {
       });
       expect(state.findings.map(finding => finding.title)).toEqual(["Authorization disabled"]);
       expect(readFileSync(source, "utf8")).toBe("export const authorize = false;\n");
-      expect(replies.flatMap(message => message.content)).toContainEqual(
+      expect(captured.messages.flatMap(message => message.content)).toContainEqual(
         expect.objectContaining({ type: "tool_result", tool_use_id: "write", is_error: true }),
       );
-      expect(replies.flatMap(message => message.content)).toContainEqual(
+      expect(captured.messages.flatMap(message => message.content)).toContainEqual(
         expect.objectContaining({ type: "tool_result", tool_use_id: "restricted", is_error: true }),
       );
+      expect(captured.system).toContain("ROOT_POLICY: Review without modifications.");
+      expect(captured.system).toContain("CHILD_TASK: Inspect route.ts");
+      expect(captured.system).not.toContain("PARENT_TASK: Examine file structure");
       expect(edges).toHaveLength(2);
       expect(edges[0].parent_scan_id).toBe("recursive-root");
       expect(edges[1].parent_scan_id).toBe(edges[0].agent_id);

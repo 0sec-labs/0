@@ -6240,10 +6240,12 @@ export class ToolExecutor {
       // tool description — that it applies to every agent — is actually honoured
       // in child-visible input, not merely echoed onto the display card.
       const jobText = sharedContext ? `${sharedContext}\n\n${task}` : task;
+      const delegationSystemPrompt = this.ctx.delegationSystemPrompt ?? `You are a focused ${this.ctx.role ?? "attack"} agent.`;
       const state = await runNativeAgentLoop({
         config: {
           role: this.ctx.role ?? "attack",
-          systemPrompt: `${this.ctx.delegationSystemPrompt ?? `You are a focused ${this.ctx.role ?? "attack"} agent.`}\n\nYour delegated task:\n\n${jobText}\n\nUse only your provided tools within the inherited scope. Delegate independent subtasks when useful. Save evidence-backed findings with save_finding and call done when finished.${renderSubagentMessagingPrompt(childMessaging)}`,
+          systemPrompt: `${delegationSystemPrompt}\n\nYour delegated task:\n\n${jobText}\n\nUse only your provided tools within the inherited scope. Delegate independent subtasks when useful. Save evidence-backed findings with save_finding and call done when finished.${renderSubagentMessagingPrompt(childMessaging)}`,
+          delegationSystemPrompt,
           tools: subTools,
           maxTurns,
           target: this.ctx.target,
@@ -6381,6 +6383,7 @@ export class ToolExecutor {
     signal?.throwIfAborted();
 
     const subTools = this.subagentTools(childMessaging);
+    const delegationSystemPrompt = this.ctx.delegationSystemPrompt ?? `You are a focused ${this.ctx.role ?? "attack"} agent.`;
 
     const preamble =
       messages && messages.length > 0
@@ -6392,7 +6395,8 @@ export class ToolExecutor {
     const state = await runNativeAgentLoop({
       config: {
         role: this.ctx.role ?? "attack",
-        systemPrompt: `${this.ctx.delegationSystemPrompt ?? `You are a focused ${this.ctx.role ?? "attack"} agent.`}\n\n${preamble}${renderSubagentMessagingPrompt(childMessaging)}`,
+        systemPrompt: `${delegationSystemPrompt}\n\n${preamble}${renderSubagentMessagingPrompt(childMessaging)}`,
+        delegationSystemPrompt,
         tools: subTools,
         maxTurns,
         target: this.ctx.target,

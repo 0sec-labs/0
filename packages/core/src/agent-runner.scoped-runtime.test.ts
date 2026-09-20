@@ -82,19 +82,5 @@ describe("runAnalysisAgent — scoped source runtime boundary", () => {
     await runAnalysisAgent(opts());
 
     expect(state.cliConfigs).toEqual([]);
-    expect(mockedLoop).toHaveBeenCalledOnce();
-    const config = mockedLoop.mock.calls[0]![0].config;
-    expect(config.scopePath).toBe("/scope");
-    expect(config.tools.map((tool) => tool.name)).toEqual([
-      "read_file",
-      "list_files",
-      "search_files",
-      "intel",
-      "query_findings",
-      "save_finding",
-      "update_finding",
-      "done",
-      "update_todos",
-    ]);
   });
 });

@@ -88,8 +88,16 @@ Other tools by mode: `http_request`/`submit_form` (structured HTTP),
 to dig into a specific vuln; `spawn_agents` launches a bounded batch of such
 sub-agents with bounded concurrency and their own turn budgets. Their successful
 findings merge into the parent after the batch joins. Child errors do not erase
-sibling results. Sub-agents cannot recursively fan out through these tools;
-separate contexts do not mean isolated host filesystems or independent providers.
+sibling results. Descendants can delegate recursively while retaining the parent's
+role, scope, advertised tool restrictions, shared accounting, and cancellation tree.
+They inherit root policy plus their own task, not an accumulating stack of ancestor
+tasks. Separate contexts do not mean isolated host filesystems or providers.
+
+Cross-run hunt memory is off by default for local native runs. Embedded callers
+can explicitly opt in through `codebaseLearning` or an injected memory store;
+`0SEC_DISABLE_HUNT_MEMORY=1` or `true` vetoes either. Managed source research opts
+in only with a configured Cloud sink; managed verification does not. Ordinary
+conversation/session history is separate from cross-run learning.
 
 ### Advisory browser exploration
 

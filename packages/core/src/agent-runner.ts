@@ -488,7 +488,7 @@ export async function runAnalysisAgent(opts: AnalysisAgentOptions): Promise<Anal
           target,
           scanId,
           scopePath,
-          codebaseLearning: scopedSourceAudit && purpose === "research",
+          codebaseLearning: !!getCloudSinkConfig() && scopedSourceAudit && purpose === "research",
           sessionId,
           costCeilingUsd: config.costCeilingUsd,
           costModel: config.model,
