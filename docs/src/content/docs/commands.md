@@ -7,7 +7,7 @@ tableOfContents:
 ---
 
 Find the command, arguments, and options for your task. This reference covers
-**61 top-level commands** and their registered subcommands.
+**63 top-level commands** and their registered subcommands.
 
 For a worked example, start with [Scan Workflows](/scan-workflows/),
 [Console](/console/), or [Research Workflows](/research-workflows/).
@@ -2963,9 +2963,9 @@ run. Unknown topics fail before probing the service.
 
 ### connect
 
-Request a managed `secure` run and optional recurrence for an authorized
-repository. Readiness and schedule lookups must succeed before creating work.
-Unavailable enrollment APIs block dispatch rather than assuming authorization.
+Verify repository access without starting work. A managed scan requires `--run`;
+a scan with recurrence requires `--schedule`. Readiness and, for dispatch,
+schedule lookups must succeed. Unavailable APIs block dispatch.
 
 The current client takes the first returned schedule without independently
 checking its repository. Against the reviewed organization-wide list endpoint,
@@ -2997,22 +2997,22 @@ For a noninteractive agent, request JSON and inspect any required action first:
 ```bash
 0 connect --format json --test-command "npm test"
 # Only after confirming API compatibility and reviewing scope, cadence, budget and publication:
-0 connect --format json --test-command "npm test" --yes
+0 connect --format json --test-command "npm test" --run --yes
 ```
 
-JSON mode without `--yes` returns `action-required` with
-`reason: "confirmation_required"` before starting new work. An existing
-connection may return `no-open` because it creates no new work. Missing GitHub
-App access returns an installation URL where available; this browser handoff
-does not claim that a browser-poll enrollment session is implemented.
+For `--run` or `--schedule`, JSON mode without `--yes` returns `action-required`
+with `reason: "confirmation_required"` before starting new work. Without either
+dispatch flag, `ready` means access was checked and no scan or schedule was created.
+An existing schedule may return `no-open`. Missing GitHub App access returns an
+installation URL where available; it does not implement browser-poll enrollment.
 
-Scheduling defaults to daily at 03:00 UTC. Use `--cron` to change it, or
-`--no-schedule` for an approved one-shot run. The per-run `--cost-ceiling` is
-not a monthly subscription allowance.
+`--schedule` defaults to daily at 03:00 UTC; `--cron` changes that frequency and
+requires `--schedule`. Use `--run` for an approved one-shot request. The per-run
+`--cost-ceiling` is not a monthly subscription allowance.
 
 | JSON state | Meaning |
 | --- | --- |
-| `ready` | The scan was created and requested recurrence was confirmed. |
+| `ready` | Access was verified without dispatch, or requested work was created. Check `scan_id` and `schedule`; readiness alone does not mean a scan exists. |
 | `no-open` | A returned schedule was selected; no new work was created. Repository identity is not independently verified by the client. |
 | `action-required` | Enrollment, authorization, approval or an operation failed; inspect `reason` and `message`. |
 
@@ -3047,6 +3047,416 @@ Guide: [Cloud authentication](/api-keys/).
 | `--format <fmt>` | `terminal` | Output format: terminal \| json |
 | `--publication-policy <policy>` | `off` | Publication policy: off \| manual \| auto. Default: off |
 | `--yes` | — | Skip interactive confirmation before scheduling |
+
+## Codebase configuration and methodology
+
+These commands use the same authenticated cloud APIs as the dashboard. They
+require a matching deployed service and current organization access. Add the
+codebase in the dashboard first; `project setup` does not enroll repositories.
+Saving configuration and binding a methodology do not start a scan or grant
+credits. New runs capture immutable revisions; edits do not change queued work.
+
+### project
+
+Read and edit a codebase's context, operating plan, revision history and optional
+Slack notification settings. Mutations require server-authorized access.
+
+```text
+0 project
+```
+
+Subcommands: [list](#project-list) · [show](#project-show) · [setup](#project-setup) · [discover](#project-discover) · [save](#project-save) · [history](#project-history) · [suggestions](#project-suggestions) · [restore](#project-restore) · [start](#project-start) · [slack](#project-slack).
+
+### project list
+
+List the enrolled codebases visible to the authenticated organization.
+
+```text
+0 project list [options]
+```
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--json` | — | Emit machine-readable JSON |
+
+### project show
+
+Read the saved configuration. Select an enrolled UUID, GitHub repository URL,
+or omit the argument to resolve the current checkout's origin.
+
+```text
+0 project show [options] [project]
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `project` | No |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--json` | — | Emit machine-readable JSON |
+
+### project setup
+
+Prepare a source-backed proposal. Interactive mode asks before saving and asks
+separately before starting a credit-funded scan. `--json` and noninteractive
+mode return the proposal without saving or starting work.
+
+```text
+0 project setup [options] [project]
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `project` | No |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--json` | — | Return an editable proposal without saving or starting |
+
+### project discover
+
+Read repository metadata at an immutable source commit. This does not execute
+repository code, persist a plan, or start a scan.
+
+```text
+0 project discover [options] [project]
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `project` | No |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--json` | — | Emit machine-readable JSON |
+
+### project save
+
+Save a reviewed JSON plan with its expected configuration revision and source
+commit. A stale revision is rejected rather than overwriting another editor.
+Saving does not authorize or start execution.
+
+```text
+0 project save [options] <project>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `project` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--file <path>` **required** | — | Operating-plan JSON file |
+| `--revision <number>` **required** | — | Expected current revision, including 0 for first save |
+| `--source <sha>` **required** | — | Reviewed immutable source commit |
+| `--json` | — | Emit machine-readable JSON |
+
+### project history
+
+Read saved revisions, or select one historical revision for inspection.
+
+```text
+0 project history [options] <project> [revision]
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `project` | Yes |  |
+| `revision` | No |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--json` | — | Emit machine-readable JSON |
+
+### project suggestions
+
+Read observations proposed by completed scans. Suggestions are not automatically
+accepted as configuration, permissions, or verified security facts.
+
+```text
+0 project suggestions [options] <project>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `project` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--json` | — | Emit machine-readable JSON |
+
+### project restore
+
+Restore a historical plan using the expected current revision. This changes
+future configuration, not the immutable snapshots of existing runs.
+
+```text
+0 project restore [options] <project> <revision>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `project` | Yes |  |
+| `revision` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--expected-revision <number>` **required** | — | Current revision to replace |
+| `--json` | — | Emit machine-readable JSON |
+
+### project start
+
+Explicitly request execution of an approved saved revision. Review scope and
+budget first. Supply a UUID idempotency key and reuse it when recovering a lost
+response. The service checks authorization and credit funding before enqueue.
+
+```text
+0 project start [options] <project>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `project` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--revision <number>` **required** | — | Approved configuration revision |
+| `--idempotency-key <uuid>` **required** | — | Reuse this key when recovering a lost response |
+| `--json` | — | Emit machine-readable JSON |
+
+### project slack
+
+Manage optional workspace notifications through an existing Slack connection.
+This command does not install Slack or change scan authorization.
+
+```text
+0 project slack
+```
+
+Subcommands: [channels](#project-slack-channels) · [channel](#project-slack-channel) · [clear](#project-slack-clear).
+
+### project slack channels
+
+List channels available through the workspace's current Slack integration.
+
+```text
+0 project slack channels [options]
+```
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--json` | — | Emit machine-readable JSON |
+
+### project slack channel
+
+Select the workspace notification channel by its Slack channel ID.
+
+```text
+0 project slack channel [options] <channel-id>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `channel-id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--json` | — | Emit machine-readable JSON |
+
+### project slack clear
+
+Clear the selected notification channel without disconnecting Slack.
+
+```text
+0 project slack clear [options]
+```
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--json` | — | Emit machine-readable JSON |
+
+### skills
+
+Manage versioned audit-methodology bundles. Cloud credentials are required;
+the service restricts mutations to authorized owners and administrators.
+Methodology content never grants additional targets, budget, or tool access.
+
+```text
+0 skills
+```
+
+Subcommands: [list](#skills-list) · [show](#skills-show) · [new](#skills-new) · [import](#skills-import) · [edit](#skills-edit) · [sync](#skills-sync) · [use](#skills-use) · [unuse](#skills-unuse) · [project](#skills-project) · [archive](#skills-archive).
+
+### skills list
+
+List the organization's available audit skills and codebases.
+
+```text
+0 skills list [options]
+```
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--json` | — | Emit result as machine-readable JSON |
+
+### skills show
+
+Read a skill's revisions and codebase assignments.
+
+```text
+0 skills show [options] <id>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--json` | — | Emit result as machine-readable JSON |
+
+### skills new
+
+Create a Markdown bundle from relative local file paths, with `SKILL.md` first.
+Review all included files before uploading them to the workspace.
+
+```text
+0 skills new [options]
+```
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--name <name>` **required** | — | Skill name |
+| `--description <desc>` | — | Optional description |
+| `--file <paths...>` **required** | — | Markdown file(s) to include (SKILL.md must be first) |
+| `--json` | — | Emit result as machine-readable JSON |
+
+### skills import
+
+Import a methodology from a GitHub repository accessible to the workspace's
+current GitHub App. The service resolves the selected ref to a source commit.
+
+```text
+0 skills import [options] <owner/repo>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `owner/repo` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--ref <ref>` | — | Branch, tag, or commit SHA (default: HEAD) |
+| `--path <path>` | — | Path within the repo to the bundle folder or .md file |
+| `--name <name>` | — | Override skill name |
+| `--json` | — | Emit result as machine-readable JSON |
+
+### skills edit
+
+Create a revision from reviewed local files. Supply `--expected-revision` when
+editing a previously read version to reject stale updates.
+
+```text
+0 skills edit [options] <id>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--file <paths...>` **required** | — | Markdown file(s) to include |
+| `--expected-revision <n>` | — | Expected current revision number (prevents stale overwrite) |
+| `--name <name>` | — | Update skill name |
+| `--description <desc>` | — | Update description |
+| `--json` | — | Emit result as machine-readable JSON |
+
+### skills sync
+
+Refresh a GitHub-imported skill using its expected current revision.
+
+```text
+0 skills sync [options] <id>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--expected-revision <n>` **required** | — | Expected current revision number (CAS — 409 on mismatch) |
+| `--json` | — | Emit result as machine-readable JSON |
+
+### skills use
+
+Pin a revision to an authorized enrolled codebase. An omitted revision selects
+the latest available revision at assignment time; it is not a floating binding.
+
+```text
+0 skills use [options] <id>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--project <owner/repo>` **required** | — | Project to assign the skill to (owner/name or UUID) |
+| `--revision <id>` | — | Revision UUID to pin (default: latest) |
+| `--json` | — | Emit result as machine-readable JSON |
+
+### skills unuse
+
+Remove a codebase assignment without deleting the skill's revision history.
+
+```text
+0 skills unuse [options] <id>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--project <owner/repo>` **required** | — | Project to remove the skill from (owner/name or UUID) |
+| `--json` | — | Emit result as machine-readable JSON |
+
+### skills project
+
+Read the codebase's pinned methodology revisions and available skills.
+
+```text
+0 skills project [options] <owner/repo>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `owner/repo` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--json` | — | Emit result as machine-readable JSON |
+
+### skills archive
+
+Archive a skill for future use while preserving its revision history.
+
+```text
+0 skills archive [options] <id>
+```
+
+| Argument | Required | Description |
+| --- | --- | --- |
+| `id` | Yes |  |
+
+| Option | Registered default | Description |
+| --- | --- | --- |
+| `--json` | — | Emit result as machine-readable JSON |
 
 ## XBOW benchmark runner
 

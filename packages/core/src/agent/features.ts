@@ -548,13 +548,14 @@ export const features = {
    * them into working context mid-scan. Skills replace the monolithic
    * playbook injection with targeted, on-demand knowledge (#410, #457).
    *
-   * Default OFF until the skill registry is validated via A/B testing.
+   * Default OFF unless an assigned cloud methodology manifest opts this run in.
+   * An explicit feature flag still takes precedence over that default.
    * Implemented as a getter so the CLI `--features` flag — which sets
    * the env var inside the command action, AFTER this module has been
    * imported — is still honored at tool-dispatch time.
    */
   get jitSkills(): boolean {
-    return env("0SEC_FEATURE_JIT_SKILLS", false);
+    return env("0SEC_FEATURE_JIT_SKILLS", Boolean(process.env["0SEC_AUDIT_SKILLS_MANIFEST"]?.trim()));
   },
 
   /**

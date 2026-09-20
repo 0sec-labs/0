@@ -76,13 +76,15 @@ interface SkillFrontmatter {
 /** Parse YAML frontmatter from a Markdown file's leading `---` block. */
 function parseFrontmatter(
   raw: string,
-  skillId: string,
+  snapshot: AuditSkillSnapshot,
 ): { frontmatter: SkillFrontmatter; body: string } {
+  const { skillId } = snapshot;
   const trimmed = raw.trimStart();
   if (!trimmed.startsWith("---")) {
-    throw new Error(
-      `Skill ${skillId}: SKILL.md must start with YAML frontmatter (---)`,
-    );
+    return {
+      frontmatter: { name: snapshot.name, description: snapshot.description, version: DEFAULT_VERSION, tags: DEFAULT_TAGS, triggers: DEFAULT_TRIGGERS },
+      body: raw,
+    };
   }
 
   const end = trimmed.indexOf("---", 3);
@@ -116,19 +118,17 @@ function parseFrontmatter(
     );
   }
 
-  const name = typeof parsed.name === "string" && parsed.name.trim()
-    ? parsed.name.trim()
-    : undefined;
+  const name = parsed.name === undefined ? snapshot.name
+    : typeof parsed.name === "string" && parsed.name.trim() ? parsed.name.trim() : undefined;
   if (!name) {
     throw new Error(`Skill ${skillId}: SKILL.md frontmatter "name" is required`);
   }
 
-  const description = typeof parsed.description === "string" && parsed.description.trim()
-    ? parsed.description.trim()
-    : undefined;
-  if (!description) {
+  const description = parsed.description === undefined ? snapshot.description
+    : typeof parsed.description === "string" ? parsed.description.trim() : undefined;
+  if (description === undefined) {
     throw new Error(
-      `Skill ${skillId}: SKILL.md frontmatter "description" is required`,
+      `Skill ${skillId}: SKILL.md frontmatter "description" must be a string`,
     );
   }
 
@@ -235,8 +235,8 @@ function validateSkillSnapshot(snapshot: AuditSkillSnapshot): void {
   if (!name || typeof name !== "string") {
     throw new Error(`Skill ${skillId}: non-empty 'name' required`);
   }
-  if (!description || typeof description !== "string") {
-    throw new Error(`Skill ${skillId}: non-empty 'description' required`);
+  if (typeof description !== "string") {
+    throw new Error(`Skill ${skillId}: 'description' must be a string`);
   }
 
   // Entrypoint
@@ -373,7 +373,7 @@ export function loadSkillBundleFromManifest(
 
     // Find the SKILL.md entry and parse its frontmatter
     const skillMd = snapshot.files.find((f) => f.path === ENTRYPOINT)!;
-    const { frontmatter, body } = parseFrontmatter(skillMd.content, snapshot.skillId);
+    const { frontmatter, body } = parseFrontmatter(skillMd.content, snapshot);
 
     const def = buildSkillDefinition(snapshot, frontmatter, body);
     result.set(def.id, def);

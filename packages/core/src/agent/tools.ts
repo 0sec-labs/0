@@ -603,6 +603,9 @@ const SCOPED_SOURCE_AUDIT_TOOLS: Record<string, true> = {
   list_files: true,
   search_files: true,
   intel: true,
+  // Methodology reads return bounded registry text, never execute its contents.
+  list_skills: true,
+  load_skill: true,
   query_findings: true,
   save_finding: true,
   update_finding: true,
@@ -9446,7 +9449,8 @@ export function getToolsForRole(role: string, opts?: { hasScope?: boolean; webMo
     && ((featureFlags.cveAdapt && opts?.hasScope) || !CVE_ADAPT_TOOL_NAMES.includes(name)),
   );
   const scopedSourceTools = Object.keys(SCOPED_SOURCE_AUDIT_TOOLS).filter((name) =>
-    name !== "remember_codebase" && (featureFlags.zeroverse || name !== "analyze_binary"),
+    name !== "remember_codebase" && (featureFlags.zeroverse || name !== "analyze_binary")
+    && (featureFlags.jitSkills || (name !== "list_skills" && name !== "load_skill")),
   );
 
 
