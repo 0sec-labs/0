@@ -12,12 +12,13 @@
 </p>
 
 <p align="center">
-  <strong>Open-source cybersecurity research and tooling.</strong><br/>
+  <strong>Meet Zero, your AI security team.</strong><br/>
   <sub>The Swiss Applied AI &amp; Cybersecurity Research Lab</sub><br/>
   <a href="https://0.security/">0.security</a> ·
   <a href="https://docs.0.security/">Documentation</a> ·
   <a href="https://github.com/0sec-labs/foxguard">FoxGuard</a>
 </p>
+
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-1A1815?style=flat-square&labelColor=1A1815" alt="License: MIT OR Apache-2.0"></a>
@@ -25,7 +26,6 @@
   <a href="#status"><img src="https://img.shields.io/badge/status-research%20preview-FD802E?style=flat-square&labelColor=1A1815" alt="Status: research preview"></a>
 </p>
 
-## Meet Zero, your AI security team.
 <p align="center">
   <img src="assets/security-cycle-diagram.webp" alt="Zero studies, finds, fixes, reports, and improves." width="100%">
 </p>
