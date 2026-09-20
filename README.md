@@ -33,14 +33,7 @@
 
 ## Get started
 
-Give this to your agent to start:
-
-> Review this repository for security issues, explain what you find, and
-> propose fixes.
-
-[Documentation](https://docs.0.security/getting-started/) ·
-[Commands](https://docs.0.security/commands/) ·
-[Contributing](CONTRIBUTING.md)
+Give this to your agent to start.
 
 ## License
 
