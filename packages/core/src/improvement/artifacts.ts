@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { closeSync, constants, fchmodSync, fstatSync, fsyncSync, linkSync, lstatSync, mkdirSync, openSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
-import { dirname, isAbsolute, join, parse, resolve, sep } from "node:path";
+import { closeSync, constants, fchmodSync, fstatSync, fsyncSync, linkSync, lstatSync, mkdirSync, openSync, readFileSync, realpathSync, unlinkSync, writeFileSync } from "node:fs";
+import { basename, dirname, isAbsolute, join, parse, resolve, sep } from "node:path";
 import { canonicalEvolutionJson } from "./config.js";
 
 const MAX_ARTIFACT_BYTES = 128 * 1024 * 1024;
@@ -9,9 +9,30 @@ function hasCode(error: unknown, code: string): boolean {
   return error instanceof Error && "code" in error && error.code === code;
 }
 
+function canonicalStoragePath(path: string): string {
+  const requested = resolve(path);
+  let cursor = requested;
+  const suffix: string[] = [];
+  while (true) {
+    try {
+      const stat = lstatSync(cursor);
+      if (cursor === requested && stat.isSymbolicLink()) {
+        throw new Error(`unsafe evolution directory: ${cursor}`);
+      }
+      return join(realpathSync(cursor), ...suffix.reverse());
+    } catch (error) {
+      if (!hasCode(error, "ENOENT")) throw error;
+      const parent = dirname(cursor);
+      if (parent === cursor) throw error;
+      suffix.unshift(basename(cursor));
+      cursor = parent;
+    }
+  }
+}
+
 function inspectDirectories(path: string, create: boolean): string {
   if (!isAbsolute(path)) throw new Error("evolution storage paths must be absolute");
-  const absolute = resolve(path);
+  const absolute = canonicalStoragePath(path);
   const root = parse(absolute).root;
   let cursor = root;
   for (const component of absolute.slice(root.length).split(sep).filter(Boolean)) {

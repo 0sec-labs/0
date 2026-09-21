@@ -707,18 +707,22 @@ function assertPromotableReceipt(receipt: EvolutionEvaluation, versionId: string
 /** Copy explicitly selected sourcePaths into a store-owned immutable content-addressed directory. */
 export async function snapshotEvolutionSource(config: Pick<EvolutionConfig, "sourceRoot" | "storePath" | "sourcePaths" | "maxSourceBytes">): Promise<EvolutionSnapshot> {
   const { sourceRoot, storePath, sourcePaths, maxSourceBytes } = config;
-  for (const d of [snapshotsDir(storePath), receiptsDir(storePath), configsDir(storePath)]) {
+  if (lstatSync(sourceRoot).isSymbolicLink()) {
+    throw new Error(`snapshot source root is a symlink: ${sourceRoot}`);
+  }
+  for (const d of [storePath, snapshotsDir(storePath), receiptsDir(storePath), configsDir(storePath)]) {
     ensureEvolutionDirectory(d);
   }
+  const physicalSourceRoot = realpathSync(sourceRoot);
+  const physicalStorePath = dirname(realpathSync(snapshotsDir(storePath)));
   const id = randomUUID();
-  const { sourceAbsPaths, files } = indexSourceFiles(sourceRoot, sourcePaths, storePath, maxSourceBytes);
-  await copySnapshotFiles(sourceRoot, sourceAbsPaths, storePath, id);
+  const { sourceAbsPaths, files } = indexSourceFiles(physicalSourceRoot, sourcePaths, physicalStorePath, maxSourceBytes);
+  await copySnapshotFiles(physicalSourceRoot, sourceAbsPaths, physicalStorePath, id);
   const digest = computeSnapshotDigest(files);
-  const snapshot: EvolutionSnapshot = { id, root: snapshotDir(storePath, id), digest, files };
+  const snapshot: EvolutionSnapshot = { id, root: snapshotDir(physicalStorePath, id), digest, files };
   verifyEvolutionSnapshot(snapshot);
   return snapshot;
 }
-
 /** Apply model file edits to a COPY of the baseline snapshot, creating a new candidate. */
 export async function createEvolutionCandidate(
   base: EvolutionSnapshot, proposal: EvolutionProposal, config: EvolutionConfig,
@@ -726,10 +730,12 @@ export async function createEvolutionCandidate(
   verifyEvolutionSnapshot(base);
   const id = randomUUID();
   const { files } = applyEdits(base, proposal.edits, config);
+  const physicalStorePath = dirname(realpathSync(snapshotsDir(config.storePath)));
+  const snapshotRoot = snapshotDir(physicalStorePath, id);
   const digest = computeSnapshotDigest(files);
-  const snapshot: EvolutionSnapshot = { id, root: snapshotDir(config.storePath, id), digest, files };
-  await mkdir(snapshotDir(config.storePath, id), { recursive: true });
-  await writeSnapshotFiles(id, base, proposal.edits, config.storePath);
+  const snapshot: EvolutionSnapshot = { id, root: snapshotRoot, digest, files };
+  await mkdir(snapshotRoot, { recursive: true });
+  await writeSnapshotFiles(id, base, proposal.edits, physicalStorePath);
   verifyEvolutionSnapshot(snapshot);
   return snapshot;
 }

@@ -106,8 +106,16 @@ export async function evaluateEvolutionCandidate(
         }
         const costUsd = Number.isFinite(execution.durationMs) && execution.durationMs >= 0
           ? execution.durationMs / 1000 * config.computeUsdPerSecond : 0;
-        spent += costUsd;
-        attempts[variant].push({ caseId: fixture.id, lane: fixture.lane, repeat, matched, inconclusive, costUsd, execution });
+        const executionRecord = {
+          exitCode: execution.exitCode,
+          stdout: execution.stdout,
+          stderr: execution.stderr,
+          durationMs: execution.durationMs,
+          timedOut: execution.timedOut,
+          ...(execution.error === undefined ? {} : { error: execution.error }),
+          ...(execution.cleanupFailed === undefined ? {} : { cleanupFailed: execution.cleanupFailed }),
+        };
+        attempts[variant].push({ caseId: fixture.id, lane: fixture.lane, repeat, matched, inconclusive, costUsd, execution: executionRecord });
         deps.log?.(`[evolve] ${variant} ${fixture.lane}/${fixture.id} repeat=${repeat + 1}: ${inconclusive ? "inconclusive" : matched ? "matched" : "mismatch"}`);
         if (spent > config.maxEvaluationCostUsd) throw new Error("evaluation cost ceiling exceeded");
         // An unavailable oracle already disqualifies the candidate; retain the
@@ -139,7 +147,7 @@ export async function evaluateEvolutionCandidate(
     developmentCorpusDigest: evolutionDigest(config.cases.filter((entry) => entry.lane === "development")),
     heldOutCorpusDigest: evolutionDigest(config.cases.filter((entry) => entry.lane === "held-out")),
     negativeControlCorpusDigest: evolutionDigest(config.cases.filter((entry) => entry.lane === "negative-control")),
-    campaignGate,
+    ...(campaignGate === undefined ? {} : { campaignGate }),
     evaluatorDigestBefore: evaluatorDigest,
     evaluatorDigestAfter: evolutionDigest(evaluatorIdentity),
     provenance,
