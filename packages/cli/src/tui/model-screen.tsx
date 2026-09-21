@@ -26,7 +26,7 @@
  * domain — which models exist, how they group, what their detail says — and its
  * own keyboard.
  *
- * ## Two catalogues, never mixed
+ * ## Account catalogues retain their own metadata
  *
  * A hosted runtime (`providerId === "hosted"`) is served by the account's own
  * catalogue, read live through `loadHostedModelCatalog` and projected by
@@ -35,13 +35,16 @@
  * fails the screen says so and offers a reload, because a Models.dev row of the
  * same name describes a different thing — the public model — and showing its
  * numbers under this account's route would be a fabrication. Every other
- * runtime keeps the existing BYOK catalogue (`buildFullModelCatalog`, the
- * pricing table plus the Models.dev sync).
+ * runtime keeps the BYOK catalogue (`buildFullModelCatalog`, the pricing table
+ * plus the Models.dev sync), with separate account groups for configured
+ * 0cloud and Codex connections. Codex model IDs and context windows come from
+ * the subscription account, including models absent from public pricing feeds.
  *
  * ## What this screen may say about a model
  *
  * Only what the authoritative catalogue reported. Every id on screen comes out
- * of `buildFullModelCatalog` (BYOK) or `buildHostedModelCatalog` (hosted) —
+ * of `buildFullModelCatalog` (BYOK), `buildHostedModelCatalog` (hosted), or
+ * `loadCodexModelCatalog` (subscription) —
  * there is no hand-written model list anywhere in this file. BYOK prices come
  * from the pricing table. Cloud rows show model identity and capabilities,
  * without supplier routing or cost metadata. The BYOK context
@@ -101,6 +104,8 @@
  */
 
 import React, { useEffect, useMemo, useRef, useState, type SetStateAction } from "react";
+import { loadCodexModelCatalog, type CodexCatalogModel, type RuntimeConfig } from "@0/core";
+import { credentialEnvPatch, loadCredentials } from "./credential-store.js";
 import { sleekScrollbar } from "./scrollbar.js";
 import { useKeyboard, usePaste } from "@opentui/react";
 import { decodePasteBytes, TextAttributes } from "@opentui/core";
@@ -191,10 +196,13 @@ export interface ModelScreenProps {
   currentModel?: string;
   /**
    * The runtime this picker is choosing for: `"hosted"` selects the account's
-   * own catalogue, anything else (including nothing) keeps the BYOK catalogue.
+   * own catalogue; other connections use the BYOK catalogue with separate
+   * account groups for configured subscription/cloud connections.
    * Never invented — the router reports what the runtime says.
    */
   providerId?: string;
+  /** Catalog bound to the running subscription account, when one exists. */
+  codexCatalog?: (signal?: AbortSignal) => Promise<CodexCatalogModel[]>;
   /** Per-role model assignments applied to the current audit. */
   agentModels?: Readonly<Record<string, string>>;
   /** Whether the audit is pinned to one model for every role. */
@@ -208,7 +216,7 @@ export interface ModelScreenProps {
   /** Apply the single-model policy. Optional on the same terms as above. */
   onSingleModelChange?: (enabled: boolean) => void;
   /** Enter on a model row. The router decides what "select" means. */
-  onSelect: (id: string) => void;
+  onSelect: (id: string, providerId?: RuntimeConfig["provider"]) => void;
   /** Leave the screen — Esc, once any filter has been cleared. */
   onBack: () => void;
   /** Wizard-only: skip this decision with Ctrl+N when unfiltered. */
@@ -257,6 +265,7 @@ export function ModelScreen({
   frame,
   currentModel,
   providerId,
+  codexCatalog,
   agentModels,
   singleModel = false,
   onAgentModelsChange,
@@ -265,12 +274,16 @@ export function ModelScreen({
   onBack,
   onSkip,
   onExit,
-  env,
+  env: suppliedEnv,
 }: ModelScreenProps) {
   const theme = useTheme();
   const symbols = useSymbols();
   const { width, height } = useSurfaceDimensions();
   const inDialog = useDialogSurface();
+  const [reload, setReload] = useState(0);
+  const env = useMemo(() => suppliedEnv ?? {
+    ...process.env, ...credentialEnvPatch(loadCredentials(), process.env),
+  }, [suppliedEnv, reload]);
 
   // A hosted *runtime* (`providerId === "hosted"`) still gets the pure hosted
   // catalogue with no BYOK fallback — that lane is unchanged. What is new is the
@@ -309,7 +322,6 @@ export function ModelScreen({
   // target row says so rather than showing the inherited id as an assignment.
   const activeModel = role === null ? currentModel : (agentModels?.[role] ?? currentModel);
   const [notice, setNotice] = useState("");
-  const [reload, setReload] = useState(0);
 
   const [filter, setFilter] = useState("");
   const [showAll, setShowAll] = useState(false);
@@ -320,13 +332,13 @@ export function ModelScreen({
   // Read once per mount. Credentials are process-level and cannot change
   // under a screen that has no way to set them; re-deriving them on every
   // keystroke would only make the filter slower.
-  const states = useMemo(() => providerStates(env ?? process.env), [env]);
-  const configured = useMemo(() => configuredProviderLabels(states), [states]);
+  const credentialStates = useMemo(() => providerStates(env), [env]);
+  const loadCodex = isByok && (providerId === "chatgpt-codex" || credentialStates.some((state) => state.id === "chatgpt-codex" && state.configured));
 
   // The identity of the connection this load belongs to. A hosted snapshot is
   // only ever shown while it still matches — rows fetched for one account must
   // never paint under another, and Ctrl+R bumps `reload` to force a re-read.
-  const source = useMemo(() => ({ providerId, env, reload }), [providerId, env, reload]);
+  const source = useMemo(() => ({ providerId, env, reload, codexCatalog }), [providerId, env, reload, codexCatalog]);
   const [hostedState, setHostedState] = useState<{
     source: typeof source;
     snapshot: HostedCatalogSnapshot | null;
@@ -334,6 +346,18 @@ export function ModelScreen({
   } | null>(null);
   const hostedSnapshot = hostedState?.source === source ? hostedState.snapshot : null;
   const hostedError = hostedState?.source === source ? hostedState.error : null;
+  const [codexState, setCodexState] = useState<{
+    source: typeof source; models: CodexCatalogModel[] | null; failed: boolean;
+  } | null>(null);
+  const codexModels = codexState?.source === source ? codexState.models : null;
+  const codexFailed = codexState?.source === source && codexState.failed;
+  // Successful discovery also verifies file-backed Codex credentials that the
+  // environment-only provider inventory cannot see. A staged provider alone
+  // is not evidence of credentials.
+  const states = useMemo(() => credentialStates.map((state) =>
+    state.id === "chatgpt-codex" && codexModels !== null
+      ? { ...state, configured: true } : state), [credentialStates, codexModels]);
+  const configured = useMemo(() => configuredProviderLabels(states), [states]);
 
   // BYOK: refresh the Models.dev catalog cache in the background whenever the
   // picker opens. Fire-and-forget: it never throws, no-ops when the cache is
@@ -347,8 +371,15 @@ export function ModelScreen({
   const [catalogNonce, setCatalogNonce] = useState(0);
   useEffect(() => {
     let alive = true;
+    const controller = new AbortController();
     setRefreshing(true);
     const tasks: Promise<unknown>[] = [];
+    if (loadCodex) {
+      tasks.push((codexCatalog ? codexCatalog(controller.signal) : loadCodexModelCatalog({ env, signal: controller.signal })).then(
+        (models) => { if (alive) setCodexState({ source, models, failed: false }); },
+        () => { if (alive) setCodexState({ source, models: null, failed: true }); },
+      ));
+    }
     // Hosted read: the pure hosted runtime, or the BYOK lane merging cloud
     // routes. A failure here becomes a status line, never a blanked picker —
     // when it is a merge the BYOK list still stands (see `connectionMessage`,
@@ -394,8 +425,9 @@ export function ModelScreen({
     });
     return () => {
       alive = false;
+      controller.abort();
     };
-  }, [source, isHosted, isByok, loadHosted, env]);
+  }, [source, isHosted, isByok, loadHosted, loadCodex, env, codexCatalog]);
 
   const hostedCatalog = useMemo(
     () => (hostedSnapshot ? buildHostedModelCatalog(hostedSnapshot.models) : []),
@@ -424,10 +456,23 @@ export function ModelScreen({
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [isByok, catalogNonce],
   );
-  const scopedCatalog = useMemo(
-    () => isByok ? scopeModelCatalog(catalog, { showAll, filter, currentModel: activeModel }) : [],
-    [catalog, activeModel, filter, isByok, showAll],
-  );
+  const scopeCatalog = (query: string, all: boolean) => {
+    if (!isByok) return [];
+    const scoped = scopeModelCatalog(catalog, { showAll: all, filter: query, currentModel: activeModel });
+    // Subscription rows come only from this account, including models absent
+    // from the public pricing feed. Do not dress API-key rows as subscription access.
+    const apiConfigured = states.some((state) => state.id === "openai" && state.configured);
+    return [
+      ...scoped.filter((model) => !(providerId === "chatgpt-codex" && !apiConfigured && model.provider === "openai")),
+      ...(codexModels ?? []).map((model) => ({ id: model.id, provider: "chatgpt-codex", price: "subscription" })),
+    ].filter((model) => role === null || (
+      // Role maps carry only IDs and inherit the parent connection. Keep the
+      // subscription boundary; other routes retain their existing catalog
+      // mappings (e.g. Azure uses OpenAI-named GPT rows).
+      model.provider === "chatgpt-codex" ? providerId === "chatgpt-codex" : providerId !== "chatgpt-codex"
+    ));
+  };
+  const scopedCatalog = scopeCatalog(filter, showAll);
 
   // `buildModelRows` does all the domain work — grouping by provider, credential
   // lookup, credential-band ordering, floating the active model first, and the
@@ -436,12 +481,13 @@ export function ModelScreen({
   // shared body draws a heading per provider), the price is the right-aligned
   // meta, and the running model carries the current-value dot.
   const modelRows = useMemo(
-    () => buildModelRows({ catalog: scopedCatalog, states, filter, activeModel }),
-    [scopedCatalog, states, filter, activeModel],
+    () => buildModelRows({ catalog: scopedCatalog, states, filter, activeModel, activeProvider: providerId }),
+    [scopedCatalog, states, filter, activeModel, providerId],
   );
   // Cloud rows share a customer-facing group and search only public model IDs.
   // Supplier routing and cost fields remain outside this presentation.
   const hostedItems = (query: string, prefix: string): DialogItem[] => {
+    if (role !== null && providerId !== "hosted") return [];
     const terms = query.toLowerCase().trim().split(/\s+/).filter(Boolean);
     return hostedCatalog
       .filter((model) =>
@@ -503,7 +549,7 @@ export function ModelScreen({
   const selectionIndex = (visible: DialogItem[], selection = selectedItemRef.current) =>
     clampDialogSelection(visible, visible.findIndex((item) =>
       item.id === (selection?.id ?? (isHosted ? offeredId : activeModel)) &&
-      (!selection || item.category === selection.category),
+      (!selection ? !providerId || item.category === (isHosted ? "Hosted" : states.find((state) => state.id === providerId)?.label) : item.category === selection.category),
     ));
   const cursor = selectionIndex(items, selectedItem);
 
@@ -553,9 +599,8 @@ export function ModelScreen({
 
   const mode: ModelMode = filter ? "filter" : "browse";
   // The always-on status line carries the one statement this screen can always
-  // make. On BYOK it matters most for the operator whose only credential is
-  // ChatGPT Codex: the catalogue has no chatgpt-codex models to group under, so
-  // no heading names them, and without this line that reads as "nothing works".
+  // make. Account discovery is reported separately from local credentials,
+  // so loading or unavailable catalogs are not mistaken for missing login.
   // On hosted it names the host the rows came from and how many were listed —
   // a count of rows, not a verdict on any of them.
   // In the merged BYOK lane the cloud read is additive: its outcome is reported
@@ -572,7 +617,7 @@ export function ModelScreen({
   // A hosted error is only fatal on the *pure* hosted lane, where there is no
   // other list to fall back to. In the merge it is just the cloud suffix above.
   const hostedFatal = isHosted && hostedError !== null;
-  const statusText = isHosted
+  const baseStatusText = isHosted
     ? hostedError
       ? `${symbols.warning} Hosted catalog error: ${hostedError} · Ctrl+R reload`
       : !hostedSnapshot
@@ -581,6 +626,9 @@ export function ModelScreen({
     : cloudStatus
       ? `${credentialSummary(states)} · ${cloudStatus}`
       : credentialSummary(states);
+  const statusText = !loadCodex ? baseStatusText : `${baseStatusText} · ${codexFailed
+    ? "Codex model discovery unavailable · Ctrl+R retry"
+    : codexModels === null ? "Loading Codex account models…" : `${codexModels.length} Codex account models`}`;
   // When there is no list to draw, the reason takes the list's place. It is the
   // whole explanation, so it is wrapped and scrolled rather than clipped. This
   // only happens on the pure hosted lane — the merge always has the BYOK list.
@@ -597,14 +645,11 @@ export function ModelScreen({
     const byok = filterRef.current === filter && showAllRef.current === showAll
       ? byokItems
       : modelDialogItems(buildModelRows({
-        catalog: scopeModelCatalog(catalog, {
-          showAll: showAllRef.current,
-          filter: filterRef.current,
-          currentModel: activeModel,
-        }),
+        catalog: scopeCatalog(filterRef.current, showAllRef.current),
         states,
         filter: filterRef.current,
         activeModel,
+        activeProvider: providerId,
       }));
     return mergeCloud ? [...byok, ...hostedItems(filterRef.current, "0cloud")] : byok;
   };
@@ -650,7 +695,7 @@ export function ModelScreen({
       const index = roles.indexOf(role);
       const next = roles[(index + (key.name === "right" ? 1 : -1) + roles.length) % roles.length] ?? null;
       setRole(next);
-      setNotice("");
+      setNotice(next === null ? "" : "Role models use the parent audit’s connection.");
       const target = next === null ? currentModel : (agentModels?.[next] ?? currentModel);
       highlight(currentItems().findIndex((item) => item.id === target));
       return;
@@ -662,7 +707,7 @@ export function ModelScreen({
     }
     // Ctrl+R re-reads the live hosted catalogue — on the pure hosted lane, and
     // in the merge to retry a dark cloud without losing the BYOK list.
-    if (loadHosted && key.ctrl && key.name === "r") {
+    if ((loadHosted || loadCodex) && key.ctrl && key.name === "r") {
       setReload((value) => value + 1);
       return;
     }
@@ -699,7 +744,10 @@ export function ModelScreen({
         );
         return;
       }
-      onSelect(activeItem.id);
+      const selectedRow = modelOnlyRows.find((row) => row.model.id === activeItem.id && row.group.label === activeItem.category);
+      const selectedProvider = activeItem.category === "Hosted" || activeItem.category === "0cloud" ? "hosted"
+        : selectedRow && states.some((state) => state.id === selectedRow.model.provider) ? selectedRow.model.provider as RuntimeConfig["provider"] : undefined;
+      onSelect(activeItem.id, selectedProvider);
       return;
     }
     if (key.name === "escape") {
@@ -772,7 +820,9 @@ export function ModelScreen({
     // credential story — and is clipped with a visible marker rather than
     // scrolled. Nothing that was reachable before is dropped.
     const contextTokens = row?.kind === "model"
-      ? contextWindowFor(contextIndex, row.model.provider, row.model.id)
+      ? row.model.provider === "chatgpt-codex"
+        ? codexModels?.find((model) => model.id === row.model.id)?.contextTokens ?? null
+        : contextWindowFor(contextIndex, row.model.provider, row.model.id)
       : null;
     const lines: ModelDetailLine[] = clipModelDetailLines(
       modelDetailLines({ row, configured, compact, contextTokens }, pane.width, symbols),
@@ -811,7 +861,7 @@ export function ModelScreen({
   const hint = onSkip && !filter
     ? "[esc] back · [⌃N] skip · [⏎] select · [↑↓] move · type to filter · [⌃C] quit"
     : rolesLive && singleModelLive
-    ? modelDialogHint({ scope, role, hasFilter: filter.length > 0, canReload: loadHosted })
+    ? modelDialogHint({ scope, role, hasFilter: filter.length > 0, canReload: loadHosted || loadCodex })
     : isByok
       ? modelFooterHint(mode, filter.length > 0)
       : [

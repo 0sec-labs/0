@@ -281,6 +281,7 @@ function AgentsCommsRoute({ onExit, shell, readAgents }: {
 function ModelRoute({
   currentModel,
   providerId,
+  codexCatalog,
   agentModels,
   singleModel,
   onAgentModelsChange,
@@ -291,11 +292,12 @@ function ModelRoute({
 }: {
   currentModel?: string;
   providerId?: string;
+  codexCatalog?: (signal?: AbortSignal) => Promise<import("@0/core").CodexCatalogModel[]>;
   agentModels?: ChatScreenOptions["agentModels"];
   singleModel?: boolean;
   onAgentModelsChange: (map: NonNullable<ChatScreenOptions["agentModels"]>) => void;
   onSingleModelChange: (enabled: boolean) => void;
-  onSelect: (model: string) => void;
+  onSelect: (model: string, providerId?: ChatScreenOptions["providerId"]) => void;
   onExit: () => void;
   shell?: ShellNav;
 }) {
@@ -303,6 +305,7 @@ function ModelRoute({
     <ModelScreen
       currentModel={currentModel}
       providerId={providerId}
+      codexCatalog={codexCatalog}
       agentModels={agentModels}
       singleModel={singleModel}
       onAgentModelsChange={onAgentModelsChange}
@@ -1220,11 +1223,12 @@ function ConsoleApp({
           <ModelScreen
             currentModel={sel?.nextOptions.model ?? sel?.runtimeInfo.current?.model() ?? sel?.options?.model}
             providerId={sel?.nextOptions.providerId ?? sel?.runtimeInfo.current?.providerId() ?? sel?.options?.providerId}
+            codexCatalog={sel?.runtimeInfo.current?.providerId() === "chatgpt-codex" ? sel.runtimeInfo.current.codexCatalog : undefined}
             agentModels={sel?.nextOptions.agentModels ?? sel?.options?.agentModels}
             singleModel={sel?.nextOptions.singleModel ?? sel?.options?.singleModel}
             onAgentModelsChange={(map) => { applyOrStage({ agentModels: map }); }}
             onSingleModelChange={(enabled) => { applyOrStage({ singleModel: enabled }); }}
-            onSelect={(id) => { applyOrStage({ model: id }); nav.onDone(); }}
+            onSelect={(id, providerId) => { applyOrStage({ model: id, ...(providerId ? { providerId } : {}) }); nav.onDone(); }}
             onBack={nav.onBack}
             onSkip={nav.onSkip}
             onExit={nav.onExit}
@@ -1301,12 +1305,13 @@ function ConsoleApp({
       <ModelRoute
         currentModel={sel?.nextOptions.model ?? sel?.runtimeInfo.current?.model() ?? sel?.options?.model}
         providerId={sel?.nextOptions.providerId ?? sel?.runtimeInfo.current?.providerId() ?? sel?.options?.providerId}
+        codexCatalog={sel?.runtimeInfo.current?.providerId() === "chatgpt-codex" ? sel.runtimeInfo.current.codexCatalog : undefined}
         agentModels={sel?.nextOptions.agentModels ?? sel?.options?.agentModels}
         singleModel={sel?.nextOptions.singleModel ?? sel?.options?.singleModel}
         onAgentModelsChange={(map) => { applyOrStage({ agentModels: map }); }}
         onSingleModelChange={(enabled) => { applyOrStage({ singleModel: enabled }); }}
-        onSelect={(id) => {
-          if (applyOrStage({ model: id })) leaveCurrentScreen(shell, appExit);
+        onSelect={(id, providerId) => {
+          if (applyOrStage({ model: id, ...(providerId ? { providerId } : {}) })) leaveCurrentScreen(shell, appExit);
         }}
         onExit={appExit}
         shell={shell}

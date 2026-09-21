@@ -28,6 +28,10 @@ on the published npm package and the GitHub Release tag.
 
 ### Fixed
 
+- Keep model switches on the active Codex subscription and discover models from
+  that account, including IDs absent from public pricing lists. Preserve provider
+  identity for duplicate model IDs; report and retry discovery failures.
+
 - Onboarding Escape returns to the previous decision; skipping setup enters
   chat without completing setup or quitting. Provider login/search cancellation
   stays local, confirmed choices survive navigation, and setup has clickable

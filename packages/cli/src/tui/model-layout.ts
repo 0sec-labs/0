@@ -234,6 +234,8 @@ export interface ModelRowsInput {
   filter?: string;
   /** The model the session is currently running. */
   activeModel?: string;
+  /** Runtime connection identity disambiguates duplicate IDs across accounts. */
+  activeProvider?: string;
 }
 
 /** Byte-order compare: locale-independent so the order never shifts. */
@@ -287,6 +289,7 @@ export function buildModelRows({
   states = providerStates({}),
   filter = "",
   activeModel,
+  activeProvider: selectedProvider,
 }: ModelRowsInput = {}): ModelRow[] {
   const terms = sanitizeTuiText(filter).toLowerCase().split(" ").filter(Boolean);
   const groups = new Map<string, ModelProviderGroup>();
@@ -309,7 +312,7 @@ export function buildModelRows({
     else byProvider.set(providerId, [model]);
   }
 
-  const activeProvider = [...byProvider.entries()].find(([, models]) =>
+  const activeProvider = selectedProvider ?? [...byProvider.entries()].find(([, models]) =>
     models.some((model) => model.id === activeModel),
   )?.[0];
 
@@ -340,7 +343,7 @@ export function buildModelRows({
     });
     rows.push({ kind: "heading", group, count: sorted.length });
     for (const model of sorted) {
-      rows.push({ kind: "model", group, model, active: model.id === activeModel });
+      rows.push({ kind: "model", group, model, active: model.id === activeModel && providerId === activeProvider });
     }
   }
   return rows;

@@ -1406,6 +1406,7 @@ function accessTokenExpiryMs(accessToken: string): number {
 
 async function refreshChatGptCodexAccessToken(refreshToken: string): Promise<CodexTokenResponse> {
   const res = await fetch(`${CODEX_OAUTH_ISSUER}/oauth/token`, {
+    signal: AbortSignal.timeout(30_000),
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
@@ -2583,6 +2584,14 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
         // Swallow — startup logging must never abort runtime init.
       });
     }
+  }
+
+  /** Discover models using this runtime's captured account, including after a separate login changes. */
+  async codexModelCatalog(signal?: AbortSignal): Promise<import("./codex-models.js").CodexCatalogModel[]> {
+    const state = this.codexAuthState;
+    if (this.provider !== "chatgpt-codex" || !state) throw new Error("No active Codex subscription");
+    const { loadCodexModelCatalog } = await import("./codex-models.js");
+    return loadCodexModelCatalog({ signal, resolveCredentials: () => refreshChatGptCodexAuthState(state) });
   }
 
   /**
