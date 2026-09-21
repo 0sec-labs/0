@@ -1,10 +1,10 @@
 import { createHash } from "node:crypto";
 
+import type { EvolutionComparisonIdentity } from "../improvement/safety.js";
 import type { BenchManifest } from "./manifest.js";
 import type { BenchScorecard } from "./scorecard.js";
 import type { TournamentResult } from "./tournament.js";
 import type { BenchEvaluatorAttestation } from "./oracle.js";
-
 export interface ResearchScoreSnapshot {
   cases: number;
   successRate: number;
@@ -37,6 +37,10 @@ export interface ResearchImprovementResult {
     champion: ResearchNegativeControlSnapshot;
     challenger: ResearchNegativeControlSnapshot;
   };
+  /** Controller-owned provenance used to decide whether longitudinal evidence is comparable. */
+  provenance?: EvolutionComparisonIdentity;
+  /** Optional durable campaign gate; absent preserves legacy, explicitly opt-in callers. */
+  campaignGate?: { allowed: boolean; reason?: string };
   evidenceRefs: string[];
 }
 

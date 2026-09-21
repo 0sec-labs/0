@@ -2,7 +2,10 @@ import { evaluateImprovementPromotion } from "../bench/improvement-promotion.js"
 import type { ResearchScoreSnapshot } from "../bench/improvement.js";
 import { wilson95 } from "../bench/scorecard.js";
 import { canonicalEvolutionJson, parseEvolutionConfig } from "./config.js";
-import { evolutionDigest, verifyEvolutionSnapshot } from "./registry.js";
+import {
+  campaignPromotionAllowed, createEvolutionComparisonIdentity, createOrLoadEvolutionCampaign,
+  reserveHoldoutExposure,
+} from "./safety.js";
 import { createEvolutionSandbox, resolveEvolutionConfigImage } from "./sandbox.js";
 import type {
   EvolutionAttempt, EvolutionConfig, EvolutionDependencies, EvolutionEvaluation,
@@ -63,6 +66,19 @@ export async function evaluateEvolutionCandidate(
     ],
   };
   const evaluatorDigest = evolutionDigest(evaluatorIdentity);
+  const provenance = createEvolutionComparisonIdentity(config, evaluatorDigest, {
+    resolvedModel: config.model ?? null,
+    provider: config.model ? "configured" : null,
+  });
+  let campaignGate: { allowed: boolean; reason?: string } | undefined;
+  if (config.safety?.enabled) {
+    createOrLoadEvolutionCampaign(config.storePath, provenance);
+    const allowed = campaignPromotionAllowed(config.storePath);
+    if (!allowed.allowed) throw new Error(allowed.reason ?? "campaign safety gate blocked evaluation");
+    const heldOutQueries = config.cases.filter((entry) => entry.lane === "held-out").length * config.repeats * 2;
+    reserveHoldoutExposure(config.storePath, provenance, heldOutQueries, config.safety.holdoutExposureLimit);
+    campaignGate = { allowed: true };
+  }
   // Alternate the order to avoid consistently giving one variant a warm-cache advantage.
   evaluation: for (let repeat = 0; repeat < config.repeats; repeat++) {
     for (const fixture of config.cases) {
@@ -122,8 +138,10 @@ export async function evaluateEvolutionCandidate(
     developmentCorpusDigest: evolutionDigest(config.cases.filter((entry) => entry.lane === "development")),
     heldOutCorpusDigest: evolutionDigest(config.cases.filter((entry) => entry.lane === "held-out")),
     negativeControlCorpusDigest: evolutionDigest(config.cases.filter((entry) => entry.lane === "negative-control")),
+    campaignGate,
     evaluatorDigestBefore: evaluatorDigest,
     evaluatorDigestAfter: evolutionDigest(evaluatorIdentity),
+    provenance,
     ciPassed: baselineBehaviorRetained && repeatedResultsStable
       && [...attempts.baseline, ...attempts.candidate].every((entry) => !entry.inconclusive),
     development: { champion: score(attempts.baseline, "development"), challenger: score(attempts.candidate, "development") },

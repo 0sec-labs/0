@@ -1,7 +1,6 @@
 import { createHash } from "node:crypto";
 
 import type { ResearchImprovementResult } from "./improvement.js";
-
 export type ImprovementCandidateKind = "policy" | "source";
 export type ImprovementPromotionStatus =
   | "rejected"
@@ -44,13 +43,14 @@ export interface ImprovementPromotionCheck {
     | "artifact_digests"
     | "ci"
     | "evaluator_stability"
+    | "comparison_compatibility"
+    | "holdout_exposure"
     | "evidence"
     | "sample_size"
     | "development_lift"
     | "held_out_lift"
     | "negative_control_precision"
     | "cost_discipline";
-  passed: boolean;
   detail: string;
 }
 
@@ -175,6 +175,21 @@ export function evaluateImprovementPromotion(
     passed: isSha256(result.evaluatorDigestBefore)
       && result.evaluatorDigestBefore === result.evaluatorDigestAfter,
     detail: "the evaluator digest must remain stable across the candidate evaluation",
+  });
+  const provenance = result.provenance;
+  checks.push({
+    id: "comparison_compatibility",
+    passed: provenance === undefined || provenance.compatibilityStatus === "compatible",
+    detail: provenance === undefined
+      ? "legacy result has no comparison provenance; explicit provenance enables longitudinal gating"
+      : provenance.compatibilityStatus === "compatible"
+        ? "comparison provenance is compatible"
+        : "comparison provenance is incompatible or unresolved",
+  });
+  checks.push({
+    id: "holdout_exposure",
+    passed: result.campaignGate === undefined || result.campaignGate.allowed,
+    detail: result.campaignGate?.reason ?? "holdout exposure and durable campaign accounting permit promotion",
   });
   checks.push({
     id: "evidence",

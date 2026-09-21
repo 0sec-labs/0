@@ -55,6 +55,10 @@ const schema = z.object({
     maximumNegativeControlFpDelta: z.literal(0).default(0),
     maximumCostMultiplier: finitePositive.max(10).default(DEFAULT_IMPROVEMENT_PROMOTION_POLICY.maximumCostMultiplier),
   }).strict().default({}),
+  safety: z.object({
+    enabled: z.boolean().default(false),
+    holdoutExposureLimit: z.number().int().min(1).max(1_000_000),
+  }).strict().optional(),
   maxAlternativeParents: z.number().int().min(0).max(10).optional(),
 }).strict();
 

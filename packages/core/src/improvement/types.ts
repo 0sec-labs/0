@@ -53,6 +53,11 @@ export interface EvolutionConfig {
   autoPromote: boolean;
   canaryTrials: number;
   promotionPolicy: ImprovementPromotionPolicy;
+  /** Opt-in durable campaign/exposure enforcement; legacy callers remain unchanged. */
+  safety?: {
+    enabled: boolean;
+    holdoutExposureLimit: number;
+  };
   /** Optional bounded exploration of alternative parent versions (0 or omitted disables; 1+ enables). */
   maxAlternativeParents?: number;
 }

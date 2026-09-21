@@ -23,6 +23,28 @@ export {
 } from "./sandbox.js";
 export { proposeEvolutionEdits } from "./rewrite.js";
 export {
+  campaignPromotionAllowed,
+  compareEvolutionIdentities,
+  createOrLoadEvolutionCampaign,
+  createEvolutionComparisonIdentity,
+  evolutionCampaignKey,
+  evolutionCorpusIdentity,
+  holdoutExposureIdentity,
+  loadEvolutionCampaign,
+  reserveCampaignDispatch,
+  reserveHoldoutExposure,
+  settleCampaignDispatch,
+} from "./safety.js";
+export type {
+  CampaignDispatchReservation,
+  EvolutionCampaignLedger,
+  EvolutionCompatibility,
+  EvolutionCompatibilityStatus,
+  EvolutionComparisonIdentity,
+  EvolutionCorpusIdentity,
+  HoldoutExposureRecord,
+} from "./safety.js";
+export {
   harvestMissesFromScorecard,
   harvestMissesFromTournament,
   harvestMissesFromLedgerEntry,
