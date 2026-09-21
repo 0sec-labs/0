@@ -983,6 +983,21 @@ function ConsoleApp({
           : "scan";
       const depth = selectedPlan.depth;
       const runtime = selection.runtime ?? "auto";
+      if (selectedPlan.runCount > 1) {
+        await runUnified({
+          target: plan.target,
+          targetType: plan.targetType,
+          reviewPackageEcosystem: plan.ecosystem,
+          depth,
+          format: "terminal",
+          runtime,
+          plan: selectedPlan,
+          timeout: selectedPlan.timeCapMs,
+          verbose: false,
+        });
+        if (!exitRequested.current) shell.goBack();
+        return;
+      }
       const availability = await getRuntimeAvailability();
       if (exitRequested.current) return;
       let state = createInitialSessionState(plan.target, depth, mode, {
