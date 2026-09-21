@@ -508,6 +508,12 @@ export interface ToolContext {
     tags?: string[];
   }) => { id: string };
   /**
+   * True only for the interactive console executor. This explicit marker keeps
+   * console-only source-acquisition identity checks out of native scan callers,
+   * whose acquisition contract is unchanged.
+   */
+  consoleSession?: boolean;
+  /**
    * Current console autonomy mode, re-read by the scoped-source-audit gate on
    * every `execute()` so switching mode mid-session takes effect immediately
    * (no executor rebuild). Absent for every non-console caller — the scan

@@ -119,7 +119,7 @@ import { validateFlagShape } from "./flag-validator.js";
 import { extractPocStepsFromProse } from "./poc-steps-from-prose.js";
 import { isUntrustedSourceTool, sanitizeUntrustedToolResult } from "../untrusted-sanitizer.js";
 import { computeFindingConfidence } from "./finding-confidence.js";
-import { parseRepositoryAcquisition, repositoryAcquisitionAllowed, runRepositoryAcquisition } from "./repository-acquisition.js";
+import { parseRepositoryAcquisition, repositoryAcquisitionAllowed, repositoryIdentityMatchesTarget, runRepositoryAcquisition } from "./repository-acquisition.js";
 import {
   validateFindingDraft,
   type FindingDraft,
@@ -5655,9 +5655,16 @@ export class ToolExecutor {
       return { success: false, output: null, error: "Command is required" };
     }
     const networkScope = this.ctx.publicNetwork ? this.ctx.publicNetwork.scope : this.ctx.scope;
+    const acquisition = parseRepositoryAcquisition(command);
+    if (this.ctx.consoleSession && acquisition && !repositoryIdentityMatchesTarget(this.ctx.target, acquisition.url)) {
+      return {
+        success: false,
+        output: null,
+        error: "Console repository acquisition refused: provide the exact official HTTPS repository URL as the current target before cloning or reviewing source.",
+      };
+    }
 
     if (this.ctx.autonomyMode === "yolo" && !this.ctx.enforcement) {
-      const acquisition = parseRepositoryAcquisition(command);
       if (acquisition && !networkScope?.match(acquisition.url).allowed) {
         if (!repositoryAcquisitionAllowed(acquisition, networkScope)) {
           return { success: false, output: null, error: "Repository source is explicitly excluded by the engagement scope" };

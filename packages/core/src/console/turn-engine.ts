@@ -1838,6 +1838,7 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
   const toolContext: ToolContext = {
     target: sessionTarget,
     scanId,
+    consoleSession: true,
     role,
     costModel: config.costModel,
     findings: cp ? structuredClone(cp.sessionData.findings) : [],

@@ -64,6 +64,41 @@ export function parseRepositoryAcquisition(command: string): RepositoryAcquisiti
     return null;
   }
 }
+/**
+ * Normalize an operator-supplied repository identity for the console guard.
+ * Only the URL spelling is normalized; repository path segments remain
+ * case-sensitive. A trailing `.git` is transport syntax, not identity.
+ */
+function normalizeRepositoryIdentity(value: string): string | null {
+  try {
+    const url = new URL(value.trim());
+    if (
+      url.protocol !== "https:" ||
+      url.username ||
+      url.password ||
+      url.search ||
+      url.hash ||
+      (url.port && url.port !== "443") ||
+      url.pathname === "/"
+    ) return null;
+    url.hostname = url.hostname.replace(/\.+$/, "").toLowerCase();
+    let pathname = url.pathname;
+    if (pathname.endsWith("/")) pathname = pathname.slice(0, -1);
+    if (pathname.endsWith(".git")) pathname = pathname.slice(0, -4);
+    if (!pathname || pathname === "/") return null;
+    url.pathname = pathname;
+    return url.href;
+  } catch {
+    return null;
+  }
+}
+
+/** Require an exact HTTPS repository target before console source acquisition. */
+export function repositoryIdentityMatchesTarget(target: string, cloneUrl: string): boolean {
+  const targetIdentity = normalizeRepositoryIdentity(target);
+  const cloneIdentity = normalizeRepositoryIdentity(cloneUrl);
+  return targetIdentity !== null && targetIdentity === cloneIdentity;
+}
 
 /** Preserve explicit exclusions without turning a source host into an attack target. */
 export function repositoryAcquisitionAllowed(plan: RepositoryAcquisition, scope?: ScopePolicy): boolean {

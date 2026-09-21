@@ -2511,8 +2511,8 @@ describe("Console source acquisition is not target authorization", () => {
     expect(requestScope).not.toHaveBeenCalled();
   });
 
-  it("also permits source setup through run_command with no preconfigured target", async () => {
-    vi.spyOn(repositoryAcquisition, "runRepositoryAcquisition").mockResolvedValue({ success: true, output: "Checkout completed" });
+  it("refuses source setup through run_command with no exact repository target", async () => {
+    const runCheckout = vi.spyOn(repositoryAcquisition, "runRepositoryAcquisition").mockResolvedValue({ success: true, output: "Checkout completed" });
     const session = createConsoleSession({
       runtime: new ScriptedRuntime([
         checkoutTurn("git clone --depth 1 https://github.com/golang/go.git", "run_command"),
@@ -2521,8 +2521,41 @@ describe("Console source acquisition is not target authorization", () => {
       autonomyMode: "yolo",
     });
     const checkout = await session.send("Get Go source");
-    expect(checkout.toolCalls[0].result.success).toBe(true);
+    expect(checkout.toolCalls[0].result.success).toBe(false);
+    expect(checkout.toolCalls[0].result.error).toContain("exact official HTTPS repository URL");
+    expect(runCheckout).not.toHaveBeenCalled();
     expect(session.scope?.match("https://github.com").allowed ?? false).toBe(false);
+  });
+
+  it("allows an exact operator-supplied repository target, including a clone suffix", async () => {
+    const runCheckout = vi.spyOn(repositoryAcquisition, "runRepositoryAcquisition").mockResolvedValue({ success: true, output: "Checkout completed" });
+    const session = createConsoleSession({
+      runtime: new ScriptedRuntime([
+        checkoutTurn("git clone --depth 1 https://github.com/muse-spark/muse-spark.git", "run_command"),
+        endTurn("Source ready."),
+      ]),
+      autonomyMode: "yolo",
+      target: "https://github.com/muse-spark/muse-spark",
+    });
+    const checkout = await session.send("Review the official Muse Spark source");
+    expect(checkout.toolCalls[0].result.success).toBe(true);
+    expect(runCheckout).toHaveBeenCalledOnce();
+  });
+
+  it("does not treat a product name and same-name search result as repository identity", async () => {
+    const runCheckout = vi.spyOn(repositoryAcquisition, "runRepositoryAcquisition").mockResolvedValue({ success: true, output: "Checkout completed" });
+    const session = createConsoleSession({
+      runtime: new ScriptedRuntime([
+        checkoutTurn("git clone https://github.com/muse-spark/muse-spark.git"),
+        endTurn("Refused."),
+      ]),
+      autonomyMode: "yolo",
+      target: "Muse Spark",
+    });
+    const checkout = await session.send("Use the same-name search result for Muse Spark");
+    expect(checkout.toolCalls[0].result.success).toBe(false);
+    expect(checkout.toolCalls[0].result.error).toContain("exact official HTTPS repository URL");
+    expect(runCheckout).not.toHaveBeenCalled();
   });
 
   it("does not exempt appended commands or Git configuration and submodule execution", async () => {
