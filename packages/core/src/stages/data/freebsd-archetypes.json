@@ -1,5 +1,5 @@
 {
-  "provenance": "0sec-authored (NOT ported from 0verse — 0verse's archetypes.json is Linux-only, no FreeBSD registry exists). Grounded independently in public FreeBSD-SA advisories / CVEs, several confirmed by fetching the advisory text directly, 2026-07-05. IMPORTANT HONEST CAVEAT: unlike the Linux pack, this repo has NO FreeBSD build+boot+KASAN kernel-verify lane today — every 'kernel-verify' route entry below is a hypothesis that needs a human/skeptic read (or a future FreeBSD prover lane), not a proven-confirmable claim.",
+  "provenance": "0-authored (NOT ported from 0verse — 0verse's archetypes.json is Linux-only, no FreeBSD registry exists). Grounded independently in public FreeBSD-SA advisories / CVEs, several confirmed by fetching the advisory text directly, 2026-07-05. IMPORTANT HONEST CAVEAT: unlike the Linux pack, this repo has NO FreeBSD build+boot+KASAN kernel-verify lane today — every 'kernel-verify' route entry below is a hypothesis that needs a human/skeptic read (or a future FreeBSD prover lane), not a proven-confirmable claim.",
   "archetypes": [
     {
       "id": "CP-01",

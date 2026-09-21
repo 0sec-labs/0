@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import type { SemgrepFinding } from "@0sec/shared";
+import type { SemgrepFinding } from "@0/shared";
 
 /**
  * Solidity/EVM static-analysis SEED layer for the `evm-onchain` review profile

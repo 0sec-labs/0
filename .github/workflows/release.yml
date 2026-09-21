@@ -1,6 +1,6 @@
-name: "0sec: Release"
+name: "0: Release"
 
-# Build the standalone `0sec` binary natively on each target OS and publish all
+# Build the standalone `0` binary natively on each target OS and publish all
 # four (+ checksums) to the GitHub Release. Native builds avoid `bun --compile`
 # cross-compilation, which cannot resolve @opentui/core's per-platform native
 # packages from a single host. Each binary is smoke-tested on its own runner
@@ -33,13 +33,13 @@ jobs:
       matrix:
         include:
           - os: macos-latest
-            asset: 0sec-darwin-arm64
+            asset: 0-darwin-arm64
           - os: ubuntu-latest
-            asset: 0sec-linux-x64
+            asset: 0-linux-x64
           - os: ubuntu-24.04-arm
-            asset: 0sec-linux-arm64
+            asset: 0-linux-arm64
           - os: windows-latest
-            asset: 0sec-windows-x64.exe
+            asset: 0-windows-x64.exe
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     env:
@@ -73,8 +73,8 @@ jobs:
         # not a CLI dependency, so build it explicitly before bun-compile
         # generates the embedded asset manifest.
         run: |
-          pnpm --filter "0sec-cli..." build
-          pnpm --filter @0sec/dashboard build
+          pnpm --filter "@0/cli..." build
+          pnpm --filter @0/dashboard build
       - name: Compile native binary
         shell: bash
         run: bash scripts/bun-compile.sh "" "dist-bin/${{ matrix.asset }}"
@@ -87,14 +87,14 @@ jobs:
           smoke_dir="$(mktemp -d)"
           mv node_modules node_modules.release-build
           trap 'mv node_modules.release-build node_modules; rm -rf "$smoke_dir"' EXIT
-          cp "dist-bin/${{ matrix.asset }}" "$smoke_dir/0sec"
+          cp "dist-bin/${{ matrix.asset }}" "$smoke_dir/0"
           (
             cd "$smoke_dir"
-            ./0sec --version
-            ./0sec --help | grep -q "security research harness"
+            ./0 --version
+            ./0 --help | grep -q "security research harness"
             # Run the dashboard from the same empty directory. This must use
             # the manifest embedded by bun-compile, not workspace assets.
-            ./0sec dashboard --db-path dashboard.db --port 48123 --no-open --ready-json > dashboard.log 2>&1 &
+            ./0 dashboard --db-path dashboard.db --port 48123 --no-open --ready-json > dashboard.log 2>&1 &
             dashboard_pid=$!
             cleanup_dashboard() {
               kill "$dashboard_pid" >/dev/null 2>&1 || true
@@ -106,7 +106,7 @@ jobs:
               const deadline = Date.now() + 10_000;
               while (Date.now() < deadline) {
                 try {
-                  if (readFileSync("dashboard.log", "utf8").includes("0SEC_DASHBOARD_READY")) process.exit(0);
+                  if (readFileSync("dashboard.log", "utf8").includes("ZERO_DASHBOARD_READY")) process.exit(0);
                 } catch {}
                 await new Promise((resolve) => setTimeout(resolve, 100));
               }
@@ -154,7 +154,7 @@ jobs:
           else
             gh release create "$TAG" dist-bin/* \
               --repo "${{ github.repository }}" \
-              --title "0sec $TAG" \
+              --title "0 $TAG" \
               --notes "Automated multi-platform release. See CHANGELOG.md for changes." \
               --verify-tag
           fi
@@ -194,22 +194,21 @@ jobs:
         run: pnpm build
       - name: Normalize public npm identity
         working-directory: dist
-        # The private workspace name is not the established npm channel.
-        # Apply packaging metadata here too so older tags can be recovered.
-        run: npm pkg set name=0sec-cli bin.0sec=0sec.js bin.0=0sec.js
+        # The published npm identity is the canonical 0 package.
+        run: npm pkg set name=0 bin.0=0.js
       - name: Install runtime dependencies and smoke the bundle
         run: |
           npm --prefix dist install --omit=dev --no-audit --no-fund
-          node dist/0sec.js --version
-          bash scripts/smoke-cli.sh "node dist/0sec.js"
-          node scripts/smoke-plugin-runtime.mjs dist/0sec.js
+          node dist/0.js --version
+          bash scripts/smoke-cli.sh "node dist/0.js"
+          node scripts/smoke-plugin-runtime.mjs dist/0.js
       - name: Smoke an installed package
         run: |
           mkdir -p "$RUNNER_TEMP/npm-pack" "$RUNNER_TEMP/npm-smoke"
           npm pack ./dist --pack-destination "$RUNNER_TEMP/npm-pack"
           npm install --prefix "$RUNNER_TEMP/npm-smoke" "$RUNNER_TEMP"/npm-pack/*.tgz --omit=dev --no-audit --no-fund
-          "$RUNNER_TEMP/npm-smoke/node_modules/.bin/0sec" --version
-          node scripts/smoke-plugin-runtime.mjs "$RUNNER_TEMP/npm-smoke/node_modules/.bin/0sec"
+          "$RUNNER_TEMP/npm-smoke/node_modules/.bin/0" --version
+          node scripts/smoke-plugin-runtime.mjs "$RUNNER_TEMP/npm-smoke/node_modules/.bin/0"
       - name: Publish npm package
         working-directory: dist
         run: npm publish --access public

@@ -10,11 +10,11 @@ afterEach(() => {
 });
 
 function hostedRuntime(model: string, provider = "hosted") {
-  vi.stubEnv("0SEC_FORCE_PROVIDER", provider);
-  vi.stubEnv("0SEC_SELECTED_PROVIDER", "");
-  vi.stubEnv("0SEC_CLOUD_HOST", "http://127.0.0.1:12345");
-  vi.stubEnv("0SEC_CLOUD_TOKEN", "fixture-token");
-  vi.stubEnv("0SEC_SKIP_PROVIDER_BANNER", "1");
+  vi.stubEnv("ZERO_FORCE_PROVIDER", provider);
+  vi.stubEnv("ZERO_SELECTED_PROVIDER", "");
+  vi.stubEnv("ZERO_CLOUD_HOST", "http://127.0.0.1:12345");
+  vi.stubEnv("ZERO_CLOUD_TOKEN", "fixture-token");
+  vi.stubEnv("ZERO_SKIP_PROVIDER_BANNER", "1");
   return new LlmApiRuntime({ type: "api", model, timeout: 1000 });
 }
 
@@ -51,8 +51,8 @@ describe("hosted catalog selection", () => {
 
   it("rebuilds native tool requests across hosted fallback models and wire protocols", async () => {
     vi.stubEnv("OPENAI_API_KEY", "fixture-primary");
-    vi.stubEnv("0SEC_LLM_FALLBACK", "hosted:hosted-chat,hosted:hosted-responses");
-    vi.stubEnv("0SEC_LLM_429_MAX_RETRIES", "0");
+    vi.stubEnv("ZERO_LLM_FALLBACK", "hosted:hosted-chat,hosted:hosted-responses");
+    vi.stubEnv("ZERO_LLM_429_MAX_RETRIES", "0");
     __resetFallbackChainForTests();
     const runtime = hostedRuntime("primary", "openai");
     vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
@@ -62,7 +62,7 @@ describe("hosted catalog selection", () => {
       ] });
       const request = JSON.parse(String(init?.body));
       if (request.model === "primary" || request.model === "hosted-chat") {
-        return Response.json({ error: { message: "rate limit" } }, { status: 429, headers: { "x-0sec-retry-safe": "1" } });
+        return Response.json({ error: { message: "rate limit" } }, { status: 429, headers: { "x-0-retry-safe": "1" } });
       }
       if (!url.endsWith("/responses") || !Array.isArray(request.input) || request.messages) {
         return Response.json({ error: "wrong model protocol" }, { status: 400 });
@@ -79,8 +79,8 @@ describe("hosted catalog selection", () => {
 
   it("rebuilds a plain completion for a hosted Responses fallback", async () => {
     vi.stubEnv("OPENAI_API_KEY", "fixture-primary");
-    vi.stubEnv("0SEC_LLM_FALLBACK", "hosted:hosted-responses");
-    vi.stubEnv("0SEC_LLM_429_MAX_RETRIES", "0");
+    vi.stubEnv("ZERO_LLM_FALLBACK", "hosted:hosted-responses");
+    vi.stubEnv("ZERO_LLM_429_MAX_RETRIES", "0");
     __resetFallbackChainForTests();
     const runtime = hostedRuntime("primary", "openai");
     vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
@@ -99,7 +99,7 @@ describe("hosted catalog selection", () => {
   it("does not replay a hosted request after a dropped response", async () => {
     const runtime = hostedRuntime("hosted-chat");
     let attempts = 0;
-    vi.stubEnv("0SEC_LLM_MAX_RETRIES", "3");
+    vi.stubEnv("ZERO_LLM_MAX_RETRIES", "3");
     vi.spyOn(Math, "random").mockReturnValue(0);
     vi.stubGlobal("fetch", vi.fn(async (url: string) => {
       if (url.endsWith("/models")) return Response.json({ data: [{ id: "hosted-chat", wire_api: "chat_completions", max_output_tokens: 512 }] });
@@ -114,7 +114,7 @@ describe("hosted catalog selection", () => {
   it("does not replay a hosted request after a gateway 502", async () => {
     const runtime = hostedRuntime("hosted-chat");
     let attempts = 0;
-    vi.stubEnv("0SEC_LLM_MAX_RETRIES", "3");
+    vi.stubEnv("ZERO_LLM_MAX_RETRIES", "3");
     vi.spyOn(Math, "random").mockReturnValue(0);
     vi.stubGlobal("fetch", vi.fn(async (url: string) => {
       if (url.endsWith("/models")) return Response.json({ data: [{ id: "hosted-chat", wire_api: "chat_completions", max_output_tokens: 512 }] });
@@ -129,7 +129,7 @@ describe("hosted catalog selection", () => {
   it("does not replay a hosted 429 without proof of pre-dispatch admission", async () => {
     const runtime = hostedRuntime("hosted-chat");
     let attempts = 0;
-    vi.stubEnv("0SEC_LLM_429_MAX_RETRIES", "1");
+    vi.stubEnv("ZERO_LLM_429_MAX_RETRIES", "1");
     vi.spyOn(Math, "random").mockReturnValue(0);
     vi.stubGlobal("fetch", vi.fn(async (url: string) => {
       if (url.endsWith("/models")) return Response.json({ data: [{ id: "hosted-chat", wire_api: "chat_completions", max_output_tokens: 512 }] });
@@ -143,7 +143,7 @@ describe("hosted catalog selection", () => {
 
   it("retains the direct-provider transport retry contract", async () => {
     vi.stubEnv("OPENAI_API_KEY", randomUUID());
-    vi.stubEnv("0SEC_LLM_MAX_RETRIES", "1");
+    vi.stubEnv("ZERO_LLM_MAX_RETRIES", "1");
     vi.spyOn(Math, "random").mockReturnValue(0);
     const runtime = hostedRuntime("primary", "openai");
     let attempts = 0;

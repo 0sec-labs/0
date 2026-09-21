@@ -108,7 +108,7 @@ it does not claim every layer ran or that all remaining findings are reproduced.
 
 Inspect per-finding triage provenance. A skipped layer and an unrecorded layer are different. [Features](/features/) lists current toggles; [Finding Triage](/triage/) explains the evidence gates.
 
-Jev assistance is separately opt-in through `0SEC_JEV_FEATURES`, not enabled by
+Jev assistance is separately opt-in through `ZERO_JEV_FEATURES`, not enabled by
 possessing a provider key. In this workflow it can assist browser navigation,
 memory ranking, or semantic deduplication. It does not grant scope, confirm a
 vulnerability, or turn a duplicate match into verification. Browser assistance
@@ -131,7 +131,7 @@ HTML and PDF output write a timestamped report under the system temporary direct
 
 ### SQLite database
 
-Current scan storage is run-local: by default `~/.0sec/runs/<scan-id>/state.db`, subject to the configured state root. `--db-path` selects an explicit database. Do not assume every command uses a single `~/.0sec/0sec.db`.
+Current scan storage is run-local: by default `~/.0/runs/<scan-id>/state.db`, subject to the configured state root. `--db-path` selects an explicit database. Do not assume every command uses a single `~/.0/0.db`.
 
 ```bash
 0 scan --target https://staging.example.com --scope ./scope.json \
@@ -209,7 +209,7 @@ verification. Deterministic replay executes a finding, fixture, or reproduction
 bundle and records concrete assertions. Verification availability depends on the
 selected path.
 
-<span id="explicit-verification-with-0sec-verify"></span>
+<span id="explicit-verification-with-0-verify"></span>
 ### Explicit verification with `0 verify`
 
 ```bash
@@ -220,7 +220,7 @@ selected path.
 0 verify --bundle ./bundle-dir --runner docker
 
 # Use the separate kernel-finding verification path.
-env 0SEC_KERNEL_VERIFY=1 0 verify \
+env ZERO_KERNEL_VERIFY=1 0 verify \
   --kernel-finding finding.json --kernel-tree ./linux
 ```
 

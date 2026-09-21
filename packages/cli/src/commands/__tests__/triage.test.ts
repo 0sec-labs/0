@@ -1,5 +1,5 @@
 /**
- * Coverage seed for `0sec-cli`'s `triage` command — the Semgrep-style
+ * Coverage seed for `@0/cli`'s `triage` command — the Semgrep-style
  * false-positive memory surface. Operators run this to (a) hand-craft an
  * FP memory from an existing finding, (b) list and filter memories,
  * (c) remove a stale one, and (d) `mark-fp` a finding which both flips
@@ -7,13 +7,13 @@
  *
  * Strategy: mock the two boundaries triage.ts touches inside its actions —
  *
- *   1. `@0sec/db`'s `osecDB` (avoid opening real WASM SQLite — memory
+ *   1. `@0/db`'s `osecDB` (avoid opening real WASM SQLite — memory
  *      `project_db_wasm`).
- *   2. `@0sec/core`'s `MemoryStore` (avoid the second WASM open path
+ *   2. `@0/core`'s `MemoryStore` (avoid the second WASM open path
  *      `MemoryStore.db()` takes under the hood).
  *
  * Both modules are dynamically imported inside triage.ts (`await import(
- * "@0sec/db")`, `await import("@0sec/core")`), so vitest's hoisted
+ * "@0/db")`, `await import("@0/core")`), so vitest's hoisted
  * `vi.mock` covers both static and dynamic resolution.
  *
  * What's covered (15 tests):
@@ -101,7 +101,7 @@ const dbState: {
   closed: false,
 };
 
-vi.mock("@0sec/db", () => {
+vi.mock("@0/db", () => {
   class FakeOsecDB {
     constructor(dbPath?: string) {
       dbState.ctorArgs.push(dbPath);
@@ -129,7 +129,7 @@ vi.mock("@0sec/db", () => {
   return { osecDB: FakeOsecDB };
 });
 
-// ── MemoryStore mock (lives in @0sec/core) ────────────────────────────────
+// ── MemoryStore mock (lives in @0/core) ────────────────────────────────
 
 interface FakeMemory {
   id: string;
@@ -201,7 +201,7 @@ class FakeMemoryStore {
   }
 }
 
-vi.mock("@0sec/core", () => ({
+vi.mock("@0/core", () => ({
   MemoryStore: FakeMemoryStore,
 }));
 
@@ -258,7 +258,7 @@ async function runCli(argv: string[]): Promise<unknown> {
   });
   registerTriageCommand(program);
   try {
-    await program.parseAsync(["node", "0sec-cli", ...argv]);
+    await program.parseAsync(["node", "@0/cli", ...argv]);
     return undefined;
   } catch (err) {
     return err;

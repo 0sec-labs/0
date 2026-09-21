@@ -3,7 +3,7 @@
 
 import { Command } from "commander";
 import chalk from "chalk";
-import { VERSION } from "@0sec/shared";
+import { VERSION } from "@0/shared";
 import {
   analyticsPipeline,
   createHerdrEventSink,
@@ -12,7 +12,7 @@ import {
   maybeSubscribeCloudEventSink,
   maybeSubscribeOperationalEventSink,
   presentationEventSink,
-} from "@0sec/core";
+} from "@0/core";
 import { getSettings } from "./tui/settings-store.js";
 import { maybeLoadCodexAuth } from "./codex-auth.js";
 import { presentationEventBus } from "./presentation/event-bus.js";
@@ -28,16 +28,16 @@ import { setHerdrSink } from "./herdr-state.js";
 installConsolePresentationBridge();
 installProcessPresentationStreamBridge();
 // Local-dev convenience: if `codex login` has run (~/.codex/auth.json) and no
-// 0SEC_CHATGPT_* token is in the env, plumb the codex tokens in so the engine
+// ZERO_CHATGPT_* token is in the env, plumb the codex tokens in so the engine
 // resolves to the chatgpt-codex provider (highest priority) instead of falling
 // through to stale AZURE_OPENAI_API_KEY / OPENAI_API_KEY. No-op in the cloud
 // worker (it sets the tokens itself) and when a token is already present.
 maybeLoadCodexAuth();
 
 // Subscribe the cloud-event sink before any subcommand runs. Idempotent
-// + env-gated (0SEC_CLOUD_EVENTS=1): the sink writes one
-// `0SEC_EVENT_<TYPE>` line per emitted event to stdout, which the
-// 0sec-cloud worker-controller's stdout streamer parses and POSTs to
+// + env-gated (ZERO_CLOUD_EVENTS=1): the sink writes one
+// `ZERO_EVENT_<TYPE>` line per emitted event to stdout, which the
+// 0-cloud worker-controller's stdout streamer parses and POSTs to
 // the orchestrator's /scans/:id/events endpoint. Without this call,
 // the sink module is dead code and the cloud's live-trace UI stays
 // dark for every scan.
@@ -52,9 +52,9 @@ try {
 }
 // Independent, purpose-specific enrollment. Missing configuration does not enroll.
 try { configureRunContributionsFromEnvironment(); }
-catch { process.stderr.write("[0sec] Run contribution unavailable: invalid private enrollment configuration.\n"); }
+catch { process.stderr.write("[0] Run contribution unavailable: invalid private enrollment configuration.\n"); }
 
-// Operational NDJSON stderr sink (0SEC_LOG_FORMAT=json). Opt-in metadata-
+// Operational NDJSON stderr sink (ZERO_LOG_FORMAT=json). Opt-in metadata-
 // only logging — writes one NDJSON line per allowlisted lifecycle / cost
 // event to stderr. Strips all sensitive fields (prompts, responses,
 // reasoning, tool args, finding evidence, token deltas, auth material,
@@ -65,7 +65,7 @@ maybeSubscribeOperationalEventSink();
 // Legacy cloud/stdout and Herdr projections remain independent adapters.
 eventBus.subscribe(presentationEventSink(presentationEventBus));
 
-// Report coarse agent state to herdr when 0sec is running inside one of its
+// Report coarse agent state to herdr when 0 is running inside one of its
 // panes, so the pane shows working/idle instead of "unknown" and
 // `herdr agent wait` becomes usable against a scan. The factory returns null
 // off-herdr, every write is fail-soft, and the payload carries only counters
@@ -95,7 +95,7 @@ async function buildProgram(): Promise<Command> {
   const c = await import("./commands/index.js");
   const program = new Command();
   program
-    .name("0sec")
+    .name("0")
     .description("Open-source multi-model security research harness")
     .version(VERSION)
     .enablePositionalOptions();
@@ -180,17 +180,17 @@ async function showInteractiveMenu(): Promise<void> {
   }
 
   console.log("");
-  console.log(`  ${chalk.bold("0sec")} ${chalk.dim(`v${VERSION}`)}`);
+  console.log(`  ${chalk.bold("0")} ${chalk.dim(`v${VERSION}`)}`);
   console.log("");
-  console.log(`  ${chalk.dim("From v0.9.0 onwards, 0sec ships as a self-contained binary.")}`);
+  console.log(`  ${chalk.dim("From v0.9.0 onwards, 0 ships as a self-contained binary.")}`);
   console.log(`  ${chalk.dim("The full TUI (mission control + live scan view) needs Bun's runtime.")}`);
   console.log("");
   console.log(`  ${chalk.bold("Install")} (single curl, no Node / Bun required):`);
-  console.log(`    curl -fsSL https://raw.githubusercontent.com/0sec-labs/0sec/main/install.sh | bash`);
+  console.log(`    curl -fsSL https://raw.githubusercontent.com/0sec-labs/0/main/install.sh | bash`);
   console.log("");
   console.log(`  ${chalk.dim("After install, run:")}`);
-  console.log(`    0sec scan --target https://example.com`);
-  console.log(`    0sec --help`);
+  console.log(`    0 scan --target https://example.com`);
+  console.log(`    0 --help`);
   console.log("");
 }
 

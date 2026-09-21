@@ -62,7 +62,7 @@ remain local even when model calls use a hosted transport.
 
 ## Input and artifact contracts
 
-`0 research` subcommands accept `--artifact-root` (default `.0sec-research`).
+`0 research` subcommands accept `--artifact-root` (default `.0-research`).
 Other research commands have their own `--output`, artifact-retention, and
 cache options; do not assume they share one directory layout or accept
 `--artifact-root`. The [command reference](/commands/) lists each contract.
@@ -76,13 +76,13 @@ Review them before committing or uploading artifacts.
 
 Provider configuration belongs in [API Keys](/api-keys/) and
 [Configuration](/configuration/). For kernel execution, follow the VM guide's
-exact `0SEC_KERNEL_QEMU_*` setup; a source checkout alone is not a bootable guest.
+exact `ZERO_KERNEL_QEMU_*` setup; a source checkout alone is not a bootable guest.
 
 Names beginning with a digit cannot be assigned using POSIX `export`. Pass
 them through `env`, for example:
 
 ```bash
-env 0SEC_DEEP_REVIEW_MAX_CANDIDATES=16 0 deep-review ./target-repo
+env ZERO_DEEP_REVIEW_MAX_CANDIDATES=16 0 deep-review ./target-repo
 ```
 
 ## Scope and host-execution boundaries
@@ -737,7 +737,7 @@ See [Adversarial Evals](/adversarial-evals/) for the conceptual background and
 ## Self-evolving detection (`lens-synth`)
 
 Evolves additive appsec finder lenses from curated misses into a user-owned
-durable overlay registry (`~/.0sec/lenses/appsec-archetypes.json`).
+durable overlay registry (`~/.0/lenses/appsec-archetypes.json`).
 
 ```bash
 # One-shot: process miss-input, validate, optionally promote
@@ -764,7 +764,7 @@ durable overlay registry (`~/.0sec/lenses/appsec-archetypes.json`).
 | Flag | Default | Description |
 |---|---|---|
 | `--miss-input <path>` | — | Curated miss-input JSON |
-| `--registry <path>` | `~/.0sec/lenses/...` | Durable overlay path |
+| `--registry <path>` | `~/.0/lenses/...` | Durable overlay path |
 | `--max-register <n>` | — | Cap promoted champions per input revision |
 | `-m, --model <id>` | — | Synthesis model override |
 | `--promote` | false | Persist validated champion to durable overlay |

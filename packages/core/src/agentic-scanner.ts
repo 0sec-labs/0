@@ -7,8 +7,8 @@ import type {
   PocStep,
   Severity,
   TriageLayerName,
-} from "@0sec/shared";
-import { loadTemplates } from "@0sec/templates";
+} from "@0/shared";
+import { loadTemplates } from "@0/templates";
 import { createRuntime } from "./runtime/index.js";
 import { LlmApiRuntime } from "./runtime/llm-api.js";
 import type { ApiRuntimeDiagnostics } from "./runtime/llm-api.js";
@@ -31,8 +31,8 @@ import {
   shellPentestPrompt,
   buildAccessControlPromptBlock,
 } from "./agent/prompts.js";
-import { createJevEvaluator, jevConfigFromEnvironment, resolveIdentities } from "@0sec/shared";
-import type { RuntimeMode, PipelineEvent } from "@0sec/shared";
+import { createJevEvaluator, jevConfigFromEnvironment, resolveIdentities } from "@0/shared";
+import type { RuntimeMode, PipelineEvent } from "@0/shared";
 import { createScanMemoryStore } from "./triage/memories.js";
 import { features } from "./agent/features.js";
 import { diag } from "./diagnostics/channel.js";
@@ -161,7 +161,7 @@ export interface AgenticScanOptions {
    */
   emitTerminalEvent?: boolean;
   /**
-   * Userspace / Rust memory-safety scan role ("Monty-mode", 0sec#700). When
+   * Userspace / Rust memory-safety scan role ("Monty-mode", 0#700). When
    * set, the scan dispatches to the focused `runMemSafetyScan` stage
    * (audit-playbook → closed fuzz loop → crash triage) and returns early,
    * BEFORE any of the live-target / DB / runtime machinery below runs. The
@@ -365,7 +365,7 @@ async function detectScanMode(config: ScanConfig): Promise<ScanConfig> {
  * Sessions are saved so interrupted scans can be resumed.
  */
 /**
- * Memory-safety scan dispatch ("Monty-mode", 0sec#700). Adapts the focused
+ * Memory-safety scan dispatch ("Monty-mode", 0#700). Adapts the focused
  * `runMemSafetyScan` stage result into the unified `ScanReport` the rest of the
  * product consumes. Lives here only as the thin bridge between the scan entry
  * point and the stage module; all real orchestration is in
@@ -456,7 +456,7 @@ async function runCraftScanStage(
       : {}),
   };
 
-  // Ensemble craft opt-in (OFF by default): when 0SEC_ENSEMBLE_MODELS lists
+  // Ensemble craft opt-in (OFF by default): when ZERO_ENSEMBLE_MODELS lists
   // more than one model, run N parallel craft trajectories across those models
   // and LLM-judge them down to one PoC. Unset / single model → the single-model
   // craft path below, byte-for-byte unchanged. `runEnsembleCraft` returns a
@@ -572,7 +572,7 @@ export async function agenticScan(opts: AgenticScanOptions): Promise<ScanReport>
   const emit = onEvent ?? (() => {});
 
   if (runId && resumeScanId && runId !== resumeScanId) {
-    throw new Error("0sec scan runId must match resumeScanId when resuming.");
+    throw new Error("0 scan runId must match resumeScanId when resuming.");
   }
 
   // #978 (ADR-060) — cloud control channel. The agent loop injects "pending
@@ -588,7 +588,7 @@ export async function agenticScan(opts: AgenticScanOptions): Promise<ScanReport>
   const getPendingUserMessages =
     optsGetPendingUserMessages ?? cloudInbox?.drain;
 
-  // Memory-safety scan role ("Monty-mode", 0sec#700). This is the minimal
+  // Memory-safety scan role ("Monty-mode", 0#700). This is the minimal
   // dispatch seam for the userspace/Rust pipeline: when a `memSafetyTarget` is
   // supplied we delegate to the focused `runMemSafetyScan` stage and return,
   // before the DB / runtime / live-target machinery below. Keeping the actual
@@ -609,7 +609,7 @@ export async function agenticScan(opts: AgenticScanOptions): Promise<ScanReport>
 
   let config = normalizeScanConfig(opts.config);
 
-  // Programmatic scope ingestion (0sec#215). Load once at the top and
+  // Programmatic scope ingestion (0#215). Load once at the top and
   // pass the parsed `ScopePolicy` to every agent config below. The CLI
   // is responsible for catching ENOENT / parse errors before this point;
   // here we just propagate. Pre-validate the configured target so an
@@ -620,7 +620,7 @@ export async function agenticScan(opts: AgenticScanOptions): Promise<ScanReport>
     scope = loadScope(config.scopeFile);
     // Seed the per-scan cache so every downstream helper reuses this
     // exact policy instance instead of re-reading the JSON file. See
-    // `resolveScopeForConfig` for the TOCTOU rationale (0sec#218
+    // `resolveScopeForConfig` for the TOCTOU rationale (0#218
     // review).
     cacheScopePolicy(config, scope);
     const verdict = scope.match(config.target);
@@ -642,11 +642,11 @@ export async function agenticScan(opts: AgenticScanOptions): Promise<ScanReport>
     throw new Error(scopeRequiredRefusal("scan"));
   }
 
-  // Attribution-header config (0sec#216). Resolved by every per-stage
+  // Attribution-header config (0#216). Resolved by every per-stage
   // helper below via `buildAttributionForConfig(config)` — see that
   // function for the actual three-source merge. We pre-flight here so a
   // malformed `attribution` block in the scope file or a malformed
-  // `0SEC_ATTRIBUTION_HEADERS` env var fails the scan loudly at boot
+  // `ZERO_ATTRIBUTION_HEADERS` env var fails the scan loudly at boot
   // instead of crashing inside the discovery agent's first fetch.
   buildAttributionForConfig(config);
 
@@ -672,7 +672,7 @@ export async function agenticScan(opts: AgenticScanOptions): Promise<ScanReport>
         osecDB,
         resolveOsecRunStorage,
         writeOsecRunReport,
-      } = await import("@0sec/db");
+      } = await import("@0/db");
       const storage = resolveOsecRunStorage({
         dbPath,
         runId: resumeScanId ?? runId,
@@ -686,7 +686,7 @@ export async function agenticScan(opts: AgenticScanOptions): Promise<ScanReport>
     } catch (err) {
       const cause = err instanceof Error ? err.message : String(err);
       throw new Error(
-        `0sec: failed to initialize the local database (@0sec/db). ` +
+        `0: failed to initialize the local database (@0/db). ` +
           `Agentic scans require SQLite persistence. Underlying error: ${cause}`,
       );
     }
@@ -714,7 +714,7 @@ export async function agenticScan(opts: AgenticScanOptions): Promise<ScanReport>
     emit({ type: "stage:start", stage: "discovery", message: "Resuming scan..." });
   }
 
-  // Record the inert-guard fact in the scan's OWN event log (0sec#133), not
+  // Record the inert-guard fact in the scan's OWN event log (0#133), not
   // just on stdout: cloud scans have no console to read, and the whole point
   // of the issue is that a reviewer must be able to answer "did the bash
   // egress guards run on this scan?" after the fact. Paired with the operator-
@@ -931,7 +931,7 @@ export async function agenticScan(opts: AgenticScanOptions): Promise<ScanReport>
   // still tells the operator how much work happened. Tracked here in
   // the scanner (the producer) so the cloud doesn't re-derive these
   // from raw scan_events on every page load — see
-  // 0sec-cloud/services/dashboard/src/routes/_authed/$orgSlug/scans/index.tsx.
+  // 0-cloud/services/dashboard/src/routes/_authed/$orgSlug/scans/index.tsx.
   let toolCallsTotal = 0;
   let lastDoneSummary = "";
   const unsubscribeMetrics = eventBus.subscribe({
@@ -1004,7 +1004,7 @@ export async function agenticScan(opts: AgenticScanOptions): Promise<ScanReport>
         lastDoneSummary ||
         undefined;
 
-      // ── Cost surfacing (0sec#231) ──
+      // ── Cost surfacing (0#231) ──
       // Aggregate per-(provider, model) so a multi-model run (Haiku
       // discovery + Opus attack) emits one entry per model with split
       // input/output/cache costs. The cloud relay / consolidator can
@@ -1107,7 +1107,7 @@ export async function agenticScan(opts: AgenticScanOptions): Promise<ScanReport>
       emit({ type: "stage:start", stage: "attack", message: "Running IPI campaign..." });
       const { findings } = await runLlmIpiAudit({
         baseUrl: config.target,
-        apiKey: config.apiKey ?? process.env["0SEC_LLM_TARGET_KEY"] ?? "",
+        apiKey: config.apiKey ?? process.env["ZERO_LLM_TARGET_KEY"] ?? "",
         models: config.model ? [config.model] : ["default"],
         maxAttempts: config.depth === "deep" ? 50 : 20,
       });
@@ -1249,7 +1249,7 @@ export async function agenticScan(opts: AgenticScanOptions): Promise<ScanReport>
         "Codex CLI live target scanning is not supported. " +
         "The MCP-backed Codex wrapper was removed because it adds a target-interaction bottleneck. " +
         "For live target scans with Codex, run `codex login`, set " +
-        "0SEC_CHATGPT_OAUTH_REFRESH_TOKEN from ~/.codex/auth.json, and retry `0sec scan --runtime codex`; " +
+        "ZERO_CHATGPT_OAUTH_REFRESH_TOKEN from ~/.codex/auth.json, and retry `0 scan --runtime codex`; " +
         "otherwise use runtime=api or runtime=claude.",
       );
     }
@@ -1270,7 +1270,7 @@ export async function agenticScan(opts: AgenticScanOptions): Promise<ScanReport>
     });
 
     // Deterministic web-recon pre-pass — runs ONCE here on the common path so it
-    // applies to BOTH native and legacy discovery. The cloud worker invokes 0sec
+    // applies to BOTH native and legacy discovery. The cloud worker invokes 0
     // with `--runtime codex`, which resolves to the legacy discovery loop; a hook
     // wired only into runNativeDiscovery never fires there (the reason the pre-pass
     // produced nothing in cloud scans). Never breaks the scan; emits findings
@@ -1745,14 +1745,14 @@ export async function agenticScan(opts: AgenticScanOptions): Promise<ScanReport>
         ...(repository ? { repository } : {}),
       });
     }
-    // ── Dynamic per-finding triage routing (0sec#113) ──
-    // When `0SEC_FEATURE_DYNAMIC_TRIAGE=1`, a per-finding decision says
+    // ── Dynamic per-finding triage routing (0#113) ──
+    // When `ZERO_FEATURE_DYNAMIC_TRIAGE=1`, a per-finding decision says
     // which layers to skip. The decision is recorded in this map so we
     // can (a) gate layer execution below and (b) emit `routing-trace.jsonl`
     // at scan teardown for offline learned-router training.
     const routingDecisions = new Map<string, RoutingDecision>();
     // Phase 3: accumulate cross-validated leads (findings the multi-modal layer
-    // scored `both_fire` — 0sec AND foxguard agree) so we can surface ONE
+    // scored `both_fire` — 0 AND foxguard agree) so we can surface ONE
     // aggregate summary event after the loop. Purely observational: reading the
     // already-computed `mm` result here does NOT change any triage decision.
     const crossValidatedLeadEntries: CrossValidatedLeadEntry[] = [];
@@ -1760,7 +1760,7 @@ export async function agenticScan(opts: AgenticScanOptions): Promise<ScanReport>
       // Always run isHoldingItWrong + extractFeatures for telemetry, but
       // only enforce the rejection when the feature flags are enabled.
       // Both default ON to preserve existing v0.6.0 behavior; setting
-      // 0SEC_FEATURE_HOLDING_IT_WRONG=0 / 0SEC_FEATURE_EVIDENCE_GATE=0
+      // ZERO_FEATURE_HOLDING_IT_WRONG=0 / ZERO_FEATURE_EVIDENCE_GATE=0
       // turns the gates off so we can A/B test what they actually cost.
       const hiwStartedAt = Date.now();
       const hiw = isHoldingItWrong(finding);
@@ -1769,7 +1769,7 @@ export async function agenticScan(opts: AgenticScanOptions): Promise<ScanReport>
         evidenceCompletenessIdx >= 0 ? featureVector[evidenceCompletenessIdx] ?? 0 : 0;
 
       // Layer telemetry: holding-it-wrong always runs (just may not enforce).
-      // 0sec#112 — feeds the dynamic routing model in #113.
+      // 0#112 — feeds the dynamic routing model in #113.
       //
       // The blocklist drop is a heuristic, so it routes through the one
       // disclosure predicate: a disclosure-grade finding is held for
@@ -1796,7 +1796,7 @@ export async function agenticScan(opts: AgenticScanOptions): Promise<ScanReport>
           layer: "holding_it_wrong",
           verdict: hiw.isHoldingItWrong ? "skip" : "pass",
           reason: hiw.isHoldingItWrong
-            ? `would have rejected (${hiw.reason}) but 0SEC_FEATURE_HOLDING_IT_WRONG=0`
+            ? `would have rejected (${hiw.reason}) but ZERO_FEATURE_HOLDING_IT_WRONG=0`
             : "no holding-it-wrong pattern matched",
           startedAt: hiwStartedAt,
         });
@@ -1926,12 +1926,12 @@ export async function agenticScan(opts: AgenticScanOptions): Promise<ScanReport>
         verdict: evidenceGateRejects ? "skip" : "pass",
         confidence: evidenceCompleteness,
         reason: evidenceGateRejects
-          ? `would have rejected (completeness=${evidenceCompleteness.toFixed(2)}) but 0SEC_FEATURE_EVIDENCE_GATE=0`
+          ? `would have rejected (completeness=${evidenceCompleteness.toFixed(2)}) but ZERO_FEATURE_EVIDENCE_GATE=0`
           : `evidence_completeness=${evidenceCompleteness.toFixed(2)} > 0.5`,
         startedAt: evidenceGateStartedAt,
       });
 
-      // ── Learned router (0sec#113) ──
+      // ── Learned router (0#113) ──
       // When enabled, the XGBoost model decides per-finding whether to
       // auto-accept, auto-reject, or run a subset of layers. This runs
       // AFTER the two free always-on filters (holding-it-wrong +
@@ -2014,8 +2014,8 @@ export async function agenticScan(opts: AgenticScanOptions): Promise<ScanReport>
         // still control which layers run for now).
       }
 
-      // ── Dynamic per-finding triage routing (0sec#113) ──
-      // Gated behind 0SEC_FEATURE_DYNAMIC_TRIAGE (default OFF). When
+      // ── Dynamic per-finding triage routing (0#113) ──
+      // Gated behind ZERO_FEATURE_DYNAMIC_TRIAGE (default OFF). When
       // enabled, the router decides per-finding which subset of the
       // 11 triage layers to invoke. Layers NOT in `layers_to_invoke`
       // are short-circuited in the per-layer branches below. The
@@ -2098,7 +2098,7 @@ export async function agenticScan(opts: AgenticScanOptions): Promise<ScanReport>
       };
 
       // ── Reachability gate ("Endor Labs moat") ──
-      // Opt-in via 0SEC_FEATURE_REACHABILITY_GATE. Only runs in white-box
+      // Opt-in via ZERO_FEATURE_REACHABILITY_GATE. Only runs in white-box
       // mode when we have source code. For each finding, check whether the
       // vulnerable sink is actually reachable from an application entry
       // point (HTTP handler, CLI main, route file). Dead code and test-only
@@ -2278,13 +2278,13 @@ export async function agenticScan(opts: AgenticScanOptions): Promise<ScanReport>
           verdict: "skip",
           reason: features.reachabilityGate
             ? "no repoPath available (black-box mode)"
-            : "0SEC_FEATURE_REACHABILITY_GATE=0",
+            : "ZERO_FEATURE_REACHABILITY_GATE=0",
           startedAt: Date.now(),
         });
       }
 
       // ── Multi-modal agreement (foxguard cross-validation) ──
-      // Opt-in via 0SEC_FEATURE_MULTIMODAL. Only runs when we have source
+      // Opt-in via ZERO_FEATURE_MULTIMODAL. Only runs when we have source
       // code (white-box mode). Cross-checks every finding against the
       // foxguard Rust pattern scanner. When both scanners flag the same file
       // and the rules cite a common weakness class, confidence increases.
@@ -2443,13 +2443,13 @@ export async function agenticScan(opts: AgenticScanOptions): Promise<ScanReport>
           verdict: "skip",
           reason: features.multiModalAgreement
             ? "no repoPath available (black-box mode)"
-            : "0SEC_FEATURE_MULTIMODAL=0",
+            : "ZERO_FEATURE_MULTIMODAL=0",
           startedAt: Date.now(),
         });
       }
 
       // ── Publishability / in-scope gate (issue #537 / #539) ──
-      // Opt-in via 0SEC_FEATURE_PUBLISHABILITY_GATE (default OFF). Decides
+      // Opt-in via ZERO_FEATURE_PUBLISHABILITY_GATE (default OFF). Decides
       // disclosure-worthiness so we stop filing by-design / duplicate /
       // dead-code / already-fixed findings. The layer itself only *computes* a
       // verdict; any SUPPRESSION decision (by_design / duplicate / fixed /
@@ -2596,7 +2596,7 @@ export async function agenticScan(opts: AgenticScanOptions): Promise<ScanReport>
           verdict: "skip",
           reason: features.publishabilityGate
             ? "skipped by dynamic_router"
-            : "0SEC_FEATURE_PUBLISHABILITY_GATE=0",
+            : "ZERO_FEATURE_PUBLISHABILITY_GATE=0",
           startedAt: Date.now(),
         });
       }
@@ -2665,7 +2665,7 @@ export async function agenticScan(opts: AgenticScanOptions): Promise<ScanReport>
           finding.confidence = 1.0;
           finding.triageStatus = "accepted";
           finding.triageNote = `oracle_verified: ${oracle.evidence}`;
-          // 0sec#659 / 0cloud#1278 — when this deterministic pass came from the
+          // 0#659 / 0cloud#1278 — when this deterministic pass came from the
           // OAST-callback oracle (SSRF / OOB-RCE / OOB-SQLi), emit an ALWAYS-ON
           // `oast_confirmed` bus event so cloudEventSink relays it to
           // scan_events. Unlike `pov_oracle` (below, gated behind the default-off
@@ -2781,10 +2781,10 @@ export async function agenticScan(opts: AgenticScanOptions): Promise<ScanReport>
             timestamp: Date.now(),
           });
           // Mirror onto the typed EventBus (#570). `db.logEvent` only writes
-          // 0sec's LOCAL sqlite, which the cloud worker never relays — so
+          // 0's LOCAL sqlite, which the cloud worker never relays — so
           // without this the per-finding "deterministic vs heuristic" badge
           // never reaches the dashboard. cloudEventSink serializes this to a
-          // `0SEC_EVENT_POV_ORACLE` line → worker → orchestrator
+          // `ZERO_EVENT_POV_ORACLE` line → worker → orchestrator
           // `scan_events`, keyed by findingId, exactly like
           // untrusted_input_sanitized (#558).
           eventBus.emit("pov_oracle", {
@@ -2885,7 +2885,7 @@ export async function agenticScan(opts: AgenticScanOptions): Promise<ScanReport>
           layer: "pov_gate",
           verdict: "skip",
           reason: !features.povGate
-            ? "0SEC_FEATURE_POV_GATE=0"
+            ? "ZERO_FEATURE_POV_GATE=0"
             : !(nativeApiAvailable || cliNativeRuntime)
               ? "no native runtime available"
               : "already accepted by upstream layer",
@@ -2902,7 +2902,7 @@ export async function agenticScan(opts: AgenticScanOptions): Promise<ScanReport>
       // execution path — no new infra). On reproduce, synthesize runnable
       // pocSteps so the verify runner picks it up; on no-repro, flag
       // `poc:none` so 0cloud routes it to manual / inconclusive — never a
-      // silent skip. Default OFF (0SEC_FEATURE_POC_GEN_STATIC), A/B-able via
+      // silent skip. Default OFF (ZERO_FEATURE_POC_GEN_STATIC), A/B-able via
       // the #656 harness.
       if (
         features.pocGenStatic
@@ -2982,7 +2982,7 @@ export async function agenticScan(opts: AgenticScanOptions): Promise<ScanReport>
         pushLayerVerdict(finding, {
           layer: "poc_gen",
           verdict: "skip",
-          reason: "0SEC_FEATURE_POC_GEN_STATIC=0",
+          reason: "ZERO_FEATURE_POC_GEN_STATIC=0",
           startedAt: Date.now(),
         });
       }
@@ -3212,7 +3212,7 @@ export async function agenticScan(opts: AgenticScanOptions): Promise<ScanReport>
     );
 
     // ── Stage 4: Report ──
-    // Extracted to `agentic/stages/report.ts` (0sec#1285) — the terminal
+    // Extracted to `agentic/stages/report.ts` (0#1285) — the terminal
     // stage assembles the report, persists completion, emits the routing
     // trace + webhook, and fires `scan_completed`. `emitScanCompleted` and
     // `attachEnforcementSummary` stay owned here (they close over the bus /

@@ -18,7 +18,7 @@ import { describe, expect, it } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import type { Finding, VerificationResult } from "@0sec/shared";
+import type { Finding, VerificationResult } from "@0/shared";
 import { osecDB, restoreFindingReviewFields } from "./database.js";
 import { createShimmedDatabase } from "./wasm-shim.js";
 
@@ -54,7 +54,7 @@ function reproducedResult(findingId: string): VerificationResult {
 }
 
 function withTempDir(fn: (dir: string) => void): void {
-  const dir = mkdtempSync(join(tmpdir(), "0sec-db-review-fields-"));
+  const dir = mkdtempSync(join(tmpdir(), "0-db-review-fields-"));
   try {
     fn(dir);
   } finally {

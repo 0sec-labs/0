@@ -139,7 +139,7 @@ export async function runRepositoryAcquisition(
       client.pipe(upstream).pipe(client);
     });
   });
-  const home = await mkdtemp(join(tmpdir(), "0sec-source-acquisition-"));
+  const home = await mkdtemp(join(tmpdir(), "0-source-acquisition-"));
   try {
     await new Promise<void>((resolveReady, reject) => {
       proxy.once("error", reject);

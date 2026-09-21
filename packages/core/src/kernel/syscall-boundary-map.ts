@@ -16,7 +16,7 @@
  * Output is structured JSON that the kernel review agent can query, optionally
  * filtered by subsystem path prefix.
  *
- * 0sec#468
+ * 0#468
  */
 
 import { execFile } from "node:child_process";

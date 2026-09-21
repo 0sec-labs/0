@@ -852,7 +852,7 @@ export interface ModelDialogTitleInput {
   /** BYOK only: whether the full synced superset is on show. */
   showAll?: boolean;
   /**
-   * BYOK only: whether 0sec Cloud routes are being folded in as an extra group.
+   * BYOK only: whether 0 Cloud routes are being folded in as an extra group.
    * Reflected in the title so an operator can see the list is not BYOK-only.
    */
   cloudMerged?: boolean;
@@ -896,7 +896,7 @@ export interface ModelDialogHintInput {
   hasFilter?: boolean;
   /**
    * Whether Ctrl+R reloads a live hosted catalogue. True on the hosted lane,
-   * and on the BYOK lane while 0sec Cloud routes are merged (a dark cloud is
+   * and on the BYOK lane while 0 Cloud routes are merged (a dark cloud is
    * retried without disturbing the BYOK list). Defaults to `scope === "hosted"`.
    */
   canReload?: boolean;

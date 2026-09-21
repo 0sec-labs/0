@@ -1,21 +1,21 @@
-# 0sec kernel crash validator — KASAN-enabled kernel builder
+# 0 kernel crash validator — KASAN-enabled kernel builder
 #
 # Builds a minimal Linux kernel with KASAN + UBSAN enabled, plus a
 # Debian root filesystem that boots into a shared-workdir reproducer runner.
 #
 # Usage:
-#   docker build -t 0sec-kernel-builder -f Dockerfile .
-#   docker run --rm -v $(pwd)/out:/out 0sec-kernel-builder
+#   docker build -t 0-kernel-builder -f Dockerfile .
+#   docker run --rm -v $(pwd)/out:/out 0-kernel-builder
 #
 # Outputs in /out:
 #   bzImage       — KASAN-enabled kernel
-#   rootfs.img    — ext4 root filesystem (512MB) with GCC/binutils + 0sec-init
+#   rootfs.img    — ext4 root filesystem (512MB) with GCC/binutils + 0-init
 #   kernel.config — .config used for the build
 #
 # The resulting artifacts work with the kernel-vm-runner.ts QEMU config:
-#   0SEC_KERNEL_QEMU=1
-#   0SEC_KERNEL_QEMU_KERNEL=/path/to/bzImage
-#   0SEC_KERNEL_QEMU_DISK=/path/to/rootfs.img
+#   ZERO_KERNEL_QEMU=1
+#   ZERO_KERNEL_QEMU_KERNEL=/path/to/bzImage
+#   ZERO_KERNEL_QEMU_DISK=/path/to/rootfs.img
 
 FROM debian:bookworm-slim AS kernel-builder
 
@@ -141,8 +141,8 @@ RUN chroot /rootfs bash -c '\
     apt-get install -y --no-install-recommends gdb isc-dhcp-client binutils && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/* && \
-    echo "0sec-kernel" > /etc/hostname && \
-    mkdir -p /root/0sec-kernel \
+    echo "0-kernel" > /etc/hostname && \
+    mkdir -p /root/0-kernel \
 '
 
 RUN printf '%s\n' \
@@ -152,26 +152,26 @@ RUN printf '%s\n' \
     'mount -t devtmpfs devtmpfs /dev 2>/dev/null || true' \
     'mount -t tmpfs tmpfs /run 2>/dev/null || true' \
     'mount -t tmpfs tmpfs /tmp 2>/dev/null || true' \
-    'echo "0SEC_INIT_START" > /dev/kmsg 2>/dev/null || true' \
-    'mkdir -p /mnt/0sec' \
-    'if mount -t 9p -o trans=virtio,version=9p2000.L osecshare /mnt/0sec 2>/tmp/0sec-mount.err; then' \
-    '  echo "0SEC_INIT_SHARE_MOUNTED" > /dev/kmsg 2>/dev/null || true' \
+    'echo "ZERO_INIT_START" > /dev/kmsg 2>/dev/null || true' \
+    'mkdir -p /mnt/0' \
+    'if mount -t 9p -o trans=virtio,version=9p2000.L osecshare /mnt/0 2>/tmp/0-mount.err; then' \
+    '  echo "ZERO_INIT_SHARE_MOUNTED" > /dev/kmsg 2>/dev/null || true' \
     'else' \
-    '  err=$(tr "\n" " " </tmp/0sec-mount.err 2>/dev/null || true)' \
-    '  echo "0SEC_INIT_SHARE_MOUNT_FAILED:${err:-unknown}" > /dev/kmsg 2>/dev/null || true' \
+    '  err=$(tr "\n" " " </tmp/0-mount.err 2>/dev/null || true)' \
+    '  echo "ZERO_INIT_SHARE_MOUNT_FAILED:${err:-unknown}" > /dev/kmsg 2>/dev/null || true' \
     'fi' \
-    'if [ -f /mnt/0sec/runner.sh ]; then' \
-    '  echo "0SEC_INIT_RUNNER_START" > /dev/kmsg 2>/dev/null || true' \
-    '  /bin/sh /mnt/0sec/runner.sh' \
+    'if [ -f /mnt/0/runner.sh ]; then' \
+    '  echo "ZERO_INIT_RUNNER_START" > /dev/kmsg 2>/dev/null || true' \
+    '  /bin/sh /mnt/0/runner.sh' \
     '  status=$?' \
-    '  echo "0SEC_INIT_RUNNER_EXIT:${status}" > /dev/kmsg 2>/dev/null || true' \
+    '  echo "ZERO_INIT_RUNNER_EXIT:${status}" > /dev/kmsg 2>/dev/null || true' \
     '  sync' \
     '  poweroff -f 2>/dev/null || halt -f 2>/dev/null || reboot -f 2>/dev/null || exit "$status"' \
     'fi' \
-    'echo "0SEC_INIT_IDLE" > /dev/kmsg 2>/dev/null || true' \
+    'echo "ZERO_INIT_IDLE" > /dev/kmsg 2>/dev/null || true' \
     'sleep infinity' \
-    > /rootfs/sbin/0sec-init \
-    && chmod 755 /rootfs/sbin/0sec-init
+    > /rootfs/sbin/0-init \
+    && chmod 755 /rootfs/sbin/0-init
 
 # Create ext4 disk image without requiring loop-mount support inside Docker build
 RUN truncate -s 512M /rootfs.img \

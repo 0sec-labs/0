@@ -1,4 +1,4 @@
-// Programmatic scope ingestion (0sec#215). `loadScope` reads a JSON
+// Programmatic scope ingestion (0#215). `loadScope` reads a JSON
 // scope file; `ScopePolicy` is the matcher used by every URL chokepoint
 // in the agent (validateTargetUrl + 5 fetch sites + shellExec URL
 // extraction + redirect-final-URL re-check in the crawler).
@@ -15,10 +15,10 @@ export {
 } from "./scope/scope-guard.js";
 export type { ScopeGuardStatus } from "./scope/scope-guard.js";
 
-// Attribution-header injection (0sec#216). Builds on scope ingestion:
+// Attribution-header injection (0#216). Builds on scope ingestion:
 // configures per-engagement headers + UA override that get merged into
 // every in-scope outbound request, so coordinated-disclosure venues can
-// deconflict 0sec traffic from real attacks.
+// deconflict 0 traffic from real attacks.
 export {
   resolveAttribution,
   applyAttribution,
@@ -101,7 +101,7 @@ export type { RadarSignals, RadarCommit, RadarCommitCandidate, ScanRepoCommitsOp
 export { rankCrashesWithJev, crashSummaryFromTriage } from "./kernel/index.js";
 export type { CrashRecord, CrashSignals, CrashTriageCandidate, CrashTriageResult } from "./kernel/index.js";
 // FoxGuard cross-validation: ranked/deduped lead helpers + the typed result
-// surfaced on the review report (0sec FoxGuard cross-validation, Phase 2).
+// surfaced on the review report (0 FoxGuard cross-validation, Phase 2).
 export {
   rankAndDedupeFoxguardLeads,
   toCrossValidatedLeads,
@@ -111,7 +111,7 @@ export type {
   CrossValidatedLead,
   CrossValidatedLeads,
   CrossValidatedLeadSource,
-} from "@0sec/shared";
+} from "@0/shared";
 export {
   buildTier1Harness,
   scaffoldTier1Harness,
@@ -154,7 +154,7 @@ export type {
   Tier3ValidationResult,
 } from "./review/c-cpp-tier3.js";
 // Userspace / Rust memory-safety pipeline ("Monty-mode") — closed fuzz loop
-// + shared contract (docs/0sec-rust-memsafety-pipeline.md, Track B).
+// + shared contract (docs/0-rust-memsafety-pipeline.md, Track B).
 export { runUserspaceFuzzLoop, parseCrashOutput } from "./triage/userspace-fuzz-runner.js";
 export type { UserspaceFuzzOptions } from "./triage/userspace-fuzz-runner.js";
 // Race-winning widening-gadget engine (#1120): turn a race candidate into a
@@ -203,7 +203,7 @@ export type {
   FuzzLoopResult,
   ExploitabilityVerdict,
 } from "./triage/memsafety-types.js";
-// Integration spine (0sec#700): the A→B→C memory-safety scan stage that
+// Integration spine (0#700): the A→B→C memory-safety scan stage that
 // chains the playbook, fuzz loop, and crash triage into Findings.
 export {
   runMemSafetyScan,
@@ -372,7 +372,7 @@ export type { HuntFinder } from "./stages/hunt-scan.js";
 // Deployment-context classification — path heuristics + severity cap for findings
 // that target dev/test/build-only code paths (issue #1215, deep-review postmortem).
 export { classifyDeploymentContext, applyDeploymentContextCap, stampDeploymentContext, hasTrustBoundaryBypass } from "./stages/deployment-context.js";
-export type { DeploymentContext } from "@0sec/shared";
+export type { DeploymentContext } from "@0/shared";
 // Depth-method specialized-lens sets, per on-chain review profile. These are
 // the ready-made `*FinderLenses` / `*VerifyLenses` fan-out + verify-quorum
 // axes the seedless `deep-review` command wires into runHuntScan (G-A).
@@ -387,7 +387,7 @@ export { collectScopeFiles, countScopeFilesUpTo } from "./source-files.js";
 // Hunt best-of-N LLM judge (disambiguates multi-attempt findings before the skeptic gate).
 export { judgeHuntCandidatesWithLlm, heuristicCandidateScore } from "./stages/hunt-judge.js";
 export type { HuntCandidateJudge, HuntCandidateScore } from "./stages/hunt-judge.js";
-// Hunt memory flywheel (0SEC_HUNT_FLYWHEEL=1, ported from 0verse's
+// Hunt memory flywheel (ZERO_HUNT_FLYWHEEL=1, ported from 0verse's
 // flywheel.py): a preseeded 5-layer memory that PRIMES the best-of-N judge
 // ordering + attempt-budget cost-router — it never confirms; see
 // hunt-flywheel.ts's header for the invariant.
@@ -413,7 +413,7 @@ export type {
   HuntCorpusRow,
   HuntProofReport,
 } from "./stages/hunt-flywheel.js";
-// Learned negatives (0SEC_HUNT_NEGATIVES, default ON): a known-refuted-shape
+// Learned negatives (ZERO_HUNT_NEGATIVES, default ON): a known-refuted-shape
 // memory that attaches prior refute reasons to the skeptic prompt as context.
 // Never auto-rejects, and inert until a caller supplies a corpus; see
 // hunt-negatives.ts's header.
@@ -459,7 +459,7 @@ export type {
   ResolvedHuntClaim,
   ReadHuntLedgerOptions,
 } from "./stages/hunt-evidence-ledger.js";
-// Cross-family adversarial refuter (0SEC_HUNT_CROSS_FAMILY, default ON, issue
+// Cross-family adversarial refuter (ZERO_HUNT_CROSS_FAMILY, default ON, issue
 // #661): force the refute pass onto a DIFFERENT model family than the finder
 // before a finding is promoted, so their errors decorrelate. Degrades to the
 // same-family refute (never to a dropped finding) when only one provider is
@@ -479,7 +479,7 @@ export type {
 export type { RefuteDecorrelation } from "./stages/hunt-scan.js";
 // Kernel archetype catalog (multi-archetype hunt seeding; ported from 0verse's
 // 90-archetype registry, kernel-domain subset). Data + brief mapping are always
-// inert/available; `planArchetypeSweep` is env-gated (0SEC_ARCHETYPE_SWEEP=1).
+// inert/available; `planArchetypeSweep` is env-gated (ZERO_ARCHETYPE_SWEEP=1).
 export {
   kernelArchetypesPath,
   loadKernelArchetypes,
@@ -819,7 +819,7 @@ export type {
 // reaching-free fixpoints). Exported so other checkers can reuse the analysis.
 export { parseC, findViolationsDataflow } from "./stages/c-dataflow.js";
 export type { DataflowFindOptions } from "./stages/c-dataflow.js";
-// Engine A → seeded-hunt adapter (`0sec hunt --invariant`): derive the
+// Engine A → seeded-hunt adapter (`0 hunt --invariant`): derive the
 // subsystem scope from the seed diff, build-or-load its invariant model, and
 // format the model + deterministic violation hypotheses as a finder-prompt
 // block appended to the hunt brief.
@@ -833,7 +833,7 @@ export type {
   InvariantHuntContextInput,
   InvariantHuntContext,
 } from "./stages/invariant-hunt-context.js";
-// Graph-slice finder stage (`0sec hunt --graph-slice`): the deterministic
+// Graph-slice finder stage (`0 hunt --graph-slice`): the deterministic
 // interprocedural slicer over a pre-exported Joern CPG (graphson JSON) + its
 // seed-diff adapter. Feeds the finder a compact cross-function/cross-file
 // reachability slice around the fix site — the multi-step chain the flat
@@ -870,7 +870,7 @@ export type {
 // Race-widening smell-hunter (kernelCTF Pipeline #3): the LLM hunts the
 // ExpRace/Calif smell — unlock(A) -> [sleep/mutex/GFP_KERNEL alloc/copy_from_user]
 // -> lock(B) with attacker state across the gap — and maps each smell's
-// `widenHint` onto the 0SEC_KERNEL_QEMU_WIDEN_* prover knobs. Sibling of
+// `widenHint` onto the ZERO_KERNEL_QEMU_WIDEN_* prover knobs. Sibling of
 // variant/invariant-candidates; plugs into runHuntScan.
 export { generateRaceSmellCandidates, widenEnvFor, KERNELCTF_TIER1_RACE_GRID } from "./stages/race-smell-candidates.js";
 export type {
@@ -997,7 +997,7 @@ export type {
 export { runPipeline, parseSubsystems } from "./unified-pipeline.js";
 export type { PipelineOptions, PipelineReport } from "./unified-pipeline.js";
 
-// External seed findings (0sec#368). Parser + reader for ND-JSON leads
+// External seed findings (0#368). Parser + reader for ND-JSON leads
 // supplied by upstream probes like GemmaForge (`gemmaforge.leads/v1`).
 export {
   parseSeedFindings,
@@ -1031,7 +1031,7 @@ export type {
   TodoInput,
   TodosEventPayload,
 } from "./agent/index.js";
-// Named bundles of 0SEC_FEATURE_* vars — the documented way to enable the
+// Named bundles of ZERO_FEATURE_* vars — the documented way to enable the
 // full FP moat for an A/B run. See `agent/feature-presets.ts`.
 export {
   FEATURE_PRESETS,
@@ -1146,7 +1146,7 @@ export type { DBScan, DBFinding, DBTarget, DBAttackResult } from "./db/schema.js
 export { parseApiSpec } from "./api-spec.js";
 export type { ApiSpecSummary, ApiSpecEndpoint, ApiSpecParameter, ApiSpecAuthScheme } from "./api-spec.js";
 
-// Vulnerability intelligence tools (0sec#439)
+// Vulnerability intelligence tools (0#439)
 export {
   defaultIntelCacheDir,
   IntelCache,
@@ -1247,7 +1247,7 @@ export type {
   DisclosureDecision,
 } from "./triage/verify-verdict.js";
 // #659 / #1278 — the pov_oracle bucketing (which categories delegate to the
-// out-of-band OAST-callback oracle). Consumed by `0sec verify` to decide when
+// out-of-band OAST-callback oracle). Consumed by `0 verify` to decide when
 // a finding's PoV provenance is an OAST callback.
 export { oracleForCategory } from "./triage/pov-gate.js";
 export type { PovOracle } from "./triage/pov-gate.js";
@@ -1294,7 +1294,7 @@ export type {
 
 // Public-advisory novelty gate (issue #851). The `0cloud findings
 // novelty-recheck` command resolves `mod.resolveNovelty` off this root import
-// (a non-literal dynamic `import("@0sec/core")`), so it MUST be re-exported
+// (a non-literal dynamic `import("@0/core")`), so it MUST be re-exported
 // here, not only via the triage barrel — otherwise the recheck throws
 // "mod.resolveNovelty is not a function" for every finding.
 export { resolveNovelty } from "./triage/publishability-sources.js";
@@ -1383,8 +1383,8 @@ export {
 export type { ToolCallLogEntry, ToolCallsLogPayload } from "./agent/action-log.js";
 
 // Opt-in cloud-sink: POST findings/leads to the orchestrator
-// (`POST /scans/:id/findings`) when 0SEC_CLOUD_SINK + 0SEC_CLOUD_SCAN_ID are
-// set. Exposed so `0sec hunt` can ingest its gated leads as candidate
+// (`POST /scans/:id/findings`) when ZERO_CLOUD_SINK + ZERO_CLOUD_SCAN_ID are
+// set. Exposed so `0 hunt` can ingest its gated leads as candidate
 // findings the same way scan/review reach the cloud (#1051).
 export { getCloudSinkConfig, postFinding } from "./cloud-sink.js";
 export type { CloudSinkConfig } from "./cloud-sink.js";
@@ -1393,7 +1393,7 @@ export type { CloudSinkConfig } from "./cloud-sink.js";
 export { parseCrashReport, crashToFinding, ingestArtifactsFromDirectory, ingestArtifactsFromFile, ingestFile, ingestDirectory, crashTypeToCategory, crashSeverity, reviewKernelCrashSubsystems } from "./ingest/index.js";
 export type { KernelCrashArtifact, KernelSubsystemReviewOptions, KernelSubsystemReviewResult, KernelSubsystemReviewRunner, KernelSubsystemReviewRunnerInput, KernelSubsystemReviewSkip } from "./ingest/index.js";
 
-// Kernel advisory variant hunting (foxguard SARIF → 0sec findings)
+// Kernel advisory variant hunting (foxguard SARIF → 0 findings)
 export {
   foxguardFindingToKernelVariantFinding,
   runKernelVariantHunt,
@@ -1403,7 +1403,7 @@ export type {
   KernelVariantHuntReport,
 } from "./kernel/index.js";
 
-// Kernel attack surface enumeration (0sec#471)
+// Kernel attack surface enumeration (0#471)
 export {
   KNOWN_ATTACK_SURFACES,
   DISTRO_DEFAULTS,
@@ -1515,7 +1515,7 @@ export type {
 
 // kernelCTF patch-gap 1day monitor (upstream-fixed CVE feed → target-tree
 // presence check → kernelCTF reachability gate → ranked candidates). See
-// 0sec/packages/core/src/kernel/patch-gap.ts.
+// 0/packages/core/src/kernel/patch-gap.ts.
 export { parseVulnsCveRecord, loadVulnsFeedFromDir, defaultVulnsFeedIo } from "./kernel/index.js";
 export type { UpstreamFixEntry, RawVulnsCveRecord, VulnsFeedIo, LoadVulnsFeedOptions } from "./kernel/index.js";
 export {
@@ -1798,8 +1798,8 @@ export type {
   VerifyKernelFinding,
 } from "./cve/index.js";
 
-// Cloud event-bus sink (0SEC_CLOUD_EVENTS=1 → emit `0SEC_EVENT_<TYPE>`
-// lines on stdout for the 0sec-cloud worker-controller to relay).
+// Cloud event-bus sink (ZERO_CLOUD_EVENTS=1 → emit `ZERO_EVENT_<TYPE>`
+// lines on stdout for the 0-cloud worker-controller to relay).
 // The CLI entry must call `maybeSubscribeCloudEventSink()` so the sink
 // subscribes once; without that call the sink module is dead code and
 // the cloud's live-trace UI stays dark for every scan.
@@ -1811,7 +1811,7 @@ export {
   presentationEventSink,
 } from "./events/bus.js";
 // Consent-gated analytics pipeline — the single choke point that may transmit
-// analytics. The CLI entry must set `0SEC_ANALYTICS_LEVEL` from the operator's
+// analytics. The CLI entry must set `ZERO_ANALYTICS_LEVEL` from the operator's
 // setting and call `maybeSubscribeAnalyticsPipeline()` (mirrors the cloud sink
 // wiring); without that call the pipeline never subscribes and transmits
 // nothing. USAGE tier only for now — command/code/target/finding collectors
@@ -1840,7 +1840,7 @@ export {
   type ContributionPurpose, type ContributionClientPolicy, type RunContributionClientConfig,
   type BeginContribution, type ContributionUploadResult,
 } from "./telemetry/run-contribution.js";
-// Operational NDJSON stderr sink (0SEC_LOG_FORMAT=json). Writes one
+// Operational NDJSON stderr sink (ZERO_LOG_FORMAT=json). Writes one
 // NDJSON line per allowlisted lifecycle/cost event to stderr, stripped
 // of all sensitive fields (prompts, responses, reasoning, tool args,
 // finding evidence, token deltas, auth material, raw error text).
@@ -1848,8 +1848,8 @@ export {
   createOperationalEventSink,
   maybeSubscribeOperationalEventSink,
 } from "./events/operational-sink.js";
-// herdr pane-state sink. Reports only 0sec's coarse working/idle state and
-// non-identifying counters to the local herdr socket, so a 0sec pane stops
+// herdr pane-state sink. Reports only 0's coarse working/idle state and
+// non-identifying counters to the local herdr socket, so a 0 pane stops
 // showing as "unknown" in herdr's sidebar. Inert unless HERDR_ENV=1 with a
 // socket and pane id present. Never carries engagement content — the socket
 // is readable by any process running as this user.
@@ -1960,7 +1960,7 @@ export { getWorkspaceHarnessTrust, setWorkspaceHarnessTrust } from "./plugins/ha
 export type { ExecutablePluginConfiguration } from "./agent/executable-plugins.js";
 export type { InteractiveExecutionChannel } from "./runtime/interactive.js";
 // ── Third-party plugin lifecycle (install → enable → run → hot-swap) ──────────
-// These are the primitives the `0sec plugin` CLI surface drives. They are the
+// These are the primitives the `0 plugin` CLI surface drives. They are the
 // SAME modules the console loads plugins through, so the CLI never duplicates
 // loader/registry/enablement logic — it imports it. Every security invariant
 // (install ≠ enablement, the single capability→gate translation, the re-approval
@@ -2128,7 +2128,7 @@ export {
 } from "./agent/live-agent-state.js";
 export type { LiveAgentState } from "./agent/live-agent-state.js";
 
-// Verification spec evaluator (0sec#193 / 0sec-cloud#111). Re-checks a
+// Verification spec evaluator (0#193 / 0-cloud#111). Re-checks a
 // finding's `verificationSpec` predicates against a repo on disk so cloud's
 // canary watcher (and any OSS caller) can deterministically decide whether
 // a finding is still real after upstream changes.
@@ -2161,7 +2161,7 @@ export type {
 
 // Deterministic replay runner. Consumes a finding's `pocSteps`, sequentially
 // executes them through local, Docker, or QEMU isolation, and emits a canonical
-// `VerificationResult` payload matching `@0sec/shared/verification`. Cloud's
+// `VerificationResult` payload matching `@0/shared/verification`. Cloud's
 // worker-controller can call this directly in-process without shelling out to
 // the CLI.
 //
@@ -2240,8 +2240,8 @@ export type {
   H1BalanceAttributes,
 } from "./h1/index.js";
 
-// 0sec-cloud auth + HTTP client (CLI half of #303). The server-side
-// token-mint endpoint lives in 0sec-cloud and is out of scope here;
+// 0-cloud auth + HTTP client (CLI half of #303). The server-side
+// token-mint endpoint lives in 0-cloud and is out of scope here;
 // see ./cloud/credentials.ts and ./cloud/client.ts for details.
 export {
   loadCloudCredentials,
@@ -2318,7 +2318,7 @@ export type { CweEntry, CvssSuggestion, AdvisoryContext, AdvisoryScreenshot, Ren
 export { DISCLOSURE_STATUSES, TERMINAL_STATUSES, PUBLIC_STATUSES, allowedNextStatuses, canTransition, createDisclosureRecord, transition, isPubliclyDisclosed, IllegalTransitionError, assembleEvidencePack, renderVendorNotificationMarkdown, UnreproducedFindingError } from "./disclose/index.js";
 export type { DisclosureStatus, DisclosureRecord, DisclosureTimelineEvent, TransitionInput, VendorNotificationDraft, EvidencePackOptions } from "./disclose/index.js";
 
-// PR-shaped finding output (0sec#377). `emitFindingsAsPRs` turns reproduced
+// PR-shaped finding output (0#377). `emitFindingsAsPRs` turns reproduced
 // findings into one GitHub PR each (repro + suggested patch from a fix-template
 // registry); non-reproduced findings roll up into a single hypotheses.md.
 export {
@@ -2351,7 +2351,7 @@ export type {
   UnifiedDiffHunk,
 } from "./emit/index.js";
 
-// ── Scan-level pass@k bench harness (0sec#556) ──
+// ── Scan-level pass@k bench harness (0#556) ──
 // Turns the per-finding verify oracles into a scan-level scorecard
 // (success rate, FP rate vs known-negatives, cost-per-success) + CI gate.
 export * from "./bench/index.js";
@@ -2388,7 +2388,7 @@ export type {
   SessionObjectiveServiceConfig,
 } from "./console/index.js";
 
-// ── Recon mode: domain surface enumeration (0sec#769) ──
+// ── Recon mode: domain surface enumeration (0#769) ──
 // Given a domain, probes well-known OpenAPI/Swagger + MCP endpoints and emits
 // a deduped, structured asset inventory consumable as discovered_assets.
 export {
@@ -2406,7 +2406,7 @@ export type {
   ReconResult,
   ReconOptions,
 } from "./recon/recon.js";
-// Active subdomain brute-force (0sec#924) — OFF by default, scope-gated +
+// Active subdomain brute-force (0#924) — OFF by default, scope-gated +
 // time-boxed; merges into runRecon's subdomain assets when enabled.
 export {
   enumerateSubdomainsActive,
@@ -2421,7 +2421,7 @@ export type { ActiveEnumerateOptions } from "./recon/active-subdomains.js";
 // Target-neutral research control plane. Existing engines remain native and
 // opt in through adapters; the common runner owns stage order and evidence.
 export * from "./research/index.js";
-// JS-driven endpoint + secret discovery (0sec#927) — scope-gated,
+// JS-driven endpoint + secret discovery (0#927) — scope-gated,
 // deny-by-default; mines a site's JS bundles for endpoints + redacted secrets.
 export { runJsRecon, MAX_JS_FILES } from "./recon/js-recon.js";
 export type { JsReconOptions, JsReconResult } from "./recon/js-recon.js";
@@ -2429,8 +2429,8 @@ export type { SecretHit, FetchTextResult } from "./recon/js-artifacts.js";
 // Extract JS chunk URLs from a page's HTML (resolves relative, dedupes,
 // .js/.mjs only) — feeds runJsRecon's scriptUrls from a single page fetch.
 export { enumerateJsChunkUrls } from "./recon/stack-fingerprint.js";
-// Live cloud-surface probes (0sec#925) — read-only, gated behind the
-// 0SEC_FEATURE_CLOUD_SURFACE flag AND an engagement ScopePolicy.
+// Live cloud-surface probes (0#925) — read-only, gated behind the
+// ZERO_FEATURE_CLOUD_SURFACE flag AND an engagement ScopePolicy.
 export {
   probeS3Bucket,
   classifyTakeover,
@@ -2477,7 +2477,7 @@ export type {
 } from "./protocol/index.js";
 
 // xnu-fuzz — IOKit user-client fuzzer (dynamic sibling to the xnu-re review
-// profile). See docs/0sec-iokit-fuzzer.md and src/xnu-fuzz/.
+// profile). See docs/0-iokit-fuzzer.md and src/xnu-fuzz/.
 export * from "./xnu-fuzz/index.js";
 export * from "./adgraph/index.js";
 export * from "./identity/index.js";

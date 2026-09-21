@@ -19,7 +19,7 @@
  *
  * 1. **A credential leaves this screen only through the credential store.** The
  *    input sub-step writes the pasted secret with `saveCredentials`, which
- *    persists it owner-only to `~/.0sec/credentials.json`. Nothing is sent
+ *    persists it owner-only to `~/.0/credentials.json`. Nothing is sent
  *    anywhere else.
  *
  * 2. **The raw secret is never rendered.** The input sub-step echoes
@@ -41,10 +41,10 @@
  * Codex owns the browser/device protocol and writes its auth file; completion
  * reloads that file into this process only after a successful device login.
  *
- * The 0sec Cloud path runs the hosted browser login flow via
+ * The 0 Cloud path runs the hosted browser login flow via
  * `hostedBrowserLoginFlow` from commands/auth.ts. Like Codex, it never asks
  * for an API key: it opens the operator's browser, polls for session
- * completion, and persists credentials to ~/.0sec/cloud.env. An AbortSignal
+ * completion, and persists credentials to ~/.0/cloud.env. An AbortSignal
  * drives cancellation on Escape or unmount, preventing late state updates.
  */
 
@@ -439,7 +439,7 @@ export function ConnectScreen({ frame, onBack, onSkip, onExit, recovery, onConne
     hostedSessionRef.current?.cancel();
   }, []);
 
-  // Actually verify a saved 0sec Cloud sign-in against the backend (rather than
+  // Actually verify a saved 0 Cloud sign-in against the backend (rather than
   // trusting that the browser flow completed): call the Bearer-authenticated
   // account endpoint and surface verified / rejected / unreachable in the cloud
   // detail pane. Re-runs whenever the sign-in changes (authEpoch).
@@ -551,7 +551,7 @@ export function ConnectScreen({ frame, onBack, onSkip, onExit, recovery, onConne
     });
     hostedSessionRef.current = startHostedDeviceAuth({
       homeDir,
-      host: (env ?? process.env)["0SEC_CLOUD_HOST"] ?? cloudState.host,
+      host: (env ?? process.env)["ZERO_CLOUD_HOST"] ?? cloudState.host,
       onUpdate: (update) => {
         applyHosted({ ...update, providerId: "hosted" });
         if (["cancelled", "timeout", "failed"].includes(update.phase)) {
@@ -818,7 +818,7 @@ export function ConnectScreen({ frame, onBack, onSkip, onExit, recovery, onConne
       if (recovering) {
         const recoveryTitle = codexRecovery ? "ChatGPT Codex needs device sign-in" : recovery?.title;
         const recoveryDetail = codexRecovery
-          ? "Sign in with your ChatGPT subscription. This is separate from an OpenAI API key and does not require a 0sec account."
+          ? "Sign in with your ChatGPT subscription. This is separate from an OpenAI API key and does not require a 0 account."
           : recovery?.detail;
         if (recoveryTitle) lines.push(...wrap(recoveryTitle, theme.ERROR, true));
         if (recoveryDetail) lines.push(blank(), ...wrap(recoveryDetail, theme.TEXT));

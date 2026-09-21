@@ -9,7 +9,7 @@ import type { AttackCategory, Finding, PocStep, ReportSummary } from "./types.js
 
 // ── Enum mirrors ────────────────────────────────────────────────────────────
 //
-// These mirror the string-literal unions in `@0sec/shared`. We list them
+// These mirror the string-literal unions in `@0/shared`. We list them
 // explicitly (rather than e.g. deriving from a const tuple) so a drift between
 // the schema and the TypeScript type surfaces as a compile error here.
 
@@ -126,7 +126,7 @@ export const pocStepArraySchema = z.array(pocStepSchema);
 
 // ── Finding schema ──────────────────────────────────────────────────────────
 //
-// Mirrors `Finding` in `@0sec/shared`. We `.passthrough()` so undocumented
+// Mirrors `Finding` in `@0/shared`. We `.passthrough()` so undocumented
 // extras (e.g. cloud-side annotations, in-progress fields not yet landed in
 // the shared type) round-trip without rejection. We only enforce the fields
 // the rest of the codebase actually reads.
@@ -167,9 +167,9 @@ export const findingSchema = z
   })
   .passthrough();
 
-// ── ReportSummary schema (used by `0sec scan --replay`) ───────────────────
+// ── ReportSummary schema (used by `0 scan --replay`) ───────────────────
 //
-// Mirrors `ReportSummary` in `@0sec/shared` — a flat object of seven
+// Mirrors `ReportSummary` in `@0/shared` — a flat object of seven
 // non-negative integer counters. The CLI reads this back from the
 // `scans.summary` DB column on `--replay`; an older schema version or a
 // corrupt row would otherwise crash the replay renderer (which does

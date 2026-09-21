@@ -1,6 +1,6 @@
 """Stage 3 — foxguard static pre-pass over Ghidra's decompiled C (#3).
 
-foxguard is the 0sec C-taint scanner (a fast, free, multi-language SAST with
+foxguard is the 0 C-taint scanner (a fast, free, multi-language SAST with
 cross-file taint tracking and SARIF output). Here we point it at the *decompiled*
 C that the Ghidra backend recovered and treat every hit as a **hypothesis, never
 a finding** (guidance §#3 — Infer's ~99.9% FP lesson: high-recall generator,

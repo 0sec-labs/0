@@ -1,6 +1,6 @@
-// Credentials supplied to the 0sec process must not reach agent-controlled
+// Credentials supplied to the 0 process must not reach agent-controlled
 // child processes. This is defense in depth only: credentials retained by the
-// parent process are a separate process-isolation problem (0sec#134).
+// parent process are a separate process-isolation problem (0#134).
 //
 // Two layers, most-general first:
 //
@@ -16,7 +16,7 @@
 //
 //   2. VENDOR-SPECIFIC NAMES — kept for documentation / auditability even where
 //      a generic shape already covers them, so the security boundary reads as an
-//      explicit inventory of what 0sec knows it handles.
+//      explicit inventory of what 0 knows it handles.
 const SENSITIVE_ENV_PATTERNS = [
   // ── Generic credential shapes (see note above) ──────────────────────────
   "TOKEN", // *_TOKEN, AWS_SESSION_TOKEN, API_TOKEN, …
@@ -58,20 +58,20 @@ const SENSITIVE_ENV_PATTERNS = [
   "NVD_API",
   "E2B_API",
   "WPSCAN_API_TOKEN",
-  "0SEC_WPSCAN_API_TOKEN",
+  "ZERO_WPSCAN_API_TOKEN",
   "GITHUB_TOKEN",
   "GITLAB_TOKEN",
   "GH_TOKEN",
   "GL_TOKEN",
   // Per-dispatch secrets injected by 0cloud's worker-controller.
-  "0SEC_CLOUD_TOKEN",
-  "0SEC_CHATGPT_ACCESS_TOKEN",
-  "0SEC_CHATGPT_OAUTH_REFRESH_TOKEN",
-  "0SEC_GITHUB_TOKEN",
-  "0SEC_GITLAB_TOKEN",
-  "0SEC_TARGET_AUTH_JSON",
-  "0SEC_GRAPH_ACCESS_TOKEN",
-  "0SEC_LLM_TARGET_KEY",
+  "ZERO_CLOUD_TOKEN",
+  "ZERO_CHATGPT_ACCESS_TOKEN",
+  "ZERO_CHATGPT_OAUTH_REFRESH_TOKEN",
+  "ZERO_GITHUB_TOKEN",
+  "ZERO_GITLAB_TOKEN",
+  "ZERO_TARGET_AUTH_JSON",
+  "ZERO_GRAPH_ACCESS_TOKEN",
+  "ZERO_LLM_TARGET_KEY",
 ] as const;
 
 /**
@@ -123,9 +123,9 @@ const CHILD_ENV_ALLOWLIST = [
   "AUTH_VALUE",
   "AUTH_CURL_FLAG",
   // Existing child-runtime configuration contract; each name is non-secret.
-  "0SEC_FEATURE_JIT_SKILLS",
-  "0SEC_BASH_TIMEOUT_MS",
-  "0SEC_CLOUD_SCAN_ID",
+  "ZERO_FEATURE_JIT_SKILLS",
+  "ZERO_BASH_TIMEOUT_MS",
+  "ZERO_CLOUD_SCAN_ID",
 ] as const;
 
 /**

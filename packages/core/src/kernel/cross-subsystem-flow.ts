@@ -1,5 +1,5 @@
 /**
- * Cross-subsystem data flow tracing for kernel reviews (0sec#469).
+ * Cross-subsystem data flow tracing for kernel reviews (0#469).
  *
  * Bugs like Copy Fail (CVE-2026-31431) emerge from interactions between
  * subsystems — no single function contains the vulnerability. This module

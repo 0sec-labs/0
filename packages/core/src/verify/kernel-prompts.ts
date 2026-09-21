@@ -18,7 +18,7 @@
 
 import { existsSync, readFileSync, statSync, readdirSync } from "node:fs";
 import { join, relative } from "node:path";
-import type { Finding } from "@0sec/shared";
+import type { Finding } from "@0/shared";
 import { parseFaultingPc, parseSlabCache } from "../triage/kernel-primitive.js";
 import {
   rankSinkReachability,

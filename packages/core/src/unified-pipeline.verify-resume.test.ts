@@ -1,5 +1,5 @@
 /**
- * 0sec#416 — verify-resume cluster fixes.
+ * 0#416 — verify-resume cluster fixes.
  *
  * Three sibling bugs in the verify phase of `unified-pipeline.ts`:
  *
@@ -34,8 +34,8 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import { copyFileSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { Finding } from "@0sec/shared";
-import { osecDB } from "@0sec/db";
+import type { Finding } from "@0/shared";
+import { osecDB } from "@0/db";
 
 type PipelineEvent = {
   type: string;
@@ -58,9 +58,9 @@ const runFoxguardScanMock = vi.fn();
 vi.mock("./shared-analysis.js", () => ({
   runFoxguardScan: runFoxguardScanMock,
   runSemgrepScan: runSemgrepScanMock,
-  selectedStaticScanner: () => process.env["0SEC_STATIC"] === "semgrep" ? "semgrep" : "foxguard",
+  selectedStaticScanner: () => process.env["ZERO_STATIC"] === "semgrep" ? "semgrep" : "foxguard",
   runSelectedStaticScan: (...args: unknown[]) =>
-    process.env["0SEC_STATIC"] === "semgrep"
+    process.env["ZERO_STATIC"] === "semgrep"
       ? runSemgrepScanMock(...args)
       : runFoxguardScanMock(...args),
 }));
@@ -125,7 +125,7 @@ let schemaDirectory: string;
 let schemaPath: string;
 
 beforeAll(() => {
-  schemaDirectory = mkdtempSync(join(tmpdir(), "0sec-verify-resume-schema-"));
+  schemaDirectory = mkdtempSync(join(tmpdir(), "0-verify-resume-schema-"));
   schemaPath = join(schemaDirectory, "empty.db");
   const db = new osecDB(schemaPath);
   db.close();
@@ -136,13 +136,13 @@ afterAll(() => {
 });
 
 function freshTmpDir(prefix: string): string {
-  const dir = mkdtempSync(join(tmpdir(), `0sec-verify-resume-${prefix}-`));
+  const dir = mkdtempSync(join(tmpdir(), `0-verify-resume-${prefix}-`));
   tempDirs.push(dir);
   return dir;
 }
 
 function freshDbPath(): string {
-  const dbPath = join(freshTmpDir("db"), "0sec.db");
+  const dbPath = join(freshTmpDir("db"), "0.db");
   // Reuse only the empty schema; verdicts still cross real file close/reopens.
   copyFileSync(schemaPath, dbPath);
   return dbPath;
@@ -202,23 +202,23 @@ beforeEach(() => {
     providerLabel: "Anthropic",
   };
 
-  originalPerItemEnv = process.env["0SEC_FEATURE_PER_ITEM_ORCHESTRATION"];
-  process.env["0SEC_FEATURE_PER_ITEM_ORCHESTRATION"] = "0";
+  originalPerItemEnv = process.env["ZERO_FEATURE_PER_ITEM_ORCHESTRATION"];
+  process.env["ZERO_FEATURE_PER_ITEM_ORCHESTRATION"] = "0";
 
-  originalStaticAnalyzer = process.env["0SEC_STATIC"];
-  delete process.env["0SEC_STATIC"];
+  originalStaticAnalyzer = process.env["ZERO_STATIC"];
+  delete process.env["ZERO_STATIC"];
 });
 
 afterEach(() => {
   if (originalPerItemEnv === undefined) {
-    delete process.env["0SEC_FEATURE_PER_ITEM_ORCHESTRATION"];
+    delete process.env["ZERO_FEATURE_PER_ITEM_ORCHESTRATION"];
   } else {
-    process.env["0SEC_FEATURE_PER_ITEM_ORCHESTRATION"] = originalPerItemEnv;
+    process.env["ZERO_FEATURE_PER_ITEM_ORCHESTRATION"] = originalPerItemEnv;
   }
   if (originalStaticAnalyzer === undefined) {
-    delete process.env["0SEC_STATIC"];
+    delete process.env["ZERO_STATIC"];
   } else {
-    process.env["0SEC_STATIC"] = originalStaticAnalyzer;
+    process.env["ZERO_STATIC"] = originalStaticAnalyzer;
   }
   for (const dir of tempDirs.splice(0)) {
     rmSync(dir, { recursive: true, force: true });

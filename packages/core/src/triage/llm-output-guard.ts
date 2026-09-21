@@ -9,7 +9,7 @@
  */
 
 import { mkdirSync, writeFileSync } from "node:fs";
-import { homeStateDir } from "@0sec/shared";
+import { homeStateDir } from "@0/shared";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
@@ -94,7 +94,7 @@ export interface DumpModelOutputOpts {
   stage: "dedupe" | "rank";
   /** Zero-based attempt number within this batch call. */
   attempt: number;
-  /** Artifacts output directory. Defaults to `~/.0sec/artifacts/`. */
+  /** Artifacts output directory. Defaults to `~/.0/artifacts/`. */
   dir?: string;
   /** Optional scan identifier included in the filename and payload. */
   scanId?: string;

@@ -8,26 +8,26 @@ const referencePath = resolve(root, "docs/src/content/docs/commands.md");
 
 // These are reviewed corrections to registered help, not generated prose.
 const optionDescriptions = new Map([
-  ["0sec scan|--require-scope", "Set 0SEC_REQUIRE_SCOPE for scope-aware execution paths. Ordinary live-target scan already refuses missing scope, independently of this flag."],
-  ["0sec scan|--dry-run", "For --emit pr only: print proposed git/gh emission commands. The scan itself still executes."],
-  ["0sec review|--dry-run", "For --emit pr only: print proposed git/gh emission commands. The source review itself still executes."],
-  ["0sec console|--mode", "Autonomy mode: standard, recon, copilot, yolo. YOLO accepts absolute public-network targets without a launch target; explicit restrictions and exclusions still apply."],
-  ["0sec console|--yolo", "Shortcut for --mode yolo. Omits per-action approval prompts; explicit restrictions and exclusions still apply."],
-  ["0sec service start|--cost-ceiling", "Sends secure_config.cost_ceiling, but the reviewed server expects cost_ceiling_usd. Do not rely on this flag for managed budget enforcement without confirming deployed compatibility."],
-  ["0sec hunt|--max-candidates", "Registered but not forwarded by the current CLI handler; do not rely on this flag to bound work."],
-  ["0sec secure|--cost-ceiling", "Requested model-cost limit. Current accounting checks the repair ledger separately from investigation usage; this is not a guaranteed whole-workflow spend cap."],
-  ["0sec secure|--max-findings", "Maximum findings selected for repair. Inspect blockedFindingIds separately from the overall run status."],
-  ["0sec scan|--cost-ceiling", "Soft estimated-model-cost ceiling; partial findings are retained when enforcement trips. In-flight work may overshoot. Overrides 0SEC_COST_CEILING_USD."],
-  ["0sec audit|--cost-ceiling", "Soft estimated-model-cost ceiling; partial findings are retained when enforcement trips. In-flight work may overshoot. Overrides 0SEC_COST_CEILING_USD."],
-  ["0sec review|--cost-ceiling", "Soft estimated-model-cost ceiling; partial findings are retained when enforcement trips. In-flight work may overshoot. Overrides 0SEC_COST_CEILING_USD."],
-  ["0sec ingest|--expected-signature", "Registered but not forwarded to kernel verification; do not rely on this option as a required crash-signature match."],
-  ["0sec deep-review|--cost-ceiling", "Shared estimated-model-cost ceiling for planner and finder work. Checks can stop further work after recorded usage reaches the threshold; in-flight calls can overshoot."],
-  ["0sec ingest|--cost-ceiling", "Estimated model-cost ceiling for subsystem review, not a guaranteed whole-job billing cap."],
-  ["0sec console|--role", "Tool set to expose: audit, review, discovery, attack, verify, or report. Defaults to audit; role selection is not authorization or OS isolation."],
-  ["0sec console|--finding-intent", "Finding workflow: investigate, verify, draft_fix, or impact. These instructions do not independently enforce tool permissions."],
-  ["0sec console|--scope", "Initial authorization scope. Non-TUI YOLO requires at least one in_scope entry; a scope file is not an OS-isolation boundary."],
-  ["0sec console|--model", "Model selection for the console. Saved-session precedence differs across TUI, readline, and print paths; see Console."],
-  ["0sec review|--target", "Alias for --profile; accepts the supported review profiles, with app normalized to default."],
+  ["0 scan|--require-scope", "Set ZERO_REQUIRE_SCOPE for scope-aware execution paths. Ordinary live-target scan already refuses missing scope, independently of this flag."],
+  ["0 scan|--dry-run", "For --emit pr only: print proposed git/gh emission commands. The scan itself still executes."],
+  ["0 review|--dry-run", "For --emit pr only: print proposed git/gh emission commands. The source review itself still executes."],
+  ["0 console|--mode", "Autonomy mode: standard, recon, copilot, yolo. YOLO accepts absolute public-network targets without a launch target; explicit restrictions and exclusions still apply."],
+  ["0 console|--yolo", "Shortcut for --mode yolo. Omits per-action approval prompts; explicit restrictions and exclusions still apply."],
+  ["0 service start|--cost-ceiling", "Sends secure_config.cost_ceiling, but the reviewed server expects cost_ceiling_usd. Do not rely on this flag for managed budget enforcement without confirming deployed compatibility."],
+  ["0 hunt|--max-candidates", "Registered but not forwarded by the current CLI handler; do not rely on this flag to bound work."],
+  ["0 secure|--cost-ceiling", "Requested model-cost limit. Current accounting checks the repair ledger separately from investigation usage; this is not a guaranteed whole-workflow spend cap."],
+  ["0 secure|--max-findings", "Maximum findings selected for repair. Inspect blockedFindingIds separately from the overall run status."],
+  ["0 scan|--cost-ceiling", "Soft estimated-model-cost ceiling; partial findings are retained when enforcement trips. In-flight work may overshoot. Overrides ZERO_COST_CEILING_USD."],
+  ["0 audit|--cost-ceiling", "Soft estimated-model-cost ceiling; partial findings are retained when enforcement trips. In-flight work may overshoot. Overrides ZERO_COST_CEILING_USD."],
+  ["0 review|--cost-ceiling", "Soft estimated-model-cost ceiling; partial findings are retained when enforcement trips. In-flight work may overshoot. Overrides ZERO_COST_CEILING_USD."],
+  ["0 ingest|--expected-signature", "Registered but not forwarded to kernel verification; do not rely on this option as a required crash-signature match."],
+  ["0 deep-review|--cost-ceiling", "Shared estimated-model-cost ceiling for planner and finder work. Checks can stop further work after recorded usage reaches the threshold; in-flight calls can overshoot."],
+  ["0 ingest|--cost-ceiling", "Estimated model-cost ceiling for subsystem review, not a guaranteed whole-job billing cap."],
+  ["0 console|--role", "Tool set to expose: audit, review, discovery, attack, verify, or report. Defaults to audit; role selection is not authorization or OS isolation."],
+  ["0 console|--finding-intent", "Finding workflow: investigate, verify, draft_fix, or impact. These instructions do not independently enforce tool permissions."],
+  ["0 console|--scope", "Initial authorization scope. Non-TUI YOLO requires at least one in_scope entry; a scope file is not an OS-isolation boundary."],
+  ["0 console|--model", "Model selection for the console. Saved-session precedence differs across TUI, readline, and print paths; see Console."],
+  ["0 review|--target", "Alias for --profile; accepts the supported review profiles, with app normalized to default."],
 ]);
 
 const escapeTable = (value) => String(value ?? "")
@@ -35,7 +35,7 @@ const escapeTable = (value) => String(value ?? "")
   .replaceAll("<", "&lt;").replaceAll(">", "&gt;");
 
 const docsDescription = (value) => String(value ?? "")
-  .replace(/(?<![\w./:@-])0sec(?![\w./:@#-])/g, "0");
+  .replace(/(?<![\w./:@-])0(?![\w./:@#-])/g, "0");
 
 function commandPath(command) {
   return command.parent ? `${commandPath(command.parent)} ${command.name()}` : command.name();
@@ -75,7 +75,7 @@ function updateTable(section, heading, replacement, additions) {
 /** Update mechanical contracts only; preserve descriptions, guides, and safety notes. */
 export function syncReference(text, program) {
   const commands = collect(program);
-  const byHeading = new Map(commands.map((command) => [commandPath(command).replace(/^0sec /, ""), command]));
+  const byHeading = new Map(commands.map((command) => [commandPath(command).replace(/^0 /, ""), command]));
   const seen = new Set();
   const errors = [];
   // Each heading owns its body only. Human-written nested sections stay untouched.
@@ -94,7 +94,7 @@ export function syncReference(text, program) {
       const name = arg.name() + (arg.variadic ? "..." : "");
       return arg.required ? `<${name}>` : `[${name}]`;
     });
-    const usage = [commandPath(command).replace(/^0sec(?= |$)/, "0"), ...(command.options.length ? ["[options]"] : []), ...args].join(" ");
+    const usage = [commandPath(command).replace(/^0(?= |$)/, "0"), ...(command.options.length ? ["[options]"] : []), ...args].join(" ");
     if (!/^```text\n0 [^\n]*\n```/m.test(part)) {
       errors.push(`Missing usage block: ${heading}`);
       return part;
@@ -105,7 +105,7 @@ export function syncReference(text, program) {
     section = updateTable(section, "Option", optionTable(command), additions);
     const aliases = command.aliases().length ? `Aliases: ${command.aliases().map((alias) => `\`${alias}\``).join(", ")}.\n` : "";
     const children = command.commands.length ? `Subcommands: ${command.commands.map((child) => {
-      const path = commandPath(child).replace(/^0sec /, "");
+      const path = commandPath(child).replace(/^0 /, "");
       return `[${child.name()}](#${path.replaceAll(" ", "-")})`;
     }).join(" · ")}.\n` : "";
     for (const [label, value] of [["Aliases", aliases], ["Subcommands", children]]) {
@@ -131,7 +131,7 @@ async function main() {
   const requireCli = createRequire(resolve(root, "packages/cli/package.json"));
   const { Command } = requireCli("commander");
   const registrations = await import("../packages/cli/dist/commands/index.js");
-  const program = new Command().name("0sec");
+  const program = new Command().name("0");
   for (const [name, register] of Object.entries(registrations)) {
     if (/^register.*Command$/.test(name) && typeof register === "function") register(program);
   }
@@ -150,7 +150,7 @@ async function main() {
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   main().catch((error) => {
     console.error(error.message);
-    console.error("This command reads compiled CLI registrations. Run pnpm --filter '0sec-cli...' build first.");
+    console.error("This command reads compiled CLI registrations. Run pnpm --filter '@0/cli...' build first.");
     process.exitCode = 1;
   });
 }

@@ -5,7 +5,7 @@ import type {
   DesktopConsoleToolCall,
   DesktopConsoleTurnBudget,
   DesktopConsoleUsage,
-} from "@0sec/shared";
+} from "@0/shared";
 
 // ── Reduced Turn Types ───────────────────────────────────────────
 

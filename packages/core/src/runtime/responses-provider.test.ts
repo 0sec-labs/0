@@ -51,14 +51,14 @@ describe("provider Responses selection", () => {
 
   beforeEach(() => {
     originalEnv = process.env;
-    home = mkdtempSync(join(tmpdir(), "0sec-responses-provider-"));
+    home = mkdtempSync(join(tmpdir(), "0-responses-provider-"));
     // This suite asserts single-request WIRE shaping (usage retention, tool
     // non-promotion, terminal-event handling). The transient empty-stream retry
     // added in executeNative would otherwise re-issue the "response stream
     // failed" / truncated-stream fixtures 3x, firing onUsage repeatedly and
     // breaking toHaveBeenCalledOnce. Pin one attempt here; the retry loop itself
     // is covered by llm-api.stream-retry.test.ts.
-    process.env = { HOME: home, "0SEC_SKIP_PROVIDER_BANNER": "1", "0SEC_LLM_STREAM_MAX_ATTEMPTS": "1" };
+    process.env = { HOME: home, "ZERO_SKIP_PROVIDER_BANNER": "1", "ZERO_LLM_STREAM_MAX_ATTEMPTS": "1" };
     __resetFallbackChainForTests();
     // Every request is intercepted; no operator credentials or external network.
     fetchMock = vi.fn<typeof fetch>(async () => { throw new Error("Unexpected network request"); });
@@ -149,7 +149,7 @@ describe("provider Responses selection", () => {
     Object.assign(process.env, {
       OPENAI_API_KEY: "fixture-primary", OPENROUTER_API_KEY: "fixture-fallback",
       OPENAI_WIRE_API: "chat_completions", OPENROUTER_WIRE_API: "responses",
-      "0SEC_LLM_FALLBACK": "openrouter:openai/gpt-4.1", "0SEC_LLM_429_MAX_RETRIES": "0",
+      "ZERO_LLM_FALLBACK": "openrouter:openai/gpt-4.1", "ZERO_LLM_429_MAX_RETRIES": "0",
     });
     fetchMock.mockImplementation(async (url) => String(url).endsWith("/chat/completions")
       ? Response.json({ error: { message: "rate limited" } }, { status: 429 })
@@ -276,16 +276,16 @@ describe("provider Responses selection", () => {
 
   const codexConfig: Partial<RuntimeConfig> = {
     provider: "chatgpt-codex", model: "gpt-fixture",
-    env: { "0SEC_CHATGPT_ACCESS_TOKEN": "fixture-access", "0SEC_CHATGPT_ACCOUNT_ID": "fixture-account" },
+    env: { "ZERO_CHATGPT_ACCESS_TOKEN": "fixture-access", "ZERO_CHATGPT_ACCOUNT_ID": "fixture-account" },
   };
 
   it.each([
     { ending: "EOF", tail: [] },
     { ending: "misleading completion", tail: [{ type: "response.completed", response: { status: "completed", output: [] } }] },
   ])("preserves Codex policy failure at $ending without retrying or promoting tools", async ({ tail }) => {
-    process.env["0SEC_LLM_STREAM_MAX_ATTEMPTS"] = "3";
+    process.env["ZERO_LLM_STREAM_MAX_ATTEMPTS"] = "3";
     const tracePath = join(home, "native.jsonl");
-    process.env["0SEC_TRACE_NATIVE_RESPONSES"] = tracePath;
+    process.env["ZERO_TRACE_NATIVE_RESPONSES"] = tracePath;
     const events = [
       { type: "response.output_item.done", item: { type: "function_call", call_id: "unsafe_to_run", name: "inspect", arguments: "{}" } },
       { type: "response.failed", response: {
@@ -317,7 +317,7 @@ describe("provider Responses selection", () => {
     { event: { type: "response.incomplete", response: { status: "incomplete", incomplete_details: { reason: "max_output_tokens" } } }, detail: "max_output_tokens" },
     { event: { type: "response.completed", response: { status: "failed", error: { code: "server_error" } } }, detail: "server_error" },
   ])("does not turn Codex $detail into completion or transient EOF", async ({ event, detail }) => {
-    process.env["0SEC_LLM_STREAM_MAX_ATTEMPTS"] = "3";
+    process.env["ZERO_LLM_STREAM_MAX_ATTEMPTS"] = "3";
     const events = [
       { type: "response.output_item.done", item: { type: "function_call", call_id: "unsafe_to_run", name: "inspect", arguments: "{}" } },
       event,
@@ -370,7 +370,7 @@ describe("provider Responses selection", () => {
 
   it("keeps malformed and unterminated SSE distinct from a provider rejection", async () => {
     const tracePath = join(home, "native.jsonl");
-    process.env["0SEC_TRACE_NATIVE_RESPONSES"] = tracePath;
+    process.env["ZERO_TRACE_NATIVE_RESPONSES"] = tracePath;
     const unterminated = `data: ${JSON.stringify({ type: "response.completed", response: { status: "completed" } })}`;
     fetchMock.mockResolvedValueOnce(new Response(`data: invalid-json\n\ndata: null\n\n${unterminated}`, {
       headers: { "content-type": "text/event-stream" },

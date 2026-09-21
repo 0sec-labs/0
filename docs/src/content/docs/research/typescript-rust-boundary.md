@@ -78,7 +78,7 @@ Until then, a full rewrite is premature.
 ## Near-term plan
 
 1. Keep 0's agent and pipeline orchestration in TypeScript.
-2. Keep FoxGuard as the default static lead generator while preserving `0SEC_STATIC=semgrep` for comparison and compatibility.
+2. Keep FoxGuard as the default static lead generator while preserving `ZERO_STATIC=semgrep` for comparison and compatibility.
 3. Require ablation evidence before removing Semgrep from any additional runtime path.
 4. Add Rust engines only behind stable JSON/SARIF contracts.
 5. Consider an engine or runner binary after the engine contracts stabilize.

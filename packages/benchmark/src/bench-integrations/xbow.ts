@@ -11,7 +11,7 @@ import {
   type BenchScan,
   type BenchVariant,
   type TargetProvisioner,
-} from "@0sec/core";
+} from "@0/core";
 import {
   buildXbowChallenge,
   loadXbowChallenges,
@@ -99,7 +99,7 @@ export interface XbowBenchIntegrationOptions {
 /**
  * Integrates XBOW's build/reset lifecycle with the single core bench runner.
  * It owns only suite-specific lifecycle behavior; scoring and tournament logic
- * remain in @0sec/core/bench.
+ * remain in @0/core/bench.
  */
 export function createXbowBenchIntegration(
   opts: XbowBenchIntegrationOptions = {},
@@ -152,7 +152,7 @@ export function createXbowBenchIntegration(
         provisioner,
         oracle: new ObjectiveOracle(),
         executionMetadata: {
-          harnessId: variant.harnessId ?? "0sec-agentic",
+          harnessId: variant.harnessId ?? "0-agentic",
           ...(variant.model ? { model: variant.model } : {}),
           ...(variant.runtime ? { runtime: variant.runtime } : {}),
         },

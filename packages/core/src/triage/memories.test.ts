@@ -7,7 +7,7 @@ import {
   type MemoryScope,
   type TriageMemory,
 } from "./memories.js";
-import type { AttackCategory, Finding } from "@0sec/shared";
+import type { AttackCategory, Finding } from "@0/shared";
 import { runStructuredVerify } from "./structured-verify.js";
 import type { NativeRuntime } from "../runtime/types.js";
 

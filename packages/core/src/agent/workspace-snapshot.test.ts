@@ -17,7 +17,7 @@ import {
 
 let root: string;
 beforeEach(() => {
-  root = mkdtempSync(join(tmpdir(), "0sec-snap-"));
+  root = mkdtempSync(join(tmpdir(), "0-snap-"));
 });
 afterEach(() => {
   rmSync(root, { recursive: true, force: true });

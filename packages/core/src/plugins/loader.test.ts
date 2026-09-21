@@ -4,7 +4,7 @@ import { join, sep } from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { homeStateDir } from "@0sec/shared";
+import { homeStateDir } from "@0/shared";
 
 import { gateFlagsFor, type PluginManifest } from "./manifest.js";
 import {
@@ -195,7 +195,7 @@ function install(
 }
 
 beforeEach(() => {
-  root = mkdtempSync(join(tmpdir(), "0sec-plugins-"));
+  root = mkdtempSync(join(tmpdir(), "0-plugins-"));
 });
 
 afterEach(() => {
@@ -259,7 +259,7 @@ describe("plugin id safety", () => {
 
 describe("discovery", () => {
   it("defaults to the per-user state dir and never the project tree", () => {
-    const home = mkdtempSync(join(tmpdir(), "0sec-home-"));
+    const home = mkdtempSync(join(tmpdir(), "0-home-"));
     try {
       expect(pluginsRootDir(home)).toBe(join(homeStateDir(home), "plugins"));
       expect(pluginsRootDir(home).startsWith(homeStateDir(home) + sep)).toBe(true);
@@ -499,7 +499,7 @@ describe("name collisions", () => {
     const spawner: PluginSpawner = (spec, handlers) => {
       const child = new FakeChild(spec, handlers);
       children.push(child);
-      const id = String(spec.env["0SEC_PLUGIN_ID"]);
+      const id = String(spec.env["ZERO_PLUGIN_ID"]);
       queueMicrotask(() => child.handshake(id === "acme.recon" ? first : second));
       return { write: (d) => child.written.push(d), kill: () => (child.killed += 1) };
     };
@@ -1148,7 +1148,7 @@ describe("spawn hardening", () => {
       GITHUB_TOKEN: "ghp_secret",
       AWS_SECRET_ACCESS_KEY: "aws-secret",
       AWS_SESSION_TOKEN: "aws-session",
-      "0SEC_CLOUD_TOKEN": "cloud-secret",
+      "ZERO_CLOUD_TOKEN": "cloud-secret",
       NVD_CREDS: "creds",
       MY_COMPANY_APIKEY: "apikey",
       // target auth: withheld from plugins specifically
@@ -1162,8 +1162,8 @@ describe("spawn hardening", () => {
     expect(env.HOME).toBe("/home/op");
     expect(env.LANG).toBe("en_US.UTF-8");
     expect(env.TMPDIR).toBe("/tmp");
-    expect(env["0SEC_PLUGIN_ID"]).toBe("acme.recon");
-    expect(env["0SEC_PLUGIN_PROTOCOL"]).toBe("1");
+    expect(env["ZERO_PLUGIN_ID"]).toBe("acme.recon");
+    expect(env["ZERO_PLUGIN_PROTOCOL"]).toBe("1");
 
     const serialized = JSON.stringify(env);
     for (const secret of [
@@ -1183,7 +1183,7 @@ describe("spawn hardening", () => {
       "OPENAI_API_KEY",
       "GITHUB_TOKEN",
       "AWS_SECRET_ACCESS_KEY",
-      "0SEC_CLOUD_TOKEN",
+      "ZERO_CLOUD_TOKEN",
       "TARGET",
       "AUTH_HEADER",
       "AUTH_VALUE",
@@ -1234,7 +1234,7 @@ describe("satisfiesMinVersion", () => {
     });
     const result = await host.load("acme.recon");
     expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.errors[0]).toContain("requires @0sec/core");
+    if (!result.ok) expect(result.errors[0]).toContain("requires @0/core");
     expect(fake.children).toHaveLength(0);
   });
 });
@@ -1351,7 +1351,7 @@ describe("integration — real child over real stdio", () => {
         ]) {
           expect(envNames.content).not.toContain(forbidden);
         }
-        expect(envNames.content).toContain("0SEC_PLUGIN_ID");
+        expect(envNames.content).toContain("ZERO_PLUGIN_ID");
         expect(envNames.content).toContain("PATH");
       }
     } finally {

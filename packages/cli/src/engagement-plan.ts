@@ -2,7 +2,7 @@ import {
   expandHomePath,
   isExistingLocalTargetPath,
   isExplicitLocalTargetPath,
-} from "@0sec/core";
+} from "@0/core";
 
 export type EngagementKind = "web" | "source" | "package";
 export type PackageEcosystem = "npm" | "pypi" | "cargo" | "oci";

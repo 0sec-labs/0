@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://0sec.ai/schemas/0verse/acquisition-manifest-v1.schema.json",
+  "$id": "https://0.ai/schemas/0verse/acquisition-manifest-v1.schema.json",
   "title": "0verse firmware acquisition manifest v1",
   "type": "object",
   "additionalProperties": false,

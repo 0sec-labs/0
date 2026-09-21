@@ -32,7 +32,7 @@
 import { execFileSync } from "node:child_process";
 import { readFileSync, lstatSync, realpathSync } from "node:fs";
 import { dirname, resolve, sep } from "node:path";
-import type { SeedFinding } from "@0sec/shared";
+import type { SeedFinding } from "@0/shared";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 

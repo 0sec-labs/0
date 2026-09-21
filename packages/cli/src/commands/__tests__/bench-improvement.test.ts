@@ -15,7 +15,7 @@ import {
   pairwiseDeltas,
   pickChampion,
   type BenchManifest,
-} from "@0sec/core";
+} from "@0/core";
 import {
   canonicalResultJson,
   parseCandidateMetadata,
@@ -45,7 +45,7 @@ const evaluatorBundleDigest = sha256Bytes(
   ),
 );
 const producer = {
-  repository: "0sec-labs/0sec",
+  repository: "0sec-labs/0",
   commitSha: "a".repeat(40),
   treeDigest: `sha256:${"7".repeat(64)}`,
 };
@@ -81,7 +81,7 @@ afterEach(() => {
 });
 
 function root(): string {
-  const value = mkdtempSync(join(tmpdir(), "0sec-improvement-project-"));
+  const value = mkdtempSync(join(tmpdir(), "0-improvement-project-"));
   roots.push(value);
   return value;
 }
@@ -194,7 +194,7 @@ function fixtures() {
   const candidate = {
     schemaVersion: 1,
     id: "osec_source_hypothesis_001",
-    project: "0sec",
+    project: "0",
     change: {
       kind: "prompt",
       knobs: { "source_audit.hypothesis": "Inspect parser state transitions." },

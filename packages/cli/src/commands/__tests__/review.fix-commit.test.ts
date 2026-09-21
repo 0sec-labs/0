@@ -10,7 +10,7 @@ it("rejects variants-only without a fix before starting a model-backed review", 
   const program = new Command();
   program.exitOverride();
   registerReviewCommand(program);
-  await expect(program.parseAsync(["node", "0sec", "review", tmpdir(), "--variants-only"]))
+  await expect(program.parseAsync(["node", "0", "review", tmpdir(), "--variants-only"]))
     .rejects.toThrow(/--fix-commit/);
   expect(runUnified).not.toHaveBeenCalled();
 });

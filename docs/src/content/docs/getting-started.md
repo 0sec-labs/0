@@ -8,7 +8,7 @@ and work on a repository or target you're authorized to test. Model access and
 execution infrastructure are separate from the local engine.
 
 This guide uses `0` as the CLI command. Repository and package paths,
-release asset names, `~/.0sec` state paths, and `0SEC_*` environment variables
+release asset names, `~/.0` state paths, and `ZERO_*` environment variables
 retain their existing technical names.
 
 | Path | What you need | Where the work runs |
@@ -28,28 +28,28 @@ compare `0 --version` and command-specific `--help` with your installed release.
 
 The installer supports Linux x64/arm64 and macOS Apple Silicon. It requires
 `curl` and `sha256sum` or `shasum`, verifies the downloaded checksums, and installs
-the `0` alias and its release binary under `~/.0sec/bin`. It also installs the pinned
+the `0` alias and its release binary under `~/.0/bin`. It also installs the pinned
 FoxGuard companion used by default for static analysis.
 
 ```bash
 # Verified release binary (macOS Apple Silicon / Linux x64/arm64)
-curl -fsSL https://raw.githubusercontent.com/0sec-labs/0sec/main/install.sh | bash
-export PATH="$HOME/.0sec/bin:$PATH"
+curl -fsSL https://raw.githubusercontent.com/0sec-labs/0/main/install.sh | bash
+export PATH="$HOME/.0/bin:$PATH"
 0 --help
 ```
 
 Add the `export` line to your shell profile for future shells. Inspect
-[install.sh](https://github.com/0sec-labs/0sec/blob/main/install.sh) before running
+[install.sh](https://github.com/0sec-labs/0/blob/main/install.sh) before running
 it if your environment requires script review. `INSTALL_DIR` changes the install
 location; `INSTALL_FOXGUARD=0` skips the companion on a pre-provisioned host.
 
 To install a specific release, set `RELEASE_BASE_URL` on the shell running the
-installer to `https://github.com/0sec-labs/0sec/releases/download/<tag>`.
+installer to `https://github.com/0sec-labs/0/releases/download/<tag>`.
 Use the checksums from that same release. The installer does not modify your
 shell profile, and checksum verification is not a signature or code audit.
 
 Windows release builds are experimental. Download the Windows asset from
-[GitHub Releases](https://github.com/0sec-labs/0sec/releases/latest);
+[GitHub Releases](https://github.com/0sec-labs/0/releases/latest);
 `install.sh` supports Linux and macOS only. See
 [Windows installation](/troubleshooting/#install-on-windows).
 On Windows, invoke the downloaded executable by its actual filename; the
@@ -60,7 +60,7 @@ Unix `0` symlink is not installed there.
 With Node.js 24 or newer:
 
 ```bash
-npm install -g 0sec-cli
+npm install -g @0/cli
 0 --help
 ```
 
@@ -75,8 +75,8 @@ Use Node.js 24 or newer and pnpm 9 or newer. The repository pins pnpm through
 commands. See [Console](/console/) for that runtime distinction.
 
 ```bash
-git clone https://github.com/0sec-labs/0sec.git
-cd 0sec
+git clone https://github.com/0sec-labs/0.git
+cd 0
 corepack enable
 pnpm install --frozen-lockfile
 pnpm build
@@ -85,7 +85,7 @@ node packages/cli/dist/index.js --help
 Source builds do not install a global `0` command. Use the built entry point
 shown above; for interactive source work, run `bun packages/cli/dist/index.js`.
 
-The bundled Node entry point is also available as `node dist/0sec.js`.
+The bundled Node entry point is also available as `node dist/0.js`.
 Native dependency installation may need a compiler toolchain on platforms
 without prebuilt addons. The native release workflow uses its own pinned Bun
 compiler; `pnpm build` alone does not produce a standalone executable.
@@ -97,7 +97,7 @@ Docker must be installed and running. The image is a separate execution
 environment; pass only the credentials and mounts needed for the task.
 
 ```bash
-docker run --rm ghcr.io/0sec-labs/0sec:latest --help
+docker run --rm ghcr.io/0sec-labs/0:latest --help
 ```
 For a real scan, mount scope and persist any output you need before using
 `--rm`; files left only inside the container disappear when it exits.
@@ -154,7 +154,7 @@ off your machine.
 0 models --json
 0 balance --json
 
-env 0SEC_SELECTED_PROVIDER=hosted 0SEC_MODEL="<model-id-from-catalog>" \
+env ZERO_SELECTED_PROVIDER=hosted ZERO_MODEL="<model-id-from-catalog>" \
   0 review ./authorized-repo --runtime api
 ```
 
@@ -177,7 +177,7 @@ export ANTHROPIC_API_KEY="your-api-key"
 ```
 
 See [API Keys](/api-keys/) for other providers, Azure and ChatGPT Codex sign-in.
-With multiple credentials, select a matching `--model` or `0SEC_MODEL`.
+With multiple credentials, select a matching `--model` or `ZERO_MODEL`.
 Keep model keys separate from target credentials (`--auth`).
 Never commit keys or paste them into issues.
 
@@ -252,17 +252,17 @@ Create a directory writable by UID 1000, then mount it separately from scope:
 mkdir -p scan-output
 docker run --rm \
   -v "$PWD/scope.json:/work/scope.json:ro" \
-  -v "$PWD/scan-output:/output" -e ANTHROPIC_API_KEY -e 0SEC_RUN_DIR=/output \
-  ghcr.io/0sec-labs/0sec:latest scan \
+  -v "$PWD/scan-output:/output" -e ANTHROPIC_API_KEY -e ZERO_RUN_DIR=/output \
+  ghcr.io/0sec-labs/0:latest scan \
   --target https://app.example.com --mode web --scope /work/scope.json \
   --runtime api --depth quick --cost-ceiling 2 \
   --db-path /output/scan.db --format json
 ```
 
-`0SEC_RUN_DIR` enables the automatically written `report.json` under the mounted
+`ZERO_RUN_DIR` enables the automatically written `report.json` under the mounted
 output directory even with an explicit database path. Use a fresh output
 directory per run. Optional execution journals use the separate
-`~/.0sec/runs/<scan-id>/` store; persist the container's state directory too if
+`~/.0/runs/<scan-id>/` store; persist the container's state directory too if
 you enable journaling and need those traces after exit.
 
 Do not mount your Docker socket or entire home directory just to provide a key.

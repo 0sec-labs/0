@@ -13,7 +13,7 @@ import {
   type OperatorQuestionRequest,
   type ScopedAuditEscalationRequest,
   type ToolCall,
-} from "@0sec/core";
+} from "@0/core";
 import {
   DEFAULT_AUTONOMY_MODE,
   DESKTOP_CONSOLE_SCHEMA_VERSION,
@@ -29,7 +29,7 @@ import {
   type DesktopConsoleSessionStatus,
   type DesktopConsoleToolCall,
   type DesktopConsoleUsage,
-} from "@0sec/shared";
+} from "@0/shared";
 
 const MAX_EVENTS_PER_SESSION = 2_000;
 const MAX_MESSAGE_LENGTH = 32_000;

@@ -7,7 +7,7 @@ import { LlmApiRuntime } from "../runtime/llm-api.js";
 import { resolveCompactionThresholds } from "../agent/native-loop.js";
 import { contextOverflow, estimatePromptTokens, maintainContext, outputHeadroom } from "./context-maintenance.js";
 import { diag } from "../diagnostics/channel.js";
-import { DEFAULT_AUTONOMY_MODE, DEFAULT_ALLOW_MODEL_SELF_EXTENSION, homeStateDir, type HarnessSnapshot } from "@0sec/shared";
+import { DEFAULT_AUTONOMY_MODE, DEFAULT_ALLOW_MODEL_SELF_EXTENSION, homeStateDir, type HarnessSnapshot } from "@0/shared";
 import type {
   NativeContentBlock,
   NativeMessage,
@@ -33,7 +33,7 @@ import {
   listToolsDef,
   loadToolDef,
 } from "../agent/deferred-tools.js";
-import type { osecDB } from "@0sec/db";
+import type { osecDB } from "@0/db";
 import { TOOL_DISPATCH } from "../agent/tools/dispatch.js";
 import {
   BUILTIN_GUARDS,
@@ -65,8 +65,8 @@ import { registerSignalCleanup } from "../agent/signal-cleanup.js";
 /**
  * Unified interactive chat console — engine-side turn driver.
  *
- * This is the conversational front-end for the 0sec engine described in the
- * 0sec "operator cockpit" direction: one surface where an operator talks to the
+ * This is the conversational front-end for the 0 engine described in the
+ * 0 "operator cockpit" direction: one surface where an operator talks to the
  * engine and it can invoke every tool in the registry (recon, web pentest,
  * source-scan, variant-hunt, verify, patch-gen) in one place.
  *
@@ -180,7 +180,7 @@ export interface ConsoleUsageReport {
   kind: "planner" | "plugin" | "compaction";
 }
 
-// ── Console autonomy / scope resolution (0sec console) ──
+// ── Console autonomy / scope resolution (0 console) ──
 
 /**
  * Operator engagement mode for the console. This is a FRICTION model, not an
@@ -587,7 +587,7 @@ export interface ConsoleSessionConfig {
   /** Actual provider model ID, used for evolution cost accounting. */
   costModel?: string;
   /**
-   * Live plugin host for THIS session (0sec plugin system). Optional; absent =
+   * Live plugin host for THIS session (0 plugin system). Optional; absent =
    * today's behaviour exactly (no plugin tools are exposed or dispatched). When
    * provided, the tools of ENABLED/loaded plugins are unioned into the
    * model-facing tool set at each turn boundary and their calls are dispatched
@@ -790,8 +790,8 @@ export function buildConsoleSystemPrompt(opts: {
     ? "Recon mode: passive, in-scope reconnaissance ONLY. Operate strictly within the authorized target/scope and use only read-only and passive network-recon tools (crawling, fingerprinting, surface/API discovery, JS recon, intel lookups, source reading). Do NOT attempt any effectful, mutating, or exploitation action — those tools are refused in this mode. Gather and report what you observe, then hand control back. Scope is not auto-expanded; an out-of-scope target needs the operator's decision."
     : "Standard mode: the operator approves each action before it runs. Take one concrete step, wait for approval, and when a target is not authorized request a narrow scope extension and wait for the operator's decision.";
   return [
-    "You are the 0sec operator console — an interactive security assistant with",
-    "direct access to the full 0sec tool registry (reconnaissance, web pentest,",
+    "You are the 0 operator console — an interactive security assistant with",
+    "direct access to the full 0 tool registry (reconnaissance, web pentest,",
     "source and package scanning, variant hunting, exploit verification, and",
     "patch generation).",
     "",
@@ -1685,7 +1685,7 @@ const LIST_CONVERSATIONS_NAME = "list_conversations";
 const READ_CONVERSATION_NAME = "read_conversation";
 const LIST_CONVERSATIONS_DEF: ToolDefinition = {
   name: LIST_CONVERSATIONS_NAME,
-  description: "Discover saved 0sec conversations from the current project. Set all_projects=true to include other projects. Search matches previews, summaries, targets and IDs; use read_conversation to inspect a result.",
+  description: "Discover saved 0 conversations from the current project. Set all_projects=true to include other projects. Search matches previews, summaries, targets and IDs; use read_conversation to inspect a result.",
   parameters: {
     query: { type: "string", description: "Optional search text, at most 256 characters" },
     all_projects: { type: "boolean", description: "Include other projects (default false)" },
@@ -2836,7 +2836,7 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
           runId: scanId, model: runtime.resolvedModel?.() ?? config.costModel ?? "unknown",
           scope: effectiveContributionScope(), objective: userText, versions: { loop: "console-v1" },
         }) ?? undefined;
-      } catch { process.stderr.write("[0sec] Console contribution unavailable: private spool or enrollment could not be opened.\n"); }
+      } catch { process.stderr.write("[0] Console contribution unavailable: private spool or enrollment could not be opened.\n"); }
     }
     if (!contribution) return sendInternal(userText, callbacks, opts);
     const capture = contribution;
@@ -3099,9 +3099,9 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
       if (!recovery) {
         if (!compactionEnabled || !contextWindowTokens) return false;
         const thresholds = resolveCompactionThresholds(process.env);
-        const regrow = process.env["0SEC_COMPACTION_REGROW"] !== undefined
+        const regrow = process.env["ZERO_COMPACTION_REGROW"] !== undefined
           ? thresholds.regrow : Math.max(Math.round(contextWindowTokens * 0.15), 1);
-        const requested = process.env["0SEC_COMPACTION_THRESHOLD"] !== undefined
+        const requested = process.env["ZERO_COMPACTION_THRESHOLD"] !== undefined
           ? Math.max(contextWindowTokens * compactionThresholdFraction, thresholds.threshold)
           : contextWindowTokens * compactionThresholdFraction;
         const trigger = Math.min(requested, contextWindowTokens - outputHeadroom(config.runtime.outputTokenLimit));

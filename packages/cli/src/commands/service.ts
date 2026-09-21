@@ -1,4 +1,4 @@
-// `0sec service` — managed cloud lifecycle commands for agents.
+// `0 service` — managed cloud lifecycle commands for agents.
 //
 // Capability catalogue:
 //   service start   — enqueue a managed scan on a repository
@@ -7,8 +7,8 @@
 //   service cancel  — request cancellation of a pending/running scan
 //   service disconnect — remove scan schedule(s) for a repository
 //
-// Every subcommand requires cloud credentials (0SEC_CLOUD_TOKEN or
-// `~/.0sec/cloud.env`) and uses the CloudClient for bearer-authenticated
+// Every subcommand requires cloud credentials (ZERO_CLOUD_TOKEN or
+// `~/.0/cloud.env`) and uses the CloudClient for bearer-authenticated
 // HTTP against the cloud dashboard ingress (/api/scans*, /api/scan-schedules*).
 
 import { execFileSync } from "node:child_process";
@@ -22,7 +22,7 @@ import {
   CloudAuthMissingError,
   loadCloudCredentials,
   CloudForbiddenError,
-} from "@0sec/core";
+} from "@0/core";
 
 // ── Types ──
 
@@ -140,9 +140,9 @@ async function actionStart(opts: StartOptions): Promise<void> {
   } catch (error) {
     if (error instanceof CloudAuthMissingError) {
       if (isJson) {
-        process.stdout.write(JSON.stringify({ error: "not-authenticated", message: "Not authenticated. Run `0sec auth login` first." }) + "\n");
+        process.stdout.write(JSON.stringify({ error: "not-authenticated", message: "Not authenticated. Run `0 auth login` first." }) + "\n");
       } else {
-        process.stderr.write(chalk.red("Not authenticated.") + " Run " + chalk.bold("0sec auth login") + " first, then try again.\n");
+        process.stderr.write(chalk.red("Not authenticated.") + " Run " + chalk.bold("0 auth login") + " first, then try again.\n");
       }
       process.exitCode = 2;
       return;
@@ -210,9 +210,9 @@ async function actionStatus(scanId: string, opts: StatusOptions): Promise<void> 
   } catch (error) {
     if (error instanceof CloudAuthMissingError) {
       if (isJson) {
-        process.stdout.write(JSON.stringify({ error: "not-authenticated", message: "Not authenticated. Run `0sec auth login` first." }) + "\n");
+        process.stdout.write(JSON.stringify({ error: "not-authenticated", message: "Not authenticated. Run `0 auth login` first." }) + "\n");
       } else {
-        process.stderr.write(chalk.red("Not authenticated.") + " Run " + chalk.bold("0sec auth login") + " first.\n");
+        process.stderr.write(chalk.red("Not authenticated.") + " Run " + chalk.bold("0 auth login") + " first.\n");
       }
       process.exitCode = 2;
       return;
@@ -226,9 +226,9 @@ async function actionStatus(scanId: string, opts: StatusOptions): Promise<void> 
   } catch (error) {
     if (error instanceof CloudUnauthorizedError) {
       if (isJson) {
-        process.stdout.write(JSON.stringify({ error: "token-rejected", message: "Cloud token rejected. Run `0sec auth login` again." }) + "\n");
+        process.stdout.write(JSON.stringify({ error: "token-rejected", message: "Cloud token rejected. Run `0 auth login` again." }) + "\n");
       } else {
-        process.stderr.write(chalk.red("Cloud token rejected.") + " Run " + chalk.bold("0sec auth login") + " again.\n");
+        process.stderr.write(chalk.red("Cloud token rejected.") + " Run " + chalk.bold("0 auth login") + " again.\n");
       }
       process.exitCode = 2;
       return;
@@ -270,9 +270,9 @@ async function actionWait(scanId: string, opts: WaitOptions): Promise<void> {
   } catch (error) {
     if (error instanceof CloudAuthMissingError) {
       if (isJson) {
-        process.stdout.write(JSON.stringify({ error: "not-authenticated", message: "Not authenticated. Run `0sec auth login` first." }) + "\n");
+        process.stdout.write(JSON.stringify({ error: "not-authenticated", message: "Not authenticated. Run `0 auth login` first." }) + "\n");
       } else {
-        process.stderr.write(chalk.red("Not authenticated.") + " Run " + chalk.bold("0sec auth login") + " first.\n");
+        process.stderr.write(chalk.red("Not authenticated.") + " Run " + chalk.bold("0 auth login") + " first.\n");
       }
       process.exitCode = 2;
       return;
@@ -349,9 +349,9 @@ async function actionCancel(scanId: string, opts: CancelOptions): Promise<void> 
   } catch (error) {
     if (error instanceof CloudAuthMissingError) {
       if (isJson) {
-        process.stdout.write(JSON.stringify({ error: "not-authenticated", message: "Not authenticated. Run `0sec auth login` first." }) + "\n");
+        process.stdout.write(JSON.stringify({ error: "not-authenticated", message: "Not authenticated. Run `0 auth login` first." }) + "\n");
       } else {
-        process.stderr.write(chalk.red("Not authenticated.") + " Run " + chalk.bold("0sec auth login") + " first.\n");
+        process.stderr.write(chalk.red("Not authenticated.") + " Run " + chalk.bold("0 auth login") + " first.\n");
       }
       process.exitCode = 2;
       return;
@@ -406,9 +406,9 @@ async function actionDisconnect(repoArg: string | undefined, opts: DisconnectOpt
   } catch (error) {
     if (error instanceof CloudAuthMissingError) {
       if (isJson) {
-        process.stdout.write(JSON.stringify({ error: "not-authenticated", message: "Not authenticated. Run `0sec auth login` first." }) + "\n");
+        process.stdout.write(JSON.stringify({ error: "not-authenticated", message: "Not authenticated. Run `0 auth login` first." }) + "\n");
       } else {
-        process.stderr.write(chalk.red("Not authenticated.") + " Run " + chalk.bold("0sec auth login") + " first.\n");
+        process.stderr.write(chalk.red("Not authenticated.") + " Run " + chalk.bold("0 auth login") + " first.\n");
       }
       process.exitCode = 2;
       return;
@@ -560,7 +560,7 @@ function resolveRepoFromCwd(): string | null {
 export function registerServiceCommand(program: Command): void {
   const service = program
     .command("service")
-    .description("Managed cloud lifecycle (start/status/wait/cancel scans, disconnect repo). Requires cloud credentials (`0sec auth login`).");
+    .description("Managed cloud lifecycle (start/status/wait/cancel scans, disconnect repo). Requires cloud credentials (`0 auth login`).");
 
   service
     .command("start")

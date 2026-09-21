@@ -7,8 +7,8 @@
  *    "Requested runtime 'codex' is not available. AI analysis skipped."
  *
  * whenever the operator passed `--runtime codex` without the `codex` CLI
- * binary on PATH — even if `0SEC_CHATGPT_ACCESS_TOKEN` or
- * `0SEC_CHATGPT_OAUTH_REFRESH_TOKEN` was set. That gate lived in
+ * binary on PATH — even if `ZERO_CHATGPT_ACCESS_TOKEN` or
+ * `ZERO_CHATGPT_OAUTH_REFRESH_TOKEN` was set. That gate lived in
  * `hasRequestedAnalysisRuntime` (and the parallel verify-stage selector),
  * which only consulted the installed-CLI registry and ignored the direct
  * ChatGPT Codex provider that the API runtime supports.
@@ -47,9 +47,9 @@ const runFoxguardScanMock = vi.fn();
 vi.mock("./shared-analysis.js", () => ({
   runFoxguardScan: runFoxguardScanMock,
   runSemgrepScan: runSemgrepScanMock,
-  selectedStaticScanner: () => process.env["0SEC_STATIC"] === "semgrep" ? "semgrep" : "foxguard",
+  selectedStaticScanner: () => process.env["ZERO_STATIC"] === "semgrep" ? "semgrep" : "foxguard",
   runSelectedStaticScan: (...args: unknown[]) =>
-    process.env["0SEC_STATIC"] === "semgrep"
+    process.env["ZERO_STATIC"] === "semgrep"
       ? runSemgrepScanMock(...args)
       : runFoxguardScanMock(...args),
 }));
@@ -74,7 +74,7 @@ vi.mock("./runtime/registry.js", () => ({
 vi.mock("./runtime/llm-api.js", () => {
   // Crucial difference vs `unified-pipeline.dispatch.test.ts`: this mock
   // reports `provider: "chatgpt-codex"`, which is what the operator's
-  // 0SEC_CHATGPT_*_TOKEN env produces in real life. The new gate in
+  // ZERO_CHATGPT_*_TOKEN env produces in real life. The new gate in
   // unified-pipeline.ts treats this as "codex is available via the
   // direct ChatGPT provider" and proceeds even when the codex CLI
   // binary is absent.
@@ -103,13 +103,13 @@ const { runPipeline } = await import("./unified-pipeline.js");
 const tempDirs: string[] = [];
 
 function freshTmpDir(prefix: string): string {
-  const dir = mkdtempSync(join(tmpdir(), `0sec-codex-runtime-${prefix}-`));
+  const dir = mkdtempSync(join(tmpdir(), `0-codex-runtime-${prefix}-`));
   tempDirs.push(dir);
   return dir;
 }
 
 function freshDbPath(): string {
-  return join(freshTmpDir("db"), "0sec.db");
+  return join(freshTmpDir("db"), "0.db");
 }
 
 function fakeInstalledPackage(
@@ -154,23 +154,23 @@ beforeEach(() => {
   // `--runtime codex`.
   detectAvailableRuntimesMock.mockResolvedValue(new Set<string>());
 
-  originalPerItemEnv = process.env["0SEC_FEATURE_PER_ITEM_ORCHESTRATION"];
-  process.env["0SEC_FEATURE_PER_ITEM_ORCHESTRATION"] = "0";
+  originalPerItemEnv = process.env["ZERO_FEATURE_PER_ITEM_ORCHESTRATION"];
+  process.env["ZERO_FEATURE_PER_ITEM_ORCHESTRATION"] = "0";
 
-  originalStaticAnalyzer = process.env["0SEC_STATIC"];
-  delete process.env["0SEC_STATIC"];
+  originalStaticAnalyzer = process.env["ZERO_STATIC"];
+  delete process.env["ZERO_STATIC"];
 });
 
 afterEach(() => {
   if (originalPerItemEnv === undefined) {
-    delete process.env["0SEC_FEATURE_PER_ITEM_ORCHESTRATION"];
+    delete process.env["ZERO_FEATURE_PER_ITEM_ORCHESTRATION"];
   } else {
-    process.env["0SEC_FEATURE_PER_ITEM_ORCHESTRATION"] = originalPerItemEnv;
+    process.env["ZERO_FEATURE_PER_ITEM_ORCHESTRATION"] = originalPerItemEnv;
   }
   if (originalStaticAnalyzer === undefined) {
-    delete process.env["0SEC_STATIC"];
+    delete process.env["ZERO_STATIC"];
   } else {
-    process.env["0SEC_STATIC"] = originalStaticAnalyzer;
+    process.env["ZERO_STATIC"] = originalStaticAnalyzer;
   }
   for (const dir of tempDirs.splice(0)) {
     rmSync(dir, { recursive: true, force: true });

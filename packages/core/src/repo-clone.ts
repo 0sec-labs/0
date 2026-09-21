@@ -9,7 +9,7 @@ export const MAX_GIT_CLONE_TIMEOUT_MS = 600_000;
  * two-minute ceiling.
  */
 export function resolveGitCloneTimeoutMs(
-  raw = process.env["0SEC_GIT_CLONE_TIMEOUT_MS"],
+  raw = process.env["ZERO_GIT_CLONE_TIMEOUT_MS"],
 ): number {
   if (raw == null || raw.trim() === "") return DEFAULT_GIT_CLONE_TIMEOUT_MS;
 
@@ -20,7 +20,7 @@ export function resolveGitCloneTimeoutMs(
     timeoutMs > MAX_GIT_CLONE_TIMEOUT_MS
   ) {
     throw new Error(
-      `0SEC_GIT_CLONE_TIMEOUT_MS must be an integer between ${DEFAULT_GIT_CLONE_TIMEOUT_MS} and ${MAX_GIT_CLONE_TIMEOUT_MS}`,
+      `ZERO_GIT_CLONE_TIMEOUT_MS must be an integer between ${DEFAULT_GIT_CLONE_TIMEOUT_MS} and ${MAX_GIT_CLONE_TIMEOUT_MS}`,
     );
   }
   return timeoutMs;

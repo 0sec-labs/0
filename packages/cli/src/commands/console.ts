@@ -9,15 +9,15 @@ import {
   parseMcpConfig,
   connectMcpServers,
   DEFAULT_MAX_TOOL_ITERATIONS,
-} from "@0sec/core";
+} from "@0/core";
 import type {
   ConsoleAutonomyMode,
   ConsoleSession,
   NativeMessage,
   ToolCall,
   ToolResult,
-} from "@0sec/core";
-import { DEFAULT_AUTONOMY_MODE } from "@0sec/shared";
+} from "@0/core";
+import { DEFAULT_AUTONOMY_MODE } from "@0/shared";
 import { canUseOpenTui, isBunRuntime } from "../tui/runtime.js";
 import {
   findCommand,
@@ -121,12 +121,12 @@ export function resolveConsoleAutonomyMode(opts: {
 }
 
 /**
- * `0sec console` — the unified interactive chat cockpit.
+ * `0 console` — the unified interactive chat cockpit.
  *
  * A single conversational surface where the operator talks to the engine and it
- * can invoke every 0sec tool (recon, web pentest, source/package scan,
+ * can invoke every 0 tool (recon, web pentest, source/package scan,
  * variant hunt, verify, patch-gen) in one place. Thin REPL over the engine-side
- * driver in `@0sec/core` (`createConsoleSession`) — the tool registry and LLM
+ * driver in `@0/core` (`createConsoleSession`) — the tool registry and LLM
  * runtime are the real ones the autonomous scanner uses; this command only owns
  * terminal I/O and rendering.
  */
@@ -140,7 +140,7 @@ export function registerConsoleCommand(program: Command): void {
     .option("--scope <file>", "Initial authorization scope; required for the Node fallback (optional otherwise)")
     .option("--finding <id>", "Focus the chat on one persisted finding")
     .option("--finding-intent <intent>", "Finding workflow: investigate, verify, or draft_fix")
-    .option("--db-path <path>", "Persistent findings database (defaults to 0SEC_DB_PATH or the local store)")
+    .option("--db-path <path>", "Persistent findings database (defaults to ZERO_DB_PATH or the local store)")
     .option("-m, --model <id>", "Override the LLM model id (else provider default)")
     .option("--role <role>", "Tool set to expose: audit|review|discovery|attack|verify (default audit = every tool)")
     .option("--mode <mode>", "Autonomy mode to start in: standard|recon|copilot|yolo (default yolo). YOLO drops per-action prompts but stays target/scope-anchored; cycle live with Shift+Tab.")
@@ -319,13 +319,13 @@ export function registerConsoleCommand(program: Command): void {
         return;
       }
 
-      // Attach any configured MCP servers (0SEC_MCP = JSON array of
+      // Attach any configured MCP servers (ZERO_MCP = JSON array of
       // {id,command,args?}) once, before either interactive front-end launches.
       // Connecting here (not inside React) keeps the TUI session build
       // synchronous — the connected host is threaded down as an option. The
       // session closes the host on cleanup. Fail-soft: a bad config or a server
       // that won't connect degrades to no MCP tools, never blocks the console.
-      const mcpHost = await connectMcpServers(parseMcpConfig(process.env["0SEC_MCP"]));
+      const mcpHost = await connectMcpServers(parseMcpConfig(process.env["ZERO_MCP"]));
       if (mcpHost) {
         console.log(chalk.dim(`MCP: connected ${mcpHost.serverIds().length} server(s) — ${mcpHost.registeredTools().length} tool(s)`));
       }
@@ -359,7 +359,7 @@ export function registerConsoleCommand(program: Command): void {
       }
 
       if (!scope) {
-        console.error(chalk.red("0sec console under Node requires --scope <file>."));
+        console.error(chalk.red("0 console under Node requires --scope <file>."));
         console.error(chalk.dim("The readline fallback cannot approve session-only scope extensions; use the Bun TUI for scope-on-demand."));
         if (mcpHost) await mcpHost.closeAll();
         process.exitCode = 2;
@@ -457,7 +457,7 @@ export function registerConsoleCommand(program: Command): void {
           console.log(
             chalk.yellow(
               `\n"${text}" requires the Bun-backed TUI console. ` +
-              `Use the \`0sec\` command (no flags) for the full interactive experience.\n`,
+              `Use the \`0\` command (no flags) for the full interactive experience.\n`,
             ),
           );
           rl.prompt();
@@ -503,7 +503,7 @@ export function registerConsoleCommand(program: Command): void {
             console.log(
               chalk.yellow(
                 `\n/${parsed.command} isn't available in the line-mode console. ` +
-                `Use the \`0sec\` command (no flags) for the full interactive TUI.\n`,
+                `Use the \`0\` command (no flags) for the full interactive TUI.\n`,
               ),
             );
             rl.prompt();
@@ -579,7 +579,7 @@ function previewResult(result: ToolResult): string {
 
 function printBanner(session: ConsoleSession, target?: string): void {
   console.log("");
-  console.log(chalk.bold("0sec console") + chalk.dim(" — interactive operator cockpit"));
+  console.log(chalk.bold("0 console") + chalk.dim(" — interactive operator cockpit"));
   console.log(chalk.dim(`  session ${session.scanId}`));
   console.log(chalk.dim(`  ${session.tools.length} tools available${target ? ` · target ${target}` : " · no target set"}`));
   console.log(chalk.dim(`  mode: ${modeLabel(session.autonomyMode)}`));
@@ -624,7 +624,7 @@ function printHelp(): void {
   console.log(chalk.dim("  The Node fallback cannot approve scope extensions or Co-pilot actions; use the Bun TUI for those approvals."));
   console.log(chalk.dim("  anything else is sent to the engine as an operator message.\n"));
   console.log(chalk.dim("  Navigation commands (/chat, /scope, /agents, …) require the Bun TUI."));
-  console.log(chalk.dim("  Run the bare `0sec` command for the full interactive experience.\n"));
+  console.log(chalk.dim("  Run the bare `0` command for the full interactive experience.\n"));
 }
 
 function findCategory(name: string): string {

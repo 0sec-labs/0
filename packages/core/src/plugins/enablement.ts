@@ -1,5 +1,5 @@
 /**
- * Per-project plugin enablement store (0sec plugin system, DESIGN.md §4).
+ * Per-project plugin enablement store (0 plugin system, DESIGN.md §4).
  *
  * ── The three states this module is the boundary between ──────────────────────
  *
@@ -62,7 +62,7 @@ import {
 } from "node:fs";
 import { join, resolve } from "node:path";
 
-import { homeStateDir } from "@0sec/shared";
+import { homeStateDir } from "@0/shared";
 
 import { isSafePluginId } from "./loader.js";
 import { PLUGIN_CAPABILITIES, type PluginCapability, type PluginManifest } from "./manifest.js";

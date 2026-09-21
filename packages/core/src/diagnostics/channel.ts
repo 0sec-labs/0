@@ -1,5 +1,5 @@
 /**
- * Structured diagnostics channel for `@0sec/core`.
+ * Structured diagnostics channel for `@0/core`.
  *
  * ## Why this exists
  *
@@ -46,8 +46,8 @@
  *
  * The alternative — buffer silently until someone subscribes — optimizes for
  * the one consumer that is already able to defend itself and penalizes every
- * consumer that is not. The overwhelming majority of 0sec invocations are
- * *not* the TUI: `0sec scan` in a terminal, a CI job, the cloud worker, a
+ * consumer that is not. The overwhelming majority of 0 invocations are
+ * *not* the TUI: `0 scan` in a terminal, a CI job, the cloud worker, a
  * shell pipeline redirecting stderr to a log. For all of those, a diagnostic
  * that is buffered and never drained is a diagnostic that is *lost*. Losing
  * "plan quota exhausted" means the operator watches a scan produce nothing and
@@ -85,7 +85,7 @@
  *
  * ## Env controls
  *
- *   `0SEC_DIAG_LEVEL` — `off` | `error` | `warn` | `info` (default `info`).
+ *   `ZERO_DIAG_LEVEL` — `off` | `error` | `warn` | `info` (default `info`).
  *   Filters at the source, before any sink sees the event. `off` silences the
  *   channel entirely.
  */
@@ -288,10 +288,10 @@ const OFF_RANK = Number.POSITIVE_INFINITY;
 /**
  * Minimum rank an event must meet to be emitted. Read per-emit (these are
  * low-frequency calls) so tests and long-lived processes can change
- * `0SEC_DIAG_LEVEL` without a restart.
+ * `ZERO_DIAG_LEVEL` without a restart.
  */
 function minimumRank(): number {
-  const raw = process.env["0SEC_DIAG_LEVEL"];
+  const raw = process.env["ZERO_DIAG_LEVEL"];
   if (!raw) return LEVEL_RANK.info;
   switch (raw.trim().toLowerCase()) {
     case "off":
@@ -312,7 +312,7 @@ function minimumRank(): number {
 
 /**
  * Render one diagnostic the way core has always rendered these lines:
- * `[0sec] <message>`, with structured fields flattened into a trailing
+ * `[0] <message>`, with structured fields flattened into a trailing
  * `(k=v k=v)` group so nothing that used to be visible becomes invisible.
  *
  * Deliberately carries no level tag. Every call site this replaces printed
@@ -323,9 +323,9 @@ function minimumRank(): number {
  */
 export function formatDiagnosticLine(event: DiagnosticEvent): string {
   const keys = Object.keys(event.fields);
-  if (keys.length === 0) return `[0sec] ${event.message}`;
+  if (keys.length === 0) return `[0] ${event.message}`;
   const rendered = keys.map((k) => `${k}=${event.fields[k]}`).join(" ");
-  return `[0sec] ${event.message} (${rendered})`;
+  return `[0] ${event.message} (${rendered})`;
 }
 
 /**

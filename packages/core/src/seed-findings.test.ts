@@ -44,7 +44,7 @@ describe("parseSeedFindings", () => {
     expect(s!.metadata?.rank).toBe(0);
   });
 
-  it("accepts 0sec-native field names (startLine/endLine)", () => {
+  it("accepts 0-native field names (startLine/endLine)", () => {
     const ndjson = JSON.stringify({
       file: "x.py",
       startLine: 10,
@@ -106,7 +106,7 @@ describe("readSeedFindings", () => {
   let dir: string;
 
   beforeEach(() => {
-    dir = mkdtempSync(join(tmpdir(), "0sec-seed-"));
+    dir = mkdtempSync(join(tmpdir(), "0-seed-"));
   });
 
   afterEach(() => {

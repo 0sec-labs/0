@@ -22,7 +22,7 @@ afterEach(() => {
 });
 
 async function setup(): Promise<{ config: EvolutionConfig; baseline: EvolutionSnapshot; candidate: EvolutionSnapshot }> {
-  const directory = mkdtempSync(join(tmpdir(), "0sec-evaluation-"));
+  const directory = mkdtempSync(join(tmpdir(), "0-evaluation-"));
   directories.push(directory);
   const sourceRoot = join(directory, "source");
   mkdirSync(join(sourceRoot, "src"), { recursive: true });

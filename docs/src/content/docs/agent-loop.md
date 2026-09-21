@@ -95,7 +95,7 @@ tasks. Separate contexts do not mean isolated host filesystems or providers.
 
 Cross-run hunt memory is off by default for local native runs. Embedded callers
 can explicitly opt in through `codebaseLearning` or an injected memory store;
-`0SEC_DISABLE_HUNT_MEMORY=1` or `true` vetoes either. Managed source research opts
+`ZERO_DISABLE_HUNT_MEMORY=1` or `true` vetoes either. Managed source research opts
 in only with a configured Cloud sink; managed verification does not. Ordinary
 conversation/session history is separate from cross-run learning.
 
@@ -166,7 +166,7 @@ a known scan ID:
 
 ```bash
 0 history --limit 10
-0 timeline <scan-id> --db-path ~/.0sec/runs/<scan-id>/state.db
+0 timeline <scan-id> --db-path ~/.0/runs/<scan-id>/state.db
 ```
 
 `timeline` reads the selected database; it does not search every run-local

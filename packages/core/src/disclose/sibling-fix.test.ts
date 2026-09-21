@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { Finding } from "@0sec/shared";
+import type { Finding } from "@0/shared";
 import { extractSiblingFix } from "./sibling-fix.js";
 
 function baseFinding(overrides: Partial<Finding> = {}): Finding {
@@ -24,7 +24,7 @@ describe("extractSiblingFix", () => {
   let repoPath: string;
 
   beforeAll(() => {
-    repoPath = mkdtempSync(join(tmpdir(), "0sec-sibfix-"));
+    repoPath = mkdtempSync(join(tmpdir(), "0-sibfix-"));
     mkdirSync(join(repoPath, "packages/api"), { recursive: true });
     mkdirSync(join(repoPath, "server/src/routes"), { recursive: true });
     mkdirSync(join(repoPath, "scripts"), { recursive: true });
@@ -153,7 +153,7 @@ describe("extractSiblingFix", () => {
     const finding = baseFinding({
       description: "The correct pattern is at packages/api/admin.ts:42.",
     });
-    expect(extractSiblingFix(finding, { repoPath: "/no/such/path/__0sec__" })).toBeNull();
+    expect(extractSiblingFix(finding, { repoPath: "/no/such/path/__0__" })).toBeNull();
   });
 
   it("halves confidence when both sibling and vulnerable cues attach to the same ref", () => {

@@ -42,11 +42,11 @@ import {
   type ResearchExecutionEvidence,
   type ResearchTournamentRun,
   type TournamentResult,
-} from "@0sec/core";
+} from "@0/core";
 
 interface CandidateMetadata {
   id: string;
-  project: "0sec";
+  project: "0";
   calibrationEmptyFindings: boolean;
   change: { kind: string; knobs: Record<string, string | number | boolean> };
   budget: {
@@ -76,7 +76,7 @@ interface CiEvidence {
   checks?: Array<{ name: string; conclusion: "success" | "failure" | "cancelled" }>;
 }
 
-const REQUIRED_0SEC_CHECKS = [
+const REQUIRED_ZERO_CHECKS = [
   "build",
   "ecosystem-audit-smoke (cargo)",
   "ecosystem-audit-smoke (npm)",
@@ -288,7 +288,7 @@ export function parseCandidateMetadata(value: unknown): CandidateMetadata {
     throw new Error("candidate.id must be a lowercase filesystem-safe identifier");
   }
   const evaluation = record(raw.evaluation, "candidate.evaluation");
-  if (raw.project !== "0sec") throw new Error("candidate.project must be 0sec");
+  if (raw.project !== "0") throw new Error("candidate.project must be 0");
   const budget = record(raw.budget, "candidate.budget");
   const change = raw.change && typeof raw.change === "object" && !Array.isArray(raw.change)
     ? raw.change as Record<string, unknown>
@@ -306,7 +306,7 @@ export function parseCandidateMetadata(value: unknown): CandidateMetadata {
   }
   return {
     id,
-    project: "0sec",
+    project: "0",
     calibrationEmptyFindings:
       change?.kind === "feature_flag" && knobs?.["calibration.empty_findings"] === true,
     change: { kind: text(change.kind, "candidate.change.kind"), knobs: parsedKnobs },
@@ -370,7 +370,7 @@ export function parseCiEvidence(value: unknown): CiEvidence {
   const repository = text(raw.repository, "CI evidence repository");
   const commitSha = text(raw.headSha, "CI evidence headSha");
   const treeDigest = digest(raw.treeDigest, "CI evidence treeDigest");
-  if (repository !== "0sec-labs/0sec") throw new Error("CI evidence repository must be 0sec-labs/0sec");
+  if (repository !== "0sec-labs/0") throw new Error("CI evidence repository must be 0sec-labs/0");
   if (!/^[0-9a-f]{40}$/.test(commitSha)) throw new Error("CI evidence headSha must be a full lowercase SHA");
   if (!Array.isArray(raw.checks)) throw new Error("CI evidence checks must be an array");
   const checks = raw.checks.map((value, index) => {
@@ -385,7 +385,7 @@ export function parseCiEvidence(value: unknown): CiEvidence {
     return { name, conclusion: check.conclusion as "success" | "failure" | "cancelled" };
   });
   const names = checks.map((check) => check.name);
-  if (JSON.stringify(names) !== JSON.stringify(REQUIRED_0SEC_CHECKS)) {
+  if (JSON.stringify(names) !== JSON.stringify(REQUIRED_ZERO_CHECKS)) {
     throw new Error("CI evidence does not contain the controller-required check set");
   }
   const passed = checks.every((check) => check.conclusion === "success");

@@ -1,4 +1,4 @@
-import type { CreditAccount } from "@0sec/core";
+import type { CreditAccount } from "@0/core";
 
 /** Loading belongs to the active chat identity; credit readiness belongs to the DTO. */
 export type HostedBalanceState =

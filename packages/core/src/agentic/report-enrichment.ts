@@ -2,7 +2,7 @@
 // (S3 god-module cleanup). These helpers were private to agentic-scanner.ts and
 // are re-imported there; behaviour is unchanged. Kept as a focused module so
 // future enrichment work has somewhere small to grow instead of the monolith.
-import type { Finding, PipelineEvent } from "@0sec/shared";
+import type { Finding, PipelineEvent } from "@0/shared";
 import type { NativeRuntime } from "../runtime/types.js";
 import { mapWithConcurrency } from "../concurrency.js";
 import {
@@ -21,12 +21,12 @@ import { assessImpact } from "../triage/impact-assessment.js";
  * model calls at report-assembly time, after the user already believes the scan
  * is done. Bounded fan-out keeps the wall-clock flat without letting a noisy
  * scan open an unbounded number of sessions. Override with
- * `0SEC_REMEDIATION_CONCURRENCY`.
+ * `ZERO_REMEDIATION_CONCURRENCY`.
  */
 const REMEDIATION_CONCURRENCY = 4;
 
 function remediationConcurrency(): number {
-  const raw = process.env["0SEC_REMEDIATION_CONCURRENCY"];
+  const raw = process.env["ZERO_REMEDIATION_CONCURRENCY"];
   if (raw !== undefined) {
     const parsed = Number.parseInt(raw, 10);
     if (Number.isFinite(parsed) && parsed > 0) return parsed;
@@ -39,7 +39,7 @@ function remediationConcurrency(): number {
  *
  * Default path is the static knowledge base — a synchronous category lookup,
  * byte-identical to the behaviour before the LLM path was wired. When
- * `0SEC_FEATURE_LLM_REMEDIATION` is on AND a live runtime is actually
+ * `ZERO_FEATURE_LLM_REMEDIATION` is on AND a live runtime is actually
  * reachable, each finding instead gets model-written guidance that can cite its
  * own evidence rather than a generic category snippet.
  *
@@ -122,7 +122,7 @@ export async function attachRemediation(
 /**
  * Populate `finding.impactAssessment` for eligible findings.
  *
- * Gated on `0SEC_FEATURE_IMPACT_ASSESSMENT` and a reachable runtime. `assessImpact`
+ * Gated on `ZERO_FEATURE_IMPACT_ASSESSMENT` and a reachable runtime. `assessImpact`
  * is total (never throws; falls back to the deterministic heuristic when no
  * model is available), so the only failure mode to guard here is the wave
  * itself. Bounded fan-out shares the remediation concurrency knob — both are
@@ -159,7 +159,7 @@ export async function attachImpactAssessment(
 /**
  * Count distinct `FLAG{...}` matches across a finding set. Used by
  * `emitScanCompleted` to derive `cost_per_flag` for the
- * `scan_completed` event (0sec#231).
+ * `scan_completed` event (0#231).
  *
  * Mirrors the regex in `agent/flag-validator.ts` (`FLAG_WRAPPER_RE`)
  * so anything the validator would accept counts here. Walks

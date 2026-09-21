@@ -2,7 +2,7 @@
 import React, { useEffect, useReducer, useRef, useState } from "react";
 import { sleekScrollbar } from "../scrollbar.js";
 import { TextAttributes } from "@opentui/core";
-import type { TodosEventPayload } from "@0sec/core";
+import type { TodosEventPayload } from "@0/core";
 import { fitTuiText } from "../text.js";
 import type { Theme } from "../theme-context.js";
 import { useSymbols } from "../symbol-context.js";

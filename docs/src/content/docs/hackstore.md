@@ -20,11 +20,11 @@ workflow below. The 0.16.3 binary has a tool-registry bug in `plugin run`.
 Check `0 --version` and command-specific `--help` before following this guide.
 
 The implementation references for this guide are
-[`hackstore.ts`](https://github.com/0sec-labs/0sec/blob/main/packages/cli/src/commands/hackstore.ts)
+[`hackstore.ts`](https://github.com/0sec-labs/0/blob/main/packages/cli/src/commands/hackstore.ts)
 (scaffolding/validation),
-[`plugin.ts`](https://github.com/0sec-labs/0sec/blob/main/packages/cli/src/commands/plugin.ts)
+[`plugin.ts`](https://github.com/0sec-labs/0/blob/main/packages/cli/src/commands/plugin.ts)
 (installation/approval/direct calls), and
-[`loader.ts`](https://github.com/0sec-labs/0sec/blob/main/packages/core/src/plugins/loader.ts)
+[`loader.ts`](https://github.com/0sec-labs/0/blob/main/packages/core/src/plugins/loader.ts)
 (spawn/handshake/dispatch). Check the help for your installed release rather
 than assuming an SDK method has a matching CLI command.
 
@@ -73,7 +73,7 @@ containing `my-extension`:
   test_root="$(mktemp -d)"
   trap 'rm -rf "$test_root"' EXIT
   export HOME="$test_root/home"
-  plugin_dir="$HOME/.0sec/plugins/my-extension"
+  plugin_dir="$HOME/.0/plugins/my-extension"
   mkdir -p "$plugin_dir" "$test_root/project"
   cp "$source_dir/manifest.json" "$plugin_dir/plugin.json"
   cp "$source_dir/plugin.js" "$plugin_dir/plugin.js"
@@ -142,7 +142,7 @@ Document external executables such as `foxguard` as prerequisites.
 
 The [JSON schema](https://raw.githubusercontent.com/0sec-labs/hackstore/main/hackstore-manifest.schema.json)
 provides editor checks. The runtime validator in
-[`manifest.ts`](https://github.com/0sec-labs/0sec/blob/main/packages/core/src/plugins/manifest.ts) is authoritative.
+[`manifest.ts`](https://github.com/0sec-labs/0/blob/main/packages/core/src/plugins/manifest.ts) is authoritative.
 
 | Field | Contract |
 | --- | --- |
@@ -200,7 +200,7 @@ reading credentials from the operator's home directory.
 
 ## Wire protocol
 
-See [`protocol.ts`](https://github.com/0sec-labs/0sec/blob/main/packages/core/src/plugins/protocol.ts) for exact message
+See [`protocol.ts`](https://github.com/0sec-labs/0/blob/main/packages/core/src/plugins/protocol.ts) for exact message
 types and validation. Registry plugins use newline-delimited JSON over stdin and
 stdout. Every frame has `v: 1`. Each request and response shares a printable,
 bounded correlation `id`.
@@ -260,8 +260,8 @@ the current project without starting the plugin. Direct `plugin run`, or loading
 an approved plugin for an OpenTUI chat, starts the child. Disabling removes
 project approval but keeps files.
 
-Installed files live under `~/.0sec/plugins/<id>/`. Project approval records live
-under `~/.0sec/plugin-enablement/`, keyed by the resolved project path. A changed
+Installed files live under `~/.0/plugins/<id>/`. Project approval records live
+under `~/.0/plugin-enablement/`, keyed by the resolved project path. A changed
 aggregate capability set requires renewed approval. Version-only changes with
 the same capabilities do not by themselves invalidate that approval.
 
@@ -277,7 +277,7 @@ refresh through the marketplace and start a new chat. Existing chats keep their
 leased host until cleanup; disablement does not retroactively kill that running
 code. Close the old chats when revocation must take effect immediately. This
 host ownership is implemented in
-[`session-plugin-host.ts`](https://github.com/0sec-labs/0sec/blob/main/packages/cli/src/tui/session-plugin-host.ts).
+[`session-plugin-host.ts`](https://github.com/0sec-labs/0/blob/main/packages/cli/src/tui/session-plugin-host.ts).
 Other CLI workflows do not automatically acquire this TUI host.
 
 ### Update deliberately
@@ -301,7 +301,7 @@ for the version you are installing.
 
 The default registry is
 <https://raw.githubusercontent.com/0sec-labs/hackstore/main/index.json>.
-`0SEC_REGISTRY_URL`, or `--registry URL` on browse/search/install, overrides it.
+`ZERO_REGISTRY_URL`, or `--registry URL` on browse/search/install, overrides it.
 The fetcher requires HTTPS; an explicit empty registry setting disables fetching.
 The default signature verifier is unconfigured and entries are marked
 `unverified`. Do not treat an index entry or a review as a verified signature.

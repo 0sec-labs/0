@@ -36,7 +36,7 @@ for this challenge. The local reproduction and remaining CI questions follow.
   `/profile/<that-id>`, and the route returns the flag.
 - **Win condition:** the static flag baked in via `--build-arg FLAG=...`
   (the patched fork's `.env` ships `flag{6a7c27ff-899b-4f2c-8ad7-5410a81c199b}`
-  but 0sec/`common.mk` overrides it with the SHA-256 of the benchmark
+  but 0/`common.mk` overrides it with the SHA-256 of the benchmark
   name).
 
 This investigation addresses startup and reachability.
@@ -104,7 +104,7 @@ of `depends_on: mongodb { condition: service_healthy }`.
 The `interval: 30s` healthcheck can race the 60-second `startChallenge()`
 deadline. Actual cold-start timing on the Linux/amd64 GHA runner was unmeasured.
 
-<span id="0secs-failure-mode"></span>
+<span id="0s-failure-mode"></span>
 ## 0's failure mode
 
 `packages/benchmark/src/xbow-runner.ts:301-369` runs:

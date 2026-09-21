@@ -1121,7 +1121,7 @@ describe("Console autonomy — local filesystem scope-on-demand", () => {
 
   /** Create an isolated temp tree and return its symlink-resolved real path. */
   function makeTmpRoot(): string {
-    const root = mkdtempSync(join(tmpdir(), "0sec-localscope-"));
+    const root = mkdtempSync(join(tmpdir(), "0-localscope-"));
     tmpRoots.push(root);
     return realpathSync(root);
   }
@@ -1998,8 +1998,8 @@ describe("Console scope gate — unresolvable shell destinations", () => {
     // operator's explicit full-autonomy opt-in, so the scope gate no longer
     // refuses an unreadable command — it runs (the executor's SSRF rail still
     // applies to supported network tools). Named foreign hosts need approval.
-    const prevRequireScope = process.env["0SEC_REQUIRE_SCOPE"];
-    delete process.env["0SEC_REQUIRE_SCOPE"];
+    const prevRequireScope = process.env["ZERO_REQUIRE_SCOPE"];
+    delete process.env["ZERO_REQUIRE_SCOPE"];
     try {
       const runtime = new ScriptedRuntime([bashTurn("c1", `echo aGk= | base64 -d`), endTurn("done")]);
       let prompts = 0;
@@ -2019,7 +2019,7 @@ describe("Console scope gate — unresolvable shell destinations", () => {
       expect(outcome.toolCalls[0].result.error ?? "").not.toContain("cannot resolve");
       expect(outcome.toolCalls[0].result.error ?? "").not.toContain("YOLO mode");
     } finally {
-      if (prevRequireScope !== undefined) process.env["0SEC_REQUIRE_SCOPE"] = prevRequireScope;
+      if (prevRequireScope !== undefined) process.env["ZERO_REQUIRE_SCOPE"] = prevRequireScope;
     }
   });
 
@@ -2399,8 +2399,8 @@ describe("Console autonomy — yolo: no preconfigured scope, but the target stil
     // Previously yolo refused any command whose destination it couldn't read.
     // That blocked legitimate local work, so yolo now RUNS it (SSRF rail still
     // governs real egress beneath); a foreign NAMED host requires approval.
-    const prevRequireScope = process.env["0SEC_REQUIRE_SCOPE"];
-    delete process.env["0SEC_REQUIRE_SCOPE"];
+    const prevRequireScope = process.env["ZERO_REQUIRE_SCOPE"];
+    delete process.env["ZERO_REQUIRE_SCOPE"];
     try {
       const runtime = new ScriptedRuntime([
         { content: [{ type: "tool_use", id: "c1", name: "bash", input: { command: `echo aGk= | base64 -d` } }], stopReason: "tool_use", durationMs: 1 },
@@ -2422,7 +2422,7 @@ describe("Console autonomy — yolo: no preconfigured scope, but the target stil
       expect(outcome.toolCalls[0].result.success).toBe(true);
       expect(outcome.toolCalls[0].result.error ?? "").not.toContain("cannot resolve");
     } finally {
-      if (prevRequireScope !== undefined) process.env["0SEC_REQUIRE_SCOPE"] = prevRequireScope;
+      if (prevRequireScope !== undefined) process.env["ZERO_REQUIRE_SCOPE"] = prevRequireScope;
     }
   });
 
@@ -2966,7 +2966,7 @@ describe("Console turn cancellation — AbortSignal", () => {
   });
 });
 
-// ── Session-registered tools: self-extension + plugin host (0sec console) ──────
+// ── Session-registered tools: self-extension + plugin host (0 console) ──────
 //
 // The interactive console turn loop wires the SAME two kinds of session-
 // registered tools the scan `runNativeAgentLoop` supports: (1) model self-
@@ -2984,7 +2984,7 @@ describe("console executable self-extension permissions", () => {
   });
 
   function session(runtime: NativeRuntime, enabled: boolean) {
-    const root = mkdtempSync(join(tmpdir(), "0sec-console-executables-"));
+    const root = mkdtempSync(join(tmpdir(), "0-console-executables-"));
     roots.push(root);
     const created = createConsoleSession({
       runtime, allowModelSelfExtension: enabled,
@@ -3127,7 +3127,7 @@ describe("createConsoleSession — MCP deferred tool loading", () => {
 
 describe("console live driver authority", () => {
   it.each(["tool-start", "approval", "sdk-approval"])("blocks revoked effects at %s without replay or lost usage", async point => {
-    const root = mkdtempSync(join(tmpdir(), "0sec-console-authority-"));
+    const root = mkdtempSync(join(tmpdir(), "0-console-authority-"));
     vi.stubEnv("HOME", root);
     const marker = join(root, "effect");
     const runtime = new ScriptedRuntime([{ ...endTurn("model receipt"), usage: { inputTokens: 10, outputTokens: 3 } }]);

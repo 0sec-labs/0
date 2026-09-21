@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
-import type { PresentationEvent } from "@0sec/shared";
+import type { PresentationEvent } from "@0/shared";
 import { PresentationEventBus } from "./event-bus.js";
 
 const event: PresentationEvent = {
-  protocol: "0sec.presentation/v1",
+  protocol: "0.presentation/v1",
   kind: "event",
   source: "cli",
   sequence: 1,

@@ -42,7 +42,7 @@ function themeItem(id: string): MarketItem {
   };
 }
 
-/** A fake @0sec/core: every method has a benign default, overridable per test. */
+/** A fake @0/core: every method has a benign default, overridable per test. */
 function fakeCore(overrides: Partial<CorePluginApi> = {}): CorePluginApi {
   const base: CorePluginApi = {
     fetchRegistryIndex: async () => ({ ok: true, result: { entries: [], artifacts: [] } }),
@@ -312,7 +312,7 @@ describe("PluginService.install — writes bytes, never enables, never runs", ()
   });
 
   it("copies a plugin's validated files to disk and enables nothing", async () => {
-    root = mkdtempSync(join(tmpdir(), "0sec-plugin-svc-"));
+    root = mkdtempSync(join(tmpdir(), "0-plugin-svc-"));
     let enableWritten = false;
     let hostBuilt = false;
     const svc = createPluginService({
@@ -345,7 +345,7 @@ describe("PluginService.install — writes bytes, never enables, never runs", ()
   });
 
   it("refuses a plugin entry missing its entrypoint", async () => {
-    root = mkdtempSync(join(tmpdir(), "0sec-plugin-svc-"));
+    root = mkdtempSync(join(tmpdir(), "0-plugin-svc-"));
     const svc = createPluginService({ core: fakeCore({ pluginsRootDir: () => root }) });
     const res = await svc.install(pluginItem("a.tool", [], {}));
     expect(res.ok).toBe(false);

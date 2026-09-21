@@ -1,14 +1,14 @@
 /**
  * Opt-in metadata-only operational NDJSON EventSink writing to stderr.
  *
- * Enabled by setting `0SEC_LOG_FORMAT=json`. Only allowlisted lifecycle
+ * Enabled by setting `ZERO_LOG_FORMAT=json`. Only allowlisted lifecycle
  * and cost-counter events pass through — raw prompts, responses, reasoning,
  * tool args/results, finding evidence/descriptions, token deltas, auth
  * material, and raw error text are excluded entirely.
  *
  * Every line is a JSON object on stderr, one per bus event:
  *
- *   {"timestamp":"…","level":"info","service":"0sec","event":"step_started","step":"analyze"}
+ *   {"timestamp":"…","level":"info","service":"0","event":"step_started","step":"analyze"}
  *
  * The sink is designed for an SRE / operator who wants to observe scan
  * lifecycle and cost without seeing internal agent transcripts or finding
@@ -337,7 +337,7 @@ export function createOperationalEventSink(): EventSink {
       const envelope: Record<string, unknown> = {
         timestamp: new Date().toISOString(),
         level: type === "tool_health" ? "warn" : "info",
-        service: "0sec",
+        service: "0",
         event: type,
       };
 
@@ -357,12 +357,12 @@ export function createOperationalEventSink(): EventSink {
 }
 
 /**
- * Subscribe the operational NDJSON stderr sink if `0SEC_LOG_FORMAT=json`
+ * Subscribe the operational NDJSON stderr sink if `ZERO_LOG_FORMAT=json`
  * is set. Idempotent — safe to call multiple times.
  */
 export function maybeSubscribeOperationalEventSink(): void {
   if (operationalSinkSubscribed) return;
-  const format = process.env["0SEC_LOG_FORMAT"];
+  const format = process.env["ZERO_LOG_FORMAT"];
   if (format?.toLowerCase() === "json") {
     eventBus.subscribe(createOperationalEventSink());
     operationalSinkSubscribed = true;

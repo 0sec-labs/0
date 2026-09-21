@@ -1,18 +1,18 @@
 #!/usr/bin/env bash
 # Full 104-challenge sweep, 5-way parallel, parametrized.
-# Usage: env 0SEC_MODEL=<model> 0SEC_REPEAT=1 0SEC_BENCH_DEPTH=default ./run-full-sweep.sh <tag> <bb|wb>
+# Usage: env ZERO_MODEL=<model> ZERO_REPEAT=1 ZERO_BENCH_DEPTH=default ./run-full-sweep.sh <tag> <bb|wb>
 set -uo pipefail
-BENCH=/home/peak/xbow-bench/0sec/packages/benchmark
+BENCH=/home/peak/xbow-bench/0/packages/benchmark
 TAG="${1:?tag}"; MODE="${2:-bb}"
 cd "$BENCH"
 export PATH="$HOME/.cache/cpkbin:$PATH"
 CHATGPT_ACCESS_TOKEN="$(node -e 'console.log(JSON.parse(require("fs").readFileSync(process.env.HOME+"/.codex/auth.json","utf8")).tokens.access_token)')"
 [[ -n "${CHATGPT_ACCESS_TOKEN}" ]] || { echo "missing ChatGPT Codex access token" >&2; exit 2; }
-OSEC_MODEL="$(printenv 0SEC_MODEL 2>/dev/null || true)"
-[[ -n "${OSEC_MODEL}" ]] || { echo "set 0SEC_MODEL" >&2; exit 2; }
-OSEC_BENCH_DEPTH="$(printenv 0SEC_BENCH_DEPTH 2>/dev/null || true)"
+OSEC_MODEL="$(printenv ZERO_MODEL 2>/dev/null || true)"
+[[ -n "${OSEC_MODEL}" ]] || { echo "set ZERO_MODEL" >&2; exit 2; }
+OSEC_BENCH_DEPTH="$(printenv ZERO_BENCH_DEPTH 2>/dev/null || true)"
 : "${OSEC_BENCH_DEPTH:=default}"
-REPEAT="$(printenv 0SEC_REPEAT 2>/dev/null || true)"
+REPEAT="$(printenv ZERO_REPEAT 2>/dev/null || true)"
 : "${REPEAT:=1}"
 WB=""; [ "$MODE" = "wb" ] && WB="--white-box"
 echo "[$TAG] $MODE | model=${OSEC_MODEL} depth=${OSEC_BENCH_DEPTH} repeat=$REPEAT | start $(date -u +%FT%TZ)"
@@ -20,9 +20,9 @@ pids=()
 for k in 0 1 2 3 4; do
   start=$((k*21))
   env \
-    "0SEC_CHATGPT_ACCESS_TOKEN=${CHATGPT_ACCESS_TOKEN}" \
-    "0SEC_MODEL=${OSEC_MODEL}" \
-    "0SEC_BENCH_DEPTH=${OSEC_BENCH_DEPTH}" \
+    "ZERO_CHATGPT_ACCESS_TOKEN=${CHATGPT_ACCESS_TOKEN}" \
+    "ZERO_MODEL=${OSEC_MODEL}" \
+    "ZERO_BENCH_DEPTH=${OSEC_BENCH_DEPTH}" \
     pnpm xbow --agentic --runtime api $WB --save-findings --fresh \
     --benchmark-repo 0ca/xbow-validation-benchmarks-patched \
     --start $start --limit 21 --repeat "$REPEAT" \

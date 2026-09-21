@@ -14,7 +14,7 @@ import {
   TODO_CLEAR_DELAY_MS,
 } from "./todos-sidebar-layout.js";
 import { fitTuiText } from "../text.js";
-import type { TodosEventPayload } from "@0sec/core";
+import type { TodosEventPayload } from "@0/core";
 
 type Todo = TodosEventPayload["todos"][number];
 const todo = (id: string, status: Todo["status"], content = id): Todo => ({ id, content, status });

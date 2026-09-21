@@ -18,10 +18,10 @@ let runScan: (typeof import("../../packages/core/src/scanner.js"))["scan"];
 let testHome = "";
 const savedApiEnv = {
   HOME: process.env.HOME,
-  "0SEC_CLOUD_TOKEN": process.env["0SEC_CLOUD_TOKEN"],
-  "0SEC_CLOUD_HOST": process.env["0SEC_CLOUD_HOST"],
-  "0SEC_SELECTED_PROVIDER": process.env["0SEC_SELECTED_PROVIDER"],
-  "0SEC_FORCE_PROVIDER": process.env["0SEC_FORCE_PROVIDER"],
+  "ZERO_CLOUD_TOKEN": process.env["ZERO_CLOUD_TOKEN"],
+  "ZERO_CLOUD_HOST": process.env["ZERO_CLOUD_HOST"],
+  "ZERO_SELECTED_PROVIDER": process.env["ZERO_SELECTED_PROVIDER"],
+  "ZERO_FORCE_PROVIDER": process.env["ZERO_FORCE_PROVIDER"],
   OPENROUTER_API_KEY: process.env.OPENROUTER_API_KEY,
   ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
   AZURE_OPENAI_API_KEY: process.env.AZURE_OPENAI_API_KEY,
@@ -30,10 +30,10 @@ const savedApiEnv = {
   KIMI_API_KEY: process.env.KIMI_API_KEY,
   QWEN_API_KEY: process.env.QWEN_API_KEY,
   DEEPSEEK_API_KEY: process.env.DEEPSEEK_API_KEY,
-  "0SEC_CHATGPT_ACCESS_TOKEN": process.env["0SEC_CHATGPT_ACCESS_TOKEN"],
-  "0SEC_CHATGPT_OAUTH_REFRESH_TOKEN": process.env["0SEC_CHATGPT_OAUTH_REFRESH_TOKEN"],
-  "0SEC_CHATGPT_ACCOUNT_ID": process.env["0SEC_CHATGPT_ACCOUNT_ID"],
-  "0SEC_CHATGPT_AUTH_FILE": process.env["0SEC_CHATGPT_AUTH_FILE"],
+  "ZERO_CHATGPT_ACCESS_TOKEN": process.env["ZERO_CHATGPT_ACCESS_TOKEN"],
+  "ZERO_CHATGPT_OAUTH_REFRESH_TOKEN": process.env["ZERO_CHATGPT_OAUTH_REFRESH_TOKEN"],
+  "ZERO_CHATGPT_ACCOUNT_ID": process.env["ZERO_CHATGPT_ACCOUNT_ID"],
+  "ZERO_CHATGPT_AUTH_FILE": process.env["ZERO_CHATGPT_AUTH_FILE"],
 };
 
 function restoreApiEnv(): void {
@@ -73,12 +73,12 @@ async function mcpFetch(target: string, url: string): Promise<string> {
 }
 
 beforeAll(async () => {
-  testHome = mkdtempSync(join(tmpdir(), "0sec-scan-test-"));
+  testHome = mkdtempSync(join(tmpdir(), "0-scan-test-"));
   process.env.HOME = testHome;
-  process.env["0SEC_CLOUD_TOKEN"] = "";
-  process.env["0SEC_CLOUD_HOST"] = "";
-  process.env["0SEC_SELECTED_PROVIDER"] = "";
-  process.env["0SEC_FORCE_PROVIDER"] = "";
+  process.env["ZERO_CLOUD_TOKEN"] = "";
+  process.env["ZERO_CLOUD_HOST"] = "";
+  process.env["ZERO_SELECTED_PROVIDER"] = "";
+  process.env["ZERO_FORCE_PROVIDER"] = "";
   process.env.OPENROUTER_API_KEY = "";
   process.env.ANTHROPIC_API_KEY = "";
   process.env.AZURE_OPENAI_API_KEY = "";
@@ -87,10 +87,10 @@ beforeAll(async () => {
   process.env.KIMI_API_KEY = "";
   process.env.QWEN_API_KEY = "";
   process.env.DEEPSEEK_API_KEY = "";
-  process.env["0SEC_CHATGPT_ACCESS_TOKEN"] = "";
-  process.env["0SEC_CHATGPT_OAUTH_REFRESH_TOKEN"] = "";
-  process.env["0SEC_CHATGPT_ACCOUNT_ID"] = "";
-  process.env["0SEC_CHATGPT_AUTH_FILE"] = join(tmpdir(), "0sec-scan-test-no-codex-auth.json");
+  process.env["ZERO_CHATGPT_ACCESS_TOKEN"] = "";
+  process.env["ZERO_CHATGPT_OAUTH_REFRESH_TOKEN"] = "";
+  process.env["ZERO_CHATGPT_ACCOUNT_ID"] = "";
+  process.env["ZERO_CHATGPT_AUTH_FILE"] = join(tmpdir(), "0-scan-test-no-codex-auth.json");
 
   const vulnMod = await import("./vulnerable-server.js");
   const safeMod = await import("./safe-server.js");
@@ -316,7 +316,7 @@ describe("Safe server responses", () => {
   });
 });
 
-describe("0sec scan integration", () => {
+describe("0 scan integration", () => {
 
   it("returns a clean report for the safe target", async () => {
     const report = await runScan({

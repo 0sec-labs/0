@@ -1,5 +1,5 @@
 /**
- * Coverage seed for `0sec-cli`'s `dashboard` command. This is the local
+ * Coverage seed for `@0/cli`'s `dashboard` command. This is the local
  * mission-control HTTP server (1.5k LoC, zero tests before this seed) —
  * it spawns a Node http server, opens a browser, manages the orchestrator
  * daemon child process, and exposes a control-token-gated POST surface
@@ -18,7 +18,7 @@
  *   • `node:child_process` — capture execFile (browser) + spawn (daemon).
  *   • `node:fs`            — fake existsSync/readFileSync so the asset
  *                            dir resolves and HTML "files" round-trip.
- *   • `@0sec/db`         — fake osecDB (no native bindings, no WAL).
+ *   • `@0/db`         — fake osecDB (no native bindings, no WAL).
  *   • `./orchestrate.js`   — fake recoverStaleWorkers (dynamic import).
  *   • `./db.js`            — fake seedVerificationWorkbench (dynamic import).
  *
@@ -207,7 +207,7 @@ vi.mock("node:fs", async () => {
   };
 });
 
-// @0sec/db — fake osecDB plus resetOsecDatabase. We log every
+// @0/db — fake osecDB plus resetOsecDatabase. We log every
 // constructor + method call so we can assert on lifecycle (always
 // close in finally) and argument plumbing.
 interface FakeWorker {
@@ -266,7 +266,7 @@ const dbState: {
 
 const resetOsecDatabaseMock = vi.fn();
 
-vi.mock("@0sec/db", () => {
+vi.mock("@0/db", () => {
   class FakeOsecDB {
     constructor(dbPath?: string) {
       dbState.ctorPaths.push(dbPath);
@@ -363,7 +363,7 @@ async function runCli(argv: string[]): Promise<unknown> {
   });
   registerDashboardCommand(program);
   try {
-    await program.parseAsync(["node", "0sec-cli", ...argv]);
+    await program.parseAsync(["node", "@0/cli", ...argv]);
     return undefined;
   } catch (err) {
     return err;
@@ -445,7 +445,7 @@ async function invokeHandler(req: import("node:http").IncomingMessage): Promise<
 }
 
 async function getControlToken(): Promise<string> {
-  // The dashboard injects <meta name="0sec-control-token" content="…">
+  // The dashboard injects <meta name="0-control-token" content="…">
   // into the served HTML. The injection only happens on the SPA-route
   // fallback (resolveAssetPath returns null AND extname is empty),
   // NOT on resolveAssetPath's explicit-asset branch. We request a
@@ -454,7 +454,7 @@ async function getControlToken(): Promise<string> {
   const captured = await invokeHandler(
     makeRequest({ method: "GET", url: "/dashboard-spa-route" }),
   );
-  const m = captured.body.match(/0sec-control-token" content="([^"]+)"/);
+  const m = captured.body.match(/0-control-token" content="([^"]+)"/);
   if (!m) {
     throw new Error(`control token not found in HTML; body=${captured.body.slice(0, 200)}`);
   }
@@ -507,7 +507,7 @@ beforeEach(() => {
   dbState.findings.length = 0;
   dbState.recentEvents.length = 0;
 
-  resetOsecDatabaseMock.mockReset().mockReturnValue("/fake/0sec.db");
+  resetOsecDatabaseMock.mockReset().mockReturnValue("/fake/0.db");
   recoverStaleWorkersMock.mockReset().mockReturnValue(3);
   seedVerificationWorkbenchMock
     .mockReset()
@@ -543,7 +543,7 @@ describe("dashboard — argument validation", () => {
     expect(err).toBeUndefined();
     expect(httpState.listenCalls).toEqual([{ port: 0, host: "127.0.0.1" }]);
     expect(logSpy).toHaveBeenCalledWith(
-      '0SEC_DASHBOARD_READY {"url":"http://127.0.0.1:46123"}',
+      'ZERO_DASHBOARD_READY {"url":"http://127.0.0.1:46123"}',
     );
   });
 
@@ -596,7 +596,7 @@ describe("dashboard — argument validation", () => {
 
   it("uses explicit dashboard assets before checkout-relative candidates", async () => {
     fsState.existsPaths.clear();
-    const assetDir = "/tmp/0sec-desktop-dashboard";
+    const assetDir = "/tmp/0-desktop-dashboard";
     fsState.existsPaths.add(`${assetDir}/index.html`);
     fsState.readBodies.set(
       `${assetDir}/index.html`,
@@ -650,7 +650,7 @@ describe("dashboard — static asset serving", () => {
     const captured = await invokeHandler(makeRequest({ method: "GET", url: "/" }));
     expect(captured.statusCode).toBe(200);
     expect(captured.headers["Content-Type"]).toMatch(/text\/html/);
-    expect(captured.body).toMatch(/0sec-control-token" content="[0-9a-f-]{8,}"/);
+    expect(captured.body).toMatch(/0-control-token" content="[0-9a-f-]{8,}"/);
   });
 
   it("GET /<spa-route> serves index.html WITH the control-token <meta> injected", async () => {
@@ -663,7 +663,7 @@ describe("dashboard — static asset serving", () => {
     );
     expect(captured.statusCode).toBe(200);
     expect(captured.headers["Content-Type"]).toMatch(/text\/html/);
-    expect(captured.body).toMatch(/0sec-control-token" content="[0-9a-f-]{8,}"/);
+    expect(captured.body).toMatch(/0-control-token" content="[0-9a-f-]{8,}"/);
   });
 
   it("unknown extension under / returns 404 (asset-not-found path)", async () => {
@@ -715,7 +715,7 @@ describe("dashboard — desktop console API", () => {
       makeRequest({
         method: "GET",
         url: "/api/console/providers/codex",
-        headers: { "x-0sec-control-token": token },
+        headers: { "x-0-control-token": token },
       }),
     );
 
@@ -735,7 +735,7 @@ describe("dashboard — desktop console API", () => {
       makeRequest({
         method: "POST",
         url: "/api/console/sessions",
-        headers: { "x-0sec-control-token": token },
+        headers: { "x-0-control-token": token },
         body: {
           target: "https://app.example.test",
           role: "audit",
@@ -755,7 +755,7 @@ describe("dashboard — desktop console API", () => {
       makeRequest({
         method: "GET",
         url: `/api/console/sessions/${session.session.id}/events?after=0`,
-        headers: { "x-0sec-control-token": token },
+        headers: { "x-0-control-token": token },
       }),
     );
 
@@ -865,7 +865,7 @@ describe("dashboard — read APIs", () => {
       expect.objectContaining({
         id: "event-1",
         presentation: {
-          protocol: "0sec.presentation/v1",
+          protocol: "0.presentation/v1",
           kind: "event",
           source: "core",
           sequence: 1,
@@ -916,7 +916,7 @@ describe("dashboard — control-token gate", () => {
       makeRequest({
         method: "POST",
         url: "/api/control/recover-stale-workers",
-        headers: { "x-0sec-control-token": "not-the-real-token" },
+        headers: { "x-0-control-token": "not-the-real-token" },
         body: {},
       }),
     );
@@ -941,7 +941,7 @@ describe("dashboard — control-token gate", () => {
       makeRequest({
         method: "POST",
         url: "/api/control/recover-stale-workers",
-        headers: { "x-0sec-control-token": token },
+        headers: { "x-0-control-token": token },
         body: { staleAfterMs: 45_000 },
       }),
     );
@@ -971,7 +971,7 @@ describe("dashboard — daemon control", () => {
       makeRequest({
         method: "POST",
         url: "/api/control/start-daemon",
-        headers: { "x-0sec-control-token": token },
+        headers: { "x-0-control-token": token },
         body: {},
       }),
     );
@@ -995,7 +995,7 @@ describe("dashboard — daemon control", () => {
       makeRequest({
         method: "POST",
         url: "/api/control/start-daemon",
-        headers: { "x-0sec-control-token": token },
+        headers: { "x-0-control-token": token },
         body: { label: "my-daemon", pollIntervalMs: 5000 },
       }),
     );
@@ -1036,7 +1036,7 @@ describe("dashboard — daemon control", () => {
         makeRequest({
           method: "POST",
           url: "/api/control/stop-daemon",
-          headers: { "x-0sec-control-token": token },
+          headers: { "x-0-control-token": token },
         }),
       );
       expect(captured.statusCode).toBe(200);
@@ -1064,7 +1064,7 @@ describe("dashboard — launch-run control", () => {
       makeRequest({
         method: "POST",
         url: "/api/control/launch-run",
-        headers: { "x-0sec-control-token": token },
+        headers: { "x-0-control-token": token },
         body: {},
       }),
     );
@@ -1079,7 +1079,7 @@ describe("dashboard — launch-run control", () => {
       makeRequest({
         method: "POST",
         url: "/api/control/launch-run",
-        headers: { "x-0sec-control-token": token },
+        headers: { "x-0-control-token": token },
         body: {
           target: "https://example.com",
           depth: "deep",
@@ -1120,7 +1120,7 @@ describe("dashboard — reset-database control", () => {
       makeRequest({
         method: "POST",
         url: "/api/control/reset-database",
-        headers: { "x-0sec-control-token": token },
+        headers: { "x-0-control-token": token },
         body: { seed: "kitchen-sink" },
       }),
     );
@@ -1142,7 +1142,7 @@ describe("dashboard — reset-database control", () => {
       makeRequest({
         method: "POST",
         url: "/api/control/reset-database",
-        headers: { "x-0sec-control-token": token },
+        headers: { "x-0-control-token": token },
         body: { seed: "verification" },
       }),
     );
@@ -1159,14 +1159,14 @@ describe("dashboard — reset-database control", () => {
       makeRequest({
         method: "POST",
         url: "/api/control/reset-database",
-        headers: { "x-0sec-control-token": token },
+        headers: { "x-0-control-token": token },
         body: { seed: "verification" },
       }),
     );
     expect(captured.statusCode).toBe(200);
     const body = JSON.parse(captured.body);
     expect(body.ok).toBe(true);
-    expect(body.path).toBe("/fake/0sec.db");
+    expect(body.path).toBe("/fake/0.db");
     expect(body.seed).toBe("verification");
     expect(body.scans).toBe(4);
     expect(resetOsecDatabaseMock).toHaveBeenCalledOnce();
@@ -1179,7 +1179,7 @@ describe("dashboard — reset-database control", () => {
       makeRequest({
         method: "POST",
         url: "/api/control/reset-database",
-        headers: { "x-0sec-control-token": token },
+        headers: { "x-0-control-token": token },
         body: { seed: "empty" },
       }),
     );
@@ -1205,7 +1205,7 @@ describe("dashboard — finding-family POST handlers", () => {
       makeRequest({
         method: "POST",
         url: "/api/finding-family/fp-1/triage",
-        headers: { "x-0sec-control-token": token },
+        headers: { "x-0-control-token": token },
         body: { triageStatus: "bogus-value", triageNote: "looks weird" },
       }),
     );
@@ -1221,7 +1221,7 @@ describe("dashboard — finding-family POST handlers", () => {
       makeRequest({
         method: "POST",
         url: "/api/finding-family/fp-2/triage",
-        headers: { "x-0sec-control-token": token },
+        headers: { "x-0-control-token": token },
         body: { triageStatus: "accepted" },
       }),
     );
@@ -1236,7 +1236,7 @@ describe("dashboard — finding-family POST handlers", () => {
       makeRequest({
         method: "POST",
         url: "/api/finding-family/fp-3/workflow",
-        headers: { "x-0sec-control-token": token },
+        headers: { "x-0-control-token": token },
         body: { workflowStatus: "bogus", workflowAssignee: "  alice  " },
       }),
     );
@@ -1261,7 +1261,7 @@ describe("dashboard — prune-stopped-workers", () => {
       makeRequest({
         method: "POST",
         url: "/api/control/prune-stopped-workers",
-        headers: { "x-0sec-control-token": token },
+        headers: { "x-0-control-token": token },
         body: {},
       }),
     );

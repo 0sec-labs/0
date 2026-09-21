@@ -21,7 +21,7 @@ import {
 const tempHomes: string[] = [];
 
 function makeHome(): string {
-  const dir = mkdtempSync(join(tmpdir(), "0sec-session-store-"));
+  const dir = mkdtempSync(join(tmpdir(), "0-session-store-"));
   tempHomes.push(dir);
   return dir;
 }
@@ -62,12 +62,12 @@ afterEach(() => {
 });
 
 describe("sessionsDir", () => {
-  it("places transcripts inside the shared 0sec state directory", () => {
-    expect(sessionsDir("/home/someone")).toBe("/home/someone/.0sec/console-sessions");
+  it("places transcripts inside the shared 0 state directory", () => {
+    expect(sessionsDir("/home/someone")).toBe("/home/someone/.0/console-sessions");
   });
 
   it("defaults the home directory when none is given", () => {
-    expect(sessionsDir().endsWith(join(".0sec", "console-sessions"))).toBe(true);
+    expect(sessionsDir().endsWith(join(".0", "console-sessions"))).toBe(true);
   });
 });
 
@@ -528,7 +528,7 @@ describe("I/O failure is a return value, never an exception", () => {
     const home = makeHome();
     // A regular file where the store directory belongs: mkdir fails with
     // ENOTDIR, which must surface as "could not save", not as a crashed TUI.
-    mkdirSync(join(home, ".0sec"), { recursive: true });
+    mkdirSync(join(home, ".0"), { recursive: true });
     writeFileSync(sessionsDir(home), "in the way");
 
     expect(saveSession(makeSession(), home)).toBe(false);

@@ -93,7 +93,7 @@ import {
   writeSync,
 } from "node:fs";
 import { join, resolve } from "node:path";
-import { homeStateDir } from "@0sec/shared";
+import { homeStateDir } from "@0/shared";
 import { sanitizeId } from "./registry.js";
 
 // ---------------------------------------------------------------------------
@@ -125,7 +125,7 @@ export const HUB_ROOT_NAME = "hub";
 export const MAX_BODY_CHARS = 8_192;
 
 /** Marker appended to a body that hit {@link MAX_BODY_CHARS}. */
-export const TRUNCATION_MARKER = "[0sec-hub: body truncated]";
+export const TRUNCATION_MARKER = "[0-hub: body truncated]";
 
 /**
  * Max messages retained per inbox (and in the shared broadcast spool). A peer

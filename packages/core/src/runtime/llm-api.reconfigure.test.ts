@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { LlmApiRuntime } from "./llm-api.js";
 
-const environment = () => ({ "0SEC_FORCE_PROVIDER": "", "0SEC_SELECTED_PROVIDER": "", "0SEC_SKIP_PROVIDER_BANNER": "1", "0SEC_LLM_FALLBACK": "" });
+const environment = () => ({ "ZERO_FORCE_PROVIDER": "", "ZERO_SELECTED_PROVIDER": "", "ZERO_SKIP_PROVIDER_BANNER": "1", "ZERO_LLM_FALLBACK": "" });
 
 // Reach past the type surface to assert the private route/selection state the
 // live reconfiguration mutates in place — the same fields the constructor and
@@ -81,7 +81,7 @@ describe("live runtime reconfiguration", () => {
 
     runtime.reconfigure({
       provider: "hosted",
-      env: { ...environment(), "0SEC_CLOUD_HOST": "http://127.0.0.1:12345", "0SEC_CLOUD_TOKEN": "cloud-token" },
+      env: { ...environment(), "ZERO_CLOUD_HOST": "http://127.0.0.1:12345", "ZERO_CLOUD_TOKEN": "cloud-token" },
     });
 
     const after = peek(runtime);

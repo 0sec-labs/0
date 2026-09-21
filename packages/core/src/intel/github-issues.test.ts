@@ -38,7 +38,7 @@ describe("github public-report search", () => {
   let cacheDir: string;
 
   beforeEach(() => {
-    cacheDir = mkdtempSync(join(tmpdir(), "0sec-issues-test-"));
+    cacheDir = mkdtempSync(join(tmpdir(), "0-issues-test-"));
   });
 
   afterEach(() => {

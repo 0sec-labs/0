@@ -3,7 +3,7 @@
 /**
  * XBOW Benchmark Runner
  *
- * Runs 0sec against the XBOW validation benchmarks (104 Docker CTF challenges).
+ * Runs 0 against the XBOW validation benchmarks (104 Docker CTF challenges).
  * Each challenge is a vulnerable web app with a hidden flag.
  *
  * Prerequisites:
@@ -30,9 +30,9 @@ import { readFileSync, existsSync, writeFileSync, mkdirSync, readdirSync } from 
 import { join, dirname, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { randomBytes } from "node:crypto";
-import { scan, agenticScan, eventBus } from "@0sec/core";
+import { scan, agenticScan, eventBus } from "@0/core";
 import { tmpdir } from "node:os";
-import type { RuntimeMode } from "@0sec/shared";
+import type { RuntimeMode } from "@0/shared";
 import { aggregateRuns, type RepeatAggregate, type RepeatRun } from "./wilson.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -99,7 +99,7 @@ const modelsArg = args.includes("--models")
  * Resolve the effective model identifier for single-model runs (no --models).
  *
  * Priority mirrors LlmApiRuntime.constructor in llm-api.ts:
- *   1. 0SEC_MODEL env var (explicit override)
+ *   1. ZERO_MODEL env var (explicit override)
  *   2. Provider-specific env vars (AZURE_OPENAI_MODEL, etc.)
  *   3. Provider-specific defaults
  *
@@ -107,7 +107,7 @@ const modelsArg = args.includes("--models")
  * the loop, so this function is only used when modelsArg is empty.
  */
 function resolveEffectiveModel(): string {
-  const explicit = process.env["0SEC_MODEL"];
+  const explicit = process.env["ZERO_MODEL"];
   if (explicit) return explicit;
 
   // Mirror detectProvider priority: openrouter > anthropic > azure > openai
@@ -185,7 +185,7 @@ function cacheDirForRepo(repo: string): string {
     .replace(/^git@/, "")
     .replace(/\.git$/, "")
     .replace(/[^\w.-]+/g, "_");
-  return join(tmpdir(), `0sec-xbow-cache`, slug);
+  return join(tmpdir(), `0-xbow-cache`, slug);
 }
 
 function ensureBenchmarkRepo(repo: string, ref: string | undefined): string {
@@ -270,9 +270,9 @@ export interface XbowResult {
   stdDevCostUsd?: number;
   perRun?: RepeatRun[];
   costCeilingHit?: boolean;
-  // JIT skill usage events — present when 0SEC_FEATURE_JIT_SKILLS=1
+  // JIT skill usage events — present when ZERO_FEATURE_JIT_SKILLS=1
   // and the agent invokes list_skills / load_skill during the scan.
-  // Used by the skills-ablation harness (0sec#460) to measure skill
+  // Used by the skills-ablation harness (0#460) to measure skill
   // adoption and token overhead.
   skillsLoaded?: Array<{ skill_id: string; name: string; estimated_tokens: number }>;
   skillListings?: number;
@@ -391,7 +391,7 @@ export function startXbowChallenge(challenge: XbowChallenge): number | null {
     // 180s wait so DB-backed compose stacks (XBEN-099 and friends) survive
     // their first healthcheck cycle. Investigation in
     // docs/research/xben-099-investigation.md found the previous 60s cap
-    // raced exactly with mongo's 30s healthcheck interval — 0sec timed
+    // raced exactly with mongo's 30s healthcheck interval — 0 timed
     // out at almost the moment mongo would have gone healthy. Cheap
     // challenges still finish in seconds; only DB-backed ones approach
     // the new ceiling.
@@ -469,7 +469,7 @@ async function runChallengeOnce(challenge: XbowChallenge, model?: string): Promi
   try {
     let report: any;
 
-    // ── Skill event collector (0sec#460) ──
+    // ── Skill event collector (0#460) ──
     // Subscribe to the event bus before the scan to capture skill_loaded
     // and skill_listed events for the ablation harness. The unsubscribe
     // function is called after the scan completes regardless of outcome.
@@ -493,7 +493,7 @@ async function runChallengeOnce(challenge: XbowChallenge, model?: string): Promi
 
     try {
     if (useAgentic) {
-      const dbPath = join(tmpdir(), `0sec-xbow-${challenge.id}-${Date.now()}.db`);
+      const dbPath = join(tmpdir(), `0-xbow-${challenge.id}-${Date.now()}.db`);
       // Pass challenge description as a hint — this is standard practice
       // (KinoSec, XBOW, and MAPTA all receive the challenge description)
       const hint = challenge.description ? `\nChallenge hint: ${challenge.description}` : "";
@@ -619,7 +619,7 @@ async function runChallengeOnce(challenge: XbowChallenge, model?: string): Promi
       durationMs: Date.now() - start,
       // Save full findings for triage model training data
       ...(saveFindings && findings.length > 0 ? { findings } : {}),
-      // JIT skill usage tracking (0sec#460)
+      // JIT skill usage tracking (0#460)
       ...(skillEvents.loaded.length > 0 ? { skillsLoaded: skillEvents.loaded } : {}),
       ...(skillEvents.listings > 0 ? { skillListings: skillEvents.listings } : {}),
     };
@@ -786,7 +786,7 @@ async function main() {
   challenges = challenges.slice(0, limit);
 
   if (!jsonOutput) {
-    console.log("\x1b[31m\x1b[1m  0sec x XBOW benchmark\x1b[0m");
+    console.log("\x1b[31m\x1b[1m  0 x XBOW benchmark\x1b[0m");
     console.log(`  mode: ${useAgentic ? "agentic" : "baseline"}  challenges: ${challenges.length}/104`);
     console.log("");
   }

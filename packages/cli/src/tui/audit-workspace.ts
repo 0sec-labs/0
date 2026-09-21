@@ -1,9 +1,9 @@
 import { randomUUID } from "node:crypto";
 import { rm } from "node:fs/promises";
 import { join } from "node:path";
-import { homeStateDir } from "@0sec/shared";
+import { homeStateDir } from "@0/shared";
 import { appendTuiEvent } from "./tui-crash.js";
-import type { ConsoleSession } from "@0sec/core";
+import type { ConsoleSession } from "@0/core";
 import type { ChatScreenOptions, ChatScreenProps } from "./chat-screen.js";
 import type { ConnectionRecovery } from "./connection-recovery.js";
 

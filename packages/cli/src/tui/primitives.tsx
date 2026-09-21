@@ -11,7 +11,7 @@
  * on top of one another. That is where these came from:
  *
  *   "Show available slash commands"  ->  "Showpavailableenslash commands"
- *   "0sec / chat" + "target: none"   ->  "target:cnone"
+ *   "0 / chat" + "target: none"   ->  "target:cnone"
  *   "runs" + "12"                    ->  "runs12"
  *
  * The same thing happens on the vertical axis: a bordered box squeezed

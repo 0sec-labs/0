@@ -270,7 +270,7 @@ describe("spawn_agent / spawn_agents — progress events on the bus", () => {
 
   afterEach(() => {
     eventBus.clear();
-    delete process.env["0SEC_SUBAGENT_CONCURRENCY"];
+    delete process.env["ZERO_SUBAGENT_CONCURRENCY"];
   });
 
   it("emits monotonically increasing turn numbers for a single child", async () => {

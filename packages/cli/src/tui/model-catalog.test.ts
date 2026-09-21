@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { MODEL_PRICING, modelProvider } from "@0sec/shared";
+import { MODEL_PRICING, modelProvider } from "@0/shared";
 
 import {
   buildHostedModelCatalog,

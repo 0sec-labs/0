@@ -1,4 +1,4 @@
-import type * as Core from "@0sec/core";
+import type * as Core from "@0/core";
 import { Command } from "commander";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -22,7 +22,7 @@ vi.mock("../../tui/run.js", () => ({
   showOpenTuiConsole: startup.showConsole,
   showOpenTuiResume: vi.fn(),
 }));
-vi.mock("@0sec/core", async (importOriginal) => {
+vi.mock("@0/core", async (importOriginal) => {
   const actual = await importOriginal<typeof Core>();
   return { ...actual, connectMcpServers: async () => undefined };
 });
@@ -57,7 +57,7 @@ describe("console launch authorization", () => {
   });
 
   it("uses the engine's round default unless the operator supplies a cap", async () => {
-    const { DEFAULT_MAX_TOOL_ITERATIONS } = await import("@0sec/core");
+    const { DEFAULT_MAX_TOOL_ITERATIONS } = await import("@0/core");
     await launch();
     expect(startup.showConsole).toHaveBeenLastCalledWith(expect.objectContaining({ maxToolIterations: DEFAULT_MAX_TOOL_ITERATIONS }));
     await launch(["--max-tool-calls", "7"]);

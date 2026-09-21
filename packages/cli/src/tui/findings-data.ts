@@ -1,5 +1,5 @@
-import type { Finding } from "@0sec/shared";
-import type { NativeRuntime, SourceFixResult, SourceFixStatus } from "@0sec/core";
+import type { Finding } from "@0/shared";
+import type { NativeRuntime, SourceFixResult, SourceFixStatus } from "@0/core";
 import type { getRuntimeAvailability } from "../utils.js";
 import { fitTuiText, fitTuiUrl } from "./text.js";
 
@@ -40,7 +40,7 @@ export interface FindingsRow {
   evidenceResponse: string;
   evidenceAnalysis?: string | null;
   /**
-   * JSON-stringified VerificationSpec as stored by `@0sec/db`. NULL for
+   * JSON-stringified VerificationSpec as stored by `@0/db`. NULL for
    * findings that carry no machine-executable re-check contract. The
    * source-fix action parses it back before asking `fixEligibility`.
    */
@@ -131,8 +131,8 @@ export function groupFindings(rows: FindingsRow[]): FindingGroup[] {
     .sort((a, b) => b.latest.timestamp - a.latest.timestamp);
 }
 
-/** Overrides the scan target as the repo to fix in; `0sec fix` takes <repo>. */
-const FIX_REPO_ENV = "0SEC_FIX_REPO";
+/** Overrides the scan target as the repo to fix in; `0 fix` takes <repo>. */
+const FIX_REPO_ENV = "ZERO_FIX_REPO";
 
 export interface FixRunState {
   findingId: string;
@@ -188,7 +188,7 @@ export function isNativeRuntime(runtime: unknown): runtime is NativeRuntime {
 const REMOTE_TARGET_PATTERN = /^[a-z][a-z0-9+.-]*:\/\//i;
 
 /**
- * Where a source fix for this finding would run. `0SEC_FIX_REPO` wins so an
+ * Where a source fix for this finding would run. `ZERO_FIX_REPO` wins so an
  * operator can point at a checkout that is not the recorded scan target;
  * otherwise the scan target is used, but only when it looks like a path.
  */

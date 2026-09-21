@@ -77,13 +77,13 @@ importers:
 
   packages/benchmark:
     dependencies:
-      '@0sec/core':
+      '@0/core':
         specifier: workspace:*
         version: link:../core
-      '@0sec/shared':
+      '@0/shared':
         specifier: workspace:*
         version: link:../shared
-      '@0sec/test-targets':
+      '@0/test-targets':
         specifier: workspace:*
         version: link:../../test-targets
       express:
@@ -108,25 +108,25 @@ importers:
 
   packages/cli:
     dependencies:
-      '@0sec/benchmark':
+      '@0/benchmark':
         specifier: workspace:*
         version: link:../benchmark
-      '@0sec/core':
+      '@0/core':
         specifier: workspace:*
         version: link:../core
-      '@0sec/db':
+      '@0/db':
         specifier: workspace:*
         version: link:../db
-      '@0sec/llm-redteam':
+      '@0/llm-redteam':
         specifier: workspace:*
         version: link:../llm-redteam
-      '@0sec/shared':
+      '@0/shared':
         specifier: workspace:*
         version: link:../shared
-      '@0sec/templates':
+      '@0/templates':
         specifier: workspace:*
         version: link:../templates
-      '@0sec/test-targets':
+      '@0/test-targets':
         specifier: workspace:*
         version: link:../../test-targets
       '@modelcontextprotocol/sdk':
@@ -184,16 +184,16 @@ importers:
 
   packages/core:
     dependencies:
-      '@0sec/db':
+      '@0/db':
         specifier: workspace:*
         version: link:../db
-      '@0sec/llm-redteam':
+      '@0/llm-redteam':
         specifier: workspace:*
         version: link:../llm-redteam
-      '@0sec/shared':
+      '@0/shared':
         specifier: workspace:*
         version: link:../shared
-      '@0sec/templates':
+      '@0/templates':
         specifier: workspace:*
         version: link:../templates
       '@deepseek-ai/cordis':
@@ -228,7 +228,7 @@ importers:
 
   packages/dashboard:
     dependencies:
-      '@0sec/shared':
+      '@0/shared':
         specifier: workspace:*
         version: link:../shared
       '@dnd-kit/core':
@@ -328,7 +328,7 @@ importers:
 
   packages/db:
     dependencies:
-      '@0sec/shared':
+      '@0/shared':
         specifier: workspace:*
         version: link:../shared
       drizzle-orm:
@@ -347,7 +347,7 @@ importers:
 
   packages/desktop:
     devDependencies:
-      '@0sec/shared':
+      '@0/shared':
         specifier: workspace:*
         version: link:../shared
       '@fontsource/ibm-plex-mono':
@@ -398,7 +398,7 @@ importers:
 
   packages/llm-redteam:
     dependencies:
-      '@0sec/shared':
+      '@0/shared':
         specifier: workspace:*
         version: link:../shared
     devDependencies:
@@ -430,7 +430,7 @@ importers:
 
   packages/templates:
     dependencies:
-      '@0sec/shared':
+      '@0/shared':
         specifier: workspace:*
         version: link:../shared
       yaml:

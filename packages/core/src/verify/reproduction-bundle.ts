@@ -6,7 +6,7 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join, parse, resolve, sep } from "node:path";
 import { z } from "zod";
-import { findingSchema, VERSION, type Finding, type VerificationResult } from "@0sec/shared";
+import { findingSchema, VERSION, type Finding, type VerificationResult } from "@0/shared";
 import type { ScopePolicy } from "../scope/scope.js";
 import { DockerRunner, LocalShellRunner, runDeterministicReplay, type ReplayRunner } from "./replay-runner.js";
 
@@ -233,7 +233,7 @@ export async function runReproductionBundle(opts: {
         if (bytes.length !== entry.size) throw new Error(`snapshot size mismatch: ${path}`);
       }
     }
-    const resultsDir = opts.outDir ? resolve(opts.outDir) : mkdtempSync(join(tmpdir(), "0sec-repro-"));
+    const resultsDir = opts.outDir ? resolve(opts.outDir) : mkdtempSync(join(tmpdir(), "0-repro-"));
     if (overlaps(bundleDir, resultsDir)) throw new Error("replay output overlaps the bundle");
     freshDirectory(resultsDir);
     async function replay(side: "vulnerable" | "patched"): Promise<VerificationResult> {

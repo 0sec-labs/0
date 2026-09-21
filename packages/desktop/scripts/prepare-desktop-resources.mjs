@@ -14,16 +14,16 @@ function sidecarFileName(platform = process.platform, arch = process.arch) {
   switch (platform) {
     case "linux":
     case "darwin":
-      return `0sec-${platform}-${arch}`;
+      return `0-${platform}-${arch}`;
     case "win32":
-      return `0sec-windows-${arch}.exe`;
+      return `0-windows-${arch}.exe`;
     default:
       throw new Error(`Unsupported desktop platform: ${platform}`);
   }
 }
 
 if (!existsSync(join(dashboardSource, "index.html"))) {
-  throw new Error("Dashboard build is missing. Run pnpm --filter @0sec/dashboard build before packaging desktop.");
+  throw new Error("Dashboard build is missing. Run pnpm --filter @0/dashboard build before packaging desktop.");
 }
 
 const sidecarName = sidecarFileName();

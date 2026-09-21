@@ -221,7 +221,7 @@ describe("parseManifest — source-audit + finding-match", () => {
 describePrivateCorpus("loadManifest (corpus-v1.json — the real labeled corpus)", () => {
   it("loads + validates the committed corpus", async () => {
     const m = await loadManifest(privateCorpusPath);
-    expect(m.id).toBe("0sec-bench-corpus-v1");
+    expect(m.id).toBe("0-bench-corpus-v1");
     expect(m.cases.length).toBeGreaterThanOrEqual(30);
     expect(m.cases.length).toBeLessThanOrEqual(60);
   });

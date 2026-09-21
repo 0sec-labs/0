@@ -63,7 +63,7 @@ is the theme-aware replacement with an identical mapping.
 Contrast columns are ratios against `CANVAS` / `PANEL` / `PANEL_ALT` in that
 order. Every number here is asserted in `themes.test.ts`.
 
-### `dark` — "0sec Dark" (default)
+### `dark` — "0 Dark" (default)
 
 The palette shipped today, **byte-for-byte**. It is the default because an
 upgrade must not restyle anyone's console; a theme system that silently
@@ -427,6 +427,6 @@ four palettes define it. The contrast sweep then covers it automatically.
 ## Verification
 
 ```
-pnpm --filter 0sec-cli exec vitest run src/tui/themes.test.ts
-pnpm --filter 0sec-cli exec tsc --noEmit -p tsconfig.json
+pnpm --filter @0/cli exec vitest run src/tui/themes.test.ts
+pnpm --filter @0/cli exec tsc --noEmit -p tsconfig.json
 ```

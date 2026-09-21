@@ -9,7 +9,7 @@ depend on feature settings, source availability, category, runtime and routing.
 Some make network requests or model calls. A gate's `accepted` label is not a
 universal reproduction or disclosure verdict.
 
-> **2026-04-11 ablation results.** The stack strictly beats the no-triage baseline on XBOW black-box, is a Pareto tradeoff on white-box (2 flags at limit=50 for 63% fewer findings), and is a no-op on npm-bench. Layer 11 (EGATS) is the one broken layer and is opt-in only ([0sec#116](https://github.com/0sec-labs/0sec/issues/116)). Numbers: [FP Reduction Moat](/research/fp-reduction-moat/); narrative: [2026-04-11 ablation](/research/2026-04-11-ablation/).
+> **2026-04-11 ablation results.** The stack strictly beats the no-triage baseline on XBOW black-box, is a Pareto tradeoff on white-box (2 flags at limit=50 for 63% fewer findings), and is a no-op on npm-bench. Layer 11 (EGATS) is the one broken layer and is opt-in only ([0#116](https://github.com/0sec-labs/0/issues/116)). Numbers: [FP Reduction Moat](/research/fp-reduction-moat/); narrative: [2026-04-11 ablation](/research/2026-04-11-ablation/).
 
 :::caution[Manual triage command availability]
 The pipeline below is separate from the manual `0 triage` command.
@@ -51,7 +51,7 @@ that the system is safe.
 
 `triage/holding-it-wrong.ts` detects documented sink behavior mistaken for a
 vulnerability, such as treating a file-writing API as arbitrary file write.
-Enforcement defaults on but `0SEC_FEATURE_HOLDING_IT_WRONG=0` disables it.
+Enforcement defaults on but `ZERO_FEATURE_HOLDING_IT_WRONG=0` disables it.
 Suppressible matches become `info` / `false-positive` and skip later verification;
 protected findings continue with an explanatory note. Feature extraction still
 runs for telemetry even when enforcement is off.
@@ -62,7 +62,7 @@ runs for telemetry even when enforcement is off.
 payload, evidence and category signals. The agentic scanner records it as
 `triage_features`; the default-on evidence gate can suppress findings with
 `evidence_completeness <= 0.5`, subject to the same protection against heuristic
-auto-suppression. Disable enforcement with `0SEC_FEATURE_EVIDENCE_GATE=0`.
+auto-suppression. Disable enforcement with `ZERO_FEATURE_EVIDENCE_GATE=0`.
 The ~77% recall / 16% FPR figure is a historical feature-extractor measurement,
 not current-target accuracy. See [Feature Extractor](/research/feature-extractor/)
 and [Triage Dataset](/research/triage-dataset/).
@@ -93,17 +93,17 @@ identities before disclosing IDOR.
 
 ## 4. Reachability gate
 
-`triage/reachability.ts` — `0SEC_FEATURE_REACHABILITY_GATE=1`. With source
+`triage/reachability.ts` — `ZERO_FEATURE_REACHABILITY_GATE=1`. With source
 available, a conservative pattern pass inspects paths, entry points and imports.
 High-confidence unreachable findings can be suppressed subject to the disclosure
 guard. This is not an exhaustive interprocedural proof of reachability.
 
 Today it's a zero-dependency grep/pattern pass and deliberately conservative: when it can't make a confident call it returns `reachable: true` with low confidence so later stages still run. A tree-sitter interprocedural upgrade is planned.
 
-<span id="5-multi-modal-agreement-foxguard--0sec"></span>
+<span id="5-multi-modal-agreement-foxguard--0"></span>
 ## 5. Multi-modal agreement (foxguard × 0)
 
-`triage/multi-modal.ts` — `0SEC_FEATURE_MULTIMODAL=1`. When both source and the [foxguard](https://github.com/0sec-labs/foxguard) binary are present, 0 runs foxguard on the same code and cross-checks each finding against its SARIF:
+`triage/multi-modal.ts` — `ZERO_FEATURE_MULTIMODAL=1`. When both source and the [foxguard](https://github.com/0sec-labs/foxguard) binary are present, 0 runs foxguard on the same code and cross-checks each finding against its SARIF:
 
 - **Both fire** → prioritize verification; only sufficiently strong agreement
   and evidence completeness take the fused auto-accept branch.
@@ -114,13 +114,13 @@ Today it's a zero-dependency grep/pattern pass and deliberately conservative: wh
 Even a fused auto-accept label is a triage decision, not a fresh exploit replay.
 
 ```bash
-env 0SEC_FEATURE_MULTIMODAL=1 \
+env ZERO_FEATURE_MULTIMODAL=1 \
   0 scan --target https://example.com --scope ./scope.json --repo ./source
 ```
 
 ## 6. PoV generation gate
 
-`triage/pov-gate.ts` — `0SEC_FEATURE_POV_GATE=1`. The agentic path requires a
+`triage/pov-gate.ts` — `ZERO_FEATURE_POV_GATE=1`. The agentic path requires a
 usable runtime, a finding not already accepted, and routing permission. It uses
 category-specific oracles (reusing an upstream result when available) or a
 bounded PoC-generation path.
@@ -148,7 +148,7 @@ tool-using verifier.
 
 ## 8. Self-consistency voting
 
-`0SEC_FEATURE_CONSENSUS_VERIFY=1`. The agentic scanner calls `verify` with three
+`ZERO_FEATURE_CONSENSUS_VERIFY=1`. The agentic scanner calls `verify` with three
 parallel structured passes per candidate. The SDK defaults to a single pass
 unless `votes` is supplied. Early resolution can return a majority before all
 calls settle; it does not guarantee cancellation of their model costs.
@@ -157,7 +157,7 @@ the disclosure guard; errors fall through to agentic verification.
 
 ## 9. Assistant memories
 
-`triage/memories.ts` stores false-positive context from human triage. Use `0 triage mark-fp` and `0 triage memory` to manage feedback. `0SEC_FEATURE_TRIAGE_MEMORIES` is not a current feature toggle. Memory context can inform verification; it is not independent reproduction evidence.
+`triage/memories.ts` stores false-positive context from human triage. Use `0 triage mark-fp` and `0 triage memory` to manage feedback. `ZERO_FEATURE_TRIAGE_MEMORIES` is not a current feature toggle. Memory context can inform verification; it is not independent reproduction evidence.
 
 Scope matching is exact: `global`, inferred `package` identity, or `target`
 URL/path, within the finding's category. Default ranking uses token overlap.
@@ -165,7 +165,7 @@ Opt-in Jev memory assistance reranks up to twelve shortlisted memories and falls
 back to token ranking when unavailable; it never auto-rejects a finding.
 
 On the native agentic-scan verification path, `createScanMemoryStore` is wired
-when `0SEC_TRIAGE_FEEDBACK` or Jev `memory` configuration is present. Prepared
+when `ZERO_TRIAGE_FEEDBACK` or Jev `memory` configuration is present. Prepared
 feedback is scan-local context, not imported into the global memory database.
 A historical memory in another database is not automatically available to every
 new run. See [advisory evaluation settings](/features/#advisory-evaluations).
@@ -184,7 +184,7 @@ new run. See [advisory evaluation settings](/features/#advisory-evaluations).
 
 ## 10. Adversarial debate
 
-**Planned — not implemented.** There is no `triage/adversarial.ts` module and no `0SEC_FEATURE_DEBATE` flag in the engine. The intent: a prosecutor (finding is real) and a defender (it's an FP) argue from fresh contexts, and a skeptical judge picks the winner — each seeing only the other's written arguments, never the research agent's chain of thought. The design follows the open-source read of Anthropic's debate paper (arXiv:2402.06782); the point is to keep the two agents' errors independent.
+**Planned — not implemented.** There is no `triage/adversarial.ts` module and no `ZERO_FEATURE_DEBATE` flag in the engine. The intent: a prosecutor (finding is real) and a defender (it's an FP) argue from fresh contexts, and a skeptical judge picks the winner — each seeing only the other's written arguments, never the research agent's chain of thought. The design follows the open-source read of Anthropic's debate paper (arXiv:2402.06782); the point is to keep the two agents' errors independent.
 
 Its goal is partly served by the hunt **cross-family refuter**
 (`stages/hunt-cross-family.ts`). Its model-family selection is specific to that
@@ -197,26 +197,26 @@ finder and verifier use different model families.
 It expands an explicit hypothesis tree and uses observed evidence to score
 branches. It is not a downstream verification stage or part of `fp-moat`.
 The historical ablation found a regression on its hard-challenge slice
-([0sec#116](https://github.com/0sec-labs/0sec/issues/116)); it is not a universal
+([0#116](https://github.com/0sec-labs/0/issues/116)); it is not a universal
 performance recommendation.
 
 ## Configuration cheat-sheet
 
 | Env var | Default | Stage |
 |---------|---------|-------|
-| `0SEC_FEATURE_HOLDING_IT_WRONG` | **on** | 1 |
-| `0SEC_FEATURE_EVIDENCE_GATE` | **on** | 2 |
-| `0SEC_FEATURE_REACHABILITY_GATE` | off | 4 |
-| `0SEC_FEATURE_MULTIMODAL` | off | 5 |
-| `0SEC_FEATURE_POV_GATE` | off | 6 |
-| `0SEC_FEATURE_PUBLISHABILITY_GATE` | off | 6 |
-| `0SEC_FEATURE_POC_GEN_STATIC` | off | 6 |
-| `0SEC_FEATURE_CONSENSUS_VERIFY` | off | 8 |
-| `0SEC_FEATURE_LEARNED_ROUTER` | off | router |
-| `0SEC_FEATURE_DYNAMIC_TRIAGE` | off | router |
+| `ZERO_FEATURE_HOLDING_IT_WRONG` | **on** | 1 |
+| `ZERO_FEATURE_EVIDENCE_GATE` | **on** | 2 |
+| `ZERO_FEATURE_REACHABILITY_GATE` | off | 4 |
+| `ZERO_FEATURE_MULTIMODAL` | off | 5 |
+| `ZERO_FEATURE_POV_GATE` | off | 6 |
+| `ZERO_FEATURE_PUBLISHABILITY_GATE` | off | 6 |
+| `ZERO_FEATURE_POC_GEN_STATIC` | off | 6 |
+| `ZERO_FEATURE_CONSENSUS_VERIFY` | off | 8 |
+| `ZERO_FEATURE_LEARNED_ROUTER` | off | router |
+| `ZERO_FEATURE_DYNAMIC_TRIAGE` | off | router |
 
-`0SEC_FEATURE_TRIAGE_MEMORIES`, `0SEC_FEATURE_DEBATE`, and
-`0SEC_FEATURE_EGATS` are not current toggles. EGATS is selected by `--egats` /
+`ZERO_FEATURE_TRIAGE_MEMORIES`, `ZERO_FEATURE_DEBATE`, and
+`ZERO_FEATURE_EGATS` are not current toggles. EGATS is selected by `--egats` /
 `config.egats`, not an environment flag. See [Configuration](/configuration/)
 for feature settings and [Features](/features/#advisory-evaluations) for the
 separate Jev controls.
@@ -233,7 +233,7 @@ before choosing the preset; enabled gates can still skip missing prerequisites.
 ```bash
 0 scan --features fp-moat --target https://example.com --scope ./scope.json
 # or, for templated CI:
-env 0SEC_FEATURE_PRESET=fp-moat 0 scan --target https://example.com --scope ./scope.json
+env ZERO_FEATURE_PRESET=fp-moat 0 scan --target https://example.com --scope ./scope.json
 ```
 
 It expands to `REACHABILITY_GATE`, `MULTIMODAL`, `PUBLISHABILITY_GATE`, `POV_GATE`, `POC_GEN_STATIC`, and `CONSENSUS_VERIFY`. Membership lives in `packages/core/src/agent/feature-presets.ts` and is pinned by test.
@@ -241,7 +241,7 @@ It expands to `REACHABILITY_GATE`, `MULTIMODAL`, `PUBLISHABILITY_GATE`, `POV_GAT
 A flag you set yourself always wins, so you can ablate one layer:
 
 ```bash
-env 0SEC_FEATURE_POV_GATE=0 0 scan --features fp-moat …
+env ZERO_FEATURE_POV_GATE=0 0 scan --features fp-moat …
 ```
 
 The preset deliberately omits `LEARNED_ROUTER` and `DYNAMIC_TRIAGE` — those decide which layers to *skip* per finding, so enabling them alongside the moat would suppress the layers you're trying to measure.
@@ -261,7 +261,7 @@ Each layer records a verdict on the finding as it runs. `findings show` renders 
   Layers: 3 executed, 5 skipped, 3 unrecorded | 412ms | $0.0000
     + holding_it_wrong   executed(pass) — no holding-it-wrong pattern matched
     + evidence_gate      executed(pass) — evidence_completeness=0.83 > 0.5
-    - reachability       skipped(skip) — 0SEC_FEATURE_REACHABILITY_GATE=0
+    - reachability       skipped(skip) — ZERO_FEATURE_REACHABILITY_GATE=0
     …
 ```
 

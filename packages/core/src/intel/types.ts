@@ -47,7 +47,7 @@ export interface VulnerabilityIntel {
   modifiedAt?: string;
   fetchedAt: string;
   /**
-   * Target-history relevance (0sec#intel-advisories). Set only by
+   * Target-history relevance (0#intel-advisories). Set only by
    * search_target_history when annotating how strongly an advisory matches the
    * target: "high" = exact repo/package match, "medium" = a target token appears
    * as a whole word, "low" = loose keyword-only match. Absent elsewhere.
@@ -88,7 +88,7 @@ export interface GhsaLookupInput {
 }
 
 /**
- * Layer-3 public-report search (0sec#intel-advisories): GitHub issues/PRs that
+ * Layer-3 public-report search (0#intel-advisories): GitHub issues/PRs that
  * mention a candidate finding's code terms but are not formal advisories. LEADS
  * only — every result is unverified.
  */
@@ -267,7 +267,7 @@ export interface IntelTargetHistorySummary {
   cweCount: number;
   topSeverity: IntelSeverity;
   matchedHints: string[];
-  /** Count of matched advisories by match confidence (0sec#intel-advisories). */
+  /** Count of matched advisories by match confidence (0#intel-advisories). */
   confidenceCounts: { high: number; medium: number; low: number };
 }
 
@@ -295,7 +295,7 @@ export interface IntelTargetHistory {
 }
 
 /**
- * Combined advisory-sweep (0sec#intel-advisories) — "everything in one call".
+ * Combined advisory-sweep (0#intel-advisories) — "everything in one call".
  * Orchestrates exact GHSA lookups, structured package advisories, repo
  * issue/PR search, and (optionally) target history into one de-duped,
  * confidence-ranked lead list.

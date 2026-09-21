@@ -1,12 +1,12 @@
 /**
  * MCP client adapter — the pure core.
  *
- * An MCP client lets 0sec attach external tool servers. Per the `mcp-client`
- * research paper, it wires into machinery 0sec already has (the PluginHost model,
+ * An MCP client lets 0 attach external tool servers. Per the `mcp-client`
+ * research paper, it wires into machinery 0 already has (the PluginHost model,
  * the `mcp__`-prefix untrusted-input sanitizer, the capability/scope gates) — so
  * the client splits into (a) a thin networked host that speaks JSON-RPC to a
  * server via the MCP SDK, and (b) this deterministic adapter that turns a
- * server's advertised tools into 0sec `ToolDefinition`s and back. The adapter is
+ * server's advertised tools into 0 `ToolDefinition`s and back. The adapter is
  * pure — no SDK, no network — so it is unit-tested without a live server; the
  * host is thin glue over it.
  *
@@ -33,7 +33,7 @@ export function isSafeMcpServerId(id: unknown): id is string {
   return typeof id === "string" && id.length > 0 && id.length <= 64 && MCP_ID_RE.test(id);
 }
 
-/** The 0sec tool name for an MCP tool: `mcp__<server>__<tool>`. */
+/** The 0 tool name for an MCP tool: `mcp__<server>__<tool>`. */
 export function mcpToolName(server: string, tool: string): string {
   return `${MCP_TOOL_PREFIX}${server}${"__"}${tool}`;
 }
@@ -69,9 +69,9 @@ export interface McpToolSpec {
 const MAX_DESC = 1024;
 
 /**
- * Convert one MCP tool spec into a 0sec `ToolDefinition`, namespaced to `server`.
+ * Convert one MCP tool spec into a 0 `ToolDefinition`, namespaced to `server`.
  * The MCP input schema's `properties` map onto `parameters` (already the same
- * JSON-Schema-ish shape 0sec uses), `required` is carried through, and the
+ * JSON-Schema-ish shape 0 uses), `required` is carried through, and the
  * description is prefixed so the model knows the tool is external + untrusted and
  * is length-clamped so a hostile server can't bloat the prompt.
  */
@@ -93,7 +93,7 @@ export function mcpToolToDefinition(server: string, spec: McpToolSpec): ToolDefi
 }
 
 /**
- * Map a whole `tools/list` result to 0sec definitions, dropping any entry with a
+ * Map a whole `tools/list` result to 0 definitions, dropping any entry with a
  * malformed name and capping the count so one server can't flood the registry.
  */
 export function mcpToolsToDefinitions(
@@ -112,7 +112,7 @@ export function mcpToolsToDefinitions(
 
 /**
  * Flatten an MCP `tools/call` result's content blocks into a single string for a
- * 0sec `ToolResult.output`. Text blocks are concatenated; non-text blocks are
+ * 0 `ToolResult.output`. Text blocks are concatenated; non-text blocks are
  * summarized (never inlined). The caller still routes this through the untrusted
  * fence via the `mcp__` name — this only shapes the payload.
  */

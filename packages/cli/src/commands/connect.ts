@@ -1,13 +1,13 @@
-// `0sec connect` verifies Cloud membership and GitHub repository access.
+// `0 connect` verifies Cloud membership and GitHub repository access.
 // Scans and recurring schedules require explicit --run or --schedule consent.
 // Test-command detection, publication policy, and confirmation apply only
 // after the operator requests work.
 //
 // Usage:
-//   0sec connect                                   ← use cwd git remote origin
-//   0sec connect https://github.com/org/repo      ← explicit repo URL
-//   0sec connect --format json                     ← machine-readable output
-//   0sec connect --schedule --yes                  ← explicitly approve recurrence
+//   0 connect                                   ← use cwd git remote origin
+//   0 connect https://github.com/org/repo      ← explicit repo URL
+//   0 connect --format json                     ← machine-readable output
+//   0 connect --schedule --yes                  ← explicitly approve recurrence
 //
 // States (--format json):
 //   ready             — access verified, or explicitly requested work created
@@ -28,7 +28,7 @@ import {
   loadCloudCredentials,
   CloudAuthMissingError,
   CloudForbiddenError,
-} from "@0sec/core";
+} from "@0/core";
 
 // ── types ──
 
@@ -196,7 +196,7 @@ function detectTestCommandLocal(dir: string): { command: string; source: string 
 
 /** Test-command detection from a shallow clone. */
 function detectTestCommandClone(repoUrl: string): { command: string; source: string } | null {
-  const dir = mkdtempSync(join(tmpdir(), "0sec-connect-"));
+  const dir = mkdtempSync(join(tmpdir(), "0-connect-"));
   try {
     execFileSync("git", ["clone", "--depth", "1", "--quiet", repoUrl, dir], {
       timeout: 120_000,
@@ -382,7 +382,7 @@ export async function runConnect(repoArg: string | undefined, opts: ConnectActio
       err(chalk.red("No repository specified.\n"));
       if (repoArg === undefined) {
         err(chalk.dim("  Run from a git repository with a remote 'origin', or pass the URL:\n"));
-        err(chalk.dim(`    ${chalk.bold("0sec connect https://github.com/org/repo")}\n`));
+        err(chalk.dim(`    ${chalk.bold("0 connect https://github.com/org/repo")}\n`));
       }
     }
     process.exitCode = 1;
@@ -416,11 +416,11 @@ export async function runConnect(repoArg: string | undefined, opts: ConnectActio
         out(JSON.stringify({
           state: "action-required",
           repo: repoUrl,
-          message: "Not authenticated. Run `0sec auth login` first, then connect again.",
+          message: "Not authenticated. Run `0 auth login` first, then connect again.",
           reason: "not-authenticated",
         } satisfies ConnectJsonResult));
       } else {
-        err(` ${chalk.red("Not authenticated.")} Run ${chalk.bold("0sec auth login")} first, then connect again.\n`);
+        err(` ${chalk.red("Not authenticated.")} Run ${chalk.bold("0 auth login")} first, then connect again.\n`);
       }
       process.exitCode = 2;
       return;
@@ -444,7 +444,7 @@ export async function runConnect(repoArg: string | undefined, opts: ConnectActio
     } else {
       err(` ${chalk.red("Enrollment check:")} ${enrollment.reason}\n`);
       if (enrollment.reason === "github-app-not-installed" && enrollment.action_url) {
-        err(chalk.dim(`  Visit ${enrollment.action_url} to install the 0sec GitHub App.\n`));
+        err(chalk.dim(`  Visit ${enrollment.action_url} to install the 0 GitHub App.\n`));
       }
     }
     process.exitCode = 2;
@@ -656,7 +656,7 @@ export async function runConnect(repoArg: string | undefined, opts: ConnectActio
         ? `  Schedule:     ${opts.cron} (next: ${scheduleResult.next_run_at ?? "pending"})`
         : "  Schedule:     none (one-shot run)",
       "",
-      "0sec will investigate, reproduce, repair, and verify. Verified patches and evidence are retained on the scan for your review.",
+      "0 will investigate, reproduce, repair, and verify. Verified patches and evidence are retained on the scan for your review.",
       "",
     ].join("\n"));
   }

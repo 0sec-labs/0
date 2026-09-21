@@ -9,9 +9,9 @@ import { fileURLToPath } from "node:url";
 
 const scriptPath = fileURLToPath(import.meta.url);
 const repoRoot = resolve(dirname(scriptPath), "..");
-const runnerPath = join(repoRoot, "scripts", "dsh-0sec-mcp.mjs");
-const entrypoint = join(repoRoot, "dist", "0sec.js");
-const marker = "DSH-0SEC-E2E: health tool completed.";
+const runnerPath = join(repoRoot, "scripts", "dsh-0-mcp.mjs");
+const entrypoint = join(repoRoot, "dist", "0.js");
+const marker = "DSH-ZERO-E2E: health tool completed.";
 
 function listen(server) {
   return new Promise((resolvePromise, rejectPromise) => {
@@ -58,7 +58,7 @@ function streamToolCall(target) {
   const now = Math.floor(Date.now() / 1000);
   return [
     {
-      id: "chatcmpl-dsh-0sec-e2e-tool",
+      id: "chatcmpl-dsh-0-e2e-tool",
       object: "chat.completion.chunk",
       created: now,
       model: "fixture-agent",
@@ -68,10 +68,10 @@ function streamToolCall(target) {
           role: "assistant",
           tool_calls: [{
             index: 0,
-            id: "call-0sec-health",
+            id: "call-0-health",
             type: "function",
             function: {
-              name: "mcp__0sec__http_request",
+              name: "mcp__0__http_request",
               arguments: JSON.stringify({ method: "GET", url: `${target}/health` }),
             },
           }],
@@ -80,7 +80,7 @@ function streamToolCall(target) {
       }],
     },
     {
-      id: "chatcmpl-dsh-0sec-e2e-tool",
+      id: "chatcmpl-dsh-0-e2e-tool",
       object: "chat.completion.chunk",
       created: now,
       model: "fixture-agent",
@@ -93,14 +93,14 @@ function streamFinalAnswer() {
   const now = Math.floor(Date.now() / 1000);
   return [
     {
-      id: "chatcmpl-dsh-0sec-e2e-final",
+      id: "chatcmpl-dsh-0-e2e-final",
       object: "chat.completion.chunk",
       created: now,
       model: "fixture-agent",
       choices: [{ index: 0, delta: { role: "assistant", content: marker }, finish_reason: null }],
     },
     {
-      id: "chatcmpl-dsh-0sec-e2e-final",
+      id: "chatcmpl-dsh-0-e2e-final",
       object: "chat.completion.chunk",
       created: now,
       model: "fixture-agent",
@@ -181,7 +181,7 @@ async function main() {
     timings.targetRequest ??= performance.now();
     if (request.method === "GET" && request.url === "/health") {
       response.writeHead(200, { "content-type": "application/json" });
-      response.end(JSON.stringify({ status: "ok", fixture: "0sec-dsh-e2e" }));
+      response.end(JSON.stringify({ status: "ok", fixture: "0-dsh-e2e" }));
       return;
     }
     response.writeHead(404);
@@ -204,10 +204,10 @@ async function main() {
       if (modelRequests.length === 2) timings.secondModelRequest = performance.now();
       if (modelRequests.length === 1) {
         const names = toolNames(body);
-        if (!names.includes("mcp__0sec__http_request")) {
-          fixtureError = new Error(`0sec MCP http_request was absent from DSH tools: ${JSON.stringify(names)}`);
+        if (!names.includes("mcp__0__http_request")) {
+          fixtureError = new Error(`0 MCP http_request was absent from DSH tools: ${JSON.stringify(names)}`);
         }
-        if (names.some((name) => !name.startsWith("mcp__0sec__"))) {
+        if (names.some((name) => !name.startsWith("mcp__0__"))) {
           fixtureError = new Error(`generic DSH tool leaked into the model request: ${JSON.stringify(names)}`);
         }
         writeSse(response, streamToolCall(targetOrigin));
@@ -222,10 +222,10 @@ async function main() {
   });
   const modelOrigin = await listen(modelServer);
 
-  const fixture = await mkdtemp(join(tmpdir(), "0sec-dsh-mcp-e2e-"));
+  const fixture = await mkdtemp(join(tmpdir(), "0-dsh-mcp-e2e-"));
   try {
     const dshHome = join(fixture, "dsh-home");
-    const zeroSecHome = join(fixture, "0sec-home");
+    const zeroSecHome = join(fixture, "0-home");
     const scopePath = join(fixture, "scope.json");
     await mkdir(dshHome, { recursive: true });
     await mkdir(zeroSecHome, { recursive: true });
@@ -242,7 +242,7 @@ async function main() {
         : []),
       "--mcp-env", "HOME",
       "--dsh-bin", dshBin,
-      "Call the 0sec MCP http_request tool on the target health endpoint, then report completion.",
+      "Call the 0 MCP http_request tool on the target health endpoint, then report completion.",
     ];
     timings.runnerStart = performance.now();
     const result = await run(
@@ -289,6 +289,6 @@ async function main() {
 }
 
 main().catch((error) => {
-  process.stderr.write(`dsh-0sec-mcp.e2e: ${error instanceof Error ? error.stack ?? error.message : String(error)}\n`);
+  process.stderr.write(`dsh-0-mcp.e2e: ${error instanceof Error ? error.stack ?? error.message : String(error)}\n`);
   process.exitCode = 1;
 });

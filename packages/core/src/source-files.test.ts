@@ -10,7 +10,7 @@ afterEach(() => {
 });
 
 it.skipIf(process.platform === "win32")("does not expose outside source through file, directory, or hard-link aliases", () => {
-  const root = mkdtempSync(join(tmpdir(), "0sec-source-scope-"));
+  const root = mkdtempSync(join(tmpdir(), "0-source-scope-"));
   roots.push(root);
   const target = join(root, "target");
   const outside = join(root, "outside");
@@ -30,7 +30,7 @@ it.skipIf(process.platform === "win32")("does not expose outside source through 
 });
 
 it("still counts nested source and detects when the review cap is exceeded", () => {
-  const root = mkdtempSync(join(tmpdir(), "0sec-source-count-"));
+  const root = mkdtempSync(join(tmpdir(), "0-source-count-"));
   roots.push(root);
   mkdirSync(join(root, "nested"));
   writeFileSync(join(root, "first.ts"), "export const first = 1;\n");

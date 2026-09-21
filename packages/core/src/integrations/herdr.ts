@@ -2,7 +2,7 @@
  * herdr pane integration (protocol 19).
  *
  * `herdr` (https://herdr.dev) is a terminal workspace manager for AI coding
- * agents. When 0sec runs inside a herdr pane, herdr wants to know whether the
+ * agents. When 0 runs inside a herdr pane, herdr wants to know whether the
  * agent in that pane is `idle | working | blocked` — it drives the sidebar,
  * the completion sounds/toasts and `herdr agent wait` off exactly that signal.
  * Without a native reporter herdr falls back to screen-scraping our TUI and
@@ -12,7 +12,7 @@
  * per-pane picture — the pane's live TOPIC (its title), the model in use, the
  * provider roster, the tool it is running, subagent/task counts, context-window
  * occupancy and the agent-session link. This module reports all of that so a
- * 0sec pane is a first-class herdr citizen, on par with oh-my-pi.
+ * 0 pane is a first-class herdr citizen, on par with oh-my-pi.
  *
  * This module implements a `HerdrEventSink` — a normal `EventSink` (see
  * `../events/bus.ts`) that translates the bus's event vocabulary into herdr
@@ -36,7 +36,7 @@
  *
  * Methods emitted:
  *   - `pane.report_agent`         coarse state (idle/working/blocked) + message
- *   - `pane.report_agent_session` link the pane to the 0sec agent session
+ *   - `pane.report_agent_session` link the pane to the 0 agent session
  *                                 (id/path/start-source) — herdr's session
  *                                 lifecycle signal (started/updated)
  *   - `pane.report_metadata`      the pane TOPIC (`title`) + a `tokens` map
@@ -54,12 +54,12 @@
  *     `unref`'d so a pending report never keeps the process alive, and the
  *     metadata TTL is clamped to herdr's 24h ceiling.
  *
- *  2. NO PRINTING. 0sec runs inside a TUI that owns the terminal; a stray
+ *  2. NO PRINTING. 0 runs inside a TUI that owns the terminal; a stray
  *     `console.log` or `process.stderr.write` corrupts the framebuffer. There
  *     is deliberately not a single write to stdout/stderr in this file, not
  *     even on error. Failures are silent by design.
  *
- *  3. CONTENT POLICY — deliberately RICH. This 0sec build runs on a single
+ *  3. CONTENT POLICY — deliberately RICH. This 0 build runs on a single
  *     operator's hardened, boxed pentester machine, and the operator has
  *     explicitly waived the shared-socket privacy concern in favour of full
  *     herdr visibility. We therefore DO send the useful engagement content —
@@ -82,8 +82,8 @@ import type { EventSink, EventType } from "../events/bus.js";
 export type HerdrAgentState = "idle" | "working" | "blocked" | "unknown";
 
 /** Identifies us as the reporter in herdr's sidebar / `herdr agent ls`. */
-const HERDR_SOURCE = "0sec";
-const HERDR_AGENT = "0sec";
+const HERDR_SOURCE = "0";
+const HERDR_AGENT = "0";
 
 /** Protocol 19: `tokens` is a map of at most 16 entries… */
 const MAX_TOKENS = 16;
@@ -114,7 +114,7 @@ const DEFAULT_ATTEMPT_MS = 500;
 const DEFAULT_RETRY_MS = 1500;
 
 /**
- * The canonical 0sec pipeline phase names (documented on `PhaseStartedPayload`
+ * The canonical 0 pipeline phase names (documented on `PhaseStartedPayload`
  * in `bus.ts`). `phase_started` carries `name: string`, so a caller *could*
  * emit an off-script value; anything not in this closed set is ignored so a
  * stray phase name never becomes a pane label.
@@ -340,7 +340,7 @@ export class HerdrEventSink implements EventSink {
 
   /**
    * Monotonic sequence number. Seeded from wall-clock micros exactly like
-   * herdr's `pi` integration so that a restarted 0sec in the same pane still
+   * herdr's `pi` integration so that a restarted 0 in the same pane still
    * produces seqs above the ones the daemon already saw — otherwise the
    * daemon drops our first reports as stale.
    */
@@ -484,7 +484,7 @@ export class HerdrEventSink implements EventSink {
 
   /** Note that the compaction path ran (herdr has no compaction method; we
    * surface it as a monotonic `compactions` count token — the truthful,
-   * non-flapping representation, since 0sec only observes compaction after it
+   * non-flapping representation, since 0 only observes compaction after it
    * completes). */
   reportCompacting(): void {
     try {
@@ -496,7 +496,7 @@ export class HerdrEventSink implements EventSink {
   }
 
   /**
-   * Link this pane to the 0sec agent session, or refresh the link. This is
+   * Link this pane to the 0 agent session, or refresh the link. This is
    * herdr's session-lifecycle signal: the first call after mount is the
    * session "start", later calls (a resume/fork, or a session id becoming
    * known) are "updates". Sends `pane.report_agent_session`.
@@ -792,7 +792,7 @@ export class HerdrEventSink implements EventSink {
   }
 
   private nextId(): string {
-    return `0sec-${this.seq + 1}`;
+    return `0-${this.seq + 1}`;
   }
 
   /**

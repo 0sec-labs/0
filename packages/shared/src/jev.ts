@@ -75,32 +75,32 @@ export function jevConfigFromEnvironment(
   feature: JevFeature,
   environment: Readonly<Record<string, string | undefined>>,
 ): JevConfig | undefined {
-  const requested = (environment["0SEC_JEV_FEATURES"] ?? "").split(",").map((item) => item.trim()).filter(Boolean);
+  const requested = (environment["ZERO_JEV_FEATURES"] ?? "").split(",").map((item) => item.trim()).filter(Boolean);
   for (const name of requested) {
-    if (!FEATURES.includes(name as JevFeature)) throw new Error(`Unknown 0SEC_JEV_FEATURES entry: ${name}`);
+    if (!FEATURES.includes(name as JevFeature)) throw new Error(`Unknown ZERO_JEV_FEATURES entry: ${name}`);
   }
   if (!requested.includes(feature)) return undefined;
-  const provider = environment["0SEC_JEV_PROVIDER"] ?? "vercel";
+  const provider = environment["ZERO_JEV_PROVIDER"] ?? "vercel";
   if (provider !== "typesafe" && provider !== "vercel" && provider !== "cloud" && provider !== "classifier") {
-    throw new Error("0SEC_JEV_PROVIDER must be typesafe, vercel, cloud, or classifier");
+    throw new Error("ZERO_JEV_PROVIDER must be typesafe, vercel, cloud, or classifier");
   }
   const common = {
-    timeoutMs: positiveNumber(environment["0SEC_JEV_TIMEOUT_MS"], 10_000, "0SEC_JEV_TIMEOUT_MS"),
-    maxRequests: positiveNumber(environment["0SEC_JEV_MAX_REQUESTS"], 100, "0SEC_JEV_MAX_REQUESTS"),
-    maxCostUsd: positiveNumber(environment["0SEC_JEV_MAX_COST_USD"], 0.10, "0SEC_JEV_MAX_COST_USD"),
+    timeoutMs: positiveNumber(environment["ZERO_JEV_TIMEOUT_MS"], 10_000, "ZERO_JEV_TIMEOUT_MS"),
+    maxRequests: positiveNumber(environment["ZERO_JEV_MAX_REQUESTS"], 100, "ZERO_JEV_MAX_REQUESTS"),
+    maxCostUsd: positiveNumber(environment["ZERO_JEV_MAX_COST_USD"], 0.10, "ZERO_JEV_MAX_COST_USD"),
   };
   if (provider === "classifier") {
     if (feature !== "kernel") throw new Error("classifier provider is restricted to the kernel prepass");
     return {
       provider, feature: "kernel", ...common,
-      maxClassifications: positiveNumber(environment["0SEC_JEV_MAX_CLASSIFICATIONS"], 1_000, "0SEC_JEV_MAX_CLASSIFICATIONS"),
+      maxClassifications: positiveNumber(environment["ZERO_JEV_MAX_CLASSIFICATIONS"], 1_000, "ZERO_JEV_MAX_CLASSIFICATIONS"),
     };
   }
-  const keyName = provider === "typesafe" ? "TYPESAFE_API_KEY" : provider === "cloud" ? "0SEC_JEV_CLOUD_TOKEN" : "AI_GATEWAY_API_KEY";
+  const keyName = provider === "typesafe" ? "TYPESAFE_API_KEY" : provider === "cloud" ? "ZERO_JEV_CLOUD_TOKEN" : "AI_GATEWAY_API_KEY";
   const apiKey = environment[keyName]?.trim();
   if (!apiKey) throw new Error(`${keyName} is required when Jev assistance is enabled`);
   if (provider === "cloud") {
-    return { provider, apiKey, cloudUrl: environment["0SEC_JEV_CLOUD_URL"], feature, ...common };
+    return { provider, apiKey, cloudUrl: environment["ZERO_JEV_CLOUD_URL"], feature, ...common };
   }
   return {
     provider, apiKey, ...common,
@@ -169,7 +169,7 @@ function createClassifierDevEvaluator(config: Extract<JevConfig, { provider: "cl
         await Promise.all([...groups.values()].map(async (group) => {
           const response = await fetchImpl("https://classifier.dev", {
             method: "POST", signal, redirect: "error",
-            headers: { "Content-Type": "application/json", "User-Agent": "0sec-kernel-prepass/1.0" },
+            headers: { "Content-Type": "application/json", "User-Agent": "0-kernel-prepass/1.0" },
             body: JSON.stringify({
               labels: group.labels,
               inputs: group.items.map((item) => item.input),

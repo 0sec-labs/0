@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { Finding } from "@0sec/shared";
+import type { Finding } from "@0/shared";
 import { createReproductionBundle, runReproductionBundle, type BundleManifest, type BundlePlan } from "./reproduction-bundle.js";
 
 interface Fixture {
@@ -17,7 +17,7 @@ const roots: string[] = [];
 afterEach(() => { for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true }); });
 
 function fixture(patched = 'console.log("DENIED")'): Fixture {
-  const root = mkdtempSync(join(tmpdir(), "0sec-bundle-test-"));
+  const root = mkdtempSync(join(tmpdir(), "0-bundle-test-"));
   roots.push(root);
   for (const side of ["vulnerable", "patched"]) mkdirSync(join(root, side));
   writeFileSync(join(root, "vulnerable/app.cjs"), 'console.log("CROSS_TENANT_MARKER")');

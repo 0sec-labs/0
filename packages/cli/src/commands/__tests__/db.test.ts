@@ -1,12 +1,12 @@
 /**
- * Coverage seed for `0sec-cli`'s `db` command. This is the local SQLite
- * management surface — `0sec db reset` (destructive: deletes the local
- * DB + reseeds the verification workbench) and `0sec db repair` (backs
+ * Coverage seed for `@0/cli`'s `db` command. This is the local SQLite
+ * management surface — `0 db reset` (destructive: deletes the local
+ * DB + reseeds the verification workbench) and `0 db repair` (backs
  * up a malformed file and recreates a clean one). Both call into
- * `@0sec/db` (WASM SQLite per memory `project_db_wasm` — we never want
+ * `@0/db` (WASM SQLite per memory `project_db_wasm` — we never want
  * to touch a real DB from a unit test).
  *
- * Strategy: mock the `@0sec/db` boundary with a chatty fake that records
+ * Strategy: mock the `@0/db` boundary with a chatty fake that records
  * every method call db.ts makes (saveFinding, upsertWorkItem, addVerdict,
  * etc.), register the command on a fresh Commander program, and drive
  * `parseAsync` with the argv the operator would type. The `seedVerificationWorkbench`
@@ -34,7 +34,7 @@
  *   • Anything that requires opening real WASM SQLite — file I/O,
  *     PRAGMA quick_check, migrateWalHeaderIfNeeded — is exercised by
  *     `packages/db/src/wasm-shim.test.ts` and the database tests.
- *     Here the entire `@0sec/db` module is mocked.
+ *     Here the entire `@0/db` module is mocked.
  *   • The chalk-coloured stdout banner is not asserted exactly — we
  *     only assert the substrings that downstream parsing/relays rely on.
  *
@@ -48,7 +48,7 @@ import { Command } from "commander";
 // ── Module-level mocks ──────────────────────────────────────────────────────
 //
 // db.ts imports `osecDB`, `repairOsecDatabase`, and `resetOsecDatabase`
-// statically from `@0sec/db`. Vitest hoists `vi.mock`, so the static
+// statically from `@0/db`. Vitest hoists `vi.mock`, so the static
 // imports resolve to our stub.
 
 interface DbCall {
@@ -73,7 +73,7 @@ const dbState: {
 const resetOsecDatabaseMock = vi.fn();
 const repairOsecDatabaseMock = vi.fn();
 
-vi.mock("@0sec/db", () => {
+vi.mock("@0/db", () => {
   class FakeOsecDB {
     constructor(dbPath?: string) {
       dbState.instances += 1;
@@ -147,7 +147,7 @@ async function runCli(argv: string[]): Promise<unknown> {
   });
   registerDbCommand(program);
   try {
-    await program.parseAsync(["node", "0sec-cli", ...argv]);
+    await program.parseAsync(["node", "@0/cli", ...argv]);
     return null;
   } catch (err) {
     // The `db reset --seed bogus` path throws an Error from inside
@@ -171,10 +171,10 @@ beforeEach(() => {
   dbState.closed = false;
   dbState.scanIdCounter = 0;
 
-  resetOsecDatabaseMock.mockReset().mockReturnValue("/fake/0sec.db");
+  resetOsecDatabaseMock.mockReset().mockReturnValue("/fake/0.db");
   repairOsecDatabaseMock
     .mockReset()
-    .mockReturnValue({ path: "/fake/0sec.db" });
+    .mockReturnValue({ path: "/fake/0.db" });
 
   logSpy = vi.spyOn(console, "log").mockImplementation(() => undefined);
   errSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
@@ -255,24 +255,24 @@ describe("db reset — destructive happy path", () => {
       "db",
       "reset",
       "--db-path",
-      "/tmp/custom-0sec.db",
+      "/tmp/custom-0.db",
       "--seed",
       "empty",
     ]);
     expect(err).toBeNull();
-    expect(resetOsecDatabaseMock).toHaveBeenCalledWith("/tmp/custom-0sec.db");
-    expect(dbState.lastConstructorArg).toBe("/tmp/custom-0sec.db");
+    expect(resetOsecDatabaseMock).toHaveBeenCalledWith("/tmp/custom-0.db");
+    expect(dbState.lastConstructorArg).toBe("/tmp/custom-0.db");
   });
 
   it("closes the DB even if the seed helper throws (no leaked handle)", async () => {
     // Make `getScan` (the first thing every family calls) throw, so the
     // seed loop dies mid-way and the `finally` is the only path to close().
     const originalGetScan = (
-      await import("@0sec/db")
+      await import("@0/db")
     ).osecDB.prototype.getScan;
     const seedExplosion = new Error("boom mid-seed");
     (
-      await import("@0sec/db")
+      await import("@0/db")
     ).osecDB.prototype.getScan = function getScanSpy(): never {
       throw seedExplosion;
     };
@@ -284,7 +284,7 @@ describe("db reset — destructive happy path", () => {
       expect(dbState.closed).toBe(true);
     } finally {
       (
-        await import("@0sec/db")
+        await import("@0/db")
       ).osecDB.prototype.getScan = originalGetScan;
     }
   });
@@ -294,7 +294,7 @@ describe("db reset — destructive happy path", () => {
 
 describe("db repair", () => {
   it("happy path: calls repairOsecDatabase and logs the resulting path", async () => {
-    repairOsecDatabaseMock.mockReturnValueOnce({ path: "/fake/0sec.db" });
+    repairOsecDatabaseMock.mockReturnValueOnce({ path: "/fake/0.db" });
     const err = await runCli(["db", "repair"]);
     expect(err).toBeNull();
     expect(repairOsecDatabaseMock).toHaveBeenCalledOnce();
@@ -302,21 +302,21 @@ describe("db repair", () => {
 
     const out = logSpy.mock.calls.map((c: unknown[]) => String(c[0])).join("\n");
     expect(out).toMatch(/db repair/);
-    expect(out).toMatch(/\/fake\/0sec\.db/);
+    expect(out).toMatch(/\/fake\/0\.db/);
     // No backupPath means no `backup:` line.
     expect(out).not.toMatch(/backup:/);
   });
 
   it("logs a `backup:` line when repair quarantined a corrupt file", async () => {
     repairOsecDatabaseMock.mockReturnValueOnce({
-      path: "/fake/0sec.db",
-      backupPath: "/fake/0sec.db.corrupt-2026-05-13",
+      path: "/fake/0.db",
+      backupPath: "/fake/0.db.corrupt-2026-05-13",
     });
     const err = await runCli(["db", "repair"]);
     expect(err).toBeNull();
 
     const out = logSpy.mock.calls.map((c: unknown[]) => String(c[0])).join("\n");
-    expect(out).toMatch(/backup: \/fake\/0sec\.db\.corrupt-2026-05-13/);
+    expect(out).toMatch(/backup: \/fake\/0\.db\.corrupt-2026-05-13/);
   });
 
   it("--db-path is threaded through to repairOsecDatabase", async () => {
@@ -324,10 +324,10 @@ describe("db repair", () => {
       "db",
       "repair",
       "--db-path",
-      "/tmp/custom-0sec.db",
+      "/tmp/custom-0.db",
     ]);
     expect(err).toBeNull();
-    expect(repairOsecDatabaseMock).toHaveBeenCalledWith("/tmp/custom-0sec.db");
+    expect(repairOsecDatabaseMock).toHaveBeenCalledWith("/tmp/custom-0.db");
   });
 
   it("does NOT open a osecDB handle from the CLI layer (repair owns the open/close)", async () => {
@@ -348,7 +348,7 @@ describe("db repair", () => {
 
 describe("seedVerificationWorkbench — fixture shape", () => {
   it("returns the documented {scans, families, workers} counts", async () => {
-    const { osecDB } = await import("@0sec/db");
+    const { osecDB } = await import("@0/db");
     const db = new osecDB();
     const result = seedVerificationWorkbench(db as never);
     expect(result.scans).toBe(4);
@@ -357,7 +357,7 @@ describe("seedVerificationWorkbench — fixture shape", () => {
   });
 
   it("creates a scan per scan-key and completes each one with a summary", async () => {
-    const { osecDB } = await import("@0sec/db");
+    const { osecDB } = await import("@0/db");
     const db = new osecDB();
     seedVerificationWorkbench(db as never);
 
@@ -366,7 +366,7 @@ describe("seedVerificationWorkbench — fixture shape", () => {
   });
 
   it("writes one saveFinding + one workflow update per family (8 families)", async () => {
-    const { osecDB } = await import("@0sec/db");
+    const { osecDB } = await import("@0/db");
     const db = new osecDB();
     seedVerificationWorkbench(db as never);
 
@@ -375,7 +375,7 @@ describe("seedVerificationWorkbench — fixture shape", () => {
   });
 
   it("writes 6 work items per family (one per pipeline kind) — 48 total", async () => {
-    const { osecDB } = await import("@0sec/db");
+    const { osecDB } = await import("@0/db");
     const db = new osecDB();
     seedVerificationWorkbench(db as never);
 
@@ -385,14 +385,14 @@ describe("seedVerificationWorkbench — fixture shape", () => {
   });
 
   it("writes one runbook artifact per family", async () => {
-    const { osecDB } = await import("@0sec/db");
+    const { osecDB } = await import("@0/db");
     const db = new osecDB();
     seedVerificationWorkbench(db as never);
     expect(callsByMethod("upsertArtifact")).toHaveLength(8);
   });
 
   it("only emits saveSession for families that declare a `session` block", async () => {
-    const { osecDB } = await import("@0sec/db");
+    const { osecDB } = await import("@0/db");
     const db = new osecDB();
     seedVerificationWorkbench(db as never);
 
@@ -402,7 +402,7 @@ describe("seedVerificationWorkbench — fixture shape", () => {
   });
 
   it("emits addVerdict only for families with verdicts (not all 8)", async () => {
-    const { osecDB } = await import("@0sec/db");
+    const { osecDB } = await import("@0/db");
     const db = new osecDB();
     seedVerificationWorkbench(db as never);
 
@@ -412,7 +412,7 @@ describe("seedVerificationWorkbench — fixture shape", () => {
   });
 
   it("rewrites verdict.findingId to the parent finding.id before persisting", async () => {
-    const { osecDB } = await import("@0sec/db");
+    const { osecDB } = await import("@0/db");
     const db = new osecDB();
     seedVerificationWorkbench(db as never);
 
@@ -428,7 +428,7 @@ describe("seedVerificationWorkbench — fixture shape", () => {
   });
 
   it("logs `finding_seeded` + `work_item_seeded` events for every family", async () => {
-    const { osecDB } = await import("@0sec/db");
+    const { osecDB } = await import("@0/db");
     const db = new osecDB();
     seedVerificationWorkbench(db as never);
 
@@ -444,7 +444,7 @@ describe("seedVerificationWorkbench — fixture shape", () => {
   });
 
   it("tags every seeded event with `seeded: true` so they can be filtered out later", async () => {
-    const { osecDB } = await import("@0sec/db");
+    const { osecDB } = await import("@0/db");
     const db = new osecDB();
     seedVerificationWorkbench(db as never);
 

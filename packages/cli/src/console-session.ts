@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { createConsoleSession, type ConsoleSession, type ConsoleSessionConfig } from "@0sec/core";
-import { osecDB } from "@0sec/db";
+import { createConsoleSession, type ConsoleSession, type ConsoleSessionConfig } from "@0/core";
+import { osecDB } from "@0/db";
 import { createConversationHistory } from "./conversation-history.js";
 import { withDevEngineUpdates } from "./dev-engine-updates.js";
 

@@ -209,7 +209,7 @@ export function startVulnerableServer(port = DEFAULT_PORT): {
 
   console.log(`[VULNERABLE] Test target running on http://localhost:${resolvedPort}/v1/chat/completions`);
   console.log(`[VULNERABLE] MCP endpoint running on http://localhost:${resolvedPort}/mcp`);
-  console.log("This server is INTENTIONALLY vulnerable for 0sec testing.");
+  console.log("This server is INTENTIONALLY vulnerable for 0 testing.");
 
   return { app, server, port: resolvedPort };
 }

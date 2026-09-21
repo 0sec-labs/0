@@ -1,5 +1,5 @@
 /**
- * 0sec#193 — `restorePersistedFinding` round-trip for `verificationSpec`.
+ * 0#193 — `restorePersistedFinding` round-trip for `verificationSpec`.
  *
  * CodeRabbit flagged that `Finding.verificationSpec` is part of the shared
  * model but the unified-pipeline reload path was dropping it on restore.
@@ -14,14 +14,14 @@ import { copyFileSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
-import { osecDB } from "@0sec/db";
+import { osecDB } from "@0/db";
 import type {
   Finding,
   LayerVerdict,
   PocStep,
   ScanConfig,
   VerificationSpec,
-} from "@0sec/shared";
+} from "@0/shared";
 import { restorePersistedFinding } from "./unified-pipeline.js";
 
 const tempDirs: string[] = [];
@@ -30,7 +30,7 @@ let schemaDirectory: string;
 let schemaPath: string;
 
 beforeAll(() => {
-  schemaDirectory = mkdtempSync(join(tmpdir(), "0sec-restore-schema-"));
+  schemaDirectory = mkdtempSync(join(tmpdir(), "0-restore-schema-"));
   schemaPath = join(schemaDirectory, "empty.db");
   const db = new osecDB(schemaPath);
   db.close();
@@ -41,9 +41,9 @@ afterAll(() => {
 });
 
 function makeDb(): { db: osecDB; scanId: string } {
-  const dir = mkdtempSync(join(tmpdir(), "0sec-restore-vspec-"));
+  const dir = mkdtempSync(join(tmpdir(), "0-restore-vspec-"));
   tempDirs.push(dir);
-  const dbPath = join(dir, "0sec.db");
+  const dbPath = join(dir, "0.db");
   // Keep real serialization and persistence, without repeating empty-schema DDL.
   copyFileSync(schemaPath, dbPath);
   const db = new osecDB(dbPath);
@@ -131,7 +131,7 @@ function makePersistedRow(
   };
 }
 
-describe("restorePersistedFinding (0sec#193 — verificationSpec round-trip)", () => {
+describe("restorePersistedFinding (0#193 — verificationSpec round-trip)", () => {
   afterEach(() => {
     for (const dir of tempDirs.splice(0)) {
       rmSync(dir, { recursive: true, force: true });
@@ -205,7 +205,7 @@ describe("restorePersistedFinding (0sec#193 — verificationSpec round-trip)", (
   });
 });
 
-// 0sec#414 — six additional persisted columns were being silently dropped
+// 0#414 — six additional persisted columns were being silently dropped
 // on resume (pocSteps, layerVerdicts, pocExecution, workflowStatus,
 // workflowAssignee, score). These tests pin the round-trip so the next
 // regression fails loudly.
@@ -255,7 +255,7 @@ function makePocExecution() {
   };
 }
 
-describe("restorePersistedFinding (0sec#414 — six-field round-trip)", () => {
+describe("restorePersistedFinding (0#414 — six-field round-trip)", () => {
   afterEach(() => {
     for (const dir of tempDirs.splice(0)) {
       rmSync(dir, { recursive: true, force: true });
@@ -409,7 +409,7 @@ describe("restorePersistedFinding — impactAssessment round-trip", () => {
   });
 });
 
-describe("restorePersistedFinding \u2014 review fields (0sec#420)", () => {
+describe("restorePersistedFinding \u2014 review fields (0#420)", () => {
   it("threads a persisted verification_result back onto the finding", () => {
     const restored = restorePersistedFinding(
       makePersistedRow({

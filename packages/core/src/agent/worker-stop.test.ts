@@ -68,7 +68,7 @@ afterEach(() => {
 
 describe("owned worker stop and drain", () => {
   it("delivers operator mail to workers created under UUID audit identities", async () => {
-    const home = mkdtempSync(join(tmpdir(), "0sec-worker-mailbox-"));
+    const home = mkdtempSync(join(tmpdir(), "0-worker-mailbox-"));
     const executor = new ToolExecutor(
       context("0b61d1cc-613c-4081-97d6-b718b786b012"), null, undefined, async () => runtime(),
     );
@@ -195,7 +195,7 @@ describe("owned worker stop and drain", () => {
   });
 
   it("drains queued work through ordered publication without losing already completed findings", async () => {
-    vi.stubEnv("0SEC_SUBAGENT_CONCURRENCY", "1");
+    vi.stubEnv("ZERO_SUBAGENT_CONCURRENCY", "1");
     const running = deferred();
     const cleanup = deferred();
     const ctx = context("audit-queued");

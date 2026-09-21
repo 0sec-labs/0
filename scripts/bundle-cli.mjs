@@ -64,7 +64,7 @@ await build({
   entryPoints: ["packages/cli/src/index.ts"],
   outdir,
   outExtension: { ".js": ".js" },
-  entryNames: "0sec",
+  entryNames: "0",
   chunkNames: "chunks/[name]-[hash]",
   bundle: true,
   format: "esm",
@@ -75,7 +75,7 @@ await build({
   // never call it.
   splitting: true,
   banner: {
-    js: '#!/usr/bin/env node\nimport { createRequire as __0secCreateRequire } from "node:module";\nconst require = __0secCreateRequire(import.meta.url);',
+    js: '#!/usr/bin/env node\nimport { createRequire as __0CreateRequire } from "node:module";\nconst require = __0CreateRequire(import.meta.url);',
   },
   external: [
     // node-sqlite3-wasm ships a .wasm sidecar that is resolved relative to
@@ -89,7 +89,7 @@ await build({
     "playwright-core",
     // tree-sitter and its C grammar load native .node bindings relative to
     // their installed package directories. Bundling their CommonJS loaders
-    // into an ESM chunk removes __dirname and breaks even `0sec --help`.
+    // into an ESM chunk removes __dirname and breaks even `0 --help`.
     // Keep both packages intact and declare them in the published tarball.
     "tree-sitter",
     "tree-sitter-c",
@@ -115,11 +115,11 @@ await build({
     // bundled constants.ts picks it up without a runtime fs read. The
     // unbundled source/test path falls back to a one-time fs read of
     // the same root package.json.
-    __0SEC_VERSION__: JSON.stringify(PKG_VERSION),
+    __ZERO_VERSION__: JSON.stringify(PKG_VERSION),
     // The JavaScript bundle ships tree-sitter as an external runtime dependency.
     // Only `bun --compile` stages and embeds its native addons.
-    __0SEC_COMPILED_TARGET__: "undefined",
-    __0SEC_BUILD_COMMIT__: JSON.stringify(BUILD_COMMIT),
+    __ZERO_COMPILED_TARGET__: "undefined",
+    __ZERO_BUILD_COMMIT__: JSON.stringify(BUILD_COMMIT),
   },
   plugins: [stubPlugin, releaseOnlyAddonPlugin],
 });
@@ -131,7 +131,7 @@ cpSync("packages/dashboard/dist", `${outdir}/dashboard`, { recursive: true });
 // `new URL("./<file>", import.meta.url)`. The package build co-locates them
 // (`cp src/bench/*.json dist/bench/`), but esbuild splits that module into
 // `dist/chunks/`, so the JSON must sit next to the chunk too — otherwise
-// `0sec bench run` (the nightly regression gate) fails with
+// `0 bench run` (the nightly regression gate) fails with
 // `ENOENT dist/chunks/corpus-v1.json`. Keep in sync with the files paths.ts reads.
 for (const benchFile of ["corpus-v1.json", "example-manifest.json"]) {
   const source = `packages/core/src/bench/${benchFile}`;
@@ -147,7 +147,7 @@ for (const benchFile of ["corpus-v1.json", "example-manifest.json"]) {
 // splits those modules into `dist/chunks/`, so `import.meta.url` points at the
 // chunk and the loader reads `dist/chunks/data/<file>.json`. The appsec loader
 // runs at MODULE-EVAL (deep-review's `defaultFinderLenses` const → every command
-// incl. `0sec --help`), so a missing copy is a hard boot crash, not a lazy
+// incl. `0 --help`), so a missing copy is a hard boot crash, not a lazy
 // failure — mirror the bench-corpus copy above into the chunk-relative `data/`
 // dir. Keep in sync with the files those loaders read (whole *.json glob, same
 // as the core build's copy step).
@@ -161,7 +161,7 @@ for (const dataFile of readdirSync(stagesDataSrc).filter((f) => f.endsWith(".jso
 // module directory (`new URL(".", import.meta.url)`) for *.yaml and validates
 // each as a skill. esbuild lands that loader in `dist/chunks/`, so the walk
 // targets `dist/chunks/` — mirror the skills tree to `dist/chunks/agent/skills/`
-// so `list_skills`/`load_skill` (0SEC_FEATURE_JIT_SKILLS) find every pack in the
+// so `list_skills`/`load_skill` (ZERO_FEATURE_JIT_SKILLS) find every pack in the
 // packaged binary, exactly as they do from source. Copy ONLY *.yaml: the loader
 // validates every yaml it walks as a skill, so a stray non-skill yaml under
 // chunks would hard-fail loading. There are no other yaml under dist/chunks/.
@@ -185,7 +185,7 @@ copySkillYaml("");
 console.log(`Copied ${skillYamlCopied} skill YAML files → chunks/agent/skills/`);
 
 // Fix double shebang
-const bundlePath = `${outdir}/0sec.js`;
+const bundlePath = `${outdir}/0.js`;
 const bundle = readFileSync(bundlePath, "utf8").replace(
   "#!/usr/bin/env node\n#!/usr/bin/env node\n",
   "#!/usr/bin/env node\n"
@@ -194,12 +194,12 @@ writeFileSync(bundlePath, bundle);
 
 // Write a clean package.json for publishing (no workspace: deps).
 const publishPkg = {
-  name: cliPkg.name,
+  name: rootPkg.name,
   version: rootPkg.version,
   type: "module",
   description: rootPkg.description,
-  bin: { "0sec": "0sec.js", "0": "0sec.js" },
-  files: ["0sec.js", "chunks", "attacks", "dashboard"],
+  bin: { "0": "0.js" },
+  files: ["0.js", "chunks", "attacks", "dashboard"],
   keywords: rootPkg.keywords,
   author: rootPkg.author,
   homepage: rootPkg.homepage,
@@ -225,4 +225,4 @@ copyFileSync("scripts/dist-package-lock.json", `${outdir}/package-lock.json`);
 copyFileSync("LICENSE", `${outdir}/LICENSE`);
 copyFileSync("README.md", `${outdir}/README.md`);
 
-console.log(`Bundled 0sec v${rootPkg.version} → ${outdir}/`);
+console.log(`Bundled 0 v${rootPkg.version} → ${outdir}/`);

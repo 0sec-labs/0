@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /** Real guest lifecycle. Requires built packages and a provisioned toolbox.
- * 0SEC_PLUGIN_BACKEND=docker|smolvm; smolvm requires 0SEC_SMOLVM_IMAGE_ARCHIVE.
- * Set 0SEC_EVOLVE_REAL=1 for real-provider code evolution; missing credentials,
+ * ZERO_PLUGIN_BACKEND=docker|smolvm; smolvm requires ZERO_SMOLVM_IMAGE_ARCHIVE.
+ * Set ZERO_EVOLVE_REAL=1 for real-provider code evolution; missing credentials,
  * failed evaluation, failed activation, and failed rollback are test failures.
  */
 import assert from "node:assert/strict";
@@ -15,12 +15,12 @@ import { BUILTIN_GUARDS } from "../packages/core/dist/plugins/guards.js";
 import { SELF_EXTENSION_RESERVED_TOOL_NAMES } from "../packages/core/dist/agent/tools.js";
 import { parseEvolutionConfig } from "../packages/core/dist/improvement/config.js";
 
-const backend = process.env["0SEC_PLUGIN_BACKEND"] ?? "docker";
+const backend = process.env["ZERO_PLUGIN_BACKEND"] ?? "docker";
 assert(["docker", "smolvm"].includes(backend));
-const imageArchive = process.env["0SEC_SMOLVM_IMAGE_ARCHIVE"];
+const imageArchive = process.env["ZERO_SMOLVM_IMAGE_ARCHIVE"];
 if (backend === "smolvm") assert(imageArchive, "provide a local toolbox archive");
-const image = process.env["0SEC_PLUGIN_IMAGE"] ?? "0sec-toolbox:qualification";
-const root = mkdtempSync(join(tmpdir(), "0sec-executable-smoke-"));
+const image = process.env["ZERO_PLUGIN_IMAGE"] ?? "0-toolbox:qualification";
+const root = mkdtempSync(join(tmpdir(), "0-executable-smoke-"));
 const controller = new AbortController();
 const abort = () => controller.abort(new Error("qualification cancelled"));
 process.once("SIGINT", abort); process.once("SIGTERM", abort);
@@ -137,11 +137,11 @@ try {
     } finally { writeFileSync(path, prior); }
     assert.equal(manager.list().find(item => item.id === "smoke.echo" && item.active).versionId, original);
   });
-  if (process.env["0SEC_EVOLVE_REAL"] === "1") {
+  if (process.env["ZERO_EVOLVE_REAL"] === "1") {
     const { maybeLoadCodexAuth } = await import("../packages/cli/dist/codex-auth.js");
     maybeLoadCodexAuth();
-    process.env["0SEC_DISABLE_HUNT_MEMORY"] = "1";
-    process.env["0SEC_CLOUD_SINK"] = "";
+    process.env["ZERO_DISABLE_HUNT_MEMORY"] = "1";
+    process.env["ZERO_CLOUD_SINK"] = "";
     await step("Real provider repairs source and activates a measured version", async () => {
       const buggy = output(await manager.submit({ manifest: manifest("smoke.evolve", [tool("smoke_evolve")]), entry: "main.ts", kind: "agent", files: {
         "main.ts": source("if (typeof args.value !== 'number' || !Number.isFinite(args.value)) return {error:'invalid'}; return {result:args.value - 42};"),
@@ -158,7 +158,7 @@ try {
         sourceRoot: join(root, "profile-source"), storePath: join(root, "profile-store"),
         sourcePaths: ["main.ts", "evaluate.mjs"], editablePaths: ["main.ts"],
         command: ["node", "--experimental-strip-types", "evaluate.mjs"], cases,
-        model: process.env["0SEC_MODEL"] ?? "gpt-5.6-luna",
+        model: process.env["ZERO_MODEL"] ?? "gpt-5.6-luna",
         objective: "Fix run() to return {result: value + 42} for finite numeric args.value. Preserve {error:'invalid'} for absent, nonnumeric, or nonfinite values. Preserve the run export and all existing argument handling; fix the general arithmetic rather than matching fixture inputs.",
         allowModelSourceAccess: true, autoPromote: true, repeats: 2, canaryTrials: 1,
         maxIterations: 2, maxModelTurns: 6, maxModelCostUsd: 1, maxEvaluationCostUsd: 1,
@@ -184,7 +184,7 @@ try {
       console.log(JSON.stringify({ phase: "real-evolution", model: profile.model, baselineVersion: buggy, evolvedVersion: evolved.versionId, coldRestore: true, rollback: true }));
     });
   }
-  console.log(JSON.stringify({ outcome: "passed", backend, checks: passed, realProviderEvolution: process.env["0SEC_EVOLVE_REAL"] === "1" }));
+  console.log(JSON.stringify({ outcome: "passed", backend, checks: passed, realProviderEvolution: process.env["ZERO_EVOLVE_REAL"] === "1" }));
 } finally {
   controller.abort();
   await Promise.allSettled(managers.map(instance => instance.close()));

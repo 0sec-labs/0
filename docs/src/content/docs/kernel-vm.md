@@ -21,7 +21,7 @@ A maintained build recipe at `packages/core/src/triage/kernel-vm/` builds:
   support; inspect the generated config rather than assuming every requested
   option survives `olddefconfig`. Tree builds use separate `kasan` and `kcsan` profiles.
 - `rootfs.img` — 512 MB Debian Bookworm ext4 with `gcc`, `binutils`, `make`,
-  `procps`, `kmod`, `strace`, `gdb`, OpenSSH, and `/sbin/0sec-init`.
+  `procps`, `kmod`, `strace`, `gdb`, OpenSSH, and `/sbin/0-init`.
 - `kernel.config` — the exact config used for the build.
 - `osec_vm_key[.pub]` — root SSH keypair for manual debugging only (the verifier
   uses a QEMU 9p share, not SSH).
@@ -45,14 +45,14 @@ From the repo root:
 ```bash
 # Docker builds the guest; the published 0 CLI and QEMU are needed to run it.
 cd packages/core/src/triage/kernel-vm
-env 0SEC_KERNEL_VM_MAKE_JOBS=4 \
-  ./build.sh "$HOME/.0sec/kernel-vm/linux-6.8.12-kasan"
+env ZERO_KERNEL_VM_MAKE_JOBS=4 \
+  ./build.sh "$HOME/.0/kernel-vm/linux-6.8.12-kasan"
 ```
 
 Output:
 
 ```text
-$HOME/.0sec/kernel-vm/linux-6.8.12-kasan/
+$HOME/.0/kernel-vm/linux-6.8.12-kasan/
   bzImage
   rootfs.img
   kernel.config
@@ -63,19 +63,19 @@ $HOME/.0sec/kernel-vm/linux-6.8.12-kasan/
 Treat the output directory as a local cache; regenerate it when the Dockerfile,
 kernel version, or guest package list changes.
 
-<span id="configure-0sec"></span>
+<span id="configure-0"></span>
 ## Configure 0
 
-Required values must be passed with `env`: `0SEC_*` names begin with a digit and
+Required values must be passed with `env`: `ZERO_*` names begin with a digit and
 cannot be exported by POSIX shells.
 
 ```bash
 env \
-  0SEC_KERNEL_QEMU=1 \
-  0SEC_KERNEL_QEMU_KERNEL="$HOME/.0sec/kernel-vm/linux-6.8.12-kasan/bzImage" \
-  0SEC_KERNEL_QEMU_DISK="$HOME/.0sec/kernel-vm/linux-6.8.12-kasan/rootfs.img" \
-  0SEC_KERNEL_QEMU_CONFIG="$HOME/.0sec/kernel-vm/linux-6.8.12-kasan/kernel.config" \
-  0SEC_KERNEL_QEMU_EXPECTED_RELEASE=6.8.12 \
+  ZERO_KERNEL_QEMU=1 \
+  ZERO_KERNEL_QEMU_KERNEL="$HOME/.0/kernel-vm/linux-6.8.12-kasan/bzImage" \
+  ZERO_KERNEL_QEMU_DISK="$HOME/.0/kernel-vm/linux-6.8.12-kasan/rootfs.img" \
+  ZERO_KERNEL_QEMU_CONFIG="$HOME/.0/kernel-vm/linux-6.8.12-kasan/kernel.config" \
+  ZERO_KERNEL_QEMU_EXPECTED_RELEASE=6.8.12 \
   0 ingest --verify ./crashes
 ```
 
@@ -83,25 +83,25 @@ Recommended local defaults can be added to the same command:
 
 ```bash
 env \
-  0SEC_KERNEL_QEMU=1 \
-  0SEC_KERNEL_QEMU_KERNEL="$HOME/.0sec/kernel-vm/linux-6.8.12-kasan/bzImage" \
-  0SEC_KERNEL_QEMU_DISK="$HOME/.0sec/kernel-vm/linux-6.8.12-kasan/rootfs.img" \
-  0SEC_KERNEL_QEMU_CONFIG="$HOME/.0sec/kernel-vm/linux-6.8.12-kasan/kernel.config" \
-  0SEC_KERNEL_QEMU_EXPECTED_RELEASE=6.8.12 \
-  0SEC_KERNEL_QEMU_MEMORY_MB=2048 \
-  0SEC_KERNEL_QEMU_SMP=2 \
-  0SEC_KERNEL_QEMU_BOOT_TIMEOUT_SEC=180 \
-  0SEC_KERNEL_QEMU_TIMEOUT_SEC=60 \
-  0SEC_KERNEL_QEMU_ARTIFACT_DIR="$HOME/.0sec/kernel-vm/runs" \
+  ZERO_KERNEL_QEMU=1 \
+  ZERO_KERNEL_QEMU_KERNEL="$HOME/.0/kernel-vm/linux-6.8.12-kasan/bzImage" \
+  ZERO_KERNEL_QEMU_DISK="$HOME/.0/kernel-vm/linux-6.8.12-kasan/rootfs.img" \
+  ZERO_KERNEL_QEMU_CONFIG="$HOME/.0/kernel-vm/linux-6.8.12-kasan/kernel.config" \
+  ZERO_KERNEL_QEMU_EXPECTED_RELEASE=6.8.12 \
+  ZERO_KERNEL_QEMU_MEMORY_MB=2048 \
+  ZERO_KERNEL_QEMU_SMP=2 \
+  ZERO_KERNEL_QEMU_BOOT_TIMEOUT_SEC=180 \
+  ZERO_KERNEL_QEMU_TIMEOUT_SEC=60 \
+  ZERO_KERNEL_QEMU_ARTIFACT_DIR="$HOME/.0/kernel-vm/runs" \
   0 ingest --verify ./crashes
 ```
 
-On Linux hosts with KVM, add `0SEC_KERNEL_QEMU_ACCEL=kvm` to that `env` invocation.
+On Linux hosts with KVM, add `ZERO_KERNEL_QEMU_ACCEL=kvm` to that `env` invocation.
 
-Leave `0SEC_KERNEL_QEMU_APPEND` unset unless using a custom guest. Default:
+Leave `ZERO_KERNEL_QEMU_APPEND` unset unless using a custom guest. Default:
 
 ```text
-console=ttyS0 root=/dev/vda rw nokaslr panic=-1 init=/sbin/0sec-init
+console=ttyS0 root=/dev/vda rw nokaslr panic=-1 init=/sbin/0-init
 ```
 
 The release above applies only to the unmodified 6.8.12 recipe. For custom
@@ -135,16 +135,16 @@ For a standalone reproducer, use a source tree and the current profile flag:
   --kernel-config kasan --output json
 ```
 
-This resolves/builds cached artifacts (default `~/.0sec/kernel-cache`, override
-with `--kernel-cache-dir` or `0SEC_KERNEL_BUILD_CACHE`). Built-in profiles are
-`kasan`, `kcsan`, and `plain`. Existing `0SEC_KERNEL_QEMU_KERNEL`/`DISK` overrides
+This resolves/builds cached artifacts (default `~/.0/kernel-cache`, override
+with `--kernel-cache-dir` or `ZERO_KERNEL_BUILD_CACHE`). Built-in profiles are
+`kasan`, `kcsan`, and `plain`. Existing `ZERO_KERNEL_QEMU_KERNEL`/`DISK` overrides
 take precedence unless `--force-kernel-build` is used, so unset those overrides
 when you intend to test the supplied tree. `--syz ./program.syz` requires
 `syz-execprog` in the guest; the stock rootfs recipe does not install it.
 
 For each C reproducer 0 writes `repro.c` and `runner.sh` to a temp dir, boots
-QEMU with a 9p share (`osecshare`), lets `/sbin/0sec-init` run
-`/mnt/0sec/runner.sh`, compiles and runs the reproducer under the timeout, and
+QEMU with a 9p share (`osecshare`), lets `/sbin/0-init` run
+`/mnt/0/runner.sh`, compiles and runs the reproducer under the timeout, and
 copies `compile.log`, `run.log`, `dmesg.log`, markers, and the serial log back
 to the artifact directory (when configured).
 
@@ -165,7 +165,7 @@ ordinary label/artifact mixups but is **not** hardware attestation (no TPM /
 SEV-SNP) and does not defend against a malicious host or guest kernel, nor prove
 the running kernel config without a runtime measurement like `/proc/config.gz`.
 
-If `0SEC_KERNEL_QEMU_ARTIFACT_DIR` is unset, the temp run directory is deleted
+If `ZERO_KERNEL_QEMU_ARTIFACT_DIR` is unset, the temp run directory is deleted
 after each attempt.
 
 ## Guest contract
@@ -176,9 +176,9 @@ A custom guest must satisfy:
 | --- | --- |
 | Architecture | x86_64, bootable by `qemu-system-x86_64` |
 | Root device | `root=/dev/vda` (or matching custom append) |
-| Init path | `/sbin/0sec-init` (unless `0SEC_KERNEL_QEMU_APPEND` changed) |
-| Host share | Mount 9p tag `osecshare` at `/mnt/0sec` |
-| Runner | Execute `/mnt/0sec/runner.sh`, leave results in the share |
+| Init path | `/sbin/0-init` (unless `ZERO_KERNEL_QEMU_APPEND` changed) |
+| Host share | Mount 9p tag `osecshare` at `/mnt/0` |
+| Runner | Execute `/mnt/0/runner.sh`, leave results in the share |
 | Compiler | `/usr/bin/gcc` plus libc headers and `binutils` |
 | Logs | `dmesg` readable after the reproducer runs |
 | Kernel | Debug-friendly, crash signal visible in `dmesg` |
@@ -189,22 +189,22 @@ SSH is not part of the contract; the keypair is only for manual debugging.
 
 | Variable | Required | Default | Description |
 | --- | --- | --- | --- |
-| `0SEC_KERNEL_QEMU` | Yes | - | `1` to enable VM execution |
-| `0SEC_KERNEL_QEMU_KERNEL` | Yes | - | Path to `bzImage` |
-| `0SEC_KERNEL_QEMU_DISK` | Yes | - | Path to `rootfs.img` or other bootable disk |
-| `0SEC_KERNEL_QEMU_CONFIG` | For direct execution receipts | - | Config used to build the selected kernel |
-| `0SEC_KERNEL_QEMU_EXPECTED_RELEASE` | For direct/prebuilt execution | - | Exact expected `uname -r`; never inferred from filename |
-| `0SEC_KERNEL_QEMU_BINARY` | No | `qemu-system-x86_64` | QEMU binary |
-| `0SEC_KERNEL_QEMU_DISK_FORMAT` | No | inferred | `raw` or `qcow2` |
-| `0SEC_KERNEL_QEMU_MEMORY_MB` | No | `2048` | Guest memory (MB) |
-| `0SEC_KERNEL_QEMU_SMP` | No | `2` | Guest CPU count |
-| `0SEC_KERNEL_QEMU_APPEND` | No | see above | Kernel command line |
-| `0SEC_KERNEL_QEMU_ACCEL` | No | - | Accelerator, e.g. `kvm` |
-| `0SEC_KERNEL_QEMU_INITRD` | No | - | Optional initrd for custom guests |
-| `0SEC_KERNEL_QEMU_BOOT_TIMEOUT_SEC` | No | `120` | Boot + setup time |
-| `0SEC_KERNEL_QEMU_TIMEOUT_SEC` | No | `60` | Reproducer time |
-| `0SEC_KERNEL_QEMU_SHARE_TAG` | No | `osecshare` | 9p mount tag |
-| `0SEC_KERNEL_QEMU_ARTIFACT_DIR` | No | - | Where per-run artifacts are preserved |
+| `ZERO_KERNEL_QEMU` | Yes | - | `1` to enable VM execution |
+| `ZERO_KERNEL_QEMU_KERNEL` | Yes | - | Path to `bzImage` |
+| `ZERO_KERNEL_QEMU_DISK` | Yes | - | Path to `rootfs.img` or other bootable disk |
+| `ZERO_KERNEL_QEMU_CONFIG` | For direct execution receipts | - | Config used to build the selected kernel |
+| `ZERO_KERNEL_QEMU_EXPECTED_RELEASE` | For direct/prebuilt execution | - | Exact expected `uname -r`; never inferred from filename |
+| `ZERO_KERNEL_QEMU_BINARY` | No | `qemu-system-x86_64` | QEMU binary |
+| `ZERO_KERNEL_QEMU_DISK_FORMAT` | No | inferred | `raw` or `qcow2` |
+| `ZERO_KERNEL_QEMU_MEMORY_MB` | No | `2048` | Guest memory (MB) |
+| `ZERO_KERNEL_QEMU_SMP` | No | `2` | Guest CPU count |
+| `ZERO_KERNEL_QEMU_APPEND` | No | see above | Kernel command line |
+| `ZERO_KERNEL_QEMU_ACCEL` | No | - | Accelerator, e.g. `kvm` |
+| `ZERO_KERNEL_QEMU_INITRD` | No | - | Optional initrd for custom guests |
+| `ZERO_KERNEL_QEMU_BOOT_TIMEOUT_SEC` | No | `120` | Boot + setup time |
+| `ZERO_KERNEL_QEMU_TIMEOUT_SEC` | No | `60` | Reproducer time |
+| `ZERO_KERNEL_QEMU_SHARE_TAG` | No | `osecshare` | 9p mount tag |
+| `ZERO_KERNEL_QEMU_ARTIFACT_DIR` | No | - | Where per-run artifacts are preserved |
 
 ## Troubleshooting
 

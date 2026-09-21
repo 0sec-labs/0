@@ -11,7 +11,7 @@ import {
 const directories: string[] = [];
 
 function temporaryHome(): string {
-  const home = mkdtempSync(join(tmpdir(), "0sec-codex-device-auth-"));
+  const home = mkdtempSync(join(tmpdir(), "0-codex-device-auth-"));
   directories.push(home);
   return home;
 }
@@ -58,9 +58,9 @@ describe("startCodexDeviceAuth", () => {
       tokens: { access_token: "fresh-access", refresh_token: "fresh-refresh" },
     }));
     const env: NodeJS.ProcessEnv = {
-      "0SEC_CHATGPT_AUTH_FILE": authPath,
-      "0SEC_CHATGPT_ACCESS_TOKEN": "stale-access",
-      "0SEC_CHATGPT_OAUTH_REFRESH_TOKEN": "stale-refresh",
+      "ZERO_CHATGPT_AUTH_FILE": authPath,
+      "ZERO_CHATGPT_ACCESS_TOKEN": "stale-access",
+      "ZERO_CHATGPT_OAUTH_REFRESH_TOKEN": "stale-refresh",
     };
     const child = fakeProcess();
     const updates: string[] = [];
@@ -81,8 +81,8 @@ describe("startCodexDeviceAuth", () => {
     child.stderr("Enter code ABCD-EFGH\n");
     child.close(0);
 
-    expect(env["0SEC_CHATGPT_ACCESS_TOKEN"]).toBe("fresh-access");
-    expect(env["0SEC_CHATGPT_OAUTH_REFRESH_TOKEN"]).toBe("fresh-refresh");
+    expect(env["ZERO_CHATGPT_ACCESS_TOKEN"]).toBe("fresh-access");
+    expect(env["ZERO_CHATGPT_OAUTH_REFRESH_TOKEN"]).toBe("fresh-refresh");
     expect(updates).toEqual(["running", "running", "running", "connected"]);
     expect(connected).toBe(1);
   });

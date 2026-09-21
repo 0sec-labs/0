@@ -7,7 +7,7 @@ import type {
   DesktopConsoleEvent,
   DesktopConsoleRole,
   DesktopConsoleSession,
-} from "@0sec/shared";
+} from "@0/shared";
 import { api } from "./api.js";
 import { useStoredState } from "./use-stored-state.js";
 
@@ -68,7 +68,7 @@ export function useWorkspace(): Workspace {
   /* ── Sessions ──────────────────────────────────────────────── */
   const [sessions, setSessions] = useState<DesktopConsoleSession[]>([]);
   const [activeId, setActiveId] = useStoredState<string | null>(
-    "0sec:active-session",
+    "0:active-session",
     null,
   );
   const [loading, setLoading] = useState(true);
@@ -80,11 +80,11 @@ export function useWorkspace(): Workspace {
 
   /* ── Drafts & titles ────────────────────────────────────────── */
   const [drafts, setDrafts] = useStoredState<Record<string, string>>(
-    "0sec:drafts",
+    "0:drafts",
     {},
   );
   const [titles, setTitles] = useStoredState<Record<string, string>>(
-    "0sec:thread-titles",
+    "0:thread-titles",
     {},
   );
 

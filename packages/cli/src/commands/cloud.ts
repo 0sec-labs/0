@@ -11,7 +11,7 @@ import {
   type BucketProbeResult,
   type TakeoverVerdict,
   type CredentialValidationResult,
-} from "@0sec/core";
+} from "@0/core";
 
 interface S3ProbeOptions {
   scope?: string;
@@ -30,11 +30,11 @@ interface ValidateCredsOptions {
 }
 
 const FEATURE_OFF_MSG =
-  "cloud commands are disabled. Set 0SEC_FEATURE_CLOUD_SURFACE=1 to enable (read-only S3/credential probes, deny-by-default).";
+  "cloud commands are disabled. Set ZERO_FEATURE_CLOUD_SURFACE=1 to enable (read-only S3/credential probes, deny-by-default).";
 
 /**
  * Live cloud-surface probes (#925). Every subcommand is gated behind BOTH the
- * 0SEC_FEATURE_CLOUD_SURFACE feature flag AND an engagement ScopePolicy
+ * ZERO_FEATURE_CLOUD_SURFACE feature flag AND an engagement ScopePolicy
  * (`--scope`). Both rails are deny-by-default and refuse with a clear message.
  * All probes are anonymous or read-only — nothing is mutated or exfiltrated.
  */
@@ -42,7 +42,7 @@ export function registerCloudCommand(program: Command): void {
   const cloud = program
     .command("cloud")
     .description(
-      "Read-only cloud-surface probes (S3 public-access / takeover, AWS credential validation). Gated behind 0SEC_FEATURE_CLOUD_SURFACE + an engagement scope, deny-by-default. #925",
+      "Read-only cloud-surface probes (S3 public-access / takeover, AWS credential validation). Gated behind ZERO_FEATURE_CLOUD_SURFACE + an engagement scope, deny-by-default. #925",
     );
 
   cloud

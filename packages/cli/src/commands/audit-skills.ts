@@ -1,4 +1,4 @@
-// `0sec skills` — manage audit-skills methodology bundles via 0cloud.
+// `0 skills` — manage audit-skills methodology bundles via 0cloud.
 //
 // Capability catalogue:
 //   skills list            — list all audit skills for the authenticated org
@@ -12,8 +12,8 @@
 //   skills project <prj>   — list skills assigned to a project
 //   skills archive <id>    — archive a skill (disables future bindings)
 //
-// Every subcommand requires cloud credentials (0SEC_CLOUD_TOKEN or
-// `~/.0sec/cloud.env`) and uses the CloudClient for bearer-authenticated
+// Every subcommand requires cloud credentials (ZERO_CLOUD_TOKEN or
+// `~/.0/cloud.env`) and uses the CloudClient for bearer-authenticated
 // HTTP against the cloud dashboard ingress (/api/audit-skills*).
 
 import { readFileSync, statSync } from "node:fs";
@@ -26,9 +26,9 @@ import {
   CloudAuthMissingError,
   CloudForbiddenError,
   loadCloudCredentials,
-} from "@0sec/core";
+} from "@0/core";
 // Wire DTOs mirroring the frozen /api/audit-skills contract
-// (0sec-audit-skills-v1). The @0sec/core root barrel is a shared-release
+// (0-audit-skills-v1). The @0/core root barrel is a shared-release
 // surface this feature must not extend, so the CLI owns its view of the
 // HTTP contract. Field shapes must stay assignable to the CloudClient
 // method responses in packages/core/src/cloud/client.ts.
@@ -124,10 +124,10 @@ function handleCloudError(error: unknown, isJson: boolean): never {
   if (error instanceof CloudAuthMissingError) {
     if (isJson) {
       process.stdout.write(
-        JSON.stringify({ error: "no-credentials", message: "Run `0sec auth login` first." }) + "\n",
+        JSON.stringify({ error: "no-credentials", message: "Run `0 auth login` first." }) + "\n",
       );
     } else {
-      process.stderr.write(chalk.red("Run `0sec auth login` first.\n"));
+      process.stderr.write(chalk.red("Run `0 auth login` first.\n"));
     }
     process.exitCode = 1;
     return undefined as never;
@@ -513,7 +513,7 @@ async function actionArchive(skillId: string, opts: JsonFlag): Promise<void> {
 export function registerAuditSkillsCommand(program: Command): void {
   const skills = program
     .command("skills")
-    .description("Manage audit-skills methodology bundles (cloud). Requires cloud credentials (`0sec auth login`).");
+    .description("Manage audit-skills methodology bundles (cloud). Requires cloud credentials (`0 auth login`).");
 
   skills
     .command("list")

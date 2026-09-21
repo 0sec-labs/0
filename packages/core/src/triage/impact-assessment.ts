@@ -33,7 +33,7 @@ import type {
   ImpactAssessment,
   ReachabilityTier,
   Weaponizability,
-} from "@0sec/shared";
+} from "@0/shared";
 import type { NativeRuntime } from "../runtime/types.js";
 
 // ────────────────────────────────────────────────────────────────────

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// SSE bridge for the live dashboard (0sec#370).
+// SSE bridge for the live dashboard (0#370).
 //
 // Two modes, mutually compatible — pass either or both:
 //
@@ -9,18 +9,18 @@
 //      to anyone connected at `/events`. The dashboard's Probe + Lead
 //      lanes consume this stream (`?events=http://localhost:8765/events`).
 //
-//   2. 0sec hunt feed (`/hunt-events`):
-//        node scripts/serve-events.mjs --0sec-log <0sec-stdout.log>
-//      Tails a file containing `0SEC_EVENT_<TYPE> {json}` lines (what
+//   2. 0 hunt feed (`/hunt-events`):
+//        node scripts/serve-events.mjs --0-log <0-stdout.log>
+//      Tails a file containing `ZERO_EVENT_<TYPE> {json}` lines (what
 //      core/src/events/bus.ts:cloudEventSink writes when
-//      0SEC_CLOUD_EVENTS=1) and translates each into the unified
-//      `0sec.events/v1` JSON shape the Hunt lane renders. The
+//      ZERO_CLOUD_EVENTS=1) and translates each into the unified
+//      `0.events/v1` JSON shape the Hunt lane renders. The
 //      dashboard's Hunt lane consumes this stream
 //      (`?huntEvents=http://localhost:8765/hunt-events`).
 //
 // Why a separate endpoint instead of multiplexing both into `/events`:
 // the two upstream streams are produced by different processes (the
-// gemmaforge scanner and a 0sec scan), often started at different
+// gemmaforge scanner and a 0 scan), often started at different
 // times, and they use distinct schemas. Keeping them on two endpoints
 // lets the dashboard subscribe independently, reconnect independently,
 // and renders the lanes correctly when only one source is live.
@@ -33,24 +33,24 @@ import { resolve } from "node:path";
 
 const argv = process.argv.slice(2);
 if (argv.length === 0 || argv[0] === "--help") {
-  console.error("usage: serve-events.mjs [<events.ndjson>] [--0sec-log <path>] [--port 8765]");
-  console.error("  at least one of <events.ndjson> or --0sec-log must be provided");
+  console.error("usage: serve-events.mjs [<events.ndjson>] [--0-log <path>] [--port 8765]");
+  console.error("  at least one of <events.ndjson> or --0-log must be provided");
   process.exit(1);
 }
 
 const portIdx = argv.indexOf("--port");
 const port = portIdx >= 0 ? Number(argv[portIdx + 1]) : 8765;
-const osecIdx = argv.indexOf("--0sec-log");
+const osecIdx = argv.indexOf("--0-log");
 const osecLog = osecIdx >= 0 ? resolve(argv[osecIdx + 1]) : null;
 const positional = argv.filter((arg, idx) => {
   if (arg.startsWith("--")) return false;
-  if (idx > 0 && (argv[idx - 1] === "--port" || argv[idx - 1] === "--0sec-log")) return false;
+  if (idx > 0 && (argv[idx - 1] === "--port" || argv[idx - 1] === "--0-log")) return false;
   return true;
 });
 const gemmaFile = positional[0] ? resolve(positional[0]) : null;
 
 if (!gemmaFile && !osecLog) {
-  console.error("error: provide a gemmaforge events file and/or --0sec-log <path>");
+  console.error("error: provide a gemmaforge events file and/or --0-log <path>");
   process.exit(1);
 }
 
@@ -116,20 +116,20 @@ if (osecLog) {
 }
 
 /**
- * Convert one `0SEC_EVENT_<TYPE> {…}` line into a `0sec.events/v1`
+ * Convert one `ZERO_EVENT_<TYPE> {…}` line into a `0.events/v1`
  * JSON string. Returns null for unrecognised / unmapped event types so
  * we don't spam the Hunt lane with token-level deltas, planner pings,
  * etc. Mirrors the translator in `dashboard/src/lib/hunt-stream.ts`.
  */
 function translateOsecLine(line) {
-  const match = /^0SEC_EVENT_([A-Z_]+)\s+(\{.*\})\s*$/.exec(line);
+  const match = /^ZERO_EVENT_([A-Z_]+)\s+(\{.*\})\s*$/.exec(line);
   if (!match) return null;
   const type = match[1].toLowerCase();
   let payload;
   try { payload = JSON.parse(match[2]); } catch { return null; }
   if (!payload || typeof payload !== "object") return null;
 
-  // Best-effort wall-clock timestamp. 0sec's eventBus payloads don't
+  // Best-effort wall-clock timestamp. 0's eventBus payloads don't
   // currently carry one; the dashboard treats this as fractional seconds.
   const ts = Date.now() / 1000;
 
@@ -137,7 +137,7 @@ function translateOsecLine(line) {
     const argsPreview = typeof payload.args_preview === "string" ? payload.args_preview : undefined;
     const fileLine = extractFileLine(argsPreview);
     return JSON.stringify({
-      schema: "0sec.events/v1",
+      schema: "0.events/v1",
       kind: "tool_use",
       ts,
       tool: typeof payload.tool === "string" ? payload.tool : "?",
@@ -154,7 +154,7 @@ function translateOsecLine(line) {
 
   if (type === "finding_ingested") {
     return JSON.stringify({
-      schema: "0sec.events/v1",
+      schema: "0.events/v1",
       kind: "finding",
       ts,
       finding_id: payload.finding_id,
@@ -169,7 +169,7 @@ function translateOsecLine(line) {
 
   if (type === "step_started" || type === "step_completed") {
     return JSON.stringify({
-      schema: "0sec.events/v1",
+      schema: "0.events/v1",
       kind: "stage",
       ts,
       stage: typeof payload.step === "string" ? payload.step : "stage",
@@ -180,7 +180,7 @@ function translateOsecLine(line) {
 
   if (type === "agent_turn_started" || type === "agent_turn_completed") {
     return JSON.stringify({
-      schema: "0sec.events/v1",
+      schema: "0.events/v1",
       kind: "stage",
       ts,
       stage: `turn ${typeof payload.turn === "number" ? payload.turn : "?"}`,

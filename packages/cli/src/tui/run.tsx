@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import React, { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { CliRenderEvents, createCliRenderer, type CliRenderer } from "@opentui/core";
 import { AppContext, createRoot, useKeyboard } from "@opentui/react";
-import { type Finding } from "@0sec/shared";
+import { type Finding } from "@0/shared";
 import { resolveEngagement } from "../engagement-plan.js";
 import { getRuntimeAvailability } from "../utils.js";
 import { buildFindingChatPrompt, loadFindingFocus } from "../finding-focus.js";
@@ -59,7 +59,7 @@ import { listSessions, loadSession, deleteSession } from "./session-store.js";
 import { MarketScreen } from "./market-screen.js";
 import { createPluginService } from "./plugin-service.js";
 import { createSessionPluginHostManager, type SessionPluginHostManager } from "./session-plugin-host.js";
-import { connectMcpServers, parseMcpConfig, DEFAULT_REGISTRY_URL, TOOL_DEFINITIONS } from "@0sec/core";
+import { connectMcpServers, parseMcpConfig, DEFAULT_REGISTRY_URL, TOOL_DEFINITIONS } from "@0/core";
 import { ConnectScreen } from "./connect-screen.js";
 import type { ConnectionRecovery } from "./connection-recovery.js";
 import { UsageScreen } from "./usage-screen.js";
@@ -360,7 +360,7 @@ function ResumeRoute({ onResume, protectedSessionIds, currentId, onExit, shell }
  * mounted here: every printable key on this screen filters the list, so a second
  * `useKeyboard` competing for those keystrokes would fight the filter. The
  * registry URL, install action and installed-state read are left at their
- * defaults — `MarketScreen` resolves `$0SEC_REGISTRY_URL` (empty by default) and
+ * defaults — `MarketScreen` resolves `$ZERO_REGISTRY_URL` (empty by default) and
  * reuses the core install APIs — so this route is pure wiring and stays honest
  * with no endpoint configured.
  */
@@ -373,10 +373,10 @@ function MarketRoute({ onExit, shell, pluginHostManager }: { onExit: () => void;
   // load host persists for the life of the overlay.
   const registryUrl = React.useMemo(
     // Unset → the default Hackstore index. An explicitly-set value (even empty)
-    // is honoured verbatim, so `0SEC_REGISTRY_URL=` stays a deliberate "no
+    // is honoured verbatim, so `ZERO_REGISTRY_URL=` stays a deliberate "no
     // store" rather than silently reverting to the default.
     () => {
-      const override = process.env["0SEC_REGISTRY_URL"];
+      const override = process.env["ZERO_REGISTRY_URL"];
       return (override !== undefined ? override : DEFAULT_REGISTRY_URL).trim();
     },
     [],
@@ -611,7 +611,7 @@ function ConsoleApp({
   const selectedId = workspace.selectedId;
   const selectedRecord = workspace.selected;
   // Link the herdr pane to the selected audit's agent session so herdr can tie
-  // the pane to a 0sec session (its lifecycle signal). Re-links whenever the
+  // the pane to a 0 session (its lifecycle signal). Re-links whenever the
   // selected session changes (a new/resumed audit). No-op off-herdr, fail-soft.
   const selectedScanId = selectedRecord?.session?.scanId;
   useEffect(() => {
@@ -642,7 +642,7 @@ function ConsoleApp({
     exitRequested.current = true;
     setClosingAll(true);
     // Release this pane's herdr agent slot on the way out so the sidebar stops
-    // showing 0sec's stale state/topic. Fire-and-forget and fail-soft.
+    // showing 0's stale state/topic. Fire-and-forget and fail-soft.
     reportHerdrSessionClose();
     appendTuiEvent({ kind: "shutdown", stage: "requested", audits: creations.current.size });
     for (const gate of legacyLaunches.current.keys()) gate.close();
@@ -726,7 +726,7 @@ function ConsoleApp({
     };
     const creation = (async (): Promise<AuditRecord | undefined> => {
       if (exitRequested.current) return undefined;
-      const mcpHost = await connectMcpServers(parseMcpConfig(process.env["0SEC_MCP"]));
+      const mcpHost = await connectMcpServers(parseMcpConfig(process.env["ZERO_MCP"]));
       if (exitRequested.current || !appAlive.current) {
         await mcpHost?.closeAll();
         return undefined;
@@ -998,20 +998,20 @@ function ConsoleApp({
         },
       });
 
-      const previousStartupLogSetting = process.env["0SEC_SUPPRESS_PROVIDER_STARTUP_LOG"];
-      const previousNativeTracePath = process.env["0SEC_TRACE_NATIVE_RESPONSES"];
-      const previousTuiTracePath = process.env["0SEC_TRACE_TUI_EVENTS"];
+      const previousStartupLogSetting = process.env["ZERO_SUPPRESS_PROVIDER_STARTUP_LOG"];
+      const previousNativeTracePath = process.env["ZERO_TRACE_NATIVE_RESPONSES"];
+      const previousTuiTracePath = process.env["ZERO_TRACE_TUI_EVENTS"];
       try {
-        process.env["0SEC_SUPPRESS_PROVIDER_STARTUP_LOG"] = "1";
-        process.env["0SEC_TRACE_NATIVE_RESPONSES"] = `/tmp/0sec-native-responses-${Date.now()}.ndjson`;
-        process.env["0SEC_TRACE_TUI_EVENTS"] = `/tmp/0sec-tui-events-${Date.now()}.ndjson`;
+        process.env["ZERO_SUPPRESS_PROVIDER_STARTUP_LOG"] = "1";
+        process.env["ZERO_TRACE_NATIVE_RESPONSES"] = `/tmp/0-native-responses-${Date.now()}.ndjson`;
+        process.env["ZERO_TRACE_TUI_EVENTS"] = `/tmp/0-tui-events-${Date.now()}.ndjson`;
         appendTuiTrace({
           kind: "session-start",
           target: plan.target,
           mode,
           runtime,
           depth,
-          nativeTrace: process.env["0SEC_TRACE_NATIVE_RESPONSES"],
+          nativeTrace: process.env["ZERO_TRACE_NATIVE_RESPONSES"],
         });
         await runUnified({
           target: plan.target,
@@ -1074,12 +1074,12 @@ function ConsoleApp({
           }),
         });
       } finally {
-        if (previousStartupLogSetting === undefined) delete process.env["0SEC_SUPPRESS_PROVIDER_STARTUP_LOG"];
-        else process.env["0SEC_SUPPRESS_PROVIDER_STARTUP_LOG"] = previousStartupLogSetting;
-        if (previousNativeTracePath === undefined) delete process.env["0SEC_TRACE_NATIVE_RESPONSES"];
-        else process.env["0SEC_TRACE_NATIVE_RESPONSES"] = previousNativeTracePath;
-        if (previousTuiTracePath === undefined) delete process.env["0SEC_TRACE_TUI_EVENTS"];
-        else process.env["0SEC_TRACE_TUI_EVENTS"] = previousTuiTracePath;
+        if (previousStartupLogSetting === undefined) delete process.env["ZERO_SUPPRESS_PROVIDER_STARTUP_LOG"];
+        else process.env["ZERO_SUPPRESS_PROVIDER_STARTUP_LOG"] = previousStartupLogSetting;
+        if (previousNativeTracePath === undefined) delete process.env["ZERO_TRACE_NATIVE_RESPONSES"];
+        else process.env["ZERO_TRACE_NATIVE_RESPONSES"] = previousNativeTracePath;
+        if (previousTuiTracePath === undefined) delete process.env["ZERO_TRACE_TUI_EVENTS"];
+        else process.env["ZERO_TRACE_TUI_EVENTS"] = previousTuiTracePath;
       }
     }).finally(() => {
       sessionGate.close();
@@ -1444,7 +1444,7 @@ export function UnifiedApp({
 
 async function mountApp(mode: AppMode): Promise<void> {
   installTuiCrashHandlers();
-  const traceRender = Boolean(process.env["0SEC_TRACE_TUI_RENDER"]);
+  const traceRender = Boolean(process.env["ZERO_TRACE_TUI_RENDER"]);
   suspendProcessPresentationStreamBridge();
   let renderer: CliRenderer;
   try {
@@ -1519,10 +1519,10 @@ async function mountApp(mode: AppMode): Promise<void> {
       if (captured.length > 0 || dropped > 0) {
         // Labelled so the replay reads as a session log rather than a
         // duplicate of what the transcript already showed.
-        process.stderr.write(`[0sec] runtime output captured during this session:\n`);
+        process.stderr.write(`[0] runtime output captured during this session:\n`);
       }
       if (dropped > 0) {
-        process.stderr.write(`[0sec] ${dropped} earlier line(s) dropped (buffer full)\n`);
+        process.stderr.write(`[0] ${dropped} earlier line(s) dropped (buffer full)\n`);
       }
       for (const line of captured) {
         const stream = line.stream === "stderr" ? process.stderr : process.stdout;

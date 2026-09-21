@@ -183,7 +183,7 @@ export async function searchTargetHistory(
 }
 
 /**
- * Direct GHSA lookup (0sec#intel-advisories). Resolves a specific advisory id
+ * Direct GHSA lookup (0#intel-advisories). Resolves a specific advisory id
  * via GET /advisories/{ghsa_id} — the reliable endpoint. We never fall back to
  * free-text advisories?query= (unreliable).
  */
@@ -195,7 +195,7 @@ export async function lookupAdvisory(
 }
 
 /**
- * Layer-3 public-report search (0sec#intel-advisories): GitHub issues/PRs that
+ * Layer-3 public-report search (0#intel-advisories): GitHub issues/PRs that
  * mention a candidate finding's code terms. LEADS ONLY — unverified.
  */
 export async function searchPublicReports(
@@ -215,7 +215,7 @@ const SWEEP_CAVEAT =
   "tickets are invisible to this sweep. Verify local reachability before reporting a new bug.";
 
 /**
- * One-call advisory sweep (0sec#intel-advisories). Orchestrates every coverage
+ * One-call advisory sweep (0#intel-advisories). Orchestrates every coverage
  * layer, de-dupes across sources, and ranks leads by confidence:
  *   1. exact GHSA-id lookups (high)
  *   2. structured package advisories via ecosystem+affects (high)

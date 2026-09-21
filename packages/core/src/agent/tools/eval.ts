@@ -74,7 +74,7 @@ export const evalToolDefinitions: Record<string, ToolDefinition> = {
   },
 };
 
-// Tool-name → ToolExecutor handler-method name (0sec#614). Co-located with this
+// Tool-name → ToolExecutor handler-method name (0#614). Co-located with this
 // domain's definitions so a new tool adds its route here, not in a shared
 // dispatch switch. Assembled by ./dispatch.ts; resolved off the executor
 // instance in agent/tools.ts (the handler bodies stay private methods).

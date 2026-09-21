@@ -12,9 +12,9 @@ import { osecDB } from "../packages/db/dist/index.js";
 import { getRates, MODEL_PRICING } from "../packages/shared/dist/index.js";
 
 maybeLoadCodexAuth();
-process.env["0SEC_DISABLE_HUNT_MEMORY"] = "1";
-process.env["0SEC_CLOUD_SINK"] = "";
-const temporary = mkdtempSync(join(tmpdir(), "0sec-citation-e2e-"));
+process.env["ZERO_DISABLE_HUNT_MEMORY"] = "1";
+process.env["ZERO_CLOUD_SINK"] = "";
+const temporary = mkdtempSync(join(tmpdir(), "0-citation-e2e-"));
 const root = join(temporary, "source");
 mkdirSync(root);
 const cleanup = () => rmSync(temporary, { recursive: true, force: true });
@@ -23,7 +23,7 @@ const deadline = setTimeout(() => { console.error("Source citation E2E exceeded 
 let db;
 try {
   writeFileSync(join(root, "proxy.py"), 'import requests\nfrom flask import Flask, request\napp = Flask(__name__)\n@app.get("/proxy")\ndef proxy():\n    return requests.get(request.args["url"]).text\n');
-  const model = process.env["0SEC_MODEL"] || "gpt-5.6-luna";
+  const model = process.env["ZERO_MODEL"] || "gpt-5.6-luna";
   assert.notEqual(getRates(model), MODEL_PRICING.default, "model pricing must be known");
   const runtime = new LlmApiRuntime({ type: "api", model, timeout: 60000 });
   db = new osecDB(join(temporary, "findings.db"));

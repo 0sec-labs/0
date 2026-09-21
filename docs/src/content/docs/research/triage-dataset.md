@@ -9,7 +9,7 @@ true-positive / false-positive classifiers.
 
 The dataset supports text classifiers and hybrid models combining text with
 the current 55-feature vector (45 original finding features plus 10 kernel features). The model plan is tracked in
-[issue #67](https://github.com/0sec-labs/0sec/issues/67).
+[issue #67](https://github.com/0sec-labs/0/issues/67).
 
 ## Inputs
 
@@ -34,7 +34,7 @@ files by filename:
 Run against a specific benchmark artifact:
 
 ```bash
-pnpm --filter @0sec/benchmark exec tsx src/triage-data-collector.ts \
+pnpm --filter @0/benchmark exec tsx src/triage-data-collector.ts \
   --npm-bench results/npm-bench-latest.json \
   --output results/triage-dataset.jsonl
 ```
@@ -42,16 +42,16 @@ pnpm --filter @0sec/benchmark exec tsx src/triage-data-collector.ts \
 Combine npm-bench with local verified findings from the SQLite DB:
 
 ```bash
-pnpm --filter @0sec/benchmark exec tsx src/triage-data-collector.ts \
+pnpm --filter @0/benchmark exec tsx src/triage-data-collector.ts \
   --npm-bench results/npm-bench-latest.json \
-  --db "$HOME/.0sec/0sec.db" \
+  --db "$HOME/.0/0.db" \
   --output results/triage-dataset-mixed.jsonl
 ```
 
 Pull labels from a whole directory of scan databases:
 
 ```bash
-pnpm --filter @0sec/benchmark exec tsx src/triage-data-collector.ts \
+pnpm --filter @0/benchmark exec tsx src/triage-data-collector.ts \
   --scan-dir /absolute/path/to/scan-dbs \
   --output results/triage-dataset-from-db.jsonl
 ```

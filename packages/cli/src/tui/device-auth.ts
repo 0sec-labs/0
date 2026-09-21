@@ -7,7 +7,7 @@
  * This is the sibling of `codex-device-auth.ts`, but it is a different KIND of
  * thing. `codex-device-auth.ts` is a SUBPROCESS orchestrator: it spawns
  * `codex login --device-auth` and scrapes its stdout, because Codex owns the
- * ChatGPT protocol and 0sec must not reimplement it. This module, by contrast,
+ * ChatGPT protocol and 0 must not reimplement it. This module, by contrast,
  * speaks the protocols itself. The device-code path POSTs the device-code
  * endpoint, opens the browser, and polls the token endpoint. The pkce-loopback
  * path generates a code_verifier/code_challenge, stands up a `node:http`
@@ -38,7 +38,7 @@ import { createServer } from "node:http";
 import { arch, hostname, platform, release, version as osVersion } from "node:os";
 import { join } from "node:path";
 
-import { homeStateDir } from "@0sec/shared";
+import { homeStateDir } from "@0/shared";
 
 import { defaultOpenBrowser } from "../commands/auth.js";
 import {
@@ -128,7 +128,7 @@ export interface DeviceCodeProviderConfig extends DeviceAuthProviderConfigBase {
    * headers) to bind the credential to this install, mirroring oh-my-pi's
    * `kimi-fingerprint` headers-hook; providers without a fingerprint omit this.
    * Receives the credential-store home dir so any persisted device id lands in
-   * the same `~/.0sec` state dir the tests can redirect.
+   * the same `~/.0` state dir the tests can redirect.
    */
   buildHeaders?(homeDir?: string): Record<string, string>;
   /** Builds the stored account record from a successful token response. */
@@ -298,7 +298,7 @@ const defaultServerFactory: LoopbackServerFactory = async ({ onRedirect }) => {
     const error = requestUrl.searchParams.get("error") ?? undefined;
     res.statusCode = 200;
     res.setHeader("Content-Type", "text/html; charset=utf-8");
-    res.end("<!doctype html><meta charset=utf-8><title>0sec</title><body>Sign-in complete — you can close this tab and return to 0sec.</body>");
+    res.end("<!doctype html><meta charset=utf-8><title>0</title><body>Sign-in complete — you can close this tab and return to 0.</body>");
     // Only the first redirect matters; ignore stray probes after it.
     if (delivered) return;
     delivered = true;
@@ -719,14 +719,14 @@ export function startDeviceAuth(
  * The version reported to Kimi in the `X-Msh-Version`/User-Agent fingerprint.
  * oh-my-pi sends its own package version here; the value is informational to
  * Kimi's server (the load-bearing fields are `X-Msh-Platform` and the stable
- * `X-Msh-Device-Id`), so it tracks the 0sec CLI version and is safe to bump.
+ * `X-Msh-Device-Id`), so it tracks the 0 CLI version and is safe to bump.
  */
 const KIMI_CLIENT_VERSION = "0.16.3";
 const KIMI_DEVICE_ID_FILENAME = "kimi-device-id";
 
 /**
  * A stable per-install device id for Kimi, persisted best-effort under the
- * `~/.0sec` state dir (redirectable via `homeDir` in tests). Mirrors oh-my-pi
+ * `~/.0` state dir (redirectable via `homeDir` in tests). Mirrors oh-my-pi
  * packages/ai/src/registry/oauth/kimi.ts: a missing/unwritable state dir must
  * never break header construction — fall back to an ephemeral id.
  */
@@ -830,7 +830,7 @@ export const PROVIDER_DEVICE_AUTH: Record<string, DeviceAuthProviderConfig> = {
   // scope "read:user". The device token is long-lived and sent DIRECTLY as a
   // Bearer to api.githubcopilot.com — NO secondary token exchange and NO
   // refresh — so it is stored as a plain oauth record (buildOAuthRecord) whose
-  // access_token accountEnvPatch writes to 0SEC_COPILOT_GITHUB_TOKEN (envVars[0]).
+  // access_token accountEnvPatch writes to ZERO_COPILOT_GITHUB_TOKEN (envVars[0]).
   copilot: {
     kind: "device-code",
     providerId: "copilot",
@@ -871,8 +871,8 @@ export const PROVIDER_DEVICE_AUTH: Record<string, DeviceAuthProviderConfig> = {
   // scopes: cloud-platform + userinfo.email + userinfo.profile.
   // The token response's access_token/refresh_token/expires_in are stored as an
   // oauth record (buildOAuthRecord): accountEnvPatch writes access_token to
-  // 0SEC_GEMINI_ACCESS_TOKEN (envVars[0]) and refresh_token to
-  // 0SEC_GEMINI_OAUTH_REFRESH_TOKEN (the /REFRESH/i var). The Code Assist
+  // ZERO_GEMINI_ACCESS_TOKEN (envVars[0]) and refresh_token to
+  // ZERO_GEMINI_OAUTH_REFRESH_TOKEN (the /REFRESH/i var). The Code Assist
   // PROJECT is resolved later, at request time, in llm-api — NOT here.
   //
   // Redirect path: the shared loopback server answers `/callback`; Google's

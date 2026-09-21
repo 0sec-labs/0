@@ -6,7 +6,7 @@ import type {
   ConsoleTurnOutcome,
   ScopePolicy,
   ToolCall,
-} from "@0sec/core";
+} from "@0/core";
 import { DesktopConsoleGateway, DesktopConsoleGatewayError } from "./console-gateway.js";
 
 type GatewayFactoryInput = {

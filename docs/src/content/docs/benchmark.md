@@ -5,7 +5,7 @@ description: Public security benchmark results, test conditions, and reproductio
 
 Published vulnerability disclosures are listed at [0](https://0.security). The CTF results below measure performance on smaller, controlled challenges. Compare scores using the same benchmark fork, model, turn cap, and retry protocol.
 
-<span id="where-0sec-stands-honest-condition-specific"></span>
+<span id="where-0-stands-honest-condition-specific"></span>
 ## Results
 
 These are **dated repository snapshots**, not a live leaderboard. The committed

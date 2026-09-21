@@ -1,5 +1,5 @@
 /**
- * `0sec auth` CLI smoke tests. Pattern-matches h1.test.ts: we drive
+ * `0 auth` CLI smoke tests. Pattern-matches h1.test.ts: we drive
  * the action functions directly (exported from auth.ts) so we can pass
  * test seams for fetch / sleep / homeDir / openBrowser without having to
  * thread them through Commander. The argv → exit code shape is covered
@@ -25,13 +25,13 @@ interface CapturedIO {
 }
 
 function freshHome(): string {
-  return mkdtempSync(join(tmpdir(), "0sec-cloud-cli-"));
+  return mkdtempSync(join(tmpdir(), "0-cloud-cli-"));
 }
 
 function seedHomeWithCreds(home: string, host: string = HOST, token: string = SECRET): string {
-  mkdirSync(join(home, ".0sec"), { recursive: true, mode: 0o700 });
-  const path = join(home, ".0sec", "cloud.env");
-  writeFileSync(path, `0SEC_CLOUD_HOST=${host}\n0SEC_CLOUD_TOKEN=${token}\n`, { mode: 0o600 });
+  mkdirSync(join(home, ".0"), { recursive: true, mode: 0o700 });
+  const path = join(home, ".0", "cloud.env");
+  writeFileSync(path, `ZERO_CLOUD_HOST=${host}\nZERO_CLOUD_TOKEN=${token}\n`, { mode: 0o600 });
   chmodSync(path, 0o600);
   return path;
 }
@@ -66,7 +66,7 @@ function captureIO(): CapturedIO & { restore: () => void } {
   };
 }
 
-describe("0sec auth login", () => {
+describe("0 auth login", () => {
   let home: string;
   let originalEnvHost: string | undefined;
   let originalEnvTok: string | undefined;
@@ -74,17 +74,17 @@ describe("0sec auth login", () => {
 
   beforeEach(() => {
     home = freshHome();
-    originalEnvHost = process.env["0SEC_CLOUD_HOST"];
-    originalEnvTok = process.env["0SEC_CLOUD_TOKEN"];
-    delete process.env["0SEC_CLOUD_HOST"];
-    delete process.env["0SEC_CLOUD_TOKEN"];
+    originalEnvHost = process.env["ZERO_CLOUD_HOST"];
+    originalEnvTok = process.env["ZERO_CLOUD_TOKEN"];
+    delete process.env["ZERO_CLOUD_HOST"];
+    delete process.env["ZERO_CLOUD_TOKEN"];
     process.exitCode = undefined;
     io = captureIO();
   });
 
   afterEach(() => {
-    if (originalEnvHost !== undefined) process.env["0SEC_CLOUD_HOST"] = originalEnvHost;
-    if (originalEnvTok !== undefined) process.env["0SEC_CLOUD_TOKEN"] = originalEnvTok;
+    if (originalEnvHost !== undefined) process.env["ZERO_CLOUD_HOST"] = originalEnvHost;
+    if (originalEnvTok !== undefined) process.env["ZERO_CLOUD_TOKEN"] = originalEnvTok;
     process.exitCode = undefined;
     io.restore();
   });
@@ -92,24 +92,24 @@ describe("0sec auth login", () => {
   it("--token escape-hatch persists creds and exits 0", async () => {
     await runLogin({ host: HOST, token: SECRET, homeDir: home });
     expect(process.exitCode).toBe(0);
-    const path = join(home, ".0sec", "cloud.env");
+    const path = join(home, ".0", "cloud.env");
     expect(existsSync(path)).toBe(true);
     const body = readFileSync(path, "utf-8");
-    expect(body).toContain(`0SEC_CLOUD_HOST=${HOST}`);
-    expect(body).toContain(`0SEC_CLOUD_TOKEN=${SECRET}`);
+    expect(body).toContain(`ZERO_CLOUD_HOST=${HOST}`);
+    expect(body).toContain(`ZERO_CLOUD_TOKEN=${SECRET}`);
     expect((statSync(path).mode & 0o777).toString(8)).toBe("600");
   });
 
   it("--token empty value → exit 1", async () => {
     await runLogin({ host: HOST, token: "   ", homeDir: home });
     expect(process.exitCode).toBe(1);
-    expect(existsSync(join(home, ".0sec", "cloud.env"))).toBe(false);
+    expect(existsSync(join(home, ".0", "cloud.env"))).toBe(false);
   });
 
   it("rejects non-http(s) --host", async () => {
     await runLogin({ host: "ftp://bad.example", token: SECRET, homeDir: home });
     expect(process.exitCode).toBe(1);
-    expect(existsSync(join(home, ".0sec", "cloud.env"))).toBe(false);
+    expect(existsSync(join(home, ".0", "cloud.env"))).toBe(false);
   });
 
   it("browser flow continues through 200 pending responses and persists a ready token", async () => {
@@ -137,8 +137,8 @@ describe("0sec auth login", () => {
     expect(openCalls.length).toBe(1);
     expect(openCalls[0]).toMatch(/\/cli-auth\?session=/);
     expect(polls).toBe(3);
-    const path = join(home, ".0sec", "cloud.env");
-    expect(readFileSync(path, "utf-8")).toContain(`0SEC_CLOUD_TOKEN=${SECRET}`);
+    const path = join(home, ".0", "cloud.env");
+    expect(readFileSync(path, "utf-8")).toContain(`ZERO_CLOUD_TOKEN=${SECRET}`);
   });
 
   it("browser flow times out cleanly when server never responds 200", async () => {
@@ -158,7 +158,7 @@ describe("0sec auth login", () => {
     });
     expect(process.exitCode).toBe(3);
     expect(polls).toBe(3);
-    expect(existsSync(join(home, ".0sec", "cloud.env"))).toBe(false);
+    expect(existsSync(join(home, ".0", "cloud.env"))).toBe(false);
   });
 
   it("browser flow rejects a 200 body that has no token field", async () => {
@@ -173,7 +173,7 @@ describe("0sec auth login", () => {
       sleep: async () => {},
     });
     expect(process.exitCode).toBe(1);
-    expect(existsSync(join(home, ".0sec", "cloud.env"))).toBe(false);
+    expect(existsSync(join(home, ".0", "cloud.env"))).toBe(false);
   });
 
   it("never leaks the token to stdout/stderr on the --token happy path", async () => {
@@ -199,9 +199,9 @@ describe("development Cloud authentication", () => {
     writeFileSync(privatePath, '{"token":"private-production-token"}', { mode: 0o600 });
     const privateBytes = readFileSync(privatePath);
     const io = captureIO();
-    vi.stubEnv("0SEC_DEV_SOURCE_ROOT", "/fixture/engine");
-    vi.stubEnv("0SEC_CLOUD_HOST", "https://dev.cloud.0.security");
-    vi.stubEnv("0SEC_CLOUD_TOKEN", undefined);
+    vi.stubEnv("ZERO_DEV_SOURCE_ROOT", "/fixture/engine");
+    vi.stubEnv("ZERO_CLOUD_HOST", "https://dev.cloud.0.security");
+    vi.stubEnv("ZERO_CLOUD_TOKEN", undefined);
     const opened: string[] = [];
     const fetchImpl = (async (url: string | URL | Request) => {
       expect(String(url)).toMatch(/\/cli-auth\/sessions\//);
@@ -218,8 +218,8 @@ describe("development Cloud authentication", () => {
     expect(process.exitCode).toBe(0);
     expect(opened).toHaveLength(1);
     expect(new URL(opened[0]).origin).toBe("https://dev.cloud.0.security");
-    const devPath = join(home, ".0sec", "dev", "cloud.env");
-    expect(readFileSync(devPath, "utf8")).toContain(`0SEC_CLOUD_TOKEN=${SECRET}`);
+    const devPath = join(home, ".0", "dev", "cloud.env");
+    expect(readFileSync(devPath, "utf8")).toContain(`ZERO_CLOUD_TOKEN=${SECRET}`);
     expect(statSync(devPath).mode & 0o777).toBe(0o600);
     expect(readFileSync(productionPath)).toEqual(productionBytes);
     expect(readFileSync(privatePath)).toEqual(privateBytes);
@@ -232,7 +232,7 @@ describe("development Cloud authentication", () => {
   });
 });
 
-describe("0sec auth logout", () => {
+describe("0 auth logout", () => {
   let home: string;
   let io: ReturnType<typeof captureIO>;
 
@@ -247,7 +247,7 @@ describe("0sec auth logout", () => {
     io.restore();
   });
 
-  it("deletes ~/.0sec/cloud.env and exits successfully", () => {
+  it("deletes ~/.0/cloud.env and exits successfully", () => {
     const path = seedHomeWithCreds(home);
     expect(existsSync(path)).toBe(true);
     runLogout({ homeDir: home });
@@ -261,7 +261,7 @@ describe("0sec auth logout", () => {
   });
 });
 
-describe("0sec auth status", () => {
+describe("0 auth status", () => {
   let home: string;
   let originalHome: string | undefined;
   let originalEnvHost: string | undefined;
@@ -271,11 +271,11 @@ describe("0sec auth status", () => {
   beforeEach(() => {
     home = freshHome();
     originalHome = process.env.HOME;
-    originalEnvHost = process.env["0SEC_CLOUD_HOST"];
-    originalEnvTok = process.env["0SEC_CLOUD_TOKEN"];
+    originalEnvHost = process.env["ZERO_CLOUD_HOST"];
+    originalEnvTok = process.env["ZERO_CLOUD_TOKEN"];
     process.env.HOME = home;
-    delete process.env["0SEC_CLOUD_HOST"];
-    delete process.env["0SEC_CLOUD_TOKEN"];
+    delete process.env["ZERO_CLOUD_HOST"];
+    delete process.env["ZERO_CLOUD_TOKEN"];
     process.exitCode = undefined;
     io = captureIO();
   });
@@ -283,8 +283,8 @@ describe("0sec auth status", () => {
   afterEach(() => {
     if (originalHome === undefined) delete process.env.HOME;
     else process.env.HOME = originalHome;
-    if (originalEnvHost !== undefined) process.env["0SEC_CLOUD_HOST"] = originalEnvHost;
-    if (originalEnvTok !== undefined) process.env["0SEC_CLOUD_TOKEN"] = originalEnvTok;
+    if (originalEnvHost !== undefined) process.env["ZERO_CLOUD_HOST"] = originalEnvHost;
+    if (originalEnvTok !== undefined) process.env["ZERO_CLOUD_TOKEN"] = originalEnvTok;
     process.exitCode = undefined;
     io.restore();
   });
@@ -307,7 +307,7 @@ describe("0sec auth status", () => {
     // No cloud.env in this home.
     await runStatus({});
     expect(process.exitCode).toBe(2);
-    expect(io.stderr.join("\n")).toMatch(/0sec auth login/);
+    expect(io.stderr.join("\n")).toMatch(/0 auth login/);
   });
 
   it("exit 2 on 401, stderr does NOT contain token", async () => {
@@ -334,7 +334,7 @@ describe("0sec auth status", () => {
   });
 });
 
-describe("0sec auth — command registration", () => {
+describe("0 auth — command registration", () => {
   it("registers login / logout / status under `auth`", () => {
     const program = new Command();
     program.exitOverride();

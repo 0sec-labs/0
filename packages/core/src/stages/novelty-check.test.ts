@@ -10,7 +10,7 @@ import { describe, it, expect } from "vitest";
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { Finding } from "@0sec/shared";
+import type { Finding } from "@0/shared";
 import {
   deriveSearchTerms,
   findingToQuery,
@@ -86,13 +86,13 @@ describe("findingToQuery", () => {
     // regardless of the symbol/identifier bucket the miner placed them in.
     expect(ids).toEqual(expect.arrayContaining(["ref_frame_idx", "V4L2_AV1_TOTAL_REFS_PER_FRAME"]));
     // defaults to excluding our own postings
-    expect(q.excludeFrom).toContain("0sec.ai");
+    expect(q.excludeFrom).toContain("0.ai");
   });
 });
 
 describe("syncLoreMirror", () => {
   it("creates a missing mirror root before cloning", async () => {
-    const parent = mkdtempSync(join(tmpdir(), "0sec-lore-sync-"));
+    const parent = mkdtempSync(join(tmpdir(), "0-lore-sync-"));
     const rootDir = join(parent, "nested", "mirrors");
     const git: GitRunner = async (args) => {
       if (args[0] === "ls-remote") {
@@ -122,13 +122,13 @@ describe("syncLoreMirror", () => {
 describe("searchLoreMirror", () => {
   const emails = [
     email("c1", { From: "Maintainer <m@kernel.org>", Subject: "[PATCH] fix tile_cols overflow", "Message-ID": "<id-1@x>", Date: "Mon, 1 Jun 2026 00:00:00 +0000" }, "bounds tile_cols and tile_rows in set_tile_info"),
-    email("c2", { From: "Doruk Tan Ozturk <doruk@0sec.ai>", Subject: "[PATCH] our own fix", "Message-ID": "<id-2@x>", Date: "Tue, 2 Jun 2026 00:00:00 +0000" }, "validate tile_cols here too"),
+    email("c2", { From: "Doruk Tan Ozturk <doruk@0.ai>", Subject: "[PATCH] our own fix", "Message-ID": "<id-2@x>", Date: "Tue, 2 Jun 2026 00:00:00 +0000" }, "validate tile_cols here too"),
     email("c3", { From: "Other <o@x.org>", Subject: "[PATCH] unrelated usb fix", "Message-ID": "<id-3@x>", Date: "Wed, 3 Jun 2026 00:00:00 +0000" }, "nothing relevant here"),
   ];
   const terms = deriveSearchTerms({ title: "t", identifiers: ["tile_cols", "tile_rows"] });
 
   it("ranks by matched-term weight, parses headers, and flags our own postings", async () => {
-    const cands = await searchLoreMirror(MIRROR, terms, ["0sec.ai"], {
+    const cands = await searchLoreMirror(MIRROR, terms, ["0.ai"], {
       git: fakeGit(emails),
       maxCandidates: 8,
       bodyChars: 1000,
@@ -138,7 +138,7 @@ describe("searchLoreMirror", () => {
     expect(c1.messageId).toBe("id-1@x");
     expect(c1.subject).toBe("[PATCH] fix tile_cols overflow");
     expect(c1.ours).toBe(false);
-    expect(cands.find((c) => c.commit === "c2")!.ours).toBe(true); // doruk@0sec.ai
+    expect(cands.find((c) => c.commit === "c2")!.ours).toBe(true); // doruk@0.ai
     // c1 matched both terms, c2 only one → c1 ranks first
     expect(cands[0].commit).toBe("c1");
   });
@@ -147,7 +147,7 @@ describe("searchLoreMirror", () => {
 describe("checkNovelty", () => {
   const emails = [
     email("dup", { From: "Maintainer <m@kernel.org>", Subject: "[PATCH] reject frames exceeding tile capacity", "Message-ID": "<dup@x>", Date: "Mon, 1 Jun 2026 00:00:00 +0000" }, "guards tile_cols tile_rows AV1_MAX_TILES"),
-    email("ours", { From: "Doruk Tan Ozturk <doruk@0sec.ai>", Subject: "[PATCH] our fix", "Message-ID": "<ours@x>", Date: "Tue, 2 Jun 2026 00:00:00 +0000" }, "tile_cols tile_rows AV1_MAX_TILES from us"),
+    email("ours", { From: "Doruk Tan Ozturk <doruk@0.ai>", Subject: "[PATCH] our fix", "Message-ID": "<ours@x>", Date: "Tue, 2 Jun 2026 00:00:00 +0000" }, "tile_cols tile_rows AV1_MAX_TILES from us"),
   ];
 
   it("returns DUPLICATE when the judge confirms a third-party fix", async () => {
@@ -182,7 +182,7 @@ describe("checkNovelty", () => {
       return cands.map((c) => ({ messageId: c.messageId, subject: c.subject, author: c.from, verdict: "DUPLICATE" as const, why: "x" }));
     };
     await checkNovelty(
-      { title: "tile overflow", identifiers: ["tile_cols", "tile_rows", "AV1_MAX_TILES"], excludeFrom: ["0sec.ai"] },
+      { title: "tile overflow", identifiers: ["tile_cols", "tile_rows", "AV1_MAX_TILES"], excludeFrom: ["0.ai"] },
       { mirrors: [MIRROR], git: fakeGit(emails), judge },
     );
     expect(seen).not.toContain("ours@x");

@@ -1,10 +1,10 @@
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { spawn } from "node:child_process";
-import { homeStateDir } from "@0sec/shared";
+import { homeStateDir } from "@0/shared";
 import { loadLayeredSettings } from "../tui/settings.js";
 
-const REPO = "0sec-labs/0sec";
+const REPO = "0sec-labs/0";
 const INSTALL_URL = `https://raw.githubusercontent.com/${REPO}/main/install.sh`;
 const CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000;
 const FETCH_TIMEOUT_MS = 4_000;
@@ -84,9 +84,9 @@ export function shouldRunCheck(
   isTty = Boolean(process.stdout.isTTY),
   policy?: UpdatePolicy,
 ): boolean {
-  if (!isTty || disabled(env.CI) || disabled(env["0SEC_OFFLINE"]) || disabled(env["0SEC_NO_UPDATE_CHECK"])) return false;
+  if (!isTty || disabled(env.CI) || disabled(env["ZERO_OFFLINE"]) || disabled(env["ZERO_NO_UPDATE_CHECK"])) return false;
   if (policy !== undefined) return policy !== "off";
-  return env["0SEC_UPDATE_CHECK"] === "1";
+  return env["ZERO_UPDATE_CHECK"] === "1";
 }
 
 function recent(timestamp: string | undefined, now: number): boolean {
@@ -121,7 +121,7 @@ async function fetchLatestTag(): Promise<string | null> {
   const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
   try {
     const response = await fetch(`https://api.github.com/repos/${REPO}/releases/latest`, {
-      headers: { Accept: "application/vnd.github+json", "User-Agent": "0sec-cli/update-check" },
+      headers: { Accept: "application/vnd.github+json", "User-Agent": "@0/cli/update-check" },
       signal: controller.signal,
     });
     if (!response.ok) return null;
@@ -138,8 +138,8 @@ const attemptedAutomaticTags = new Set<string>();
 
 /** One canonical installer, shared by explicit upgrade and startup auto-update. */
 export async function performAutoUpdate(options: AutoUpdateOptions = {}): Promise<AutoUpdateResult> {
-  if (process.platform === "win32") return { success: false, installed: false, error: "Automatic installation is unavailable on Windows; download a release from https://github.com/0sec-labs/0sec/releases/latest." };
-  if (disabled(process.env["0SEC_OFFLINE"]) || disabled(process.env["0SEC_NO_UPDATE_CHECK"])) {
+  if (process.platform === "win32") return { success: false, installed: false, error: "Automatic installation is unavailable on Windows; download a release from https://github.com/0sec-labs/0/releases/latest." };
+  if (disabled(process.env["ZERO_OFFLINE"]) || disabled(process.env["ZERO_NO_UPDATE_CHECK"])) {
     return { success: false, installed: false, error: "Updates are disabled by the current offline/update policy." };
   }
   if (installInProgress) return { success: false, installed: false, error: "An update is already in progress." };
@@ -150,7 +150,7 @@ export async function performAutoUpdate(options: AutoUpdateOptions = {}): Promis
     if (!tag || !version?.complete) return { success: false, installed: false, error: "Could not resolve a valid release tag." };
     const normalizedTag = tag.startsWith("v") ? tag : `v${tag}`;
     const env: NodeJS.ProcessEnv = { ...process.env, RELEASE_BASE_URL: `https://github.com/${REPO}/releases/download/${normalizedTag}` };
-    const installDir = options.installDir ?? process.env["0SEC_INSTALL_DIR"];
+    const installDir = options.installDir ?? process.env["ZERO_INSTALL_DIR"];
     if (installDir !== undefined) env.INSTALL_DIR = installDir;
     const timeoutMs = Number.isFinite(options.timeoutMs) && options.timeoutMs! > 0
       ? Math.min(options.timeoutMs!, INSTALL_TIMEOUT_MS) : INSTALL_TIMEOUT_MS;
@@ -228,21 +228,21 @@ export async function maybeNotifyUpdate(currentVersion: string, options: NotifyO
   const candidate = tag ? parseVersion(tag) : null;
   if (!tag || !candidate?.complete || candidate.prerelease.length > 0 || compareVersions(tag, currentVersion) <= 0) return;
   if (policy !== "automatic") {
-    process.stderr.write(`[0sec] Update available: ${currentVersion} → ${tag}. Run 0sec upgrade.\n`);
+    process.stderr.write(`[0] Update available: ${currentVersion} → ${tag}. Run 0 upgrade.\n`);
     return;
   }
   if (attemptedAutomaticTags.has(tag) || (cache.lastInstallTag === tag && recent(cache.lastInstallAttemptAt, now))) return;
   attemptedAutomaticTags.add(tag);
   writeCache({ ...cache, lastInstallTag: tag, lastInstallAttemptAt: new Date(now).toISOString() });
-  process.stderr.write(`[0sec] Updating to ${tag} before starting the console…\n`);
+  process.stderr.write(`[0] Updating to ${tag} before starting the console…\n`);
   const result = await performAutoUpdate({ version: tag });
   if (result.signal) {
     process.kill(process.pid, result.signal);
     return;
   }
   process.stderr.write(result.success
-    ? `[0sec] Installed ${result.installedVersion}. This process is still ${currentVersion}; restart to use the update.\n`
-    : `[0sec] Update not installed: ${result.error ?? "unknown error"} Continuing with ${currentVersion}.\n`);
+    ? `[0] Installed ${result.installedVersion}. This process is still ${currentVersion}; restart to use the update.\n`
+    : `[0] Update not installed: ${result.error ?? "unknown error"} Continuing with ${currentVersion}.\n`);
 }
 
 /** Awaited at the entry point: only explicit automatic policy delays startup. */

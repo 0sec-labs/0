@@ -103,7 +103,7 @@ export function DoctorScreen({ onExit, shell }: { onExit: () => void; shell?: Sh
   const nextStep = !state
     ? "Checking environment"
     : !state.nodeOk
-      ? "Upgrade to Node 24+ before running 0sec."
+      ? "Upgrade to Node 24+ before running 0."
       : state.apiRuntime.configured && !state.apiRuntime.valid && state.apiRuntime.error
         ? "Repair the configured API runtime before scanning."
         : state.hasApiKey || state.availableRuntimes.length > 0
@@ -157,9 +157,9 @@ export function DoctorScreen({ onExit, shell }: { onExit: () => void; shell?: Sh
     },
     ...(showDoctorExamples
       ? [
-          { id: "step:scan", label: "0sec scan --target https://example.com --mode web", meta: "example", category: "Next steps" },
-          { id: "step:review", label: "0sec review .", meta: "example", category: "Next steps" },
-          { id: "step:audit", label: "0sec audit express", meta: "example", category: "Next steps" },
+          { id: "step:scan", label: "0 scan --target https://example.com --mode web", meta: "example", category: "Next steps" },
+          { id: "step:review", label: "0 review .", meta: "example", category: "Next steps" },
+          { id: "step:audit", label: "0 audit express", meta: "example", category: "Next steps" },
         ]
       : []),
   ];
@@ -189,7 +189,7 @@ export function DoctorScreen({ onExit, shell }: { onExit: () => void; shell?: Sh
       lines.push({ text: nodeStatus, fg: statusTone(nodeStatus) ?? theme.MUTED });
       lines.push({ text: "" });
       lines.push(...wrapDialogLines(state ? `version ${state.nodeVersion}` : "version unknown", inner, theme.TEXT));
-      lines.push(...wrapDialogLines("0sec requires Node 24 or newer.", inner, theme.MUTED));
+      lines.push(...wrapDialogLines("0 requires Node 24 or newer.", inner, theme.MUTED));
     } else if (item.id === "check:api") {
       lines.push({ text: "API RUNTIME", fg: theme.PRIMARY });
       lines.push({ text: apiStatus, fg: statusTone(apiStatus) ?? theme.MUTED });

@@ -10,7 +10,7 @@ import {
   type LogoFrame,
 } from "./logo-animation.js";
 
-/** The shipped 0SECURITY block mark (mirrors chat-screen's TERMINAL_BLOCK_LOGO compact). */
+/** The shipped ZEROSECURITY block mark (mirrors chat-screen's TERMINAL_BLOCK_LOGO compact). */
 const LOGO = [
   " ######   #######  #######   ######",
   "##  //##  ##       ##       ##     ",

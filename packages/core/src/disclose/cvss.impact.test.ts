@@ -10,7 +10,7 @@
  */
 
 import { describe, it, expect } from "vitest";
-import type { Finding, ImpactAssessment, ReachabilityTier } from "@0sec/shared";
+import type { Finding, ImpactAssessment, ReachabilityTier } from "@0/shared";
 import { suggestCvss } from "./cvss.js";
 
 function mkFinding(overrides: Partial<Finding> = {}): Finding {

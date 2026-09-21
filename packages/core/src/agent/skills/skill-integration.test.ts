@@ -30,15 +30,15 @@ describe("Skill Integration (#458)", () => {
   let savedJitSkills: string | undefined;
 
   beforeEach(() => {
-    savedJitSkills = process.env["0SEC_FEATURE_JIT_SKILLS"];
-    process.env["0SEC_FEATURE_JIT_SKILLS"] = "1";
+    savedJitSkills = process.env["ZERO_FEATURE_JIT_SKILLS"];
+    process.env["ZERO_FEATURE_JIT_SKILLS"] = "1";
     clearSkillRegistry();
     loadSkillRegistry(__dirname);
   });
 
   afterEach(() => {
-    if (savedJitSkills === undefined) delete process.env["0SEC_FEATURE_JIT_SKILLS"];
-    else process.env["0SEC_FEATURE_JIT_SKILLS"] = savedJitSkills;
+    if (savedJitSkills === undefined) delete process.env["ZERO_FEATURE_JIT_SKILLS"];
+    else process.env["ZERO_FEATURE_JIT_SKILLS"] = savedJitSkills;
     clearSkillRegistry();
     eventBus.clear();
   });

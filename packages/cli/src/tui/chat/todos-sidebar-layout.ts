@@ -14,7 +14,7 @@
  */
 
 import { sanitizeTuiText, fitTuiText } from "../text.js";
-import type { TodosEventPayload, TodoStatus } from "@0sec/core";
+import type { TodosEventPayload, TodoStatus } from "@0/core";
 
 /** Default number of rows a wrapped sidebar item may span. */
 export const DEFAULT_WRAP_LINES = 2;

@@ -9,7 +9,7 @@ From the prompt, the operator can investigate targets, review source, verify fin
 work on candidate fixes with the available tools.
 
 Two front-ends share the same engine session (`createConsoleSession` from
-`@0sec/core`):
+`@0/core`):
 
 | Front-end | Requirement | Features |
 |-----------|-------------|----------|
@@ -63,7 +63,7 @@ when running the full terminal UI from source.
 | `--allow-scanners` | Expose scanner wrappers (sqlmap, nikto, …) | off |
 | `--finding <id>` | Focus the chat on one persisted finding | (none) |
 | `--finding-intent <intent>` | Finding workflow: `investigate`, `verify`, `draft_fix`, `impact` (requires `--finding`) | `investigate` |
-| `--db-path <path>` | Persistent findings database, also used by history screens | `0SEC_DB_PATH` or `~/.0sec/0sec.db` |
+| `--db-path <path>` | Persistent findings database, also used by history screens | `ZERO_DB_PATH` or `~/.0/0.db` |
 | `--resume [id]` | Reopen a saved session; omitting id opens a picker | (none) |
 | `--continue` | Reopen the most recent session, no picker | (none) |
 | `--print [prompt]` | One-shot non-interactive; reads from argument or piped stdin | (none) |
@@ -105,7 +105,7 @@ the engagement launcher's fields.
 ### Long-running work and context
 
 The interactive console has no cumulative turn-token cap by default, including
-subscription-backed providers. Bare `0`, `0sec console`, and resumed sessions
+subscription-backed providers. Bare `0`, `0 console`, and resumed sessions
 share the 100-tool-round default; `--max-tool-calls` overrides it explicitly.
 Provider subscription quotas and explicitly configured engine budgets still
 apply independently.
@@ -118,7 +118,7 @@ quota or authentication error is not treated as context overflow.
 
 A “turn token budget” pause identifies a local cumulative budget, not the size
 of the current context. Older builds imposed a 2m-token default. If that pause
-appears unexpectedly, check `0sec --version` and `/doctor` for the running
+appears unexpectedly, check `0 --version` and `/doctor` for the running
 artifact, then restart after updating; an already-running process retains its
 loaded code. A separate source checkout or generated bundle may be older than
 the installed standalone executable.
@@ -129,7 +129,7 @@ The console attaches a persistent findings database. `query_findings` can
 search all sessions or a particular scan ID **within that attached database**.
 Use `--db-path` to open a scan's run-local `state.db`; it works independently
 of `--finding`, including with `--print`. The console's default remains the
-local `~/.0sec/0sec.db` (or `0SEC_DB_PATH`), whereas fresh scan workflows use
+local `~/.0/0.db` (or `ZERO_DB_PATH`), whereas fresh scan workflows use
 run-local databases. Do not assume a global history listing means every run's
 findings are loaded into this chat.
 
@@ -577,7 +577,7 @@ Categories: engagement, findings, verification, connect, settings, evolution, au
 
 ### Session persistence
 
-The TUI saves conversations to `~/.0sec/console-sessions/<id>.json` after turns,
+The TUI saves conversations to `~/.0/console-sessions/<id>.json` after turns,
 including failed turns. Files are owner-only (`0600`), and the directory is
 `0700`. Metadata includes working directory, model, target, mode, preview,
 optional summary, timestamp and native-message count.
@@ -682,7 +682,7 @@ The console has two views into past data:
 | Scope | Current session's conversation turns | Any persisted scan (by scan ID or database) |
 | Content | Operator + model turns, tool calls, outcomes | Event-level turn timeline: stages, tool calls, model output |
 | Access | `/transcript` (Ctrl+O) | `/replay` |
-| Data source | Current in-memory conversation; saved native messages can seed a resumed chat | Scan database (`--db-path` or `~/.0sec/0sec.db`) |
+| Data source | Current in-memory conversation; saved native messages can seed a resumed chat | Scan database (`--db-path` or `~/.0/0.db`) |
 | Use case | Review what was discussed and returned by tools in this chat | Inspect the events that a scan actually persisted |
 
 The **transcript review** (Ctrl+O) is a scrollable, virtualised rendering of
@@ -696,7 +696,7 @@ Browse scan runs, select one, and step through its events.
 ### Local feedback
 
 `/feedback <message>` appends a Markdown entry with timestamp, version, model,
-and mode metadata to `~/.0sec/feedback.md`. This file is yours — never sent
+and mode metadata to `~/.0/feedback.md`. This file is yours — never sent
 anywhere without explicit action.
 
 ### Staged submission
@@ -716,8 +716,8 @@ anywhere without explicit action.
 
 ### Transmission
 
-Submission is disabled by any of: `0SEC_OFFLINE=1`, `0SEC_NO_TELEMETRY=1`,
-`DO_NOT_TRACK=1`. Transmission goes to the URL in `0SEC_FEEDBACK_URL`, or to
+Submission is disabled by any of: `ZERO_OFFLINE=1`, `ZERO_NO_TELEMETRY=1`,
+`DO_NOT_TRACK=1`. Transmission goes to the URL in `ZERO_FEEDBACK_URL`, or to
 the 0cloud feedback endpoint (`/api/cli-feedback`) when the CLI is
 authenticated with a compatible configured 0cloud deployment.
 
@@ -729,7 +729,7 @@ submit never blocks the session.
 
 Problem reporting defaults to `automatic`. Tool and runtime failures can produce
 a diagnostic through the same feedback transport, independently of manually
-staged messages; it does not upload `~/.0sec/feedback.md`. At analytics levels
+staged messages; it does not upload `~/.0/feedback.md`. At analytics levels
 `off` or `usage`, the diagnostic is limited to failure categories and runtime
 metadata. Opting into `commands` or `full` allows bounded error messages,
 stack traces and captured output after redaction. Redaction is not a guarantee
@@ -747,7 +747,7 @@ reports submission as unavailable.
 
 When entering an API key through the TUI's credential prompt (`/connect` or
 `/providers`), the entered value is stored directly to
-`~/.0sec/credentials.json`. The store's `redactSecret` function produces a
+`~/.0/credentials.json`. The store's `redactSecret` function produces a
 display form showing only a prefix and the last 4 characters (e.g.
 `sk-ant-…a4f2`) — the full key is never echoed to the transcript.
 
@@ -758,7 +758,7 @@ affect provider credential storage.
 ### Storable providers (API-key auth)
 
 API-key connections offered by `/connect` are stored in
-`~/.0sec/credentials.json`; the account store also supports provider-specific
+`~/.0/credentials.json`; the account store also supports provider-specific
 OAuth records and multiple accounts. ChatGPT Codex is an OAuth connection, not
 a pasted API-key provider. Explicit nonblank environment credentials take
 precedence over saved credentials. See [API Keys](/api-keys/) for each provider's
@@ -766,8 +766,8 @@ supported methods and the additional Azure settings.
 
 ## Settings
 
-Display settings are layered: **default** → **global** (`~/.0sec/tui-settings.json`)
-→ **project** (`.0sec/tui-settings.json`). Use `/settings` in the TUI to toggle
+Display settings are layered: **default** → **global** (`~/.0/tui-settings.json`)
+→ **project** (`.0/tui-settings.json`). Use `/settings` in the TUI to toggle
 them.
 
 The full settings table lives in [Configuration](/configuration/). Key

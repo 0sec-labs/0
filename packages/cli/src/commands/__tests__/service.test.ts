@@ -1,5 +1,5 @@
 /**
- * Tests for `0sec service` — managed cloud lifecycle commands.
+ * Tests for `0 service` — managed cloud lifecycle commands.
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -17,7 +17,7 @@ const mocks = vi.hoisted(() => ({
   }),
 }));
 
-vi.mock("@0sec/core", () => ({
+vi.mock("@0/core", () => ({
   CloudClient: class {
     getJson = mocks.getJson;
     postJson = mocks.postJson;
@@ -67,7 +67,7 @@ async function runCli(argv: string[]): Promise<void> {
   program.exitOverride();
   registerServiceCommand(program);
   try {
-    await program.parseAsync(["node", "0sec", ...argv]);
+    await program.parseAsync(["node", "0", ...argv]);
   } catch {
     // expected
   }
@@ -105,7 +105,7 @@ const COMPLETE_SCAN = {
 
 // ── Tests ──
 
-describe("0sec service start", () => {
+describe("0 service start", () => {
   let io: ReturnType<typeof captureIO>;
 
   beforeEach(() => {
@@ -187,7 +187,7 @@ describe("0sec service start", () => {
   });
 });
 
-describe("0sec service status", () => {
+describe("0 service status", () => {
   let io: ReturnType<typeof captureIO>;
 
   beforeEach(() => {
@@ -232,7 +232,7 @@ describe("0sec service status", () => {
   });
 });
 
-describe("0sec service wait", () => {
+describe("0 service wait", () => {
   let io: ReturnType<typeof captureIO>;
 
   beforeEach(() => {
@@ -271,7 +271,7 @@ describe("0sec service wait", () => {
   });
 });
 
-describe("0sec service cancel", () => {
+describe("0 service cancel", () => {
   let io: ReturnType<typeof captureIO>;
 
   beforeEach(() => {
@@ -304,7 +304,7 @@ describe("0sec service cancel", () => {
   });
 });
 
-describe("0sec service disconnect", () => {
+describe("0 service disconnect", () => {
   let io: ReturnType<typeof captureIO>;
 
   beforeEach(() => {
@@ -381,7 +381,7 @@ describe("0sec service disconnect", () => {
   });
 });
 
-describe("0sec service — error handling", () => {
+describe("0 service — error handling", () => {
   let io: ReturnType<typeof captureIO>;
   let CloudUnauthorizedError: new (path: string) => Error;
   let CloudAuthMissingError: new () => Error;
@@ -390,7 +390,7 @@ describe("0sec service — error handling", () => {
     io = captureIO();
     process.exitCode = undefined;
     // Import the mock error classes so instanceof checks work
-    const core = await import("@0sec/core") as unknown as { CloudUnauthorizedError: new (path: string) => Error; CloudAuthMissingError: new () => Error };
+    const core = await import("@0/core") as unknown as { CloudUnauthorizedError: new (path: string) => Error; CloudAuthMissingError: new () => Error };
     CloudUnauthorizedError = core.CloudUnauthorizedError;
     CloudAuthMissingError = core.CloudAuthMissingError;
   });

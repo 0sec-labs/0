@@ -9,7 +9,7 @@
  * can be exercised deterministically without launching Chromium.
  */
 import { describe, it, expect } from "vitest";
-import type { JevEvaluator } from "@0sec/shared";
+import type { JevEvaluator } from "@0/shared";
 import {
   BROWSER_ACTIONS,
   browserToolDefinitions,

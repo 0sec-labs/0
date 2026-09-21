@@ -1,4 +1,4 @@
-name: "0sec: Installation E2E"
+name: "0: Installation E2E"
 
 # Verify the public commands in README.md and Getting Started, not a build-tree
 # approximation. The image-publish completion trigger makes this run after the
@@ -9,14 +9,14 @@ on:
   schedule:
     - cron: "17 3 * * *"
   workflow_run:
-    workflows: ["0sec: Publish Docker image"]
+    workflows: ["0: Publish Docker image"]
     types: [completed]
 
 permissions:
   contents: read
 
 concurrency:
-  group: 0sec-install-e2e
+  group: 0-install-e2e
   cancel-in-progress: false
 
 jobs:

@@ -4,7 +4,7 @@ import { readFile, stat } from "node:fs/promises";
 import { createInterface } from "node:readline/promises";
 import type { Command } from "commander";
 import { z } from "zod";
-import { CloudClient, loadCloudCredentials } from "@0sec/core";
+import { CloudClient, loadCloudCredentials } from "@0/core";
 import { defaultOpenBrowser } from "./auth.js";
 
 const endpoint = "/api/project-setup";

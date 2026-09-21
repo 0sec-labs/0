@@ -19,13 +19,13 @@ import { createEvolvedFinder } from "../packages/core/dist/stages/evolved-finder
 import { resolveSmolvmImage } from "../packages/core/dist/runtime/smolvm.js";
 
 maybeLoadCodexAuth();
-process.env["0SEC_DISABLE_HUNT_MEMORY"] = "1";
-process.env["0SEC_CLOUD_SINK"] = "";
-const backend = process.env["0SEC_EVOLUTION_BACKEND"] ?? "docker";
-assert(["docker", "smolvm"].includes(backend), "0SEC_EVOLUTION_BACKEND must be docker or smolvm");
-const imageArchive = process.env["0SEC_SMOLVM_IMAGE_ARCHIVE"];
-if (backend === "smolvm") assert(imageArchive, "smolvm requires 0SEC_SMOLVM_IMAGE_ARCHIVE");
-const root = mkdtempSync(join(tmpdir(), "0sec-source-e2e-"));
+process.env["ZERO_DISABLE_HUNT_MEMORY"] = "1";
+process.env["ZERO_CLOUD_SINK"] = "";
+const backend = process.env["ZERO_EVOLUTION_BACKEND"] ?? "docker";
+assert(["docker", "smolvm"].includes(backend), "ZERO_EVOLUTION_BACKEND must be docker or smolvm");
+const imageArchive = process.env["ZERO_SMOLVM_IMAGE_ARCHIVE"];
+if (backend === "smolvm") assert(imageArchive, "smolvm requires ZERO_SMOLVM_IMAGE_ARCHIVE");
+const root = mkdtempSync(join(tmpdir(), "0-source-e2e-"));
 const sourceRoot = join(root, "source");
 const storePath = join(root, "store");
 const cleanup = () => {
@@ -61,14 +61,14 @@ for (const [index, line] of input.file.content.split('\n').entries()) {
     findings.push({title:'Hardcoded credential', severity:'high', line:index+1, analysis:'Literal credential assigned.'});
   }
 }
-console.log(JSON.stringify({schemaVersion:'0sec.finder.output/v1', findings}));
+console.log(JSON.stringify({schemaVersion:'0.finder.output/v1', findings}));
 `;
   writeFileSync(join(sourceRoot, "finder.mjs"), worker);
   const finding = { title: "Hardcoded credential", severity: "high", line: 1, analysis: "Literal credential assigned." };
   const makeCase = (id, lane, content, vulnerable) => ({
     id, lane,
-    input: { schemaVersion: "0sec.finder.input/v1", file: { path: `${id}.js`, content }, lensId: "credentials", challengeHint: "Find literal credentials." },
-    expected: { schemaVersion: "0sec.finder.output/v1", findings: vulnerable ? [finding] : [] },
+    input: { schemaVersion: "0.finder.input/v1", file: { path: `${id}.js`, content }, lensId: "credentials", challengeHint: "Find literal credentials." },
+    expected: { schemaVersion: "0.finder.output/v1", findings: vulnerable ? [finding] : [] },
   });
   const cases = [
     makeCase("dev-secret", "development", 'const secret = "dev-a";', true),
@@ -86,7 +86,7 @@ console.log(JSON.stringify({schemaVersion:'0sec.finder.output/v1', findings}));
     schemaVersion: 1, kind: "source", sourceRoot, storePath, image,
     ...(backend === "smolvm" ? { backend, imageArchive, memoryMb: 2048, cpus: 2 } : {}),
     sourcePaths: ["finder.mjs"], editablePaths: ["finder.mjs"], command: ["node", "finder.mjs"], cases,
-    model: process.env["0SEC_MODEL"] || "gpt-5.6-luna",
+    model: process.env["ZERO_MODEL"] || "gpt-5.6-luna",
     objective: "Improve literal credential detection for password, passwd, secret, token, apiKey, and api_key assignments. Detect only nonempty quoted string assignments to credential keys, never ordinary names, environment reads, or empty strings. Preserve the existing output schema and finding title, severity, analysis, and line-number convention. Generalize the recognition logic rather than matching fixture identities.",
     allowModelSourceAccess: true, autoPromote: false, repeats: 2, canaryTrials: 2,
     maxIterations: 2, maxModelTurns: 6, maxModelCostUsd: 2, maxEvaluationCostUsd: 2,

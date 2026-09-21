@@ -3,7 +3,7 @@
 // enforcement tracker and rate limiter, plus the resolvers and report-attachers
 // built on them. Pure relocation — these were private to agentic-scanner.ts and
 // are imported back there; behaviour is unchanged.
-import type { ScanConfig, ScanReport } from "@0sec/shared";
+import type { ScanConfig, ScanReport } from "@0/shared";
 import { loadScope, ScopePolicy } from "../scope/scope.js";
 import { RateLimiter, parseRateLimitFlag } from "../scope/rate-limit.js";
 import { EnforcementTracker, PathPolicy } from "../scope/enforcement.js";
@@ -24,7 +24,7 @@ import type { EngagementPosture } from "../scope/engagement-profile.js";
 
 // ── scope policy cache + resolvers (was agentic-scanner.ts) ──
 /**
- * Per-scan cache of parsed scope policies (0sec#218 review). The first
+ * Per-scan cache of parsed scope policies (0#218 review). The first
  * helper that needs a policy parses the JSON file once; every subsequent
  * helper for the same `ScanConfig` reuses the same `ScopePolicy`
  * instance.
@@ -63,7 +63,7 @@ export function resolveScopeForConfig(config: ScanConfig): ScopePolicy | undefin
 }
 
 /**
- * Resolve the attribution config (0sec#216) from a ScanConfig. Called
+ * Resolve the attribution config (0#216) from a ScanConfig. Called
  * inline at every helper-function call site that constructs an
  * `AgentConfig`/`NativeAgentConfig`. Reuses the cached `ScopePolicy`
  * via `resolveScopeForConfig` so the scope file isn't reparsed.
@@ -89,14 +89,14 @@ export function buildAttributionForConfig(config: ScanConfig): AttributionConfig
  * Default 5 rps when the operator did not pass `--rate-limit`. The
  * issue body is explicit on this: the primitive should default
  * conservative even without an explicit operator flag, so an
- * unconfigured `0sec scan` can't accidentally hammer a target.
+ * unconfigured `0 scan` can't accidentally hammer a target.
  */
 const RATE_LIMITER_CACHE = new WeakMap<ScanConfig, RateLimiter>();
 export function getOrCreateRateLimiter(config: ScanConfig): RateLimiter {
   let rl = RATE_LIMITER_CACHE.get(config);
   if (!rl) {
     // In http_audit mode the per-host rps comes from the env-bridge
-    // (0SEC_TARGET_RATE_LIMIT_RPS, default 5) rather than the --rate-limit
+    // (ZERO_TARGET_RATE_LIMIT_RPS, default 5) rather than the --rate-limit
     // flag; the flag form isn't part of the worker contract. Otherwise we
     // honour the parsed --rate-limit spec with the usual 5 rps default.
     const modeFallbackRps = config.mode === "http_audit"

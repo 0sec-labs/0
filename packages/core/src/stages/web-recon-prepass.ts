@@ -1,4 +1,4 @@
-// Deterministic web-recon pre-pass (0sec web-recon integration).
+// Deterministic web-recon pre-pass (0 web-recon integration).
 //
 // This stage wires the seven standalone web-recon modules into a single
 // deterministic pass that runs BEFORE the attack agent's first turn on web
@@ -24,7 +24,7 @@ import type {
   ScanConfig,
   ScanContext,
   Severity,
-} from "@0sec/shared";
+} from "@0/shared";
 import { runBaselineWebChecks } from "./web.js";
 import {
   enumerateJsChunkUrls,
@@ -407,7 +407,7 @@ export async function runWebReconPrePass(
   // host/domain — never one a hostile target's HTML steered us to off-scope.
   if (resetBurstProbeAllowed && resetEndpoint && isInScopeUrl(resetEndpoint, targetHost, domain)) {
     try {
-      const invalidEmail = `0sec-noreply-${randomUUID().slice(0, 8)}@invalid.example`;
+      const invalidEmail = `0-noreply-${randomUUID().slice(0, 8)}@invalid.example`;
       const probe = await probeRateLimit({
         request: async () => {
           if (limiter) await limiter.acquire(resetEndpoint);

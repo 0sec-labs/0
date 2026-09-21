@@ -1,11 +1,11 @@
-// `0sec hackstore` creates extension source and validates manifests.
+// `0 hackstore` creates extension source and validates manifests.
 // These authoring commands do not install, enable, or execute plugin code.
-// `0sec plugin` handles installation, project approval, and direct tool calls.
+// `0 plugin` handles installation, project approval, and direct tool calls.
 // Manifest validation is shared with the loader; runnable code is checked
 // separately by loading and calling the installed plugin.
 //
 // HackstoreCorePort lets command tests use the real validator without importing
-// the full core barrel. Production resolves it lazily from @0sec/core.
+// the full core barrel. Production resolves it lazily from @0/core.
 
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
@@ -13,7 +13,7 @@ import { join, resolve } from "node:path";
 import chalk from "chalk";
 import type { Command } from "commander";
 
-import type { ValidationResult } from "@0sec/core";
+import type { ValidationResult } from "@0/core";
 
 // ── Decided constants ─────────────────────────────────────────────────────────
 
@@ -33,7 +33,7 @@ const EXIT_USER_ERROR = 1;
 // ── Core port ─────────────────────────────────────────────────────────────────
 
 /**
- * Everything this command needs from `@0sec/core`. Injected so tests supply the
+ * Everything this command needs from `@0/core`. Injected so tests supply the
  * real validator from core source; {@link defaultCorePort} lazily imports the
  * barrel in production.
  */
@@ -47,7 +47,7 @@ export interface HackstoreCorePort {
 let cachedCore: HackstoreCorePort | undefined;
 async function defaultCorePort(): Promise<HackstoreCorePort> {
   if (cachedCore) return cachedCore;
-  const mod = (await import("@0sec/core")) as unknown as HackstoreCorePort;
+  const mod = (await import("@0/core")) as unknown as HackstoreCorePort;
   cachedCore = { validatePluginManifest: mod.validatePluginManifest };
   return cachedCore;
 }
@@ -78,7 +78,7 @@ function resolveManifestPath(pathArg: string): { ok: true; file: string } | { ok
 }
 
 /**
- * `0sec hackstore validate <path>` — read + parse + validate a manifest against
+ * `0 hackstore validate <path>` — read + parse + validate a manifest against
  * the same contract the store enforces. Sets a non-zero exit code on any
  * failure (missing file, bad JSON, invalid manifest).
  */
@@ -182,7 +182,7 @@ function scaffoldManifest(name: string): Record<string, unknown> {
 function scaffoldReadme(name: string, id: string): string {
   return `# ${name}
 
-A [Hackstore](https://${HACKSTORE_REGISTRY_REPO}) extension for 0sec.
+A [Hackstore](https://${HACKSTORE_REGISTRY_REPO}) extension for 0.
 The included \`sha256\` tool hashes its \`input\` string.
 
 ## Develop and test
@@ -191,14 +191,14 @@ Edit \`manifest.json\` and \`plugin.js\` together. The installer writes the
 manifest as \`plugin.json\`; the program reads that file when it starts.
 
 \`\`\`sh
-0sec hackstore validate .
+0 hackstore validate .
 \`\`\`
 
 Follow the [local installation guide](https://docs.0.security/hackstore/#run-locally)
 to test with an isolated home and project. After installing and enabling:
 
 \`\`\`sh
-0sec plugin run ${id} sha256 input=hello
+0 plugin run ${id} sha256 input=hello
 \`\`\`
 
 Name the tool before passing arguments. Validate arguments in the implementation,
@@ -260,7 +260,7 @@ function isNonEmptyDir(dir: string): boolean {
 }
 
 /**
- * `0sec hackstore init <name>` — scaffold a new extension directory `<name>/`
+ * `0 hackstore init <name>` — scaffold a new extension directory `<name>/`
  * containing a minimal valid manifest.json, a README, and an example tool
  * source file. Refuses to write into a non-empty directory unless `--force`.
  */
@@ -299,7 +299,7 @@ export function runInit(name: string, deps: InitDeps): void {
   console.log("");
   console.log(chalk.bold("  Next steps:"));
   console.log(`    1. Edit ${join(name, MANIFEST_FILE)} — declare your tools + capabilities`);
-  console.log(`    2. Validate:  ${chalk.cyan(`0sec hackstore validate ${name}`)}`);
+  console.log(`    2. Validate:  ${chalk.cyan(`0 hackstore validate ${name}`)}`);
   console.log(`    3. Test locally and submit: https://${HACKSTORE_REGISTRY_REPO}/blob/main/CONTRIBUTING.md`);
   process.exitCode = EXIT_OK;
 }
@@ -310,7 +310,7 @@ export function registerHackstoreCommand(program: Command): void {
   const hackstore = program
     .command("hackstore")
     .aliases(["hack", "store"])
-    .description("Author extensions for Hackstore, the 0sec extension store");
+    .description("Author extensions for Hackstore, the 0 extension store");
 
   hackstore
     .command("init <name>")

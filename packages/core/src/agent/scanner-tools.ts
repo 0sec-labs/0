@@ -1,7 +1,7 @@
-// ── First-class structured scanner tool wrappers (0sec#555) ──
+// ── First-class structured scanner tool wrappers (0#555) ──
 //
-// 0sec is a shell-first agent and, by default, SUPPRESSES generic scanners
-// in the `bash` tool (`scope/scanner-binaries.ts`, 0sec#217): when scope is
+// 0 is a shell-first agent and, by default, SUPPRESSES generic scanners
+// in the `bash` tool (`scope/scanner-binaries.ts`, 0#217): when scope is
 // loaded the engagement is presumed to be a coordinated-disclosure run and the
 // named scanners (sqlmap/wpscan/nikto/gobuster/dirb/wfuzz/ffuf, `nmap -sV/-A`)
 // fingerprint themselves on the wire. That stealthy default is correct there.

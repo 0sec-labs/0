@@ -11,7 +11,7 @@
  */
 
 import { describe, it, expect } from "vitest";
-import type { Finding, ImpactAssessment } from "@0sec/shared";
+import type { Finding, ImpactAssessment } from "@0/shared";
 import {
   computeCvss4BaseScore,
   parseCvss4Vector,

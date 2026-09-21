@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { Command } from "commander";
-import type { CreditAccount } from "@0sec/core";
+import type { CreditAccount } from "@0/core";
 import { registerHostedCommand } from "../hosted.js";
 
 const output = vi.hoisted(() => ({ stdout: vi.fn(), stderr: vi.fn() }));
@@ -20,8 +20,8 @@ function account(): CreditAccount {
 }
 
 beforeEach(() => {
-  vi.stubEnv("0SEC_CLOUD_TOKEN", "synthetic-fixture-token");
-  vi.stubEnv("0SEC_CLOUD_HOST", "https://fixture.invalid");
+  vi.stubEnv("ZERO_CLOUD_TOKEN", "synthetic-fixture-token");
+  vi.stubEnv("ZERO_CLOUD_HOST", "https://fixture.invalid");
 });
 afterEach(() => {
   vi.restoreAllMocks();
@@ -34,9 +34,9 @@ afterEach(() => {
 
 async function run(args: string[], body: unknown, status = 200): Promise<string> {
   vi.stubGlobal("fetch", async () => Response.json(body, { status }));
-  const command = new Command("0sec");
+  const command = new Command("0");
   registerHostedCommand(command);
-  await command.parseAsync(["node", "0sec", ...args]);
+  await command.parseAsync(["node", "0", ...args]);
   return String(output.stdout.mock.lastCall?.[0] ?? "");
 }
 

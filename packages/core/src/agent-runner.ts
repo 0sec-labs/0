@@ -1,4 +1,4 @@
-import type { Finding } from "@0sec/shared";
+import type { Finding } from "@0/shared";
 import type { ScanListener } from "./scanner.js";
 import { createRuntime } from "./runtime/index.js";
 import type { RuntimeType } from "./runtime/index.js";
@@ -50,11 +50,11 @@ export interface AnalysisAgentOptions {
 }
 
 /**
- * Re-export of the canonical TokenUsage shape from @0sec/shared so
+ * Re-export of the canonical TokenUsage shape from @0/shared so
  * call sites that imported AnalysisTokenUsage from this module continue
  * to work without churn.
  */
-export type AnalysisTokenUsage = import("@0sec/shared").TokenUsage;
+export type AnalysisTokenUsage = import("@0/shared").TokenUsage;
 
 export interface AnalysisAgentResult {
   findings: Finding[];
@@ -140,10 +140,10 @@ function envTurns(key: string): number | undefined {
  * ── Env overrides ──
  *
  * All budgets are overridable without a rebuild so they can be swept:
- *   0SEC_MAX_TURNS         — every role and purpose
- *   0SEC_MAX_TURNS_VERIFY  — verify runs only
- *   0SEC_MAX_TURNS_AUDIT   — audit research runs
- *   0SEC_MAX_TURNS_REVIEW  — review research runs
+ *   ZERO_MAX_TURNS         — every role and purpose
+ *   ZERO_MAX_TURNS_VERIFY  — verify runs only
+ *   ZERO_MAX_TURNS_AUDIT   — audit research runs
+ *   ZERO_MAX_TURNS_REVIEW  — review research runs
  * The specific variable wins over the global one when both are set.
  */
 export function getMaxTurns(
@@ -152,10 +152,10 @@ export function getMaxTurns(
   branch: "native" | "legacy",
   purpose: "research" | "verify" = "research",
 ): number {
-  const globalOverride = envTurns("0SEC_MAX_TURNS");
+  const globalOverride = envTurns("ZERO_MAX_TURNS");
 
   if (purpose === "verify") {
-    const override = envTurns("0SEC_MAX_TURNS_VERIFY") ?? globalOverride;
+    const override = envTurns("ZERO_MAX_TURNS_VERIFY") ?? globalOverride;
     if (override !== undefined) return override;
     // Verify reproves ONE specific finding, so it genuinely doesn't need a
     // research-scale budget. But 8 turns was below the floor for the task:
@@ -168,7 +168,7 @@ export function getMaxTurns(
     return branch === "native" ? 20 : 12;
   }
   if (role === "audit") {
-    const override = envTurns("0SEC_MAX_TURNS_AUDIT") ?? globalOverride;
+    const override = envTurns("ZERO_MAX_TURNS_AUDIT") ?? globalOverride;
     if (override !== undefined) return override;
     if (branch === "native") {
       // Doubled across the board. Audit walks a dependency/source tree, and
@@ -182,7 +182,7 @@ export function getMaxTurns(
     return depth === "deep" ? 50 : depth === "default" ? 50 : 15;
   }
   // review
-  const override = envTurns("0SEC_MAX_TURNS_REVIEW") ?? globalOverride;
+  const override = envTurns("ZERO_MAX_TURNS_REVIEW") ?? globalOverride;
   if (override !== undefined) return override;
   if (branch === "native") {
     // `deep` 100 → 150 brings the one budget meant for exhaustive work in line
@@ -243,7 +243,7 @@ export async function runAnalysisAgent(opts: AnalysisAgentOptions): Promise<Anal
 
   // `--runtime codex` is dual-mode: it can resolve through either the
   // local `codex` CLI binary or the direct ChatGPT Codex provider when
-  // 0SEC_CHATGPT_ACCESS_TOKEN / 0SEC_CHATGPT_OAUTH_REFRESH_TOKEN is
+  // ZERO_CHATGPT_ACCESS_TOKEN / ZERO_CHATGPT_OAUTH_REFRESH_TOKEN is
   // set. Probe the API runtime configuration once up front so we can
   // route codex requests through the API native loop when the CLI
   // binary is absent but the operator has subscription auth configured.
@@ -286,8 +286,8 @@ export async function runAnalysisAgent(opts: AnalysisAgentOptions): Promise<Anal
     runtimeType = "api";
   }
 
-  if (process.env.CI || process.env["0SEC_DEBUG"]) {
-    process.stderr.write(`[0sec] agent-runner: type=${runtimeType}, available=[${[...available].join(",")}], directCodex=${useDirectChatGptCodex}\n`);
+  if (process.env.CI || process.env["ZERO_DEBUG"]) {
+    process.stderr.write(`[0] agent-runner: type=${runtimeType}, available=[${[...available].join(",")}], directCodex=${useDirectChatGptCodex}\n`);
   }
 
   // ── Branch 1: CLI runtime fast path (claude/codex/etc.) ──
@@ -464,8 +464,8 @@ export async function runAnalysisAgent(opts: AnalysisAgentOptions): Promise<Anal
 
     // Check if runtime supports native tool_use (multi-turn agentic loop)
     const supportsNative = typeof (apiRuntime as NativeRuntime).executeNative === "function";
-    if (process.env.CI || process.env["0SEC_DEBUG"]) {
-      process.stderr.write(`[0sec] API runtime: native=${supportsNative}, model=${config.model ?? "default"}\n`);
+    if (process.env.CI || process.env["ZERO_DEBUG"]) {
+      process.stderr.write(`[0] API runtime: native=${supportsNative}, model=${config.model ?? "default"}\n`);
     }
 
     if (supportsNative) {

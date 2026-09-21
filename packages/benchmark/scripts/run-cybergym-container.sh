@@ -6,8 +6,8 @@ set -euo pipefail
 
 : "${CYBERGYM_ROOT:=/srv/cybergym}"
 : "${CYBERGYM_NETWORK:=cybergym-internal}"
-OSEC_CYBERGYM_IMAGE="$(printenv 0SEC_CYBERGYM_IMAGE 2>/dev/null || true)"
-: "${OSEC_CYBERGYM_IMAGE:=0sec-cybergym-agent:local}"
+OSEC_CYBERGYM_IMAGE="$(printenv ZERO_CYBERGYM_IMAGE 2>/dev/null || true)"
+: "${OSEC_CYBERGYM_IMAGE:=0-cybergym-agent:local}"
 : "${CYBERGYM_AUTH_FILE:=${HOME}/.codex/auth.json}"
 : "${CYBERGYM_AUTH_METHOD:=chatgpt-oauth}"
 : "${CYBERGYM_MODEL_PROVIDER:=}"
@@ -44,7 +44,7 @@ case "${CYBERGYM_AUTH_METHOD}" in
     auth_mount=(
       --mount "type=bind,src=${CYBERGYM_AUTH_FILE},dst=/run/secrets/codex-auth.json,readonly"
     )
-    auth_env=(--env 0SEC_CHATGPT_AUTH_FILE=/run/secrets/codex-auth.json)
+    auth_env=(--env ZERO_CHATGPT_AUTH_FILE=/run/secrets/codex-auth.json)
     ;;
   api-key)
     case "${CYBERGYM_MODEL_PROVIDER}" in
@@ -65,7 +65,7 @@ case "${CYBERGYM_AUTH_METHOD}" in
       printf 'missing required provider credential: %s\n' "${required_provider_key}" >&2
       exit 2
     }
-    provider_route_env=(--env "0SEC_FORCE_PROVIDER=${CYBERGYM_MODEL_PROVIDER}")
+    provider_route_env=(--env "ZERO_FORCE_PROVIDER=${CYBERGYM_MODEL_PROVIDER}")
     ;;
   *)
     printf 'unsupported CyberGym auth method: %s\n' "${CYBERGYM_AUTH_METHOD}" >&2

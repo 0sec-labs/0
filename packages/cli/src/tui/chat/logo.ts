@@ -3,7 +3,7 @@ import type { Theme } from "../theme-context.js";
 import type { LogoCellTone } from "../logo-animation.js";
 
 /**
- * Five-row 0SECURITY wordmark. Every letter has an eight-cell slot and
+ * Five-row ZEROSECURITY wordmark. Every letter has an eight-cell slot and
  * two cells of tracking; the narrow I/T/Y stems keep the same two-cell weight.
  * '#' is white block art, '/' is the orange diagonal in the leading zero.
  */
@@ -53,9 +53,9 @@ export function logoRunStyle(tone: LogoCellTone, theme: Theme): { fg: string; at
   if (tone.startsWith("#")) return { fg: tone };
   switch (tone) {
     case "error":
-      // The slashed-zero's diagonal is the 0sec BRAND orange — a fixed mark, not a
+      // The slashed-zero's diagonal is the 0 BRAND orange — a fixed mark, not a
       // semantic error tone. Pinned so it stays the brand red regardless of the
-      // theme's colours (the orange is the brand mark, tuned to the 0sec identity).
+      // theme's colours (the orange is the brand mark, tuned to the 0 identity).
       return { fg: "#FD802E" };
     case "muted":
       return { fg: theme.MUTED };

@@ -18,7 +18,7 @@ import {
   useRenderer,
   useTerminalDimensions,
 } from "@opentui/react";
-import { DEFAULT_AUTONOMY_MODE } from "@0sec/shared";
+import { DEFAULT_AUTONOMY_MODE } from "@0/shared";
 import {
   ScopePolicy,
   CloudClient,
@@ -49,7 +49,7 @@ import {
   renderInboundMessage,
   type MessagingRuntime,
   type McpHost,
-} from "@0sec/core";
+} from "@0/core";
 import { decodePasteBytes, type ScrollBoxRenderable } from "@opentui/core";
 import {
   useSettings,
@@ -58,7 +58,7 @@ import {
   reloadSettings,
 } from "./settings-store.js";
 import { useTheme, type Theme } from "./theme-context.js";
-import { createTranscriptDocument, modelProvider } from "@0sec/shared";
+import { createTranscriptDocument, modelProvider } from "@0/shared";
 import { homedir } from "node:os";
 import { existsSync } from "node:fs";
 import {
@@ -149,7 +149,7 @@ import {
   connectionRecoveryForError,
   type ConnectionRecovery,
 } from "./connection-recovery.js";
-import { VERSION } from "@0sec/shared";
+import { VERSION } from "@0/shared";
 import {
   type TuiSettings,
 } from "./settings.js";
@@ -649,7 +649,7 @@ export interface ChatScreenOptions {
    * (network-gated, `mcp__`-fenced as untrusted). The CLI connects it before
    * launching the TUI and threads it down here, so the session build stays
    * synchronous — no async connect inside React. The session closes the host on
-   * cleanup. Absent when no `0SEC_MCP` servers are configured.
+   * cleanup. Absent when no `ZERO_MCP` servers are configured.
    */
   mcpHost?: McpHost;
 }
@@ -2049,7 +2049,7 @@ export function ChatScreen({
     const env = { ...process.env, ...credentialEnvPatch(loadCredentials(), process.env) };
     const currentProvider = runtime.getConfigurationDiagnostics().provider;
     // Which provider would this selection switch the live runtime into? An
-    // explicit hint (e.g. a 0sec Cloud row's "hosted") wins over the model id,
+    // explicit hint (e.g. a 0 Cloud row's "hosted") wins over the model id,
     // so a hosted model whose id also lives in a BYOK catalog still forces
     // hosted; otherwise derive it from the model and only treat it as a switch
     // when it actually differs from the running provider.
@@ -2250,7 +2250,7 @@ export function ChatScreen({
     });
   }, [appendEntry]);
 
-  // Tell herdr when 0sec is parked on a human decision, so the pane joins
+  // Tell herdr when 0 is parked on a human decision, so the pane joins
   // its attention queue instead of looking busy. No-op outside herdr.
   useEffect(() => {
     reportOperatorGate(Boolean(pendingScope || pendingLocalScope || pendingEscalation || pendingToolApproval || secretPrompt));
@@ -4850,7 +4850,7 @@ export function ChatScreen({
   });
   // Feed herdr the same live facts the status bar shows — model/provider,
   // context %, the target/objective topic and the current activity — so the
-  // pane's sidebar chrome names 0sec's work. Gated on `interactive`: only the
+  // pane's sidebar chrome names 0's work. Gated on `interactive`: only the
   // selected, non-overlay audit owns the single pane's topic, so hidden audits
   // never fight over it. Percent mirrors the status-bar meter exactly. All
   // reporters are no-ops off-herdr and fail-soft.
@@ -4971,7 +4971,7 @@ export function ChatScreen({
   // paddingX (folded into the sidebar layout), which an entry's own border must
   // live within. Shrinks to make room when a sidebar is shown.
   const transcriptWidth = sidebars.transcriptWidth;
-  // "0sec" is 4 cells. The optional objective sits at the top-right; target,
+  // "0" is 4 cells. The optional objective sits at the top-right; target,
   // scope, and readiness take the remaining header cells. Autonomy mode lives
   // in the bottom status bar rather than competing with engagement posture.
   const sidebarControlWidth = contentWidth >= 64 ? 24 : 8;
@@ -5217,10 +5217,10 @@ export function ChatScreen({
   headerSegments.push(sessionState);
   // Version rides at the far left of the top bar, like the startup masthead,
   // carrying the build-channel badge right beside it: [dev] when launched from
-  // a dev source checkout (the `0dev` wrapper exports 0SEC_DEV_SOURCE_ROOT),
+  // a dev source checkout (the `0dev` wrapper exports ZERO_DEV_SOURCE_ROOT),
   // else [beta] for a published build. fitTuiText truncates the MIDDLE here, so
   // this leading segment survives even on a narrow bar.
-  const channelBadge = process.env["0SEC_DEV_SOURCE_ROOT"]?.trim() ? "[dev]" : "[beta]";
+  const channelBadge = process.env["ZERO_DEV_SOURCE_ROOT"]?.trim() ? "[dev]" : "[beta]";
   const headerEngagement = [`v${VERSION} ${channelBadge}`, ...headerSegments].join(" · ");
 
 
@@ -5440,7 +5440,7 @@ export function ChatScreen({
         <text fg={TEXT}>{fitTuiText(`${"•".repeat(Math.min(secretPrompt.value.length, 40))}█`, approvalWidth)}</text>
       </box>
       <box width={approvalWidth} flexShrink={0} minWidth={0}>
-        <text fg={MUTED}>{fitTuiText(`Stored owner-only in your 0sec state dir and exported as ${secretPrompt.envVar}. Never transmitted by 0sec.`, approvalWidth, { mode: "middle" })}</text>
+        <text fg={MUTED}>{fitTuiText(`Stored owner-only in your 0 state dir and exported as ${secretPrompt.envVar}. Never transmitted by 0.`, approvalWidth, { mode: "middle" })}</text>
       </box>
       <box width={approvalWidth} flexShrink={0} minWidth={0}>
         <text fg={MUTED}>{fitLegend(approvalWidth, "[⏎] save · [esc] cancel")}</text>
@@ -6120,7 +6120,7 @@ export function ChatScreen({
         * flexShrink is disabled because this box is two stacked rows with
         * no explicit height: when the column is over-subscribed Yoga
         * collapses it to one row and the two lines overlap, which is how
-        * "0sec / chat" bled into "target: none" as "target:cnone".
+        * "0 / chat" bled into "target: none" as "target:cnone".
         */}
       {/*
         * ONE header row. It carries identity plus the two facts that are
@@ -6131,7 +6131,7 @@ export function ChatScreen({
         */}
       <box flexDirection="row" width="100%" minWidth={0} flexShrink={0} marginBottom={1} gap={1} paddingLeft={1} paddingRight={1} backgroundColor={PRIMARY}>
         <box flexDirection="row" flexShrink={0} minWidth={0}>
-          <text fg={headerFg}>0sec</text>
+          <text fg={headerFg}>0</text>
         </box>
         <box width={headerEngagementWidth} flexShrink={0} minWidth={0}>
           <text fg={headerFg}>{fitTuiText(headerEngagement, headerEngagementWidth, { mode: "middle" })}</text>
@@ -6139,7 +6139,7 @@ export function ChatScreen({
         {headerObjectiveWidth > 0 ? (
           // The async AI objective summary, right-aligned at the top-right.
           // Legible on the orange strip via the contrast-picked header fg; the
-          // 0sec voice (BRAND) reads on canvas but not on PRIMARY. Empty/compact
+          // 0 voice (BRAND) reads on canvas but not on PRIMARY. Empty/compact
           // hides it and the engagement summary reclaims the cells.
           <box width={headerObjectiveWidth} flexShrink={0} minWidth={0} flexDirection="row" justifyContent="flex-end">
             <text fg={headerFg}>{fitTuiText(headerObjective, headerObjectiveWidth, { mode: "end" })}</text>

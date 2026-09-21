@@ -19,7 +19,7 @@ afterEach(() => {
 
 describe("run-scoped local storage", () => {
   it("gives concurrent executions independent SQLite state", () => {
-    const homeDir = mkdtempSync(join(tmpdir(), "0sec-run-storage-"));
+    const homeDir = mkdtempSync(join(tmpdir(), "0-run-storage-"));
     temporaryDirectories.push(homeDir);
 
     const first = resolveOsecRunStorage({ homeDir, env: {} });
@@ -47,17 +47,17 @@ describe("run-scoped local storage", () => {
   });
 
   it("binds managed worker state to the orchestrator scan id", () => {
-    const homeDir = mkdtempSync(join(tmpdir(), "0sec-managed-run-"));
+    const homeDir = mkdtempSync(join(tmpdir(), "0-managed-run-"));
     temporaryDirectories.push(homeDir);
     const runDir = join(homeDir, "sandbox-run");
 
     const storage = resolveOsecRunStorage({
       homeDir,
       env: {
-        "0SEC_CLOUD_SCAN_ID": "scan-123",
-        "0SEC_RUN_DIR": runDir,
-        "0SEC_DB_PATH": join(runDir, "state.sqlite"),
-        "0SEC_REPORT_PATH": join(runDir, "final.json"),
+        "ZERO_CLOUD_SCAN_ID": "scan-123",
+        "ZERO_RUN_DIR": runDir,
+        "ZERO_DB_PATH": join(runDir, "state.sqlite"),
+        "ZERO_REPORT_PATH": join(runDir, "final.json"),
       },
     });
 
@@ -70,7 +70,7 @@ describe("run-scoped local storage", () => {
   });
 
   it("resolves an unambiguous abbreviated run id for resume", () => {
-    const homeDir = mkdtempSync(join(tmpdir(), "0sec-resume-storage-"));
+    const homeDir = mkdtempSync(join(tmpdir(), "0-resume-storage-"));
     temporaryDirectories.push(homeDir);
     const original = resolveOsecRunStorage({
       homeDir,
@@ -95,7 +95,7 @@ describe("run-scoped local storage", () => {
   });
 
   it("commits final reports atomically with owner-only permissions", () => {
-    const homeDir = mkdtempSync(join(tmpdir(), "0sec-report-storage-"));
+    const homeDir = mkdtempSync(join(tmpdir(), "0-report-storage-"));
     temporaryDirectories.push(homeDir);
     const storage = resolveOsecRunStorage({ homeDir, runId: "report-1", env: {} });
 

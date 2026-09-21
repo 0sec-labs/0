@@ -1,4 +1,4 @@
-import type { NativeMessage, TodoStatus } from "@0sec/core";
+import type { NativeMessage, TodoStatus } from "@0/core";
 import type { PanelData } from "../panels.js";
 import type { ToolPreview, ToolPreviewImage } from "../tool-format.js";
 import type {

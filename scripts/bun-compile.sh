@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
-# bun-compile.sh — produce a self-contained 0sec binary via `bun build --compile`.
+# bun-compile.sh — produce a self-contained 0 binary via `bun build --compile`.
 #
 # Usage:
 #   scripts/bun-compile.sh                    # compile for the host platform
 #   scripts/bun-compile.sh bun-linux-x64      # cross-compile for a specific target
-#   scripts/bun-compile.sh bun-darwin-arm64 ./dist-bin/0sec-darwin-arm64
+#   scripts/bun-compile.sh bun-darwin-arm64 ./dist-bin/0-darwin-arm64
 #
 # Must be run from the repo root. Assumes pnpm install + pnpm -r build have
 # already run (workspace packages need their dist/ directories so Bun can
-# resolve @0sec/shared etc.).
+# resolve @0/shared etc.).
 #
 # Externals are chosen to match the runtime pattern in the source:
 #   - playwright / playwright-core / electron / chromium-bidi  — loaded via
@@ -17,7 +17,7 @@
 #   - bun:ffi                                                  — only resolved
 #     on Bun at runtime anyway; no compile-time resolver exists.
 #   - sharp                                                    — optional peer
-#     of opentui's @opentui/core; not exercised by 0sec code paths.
+#     of opentui's @opentui/core; not exercised by 0 code paths.
 #   - node-sqlite3-wasm                                        — belt-and-
 #     suspenders pairing with the lazy `createRequire` in wasm-shim.ts. The
 #     Bun runtime always uses bun:sqlite via createBunEngine; the WASM
@@ -31,7 +31,7 @@ ROOT_DIR="$(pwd -P)"
 
 
 TARGET="${1:-}"
-OUTFILE="${2:-dist-bin/0sec}"
+OUTFILE="${2:-dist-bin/0}"
 
 mkdir -p "$(dirname "$OUTFILE")"
 
@@ -39,8 +39,8 @@ if [ -n "$TARGET" ]; then
   TARGET_ARG="--target=$TARGET"
   NATIVE_TARGET="${TARGET#bun-}"
   # Append target suffix to default outfile if caller didn't override
-  if [ "$OUTFILE" = "dist-bin/0sec" ]; then
-    OUTFILE="dist-bin/0sec-${TARGET#bun-}"
+  if [ "$OUTFILE" = "dist-bin/0" ]; then
+    OUTFILE="dist-bin/0-${TARGET#bun-}"
   fi
 else
   TARGET_ARG=""
@@ -94,8 +94,8 @@ bun build src/index.ts \
   --compile \
   ${TARGET_ARG} \
   --outfile "../../$OUTFILE" \
-  --define "__0SEC_VERSION__=\"$PKG_VERSION\"" \
-  --define "__0SEC_COMPILED_TARGET__=\"$NATIVE_TARGET\"" \
+  --define "__ZERO_VERSION__=\"$PKG_VERSION\"" \
+  --define "__ZERO_COMPILED_TARGET__=\"$NATIVE_TARGET\"" \
   --external playwright \
   --external playwright-core \
   --external electron \

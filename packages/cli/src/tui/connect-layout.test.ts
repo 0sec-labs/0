@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { CreditAccount } from "@0sec/core";
+import type { CreditAccount } from "@0/core";
 
 import {
   RECOMMENDED_IDS,

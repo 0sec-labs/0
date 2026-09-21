@@ -28,7 +28,7 @@ describe("presentationEventSink", () => {
 
     expect(events).toEqual([
       {
-        protocol: "0sec.presentation/v1",
+        protocol: "0.presentation/v1",
         kind: "event",
         source: "core",
         sequence: 1,
@@ -39,7 +39,7 @@ describe("presentationEventSink", () => {
         sessionId: "session-1",
       },
       {
-        protocol: "0sec.presentation/v1",
+        protocol: "0.presentation/v1",
         kind: "event",
         source: "core",
         sequence: 2,

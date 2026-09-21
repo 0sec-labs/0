@@ -1,6 +1,6 @@
 // Extracted verbatim from agentic-scanner.ts (S3 cleanup, pure relocation — no logic changes).
-import type { ScanConfig, Finding, LayerVerdict, PocStep } from "@0sec/shared";
-import { resolveIdentities } from "@0sec/shared";
+import type { ScanConfig, Finding, LayerVerdict, PocStep } from "@0/shared";
+import { resolveIdentities } from "@0/shared";
 import { runAgentLoop } from "../agent/loop.js";
 import { runNativeAgentLoop } from "../agent/native-loop.js";
 import { toolCallPreview } from "../agent/tool-preview.js";
@@ -40,7 +40,7 @@ import { EnforcementTracker } from "../scope/enforcement.js";
 
 export interface AgentOutput {
   findings: Finding[];
-  targetInfo: Partial<import("@0sec/shared").TargetInfo>;
+  targetInfo: Partial<import("@0/shared").TargetInfo>;
   summary: string;
   turnCount: number;
   estimatedCostUsd: number;
@@ -48,7 +48,7 @@ export interface AgentOutput {
    * Raw token-usage tally from the loop state. Surfaced separately
    * from `estimatedCostUsd` so the `scan_completed` event payload
    * can build per-(provider, model) cost splits via `splitCost()`
-   * (0sec#231) instead of just emitting a fused dollar total.
+   * (0#231) instead of just emitting a fused dollar total.
    * Optional for back-compat with legacy CLI runtimes that don't
    * report tokens.
    */
@@ -87,7 +87,7 @@ export async function runNativeDiscovery(
   // additions are the env-driven scope/path/rate/kill enforcement layered on
   // via the EnforcementTracker. So it is "web" for every prompt/tool decision.
   const isWeb = config.mode === "web" || config.mode === "http_audit";
-  // Multi-identity access-control testing (0sec#564): reconcile legacy
+  // Multi-identity access-control testing (0#564): reconcile legacy
   // `auth` with `identities` and surface the access_control_probe guidance.
   const identities = resolveIdentities(config);
   const basePrompt = isWeb
@@ -169,7 +169,7 @@ export async function runNativeAttack(
   db: any,
   config: ScanConfig,
   scanId: string,
-  targetInfo: Partial<import("@0sec/shared").TargetInfo>,
+  targetInfo: Partial<import("@0/shared").TargetInfo>,
   categories: string[],
   maxTurns: number,
   emit: ScanListener,
@@ -204,7 +204,7 @@ export async function runNativeAttack(
   // prompt. Defends against expensive thrash on CVE-tagged challenges
   // like XBEN-030 / XBEN-034 where the agent had source access but no
   // concrete leads and burned $6+ producing 0 findings.
-  // Gated behind 0SEC_FEATURE_PRE_RECON_CVE (default ON in white-box).
+  // Gated behind ZERO_FEATURE_PRE_RECON_CVE (default ON in white-box).
   let preReconBlock = "";
   if (hasSource && config.repoPath && features.preReconCve) {
     try {
@@ -624,7 +624,7 @@ function formatProgressHandoff(progress: AttemptProgress): string {
 }
 
 /** Format targetInfo from the discovery stage into a human-readable summary for the web attack prompt. */
-function formatWebDiscoveryInfo(targetInfo: Partial<import("@0sec/shared").TargetInfo>): string {
+function formatWebDiscoveryInfo(targetInfo: Partial<import("@0/shared").TargetInfo>): string {
   const parts: string[] = [];
   if (targetInfo.type) parts.push(`Type: ${targetInfo.type}`);
   if (targetInfo.model) parts.push(`Server/Framework: ${targetInfo.model}`);
@@ -794,7 +794,7 @@ export async function runLegacyAttack(
   db: any,
   config: ScanConfig,
   scanId: string,
-  targetInfo: Partial<import("@0sec/shared").TargetInfo>,
+  targetInfo: Partial<import("@0/shared").TargetInfo>,
   categories: string[],
   maxTurns: number,
   emit: ScanListener,

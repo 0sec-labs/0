@@ -31,7 +31,7 @@
  * ever emitting a line wider than that budget.
  */
 
-import type { Finding, Severity } from "@0sec/shared";
+import type { Finding, Severity } from "@0/shared";
 
 import { computeKvSplit } from "./pane-layout.js";
 import { shellChromeRows, wrapCells } from "./settings-layout.js";
@@ -133,7 +133,7 @@ export interface BuildFindingRowsOptions {
    * Evidence redactor. Raw request/response strings pasted into a finding are
    * passed through this before display, so a bearer token or API key never
    * reaches the screen. Defaults to identity — the caller (the screen) injects
-   * `redactSensitiveHeaders` from `@0sec/core`.
+   * `redactSensitiveHeaders` from `@0/core`.
    */
   redact?: (text: string) => string;
   /**

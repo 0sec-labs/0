@@ -33,7 +33,7 @@
  * Every POST re-checks each record's required tier against the live level.
  */
 
-import { homeStateDir, VERSION } from "@0sec/shared";
+import { homeStateDir, VERSION } from "@0/shared";
 import { mkdirSync, appendFileSync } from "node:fs";
 import { join } from "node:path";
 import { eventBus, type EventSink, type EventType } from "../events/bus.js";
@@ -63,7 +63,7 @@ export const ANALYTICS_SCHEMA_VERSION = 1;
 /** Endpoint (relative to the resolved cloud host) that receives batches. */
 export const ANALYTICS_ENDPOINT = "/api/cli-analytics";
 
-/** Transparency log filename under `~/.0sec`. */
+/** Transparency log filename under `~/.0`. */
 export const ANALYTICS_SENT_LOG_FILENAME = "analytics-sent.log";
 
 /** Short transmit timeout (ms) — telemetry never blocks an audit. */
@@ -91,7 +91,7 @@ export const MAX_BODY_BYTES = 1_048_576;
 // Finite host labels (mirror feedback.ts / schema.ts allowlists)
 // ---------------------------------------------------------------------------
 //
-// core must not import @0sec/cli, so the finite value sets from the CLI's
+// core must not import @0/cli, so the finite value sets from the CLI's
 // diagnostic allowlists are re-declared here. Anything not in a set collapses
 // to "unknown", so no free-form host string is ever transmitted. Keep in sync
 // with DIAGNOSTIC_* in packages/cli/src/tui/feedback.ts and the Finite* unions
@@ -136,7 +136,7 @@ function detectRuntime(): FiniteRuntime {
 // Same finite failure-MODE buckets as the CLI's diagnostic classifier, so a
 // tool error becomes a safe category label ("timeout", "network", …) and never
 // leaks a path, host, or payload. Re-declared here because core cannot depend
-// on @0sec/cli — keep in sync with feedback.ts.
+// on @0/cli — keep in sync with feedback.ts.
 
 function classifyFailureText(text: string): string | null {
   const t = text.toLowerCase();
@@ -357,9 +357,9 @@ class AnalyticsPipeline {
   /**
    * The effective consent tier: minimum of the stored (saved/configured) tier
    * and the environment-resolved tier. This ensures an explicit env override
-   * (e.g. `0SEC_ANALYTICS_LEVEL=off` in the parent shell) can never be
+   * (e.g. `ZERO_ANALYTICS_LEVEL=off` in the parent shell) can never be
    * bypassed by a cached "full" pipeline. Also re-checks opt-out env vars
-   * at every call, so a late-set `0SEC_OFFLINE` still takes effect.
+   * at every call, so a late-set `ZERO_OFFLINE` still takes effect.
    */
   private effectiveLevel(): AnalyticsLevel {
     const envLevel = resolveAnalyticsLevel();
@@ -627,7 +627,7 @@ class AnalyticsPipeline {
       // A read-only home must not break the tool or hide the stderr outcome.
     }
     try {
-      process.stderr.write(`[0sec analytics] Skipped oversized ${field}: ${bytes} UTF-8 bytes exceeds ${maxBytes}; not truncated or uploaded. Details: ${filename}.\n`);
+      process.stderr.write(`[0 analytics] Skipped oversized ${field}: ${bytes} UTF-8 bytes exceeds ${maxBytes}; not truncated or uploaded. Details: ${filename}.\n`);
     } catch {
       // Telemetry never breaks the caller.
     }
@@ -715,7 +715,7 @@ class AnalyticsPipeline {
             Authorization: `Bearer ${creds.token}`,
             "Content-Type": "application/json",
             Accept: "application/json",
-            "User-Agent": `0sec-cli/${typeof VERSION === "string" ? VERSION : "unknown"}`,
+            "User-Agent": `@0/cli/${typeof VERSION === "string" ? VERSION : "unknown"}`,
           },
           body,
           signal: controller.signal,
@@ -803,7 +803,7 @@ export const analyticsPipeline = new AnalyticsPipeline();
  * Mirror of `maybeSubscribeCloudEventSink`: resolve the effective analytics
  * tier from the environment, cache it via {@link AnalyticsPipeline.setLevel},
  * and subscribe the usage sink to the event bus when non-off. The env is
- * re-read at transmit time so a late env change (e.g. `0SEC_ANALYTICS_LEVEL`
+ * re-read at transmit time so a late env change (e.g. `ZERO_ANALYTICS_LEVEL`
  * set before spawning a child) is still honoured. Idempotent and env-gated;
  * safe to call multiple times.
  */

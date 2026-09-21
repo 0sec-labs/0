@@ -37,7 +37,7 @@ export interface MastheadEngagement {
 }
 
 /**
- * The centered empty-state hero: a muted EYEBROW (the lab name) above the 0sec
+ * The centered empty-state hero: a muted EYEBROW (the lab name) above the 0
  * block mark, then the tagline, then — when and only when the host supplies
  * them — the engagement facts. The caller still gates the whole unit behind
  * `showMasthead`.

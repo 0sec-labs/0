@@ -3,7 +3,7 @@ import {
   type ConsoleAutonomyMode,
   type ConsoleScopeRequest,
   type ConsoleScopeResolution,
-} from "@0sec/core";
+} from "@0/core";
 import type { Theme } from "../theme-context.js";
 import type { HerdDetailTone } from "../herd-layout.js";
 import type { SlashCommand } from "../slash-commands.js";

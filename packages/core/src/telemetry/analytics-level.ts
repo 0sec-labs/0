@@ -1,12 +1,12 @@
 /**
  * Analytics consent tier resolution.
  *
- * The tier is read from `0SEC_ANALYTICS_LEVEL`, but any opt-out signal wins
+ * The tier is read from `ZERO_ANALYTICS_LEVEL`, but any opt-out signal wins
  * unconditionally and forces "off". The opt-out env names mirror the CLI's
- * `FEEDBACK_OPT_OUT_ENV` (packages/cli/src/tui/feedback.ts): `0SEC_OFFLINE`
- * (the repo's pre-existing offline convention), `0SEC_NO_TELEMETRY` (the name
+ * `FEEDBACK_OPT_OUT_ENV` (packages/cli/src/tui/feedback.ts): `ZERO_OFFLINE`
+ * (the repo's pre-existing offline convention), `ZERO_NO_TELEMETRY` (the name
  * people reach for), and `DO_NOT_TRACK` (the cross-tool standard). That module
- * lives in `@0sec/cli`, which core must not depend on, so the names and the
+ * lives in `@0/cli`, which core must not depend on, so the names and the
  * "set and not explicitly falsy" semantics are re-declared here — keep them in
  * sync.
  */
@@ -21,11 +21,11 @@ const LEVEL_ORDER: Record<AnalyticsLevel, number> = {
   full: 3,
 };
 
-/** Env vars that hard-disable analytics regardless of `0SEC_ANALYTICS_LEVEL`. */
-export const ANALYTICS_OPT_OUT_ENV = ["0SEC_OFFLINE", "0SEC_NO_TELEMETRY", "DO_NOT_TRACK"] as const;
+/** Env vars that hard-disable analytics regardless of `ZERO_ANALYTICS_LEVEL`. */
+export const ANALYTICS_OPT_OUT_ENV = ["ZERO_OFFLINE", "ZERO_NO_TELEMETRY", "DO_NOT_TRACK"] as const;
 
 /** The env var that selects the tier when nothing opts out. */
-export const ANALYTICS_LEVEL_ENV = "0SEC_ANALYTICS_LEVEL";
+export const ANALYTICS_LEVEL_ENV = "ZERO_ANALYTICS_LEVEL";
 
 /** True when `current` is at least `required` (off < usage < commands < full). */
 export function levelAtLeast(current: AnalyticsLevel, required: AnalyticsLevel): boolean {
@@ -57,7 +57,7 @@ export function analyticsOptedOut(env: NodeJS.ProcessEnv = process.env): boolean
 
 /**
  * Resolve the effective analytics tier. Any opt-out env forces "off"; when
- * `0SEC_ANALYTICS_LEVEL` is unset the default is "full". An unknown/invalid
+ * `ZERO_ANALYTICS_LEVEL` is unset the default is "full". An unknown/invalid
  * value still fails closed to "off".
  */
 export function resolveAnalyticsLevel(env: NodeJS.ProcessEnv = process.env): AnalyticsLevel {

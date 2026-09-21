@@ -1,4 +1,4 @@
-name: "0sec: Live evolution E2E"
+name: "0: Live evolution E2E"
 
 # Explicit, billable runs on trusted main only. No pull-request trigger.
 on:
@@ -43,16 +43,16 @@ jobs:
       - name: Install locked dependencies
         run: pnpm install --frozen-lockfile
       - name: Build production entrypoints
-        run: pnpm --filter '0sec-cli...' -r build
+        run: pnpm --filter '@0/cli...' -r build
       - name: Provision the isolated source worker runtime
         if: matrix.lane == 'source'
         run: docker pull node:22-alpine
       - name: Exercise the real evolution lifecycle
         env:
           OPENAI_API_KEY: ${{ secrets.DOGFOOD_OPENAI_API_KEY }}
-          0SEC_SELECTED_PROVIDER: openai
-          0SEC_MODEL: gpt-5.6-luna
-          0SEC_CHATGPT_AUTH_FILE: /tmp/0sec-evolution-no-codex-auth.json
+          ZERO_SELECTED_PROVIDER: openai
+          ZERO_MODEL: gpt-5.6-luna
+          ZERO_CHATGPT_AUTH_FILE: /tmp/0-evolution-no-codex-auth.json
         run: |
           set -euo pipefail
           test -n "$OPENAI_API_KEY" || {

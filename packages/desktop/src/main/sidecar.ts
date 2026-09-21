@@ -3,7 +3,7 @@ import { existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { createInterface } from "node:readline";
 
-const READY_PREFIX = "0SEC_DASHBOARD_READY ";
+const READY_PREFIX = "ZERO_DASHBOARD_READY ";
 const DEFAULT_STARTUP_TIMEOUT_MS = 20_000;
 const GRACEFUL_STOP_TIMEOUT_MS = 5_000;
 const STDERR_LIMIT = 4_096;
@@ -74,9 +74,9 @@ export function sidecarResourceFileName(
   switch (platform) {
     case "linux":
     case "darwin":
-      return `0sec-${platform}-${arch}`;
+      return `0-${platform}-${arch}`;
     case "win32":
-      return `0sec-windows-${arch}.exe`;
+      return `0-windows-${arch}.exe`;
     default:
       throw new Error(`Unsupported desktop platform: ${platform}`);
   }
@@ -88,7 +88,7 @@ export function findWorkspaceRoot(startDirectory: string): string {
     if (existsSync(join(current, "pnpm-workspace.yaml"))) return current;
     const parent = dirname(current);
     if (parent === current) {
-      throw new Error("Unable to locate the 0sec workspace. Set OSEC_DESKTOP_ROOT to the workspace path.");
+      throw new Error("Unable to locate the 0 workspace. Set OSEC_DESKTOP_ROOT to the workspace path.");
     }
     current = parent;
   }
@@ -110,14 +110,14 @@ function dashboardArgs(assetDir: string): string[] {
 
 function assertDashboardAssets(assetDir: string): void {
   if (!existsSync(join(assetDir, "index.html"))) {
-    throw new Error(`Dashboard assets not found at ${assetDir}. Build @0sec/dashboard before launching desktop.`);
+    throw new Error(`Dashboard assets not found at ${assetDir}. Build @0/dashboard before launching desktop.`);
   }
 }
 
 function assertSidecar(path: string): void {
   if (!existsSync(path)) {
     throw new Error(
-      `0sec desktop sidecar not found at ${path}. Build the matching dist-bin/0sec-* release binary before packaging.`,
+      `0 desktop sidecar not found at ${path}. Build the matching dist-bin/0-* release binary before packaging.`,
     );
   }
 }
@@ -145,7 +145,7 @@ export function createDashboardSidecarInvocation(
   const projectRoot = options.projectRoot ?? findWorkspaceRoot(process.env.OSEC_DESKTOP_ROOT ?? process.cwd());
   const cliEntrypoint = join(projectRoot, "packages", "cli", "dist", "index.js");
   if (!existsSync(cliEntrypoint)) {
-    throw new Error(`CLI build not found at ${cliEntrypoint}. Run pnpm --filter 0sec-cli build first.`);
+    throw new Error(`CLI build not found at ${cliEntrypoint}. Run pnpm --filter @0/cli build first.`);
   }
 
   return {

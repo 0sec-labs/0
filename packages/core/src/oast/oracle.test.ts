@@ -42,7 +42,7 @@ describe("matchInteractions", () => {
   it("matches on the token in the DNS query name", () => {
     const hits = matchInteractions({
       token: marker,
-      interactions: [dns(`${marker}.oast.0sec.ai`), dns("unrelated.example.com")],
+      interactions: [dns(`${marker}.oast.0.ai`), dns("unrelated.example.com")],
     });
     expect(hits).toHaveLength(1);
   });
@@ -50,15 +50,15 @@ describe("matchInteractions", () => {
   it("matches token case-insensitively", () => {
     const hits = matchInteractions({
       token: marker,
-      interactions: [dns(`${marker.toUpperCase()}.OAST.0SEC.AI`)],
+      interactions: [dns(`${marker.toUpperCase()}.OAST.ZERO.AI`)],
     });
     expect(hits).toHaveLength(1);
   });
 
   it("requires the nonce too when supplied", () => {
     const interactions = [
-      dns(`n1.${marker}.oast.0sec.ai`),
-      dns(`n2.${marker}.oast.0sec.ai`),
+      dns(`n1.${marker}.oast.0.ai`),
+      dns(`n2.${marker}.oast.0.ai`),
     ];
     expect(matchInteractions({ token: marker, nonce: "n1", interactions })).toHaveLength(1);
     expect(matchInteractions({ token: marker, nonce: "n3", interactions })).toHaveLength(0);
@@ -68,13 +68,13 @@ describe("matchInteractions", () => {
     const hits = matchInteractions({
       token: marker,
       nonce: "cand7",
-      interactions: [http(`${marker}.oast.0sec.ai`, "/cand7")],
+      interactions: [http(`${marker}.oast.0.ai`, "/cand7")],
     });
     expect(hits).toHaveLength(1);
   });
 
   it("returns nothing for an empty token", () => {
-    expect(matchInteractions({ token: "", interactions: [dns("x.oast.0sec.ai")] })).toHaveLength(0);
+    expect(matchInteractions({ token: "", interactions: [dns("x.oast.0.ai")] })).toHaveLength(0);
   });
 });
 
@@ -83,7 +83,7 @@ describe("confirmOast", () => {
     const v = confirmOast({
       oastClass: "blind-ssrf",
       token: marker,
-      interactions: [dns(`${marker}.oast.0sec.ai`, { remoteAddress: "10.0.0.5" })],
+      interactions: [dns(`${marker}.oast.0.ai`, { remoteAddress: "10.0.0.5" })],
     });
     expect(v.verified).toBe(true);
     expect(v.protocol).toBe("dns");
@@ -95,7 +95,7 @@ describe("confirmOast", () => {
     const v = confirmOast({
       oastClass: "blind-ssrf",
       token: marker,
-      interactions: [http(`${marker}.oast.0sec.ai`)],
+      interactions: [http(`${marker}.oast.0.ai`)],
     });
     expect(v.verified).toBe(true);
     expect(v.confidence).toBe(1.0);
@@ -105,7 +105,7 @@ describe("confirmOast", () => {
     const v = confirmOast({
       oastClass: "blind-ssrf",
       token: marker,
-      interactions: [dns(`${marker}.oast.0sec.ai`), http(`${marker}.oast.0sec.ai`)],
+      interactions: [dns(`${marker}.oast.0.ai`), http(`${marker}.oast.0.ai`)],
     });
     expect(v.protocol).toBe("http");
     expect(v.confidence).toBe(1.0);
@@ -115,7 +115,7 @@ describe("confirmOast", () => {
     const v = confirmOast({
       oastClass: "blind-xss",
       token: marker,
-      interactions: [dns(`${marker}.oast.0sec.ai`)],
+      interactions: [dns(`${marker}.oast.0.ai`)],
     });
     expect(v.verified).toBe(false);
     expect(v.protocol).toBeNull();
@@ -128,7 +128,7 @@ describe("confirmOast", () => {
     const v = confirmOast({
       oastClass: "blind-xss",
       token: marker,
-      interactions: [http(`${marker}.oast.0sec.ai`, "/steal?c=sessionid")],
+      interactions: [http(`${marker}.oast.0.ai`, "/steal?c=sessionid")],
     });
     expect(v.verified).toBe(true);
     expect(v.protocol).toBe("http");
@@ -138,7 +138,7 @@ describe("confirmOast", () => {
     const v = confirmOast({
       oastClass: "oob-sqli",
       token: marker,
-      interactions: [dns(`${marker}.oast.0sec.ai`)],
+      interactions: [dns(`${marker}.oast.0.ai`)],
     });
     expect(v.verified).toBe(true);
     expect(v.confidence).toBe(0.9);
@@ -148,7 +148,7 @@ describe("confirmOast", () => {
     const v = confirmOast({
       oastClass: "jndi",
       token: marker,
-      interactions: [{ protocol: "ldap", timestamp: "2026-07-16T00:00:00Z", queryName: `${marker}.oast.0sec.ai` }],
+      interactions: [{ protocol: "ldap", timestamp: "2026-07-16T00:00:00Z", queryName: `${marker}.oast.0.ai` }],
     });
     expect(v.verified).toBe(true);
     expect(v.protocol).toBe("ldap");
@@ -159,7 +159,7 @@ describe("confirmOast", () => {
     const v = confirmOast({
       oastClass: "blind-ssrf",
       token: marker,
-      interactions: [dns("someoneelse.oast.0sec.ai")],
+      interactions: [dns("someoneelse.oast.0.ai")],
     });
     expect(v.verified).toBe(false);
     expect(v.interaction).toBeNull();
@@ -168,7 +168,7 @@ describe("confirmOast", () => {
 
   it("ties a hit to a specific candidate via the nonce", () => {
     // Two candidates share a handle; only candidate B's probe fired.
-    const interactions = [http(`b7.${marker}.oast.0sec.ai`, "/b7")];
+    const interactions = [http(`b7.${marker}.oast.0.ai`, "/b7")];
     const a = confirmOast({ oastClass: "blind-ssrf", token: marker, nonce: "a3", interactions });
     const b = confirmOast({ oastClass: "blind-ssrf", token: marker, nonce: "b7", interactions });
     expect(a.verified).toBe(false);

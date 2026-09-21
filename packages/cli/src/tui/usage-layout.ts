@@ -33,8 +33,8 @@
  * `model-layout.ts` makes when it re-implements `clipDetailLines`).
  */
 
-import { MODEL_PRICING, modelProvider, type ModelRates } from "@0sec/shared";
-import type { ToolHealthSummary } from "@0sec/core";
+import { MODEL_PRICING, modelProvider, type ModelRates } from "@0/shared";
+import type { ToolHealthSummary } from "@0/core";
 
 import { computeKvSplit } from "./pane-layout.js";
 import { shellChromeRows } from "./settings-layout.js";

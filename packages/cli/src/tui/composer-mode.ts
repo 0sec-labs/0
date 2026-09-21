@@ -15,10 +15,10 @@
  *
  * AUTHORITY. Nothing here changes what a mode MEANS or who may grant it. The
  * cycle is a pure function over the existing `ConsoleAutonomyMode` union from
- * `@0sec/core`; applying it is the host's job, via the same `/mode` route the
+ * `@0/core`; applying it is the host's job, via the same `/mode` route the
  * operator can type by hand. This module never calls `setAutonomyMode`.
  */
-import type { ConsoleAutonomyMode } from "@0sec/core";
+import type { ConsoleAutonomyMode } from "@0/core";
 import { modeLabel } from "./chat/helpers.js";
 
 /**

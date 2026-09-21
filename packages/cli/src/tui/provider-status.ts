@@ -14,11 +14,11 @@
  * (~L660-712), `providerForModel` (~L1152-1200), and the env-priority chain
  * in `detectProvider` (~L1386-1533). It is DERIVED, not guessed: several
  * providers deviate from the `<VENDOR>_API_KEY` pattern (`Z_AI_API_KEY`,
- * `AZURE_OPENAI_API_KEY`, and the two `0SEC_CHATGPT_*` tokens), so extend
+ * `AZURE_OPENAI_API_KEY`, and the two `ZERO_CHATGPT_*` tokens), so extend
  * this table by re-reading that file rather than by analogy.
  */
 
-import { loadCloudCredentials } from "@0sec/core";
+import { loadCloudCredentials } from "@0/core";
 
 /** The credential protocols a provider can be authenticated with. */
 export type AuthMethod = "api-key" | "oauth";
@@ -84,9 +84,9 @@ const PROVIDER_DEFS: readonly Omit<ProviderInfo, "auth">[] = [
     methods: ["oauth"],
     // OAuth, not an API key. Both tokens are accepted and the access token is
     // read first (llm-api.ts L874-875, L1386-1394), so it leads the list.
-    envVars: ["0SEC_CHATGPT_ACCESS_TOKEN", "0SEC_CHATGPT_OAUTH_REFRESH_TOKEN"],
-    fileSource: "~/.codex/auth.json (override with 0SEC_CHATGPT_AUTH_FILE)",
-    hint: "run `codex login` to write ~/.codex/auth.json, or invoke 0sec with env 0SEC_CHATGPT_OAUTH_REFRESH_TOKEN=...",
+    envVars: ["ZERO_CHATGPT_ACCESS_TOKEN", "ZERO_CHATGPT_OAUTH_REFRESH_TOKEN"],
+    fileSource: "~/.codex/auth.json (override with ZERO_CHATGPT_AUTH_FILE)",
+    hint: "run `codex login` to write ~/.codex/auth.json, or invoke 0 with env ZERO_CHATGPT_OAUTH_REFRESH_TOKEN=...",
   },
   {
     id: "deepseek",
@@ -138,9 +138,9 @@ const PROVIDER_DEFS: readonly Omit<ProviderInfo, "auth">[] = [
     // OAuth (device sign-in) is preferred; a pasted KIMI_API_KEY remains a
     // secondary path. The OAuth access token is written to KIMI_API_KEY as a
     // Bearer (llm-api.ts reads it there, no change needed), and the refresh
-    // token to the 0sec-owned var so the store can round-trip it.
+    // token to the 0-owned var so the store can round-trip it.
     methods: ["oauth", "api-key"],
-    envVars: ["KIMI_API_KEY", "0SEC_KIMI_OAUTH_REFRESH_TOKEN"],
+    envVars: ["KIMI_API_KEY", "ZERO_KIMI_OAUTH_REFRESH_TOKEN"],
     hint: "sign in with your Kimi account, or set KIMI_API_KEY from your Kimi coding plan (endpoint override: KIMI_BASE_URL)",
   },
   {
@@ -156,9 +156,9 @@ const PROVIDER_DEFS: readonly Omit<ProviderInfo, "auth">[] = [
     // OAuth (device sign-in) is preferred; a pasted XAI_API_KEY remains a
     // secondary path. The OAuth access token is written to XAI_API_KEY as a
     // Bearer (llm-api.ts reads it there, no change needed), and the refresh
-    // token to the 0sec-owned var so the store can round-trip it.
+    // token to the 0-owned var so the store can round-trip it.
     methods: ["oauth", "api-key"],
-    envVars: ["XAI_API_KEY", "0SEC_XAI_OAUTH_REFRESH_TOKEN"],
+    envVars: ["XAI_API_KEY", "ZERO_XAI_OAUTH_REFRESH_TOKEN"],
     hint: "sign in with your xAI account, or set XAI_API_KEY from console.x.ai (endpoint override: XAI_BASE_URL)",
   },
   {
@@ -172,24 +172,24 @@ const PROVIDER_DEFS: readonly Omit<ProviderInfo, "auth">[] = [
     id: "copilot",
     label: "GitHub Copilot",
     // OAuth only (device-code sign-in). The GitHub device-flow access token is
-    // written to 0SEC_COPILOT_GITHUB_TOKEN (envVars[0]) and sent directly as a
+    // written to ZERO_COPILOT_GITHUB_TOKEN (envVars[0]) and sent directly as a
     // Bearer to api.githubcopilot.com — no secondary exchange, no refresh, so
     // there is no refresh-token env var.
     methods: ["oauth"],
-    envVars: ["0SEC_COPILOT_GITHUB_TOKEN"],
-    hint: "sign in with your GitHub Copilot account (device sign-in), or set 0SEC_COPILOT_GITHUB_TOKEN=... (endpoint override: COPILOT_BASE_URL)",
+    envVars: ["ZERO_COPILOT_GITHUB_TOKEN"],
+    hint: "sign in with your GitHub Copilot account (device sign-in), or set ZERO_COPILOT_GITHUB_TOKEN=... (endpoint override: COPILOT_BASE_URL)",
   },
   {
     id: "google",
     label: "Google Gemini (Code Assist)",
     // OAuth only (PKCE browser sign-in — the Gemini CLI flow). The minted
-    // access token is written to 0SEC_GEMINI_ACCESS_TOKEN (envVars[0]) and the
-    // refresh token to 0SEC_GEMINI_OAUTH_REFRESH_TOKEN (the /REFRESH/i var); the
+    // access token is written to ZERO_GEMINI_ACCESS_TOKEN (envVars[0]) and the
+    // refresh token to ZERO_GEMINI_OAUTH_REFRESH_TOKEN (the /REFRESH/i var); the
     // runtime refreshes on demand against oauth2.googleapis.com. There is no
     // pasted-key equivalent — Code Assist authenticates only via OAuth.
     methods: ["oauth"],
-    envVars: ["0SEC_GEMINI_ACCESS_TOKEN", "0SEC_GEMINI_OAUTH_REFRESH_TOKEN"],
-    hint: "sign in with your Google account (browser sign-in), or set 0SEC_GEMINI_OAUTH_REFRESH_TOKEN=... for Gemini Code Assist (project override: GOOGLE_CLOUD_PROJECT / 0SEC_GEMINI_PROJECT)",
+    envVars: ["ZERO_GEMINI_ACCESS_TOKEN", "ZERO_GEMINI_OAUTH_REFRESH_TOKEN"],
+    hint: "sign in with your Google account (browser sign-in), or set ZERO_GEMINI_OAUTH_REFRESH_TOKEN=... for Gemini Code Assist (project override: GOOGLE_CLOUD_PROJECT / ZERO_GEMINI_PROJECT)",
   },
   {
     id: "anthropic",
@@ -272,8 +272,8 @@ export function providerStates(env: Record<string, string | undefined>): Provide
  *
  * Detection is delegated to `loadCloudCredentials`
  * (packages/core/src/cloud/credentials.ts) rather than re-derived here, so the
- * two never disagree: env wins (`0SEC_CLOUD_TOKEN`, host optional and defaulted),
- * else a `0SEC_CLOUD_TOKEN=` line in `~/.0sec/cloud.env`. That is the one thing
+ * two never disagree: env wins (`ZERO_CLOUD_TOKEN`, host optional and defaulted),
+ * else a `ZERO_CLOUD_TOKEN=` line in `~/.0/cloud.env`. That is the one thing
  * in this module that consults the filesystem, and deliberately so — "are we
  * connected to cloud?" cannot be answered from env vars alone, and the loader
  * already owns the file format and mode check. Every other function here stays

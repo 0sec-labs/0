@@ -13,7 +13,7 @@
  *       the model picker's active row (dialog-select.tsx: `bg = isActive ?
  *       theme.PRIMARY`) — and exactly one row wears it.
  *
- * The theme is pinned to `0sec` so the expected orange is deterministic, read
+ * The theme is pinned to `0` so the expected orange is deterministic, read
  * through the same degrade path the app uses (as the sibling header scenario).
  */
 
@@ -34,7 +34,7 @@ afterEach(async () => {
 });
 
 test("opening the command menu shows one row per command", async () => {
-  tui = await launch({ settings: { theme: "0sec" } });
+  tui = await launch({ settings: { theme: "0" } });
   await tui.waitForText(HOME_READY, 15_000);
   await tui.sendKeys("/");
   await tui.waitForText(/all commands|\/help/, 8_000);
@@ -56,13 +56,13 @@ test("opening the command menu shows one row per command", async () => {
 });
 
 test("the selected command wears the PRIMARY highlight, like the model picker", async () => {
-  tui = await launch({ settings: { theme: "0sec" } });
+  tui = await launch({ settings: { theme: "0" } });
   await tui.waitForText(HOME_READY, 15_000);
   await tui.sendKeys("/");
   await tui.waitForText(/all commands|\/help/, 8_000);
   await tui.settle();
 
-  const theme = degradePalette(getTheme("0sec"), detectColorDepth(process.env));
+  const theme = degradePalette(getTheme("0"), detectColorDepth(process.env));
   const primary = parseHex(theme.PRIMARY)!;
   const primaryKey = `${primary.r},${primary.g},${primary.b}`;
 

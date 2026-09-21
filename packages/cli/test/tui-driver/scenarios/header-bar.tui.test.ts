@@ -4,7 +4,7 @@
  * The chrome redesign turned the two-line header (a title row plus a BORDER
  * divider row) into one full-width `PRIMARY` background strip carrying the
  * identity/status in a contrast-picked dark foreground. This pins that: on the
- * default `0sec` theme the top of the frame must contain a wide run of cells
+ * default `0` theme the top of the frame must contain a wide run of cells
  * whose BACKGROUND equals the theme's `PRIMARY` colour (the orange bar), and
  * the glyphs painted on it must use the readable foreground the bar computes —
  * never a colour that vanishes on orange.
@@ -33,12 +33,12 @@ afterEach(async () => {
 });
 
 test("header paints a wide PRIMARY strip with a legible foreground", async () => {
-  // Pin the signature 0sec theme so the expected orange is deterministic.
-  tui = await launch({ settings: { theme: "0sec" } });
+  // Pin the signature 0 theme so the expected orange is deterministic.
+  tui = await launch({ settings: { theme: "0" } });
   await tui.waitForText(HOME_READY, 15_000);
   await tui.settle();
 
-  const theme = degradePalette(getTheme("0sec"), detectColorDepth(process.env));
+  const theme = degradePalette(getTheme("0"), detectColorDepth(process.env));
   const primary = parseHex(theme.PRIMARY)!;
   const fg = parseHex(readableOnPrimary(theme))!;
   const key = (rgb: { r: number; g: number; b: number }) => `${rgb.r},${rgb.g},${rgb.b}`;
@@ -84,11 +84,11 @@ test("header bar bleeds to BOTH terminal edges (column 0 and the last column)", 
   // The redesign made the bar full-bleed: it escapes the screen frame's
   // horizontal padding so the orange reaches the very first and very last
   // column, rather than stopping a cell or two short of each edge.
-  tui = await launch({ settings: { theme: "0sec" } });
+  tui = await launch({ settings: { theme: "0" } });
   await tui.waitForText(HOME_READY, 15_000);
   await tui.settle();
 
-  const theme = degradePalette(getTheme("0sec"), detectColorDepth(process.env));
+  const theme = degradePalette(getTheme("0"), detectColorDepth(process.env));
   const primary = parseHex(theme.PRIMARY)!;
   const primaryKey = `${primary.r},${primary.g},${primary.b}`;
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 /**
- * Standalone logo preview: renders the three slashed-zero "0SEC" options
+ * Standalone logo preview: renders the three slashed-zero "ZERO" options
  * with real 24-bit colour so you can pick one in your own terminal.
  *
  * This is NOT rendered inside the TUI framebuffer — it writes plain ANSI to

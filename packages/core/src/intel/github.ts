@@ -54,7 +54,7 @@ export async function queryGitHubAdvisories(
 }
 
 /**
- * Direct GHSA lookup (0sec#intel-advisories) — `GET /advisories/{ghsa_id}`.
+ * Direct GHSA lookup (0#intel-advisories) — `GET /advisories/{ghsa_id}`.
  *
  * The operator confirmed this endpoint returns the full advisory reliably,
  * whereas free-text `advisories?query=` does NOT — so this is the *only* way we
@@ -197,7 +197,7 @@ export function githubHeaders(extra: Record<string, string> | undefined): Record
   const headers: Record<string, string> = {
     Accept: "application/vnd.github+json",
     "X-GitHub-Api-Version": "2022-11-28",
-    "User-Agent": "0sec-intel/0.1",
+    "User-Agent": "0-intel/0.1",
     ...(extra ?? {}),
   };
   const token = resolveGitHubToken();
@@ -211,14 +211,14 @@ export function githubHeaders(extra: Record<string, string> | undefined): Record
 let cachedGitHubToken: string | false | undefined;
 
 /**
- * Resolve a GitHub token (0sec#intel-advisories). Most operators authenticate
+ * Resolve a GitHub token (0#intel-advisories). Most operators authenticate
  * via the `gh` CLI rather than env vars, so fall back to `gh auth token` when
- * no env token is set. Order: GITHUB_TOKEN > GH_TOKEN > 0SEC_GITHUB_TOKEN >
+ * no env token is set. Order: GITHUB_TOKEN > GH_TOKEN > ZERO_GITHUB_TOKEN >
  * `gh auth token`. Unauthenticated (public-endpoint) use still works when none
  * resolve.
  */
 export function resolveGitHubToken(): string | undefined {
-  const envToken = process.env.GITHUB_TOKEN ?? process.env.GH_TOKEN ?? process.env["0SEC_GITHUB_TOKEN"];
+  const envToken = process.env.GITHUB_TOKEN ?? process.env.GH_TOKEN ?? process.env["ZERO_GITHUB_TOKEN"];
   if (envToken && envToken.trim()) return envToken.trim();
   if (cachedGitHubToken !== undefined) return cachedGitHubToken || undefined;
   cachedGitHubToken = readGhCliToken() ?? false;

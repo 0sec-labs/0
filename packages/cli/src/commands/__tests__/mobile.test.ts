@@ -7,7 +7,7 @@ import { tmpdir } from "node:os";
 const loadScopeMock = vi.fn();
 const runMobileStaticIntakeMock = vi.fn();
 
-vi.mock("@0sec/core", () => ({
+vi.mock("@0/core", () => ({
   loadScope: loadScopeMock,
   runMobileStaticIntake: runMobileStaticIntakeMock,
 }));
@@ -22,10 +22,10 @@ async function runCli(argv: string[]): Promise<void> {
     writeErr: () => undefined,
   });
   registerMobileCommand(program);
-  await program.parseAsync(["node", "0sec-cli", ...argv]);
+  await program.parseAsync(["node", "@0/cli", ...argv]);
 }
 
-describe("0sec mobile intake", () => {
+describe("0 mobile intake", () => {
   let logSpy: ReturnType<typeof vi.spyOn>;
   let errorSpy: ReturnType<typeof vi.spyOn>;
   let previousExitCode: string | number | null | undefined;
@@ -104,7 +104,7 @@ describe("0sec mobile intake", () => {
   });
 
   it("rejects existing unpack output without --force", async () => {
-    const root = mkdtempSync(join(tmpdir(), "0sec-mobile-cli-"));
+    const root = mkdtempSync(join(tmpdir(), "0-mobile-cli-"));
     const apk = join(root, "app.apk");
     const out = join(root, "out");
     writeFileSync(apk, "not a real apk");

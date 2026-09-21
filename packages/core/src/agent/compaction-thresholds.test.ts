@@ -17,26 +17,26 @@ describe("resolveCompactionThresholds", () => {
   it("honors valid env overrides", () => {
     expect(
       resolveCompactionThresholds({
-        "0SEC_COMPACTION_THRESHOLD": "120000",
-        "0SEC_COMPACTION_REGROW": "40000",
+        "ZERO_COMPACTION_THRESHOLD": "120000",
+        "ZERO_COMPACTION_REGROW": "40000",
       }),
     ).toEqual({ threshold: 120000, regrow: 40000 });
   });
 
   it("falls back on malformed or too-small values", () => {
-    expect(resolveCompactionThresholds({ "0SEC_COMPACTION_THRESHOLD": "not-a-number" }).threshold).toBe(
+    expect(resolveCompactionThresholds({ "ZERO_COMPACTION_THRESHOLD": "not-a-number" }).threshold).toBe(
       DEFAULT_COMPACTION_THRESHOLD,
     );
     // below the floor → default
-    expect(resolveCompactionThresholds({ "0SEC_COMPACTION_THRESHOLD": "10" }).threshold).toBe(
+    expect(resolveCompactionThresholds({ "ZERO_COMPACTION_THRESHOLD": "10" }).threshold).toBe(
       DEFAULT_COMPACTION_THRESHOLD,
     );
-    expect(resolveCompactionThresholds({ "0SEC_COMPACTION_REGROW": "-5" }).regrow).toBe(
+    expect(resolveCompactionThresholds({ "ZERO_COMPACTION_REGROW": "-5" }).regrow).toBe(
       DEFAULT_COMPACTION_REGROW,
     );
   });
 
   it("floors fractional values", () => {
-    expect(resolveCompactionThresholds({ "0SEC_COMPACTION_THRESHOLD": "90000.9" }).threshold).toBe(90000);
+    expect(resolveCompactionThresholds({ "ZERO_COMPACTION_THRESHOLD": "90000.9" }).threshold).toBe(90000);
   });
 });

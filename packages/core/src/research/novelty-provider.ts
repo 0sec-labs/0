@@ -1,4 +1,4 @@
-import type { Finding, ResearchNoveltyReceipt } from "@0sec/shared";
+import type { Finding, ResearchNoveltyReceipt } from "@0/shared";
 
 export interface NoveltySourceResult {
   source: string;

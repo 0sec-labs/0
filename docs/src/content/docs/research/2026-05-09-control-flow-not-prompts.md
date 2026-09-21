@@ -6,7 +6,7 @@ description: "A bear-blog post argued that agents need deterministic code at cho
 
 > **Historical research log (2026-05-09).** A dated lab note kept for transparency. It reflects 0's state at the time and is not current product guidance.
 
-*Published 2026-05-09. PRs #287–#291 land the fixes; closes [#280](https://github.com/0sec-labs/0sec/issues/280).*
+*Published 2026-05-09. PRs #287–#291 land the fixes; closes [#280](https://github.com/0sec-labs/0/issues/280).*
 
 ## The post that started it
 
@@ -141,7 +141,7 @@ for (const finding of findings) {
 
 `unified-pipeline.ts:915 runPerFileResearch` and `audit.ts:668 runPerFileAudit` mirror the shape for research and npm/PyPI/cargo/OCI audits — one agent session per source file, focused per-file system prompt, deterministic outer loop. The reference implementation already lived in the repo: `triage/pov-gate.ts buildPovSystemPrompt` was doing this for evidence-judge agents.
 
-Feature-flagged via `0SEC_FEATURE_PER_ITEM_ORCHESTRATION` (default on) — set to `0` if you need to revert to the shared-session shape for cost-bounded benchmarks.
+Feature-flagged via `ZERO_FEATURE_PER_ITEM_ORCHESTRATION` (default on) — set to `0` if you need to revert to the shared-session shape for cost-bounded benchmarks.
 
 ## The 11 patterns we didn't change
 
@@ -162,7 +162,7 @@ The triage layer in particular is more deterministic than the audit expected to 
 
 The first-pass audit flagged a sixth pattern (H6): verify-pipeline JSON parsing was supposedly fragile because the prompt said "MUST respond with ONLY a JSON object" and we couldn't see fence-stripping in the parser. Second-pass review verified that fences are already stripped at `verify-pipeline.ts:676`, `adversarial.ts:220`, and `hybrid-router.ts:132` — three different parsers, all tolerant of markdown fences and surrounding prose. The "MUST" prompts there are belt-and-suspenders; the parsers handle whatever the model emits.
 
-We closed [issue #284](https://github.com/0sec-labs/0sec/issues/284) on second-pass review and filed [#286](https://github.com/0sec-labs/0sec/issues/286) for path-existence in its place.
+We closed [issue #284](https://github.com/0sec-labs/0/issues/284) on second-pass review and filed [#286](https://github.com/0sec-labs/0/issues/286) for path-existence in its place.
 
 <span id="what-this-is-and-isnt"></span>
 ## Runtime checks
@@ -173,10 +173,10 @@ per-item verification and audit loops.
 
 Test count went from 1185 to 1204 (19 new tests). All five PRs ship behind file-level changes:
 
-- [#287](https://github.com/0sec-labs/0sec/pull/287) — empty-PoC gate at `tools.ts:2360`
-- [#288](https://github.com/0sec-labs/0sec/pull/288) — fuzzy-title dedup at `tools.ts:2467` + `tools-helpers.ts:33 levenshtein`
-- [#289](https://github.com/0sec-labs/0sec/pull/289) — path-existence validation at `findings-parser.ts:39 validateFileRef`
-- [#290](https://github.com/0sec-labs/0sec/pull/290) — bash auth injection at `tools.ts:856 injectAuthIntoBashCommand`
-- [#291](https://github.com/0sec-labs/0sec/pull/291) — per-item loops in `agentic-scanner.ts:2552`, `unified-pipeline.ts:915`, `audit.ts:668`
+- [#287](https://github.com/0sec-labs/0/pull/287) — empty-PoC gate at `tools.ts:2360`
+- [#288](https://github.com/0sec-labs/0/pull/288) — fuzzy-title dedup at `tools.ts:2467` + `tools-helpers.ts:33 levenshtein`
+- [#289](https://github.com/0sec-labs/0/pull/289) — path-existence validation at `findings-parser.ts:39 validateFileRef`
+- [#290](https://github.com/0sec-labs/0/pull/290) — bash auth injection at `tools.ts:856 injectAuthIntoBashCommand`
+- [#291](https://github.com/0sec-labs/0/pull/291) — per-item loops in `agentic-scanner.ts:2552`, `unified-pipeline.ts:915`, `audit.ts:668`
 
 The audit followed bsuh's published analysis of model-directed control flow.

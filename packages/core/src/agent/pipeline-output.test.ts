@@ -6,7 +6,7 @@ import { ToolExecutor } from "./tools.js";
 
 describe("scoped command pipeline output", () => {
   it("retains report headers and final evidence inside the original byte budget", async () => {
-    const root = mkdtempSync(join(tmpdir(), "0sec-pipeline-output-"));
+    const root = mkdtempSync(join(tmpdir(), "0-pipeline-output-"));
     const executor = new ToolExecutor({ target: root, scanId: "pipeline-output", scopePath: root, role: "verify", autonomyMode: "standard", findings: [], attackResults: [], targetInfo: {} }, null);
     try {
       writeFileSync(join(root, "report.txt"), "HEADER=owned-report\n" + "padding\n".repeat(2200) + "VERDICT=tail-evidence\n");
@@ -21,7 +21,7 @@ describe("scoped command pipeline output", () => {
     } finally { rmSync(root, { recursive: true, force: true }); }
   });
   it("preserves the actual final failure instead of returning only preceding stdout", async () => {
-    const root = mkdtempSync(join(tmpdir(), "0sec-pipeline-error-"));
+    const root = mkdtempSync(join(tmpdir(), "0-pipeline-error-"));
     const executor = new ToolExecutor({ target: root, scanId: "pipeline-error", scopePath: root, role: "verify", autonomyMode: "standard", findings: [], attackResults: [], targetInfo: {} }, null);
     try {
       writeFileSync(join(root, "report.txt"), "START\n" + "padding\n".repeat(2200));

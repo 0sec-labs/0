@@ -1,5 +1,5 @@
 /**
- * 0sec Tier-2 multi-component C/C++ harness builder.
+ * 0 Tier-2 multi-component C/C++ harness builder.
  *
  * Tier-1 (see `c-cpp-profile.ts`) wraps a single suspect function in a
  * standalone libFuzzer harness. That confirms a primitive is reachable
@@ -494,7 +494,7 @@ function decorateHarnessForTier2(
   },
 ): string {
   const banner = [
-    "// 0sec Tier-2 multi-component harness — generated, do not edit.",
+    "// 0 Tier-2 multi-component harness — generated, do not edit.",
     "//",
     `// Build system detected: ${context.buildSystem}`,
     `// Sanitizers: ${context.sanitizers.join(", ")}`,
@@ -528,7 +528,7 @@ function renderLinkerShellScript(args: {
   sanitizers: Sanitizer[];
 }): string {
   return `#!/usr/bin/env bash
-# 0sec Tier-2 linker helper — generated.
+# 0 Tier-2 linker helper — generated.
 #
 # Sanitizers: ${args.sanitizers.join(", ")}
 # Output binary: ${args.harnessBinary}
@@ -540,8 +540,8 @@ set -euo pipefail
 
 ${args.compileCommand}
 
-echo "[0sec tier-2] harness built: ${args.harnessBinary}"
-echo "[0sec tier-2] to run:  ${args.runCommand}"
+echo "[0 tier-2] harness built: ${args.harnessBinary}"
+echo "[0 tier-2] to run:  ${args.runCommand}"
 `;
 }
 
@@ -559,18 +559,18 @@ function renderMakefileFragment(args: {
   const deps = [args.harnessPath, ...args.linkedObjects]
     .map((p) => p.replace(/ /g, "\\ "))
     .join(" \\\n  ");
-  return `# 0sec Tier-2 harness Makefile fragment — generated.
+  return `# 0 Tier-2 harness Makefile fragment — generated.
 # Sanitizers: ${args.sanitizers.join(", ")}
 
 OSEC_TIER2_HARNESS := ${args.harnessBinary}
-0SEC_TIER2_DEPS := \\
+ZERO_TIER2_DEPS := \\
   ${deps}
 
-$(OSEC_TIER2_HARNESS): $(0SEC_TIER2_DEPS)
+$(OSEC_TIER2_HARNESS): $(ZERO_TIER2_DEPS)
 \t${args.compileCommand}
 
-.PHONY: 0sec-tier2-run
-0sec-tier2-run: $(OSEC_TIER2_HARNESS)
+.PHONY: 0-tier2-run
+0-tier2-run: $(OSEC_TIER2_HARNESS)
 \t${args.runCommand}
 `;
 }

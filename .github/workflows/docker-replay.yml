@@ -1,4 +1,4 @@
-name: "0sec: Docker replay"
+name: "0: Docker replay"
 
 # Push events cover trusted repository branches, including feature branches.
 # Do not add pull_request_target checkout/execution: fork code remains subject
@@ -47,6 +47,6 @@ jobs:
       - name: Install locked dependencies
         run: pnpm install --frozen-lockfile
       - name: Build replay engine and dependencies
-        run: pnpm --filter '@0sec/core...' -r build
+        run: pnpm --filter '@0/core...' -r build
       - name: Exercise real containers, scope, timeout cleanup, and patch controls
         run: node scripts/smoke-docker-replay.mjs

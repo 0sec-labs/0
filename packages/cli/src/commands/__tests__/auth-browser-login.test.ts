@@ -22,7 +22,7 @@ function options(): HostedBrowserLoginOptions & { homeDir: string } {
   return { host: "https://fixture.invalid", homeDir, openBrowser: () => {}, sleep: async () => {}, pollAttempts: 3, pollIntervalMs: 0 };
 }
 function expectNoCredentials(home: string) {
-  expect(existsSync(join(home, ".0sec", "cloud.env"))).toBe(false);
+  expect(existsSync(join(home, ".0", "cloud.env"))).toBe(false);
   expect(existsSync(join(home, ".0cloud", "credentials.json"))).toBe(false);
 }
 afterEach(() => {
@@ -84,8 +84,8 @@ describe("neutral Cloud login", () => {
     });
     expect(result).toEqual({ ok: true, host: opts.host });
     expect(JSON.stringify({ result, status })).not.toContain(token);
-    const credentials = join(opts.homeDir, ".0sec", "cloud.env");
-    expect(readFileSync(credentials, "utf8")).toContain(`0SEC_CLOUD_TOKEN=${token}`);
+    const credentials = join(opts.homeDir, ".0", "cloud.env");
+    expect(readFileSync(credentials, "utf8")).toContain(`ZERO_CLOUD_TOKEN=${token}`);
     expect(statSync(credentials).mode & 0o777).toBe(0o600);
     expect(process.exitCode).toBe(exitCode);
   });

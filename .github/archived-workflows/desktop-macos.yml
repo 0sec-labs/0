@@ -1,4 +1,4 @@
-name: "0sec: Desktop macOS"
+name: "0: Desktop macOS"
 
 on:
   workflow_dispatch:
@@ -22,7 +22,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: 0sec-desktop-macos-${{ github.ref }}
+  group: 0-desktop-macos-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -30,14 +30,14 @@ jobs:
     # This protected Apple-silicon Mac mini holds desktop signing and keychain
     # access. Its bespoke label prevents the job landing on any other macOS
     # runner if one is added. Main/dispatch-only: never run untrusted PR code.
-    runs-on: [self-hosted, macOS, ARM64, 0sec-mac-mini]
+    runs-on: [self-hosted, macOS, ARM64, 0-mac-mini]
     timeout-minutes: 35
     env:
-      0SEC_CHATGPT_ACCESS_TOKEN: ""
-      0SEC_CHATGPT_OAUTH_REFRESH_TOKEN: ""
-      0SEC_CHATGPT_ACCOUNT_ID: ""
-      0SEC_CHATGPT_AUTH_FILE: "/tmp/0sec-ci-no-auth.json"
-      0SEC_CODEX_AUTH_JSON_PATH: "/tmp/0sec-ci-no-auth.json"
+      ZERO_CHATGPT_ACCESS_TOKEN: ""
+      ZERO_CHATGPT_OAUTH_REFRESH_TOKEN: ""
+      ZERO_CHATGPT_ACCOUNT_ID: ""
+      ZERO_CHATGPT_AUTH_FILE: "/tmp/0-ci-no-auth.json"
+      ZERO_CODEX_AUTH_JSON_PATH: "/tmp/0-ci-no-auth.json"
       OPENAI_API_KEY: ""
       OPENROUTER_API_KEY: ""
       ANTHROPIC_API_KEY: ""
@@ -59,19 +59,19 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
       - name: Build dashboard and CLI closure
-        run: pnpm --filter @0sec/dashboard build && pnpm --filter "0sec-cli..." build
+        run: pnpm --filter @0/dashboard build && pnpm --filter "@0/cli..." build
       - name: Build Apple-silicon sidecar
-        run: bash scripts/bun-compile.sh "" "dist-bin/0sec-darwin-arm64"
+        run: bash scripts/bun-compile.sh "" "dist-bin/0-darwin-arm64"
       - name: Build and test desktop boundary
-        run: pnpm --filter @0sec/desktop build && pnpm --filter @0sec/desktop test
+        run: pnpm --filter @0/desktop build && pnpm --filter @0/desktop test
       - name: Package desktop application
-        run: pnpm --filter @0sec/desktop package:mac
+        run: pnpm --filter @0/desktop package:mac
       - name: Smoke packaged sidecar
         run: bash scripts/smoke-desktop-macos.sh
       - name: Upload unsigned desktop artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: 0sec-desktop-macos-arm64
+          name: 0-desktop-macos-arm64
           path: |
             packages/desktop/release/*.dmg
             packages/desktop/release/*.zip

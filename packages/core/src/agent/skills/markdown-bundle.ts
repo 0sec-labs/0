@@ -2,7 +2,7 @@
  * Audit-skills Markdown bundle loader (#audit-skills).
  *
  * Reads the staged bundle manifest JSON (pointed to by
- * 0SEC_AUDIT_SKILLS_MANIFEST), validates it strictly, verifies
+ * ZERO_AUDIT_SKILLS_MANIFEST), validates it strictly, verifies
  * sha256 integrity, and produces a Map<string, SkillDefinition>
  * keyed as "cloud/<skillId>" — making cloud skills impossible to
  * collide with or replace builtin IDs.
@@ -43,7 +43,7 @@ interface AuditSkillFile {
 
 // ── Validation constants ──
 
-const SCHEMA_TAG = "0sec-audit-skills-v1";
+const SCHEMA_TAG = "0-audit-skills-v1";
 const MAX_SKILLS = 8;
 const MAX_FILES_PER_SKILL = 64;
 const MAX_BYTES_PER_FILE = 131_072; // 128 KiB

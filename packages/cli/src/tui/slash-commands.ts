@@ -1,7 +1,7 @@
 /**
  * Shared pure slash-command registry, parser, and filter.
  *
- * Portable — no React, OpenTUI, or @0sec/core imports. Usable by both
+ * Portable — no React, OpenTUI, or @0/core imports. Usable by both
  * the Bun TUI (ChatScreen) and the Node readline console.
  *
  * A "slash command" is any input starting with `/` followed by a name
@@ -237,7 +237,7 @@ export const SLASH_COMMANDS: readonly SlashCommand[] = [
     name: "feedback",
     aliases: [],
     category: "system",
-    description: "Record feedback about 0sec to a local file you control, with optional HTTPS submission",
+    description: "Record feedback about 0 to a local file you control, with optional HTTPS submission",
     usage: "/feedback <message> | /feedback submit <message> | /feedback send | /feedback cancel",
   },
   {

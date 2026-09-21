@@ -3,9 +3,9 @@
  *
  * `formatToolArgs` (tool-format.ts) already answers *what a call is about to
  * do*; this module answers *what it found*, in one bounded line, from the
- * ACTUAL `ToolResult.output` shapes in `@0sec/core`'s agent/tools registry.
+ * ACTUAL `ToolResult.output` shapes in `@0/core`'s agent/tools registry.
  * OMP gives every tool a bespoke result line (`7 matches · 3 files`, `5
- * sources`, `Exit: 0`); this is the 0sec equivalent for our domain tools —
+ * sources`, `Exit: 0`); this is the 0 equivalent for our domain tools —
  * findings ledgers, the intel lookups, the scanner fan-out, the crawler.
  *
  * It is PURE and total: `output` may be any shape at all (a bare array, a
@@ -80,7 +80,7 @@ function formatBytes(bytes: number): string {
 /**
  * Count how many advisory/lead ids are GHSA- vs CVE-. Reads each element's
  * `id` (the primary identifier on both `VulnerabilityIntel` and `AdvisoryLead`
- * in `@0sec/core`'s intel/types.ts) and classifies by its prefix. Ids that are
+ * in `@0/core`'s intel/types.ts) and classifies by its prefix. Ids that are
  * neither (a public-report URL, say) are not counted in either bucket.
  */
 function countAdvisoryIds(rows: unknown[]): { ghsa: number; cve: number } {

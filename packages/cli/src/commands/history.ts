@@ -6,7 +6,7 @@ import {
   listOsecRunDatabasePaths,
   osecDB,
   resolveOsecDbPath,
-} from "@0sec/db";
+} from "@0/db";
 
 type HistoryOptions = {
   dbPath?: string;
@@ -55,7 +55,7 @@ export function registerHistoryCommand(program: Command): void {
       }
 
       writePresentationLine("", "history.list.blank");
-      writePresentationLine(chalk.red.bold("  \u25C6 0sec") + chalk.gray(" scan history"), "history.list.header");
+      writePresentationLine(chalk.red.bold("  \u25C6 0") + chalk.gray(" scan history"), "history.list.header");
       writePresentationLine("", "history.list.blank");
 
       for (const s of scans) {

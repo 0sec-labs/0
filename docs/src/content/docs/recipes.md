@@ -71,7 +71,7 @@ kernel verification has separate VM prerequisites; see
 
 ## Assess identity without changing the directory
 
-With an approved Graph token supplied through `0SEC_GRAPH_ACCESS_TOKEN` and a
+With an approved Graph token supplied through `ZERO_GRAPH_ACCESS_TOKEN` and a
 scope file allowing `graph.microsoft.com`:
 
 ```bash
@@ -110,11 +110,11 @@ from `readme.txt`/`style.css`, and returns CVE hints before the attack loop
 crawls.
 
 `wp_fingerprint` queries the no-key WPVulnerability API by slug. Set
-`WPSCAN_API_TOKEN` or `0SEC_WPSCAN_API_TOKEN` to merge WPScan API data too — still
+`WPSCAN_API_TOKEN` or `ZERO_WPSCAN_API_TOKEN` to merge WPScan API data too — still
 without running the `wpscan` CLI or sending generic scanner traffic.
 
 ```bash
-env 0SEC_FEATURE_DYNAMIC_PLAYBOOKS=1 \
+env ZERO_FEATURE_DYNAMIC_PLAYBOOKS=1 \
   0 scan \
   --target https://blog.example.com \
   --mode web \
@@ -129,7 +129,7 @@ to let the agent use tools like `wpscan`. Keep this off for scoped
 HackerOne/Bugcrowd targets unless the policy permits generic scanners.
 
 ```bash
-env 0SEC_FEATURE_DYNAMIC_PLAYBOOKS=1 \
+env ZERO_FEATURE_DYNAMIC_PLAYBOOKS=1 \
   0 scan \
   --target https://blog.example.com \
   --mode web \
@@ -186,7 +186,7 @@ escalate to tier-2/tier-3 rather than reporting a static-only finding.
 This path prepares kernel VM artifacts from a local tree and runs the supplied
 program through the kernel oracle. Arrange the QEMU/guest/toolchain prerequisites
 in [Kernel VM Verification](/kernel-vm/) first. Build artifacts default to
-`~/.0sec/kernel-cache/`; cache reuse is not fresh evidence of reproduction.
+`~/.0/kernel-cache/`; cache reuse is not fresh evidence of reproduction.
 
 ```bash
 # Run a syzkaller .syz program with kasan build/cache preparation.
@@ -227,10 +227,10 @@ and opt-in.
 
 ```bash
 env \
-  0SEC_FEATURE_CONSENSUS_VERIFY=1 \
-  0SEC_FEATURE_REACHABILITY_GATE=1 \
-  0SEC_FEATURE_POV_GATE=1 \
-  0SEC_FEATURE_MULTIMODAL=1 \
+  ZERO_FEATURE_CONSENSUS_VERIFY=1 \
+  ZERO_FEATURE_REACHABILITY_GATE=1 \
+  ZERO_FEATURE_POV_GATE=1 \
+  ZERO_FEATURE_MULTIMODAL=1 \
   0 scan \
   --target https://example.com \
   --mode web \
@@ -269,7 +269,7 @@ export GITHUB_TOKEN="ghp_..."
   --export github:myorg/security-findings
 ```
 
-Issues use literal `0sec`, `severity:critical` (and other severity values),
+Issues use literal `0`, `severity:critical` (and other severity values),
 and `category:xss` (and other categories) labels. Existing open issues with the
 same generated title are skipped. Issue creation does not reproduce a finding.
 

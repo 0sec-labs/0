@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import type { JevAnswer, JevEvaluator, JevUsage } from "@0sec/shared";
+import type { JevAnswer, JevEvaluator, JevUsage } from "@0/shared";
 import { mineFixCommits } from "../kernel/fix-commit-intel.js";
 
 // Kernel diffs can be large and Jev's request envelope is intentionally

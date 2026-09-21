@@ -6,11 +6,11 @@
  *   2. Running it in a configured kernel VM (QEMU + SSH) when available
  *   3. Comparing the crash output to the original report
  *
- * When no kernel VM environment is available (0SEC_KERNEL_QEMU != "1"), the oracle
+ * When no kernel VM environment is available (ZERO_KERNEL_QEMU != "1"), the oracle
  * falls back to static analysis of the reproducer and crash report consistency.
  */
 
-import type { Finding } from "@0sec/shared";
+import type { Finding } from "@0/shared";
 import { runReproducerInKernelVm } from "./kernel-vm-runner.js";
 
 // ────────────────────────────────────────────────────────────────────
@@ -229,7 +229,7 @@ function selectRelevantFrames(frames: string[]): string[] {
 /**
  * Compile and run the reproducer inside a configured kernel VM.
  *
- * When `0SEC_KERNEL_QEMU=1`, this boots the configured VM assets and
+ * When `ZERO_KERNEL_QEMU=1`, this boots the configured VM assets and
  * executes the reproducer via a host-shared working directory. Otherwise
  * it returns a stub indicating no execution.
  */
@@ -247,14 +247,14 @@ export async function compileAndRunReproducer(
     };
   }
 
-  const useQemu = process.env["0SEC_KERNEL_QEMU"] === "1";
+  const useQemu = process.env["ZERO_KERNEL_QEMU"] === "1";
 
   if (!useQemu) {
     // Dry-run mode — no actual execution
     return {
       compiled: false,
       executed: false,
-      output: "[dry-run] 0SEC_KERNEL_QEMU not set, skipping execution",
+      output: "[dry-run] ZERO_KERNEL_QEMU not set, skipping execution",
       dmesg: "",
       exitCode: -1,
       timedOut: false,
@@ -278,7 +278,7 @@ export async function compileAndRunReproducer(
 /**
  * Run a standalone kernel reproducer without an original crash report to match.
  *
- * This is the Tier 1 path for `0sec ingest --reproducer/--syz`: it answers
+ * This is the Tier 1 path for `0 ingest --reproducer/--syz`: it answers
  * "did this reproducer trigger a recognizable kernel crash under the VM
  * oracle?" rather than "did it match a previously ingested crash signature?"
  */

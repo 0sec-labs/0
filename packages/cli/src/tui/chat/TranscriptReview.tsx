@@ -1,6 +1,6 @@
 /** @jsxImportSource @opentui/react */
 import React, { type MutableRefObject, useMemo } from "react";
-import type { PresentationTranscriptDocument } from "@0sec/shared";
+import type { PresentationTranscriptDocument } from "@0/shared";
 import type { Theme } from "../theme-context.js";
 import { useSymbols } from "../symbol-context.js";
 import {

@@ -68,8 +68,8 @@ export type TranscriptStyle = (typeof TRANSCRIPT_STYLES)[number];
 
 /**
  * How the "who is speaking" label is drawn, independent of the frame:
- *  - `full`  — `▌ operator` / `▌ 0sec` (today's label; the default)
- *  - `short` — `op` / `0sec`
+ *  - `full`  — `▌ operator` / `▌ 0` (today's label; the default)
+ *  - `short` — `op` / `0`
  *  - `glyph` — `▌` only
  *  - `off`   — no label row at all
  */
@@ -315,7 +315,7 @@ function clampWidth(n: number): number {
  * it. `age` is a pre-formatted relative age ("12s"); an empty string omits the
  * separator entirely rather than leaving a dangling ` · `.
  *
- * `full` and `short` show You / 0sec with the optional age; `glyph` keeps the
+ * `full` and `short` show You / 0 with the optional age; `glyph` keeps the
  * bare name and `off` suppresses it. Placement belongs to the renderer: bubble
  * cards use a top-border title rather than a separate heading row.
  */
@@ -325,7 +325,7 @@ export function roleLabelText(
   age = "",
 ): string | null {
   if (style === "off") return null;
-  const name = kind === "user" ? "You" : "0sec";
+  const name = kind === "user" ? "You" : "0";
   const suffix = age ? ` · ${age}` : "";
   if (style === "glyph") return name;
   if (style === "short") return `${name}${suffix}`;
@@ -508,7 +508,7 @@ export function speechFrame(
   // everywhere.
   //
   // User and assistant speech turns NO LONGER carry a left spine ("inside
-  // author rail") — the role label is positioned externally (0sec upper-left,
+  // author rail") — the role label is positioned externally (0 upper-left,
   // You upper-right) so the content area is flush against the pane edge,
   // matching OpenCode's clean transcript. Reasoning and notice keep their
   // quiet rails (dotted and marker respectively) since they are not "authors".

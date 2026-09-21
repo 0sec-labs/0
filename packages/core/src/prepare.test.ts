@@ -27,7 +27,7 @@ describe("detectTargetType local path semantics", () => {
   });
 
   it("treats absolute directory targets as source code paths", () => {
-    tmpRoot = mkdtempSync(join(tmpdir(), "0sec-prepare-"));
+    tmpRoot = mkdtempSync(join(tmpdir(), "0-prepare-"));
     const absPath = join(tmpRoot, "project");
     mkdirSync(absPath, { recursive: true });
 
@@ -35,7 +35,7 @@ describe("detectTargetType local path semantics", () => {
   });
 
   it("prefers an existing cwd-relative directory over an npm package name", () => {
-    tmpRoot = mkdtempSync(join(tmpdir(), "0sec-prepare-"));
+    tmpRoot = mkdtempSync(join(tmpdir(), "0-prepare-"));
     mkdirSync(join(tmpRoot, "express"), { recursive: true });
     process.chdir(tmpRoot);
 
@@ -43,7 +43,7 @@ describe("detectTargetType local path semantics", () => {
   });
 });
 
-// #1051 — `0sec hunt --source` may be a git URL (the cloud recency feed) or a
+// #1051 — `0 hunt --source` may be a git URL (the cloud recency feed) or a
 // local checkout. hunt.ts delegates the URL-vs-localpath decision to prepare()
 // (→ resolveRepo: clone a URL shallow, use a local path as-is). These pin the
 // branch behaviour hunt relies on, without doing a network clone.
@@ -55,7 +55,7 @@ describe("prepare source-code URL-vs-localpath branch (#1051)", () => {
   });
 
   it("uses an existing local path as-is — no clone, no temp dir, no-op cleanup", async () => {
-    tmpRoot = mkdtempSync(join(tmpdir(), "0sec-prepare-"));
+    tmpRoot = mkdtempSync(join(tmpdir(), "0-prepare-"));
     const repoDir = join(tmpRoot, "checkout");
     mkdirSync(repoDir, { recursive: true });
 
@@ -69,7 +69,7 @@ describe("prepare source-code URL-vs-localpath branch (#1051)", () => {
   });
 
   it("throws on a non-existent local source path (fail loud)", async () => {
-    tmpRoot = mkdtempSync(join(tmpdir(), "0sec-prepare-"));
+    tmpRoot = mkdtempSync(join(tmpdir(), "0-prepare-"));
     const missing = join(tmpRoot, "does-not-exist");
     await expect(prepare(missing, "source-code", {}, () => {})).rejects.toThrow(
       /Repository path not found/,

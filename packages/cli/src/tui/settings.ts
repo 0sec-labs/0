@@ -1,6 +1,6 @@
 /**
  * User-configurable display settings for the interactive console, persisted
- * to `~/.0sec/tui-settings.json`.
+ * to `~/.0/tui-settings.json`.
  *
  * The trigger was "let me hide the status bar", but a single boolean would
  * have been the wrong shape: every chrome element in the TUI (logo, hints,
@@ -25,7 +25,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
-import { DEFAULT_ALLOW_MODEL_SELF_EXTENSION, homeStateDir } from "@0sec/shared";
+import { DEFAULT_ALLOW_MODEL_SELF_EXTENSION, homeStateDir } from "@0/shared";
 
 import { sanitizeKeybindingOverrides } from "./keybindings.js";
 import {
@@ -70,7 +70,7 @@ export interface TuiSettings {
    * works again; every keyboard path is unaffected either way.
    */
   mouseSupport: boolean;
-  /** Block "0SECURITY" wordmark on the empty transcript. */
+  /** Block "ZEROSECURITY" wordmark on the empty transcript. */
   showLogo: boolean;
   /** Surface runtime stdout/stderr as transcript notices. */
   showRuntimeNotices: boolean;
@@ -189,7 +189,7 @@ export interface TuiSettings {
    */
   elapsedTimer: "left" | "off";
   /**
-   * Intro animation style for the "0SECURITY" wordmark. One-shot reveals: "glitch" (a
+   * Intro animation style for the "ZEROSECURITY" wordmark. One-shot reveals: "glitch" (a
    * neon-flecked scramble that resolves — the default), "matrix" (a green
    * matrix-rain cascade), "wave" (a rippling cyan wavefront), "neon" (a
    * neon-sign warm-up flicker), "strike" (a red slash strikes through the 0),
@@ -385,7 +385,7 @@ const DEFS: readonly TuiSettingDef[] = [
   {
     key: "showLogo",
     label: "Logo",
-    description: 'Block "0SECURITY" wordmark shown on an empty transcript.',
+    description: 'Block "ZEROSECURITY" wordmark shown on an empty transcript.',
     kind: "boolean",
     default: true,
     group: "Display",
@@ -514,7 +514,7 @@ const DEFS: readonly TuiSettingDef[] = [
   {
     key: "roleLabelStyle",
     label: "Role label",
-    description: 'Speaker name on each message: "You" for your turns, "0sec" for answers. Full and short add the elapsed age when one is known; glyph shows the name alone; off omits the label entirely. Bubble cards carry it top-left on the card border, with your messages right-aligned and answers left.',
+    description: 'Speaker name on each message: "You" for your turns, "0" for answers. Full and short add the elapsed age when one is known; glyph shows the name alone; off omits the label entirely. Bubble cards carry it top-left on the card border, with your messages right-aligned and answers left.',
     kind: "enum",
     default: "full",
     choices: ["full", "short", "glyph", "off"],
@@ -570,7 +570,7 @@ const DEFS: readonly TuiSettingDef[] = [
     key: "theme",
     label: "Theme",
     description:
-      "Colour palette. Slate (neutral grey, default) and Midnight (deep blue-black) and Carbon (warm dark), Standard/Paper (light), plus Contrast, Mono Dim and ANSI 16 for 16-colour terminals. Drop validated palettes in ~/.0sec/themes to add your own.",
+      "Colour palette. Slate (neutral grey, default) and Midnight (deep blue-black) and Carbon (warm dark), Standard/Paper (light), plus Contrast, Mono Dim and ANSI 16 for 16-colour terminals. Drop validated palettes in ~/.0/themes to add your own.",
     kind: "enum",
     default: DEFAULT_THEME_NAME,
     choices: THEME_CHOICES,
@@ -598,7 +598,7 @@ const DEFS: readonly TuiSettingDef[] = [
     key: "autoEvolveFinderLenses",
     label: "Auto-evolve finder lenses",
     description:
-      "Start the TUI watcher for ~/.0sec/lens-synthesis/miss-input.json (or OSEC_TUI_LENS_SYNTH_INPUT) so each new curated revision can invoke the configured model.",
+      "Start the TUI watcher for ~/.0/lens-synthesis/miss-input.json (or OSEC_TUI_LENS_SYNTH_INPUT) so each new curated revision can invoke the configured model.",
     kind: "boolean",
     default: false,
     group: "Security",
@@ -658,7 +658,7 @@ const DEFS: readonly TuiSettingDef[] = [
     key: "logoAnimation",
     label: "Logo animation",
     description:
-      'Intro animation for the "0SECURITY" wordmark: glitch (a neon-flecked scramble that resolves — the default), rainbow (a looping hue sweep), matrix (a green matrix-rain cascade), wave (a rippling cyan wavefront), neon (a neon-sign warm-up flicker), shimmer (a bright comet with a gradient tail), pulse (the slash breathes), strike (an orange slash strikes through the 0), draw (letters draw in behind a pen tip), fade (a centre-out bloom), typein (per-cell reveal), sweep (a bright bar wipes across) or off (static).',
+      'Intro animation for the "ZEROSECURITY" wordmark: glitch (a neon-flecked scramble that resolves — the default), rainbow (a looping hue sweep), matrix (a green matrix-rain cascade), wave (a rippling cyan wavefront), neon (a neon-sign warm-up flicker), shimmer (a bright comet with a gradient tail), pulse (the slash breathes), strike (an orange slash strikes through the 0), draw (letters draw in behind a pen tip), fade (a centre-out bloom), typein (per-cell reveal), sweep (a bright bar wipes across) or off (static).',
     kind: "enum",
     default: "glitch",
     choices: [
@@ -692,7 +692,7 @@ const DEFS: readonly TuiSettingDef[] = [
     key: "analyticsLevel",
     label: "Analytics and training data",
     description:
-      "Full is the new-install default. Usage shares feature counters and error categories, not tool content. Commands adds tool arguments/results and submitted code for model training and security research; Full also adds scope and findings. Recognized credentials are scrubbed; emails, URLs, identifiers and other content are retained. Sending uses authenticated Cloud storage and is not anonymous. Each tool/code content field is limited to 256 KiB after credential scrubbing; oversized records are reported locally, not silently truncated. Explicit 0SEC_ANALYTICS_LEVEL and offline/no-telemetry/DO_NOT_TRACK restrictions win over broader settings. Problem reports are separate. Applies to this computer, not this project.",
+      "Full is the new-install default. Usage shares feature counters and error categories, not tool content. Commands adds tool arguments/results and submitted code for model training and security research; Full also adds scope and findings. Recognized credentials are scrubbed; emails, URLs, identifiers and other content are retained. Sending uses authenticated Cloud storage and is not anonymous. Each tool/code content field is limited to 256 KiB after credential scrubbing; oversized records are reported locally, not silently truncated. Explicit ZERO_ANALYTICS_LEVEL and offline/no-telemetry/DO_NOT_TRACK restrictions win over broader settings. Problem reports are separate. Applies to this computer, not this project.",
     kind: "enum",
     default: "full",
     choices: ["off", "usage", "commands", "full"],
@@ -798,13 +798,13 @@ export const DEFAULT_SETTINGS: TuiSettings = {
   keybindings: {},
 };
 
-/** Basename of the settings file inside the 0sec state directory. */
+/** Basename of the settings file inside the 0 state directory. */
 const SETTINGS_FILENAME = "tui-settings.json";
 
 /**
  * Settings live beside the rest of the per-user engine state (scan DB,
  * journals, credentials) rather than in a TUI-specific directory, so
- * `homeStateDir` from `@0sec/shared` — not a local `".0sec"` literal — decides
+ * `homeStateDir` from `@0/shared` — not a local `".0"` literal — decides
  * where that is. One definition of the state root means a future relocation or
  * an `$XDG_STATE_HOME` migration happens in one place.
  */
@@ -815,8 +815,8 @@ export function settingsFilePath(homeDir?: string): string {
 /**
  * Two-level configuration: a per-user GLOBAL file and a per-project OVERRIDE.
  *
- * The global file (`~/.0sec/tui-settings.json`) is the base. A project may add a
- * local `<cwd>/.0sec/tui-settings.json` whose SET keys override the global ones;
+ * The global file (`~/.0/tui-settings.json`) is the base. A project may add a
+ * local `<cwd>/.0/tui-settings.json` whose SET keys override the global ones;
  * a key absent from the project file falls through to global, and a key absent
  * from both falls through to the built-in default. Precedence, highest first:
  *
@@ -829,9 +829,9 @@ export function settingsFilePath(homeDir?: string): string {
  */
 export type SettingLayer = "default" | "global" | "project";
 
-/** The `.0sec` directory inside a project working tree. */
+/** The `.0` directory inside a project working tree. */
 export function projectStateDir(projectDir: string = process.cwd()): string {
-  return join(projectDir, ".0sec");
+  return join(projectDir, ".0");
 }
 
 /** The per-project override settings file (may not exist; that is the norm). */

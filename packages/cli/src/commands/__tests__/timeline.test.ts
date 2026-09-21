@@ -1,5 +1,5 @@
 /**
- * Coverage for `0sec timeline` — the forensic timeline export.
+ * Coverage for `0 timeline` — the forensic timeline export.
  *
  * This output is handed to a client's SOC to cross-reference against their own
  * detections, so the invariants under test are the ones that would make the
@@ -13,8 +13,8 @@
  *   • ATT&CK and ATLAS stay in separate fields and columns — the two matrices
  *     have disjoint id namespaces and must never be merged into one cell.
  *
- * Boundaries mocked at module level: `@0sec/db` (no native SQLite bindings,
- * no WAL files) and `@0sec/core`'s `techniquesForEvent` /
+ * Boundaries mocked at module level: `@0/db` (no native SQLite bindings,
+ * no WAL files) and `@0/core`'s `techniquesForEvent` /
  * `atlasTechniquesForEvent` (the mappings are owned by
  * `packages/core/src/attack/mitre.ts` and `.../atlas.ts`; this suite tests how
  * the command *uses* them, not the mappings themselves).
@@ -41,7 +41,7 @@ const dbState: {
   ctorPaths: Array<string | undefined>;
 } = { scans: [], events: [], closes: 0, ctorPaths: [] };
 
-vi.mock("@0sec/db", () => {
+vi.mock("@0/db", () => {
   class FakeOsecDB {
     constructor(dbPath?: string) {
       dbState.ctorPaths.push(dbPath);
@@ -61,7 +61,7 @@ vi.mock("@0sec/db", () => {
 
 const techniquesForEventMock = vi.fn();
 const atlasTechniquesForEventMock = vi.fn();
-vi.mock("@0sec/core", () => ({
+vi.mock("@0/core", () => ({
   techniquesForEvent: techniquesForEventMock,
   atlasTechniquesForEvent: atlasTechniquesForEventMock,
 }));
@@ -156,7 +156,7 @@ async function runCli(argv: string[]): Promise<void> {
   const program = new Command();
   program.exitOverride();
   registerTimelineCommand(program);
-  await program.parseAsync(["node", "0sec-cli", ...argv]);
+  await program.parseAsync(["node", "@0/cli", ...argv]);
 }
 
 beforeEach(() => {
@@ -577,7 +577,7 @@ describe("timeline — argument handling and DB lifecycle", () => {
     expect(io.err()).toContain("Invalid --format");
   });
 
-  it("fails with a pointer to `0sec history` when the scan is unknown", async () => {
+  it("fails with a pointer to `0 history` when the scan is unknown", async () => {
     const io = captureIO();
     await runCli(["timeline", "no-such-scan"]);
     io.restore();
@@ -591,10 +591,10 @@ describe("timeline — argument handling and DB lifecycle", () => {
     dbState.events = sampleEvents();
 
     const io = captureIO();
-    await runCli(["timeline", SCAN_ID, "--format", "json", "--db-path", "/tmp/0sec-test.db"]);
+    await runCli(["timeline", SCAN_ID, "--format", "json", "--db-path", "/tmp/0-test.db"]);
     io.restore();
 
     expect(dbState.closes).toBe(1);
-    expect(dbState.ctorPaths).toEqual(["/tmp/0sec-test.db"]);
+    expect(dbState.ctorPaths).toEqual(["/tmp/0-test.db"]);
   });
 });

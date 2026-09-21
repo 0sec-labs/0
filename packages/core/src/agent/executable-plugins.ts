@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { homeStateDir } from "@0sec/shared";
+import { homeStateDir } from "@0/shared";
 import { z } from "zod";
 import {
   ExecutablePluginManager,
@@ -17,14 +17,14 @@ export function createExecutablePlugins(
   registry: SelfExtensionRegistry,
   configuration: ExecutablePluginConfiguration = {},
 ): ExecutablePluginManager {
-  const backend = configuration.backend ?? process.env["0SEC_PLUGIN_BACKEND"] ?? "docker";
+  const backend = configuration.backend ?? process.env["ZERO_PLUGIN_BACKEND"] ?? "docker";
   if (backend !== "docker" && backend !== "smolvm") {
-    throw new Error("0SEC_PLUGIN_BACKEND must be docker or smolvm");
+    throw new Error("ZERO_PLUGIN_BACKEND must be docker or smolvm");
   }
   return new ExecutablePluginManager({
     root: join(homeStateDir(), "executable-plugins"),
-    image: process.env["0SEC_PLUGIN_IMAGE"] ?? "0sec-toolbox:local",
-    imageArchive: backend === "smolvm" ? process.env["0SEC_SMOLVM_IMAGE_ARCHIVE"] : undefined,
+    image: process.env["ZERO_PLUGIN_IMAGE"] ?? "0-toolbox:local",
+    imageArchive: backend === "smolvm" ? process.env["ZERO_SMOLVM_IMAGE_ARCHIVE"] : undefined,
     ...configuration,
     backend,
     registry,
@@ -36,7 +36,7 @@ export function resolveExecutableEvolutionProfiles(
   profiles?: Record<string, EvolutionConfig>,
 ): Record<string, EvolutionConfig> {
   if (profiles) return profiles;
-  const configFile = process.env["0SEC_PLUGIN_EVOLUTION_CONFIG"];
+  const configFile = process.env["ZERO_PLUGIN_EVOLUTION_CONFIG"];
   return configFile ? { default: loadEvolutionConfigFile(configFile) } : {};
 }
 

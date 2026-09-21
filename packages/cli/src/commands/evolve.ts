@@ -1,19 +1,19 @@
 /**
- * `0sec evolve` — Autonomous self-improvement: source-candidate proposal,
+ * `0 evolve` — Autonomous self-improvement: source-candidate proposal,
  * lens evaluation, durable feedback, and automatic promotion with canary
  * and rollback.
  *
  * Subcommands:
  *
- *   0sec evolve run           --config <path>    [--watch] [--json]
+ *   0 evolve run           --config <path>    [--watch] [--json]
  *                              [--auto-promote]  [--allow-source-access]
- *   0sec evolve status        [--store <path>]   [--json]
- *   0sec evolve rollback      --store <path>     --version <id> [--reason <text>]
- *   0sec evolve exec          --config <path>    --run-id <id>  --input <json>
+ *   0 evolve status        [--store <path>]   [--json]
+ *   0 evolve rollback      --store <path>     --version <id> [--reason <text>]
+ *   0 evolve exec          --config <path>    --run-id <id>  --input <json>
  *                              [--json]
- *   0sec evolve feedback capture   --source <hunt-scan|deep-review> [--reason <text>]
- *   0sec evolve feedback approve   --id <feedback-id>
- *   0sec evolve feedback status    [--json]
+ *   0 evolve feedback capture   --source <hunt-scan|deep-review> [--reason <text>]
+ *   0 evolve feedback approve   --id <feedback-id>
+ *   0 evolve feedback status    [--json]
  *
  * Error codes:
  *   0  — success
@@ -31,7 +31,7 @@ import type {
   EvolutionRegistry,
   EvolutionRunResult,
   EvolutionExecution,
-} from "@0sec/core";
+} from "@0/core";
 import {
   loadEvolutionConfigFile,
   parseEvolutionConfig,
@@ -46,7 +46,7 @@ import {
   parseObservationInput,
   parseApprovedObservationShape,
   rollbackEvolutionVersion as rollbackEvolutionRegistryVersion,
-} from "@0sec/core";
+} from "@0/core";
 
 
 // ── Exit codes ──────────────────────────────────────────────────────────────

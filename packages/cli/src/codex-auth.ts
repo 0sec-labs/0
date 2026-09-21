@@ -23,33 +23,33 @@ export interface CodexAuthOptions {
  * CLI loader has to agree with it — otherwise an operator who sets the
  * documented variable is silently ignored on this path.
  */
-const AUTH_FILE_ENV = "0SEC_CHATGPT_AUTH_FILE";
+const AUTH_FILE_ENV = "ZERO_CHATGPT_AUTH_FILE";
 
 /**
  * @deprecated CLI-only legacy spelling that never matched the runtime. Still
  * honoured as a fallback so anyone currently relying on it keeps working;
- * `0SEC_CHATGPT_AUTH_FILE` wins when both are set. Remove once the deprecation
+ * `ZERO_CHATGPT_AUTH_FILE` wins when both are set. Remove once the deprecation
  * window closes.
  */
-const LEGACY_AUTH_FILE_ENV = "0SEC_CODEX_AUTH_JSON_PATH";
+const LEGACY_AUTH_FILE_ENV = "ZERO_CODEX_AUTH_JSON_PATH";
 
 /**
  * Local-dev convenience: when no ChatGPT-Codex token is in the env but the
  * user has run `codex login` (so `~/.codex/auth.json` exists), plumb its
- * tokens into `0SEC_CHATGPT_*` — the same wiring the cloud
+ * tokens into `ZERO_CHATGPT_*` — the same wiring the cloud
  * worker-controller does for sandbox runs.
  *
  * The engine's provider priority (`llm-api.ts` detectProvider) ranks
  * `chatgpt-codex` HIGHEST, above `AZURE_OPENAI_API_KEY` / `OPENAI_API_KEY`.
  * So loading the codex token here means a logged-in `codex` session wins over
- * stale Azure/OpenAI keys left in a dev shell — `0sec review` "just works"
+ * stale Azure/OpenAI keys left in a dev shell — `0 review` "just works"
  * on the subscription backend instead of silently falling through to a dead
  * Azure endpoint.
  *
- * Path precedence: `0SEC_CHATGPT_AUTH_FILE` (canonical, matches the runtime)
- * ?? `0SEC_CODEX_AUTH_JSON_PATH` (deprecated) ?? `~/.codex/auth.json`.
+ * Path precedence: `ZERO_CHATGPT_AUTH_FILE` (canonical, matches the runtime)
+ * ?? `ZERO_CODEX_AUTH_JSON_PATH` (deprecated) ?? `~/.codex/auth.json`.
  *
- * No-op if a `0SEC_CHATGPT_*` token is already set (respects an explicit
+ * No-op if a `ZERO_CHATGPT_*` token is already set (respects an explicit
  * override) or the auth file is absent/unreadable. Best-effort: any failure
  * leaves the env untouched and the engine falls back to other providers.
  */
@@ -58,8 +58,8 @@ export function maybeLoadCodexAuth(options: CodexAuthOptions = {}): void {
   if (
     !options.force &&
     (
-      env["0SEC_CHATGPT_ACCESS_TOKEN"] ||
-      env["0SEC_CHATGPT_OAUTH_REFRESH_TOKEN"]
+      env["ZERO_CHATGPT_ACCESS_TOKEN"] ||
+      env["ZERO_CHATGPT_OAUTH_REFRESH_TOKEN"]
     )
   ) {
     return;
@@ -81,14 +81,14 @@ export function maybeLoadCodexAuth(options: CodexAuthOptions = {}): void {
     const refreshToken = nonEmpty(asString(raw.tokens?.refresh_token));
     if (!accessToken && !refreshToken) return;
     if (options.force) {
-      delete env["0SEC_CHATGPT_ACCESS_TOKEN"];
-      delete env["0SEC_CHATGPT_OAUTH_REFRESH_TOKEN"];
+      delete env["ZERO_CHATGPT_ACCESS_TOKEN"];
+      delete env["ZERO_CHATGPT_OAUTH_REFRESH_TOKEN"];
     }
     if (accessToken) {
-      env["0SEC_CHATGPT_ACCESS_TOKEN"] = accessToken;
+      env["ZERO_CHATGPT_ACCESS_TOKEN"] = accessToken;
     }
     if (refreshToken) {
-      env["0SEC_CHATGPT_OAUTH_REFRESH_TOKEN"] = refreshToken;
+      env["ZERO_CHATGPT_OAUTH_REFRESH_TOKEN"] = refreshToken;
     }
   } catch {
     // best-effort only — leave env untouched, engine falls back to other providers

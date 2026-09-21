@@ -19,7 +19,7 @@ function client(fetchImpl: typeof fetch, maxCostUsd = 0.10) {
 describe("Jev evaluation trust boundaries", () => {
   it("requires explicit data-egress opt-in even when provider credentials exist", () => {
     expect(jevConfigFromEnvironment("memory", { AI_GATEWAY_API_KEY: "test-only-key" })).toBeUndefined();
-    expect(() => jevConfigFromEnvironment("memory", { "0SEC_JEV_FEATURES": "memory" }))
+    expect(() => jevConfigFromEnvironment("memory", { "ZERO_JEV_FEATURES": "memory" }))
       .toThrow("AI_GATEWAY_API_KEY is required");
   });
 
@@ -71,17 +71,17 @@ describe("Jev evaluation trust boundaries", () => {
 
   it("allows the keyless classifier only for an explicitly enabled kernel prepass", () => {
     expect(jevConfigFromEnvironment("kernel", {
-      "0SEC_JEV_FEATURES": "kernel", "0SEC_JEV_PROVIDER": "classifier",
+      "ZERO_JEV_FEATURES": "kernel", "ZERO_JEV_PROVIDER": "classifier",
     })).toMatchObject({ provider: "classifier", feature: "kernel", maxClassifications: 1_000 });
     expect(() => jevConfigFromEnvironment("memory", {
-      "0SEC_JEV_FEATURES": "memory", "0SEC_JEV_PROVIDER": "classifier",
+      "ZERO_JEV_FEATURES": "memory", "ZERO_JEV_PROVIDER": "classifier",
     })).toThrow("restricted to the kernel prepass");
   });
 
   it("maps classifier groups back to typed kernel answers without treating false confidence as true", async () => {
     const fetchImpl = vi.fn<typeof fetch>().mockImplementation(async (_url, init) => {
       const body = JSON.parse(String(init?.body)) as { labels: string[]; inputs: string[] };
-      expect(init?.headers).toMatchObject({ "User-Agent": "0sec-kernel-prepass/1.0" });
+      expect(init?.headers).toMatchObject({ "User-Agent": "0-kernel-prepass/1.0" });
       if (body.labels[0] === "true") {
         return Response.json({ model: "jev-1.13.0", results: body.inputs.map(() => ({
           label: "false", confidence: 0.88, scores: { true: 0.12, false: 0.88 }, model: "jev-1.13.0",

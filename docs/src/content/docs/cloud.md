@@ -72,13 +72,13 @@ currently deployed. Public website and login observations were made on
 ## Agent-operated codebase setup
 
 The source implementation shares saved configuration between the dashboard and
-the `project` CLI group. Check `0sec guide --json` and `0sec project --help` in
+the `project` CLI group. Check `0 guide --json` and `0 project --help` in
 the installed version before using these commands:
 
 ```bash
-0sec project setup owner/repository --json
-0sec project show owner/repository --json
-0sec project history owner/repository --json
+0 project setup owner/repository --json
+0 project show owner/repository --json
+0 project history owner/repository --json
 ```
 
 A coding agent reads source-backed observations, asks about conventions, test
@@ -86,7 +86,7 @@ commands, repair preferences and the budget, then saves an approved revision.
 The dashboard can edit the same context. Starting a scan requires separate
 approval and confirmed credit-backed admission; setup alone does not spend.
 
-Use `0sec skills --help` for versioned methodology files and codebase
+Use `0 skills --help` for versioned methodology files and codebase
 assignments. Bundle file paths are relative to the working directory, with
 `SKILL.md` as the entrypoint. A queued scan keeps its captured configuration
 and methodology revisions even when a later revision is saved.

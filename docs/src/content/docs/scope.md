@@ -132,7 +132,7 @@ host/address exclusions and private-network restrictions still apply; other
 commands do not inherit that checkout permission. See
 [public repository acquisition](/console/#acquiring-a-public-repository-in-yolo).
 
-`0SEC_REQUIRE_SCOPE=1` requests fail-closed behavior where these guards are
+`ZERO_REQUIRE_SCOPE=1` requests fail-closed behavior where these guards are
 used. It does not manufacture a policy, and not every command accepts `--scope`.
 Use the command-specific [reference](/commands/) instead of adding unsupported
 flags. The `scan --require-scope` option is not needed to activate the normal

@@ -19,10 +19,10 @@ export function registerTuiCommand(program: Command): void {
 
       // Node cannot host the OpenTUI control plane.
       console.log("");
-      console.log(`  ${chalk.bold("0sec tui")} — the engagement control plane needs Bun.`);
+      console.log(`  ${chalk.bold("0 tui")} — the engagement control plane needs Bun.`);
       console.log("");
       console.log(`  ${chalk.dim("Install the standalone binary (Bun runtime baked in):")}`);
-      console.log(`    curl -fsSL https://raw.githubusercontent.com/0sec-labs/0sec/main/install.sh | bash`);
+      console.log(`    curl -fsSL https://raw.githubusercontent.com/0sec-labs/0/main/install.sh | bash`);
       console.log("");
       process.exit(1);
     });

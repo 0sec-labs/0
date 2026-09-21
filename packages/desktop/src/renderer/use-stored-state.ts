@@ -44,9 +44,9 @@ async function persistPreference(key: string, value: unknown): Promise<void> {
  * - Rejections surface via `osec:preference-error` CustomEvent — the
  *   workspace hook listens for those.
  *
- * Keys MUST be prefixed `0sec:`.
+ * Keys MUST be prefixed `0:`.
  *
- * @param key   Storage key (e.g. `"0sec:drafts"`).
+ * @param key   Storage key (e.g. `"0:drafts"`).
  * @param initial  Fallback value when nothing is stored.
  * @returns  Standard React state setter tuple.
  */

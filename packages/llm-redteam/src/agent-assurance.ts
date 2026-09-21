@@ -10,12 +10,12 @@ import {
   type AgentActionOutcome,
   type AgentActionScenario,
   type AgentActionTargetMetadata,
-} from "@0sec/shared";
+} from "@0/shared";
 import { isRecord } from "./guards.js";
 
 
 /** Version of the narrow HTTP contract a customer-owned agent test adapter implements. */
-export const AGENT_ACTION_TARGET_PROTOCOL_VERSION = "0sec.agent-action-target/v1" as const;
+export const AGENT_ACTION_TARGET_PROTOCOL_VERSION = "0.agent-action-target/v1" as const;
 
 const DEFAULT_HTTP_TIMEOUT_MS = 30_000;
 const DEFAULT_ORACLE_TIMEOUT_MS = 10_000;

@@ -298,7 +298,7 @@
       "pattern": "Less-audited protocols mismanage a per-socket list/timer/fragment-reassembly buffer on teardown or concurrent op -> UAF / double-free / OOB. These are reachable by unprivileged users and historically under-fuzzed.",
       "detection_signature": "Relocations to del_timer / hrtimer_cancel / list_del / kfree_skb / call_rcu survive. Shape: timer or list entry freed but not removed, or reassembly buffer reused. Maps to L5/L8/L12. MEDIUM-HARD.",
       "grounding": [
-        "tipc / nfc-llcp / nfc-digital / bluetooth fixes (0sec-disclosed, merged)",
+        "tipc / nfc-llcp / nfc-digital / bluetooth fixes (0-disclosed, merged)",
         "CAN bcm UAF family",
         "n_gsm UAF"
       ],
@@ -564,7 +564,7 @@
       "pattern": "A key or key_ref refcount is mishandled on an error/assoc path (request_key_auth UAF, key GC vs use) -> UAF on a key object reachable from an unprivileged keyctl call.",
       "detection_signature": "Relocations to key_put / key_ref_put / refcount_dec survive. Shape: put-without-get or use-after-put on a key. Maps to L5 + L8. MEDIUM-HARD.",
       "grounding": [
-        "request_key_auth UAF (contested, unpatched 6.12.93 per 0sec notes)",
+        "request_key_auth UAF (contested, unpatched 6.12.93 per 0 notes)",
         "keyctl refcount CVEs"
       ],
       "confirmable": "NO; kernel-verify lane (bench has the keyctl harness).",

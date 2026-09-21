@@ -544,7 +544,7 @@ async function readBoundedResponse(res: Response, url: string): Promise<string> 
       if (done) break;
       total += value.byteLength;
       if (total > MAX_SYZBOT_RESPONSE_BYTES) {
-        await reader.cancel("response exceeds 0sec size limit");
+        await reader.cancel("response exceeds 0 size limit");
         throw new Error(`oversized syzbot response for ${url}`);
       }
       chunks.push(value);
@@ -587,7 +587,7 @@ export const defaultSyzbotFetcher: SyzbotFetcher = async (url) => {
     // HTTPS/host/port/userinfo were checked above; redirect responses are refused.
     // foxguard: ignore[js/no-ssrf]
     const res = await fetch(parsed.toString(), {
-      headers: { "user-agent": "0sec-syzbot-queue-mine/1.0" },
+      headers: { "user-agent": "0-syzbot-queue-mine/1.0" },
       redirect: "manual",
       // The invalid listing is ~19k rows and can take tens of seconds from the
       // public dashboard; remain bounded without making the live source unusable.

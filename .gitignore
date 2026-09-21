@@ -2,7 +2,7 @@ node_modules/
 dist/
 dist-bin/
 *.tsbuildinfo
-**/.0sec/dev-engines/
+**/.0/dev-engines/
 .DS_Store
 .cache/
 .claude/

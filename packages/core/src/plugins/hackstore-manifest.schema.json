@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://raw.githubusercontent.com/0sec-labs/hackstore/main/hackstore-manifest.schema.json",
   "title": "Hackstore extension manifest",
-  "description": "A Hackstore extension's manifest.json: a PluginManifest declaring one or more tools, each gated by a closed set of capabilities. Mirrors validatePluginManifest in @0sec/core (packages/core/src/plugins/manifest.ts). Themes and config artifacts use a different shape and are out of scope for this schema.",
+  "description": "A Hackstore extension's manifest.json: a PluginManifest declaring one or more tools, each gated by a closed set of capabilities. Mirrors validatePluginManifest in @0/core (packages/core/src/plugins/manifest.ts). Themes and config artifacts use a different shape and are out of scope for this schema.",
   "type": "object",
   "required": ["id", "name", "version", "tools"],
   "additionalProperties": true,
@@ -35,7 +35,7 @@
     },
     "minCoreVersion": {
       "type": "string",
-      "description": "Optional minimum @0sec/core version this extension requires.",
+      "description": "Optional minimum @0/core version this extension requires.",
       "pattern": "^\\d+\\.\\d+\\.\\d+(?:[-+][0-9A-Za-z.-]+)?$"
     },
     "tools": {

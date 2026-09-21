@@ -55,7 +55,7 @@ import type {
   MemSafetyTarget,
 } from "./memsafety-types.js";
 
-const MEMSAFETY_ARTIFACT_SCHEMA = "0sec-memsafety-artifacts/v1";
+const MEMSAFETY_ARTIFACT_SCHEMA = "0-memsafety-artifacts/v1";
 const MAX_RETAINED_CRASHES = 16;
 const MAX_RETAINED_REPRODUCER_BYTES = 1024 * 1024;
 const MAX_RETAINED_LOG_BYTES = 256 * 1024;
@@ -79,7 +79,7 @@ export interface UserspaceFuzzOptions {
   /**
    * Total wall-clock budget for the fuzz run, seconds. Maps to libFuzzer's
    * `-max_total_time` on the Rust path and bounds the child process on both.
-   * Defaults to `0SEC_USERSPACE_FUZZ_TIMEOUT_SEC` or 60s.
+   * Defaults to `ZERO_USERSPACE_FUZZ_TIMEOUT_SEC` or 60s.
    */
   timeoutSec?: number;
   /**
@@ -496,9 +496,9 @@ function makeArtifactDir(artifactDir: string | undefined): {
   ephemeral: boolean;
 } {
   if (artifactDir) {
-    return { dir: mkdtempSync(join(artifactDir, "0sec-uf-")), ephemeral: false };
+    return { dir: mkdtempSync(join(artifactDir, "0-uf-")), ephemeral: false };
   }
-  return { dir: mkdtempSync(join(tmpdir(), "0sec-uf-")), ephemeral: true };
+  return { dir: mkdtempSync(join(tmpdir(), "0-uf-")), ephemeral: true };
 }
 
 /** Count files under a corpus dir, tolerating its absence. */
@@ -538,7 +538,7 @@ export async function runUserspaceFuzzLoop(
   const start = Date.now();
   const timeoutSec =
     opts.timeoutSec ??
-    parseInt(process.env["0SEC_USERSPACE_FUZZ_TIMEOUT_SEC"]?.trim() || "60", 10);
+    parseInt(process.env["ZERO_USERSPACE_FUZZ_TIMEOUT_SEC"]?.trim() || "60", 10);
   const timeoutMs = Math.max(1, timeoutSec) * 1000;
   const artifactDir = resolveArtifactRoot(opts.artifactDir, canonicalSourceRoot);
   const artifactMaxBytes = artifactDir

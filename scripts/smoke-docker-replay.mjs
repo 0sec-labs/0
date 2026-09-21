@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Requires built @0sec/core and a usable local Docker daemon. Never silently skips.
+// Requires built @0/core and a usable local Docker daemon. Never silently skips.
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -10,10 +10,10 @@ import { createReproductionBundle, runReproductionBundle } from "../packages/cor
 import { ScopePolicy } from "../packages/core/dist/scope/scope.js";
 
 const docker = (...args) => execFileSync("docker", args, { encoding: "utf8", timeout: 120_000, stdio: ["ignore", "pipe", "pipe"] }).trim();
-const root = mkdtempSync(join(tmpdir(), "0sec-docker-smoke-"));
+const root = mkdtempSync(join(tmpdir(), "0-docker-smoke-"));
 const resources = [];
 const failures = [];
-const secret = "0sec-smoke-provider-secret-not-for-containers";
+const secret = "0-smoke-provider-secret-not-for-containers";
 const previousSecret = process.env.ANTHROPIC_API_KEY;
 process.env.ANTHROPIC_API_KEY = secret;
 
@@ -48,7 +48,7 @@ try {
   await check("real container hardening and writable workspace", async () => {
     const runDir = join(root, "hardening");
     mkdirSync(runDir);
-    const step = shellStep('test "$(id -u)" -ne 0 && test -z "$ANTHROPIC_API_KEY" && test ! -e /sys/class/net/eth0 && ! touch /0sec-root-write 2>/dev/null && printf retained > /work/retained && cat /proc/self/status && printf VULNERABLE_MARKER');
+    const step = shellStep('test "$(id -u)" -ne 0 && test -z "$ANTHROPIC_API_KEY" && test ! -e /sys/class/net/eth0 && ! touch /0-root-write 2>/dev/null && printf retained > /work/retained && cat /proc/self/status && printf VULNERABLE_MARKER');
     const { result } = await runDeterministicReplay(finding([step]), { runner, runDir });
     assert.equal(result.status, "reproduced", JSON.stringify(result));
     assert.match(result.commands[0].stdout_excerpt, /CapEff:\s+0+\s/);
@@ -118,7 +118,7 @@ try {
   });
 
   await check("scoped HTTP runs on an isolated network and rejects out-of-scope requests", async () => {
-    const network = `0sec-replay-${process.pid}-${Date.now()}`;
+    const network = `0-replay-${process.pid}-${Date.now()}`;
     docker("network", "create", "--internal", network);
     resources.push(["network", "rm", network]);
     const id = docker("run", "--detach", "--network", network, "--network-alias", "replay-fixture",

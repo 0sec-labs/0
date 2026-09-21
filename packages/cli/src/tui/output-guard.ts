@@ -10,7 +10,7 @@
  * reality. The visible result is ghost rows, fused text, and characters
  * from one widget appearing inside another.
  *
- * `@0sec/core` has 60+ such call sites (quota notices, retry warnings,
+ * `@0/core` has 60+ such call sites (quota notices, retry warnings,
  * scanner diagnostics). Rewriting each one to thread a logger through is
  * both invasive and permanently fragile — a single new `console.warn` in
  * any dependency reintroduces the corruption. Instead the TUI claims the
@@ -31,7 +31,7 @@
  * screen clean would trade one bug for a worse one.
  */
 
-import { createPresentationEvent } from "@0sec/shared";
+import { createPresentationEvent } from "@0/shared";
 import { presentationEventBus } from "../presentation/event-bus.js";
 
 import { sanitizeTuiText } from "./text.js";
@@ -123,7 +123,7 @@ export function installTuiOutputGuard(options: TuiOutputGuardOptions = {}): TuiO
     // Core already emitted the canonical event before writing the legacy cloud
     // relay line. Keep that wire protocol out of the TUI transcript and avoid
     // replaying it after terminal teardown.
-    if (stream === "stdout" && clean.startsWith("0SEC_EVENT_")) return;
+    if (stream === "stdout" && clean.startsWith("ZERO_EVENT_")) return;
     const line: TuiOutputLine = { stream, text: clean };
     presentationEventBus.emit(createPresentationEvent({
       source: "cli",

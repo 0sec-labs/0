@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { SourceFixResult, SourceFixStatus } from "@0sec/core";
+import type { SourceFixResult, SourceFixStatus } from "@0/core";
 
 import {
   describeFixStatus,
@@ -145,14 +145,14 @@ describe("fixInputEligibility", () => {
   it("rejects a missing repo root", () => {
     expect(fixInputEligibility({ repoRoot: "  ", testCommand: "pnpm test" })).toEqual({
       eligible: false,
-      reason: "no repository path for this finding (set 0SEC_FIX_REPO)",
+      reason: "no repository path for this finding (set ZERO_FIX_REPO)",
     });
   });
 
   it("rejects a blank regression command", () => {
     expect(fixInputEligibility({ repoRoot: "/repo", testCommand: "   " })).toEqual({
       eligible: false,
-      reason: "no regression command configured (set 0SEC_FIX_TEST_COMMAND)",
+      reason: "no regression command configured (set ZERO_FIX_TEST_COMMAND)",
     });
   });
 });
@@ -251,7 +251,7 @@ describe("fixResultLines", () => {
     expect(fixResultLines(result)).toEqual([
       "source src/extract.ts",
       "test command passed in 1200ms",
-      "patch produced, not applied — re-run `0sec fix --output` to write it out",
+      "patch produced, not applied — re-run `0 fix --output` to write it out",
       "rationale Normalise the member path before joining.",
       "attempt 1 rejected: patch touches src/other.ts",
     ]);

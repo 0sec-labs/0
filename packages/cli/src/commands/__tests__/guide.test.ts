@@ -5,8 +5,8 @@ import { registerConnectCommand } from "../connect.js";
 import { registerGuideCommand } from "../guide.js";
 
 beforeEach(() => {
-  vi.stubEnv("0SEC_CLOUD_TOKEN", "test-only-token");
-  vi.stubEnv("0SEC_CLOUD_HOST", "https://cloud.0.security");
+  vi.stubEnv("ZERO_CLOUD_TOKEN", "test-only-token");
+  vi.stubEnv("ZERO_CLOUD_HOST", "https://cloud.0.security");
   vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ status: "ok" }))));
 });
 
@@ -17,7 +17,7 @@ afterEach(() => {
 });
 
 function program() {
-  const cli = new Command().name("0sec").exitOverride();
+  const cli = new Command().name("0").exitOverride();
   registerGuideCommand(cli);
   // Registration after guide must still appear in discovery at invocation time.
   registerAuthCommand(cli);

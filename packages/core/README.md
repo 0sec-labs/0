@@ -2,11 +2,11 @@
   <img src="https://raw.githubusercontent.com/0sec-labs/.github/main/profile/assets/icons/code.png" alt="" height="32">
 </p>
 
-# @0sec/core
+# @0/core
 
 The engine behind the [0 CLI](../../README.md): agent loops, tools,
 model runtimes, source review, verification and self-extension. The CLI package
-is named `0sec-cli`; it registers the `0` and `0sec` commands.
+is named `@0/cli`; it registers the `0` and `0` commands.
 
 <p>
   <a href="https://docs.0.security/architecture/"><img src="https://img.shields.io/badge/docs-architecture-DC2626?style=flat-square&amp;labelColor=1A1815" alt="Architecture documentation"></a>
@@ -47,12 +47,12 @@ and [architecture guide](https://docs.0.security/architecture/).
 ## Feature flags
 
 Feature flags are declared in `src/agent/features.ts`. Each flag maps to a
-`0SEC_FEATURE_<NAME>` environment variable. The `0sec-cli` `scan` command
+`ZERO_FEATURE_<NAME>` environment variable. The `@0/cli` `scan` command
 also accepts a `--features` flag that sets those env vars automatically:
 
 ```bash
 0 scan --target https://app.example.test --scope ./scope.json --features web_search
-env 0SEC_FEATURE_POV_GATE=0 \
+env ZERO_FEATURE_POV_GATE=0 \
   0 scan --target https://app.example.test --scope ./scope.json --features fp-moat
 ```
 
@@ -67,7 +67,7 @@ Named presets (e.g. `fp-moat`) are defined in `src/agent/feature-presets.ts`.
 Applying a preset never overwrites a flag already set in the environment.
 
 Jev advisory evaluation uses a **separate** opt-in configuration:
-`0SEC_JEV_FEATURES=browser,memory,dedupe,redteam`, with a selected provider and
+`ZERO_JEV_FEATURES=browser,memory,dedupe,redteam`, with a selected provider and
 credential. Browser assistance only navigates operator-approved read-only URLs;
 memory ranking supplies untrusted review context; duplicate assessment adds
 cluster mappings without erasing evidence; red-team feedback never decides a
@@ -79,7 +79,7 @@ for data egress, request/cost limits and which callers wire these capabilities.
 Playbooks live in `src/agent/playbooks.ts`. Each playbook is a string keyed by
 vulnerability type (`sqli`, `ssti`, `idor`, `xss`, `cve_exploitation`, …) plus
 a set of regex `INDICATORS` that pattern-match against recent tool-result text.
-When `0SEC_FEATURE_DYNAMIC_PLAYBOOKS=1`, the native agent loop matches
+When `ZERO_FEATURE_DYNAMIC_PLAYBOOKS=1`, the native agent loop matches
 indicators from about 30% of the turn budget onward and injects matching
 playbooks. It tracks injected content and can re-inject after compaction;
 this is not a mandatory one-shot phase of every loop.
@@ -90,7 +90,7 @@ this is not a mandatory one-shot phase of every loop.
 ## WordPress fingerprinter (`wp_fingerprint`)
 
 The `wp_fingerprint` tool is enabled by default where the workflow exposes it.
-Disable with `0SEC_FEATURE_WP_FINGERPRINT=0`. Implemented in
+Disable with `ZERO_FEATURE_WP_FINGERPRINT=0`. Implemented in
 `src/agent/wp-fingerprint.ts`; availability is not permission to probe a target.
 
 ### What it does
@@ -115,7 +115,7 @@ Disable with `0SEC_FEATURE_WP_FINGERPRINT=0`. Implemented in
 6. **Matches CVEs** using a built-in high-impact WordPress plugin vulnerability
    catalog, queries the no-key WPVulnerability API for current plugin/theme
    advisories, optionally queries WPScan's API when `WPSCAN_API_TOKEN` (or
-   `0SEC_WPSCAN_API_TOKEN`) is set, then optionally POSTs each `(slug, version)`
+   `ZERO_WPSCAN_API_TOKEN`) is set, then optionally POSTs each `(slug, version)`
    pair to `https://api.osv.dev/v1/query` for broader OSV coverage.
 7. **Returns structured findings** — entries with `kind`, `slug`, `version`,
    `cves` and `exploitHints`, plus a human-readable summary in the tool wrapper.
@@ -159,7 +159,7 @@ and advisory URL, and exploit hints the agent can act on.
 ### Tests
 
 ```bash
-pnpm --filter @0sec/core test -- wp-fingerprint
+pnpm --filter @0/core test -- wp-fingerprint
 ```
 
 The test suite (`src/agent/wp-fingerprint.test.ts`) mocks `fetch` with an
@@ -211,13 +211,13 @@ sometimes plant decoy flags in obvious locations to catch script kiddies."*
 
 ### Configuration
 
-- Env var: `0SEC_FEATURE_DECOY_DETECTION=0` to disable.
+- Env var: `ZERO_FEATURE_DECOY_DETECTION=0` to disable.
 - CLI flag: `0 scan --no-decoy-detection <target>`.
 
 ### Tests
 
 ```bash
-pnpm --filter @0sec/core test -- flag-validator
+pnpm --filter @0/core test -- flag-validator
 ```
 
 The test suite (`src/agent/flag-validator.test.ts`) covers the XBEN-079
@@ -250,7 +250,7 @@ kernel replay, patch validation, reproduction bundles and minimization. Each
 workflow has its own prerequisites. Local shell replay is host execution, not an
 OS sandbox.
 
-Use the canonical `VerificationResultSchema` from `@0sec/shared` for ordinary
+Use the canonical `VerificationResultSchema` from `@0/shared` for ordinary
 replay JSON: `reproduced`, `not_reproduced`, `skipped`, or `error`, with declared
 assertions and hashed artifact descriptors. Kernel and bundle outputs have
 separate contracts. A source finding, model consensus or a saved candidate is
@@ -287,10 +287,10 @@ activation, evaluation and recovery limits.
 From the repository root:
 
 ```bash
-pnpm --filter '@0sec/core...' build
-pnpm --filter @0sec/core test
-pnpm --filter @0sec/core test -- wp-fingerprint
-pnpm --filter @0sec/core dev
+pnpm --filter '@0/core...' build
+pnpm --filter @0/core test
+pnpm --filter @0/core test -- wp-fingerprint
+pnpm --filter @0/core dev
 ```
 
 Build assets live in `scripts/`: `generate-skills-manifest.mjs` compiles the

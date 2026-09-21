@@ -32,7 +32,7 @@
  * long-lived CLI process picks up a completed promotion for its next review
  * without ever changing an active engagement's lens set.
  *
- * The legacy `0SEC_RUNTIME_LENSES` blob remains a deliberately opt-in,
+ * The legacy `ZERO_RUNTIME_LENSES` blob remains a deliberately opt-in,
  * ephemeral overlay. Durable promotions use the user registry plus its
  * hash-linked ledger; malformed, unsafe, or unbound registries fail closed.
  * Every overlay is additive: baked lenses always win an id collision.
@@ -176,12 +176,12 @@ export function appsecArchetypesPath(): string {
  * package, so a successful promotion never edits checked-in or bundled source.
  */
 export function appsecUserArchetypesPath(homeDir: string = homedir()): string {
-  return join(homeDir, ".0sec", "lenses", "appsec-archetypes.json");
+  return join(homeDir, ".0", "lenses", "appsec-archetypes.json");
 }
 
 /** A deliberate process override for isolated workers and tests. */
 export function activeAppsecLensRegistryPath(): string {
-  const configured = process.env["0SEC_APPSEC_LENS_REGISTRY"]?.trim();
+  const configured = process.env["ZERO_APPSEC_LENS_REGISTRY"]?.trim();
   return configured ? resolve(configured) : appsecUserArchetypesPath();
 }
 
@@ -243,9 +243,9 @@ export function appsecArchetypeToFinderLens(a: AppsecArchetype): FinderLens {
 // ── Durable + ephemeral overlays (fail-closed) ──────────────────────────────
 
 /** Env flag gating legacy ephemeral runtime injection. */
-const RUNTIME_LENSES_FLAG = "0SEC_RUNTIME_LENSES_ENABLED";
+const RUNTIME_LENSES_FLAG = "ZERO_RUNTIME_LENSES_ENABLED";
 /** Env var carrying the legacy ephemeral runtime JSON blob. */
-const RUNTIME_LENSES_ENV = "0SEC_RUNTIME_LENSES";
+const RUNTIME_LENSES_ENV = "ZERO_RUNTIME_LENSES";
 const SHA256_DIGEST = /^sha256:[a-f0-9]{64}$/;
 const LENS_ID = /^[a-z0-9][a-z0-9-]{1,63}$/;
 
@@ -406,7 +406,7 @@ function loadDurableAppsecArchetypes(): RawAppsecArchetype[] {
 }
 
 /**
- * Read the flag-gated `0SEC_RUNTIME_LENSES` blob. This is intentionally kept
+ * Read the flag-gated `ZERO_RUNTIME_LENSES` blob. This is intentionally kept
  * separate from the durable registry: it is an explicit, process-local
  * experiment surface and never survives a restart.
  */

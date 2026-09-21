@@ -12,7 +12,7 @@ export class DesktopPreferences {
     try {
       const value: unknown = JSON.parse(readFileSync(path, "utf8"));
       if (value === null || typeof value !== "object" || Array.isArray(value)) throw new Error("Desktop preferences must be an object.");
-      this.values = Object.fromEntries(Object.entries(value).filter(([key]) => key.startsWith("0sec:")));
+      this.values = Object.fromEntries(Object.entries(value).filter(([key]) => key.startsWith("0:")));
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
       this.values = {};
@@ -24,7 +24,7 @@ export class DesktopPreferences {
   }
 
   set(key: unknown, value: unknown): Promise<void> {
-    if (typeof key !== "string" || !key.startsWith("0sec:")) throw new Error("Invalid desktop preference key.");
+    if (typeof key !== "string" || !key.startsWith("0:")) throw new Error("Invalid desktop preference key.");
     const encoded = JSON.stringify(value);
     if (encoded === undefined) throw new Error("Desktop preferences must contain JSON values.");
     this.values[key] = JSON.parse(encoded);

@@ -1,6 +1,6 @@
 /**
  * Tests for the `scan_completed` event payload shape, with a focus on
- * the cost-surfacing fields added in 0sec#231 (`cost_usd`,
+ * the cost-surfacing fields added in 0#231 (`cost_usd`,
  * `cost_breakdown`, `cost_per_flag`).
  *
  * These tests exercise the bus mechanics — a sink subscribed before
@@ -60,11 +60,11 @@ describe("eventBus.emit('scan_completed', …) cost fields", () => {
     expect(observed[0]!.payload).toEqual(payload);
   });
 
-  // 0sec#659 / 0cloud#1278 — the always-on OAST-confirmation event must flow
-  // through the bus AND serialize to the exact 0SEC_EVENT line the worker
+  // 0#659 / 0cloud#1278 — the always-on OAST-confirmation event must flow
+  // through the bus AND serialize to the exact ZERO_EVENT line the worker
   // relays into scan_events (event_type='oast_confirmed'), which the cloud
   // verify-claim EXISTS + #570 badge correlate on.
-  it("fans an oast_confirmed event to subscribers and cloudEventSink emits 0SEC_EVENT_OAST_CONFIRMED", () => {
+  it("fans an oast_confirmed event to subscribers and cloudEventSink emits ZERO_EVENT_OAST_CONFIRMED", () => {
     const observed: Array<{ type: EventType; payload: Record<string, unknown> }> = [];
     eventBus.subscribe({
       emit: (type, payload) => observed.push({ type, payload }),
@@ -74,7 +74,7 @@ describe("eventBus.emit('scan_completed', …) cost fields", () => {
       category: "ssrf",
       oracle: "oast-callback",
       hasPov: true,
-      reason: "DNS callback: host=abc.oast.0sec.ai",
+      reason: "DNS callback: host=abc.oast.0.ai",
     };
 
     const writes: string[] = [];
@@ -94,9 +94,9 @@ describe("eventBus.emit('scan_completed', …) cost fields", () => {
     expect(observed).toHaveLength(1);
     expect(observed[0]!.type).toBe("oast_confirmed");
     expect(observed[0]!.payload).toEqual(payload);
-    // The worker lowercases 0SEC_EVENT_<TYPE> → event_type='oast_confirmed'.
+    // The worker lowercases ZERO_EVENT_<TYPE> → event_type='oast_confirmed'.
     const line = writes.join("");
-    expect(line).toContain("0SEC_EVENT_OAST_CONFIRMED");
+    expect(line).toContain("ZERO_EVENT_OAST_CONFIRMED");
     expect(line).toContain('"findingId":"eng-abc123"');
   });
 

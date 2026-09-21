@@ -7,7 +7,7 @@ import {
   fetchScoped,
   type JsReconResult,
   type FetchTextResult,
-} from "@0sec/core";
+} from "@0/core";
 
 interface JsReconCliOptions {
   json?: boolean;

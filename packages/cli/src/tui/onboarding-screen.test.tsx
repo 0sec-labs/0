@@ -29,7 +29,7 @@ import {
 const tempHomes: string[] = [];
 
 function makeHome(): string {
-  const dir = mkdtempSync(join(tmpdir(), "0sec-onboarding-"));
+  const dir = mkdtempSync(join(tmpdir(), "0-onboarding-"));
   tempHomes.push(dir);
   return dir;
 }

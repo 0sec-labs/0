@@ -1,5 +1,5 @@
 /**
- * Pure, deterministic per-frame animation for the "0SECURITY" block-logo intro.
+ * Pure, deterministic per-frame animation for the "ZEROSECURITY" block-logo intro.
  *
  * This module owns only the *logic* of the intro: given the base logo grid
  * (the three-letter colour map used by the masthead — `' '` empty, `'#'` white,
@@ -137,7 +137,7 @@ export function logoRowRuns(row: readonly LogoCellState[]): LogoRun[] {
 
 /**
  * One-shot frame budgets per style (the number of distinct frames in the
- * intro). Sized for the shipped 0SEC mark (5 rows x 35 cols) but the compute
+ * intro). Sized for the shipped ZERO mark (5 rows x 35 cols) but the compute
  * function scales its thresholds to the actual grid, so a differently-sized
  * grid still reveals fully by the final frame.
  *
@@ -361,7 +361,7 @@ const DRAW_TIP: readonly string[] = ["#ffffff", "#ffcfa3"];
  * The "hot edge" tone for the reveal styles (strike/typein/sweep) and the pulse
  * peak. A bright ORANGE — brighter than the settled brand orange — so a leading edge
  * still reads as hotter than the mark behind it, WITHOUT the purple that belongs
- * to the 0sec voice rather than the logo.
+ * to the 0 voice rather than the logo.
  */
 const HOT_RED = "#ffb25e";
 

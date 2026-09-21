@@ -19,7 +19,7 @@ export function connectionRecoveryForError(error: string): ConnectionRecovery | 
 
   // Cloud credentials are not upstream provider keys. In particular, scope,
   // credit, catalog and service failures must never open a vendor's key form.
-  if (/0cloud|0sec[- ]cloud|0sec hosted models|RuntimeConfig\.provider\s*=\s*hosted/i.test(detail)) {
+  if (/0cloud|0[- ]cloud|0 hosted models|RuntimeConfig\.provider\s*=\s*hosted/i.test(detail)) {
     if (/\b(?:HTTP|API error)\s*:?\s*401\b/i.test(detail)
       || /RuntimeConfig\.provider\s*=\s*hosted has no configured credentials/i.test(detail)) {
       return { providerId: "hosted", title: "Sign in to 0cloud", detail };
@@ -33,7 +33,7 @@ export function connectionRecoveryForError(error: string): ConnectionRecovery | 
   if (status && status !== "401" && status !== "403") return null;
   if (!/\b(?:401|403|unauthori[sz]ed|forbidden|authentication|credentials?|api[_ ]?key|invalid (?:key|token)|token refresh|refresh[_ ]token)\b/i.test(detail)) return null;
 
-  if (/chatgpt.*codex|codex.*(?:token|auth|login|backend)|0sec_chatgpt/i.test(detail)) {
+  if (/chatgpt.*codex|codex.*(?:token|auth|login|backend)|0_chatgpt/i.test(detail)) {
     return {
       providerId: "chatgpt-codex",
       title: "ChatGPT Codex needs to reconnect",

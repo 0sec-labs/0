@@ -11,7 +11,7 @@ import {
   writeSync,
   fsyncSync,
 } from "node:fs";
-import { homeStateDir } from "@0sec/shared";
+import { homeStateDir } from "@0/shared";
 import { readFile } from "node:fs/promises";
 import { createHash, randomUUID } from "node:crypto";
 import { homedir } from "node:os";
@@ -87,7 +87,7 @@ export interface BranchJournalOptions {
   fromEntry: number;
   /** Optional human-readable label baked into the new run ID. */
   label?: string;
-  /** Override the runs root directory (default: `~/.0sec/runs`). */
+  /** Override the runs root directory (default: `~/.0/runs`). */
   rootDir?: string;
 }
 
@@ -528,7 +528,7 @@ function sanitizeExtension(ext: string): string {
 
 // Linux PIPE_BUF — the threshold below which POSIX guarantees `write(2)` on
 // an `O_APPEND` fd is atomic against concurrent writers. macOS uses a much
-// smaller 512-byte PIPE_BUF, but 0sec agents run primarily on Linux, and
+// smaller 512-byte PIPE_BUF, but 0 agents run primarily on Linux, and
 // the test target for concurrent journal correctness is Linux. We warn at
 // the Linux ceiling so operators notice when a line crosses into "not
 // atomic anywhere" territory.
@@ -559,7 +559,7 @@ function atomicAppendJsonLine(path: string, entry: JournalEntry): void {
     process.emitWarning(
       `journal line ${bytes.byteLength}B exceeds PIPE_BUF (${LINUX_PIPE_BUF}B); ` +
         `concurrent writers may interleave. Consider forcing the artifact to a sidecar.`,
-      { code: "0SEC_JOURNAL_LINE_TOO_LARGE", type: "Warning" },
+      { code: "ZERO_JOURNAL_LINE_TOO_LARGE", type: "Warning" },
     );
   }
 

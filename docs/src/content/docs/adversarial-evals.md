@@ -11,8 +11,8 @@ Three distinct implementations answer different questions:
 
 | Path | What it evaluates | What a success means |
 | --- | --- | --- |
-| `@0sec/benchmark` adversarial harnesses | Synthetic MCP tool misuse, indirect injection and persistence cases | The scanner detected the expected finding categories in a controlled fixture |
-| `@0sec/llm-redteam` campaigns | Generated indirect-injection payloads against mock or OpenAI-compatible chat targets | The configured regex/LLM judge matched a behavior's success criterion |
+| `@0/benchmark` adversarial harnesses | Synthetic MCP tool misuse, indirect injection and persistence cases | The scanner detected the expected finding categories in a controlled fixture |
+| `@0/llm-redteam` campaigns | Generated indirect-injection payloads against mock or OpenAI-compatible chat targets | The configured regex/LLM judge matched a behavior's success criterion |
 | `0 agent-assure` | A customer-owned agent adapter, its MCP inventory and an independent state observer | A complete observer result reports the prohibited action as observed or not observed |
 
 These are not interchangeable scores. A synthetic detection pass is not proof
@@ -22,9 +22,9 @@ proof that an external action executed.
 The benchmark package has scripts for local fixtures:
 
 ```bash
-pnpm --filter @0sec/benchmark adversarial-tool-misuse --json
-pnpm --filter @0sec/benchmark adversarial-indirect-prompt-injection --json
-pnpm --filter @0sec/benchmark adversarial-persistence --json
+pnpm --filter @0/benchmark adversarial-tool-misuse --json
+pnpm --filter @0/benchmark adversarial-indirect-prompt-injection --json
+pnpm --filter @0/benchmark adversarial-persistence --json
 ```
 
 Use a prepared repository development environment. These runners start local
@@ -102,7 +102,7 @@ redaction and hashed artifacts. A broader adversarial-eval report should also ca
 - whether the failure is specific to agent/tool composition
 - whether it's an authorization, tool-use, or instruction-hijack failure
 
-<span id="relationship-to-0sec-cloud"></span>
+<span id="relationship-to-0-cloud"></span>
 ## Product scope
 
 Use the local harness and your configured model connections for these workflows.

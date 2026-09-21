@@ -1,5 +1,5 @@
 import { afterEach, expect, test, vi } from "vitest";
-import { CloudClient, type ConsoleSession, type NativeRuntime } from "@0sec/core";
+import { CloudClient, type ConsoleSession, type NativeRuntime } from "@0/core";
 import { launch, type TuiHandle } from "../index.js";
 import { updateSetting } from "../../../src/tui/settings-store.js";
 
@@ -8,8 +8,8 @@ const captured = vi.hoisted(() => ({
   execute: undefined as NativeRuntime["executeNative"] | undefined,
   accountScenario: "normal" as "normal" | "missing" | "changed",
 }));
-vi.mock("@0sec/core", async (original) => {
-  const actual = await original<typeof import("@0sec/core")>();
+vi.mock("@0/core", async (original) => {
+  const actual = await original<typeof import("@0/core")>();
   return {
     ...actual,
     loadCloudCredentials: (...args: Parameters<typeof actual.loadCloudCredentials>) => {
@@ -60,7 +60,7 @@ test.each([
     route: { type: "chat", options: { providerId: "hosted", model: "fixture-private-model" } },
     // Keep optional live-harness persistence outside this metadata regression.
     settings: { onboardingCompleted: true, showContextMeter, allowModelSelfExtension: false },
-    env: { "0SEC_PROVIDER": "hosted", "0SEC_MODEL": "fixture-private-model", "0SEC_CLOUD_TOKEN": "synthetic-fixture-only" },
+    env: { "ZERO_PROVIDER": "hosted", "ZERO_MODEL": "fixture-private-model", "ZERO_CLOUD_TOKEN": "synthetic-fixture-only" },
   });
   await expect.poll(async () => {
     await tui!.settle();

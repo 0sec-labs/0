@@ -85,7 +85,7 @@ Guide: [Read the workflow](/console/).
 | `--scope <file>` | — | Initial authorization scope. Non-TUI YOLO requires at least one in_scope entry; a scope file is not an OS-isolation boundary. |
 | `--finding <id>` | — | Focus the chat on one persisted finding |
 | `--finding-intent <intent>` | — | Finding workflow: investigate, verify, draft_fix, or impact. These instructions do not independently enforce tool permissions. |
-| `--db-path <path>` | — | Persistent findings database (defaults to 0SEC_DB_PATH or the local store) |
+| `--db-path <path>` | — | Persistent findings database (defaults to ZERO_DB_PATH or the local store) |
 | `-m, --model <id>` | — | Model selection for the console. Saved-session precedence differs across TUI, readline, and print paths; see Console. |
 | `--role <role>` | — | Tool set to expose: audit, review, discovery, attack, verify, or report. Defaults to audit; role selection is not authorization or OS isolation. |
 | `--mode <mode>` | — | Autonomy mode: standard, recon, copilot, yolo. YOLO accepts absolute public-network targets without a launch target; explicit restrictions and exclusions still apply. |
@@ -354,7 +354,7 @@ Guide: [Read the workflow](/getting-started/).
 | Option | Registered default | Description |
 | --- | --- | --- |
 | `--version <tag>` | — | Pin a specific release tag (e.g. v0.10.0) |
-| `--install-dir <path>` | — | Override the install directory (default: ~/.0sec/bin) |
+| `--install-dir <path>` | — | Override the install directory (default: ~/.0/bin) |
 | `--scan-dependencies` | — | Scan the current project before upgrading |
 | `--fix-dependencies` | — | Refuse upgrade when vulnerabilities are present; use `0 deps fix --yes` to remediate |
 
@@ -418,35 +418,35 @@ Guide: [Read the workflow](/scan-workflows/).
 | `--depth <depth>` | `default` | Scan depth: quick, default, deep |
 | `--format <format>` | `terminal` | Output format: terminal, json, md, html, sarif, pdf |
 | `--runtime <runtime>` | `auto` | Runtime: auto (default), api, claude, codex, gemini |
-| `--mode <mode>` | — | Scan mode: probe, deep, mcp, web, http_audit. `http_audit` is the worker-driven authed HTTP scan: it reads target config from 0SEC_TARGET_* env vars (0SEC_TARGET_BASE_URL, 0SEC_TARGET_AUTH_JSON, 0SEC_TARGET_ALLOWED_HOSTS, 0SEC_TARGET_ALLOWED_PATHS, 0SEC_TARGET_RATE_LIMIT_RPS, 0SEC_TARGET_KILL_AFTER_SEC), builds an in-memory ScopePolicy + path allowlist + per-host RateLimiter + wall-clock kill switch, runs the web-pentest loop, and emits an enforcement_summary block in the report JSON. |
+| `--mode <mode>` | — | Scan mode: probe, deep, mcp, web, http_audit. `http_audit` is the worker-driven authed HTTP scan: it reads target config from ZERO_TARGET_* env vars (ZERO_TARGET_BASE_URL, ZERO_TARGET_AUTH_JSON, ZERO_TARGET_ALLOWED_HOSTS, ZERO_TARGET_ALLOWED_PATHS, ZERO_TARGET_RATE_LIMIT_RPS, ZERO_TARGET_KILL_AFTER_SEC), builds an in-memory ScopePolicy + path allowlist + per-host RateLimiter + wall-clock kill switch, runs the web-pentest loop, and emits an enforcement_summary block in the report JSON. |
 | `--timeout <ms>` | `30000` | Request timeout in milliseconds |
 | `--db-path <path>` | — | Path to SQLite database |
 | `--api-key <key>` | — | API key for LLM provider |
 | `-m, --model <model>` | — | LLM model to use |
 | `--repo <path>` | — | Source code path for white-box scanning (read code before attacking) |
 | `--auth <json>` | — | Auth credentials as JSON string or path to JSON file (types: bearer, cookie, basic, header) |
-| `--scope <path>` | — | Path to a JSON scope file ({in_scope, out_of_scope} arrays of host / *.domain / cidr rules). Out-of-scope URLs return as ToolResult.error at every fetch site. See 0sec#215. |
-| `--allow-scanners` | `false` | Disable the generic-scanner suppression gate (0sec#217). When --scope is set, the agent refuses to spawn sqlmap/wpscan/nikto/gobuster/dirb/wfuzz/ffuf/`nmap -sV`/`nmap -A` by default; pass this flag only when the engagement explicitly permits generic-scanner traffic. |
-| `--require-scope` | `false` | Set 0SEC_REQUIRE_SCOPE for scope-aware execution paths. Ordinary live-target scan already refuses missing scope, independently of this flag. |
-| `--attribution-header <name=value>` | — | Attribution header to attach to in-scope outbound requests (0sec#216). Repeatable: pass `--attribution-header X-A=1 --attribution-header X-B=2`. Lower precedence than the scope file's `attribution.headers` block and 0SEC_ATTRIBUTION_HEADERS env var. NEVER attached to out-of-scope traffic. |
-| `--attribution-ua <token>` | — | Engagement token to embed in the User-Agent on in-scope traffic (0sec#216). Resulting UA: `0sec/&lt;ver&gt; (engagement: &lt;token&gt;)`. Lower precedence than the scope file's `attribution.user_agent_token` and 0SEC_ATTRIBUTION_UA_TOKEN env var. |
+| `--scope <path>` | — | Path to a JSON scope file ({in_scope, out_of_scope} arrays of host / *.domain / cidr rules). Out-of-scope URLs return as ToolResult.error at every fetch site. See 0#215. |
+| `--allow-scanners` | `false` | Disable the generic-scanner suppression gate (0#217). When --scope is set, the agent refuses to spawn sqlmap/wpscan/nikto/gobuster/dirb/wfuzz/ffuf/`nmap -sV`/`nmap -A` by default; pass this flag only when the engagement explicitly permits generic-scanner traffic. |
+| `--require-scope` | `false` | Set ZERO_REQUIRE_SCOPE for scope-aware execution paths. Ordinary live-target scan already refuses missing scope, independently of this flag. |
+| `--attribution-header <name=value>` | — | Attribution header to attach to in-scope outbound requests (0#216). Repeatable: pass `--attribution-header X-A=1 --attribution-header X-B=2`. Lower precedence than the scope file's `attribution.headers` block and ZERO_ATTRIBUTION_HEADERS env var. NEVER attached to out-of-scope traffic. |
+| `--attribution-ua <token>` | — | Engagement token to embed in the User-Agent on in-scope traffic (0#216). Resulting UA: `0/&lt;ver&gt; (engagement: &lt;token&gt;)`. Lower precedence than the scope file's `attribution.user_agent_token` and ZERO_ATTRIBUTION_UA_TOKEN env var. |
 | `--api-spec <path>` | — | Path to OpenAPI 3.x / Swagger 2.0 spec file (JSON or YAML) for pre-loaded endpoint knowledge |
 | `--export <target>` | — | Export findings to issue tracker (e.g. github:owner/repo) |
 | `--race` | `false` | Enable benchmark/CTF best-of-N strategy racing: run multiple flag-oriented attack strategies in parallel. Do not use for normal live-target audits. |
 | `--egats` | `false` | Enable EGATS (Evidence-Gated Attack Tree Search): beam-search over a hypothesis tree |
-| `--cost-ceiling <usd>` | — | Soft estimated-model-cost ceiling; partial findings are retained when enforcement trips. In-flight work may overshoot. Overrides 0SEC_COST_CEILING_USD. |
+| `--cost-ceiling <usd>` | — | Soft estimated-model-cost ceiling; partial findings are retained when enforcement trips. In-flight work may overshoot. Overrides ZERO_COST_CEILING_USD. |
 | `--rate-limit <spec>` | — | Per-host requests-per-second cap for outbound scan traffic. Plain number (e.g. '5') sets the default rps; comma-separated form 'api.example.com=5,*.example.com=3:6,2' allows per-host overrides and a fallback default. Default is 5 rps when unset. Each host carries an independent token bucket; 429 responses honour Retry-After (with a conservative 60s floor). |
-| `--engagement-profile <name>` | — | Engagement hardening posture for authorized enterprise work. 'standard' (default) is the existing behaviour. 'conservative' applies ONE quiet posture: no password-reset burst probe, the deterministic web-recon pre-pass routed through the per-host rate limiter, no adaptive WAF-evasion ladder, full jitter on the token bucket, and a reduced default of 1 rps/host. The applied posture is recorded in the report as `engagementPosture` so it can be handed to the client as evidence. Lower precedence than the scope file's `engagement` block and 0SEC_ENGAGEMENT_PROFILE. |
-| `--no-waf-evasion` | — | Disable the adaptive WAF-evasion ladder (default: on). When a response classifies as blocked, the engine normally retries with encoding/casing/whitespace-mutated payload variants, which escalates a routine WAF block into a SOC incident. Detection and reporting of the block are unaffected. Independent of --engagement-profile; env form: 0SEC_WAF_EVASION=0. |
+| `--engagement-profile <name>` | — | Engagement hardening posture for authorized enterprise work. 'standard' (default) is the existing behaviour. 'conservative' applies ONE quiet posture: no password-reset burst probe, the deterministic web-recon pre-pass routed through the per-host rate limiter, no adaptive WAF-evasion ladder, full jitter on the token bucket, and a reduced default of 1 rps/host. The applied posture is recorded in the report as `engagementPosture` so it can be handed to the client as evidence. Lower precedence than the scope file's `engagement` block and ZERO_ENGAGEMENT_PROFILE. |
+| `--no-waf-evasion` | — | Disable the adaptive WAF-evasion ladder (default: on). When a response classifies as blocked, the engine normally retries with encoding/casing/whitespace-mutated payload variants, which escalates a routine WAF block into a SOC incident. Detection and reporting of the block are unaffected. Independent of --engagement-profile; env form: ZERO_WAF_EVASION=0. |
 | `--tui` | `false` | Open the local terminal UI after the scan completes |
-| `--features <list>` | — | Comma-separated list of opt-in feature flags to enable for this scan (e.g. 'wp_fingerprint,web_search'). Each flag maps to the corresponding 0SEC_FEATURE_&lt;NAME&gt; environment variable. The token 'fp-moat' is a preset that enables the full false-positive moat (reachability, multi-modal, publishability, pov-gate, poc-gen, consensus) for an A/B run; an env var you set yourself always wins over the preset, so '0SEC_FEATURE_POV_GATE=0 --features fp-moat' is a single-layer ablation. |
+| `--features <list>` | — | Comma-separated list of opt-in feature flags to enable for this scan (e.g. 'wp_fingerprint,web_search'). Each flag maps to the corresponding ZERO_FEATURE_&lt;NAME&gt; environment variable. The token 'fp-moat' is a preset that enables the full false-positive moat (reachability, multi-modal, publishability, pov-gate, poc-gen, consensus) for an A/B run; an env var you set yourself always wins over the preset, so 'ZERO_FEATURE_POV_GATE=0 --features fp-moat' is a single-layer ablation. |
 | `--no-decoy-detection` | — | Disable the anti-honeypot flag-shape validator (default: on). When enabled, the `done` tool rejects low-confidence flags (e.g. `FLAG{I'm_a_Script_Kiddie}`) once with a hint to keep exploring. See GitHub issue #82. |
-| `--dispatch <mode>` | `auto` | Tool-call protocol for the legacy text agent loop (0sec#232): 'json' (default TOOL_CALL JSON lines), 'xml' (&lt;command&gt;/&lt;flag&gt;/&lt;finding&gt;/&lt;note&gt; tags — survives malformed JSON from cheap OpenRouter / Gemini / DeepSeek models), or 'auto' (xml for cheap providers, json otherwise). No effect on the native API loop. Env override: 0SEC_DISPATCH=xml. |
-| `--emit <target>` | — | Emit target. Default unset → existing terminal/json/etc. `pr` → emit each reproduced finding as a GitHub PR with repro + suggested patch (0sec#377). Unverified findings roll up into `hypotheses.md`. |
+| `--dispatch <mode>` | `auto` | Tool-call protocol for the legacy text agent loop (0#232): 'json' (default TOOL_CALL JSON lines), 'xml' (&lt;command&gt;/&lt;flag&gt;/&lt;finding&gt;/&lt;note&gt; tags — survives malformed JSON from cheap OpenRouter / Gemini / DeepSeek models), or 'auto' (xml for cheap providers, json otherwise). No effect on the native API loop. Env override: ZERO_DISPATCH=xml. |
+| `--emit <target>` | — | Emit target. Default unset → existing terminal/json/etc. `pr` → emit each reproduced finding as a GitHub PR with repro + suggested patch (0#377). Unverified findings roll up into `hypotheses.md`. |
 | `--base <branch>` | — | Base branch for `--emit pr` (default: main) |
 | `--dry-run` | `false` | For --emit pr only: print proposed git/gh emission commands. The scan itself still executes. |
 | `--emit-out-dir <path>` | — | Directory for `--emit pr` rollup files (default: system temp) |
-| `--resume <run-id>` | — | Resume a previous run from its journal on disk (0sec#374). Locates the run's journal, rehydrates agent state, and continues from the last entry. |
+| `--resume <run-id>` | — | Resume a previous run from its journal on disk (0#374). Locates the run's journal, rehydrates agent state, and continues from the last entry. |
 | `--branch-from <entry-index>` | — | Branch the journal at the given entry index before resuming (requires --resume). Copies entries 0..N into a new run and resumes from there. |
 | `--verbose` | `false` | Show detailed output |
 | `--replay` | `false` | Replay the last scan's results |
@@ -516,9 +516,9 @@ Guide: [Read the workflow](/scan-workflows/).
 | `--db-path <path>` | — | Path to SQLite database |
 | `--api-key <key>` | — | API key for LLM provider |
 | `-m, --model <model>` | — | LLM model to use |
-| `--cost-ceiling <usd>` | — | Soft estimated-model-cost ceiling; partial findings are retained when enforcement trips. In-flight work may overshoot. Overrides 0SEC_COST_CEILING_USD. |
+| `--cost-ceiling <usd>` | — | Soft estimated-model-cost ceiling; partial findings are retained when enforcement trips. In-flight work may overshoot. Overrides ZERO_COST_CEILING_USD. |
 | `--tui` | `false` | Open the local terminal UI after the audit completes |
-| `--resume <run-id>` | — | Resume a previous run from its journal on disk (0sec#374) |
+| `--resume <run-id>` | — | Resume a previous run from its journal on disk (0#374) |
 | `--branch-from <entry-index>` | — | Branch the journal at the given entry index before resuming (requires --resume). |
 | `--verbose` | `false` | Show detailed output |
 | `--timeout <ms>` | `600000` | AI agent timeout in milliseconds |
@@ -547,7 +547,7 @@ Guide: [Read the workflow](/scan-workflows/).
 | `--db-path <path>` | — | Path to SQLite database |
 | `--api-key <key>` | — | API key for LLM provider |
 | `-m, --model <model>` | — | LLM model to use |
-| `--cost-ceiling <usd>` | — | Soft estimated-model-cost ceiling; partial findings are retained when enforcement trips. In-flight work may overshoot. Overrides 0SEC_COST_CEILING_USD. |
+| `--cost-ceiling <usd>` | — | Soft estimated-model-cost ceiling; partial findings are retained when enforcement trips. In-flight work may overshoot. Overrides ZERO_COST_CEILING_USD. |
 | `--tui` | `false` | Open the local terminal UI after the review completes |
 | `--diff-base <ref>` | — | Git base ref to review against (for diff-aware review) |
 | `--changed-only` | `false` | Restrict static scanner leads + prioritization to changed files |
@@ -555,9 +555,9 @@ Guide: [Read the workflow](/scan-workflows/).
 | `--target <target>` | — | Alias for --profile; accepts the supported review profiles, with app normalized to default. |
 | `--ecosystem <ecosystem>` | — | Review the SOURCE of a published package instead of a repo: npm, pypi, cargo, or oci. When set, &lt;repo&gt; is the package NAME — 0 installs it and reviews its extracted source. Omit for a local path or git URL. |
 | `--package-version <version>` | — | Pin the package version to review (only with --ecosystem). Defaults to latest. |
-| `--seed-findings <path>` | — | Path to ND-JSON leads from an external producer. "-" reads stdin. Schema: gemmaforge.leads/v1. Tracked: 0sec#368. |
+| `--seed-findings <path>` | — | Path to ND-JSON leads from an external producer. "-" reads stdin. Schema: gemmaforge.leads/v1. Tracked: 0#368. |
 | `--seed-only` | `false` | Skip static scanner prioritisation and rely solely on --seed-findings. Only meaningful when --seed-findings is set. |
-| `--emit <target>` | — | Emit target. Default unset → existing terminal/json/etc. `pr` → emit each reproduced finding as a GitHub PR with repro + suggested patch (0sec#377). Unverified findings roll up into `hypotheses.md`. |
+| `--emit <target>` | — | Emit target. Default unset → existing terminal/json/etc. `pr` → emit each reproduced finding as a GitHub PR with repro + suggested patch (0#377). Unverified findings roll up into `hypotheses.md`. |
 | `--base <branch>` | — | Base branch for `--emit pr` (default: main) |
 | `--dry-run` | `false` | For --emit pr only: print proposed git/gh emission commands. The source review itself still executes. |
 | `--emit-out-dir <path>` | — | Directory for `--emit pr` rollup files (default: system temp) |
@@ -566,9 +566,9 @@ Guide: [Read the workflow](/scan-workflows/).
 | `--harness-header <path>` | — | Tier-2 only: header to #include in the emitted harness. Defaults to the function name with a .h suffix. |
 | `--harness-build-system <system>` | `auto` | Tier-2 only: build system to grep-parse for object subset (autotools, cmake, meson, auto). |
 | `--harness-sanitizers <list>` | — | Tier-2 only: comma-separated sanitizers to enable (asan, ubsan, msan). Default: asan,ubsan. |
-| `--harness-out <dir>` | — | Tier-2 only: output directory for the emitted harness + linker fragment. Defaults to &lt;repo&gt;/.0sec-out/tier2. |
-| `--harness-qemu-kernel <path>` | — | Tier-3 only: pre-built kernel image. Defaults to 0SEC_KERNEL_QEMU_KERNEL. |
-| `--harness-qemu-disk <path>` | — | Tier-3 only: pre-built rootfs image. Defaults to 0SEC_KERNEL_QEMU_DISK. |
+| `--harness-out <dir>` | — | Tier-2 only: output directory for the emitted harness + linker fragment. Defaults to &lt;repo&gt;/.0-out/tier2. |
+| `--harness-qemu-kernel <path>` | — | Tier-3 only: pre-built kernel image. Defaults to ZERO_KERNEL_QEMU_KERNEL. |
+| `--harness-qemu-disk <path>` | — | Tier-3 only: pre-built rootfs image. Defaults to ZERO_KERNEL_QEMU_DISK. |
 | `--harness-wall-clock-ms <ms>` | — | Tier-3 only: wall-clock budget in milliseconds for the full QEMU validation. Default 300000 (5m). |
 | `--subsystem <path>` | — | Restrict the review to a specific subsystem directory (e.g. crypto/, net/tcp/). Only meaningful with --profile linux-kernel. |
 | `--hypothesis <text>` | — | Operator hypothesis to seed the agent with a specific research direction. Modeled after Xint Code's operator prompt. |
@@ -577,7 +577,7 @@ Guide: [Read the workflow](/scan-workflows/).
 | `--fix-commit <sha>` | — | Analyze a security-fix commit and hunt for structurally similar unpatched code paths (variant hunting). Requires a local git repo. Resolves the commit to its full SHA and first-parent preimage. When used alone, feeds candidates as SeedFindings into the review pipeline. Combine with --variants-only to emit candidates as JSON without model/network calls. |
 | `--variants-only` | `false` | Emit full variant-hunt result as JSON (candidates, language coverage, errors) and exit. Requires --fix-commit. No model, cloud, or network calls are made. |
 | `--npm-dynamic` | `false` | Also run the npm dynamic-discovery detector sweep (SSPP fuzz / validation read-stability / SSRF parser-diff) over the package in a disposable sandbox. Only effective with --ecosystem npm. Confirmed leads flow into the same verify → disclosure path. |
-| `--resume <run-id>` | — | Resume a previous run from its journal on disk (0sec#374) |
+| `--resume <run-id>` | — | Resume a previous run from its journal on disk (0#374) |
 | `--branch-from <entry-index>` | — | Branch the journal at the given entry index before resuming (requires --resume). |
 | `--verbose` | `false` | Show detailed output |
 | `--timeout <ms>` | `600000` | AI agent timeout in milliseconds |
@@ -599,7 +599,7 @@ The repository can be a local Git checkout or an HTTPS Git URL. Execution is **h
 For example, after reviewing the repository's test command:
 
 ```bash
-0 secure ./my-repo --test-command "npm test" --state-dir "$HOME/.0sec/secure/my-repo"
+0 secure ./my-repo --test-command "npm test" --state-dir "$HOME/.0/secure/my-repo"
 ```
 
 The regression command must pass before and after a repair. Findings that cannot be reproduced or verified must not be treated as fixed. Inspect `repairs`, `repairedFindingIds`, `blockedFindingIds`, and `errors` as well as `status`: the current implementation can return `completed` while other findings remain blocked or errors are retained. Completion is not proof that every finding was fixed or that the repository contains no vulnerabilities.
@@ -656,11 +656,11 @@ Guide: [Read the workflow](/research-workflows/).
 | `--profile <p>` | — | Lens profile: evm-onchain \| solana-onchain \| cardano-onchain \| cairo-onchain \| move-onchain (else a generic default lens set) |
 | `--subsystem <path>` | — | Narrow the review scope to a subdirectory (respects the 5000-file review cap) |
 | `--evolution-config <path>` | — | Use the active source finder with private local execution receipts |
-| `--models <a,b>` | — | Comma-separated finder models for diversity (default: single provider model, or $0SEC_DEEP_REVIEW_MODELS) |
-| `--attempts <N>` | — | Finder attempts per candidate×lens×model, best-of-N (default 1, or $0SEC_DEEP_REVIEW_ATTEMPTS) |
+| `--models <a,b>` | — | Comma-separated finder models for diversity (default: single provider model, or $ZERO_DEEP_REVIEW_MODELS) |
+| `--attempts <N>` | — | Finder attempts per candidate×lens×model, best-of-N (default 1, or $ZERO_DEEP_REVIEW_ATTEMPTS) |
 | `--concurrency <N>` | — | Max finders in flight (default 8) |
 | `--cost-ceiling <usd>` | — | Shared estimated-model-cost ceiling for planner and finder work. Checks can stop further work after recorded usage reaches the threshold; in-flight calls can overshoot. |
-| `--max-candidates <N>` | — | Cap candidate files hunted, largest-first (default 8, or $0SEC_DEEP_REVIEW_MAX_CANDIDATES) |
+| `--max-candidates <N>` | — | Cap candidate files hunted, largest-first (default 8, or $ZERO_DEEP_REVIEW_MAX_CANDIDATES) |
 | `--threat-model` | — | Enable pre-selection threat-model planner pass (trust-boundary lanes); default OFF |
 | `--quorum <N>` | — | Multi-lens verify quorum (default: majority of the verify-lens count) |
 | `--format <fmt>` | `json` | Output format (json) |
@@ -966,7 +966,7 @@ Export an immutable scan timeline with UTC ISO-8601 timestamps, action summaries
 0 timeline [options] <scanId>
 ```
 
-The scan ID is resolved only in the selected database. For run-local storage, pass `--db-path ~/.0sec/runs/<scan-id>/state.db`, adjusted for your state directory.
+The scan ID is resolved only in the selected database. For run-local storage, pass `--db-path ~/.0/runs/<scan-id>/state.db`, adjusted for your state directory.
 
 Guide: [Read the workflow](/engagements/).
 
@@ -996,7 +996,7 @@ Guide: [Read the workflow](/verification-result/).
 
 | Argument | Required | Description |
 | --- | --- | --- |
-| `finding` | No | Path to a finding.json (0sec#193 deterministic-replay path). Equivalent to --finding when --runner is supplied. |
+| `finding` | No | Path to a finding.json (0#193 deterministic-replay path). Equivalent to --finding when --runner is supplied. |
 
 | Option | Registered default | Description |
 | --- | --- | --- |
@@ -1006,7 +1006,7 @@ Guide: [Read the workflow](/verification-result/).
 | `--qemu-binary <path>` | — | QEMU emulator for --runner qemu. |
 | `--qemu-kernel <path>` | — | Guest kernel image for --runner qemu. |
 | `--qemu-busybox <path>` | — | Static BusyBox binary used to build the offline QEMU guest. |
-| `--out <dir>` | — | 0sec#193 run directory (artifacts go under &lt;out&gt;/artifacts/). Defaults to a fresh tmpdir. |
+| `--out <dir>` | — | 0#193 run directory (artifacts go under &lt;out&gt;/artifacts/). Defaults to a fresh tmpdir. |
 | `--finding <path>` | — | Path to a finding.json. |
 | `--bundle <path>` | — | Path to a reproduction bundle directory; requires --runner local\|docker. Replays the bundle's vulnerable and patched snapshots through the configured runner and emits an aggregate ReproductionBundleResult. |
 | `--create-bundle <plan.json>` | — | Path to a BundlePlan JSON. Creates a reproduction bundle without executing any PoC steps. Requires --out &lt;bundle-dir&gt;. |
@@ -1018,7 +1018,7 @@ Guide: [Read the workflow](/verification-result/).
 | `--artifact-dir <path>` | — | Use this directory as the fixture sandbox root. |
 | `--format <fmt>` | `json` | Output format. Only 'json' is supported. |
 | `--output <path>` | — | Write the verification_result JSON to this path instead of stdout. |
-| `--kernel-finding <path>` | — | Path to a kernel-review finding.json. Runs the Tier 2 agent loop to produce a reproducer and promote the finding via the kernel oracle. Requires 0SEC_KERNEL_VERIFY=1. |
+| `--kernel-finding <path>` | — | Path to a kernel-review finding.json. Runs the Tier 2 agent loop to produce a reproducer and promote the finding via the kernel oracle. Requires ZERO_KERNEL_VERIFY=1. |
 | `--kernel-tree <path>` | — | Linux source tree used by --kernel-finding for Tier 1 kernel build. |
 | `--kernel-config <profile>` | `kasan` | Kernel build config profile for --kernel-finding (only 'kasan' supported). |
 | `--attempts <N>` | — | Max reproducer attempts for --kernel-finding (default 5). |
@@ -1044,7 +1044,7 @@ Subcommands: [evidence-pack](#disclose-evidence-pack) · [track](#disclose-track
 | --- | --- | --- |
 | `--db-path <path>` | — | Path to SQLite database |
 | `--scan <scanId>` | — | Restrict to findings from this scan |
-| `--output-dir <path>` | — | Directory to write advisories into (default ~/0sec/disclosures/scan-&lt;id&gt;) |
+| `--output-dir <path>` | — | Directory to write advisories into (default ~/0/disclosures/scan-&lt;id&gt;) |
 | `--severity-floor <severity>` | `medium` | In batch mode, only draft findings at or above this severity |
 | `--no-screenshots` | — | Skip terminal-screenshot rendering even when freeze is available |
 | `--repo <path>` | — | Local git checkout of the target repo to re-verify findings against |
@@ -1144,7 +1144,7 @@ Guide: [Read the workflow](/kernel-vm/).
 | `--kernel-tree <path>` | — | Linux source tree for Tier 1 kernel build/cache resolution |
 | `--kernel-config <name>` | — | Kernel build config name for --kernel-tree (e.g. kasan, defconfig+kasan) |
 | `--config <profile>` | — | [deprecated] alias for --kernel-config |
-| `--kernel-cache-dir <path>` | — | Kernel build cache directory (default: ~/.0sec/kernel-cache) |
+| `--kernel-cache-dir <path>` | — | Kernel build cache directory (default: ~/.0/kernel-cache) |
 | `--expected-signature <pattern>` | — | Registered but not forwarded to kernel verification; do not rely on this option as a required crash-signature match. |
 | `--force-kernel-build` | — | Rebuild kernel VM artifacts even when a cache entry exists |
 | `--review-subsystem` | — | After ingest, run linux-kernel review against the crash subsystem for sibling bugs |
@@ -1157,7 +1157,7 @@ Guide: [Read the workflow](/kernel-vm/).
 | `--review-subsystem-fixture <path>` | — |  |
 | `-v, --verbose` | — | Verbose output |
 | `--persist` | — | Write ingested findings to an isolated 0 run database (default: classify only) |
-| `--db-path <path>` | — | Explicit SQLite path for --persist (default: a new ~/.0sec/runs/&lt;run-id&gt;/state.db) |
+| `--db-path <path>` | — | Explicit SQLite path for --persist (default: a new ~/.0/runs/&lt;run-id&gt;/state.db) |
 
 #### Real kernel VM verification
 
@@ -1229,7 +1229,7 @@ Run the existing web/AI/source/package pipeline through the shared evidence plan
 | `--profile <profile>` | — | Source review profile |
 | `--depth <depth>` | `default` | quick, default, or deep |
 | `--runtime <runtime>` | `auto` | auto, api, claude, codex, gemini, or ollama |
-| `--artifact-root <path>` | `.0sec-research` | Research artifact root |
+| `--artifact-root <path>` | `.0-research` | Research artifact root |
 
 #### research mobile
 
@@ -1242,7 +1242,7 @@ Run passive mobile intake; indicators remain hypotheses and only scoped adapters
 | Option | Registered default | Description |
 | --- | --- | --- |
 | `--target <path>` **required** | — | Extracted APK/IPA directory or metadata file |
-| `--artifact-root <path>` | `.0sec-research` | Research artifact root |
+| `--artifact-root <path>` | `.0-research` | Research artifact root |
 
 #### research linux-matrix
 
@@ -1256,7 +1256,7 @@ Validate and hash vulnerable-vs-patched boot logs from externally executed runs.
 | --- | --- | --- |
 | `--matrix <path>` **required** | — | Versioned external boot-matrix manifest JSON |
 | `--finding <path>` **required** | — | Existing Finding JSON to bind the proof to |
-| `--artifact-root <path>` | `.0sec-research` | Research artifact root |
+| `--artifact-root <path>` | `.0-research` | Research artifact root |
 
 #### research linux
 
@@ -1274,7 +1274,7 @@ Run a supplied Linux kernel reproducer through the shared N-boot evidence gate
 | `--expected-signature <literal>` **required** | — | Literal crash signature that every counted boot must contain |
 | `--boots <n>` | `3` | Fresh boots |
 | `--min-hits <n>` | `2` | Required reproducing boots |
-| `--artifact-root <path>` | `.0sec-research` | Research artifact root |
+| `--artifact-root <path>` | `.0-research` | Research artifact root |
 
 ### hunt
 
@@ -1299,8 +1299,8 @@ Guide: [Read the workflow](/research-workflows/).
 | `--reachable-prefer` | — | Sort kernelCTF-reachable candidates first, without dropping any (default: HUNT_REACHABLE_PREFER env) |
 | `--no-verify` | — | Skip the skeptic gate (emit all raw findings — triage only, never disclosure) |
 | `--novelty` | — | Require lore.kernel.org duplicate suppression; abort before discovery when evidence is unavailable |
-| `--novelty-root <path>` | — | Lore mirror root (default: 0SEC_LORE_MIRROR_ROOT or /root/lore-mirror) |
-| `--novelty-lists <a,b>` | — | Comma-separated lore lists to search (default: 0SEC_LORE_LISTS or linux-media) |
+| `--novelty-root <path>` | — | Lore mirror root (default: ZERO_LORE_MIRROR_ROOT or /root/lore-mirror) |
+| `--novelty-lists <a,b>` | — | Comma-separated lore lists to search (default: ZERO_LORE_LISTS or linux-media) |
 | `--novelty-recent-epochs <N>` | — | Newest public-inbox epochs to sync per list when --novelty-sync is set (default 1) |
 | `--novelty-sync` | — | Clone/fetch lore mirrors before running the novelty gate |
 | `--novelty-model <model>` | — | Optional model override for the lore duplicate judge |
@@ -1308,7 +1308,7 @@ Guide: [Read the workflow](/research-workflows/).
 | `--methodology` | — | Use the kernel-LPE methodology preset: lifecycle/provenance lenses, best-of-4, top-2 skeptic gate, reachable-first |
 | `--invariant` | — | Engine A: build (or load) the seed-touched subsystem's stored invariant model and inject its rules + deterministic violation hypotheses into every finder prompt |
 | `--graph-slice` | — | Load the seed-touched subsystem's pre-exported Joern CPG and inject a compact interprocedural reachability slice around the fix site into every finder prompt (needs scripts/provision-cpg.sh; fail-open to flat-text) |
-| `--cpg <path>` | — | Explicit CPG graphson JSON path for --graph-slice (default: &lt;source&gt;/.0sec/cpg/&lt;subsystem&gt;.json) |
+| `--cpg <path>` | — | Explicit CPG graphson JSON path for --graph-slice (default: &lt;source&gt;/.0/cpg/&lt;subsystem&gt;.json) |
 | `--ops-harvest <paths>` | — | [--graph-slice] Comma-separated repo-relative C files to harvest static ops-struct initializers from; overrides a precomputed .ops.json |
 | `--graph-slice-hops <N>` | — | [--graph-slice] Call-graph radius around the seed functions (default 3; use 8 for the exp527 known answer) |
 | `--exploitability` | — | PROVE stage: after the skeptic+prover gate, run the execution-verified exploitability oracle on each confirmed finding (GREBE diversify + SCAVY differential). BOOTS REAL QEMU VMs — requires staged kernel-VM artifacts and is ignored under --no-verify. Never rejects a finding; it stamps a proven verdict and gates the weaponize budget. |
@@ -1369,7 +1369,7 @@ Guide: [Read the workflow](/research-workflows/).
 | --- | --- | --- |
 | `--files <a.c,b.c>` **required** | — | Comma-separated subsystem source files, repo-relative to &lt;source-root&gt; |
 | `--subsystem <label>` | — | Subsystem label for the stored model (e.g. net/unix) |
-| `--model-path <path>` | — | Where the durable assumption model JSON lives (default under &lt;source-root&gt;/.0sec) |
+| `--model-path <path>` | — | Where the durable assumption model JSON lives (default under &lt;source-root&gt;/.0) |
 | `--remine` | — | Force a fresh LLM mine even if the stored model exists |
 | `--skip-hunt` | — | Stop after the deterministic caller-scan (no LLM finder/skeptic gate) |
 | `--no-verify` | — | Run the finder fan-out but skip the skeptic gate |
@@ -1378,7 +1378,7 @@ Guide: [Read the workflow](/research-workflows/).
 | `--no-wrapper-resolution` | — | Disable v1 establisher-wrapper resolution (reproduces the v0 direct-token scan — FP ablation) |
 | `--no-finder-targeting` | — | Feed the finder the whole subsystem file instead of focused per-function excerpts |
 | `--no-dual-view` | — | Disable the v2 dual-api/cross-phase enumerator (caller-scan only — the v1 behavior) |
-| `--dynamic-witness` | — | v3: route dual-view candidates to the KASAN synthesize→boot→witness oracle (bypasses the static skeptic). Needs a KASAN VM env (0SEC_KERNEL_QEMU_*). |
+| `--dynamic-witness` | — | v3: route dual-view candidates to the KASAN synthesize→boot→witness oracle (bypasses the static skeptic). Needs a KASAN VM env (ZERO_KERNEL_QEMU_*). |
 | `--witness-rounds <N>` | — | Bounded PoC-repair rounds per dual-view candidate (default 3) |
 | `--witness-candidates <N>` | — | Cap dual-view candidates run through the dynamic oracle (default 10) |
 | `--witness-model <name>` | — | Model for PoC synthesis (default: runtime default) |
@@ -1434,7 +1434,7 @@ Subcommands: [jev-prepass](#kernel-jev-prepass) · [jev-commit-prepass](#kernel-
 
 #### kernel jev-prepass
 
-Ranks source-review hypotheses before kernel verification. Requires `0SEC_JEV_FEATURES=kernel` and a configured Jev provider. Scores are advisory; verification runs only when `--verify-top` is greater than `0`.
+Ranks source-review hypotheses before kernel verification. Requires `ZERO_JEV_FEATURES=kernel` and a configured Jev provider. Scores are advisory; verification runs only when `--verify-top` is greater than `0`.
 
 ```text
 0 kernel jev-prepass [options]
@@ -1451,7 +1451,7 @@ Ranks source-review hypotheses before kernel verification. Requires `0SEC_JEV_FE
 
 #### kernel jev-commit-prepass
 
-Ranks commit diffs from a bounded Linux Git history for deeper review. Requires `0SEC_JEV_FEATURES=kernel` and a configured Jev provider. A score is not a confirmed vulnerability.
+Ranks commit diffs from a bounded Linux Git history for deeper review. Requires `ZERO_JEV_FEATURES=kernel` and a configured Jev provider. A score is not a confirmed vulnerability.
 
 ```text
 0 kernel jev-commit-prepass [options]
@@ -1467,7 +1467,7 @@ Ranks commit diffs from a bounded Linux Git history for deeper review. Requires 
 
 #### kernel jev-source-prepass
 
-Extracts C functions from a kernel subtree or source file and ranks them with Jev. Requires `0SEC_JEV_FEATURES=kernel` and a configured provider. The JSON ledger reports evaluated and unscored functions separately.
+Extracts C functions from a kernel subtree or source file and ranks them with Jev. Requires `ZERO_JEV_FEATURES=kernel` and a configured provider. The JSON ledger reports evaluated and unscored functions separately.
 
 ```text
 0 kernel jev-source-prepass [options]
@@ -1481,7 +1481,7 @@ Extracts C functions from a kernel subtree or source file and ranks them with Je
 
 #### kernel crash-triage
 
-Ranks supplied crash records for further investigation. Requires `0SEC_JEV_FEATURES=crash` and a configured Jev provider. This command does not reproduce a crash or prove exploitability.
+Ranks supplied crash records for further investigation. Requires `ZERO_JEV_FEATURES=crash` and a configured Jev provider. This command does not reproduce a crash or prove exploitability.
 
 ```text
 0 kernel crash-triage [options]
@@ -1549,7 +1549,7 @@ Run foxguard-backed kernel advisory variant hunting
 
 ### radar
 
-Ranks recent repository commits for possible silent security fixes. Requires `0SEC_JEV_FEATURES=radar` and a configured Jev provider. Optional seed output feeds later investigation; ranking does not verify or dismiss vulnerabilities.
+Ranks recent repository commits for possible silent security fixes. Requires `ZERO_JEV_FEATURES=radar` and a configured Jev provider. Optional seed output feeds later investigation; ranking does not verify or dismiss vulnerabilities.
 
 ```text
 0 radar [options]
@@ -1588,7 +1588,7 @@ Guide: [Read the workflow](/research-workflows/).
 | `--proof-out <path>` | — | [--climb] Where to write the read-only root proof (default: temp dir). |
 | `--autoclimb` | — | Autonomous LLM-composed weaponization climb: the engine's OWN codegen loop composes each C body from the technique library + bug trigger + last verdict. |
 | `--bug-spec <path>` | — | [--autoclimb] JSON AutonomousClimbBug (trigger C, config-off, slab, ceiling). |
-| `--boot-script <path>` | — | [--autoclimb] Generic boot script ($1=composed .c, stdout=guest stdout, &lt;c&gt;.serial=dmesg). Or set 0SEC_AUTOCLIMB_BOOT_SCRIPT. |
+| `--boot-script <path>` | — | [--autoclimb] Generic boot script ($1=composed .c, stdout=guest stdout, &lt;c&gt;.serial=dmesg). Or set ZERO_AUTOCLIMB_BOOT_SCRIPT. |
 | `--model <id>` | — | [--autoclimb] Engine model id for the composer (default: engine runtime default). |
 | `--agent` | — | Agentic weaponization loop: the model gets a shell in an already-provisioned target and iterates recon → weaponize → build → run against real crash output, gated by the mechanical trigger→reclaim→leak→write→root stage gate. |
 | `--task <path>` | — | [--agent] Task/vuln description file (vuln doc + PoV + build). |
@@ -1989,7 +1989,7 @@ Guide: [Read the workflow](/improvement-plane/).
 | Option | Registered default | Description |
 | --- | --- | --- |
 | `--miss-input <path>` | — | curated miss-input JSON ({ misses, corpus }) |
-| `--registry <path>` | — | durable overlay path (default: ~/.0sec/lenses/appsec-archetypes.json) |
+| `--registry <path>` | — | durable overlay path (default: ~/.0/lenses/appsec-archetypes.json) |
 | `--max-register <n>` | — | cap promoted champions per input revision |
 | `-m, --model <id>` | — | synthesis model override |
 | `--promote` | `false` | persist a validated champion to the durable overlay |
@@ -2244,7 +2244,7 @@ Sweep a package worklist with the detectors and print confirmed findings.
 
 ### identity
 
-Assess an Entra ID (Azure AD) tenant's privileged roles, conditional-access coverage, app registrations, service principals, and federated-domain trust. Read-only. Supply the Graph token through `0SEC_GRAPH_ACCESS_TOKEN`; command-line tokens are refused.
+Assess an Entra ID (Azure AD) tenant's privileged roles, conditional-access coverage, app registrations, service principals, and federated-domain trust. Read-only. Supply the Graph token through `ZERO_GRAPH_ACCESS_TOKEN`; command-line tokens are refused.
 
 ```text
 0 identity [options]
@@ -2296,7 +2296,7 @@ Guide: [Read the workflow](/engagements/).
 
 ### cloud
 
-Probe S3 public access and takeover risks, or validate AWS credentials. Read-only; requires `0SEC_FEATURE_CLOUD_SURFACE` and an engagement scope. Access is denied by default. #925
+Probe S3 public access and takeover risks, or validate AWS credentials. Read-only; requires `ZERO_FEATURE_CLOUD_SURFACE` and an engagement scope. Access is denied by default. #925
 
 ```text
 0 cloud
@@ -2491,7 +2491,7 @@ Find public PoC + write-up artifacts for a CVE id
 | Option | Registered default | Description |
 | --- | --- | --- |
 | `--format <fmt>` | `json` | Output format: json \| table |
-| `--cache-dir <path>` | — | Override cache directory (default ~/.0sec/cve-cache) |
+| `--cache-dir <path>` | — | Override cache directory (default ~/.0/cve-cache) |
 | `--no-cache` | — | Bypass on-disk cache and re-fetch every source |
 | `--timeout <ms>` | `10000` | Per-source timeout in milliseconds |
 | `--retries <n>` | `2` | Retry count per source on 5xx |
@@ -2542,8 +2542,8 @@ Guide: [Read the workflow](/integrations/).
 | `--tools <names>` | — | Comma-separated live 0 MCP tools to expose (default: all). |
 | `--rate-limit <spec>` | — | Per-host request rate-limit spec. Defaults to 5 rps when unset. An active --engagement-profile caps this: the effective rate is the minimum of the two, so the profile can only lower it. |
 | `--allow-scanners` | `false` | Disable generic-scanner suppression for scoped engagements. |
-| `--engagement-profile <name>` | — | Engagement hardening posture for authorized enterprise work. 'standard' (default) is the existing behaviour. 'conservative' applies the quiet posture to this MCP session: no adaptive WAF-evasion ladder, full jitter on the per-host token bucket, and a 1 rps/host ceiling. The profile can only ever make the session quieter — the effective rate is the minimum of the profile and --rate-limit. The applied posture is recorded as an `engagement_posture_applied` event on the scan so it can be handed to the client as evidence. Lower precedence than the scope file's `engagement` block and 0SEC_ENGAGEMENT_PROFILE. |
-| `--no-waf-evasion` | — | Disable the adaptive WAF-evasion ladder (default: on). When a response classifies as blocked, the engine normally retries with encoding/casing/whitespace-mutated payload variants, which escalates a routine WAF block into a SOC incident. Detection and reporting of the block are unaffected. Independent of --engagement-profile; env form: 0SEC_WAF_EVASION=0. |
+| `--engagement-profile <name>` | — | Engagement hardening posture for authorized enterprise work. 'standard' (default) is the existing behaviour. 'conservative' applies the quiet posture to this MCP session: no adaptive WAF-evasion ladder, full jitter on the per-host token bucket, and a 1 rps/host ceiling. The profile can only ever make the session quieter — the effective rate is the minimum of the profile and --rate-limit. The applied posture is recorded as an `engagement_posture_applied` event on the scan so it can be handed to the client as evidence. Lower precedence than the scope file's `engagement` block and ZERO_ENGAGEMENT_PROFILE. |
+| `--no-waf-evasion` | — | Disable the adaptive WAF-evasion ladder (default: on). When a response classifies as blocked, the engine normally retries with encoding/casing/whitespace-mutated payload variants, which escalates a routine WAF block into a SOC incident. Detection and reporting of the block are unaffected. Independent of --engagement-profile; env form: ZERO_WAF_EVASION=0. |
 
 ### plugin
 
@@ -2761,7 +2761,7 @@ Subcommands: [dump](#h1-scope-dump).
 
 #### h1 scope dump
 
-Write a program's structured_scopes to ~/.0sec/scopes/<handle>.json
+Write a program's structured_scopes to ~/.0/scopes/<handle>.json
 
 ```text
 0 h1 scope dump [options] <handle>
@@ -2789,7 +2789,7 @@ Guide: [Cloud authentication](/api-keys/).
 
 | Option | Registered default | Description |
 | --- | --- | --- |
-| `--host <url>` | — | Cloud host (defaults to 0SEC_CLOUD_HOST or production) |
+| `--host <url>` | — | Cloud host (defaults to ZERO_CLOUD_HOST or production) |
 | `--token <value>` | — | Skip the browser flow and persist this token directly |
 
 ### models
@@ -2994,7 +2994,7 @@ Log in through the browser, or supply a credential with `--token`.
 
 | Option | Registered default | Description |
 | --- | --- | --- |
-| `--host <url>` | — | Cloud host (defaults to 0SEC_CLOUD_HOST or production) |
+| `--host <url>` | — | Cloud host (defaults to ZERO_CLOUD_HOST or production) |
 | `--token <value>` | — | Skip the browser flow and persist this token directly |
 
 #### auth logout

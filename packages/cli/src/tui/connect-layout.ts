@@ -27,11 +27,11 @@
  *
  * ## The cloud row
  *
- * The first row in the list is always the "0sec Cloud" cloud-sign-in row. It
+ * The first row in the list is always the "0 Cloud" cloud-sign-in row. It
  * sits outside the Popular / All provider groups and is always selectable. It
  * launches the hosted browser login flow (hostedBrowserLoginFlow from
  * commands/auth.ts) which opens a browser, polls for session completion, and
- * persists credentials to ~/.0sec/cloud.env.
+ * persists credentials to ~/.0/cloud.env.
  *
  * ## The honesty rule
  *
@@ -41,8 +41,8 @@
  * ever reports a connection that was not verified against one of those two
  * sources; there is no optimistic "connecting…" state that sticks. The cloud
  * row's connected state is determined independently through
- * `hasCloudCredentials` which checks 0SEC_CLOUD_TOKEN in env or
- * ~/.0sec/cloud.env.
+ * `hasCloudCredentials` which checks ZERO_CLOUD_TOKEN in env or
+ * ~/.0/cloud.env.
  *
  * ## Reuse
  *
@@ -55,7 +55,7 @@
 import { PROVIDER_DEVICE_AUTH } from "./device-auth.js";
 import { PROVIDERS, providerStates, type ProviderState } from "./provider-status.js";
 import type { DialogItem } from "./dialog-select-layout.js";
-import type { CreditAccount } from "@0sec/core";
+import type { CreditAccount } from "@0/core";
 import { formatBalanceDetail } from "./hosted-balance.js";
 import {
   DIALOG_HOST_FOOTER_ROWS,
@@ -318,7 +318,7 @@ export interface ConnectItemsInput {
   rows: readonly ConnectRow[];
   /**
    * Local Cloud credential presence, decided by the component from the
-   * environment or `~/.0sec/cloud.env`. Never assumed here.
+   * environment or `~/.0/cloud.env`. Never assumed here.
    */
   cloudConnected?: boolean;
   /**

@@ -1,11 +1,10 @@
 {
-  "name": "0sec",
+  "name": "0",
   "type": "module",
   "version": "0.21.0",
   "description": "Your self-improving, open-source cybersecurity team.",
   "bin": {
-    "0sec": "dist/0sec.js",
-    "0": "dist/0sec.js"
+    "0": "dist/0.js"
   },
   "files": [
     "LICENSE",
@@ -16,17 +15,17 @@
     "dist"
   ],
   "scripts": {
-    "build": "pnpm -r exec rm -f tsconfig.tsbuildinfo && pnpm --filter @0sec/shared build && pnpm --filter @0sec/db --filter @0sec/templates build && pnpm --filter '!@0sec/docs' -r build && pnpm run build:bundle",
+    "build": "pnpm -r exec rm -f tsconfig.tsbuildinfo && pnpm --filter @0/shared build && pnpm --filter @0/db --filter @0/templates build && pnpm --filter '!@0/docs' -r build && pnpm run build:bundle",
     "build:bundle": "node ./scripts/bundle-cli.mjs",
-    "build:docs": "pnpm --filter @0sec/docs build",
+    "build:docs": "pnpm --filter @0/docs build",
     "docs:check": "node scripts/sync-cli-docs.mjs --check",
     "docs:sync": "node scripts/sync-cli-docs.mjs --write",
     "dev": "pnpm -r --parallel dev",
-    "lint": "pnpm --filter '!@0sec/docs' -r exec tsc --noEmit",
+    "lint": "pnpm --filter '!@0/docs' -r exec tsc --noEmit",
     "test": "pnpm test:public",
-    "test:public": "pnpm --filter @0sec/core test && pnpm --filter @0sec/test-targets test && pnpm --filter 0sec-cli test && pnpm test:runtime-lock && pnpm test:bundle-skills && pnpm test:public-source-export && pnpm test:dev-engine && node --test scripts/dsh-0sec-mcp.test.mjs && pnpm test:docs-pointers",
+    "test:public": "pnpm --filter @0/core test && pnpm --filter @0/test-targets test && pnpm --filter @0/cli test && pnpm test:runtime-lock && pnpm test:bundle-skills && pnpm test:public-source-export && pnpm test:dev-engine && node --test scripts/dsh-0-mcp.test.mjs && pnpm test:docs-pointers",
     "test:bundle-skills": "node --test scripts/bundle-skills-assets.test.mjs",
-    "test:dsh-mcp:e2e": "node scripts/dsh-0sec-mcp.e2e.mjs",
+    "test:dsh-mcp:e2e": "node scripts/dsh-0-mcp.e2e.mjs",
     "test:install-e2e": "bash scripts/install-e2e.sh",
     "test:cloud-e2e": "bash scripts/smoke-cloud-account.sh",
     "test:evolution:e2e": "node scripts/smoke-source-evolution.mjs && node scripts/smoke-lens-evolution.mjs && node scripts/smoke-codebase-learning.mjs && node scripts/smoke-source-citation.mjs",
@@ -37,12 +36,12 @@
     "test:dev-engine": "node --test scripts/build-dev-engine.test.mjs",
     "test:public-source-export": "node --test scripts/create-public-source-export.test.mjs",
     "export:public-source": "node scripts/create-public-source-export.mjs",
-    "bench": "pnpm --filter @0sec/benchmark bench",
-    "bench:quick": "pnpm --filter @0sec/benchmark bench:quick",
-    "consolidate-xbow": "pnpm --filter @0sec/benchmark consolidate-xbow",
+    "bench": "pnpm --filter @0/benchmark bench",
+    "bench:quick": "pnpm --filter @0/benchmark bench:quick",
+    "consolidate-xbow": "pnpm --filter @0/benchmark consolidate-xbow",
     "clean": "pnpm -r clean",
-    "vulnerable": "PORT=43100 pnpm --filter @0sec/test-targets vulnerable",
-    "safe": "PORT=43101 pnpm --filter @0sec/test-targets safe"
+    "vulnerable": "PORT=43100 pnpm --filter @0/test-targets vulnerable",
+    "safe": "PORT=43101 pnpm --filter @0/test-targets safe"
   },
   "keywords": [
     "security",
@@ -70,7 +69,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/0sec-labs/0sec.git"
+    "url": "git+https://github.com/0sec-labs/0.git"
   },
   "license": "MIT OR Apache-2.0",
   "engines": {

@@ -106,10 +106,10 @@ is a separate contract, not the schema for every research envelope.
 ### 0verse evidence engine
 
 `0verse` is an in-repo Python evidence producer (the `0verse/` directory), not
-an `@0sec/*` package. It handles compiled-program evidence with its own Ghidra,
+an `@0/*` package. It handles compiled-program evidence with its own Ghidra,
 angr, AFL++, PoV, and notary contracts. 0 consumes only explicit, versioned
 interfaces — the opt-in `0verse` binary/NDJSON contract and verified external
-receipts. It never bundles 0verse into `@0sec/*`, schedules it as a generic
+receipts. It never bundles 0verse into `@0/*`, schedules it as a generic
 scan worker, or promotes a hypothesis without the matching proof gate.
 
 A shared differential runner can run identical input against two versions,
@@ -250,9 +250,9 @@ limits and per-finding provenance.
 
 > **EGATS caveat.** The 2026-04-11 ablation found `egatsTreeSearch` regresses
 > solve rate on hard challenges at ~10× the cost of the next-worst layer. It's
-> removed from the default moat aliases and opt-in only ([0sec#116](https://github.com/0sec-labs/0sec/issues/116)).
+> removed from the default moat aliases and opt-in only ([0#116](https://github.com/0sec-labs/0/issues/116)).
 > Results varied by slice. npm-bench attribution needs repeated runs;
-> [routing research](https://github.com/0sec-labs/0sec/issues/113) remains separate.
+> [routing research](https://github.com/0sec-labs/0/issues/113) remains separate.
 
 ### 3. Verify agent (blind validation)
 
@@ -346,7 +346,7 @@ qualification and security-performance claims require separate evidence.
 
 Every UI and output surface consumes a renderer-neutral document or event rather
 than another renderer's terminal text. The versioned contract is
-`0sec.presentation/v1`: reports retain their existing schemas, while interactive
+`0.presentation/v1`: reports retain their existing schemas, while interactive
 sessions use typed transcript entries and live producers emit ordered semantic
 events with a local source, sequence, timestamp, type, payload, and optional scan
 or session correlation.
@@ -379,7 +379,7 @@ interface.
 | `probe` | LLM API URL | Lightweight surface scan of an LLM API |
 | `web` | Web app URL | CORS, headers, exposed files, SSRF, XSS, path traversal, fingerprinting |
 | `mcp` | MCP server | Tool poisoning, schema abuse, permission escalation |
-| `http_audit` | Authenticated HTTP target | Worker-oriented scoped web assessment using `0SEC_TARGET_*` configuration |
+| `http_audit` | Authenticated HTTP target | Worker-oriented scoped web assessment using `ZERO_TARGET_*` configuration |
 
 Package audits and source reviews use separate `audit` and `review` commands,
 not `scan --mode audit` or `scan --mode review`. Mode inference and explicit
@@ -530,7 +530,7 @@ Two execution surfaces, one public documentation home:
   status.
 
 Fresh CLI scan/review/audit workflows normally allocate a run-local
-`~/.0sec/runs/<scan-id>/state.db`, journal and report; explicit database paths,
+`~/.0/runs/<scan-id>/state.db`, journal and report; explicit database paths,
 resume, console and SDK callers have different storage choices. The dashboard
 can inspect a selected database via `--db-path`, not every worker database at
 once. Managed persistence and organization ownership are separate service

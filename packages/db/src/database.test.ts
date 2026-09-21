@@ -2,7 +2,7 @@ import { describe, expect, it, afterEach, vi } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import type { Finding } from "@0sec/shared";
+import type { Finding } from "@0/shared";
 import { osecDB } from "./database.js";
 
 function makeFinding(overrides?: Partial<Finding>): Finding {
@@ -20,7 +20,7 @@ function makeFinding(overrides?: Partial<Finding>): Finding {
 }
 
 function withTempDb(fn: (db: osecDB, cleanup: () => void) => void): void {
-  const dir = mkdtempSync(join(tmpdir(), "0sec-db-test-"));
+  const dir = mkdtempSync(join(tmpdir(), "0-db-test-"));
   const clean = () => {
     try {
       rmSync(dir, { recursive: true, force: true });
@@ -40,7 +40,7 @@ function withTempDb(fn: (db: osecDB, cleanup: () => void) => void): void {
 
 describe("osecDB read-only open", () => {
   it("reads an existing database without running the writer initialization path", () => {
-    const dir = mkdtempSync(join(tmpdir(), "0sec-db-read-only-"));
+    const dir = mkdtempSync(join(tmpdir(), "0-db-read-only-"));
     const path = join(dir, "test.db");
     const writer = new osecDB(path);
     let reader: osecDB | undefined;
@@ -61,7 +61,7 @@ describe("osecDB read-only open", () => {
   });
 
   it("refuses to create a missing database in read-only mode", () => {
-    const dir = mkdtempSync(join(tmpdir(), "0sec-db-read-only-"));
+    const dir = mkdtempSync(join(tmpdir(), "0-db-read-only-"));
     try {
       expect(() => new osecDB(join(dir, "missing.db"), { readOnly: true }))
         .toThrow("Database does not exist");
@@ -74,7 +74,7 @@ describe("osecDB read-only open", () => {
 describe("osecDB schema initialization", () => {
   it("rolls back failed schema creation without changing existing data and can retry", async () => {
     const { createShimmedDatabase, ShimmedDatabase } = await import("./wasm-shim.js");
-    const dir = mkdtempSync(join(tmpdir(), "0sec-db-schema-"));
+    const dir = mkdtempSync(join(tmpdir(), "0-db-schema-"));
     const path = join(dir, "test.db");
     const original = createShimmedDatabase(path);
     original.exec("CREATE TABLE retained (value TEXT); INSERT INTO retained VALUES ('preserved')");

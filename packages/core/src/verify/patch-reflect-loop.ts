@@ -1,5 +1,5 @@
 /**
- * Patch validate-and-reflect retry loop (0sec #1501 item 3).
+ * Patch validate-and-reflect retry loop (0 #1501 item 3).
  *
  * {@link validatePatchRemovesCrash} in `./patch-validate.ts` is a SINGLE-SHOT
  * patch-as-oracle: generate one candidate fix, apply it, rebuild the KASAN
@@ -37,7 +37,7 @@
  * defensible default (see its doc comment).
  */
 
-import type { Finding } from "@0sec/shared";
+import type { Finding } from "@0/shared";
 import {
   validatePatchRemovesCrash,
   type CandidatePatch,

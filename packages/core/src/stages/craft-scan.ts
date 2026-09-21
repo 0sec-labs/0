@@ -36,9 +36,9 @@ import {
 } from "node:fs";
 import { join, relative, resolve, sep } from "node:path";
 import { tmpdir } from "node:os";
-import type { AttackCategory, Finding, Severity } from "@0sec/shared";
-import type { RuntimeMode } from "@0sec/shared";
-import { estimateCost } from "@0sec/shared";
+import type { AttackCategory, Finding, Severity } from "@0/shared";
+import type { RuntimeMode } from "@0/shared";
+import { estimateCost } from "@0/shared";
 import {
   LlmApiRuntime,
   LOOP_SERVER_COMPACTION_TOKENS,
@@ -231,7 +231,7 @@ export interface CraftScanResult {
    * NOTIONAL API-equivalent cost in USD (what these tokens WOULD cost on a
    * pay-per-token API). Our actual marginal spend is ~$0 on the Codex
    * subscription — this quantifies the free-compute advantage. Computed from
-   * the canonical per-model price table in @0sec/shared (`estimateCost`), the
+   * the canonical per-model price table in @0/shared (`estimateCost`), the
    * single source of truth for pricing across the engine.
    */
   estimatedCostUsd: number;
@@ -426,7 +426,7 @@ export async function runCraftScan(opts: CraftScanOptions): Promise<CraftScanRes
   };
   const findSeeds = () => {
     try {
-      return clip(sh("bash", ["-c", 'find "$1" \\( -path \'*corpus*\' -o -path \'*seed*\' -o -path \'*test*\' \\) -type f \\( -size +1c -a -size -200k \\) 2>/dev/null | head -40', "0sec-find-seeds", sourceRoot])
+      return clip(sh("bash", ["-c", 'find "$1" \\( -path \'*corpus*\' -o -path \'*seed*\' -o -path \'*test*\' \\) -type f \\( -size +1c -a -size -200k \\) 2>/dev/null | head -40', "0-find-seeds", sourceRoot])
         .split("\n").map((f) => f.replace(sourceRoot + "/", "")).join("\n"), 4000) || "(no seed/corpus files found)";
     } catch { return "(none)"; }
   };
@@ -473,7 +473,7 @@ export async function runCraftScan(opts: CraftScanOptions): Promise<CraftScanRes
     ? Math.min(30_000, Math.floor(requestedGeneratorTimeoutMs))
     : 30_000;
   const runGenerator = (python: string): { ok: true; out: string } | { ok: false; err: string } => {
-    const dir = mkdtempSync(join(tmpdir(), "0sec-craft-"));
+    const dir = mkdtempSync(join(tmpdir(), "0-craft-"));
     const gen = join(dir, "generator.py");
     const out = join(dir, "poc");
     const sandbox = opts.generatorUid === undefined

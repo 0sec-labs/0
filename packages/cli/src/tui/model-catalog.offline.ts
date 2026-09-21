@@ -1,7 +1,7 @@
 /**
  * Bundled offline snapshot of the model catalog.
  *
- * The `/model` picker is derived from the local pricing table in @0sec/shared,
+ * The `/model` picker is derived from the local pricing table in @0/shared,
  * which only lists ids the engine has hand-priced. That table is authoritative
  * for cost but deliberately narrow, so the picker never shows a model the
  * operator's provider offers that we simply haven't priced yet.

@@ -20,8 +20,8 @@
  *
  * ── Two-level configuration ──────────────────────────────────────────────────
  *
- * Reads resolve the GLOBAL file (`~/.0sec/tui-settings.json`) with a per-project
- * OVERRIDE (`<cwd>/.0sec/tui-settings.json`) layered on top, per key, falling
+ * Reads resolve the GLOBAL file (`~/.0/tui-settings.json`) with a per-project
+ * OVERRIDE (`<cwd>/.0/tui-settings.json`) layered on top, per key, falling
  * through to the built-in defaults. This happens automatically on the load path
  * (`getSettings`/`reloadSettings`) — no bootstrap wiring is needed anywhere.
  *
@@ -30,7 +30,7 @@
  * `scope: "project"`; otherwise it writes the GLOBAL file. `setSettings` (the
  * whole-object write the settings screen uses) always writes the global base.
  * The provenance of every effective value is exposed via `getSettingSources` so
- * `0sec config show` can label each key default/global/project.
+ * `0 config show` can label each key default/global/project.
  */
 
 import { useSyncExternalStore } from "react";
@@ -39,7 +39,7 @@ import {
   analyticsPipeline,
   levelAtLeast,
   resolveAnalyticsLevel,
-} from "@0sec/core";
+} from "@0/core";
 
 import {
   SETTING_DEFS,

@@ -5,7 +5,7 @@ import type {
   ResearchNoveltyReceipt,
   ResearchPromotionGrade,
   ResearchReportingPolicy,
-} from "@0sec/shared";
+} from "@0/shared";
 
 export type ResearchStage =
   | "discover"

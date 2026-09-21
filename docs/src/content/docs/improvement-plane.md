@@ -55,11 +55,11 @@ evaluation or [executable-plugin setup](/integrations/#model-authored-executable
 for session tools. Model credentials configure proposal generation; guest
 images configure execution. Neither substitutes for the other.
 
-**Implementation map:** [`improvement/config.ts`](https://github.com/0sec-labs/0sec/blob/main/packages/core/src/improvement/config.ts),
-[`improvement/loop.ts`](https://github.com/0sec-labs/0sec/blob/main/packages/core/src/improvement/loop.ts),
-[`commands/evolve.ts`](https://github.com/0sec-labs/0sec/blob/main/packages/cli/src/commands/evolve.ts),
-[`plugins/executable.ts`](https://github.com/0sec-labs/0sec/blob/main/packages/core/src/plugins/executable.ts),
-[`console/turn-engine.ts`](https://github.com/0sec-labs/0sec/blob/main/packages/core/src/console/turn-engine.ts).
+**Implementation map:** [`improvement/config.ts`](https://github.com/0sec-labs/0/blob/main/packages/core/src/improvement/config.ts),
+[`improvement/loop.ts`](https://github.com/0sec-labs/0/blob/main/packages/core/src/improvement/loop.ts),
+[`commands/evolve.ts`](https://github.com/0sec-labs/0/blob/main/packages/cli/src/commands/evolve.ts),
+[`plugins/executable.ts`](https://github.com/0sec-labs/0/blob/main/packages/core/src/plugins/executable.ts),
+[`console/turn-engine.ts`](https://github.com/0sec-labs/0/blob/main/packages/core/src/console/turn-engine.ts).
 
 ## Engagement boundary
 
@@ -83,7 +83,7 @@ The development console can reload trusted `packages/core/src` changes without
 discarding its conversation. This host-code path is not the sandboxed source
 evaluator or executable-plugin admission path.
 
-It requires a console started with `0SEC_DEV_SOURCE_ROOT` and the global
+It requires a console started with `ZERO_DEV_SOURCE_ROOT` and the global
 `allowDevSourceUpdates` setting. The setting defaults off, cannot be granted by
 a project override, and is independent of `allowModelSelfExtension`.
 
@@ -128,7 +128,7 @@ Changed, missing, out-of-scope, symlinked, or multiply linked evidence invalidat
 the note. Hashes identify source versions; interpretations still need verification.
 
 Verification runs neither receive these notes nor get the learning capability.
-`0SEC_DISABLE_HUNT_MEMORY=1` disables recall and persistence. Resumed runs keep
+`ZERO_DISABLE_HUNT_MEMORY=1` disables recall and persistence. Resumed runs keep
 their existing context rather than silently receiving new notes.
 
 ### Source access consent
@@ -244,7 +244,7 @@ review. Each case input has exactly these fields:
 
 ```json
 {
-  "schemaVersion": "0sec.finder.input/v1",
+  "schemaVersion": "0.finder.input/v1",
   "file": { "path": "src/handler.js", "content": "db.query(req.query.sql);\n" },
   "lensId": "injection",
   "challengeHint": "Inspect whether untrusted input reaches SQL execution."
@@ -255,7 +255,7 @@ The command emits one JSON value with exactly these fields:
 
 ```json
 {
-  "schemaVersion": "0sec.finder.output/v1",
+  "schemaVersion": "0.finder.output/v1",
   "findings": [{
     "title": "Potential SQL injection",
     "severity": "high",
@@ -314,10 +314,10 @@ Set these environment variables before the controller's first worker starts:
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `0SEC_WORKER_MAX_ACTIVE` | `4` | Maximum active guest reservations |
-| `0SEC_WORKER_MAX_QUEUED` | `64` | Maximum waiting root calls |
-| `0SEC_WORKER_MEMORY_MB` | Half of available process memory, capped at `8192` MiB and floored at `32` MiB | Aggregate guest-memory budget |
-| `0SEC_WORKER_CPUS` | Node's available parallelism | Aggregate configured guest CPU budget |
+| `ZERO_WORKER_MAX_ACTIVE` | `4` | Maximum active guest reservations |
+| `ZERO_WORKER_MAX_QUEUED` | `64` | Maximum waiting root calls |
+| `ZERO_WORKER_MEMORY_MB` | Half of available process memory, capped at `8192` MiB and floored at `32` MiB | Aggregate guest-memory budget |
+| `ZERO_WORKER_CPUS` | Node's available parallelism | Aggregate configured guest CPU budget |
 
 Overrides must be positive finite numbers; all except CPU must be integers.
 A request larger than its resource budget fails immediately. Root calls wait
@@ -422,8 +422,8 @@ That is a small Node worker image, not the security toolbox. To provision the
 declared pentest/identity/Foxguard inventory without building the CLI application:
 
 ```bash
-docker build --target toolbox -t 0sec-toolbox:local .
-docker save 0sec-toolbox:local -o toolbox.tar
+docker build --target toolbox -t 0-toolbox:local .
+docker save 0-toolbox:local -o toolbox.tar
 node scripts/smoke-smolvm-toolbox.mjs ./toolbox.tar
 ```
 
@@ -458,7 +458,7 @@ Each invocation:
 - copies and hashes the archive into a private run directory before boot;
 - starts an offline, UID/GID 1000 guest with `--unprivileged`;
 - mounts the sealed source read-only at `/snapshot`, then copies it to writable,
-  guest-local `/tmp/0sec-workspace` for builds and execution;
+  guest-local `/tmp/0-workspace` for builds and execution;
 - sends only the case input through stdin and returns bounded stdout/stderr;
 - uses 4 GiB writable storage and a 1 GiB VM overlay, with configured CPU/RAM limits;
 - ignores ambient project Smolfiles and isolates host runtime state and caches;
@@ -598,11 +598,11 @@ gains remain unestablished.
 
 Tracked implementation work:
 
-- [Crash-safe campaigns and feedback-driven resume (#41)](https://github.com/0sec-labs/0sec/issues/41)
-- [Longitudinal capability retention (#37)](https://github.com/0sec-labs/0sec/issues/37)
-- [Adaptive holdout exposure and rotation (#40)](https://github.com/0sec-labs/0sec/issues/40)
-- [Measured, development-only archive search (#39)](https://github.com/0sec-labs/0sec/issues/39)
-- [Evidence provenance and incompatible comparisons (#38)](https://github.com/0sec-labs/0sec/issues/38)
+- [Crash-safe campaigns and feedback-driven resume (#41)](https://github.com/0sec-labs/0/issues/41)
+- [Longitudinal capability retention (#37)](https://github.com/0sec-labs/0/issues/37)
+- [Adaptive holdout exposure and rotation (#40)](https://github.com/0sec-labs/0/issues/40)
+- [Measured, development-only archive search (#39)](https://github.com/0sec-labs/0/issues/39)
+- [Evidence provenance and incompatible comparisons (#38)](https://github.com/0sec-labs/0/issues/38)
 
 ## Autonomy and hot-reload boundaries
 
@@ -636,10 +636,10 @@ The historical candidate measurements below cover particular executions, not
 every current frontend, desktop installation, real-provider route, or hosted
 deployment.
 
-**Sources:** [`plugins/live-harness.ts`](https://github.com/0sec-labs/0sec/blob/main/packages/core/src/plugins/live-harness.ts),
-[`console/turn-engine.ts`](https://github.com/0sec-labs/0sec/blob/main/packages/core/src/console/turn-engine.ts),
-[`tui/harness-context.tsx`](https://github.com/0sec-labs/0sec/blob/main/packages/cli/src/tui/harness-context.tsx),
-[`tui/harness-trust-controls.tsx`](https://github.com/0sec-labs/0sec/blob/main/packages/cli/src/tui/harness-trust-controls.tsx).
+**Sources:** [`plugins/live-harness.ts`](https://github.com/0sec-labs/0/blob/main/packages/core/src/plugins/live-harness.ts),
+[`console/turn-engine.ts`](https://github.com/0sec-labs/0/blob/main/packages/core/src/console/turn-engine.ts),
+[`tui/harness-context.tsx`](https://github.com/0sec-labs/0/blob/main/packages/cli/src/tui/harness-context.tsx),
+[`tui/harness-trust-controls.tsx`](https://github.com/0sec-labs/0/blob/main/packages/cli/src/tui/harness-trust-controls.tsx).
 
 ### Composition and language support
 
@@ -721,8 +721,8 @@ leave it off for sandboxed components. It authorizes **arbitrary host ESM for
 that workspace**, not just one tool call. Revoking it does not undo external
 effects already performed.
 
-Source: [`agent/tools/system.ts`](https://github.com/0sec-labs/0sec/blob/main/packages/core/src/agent/tools/system.ts)
-and [`agent/tools.ts`](https://github.com/0sec-labs/0sec/blob/main/packages/core/src/agent/tools.ts).
+Source: [`agent/tools/system.ts`](https://github.com/0sec-labs/0/blob/main/packages/core/src/agent/tools/system.ts)
+and [`agent/tools.ts`](https://github.com/0sec-labs/0/blob/main/packages/core/src/agent/tools.ts).
 
 ### Autonomy without a second permission system
 
@@ -790,7 +790,7 @@ goals. Ordinary session history, task ledgers, retained plugin versions and
 development-engine checkpoints are useful but do not constitute durable
 evolution spending, holdout-exposure accounting, or exactly-once tool effects.
 See [feedback across passes](#feedback-across-evolution-passes) and the
-[campaign work](https://github.com/0sec-labs/0sec/issues/41).
+[campaign work](https://github.com/0sec-labs/0/issues/41).
 First-class Python components require further implementation.
 
 ### Local candidate measurements
@@ -828,7 +828,7 @@ apply to the earlier candidate, independently of frontend and installation check
 
 ## CLI reference
 
-<span id="0sec-evolve"></span>
+<span id="0-evolve"></span>
 ### 0 evolve
 
 ```text
@@ -880,7 +880,7 @@ apply to the earlier candidate, independently of frontend and installation check
 
 **Error codes:** 0 = success, 1 = user error, 2 = runtime error, 3 = interrupt.
 
-<span id="0sec-lens-synth"></span>
+<span id="0-lens-synth"></span>
 ### 0 lens-synth
 
 Finder-lens evolution remains a separate command — see [lens-synth help](/commands/#lens-synth).
@@ -888,7 +888,7 @@ Finder-lens evolution remains a separate command — see [lens-synth help](/comm
 ```text
 0 lens-synth                   Evolve appsec finder coverage from curated misses
   --miss-input <path>                Curated miss-input JSON ({ misses, corpus })
-  --registry <path>                  Durable overlay path (~/.0sec/lenses/...)
+  --registry <path>                  Durable overlay path (~/.0/lenses/...)
   --max-register <n>                 Cap promoted champions per input revision
   -m, --model <id>                   Synthesis model override
   --promote                          Persist a validated champion to the durable overlay
@@ -1129,8 +1129,8 @@ them is not. The mutable registry instead uses a serialized temporary-file
 write and rename. Its event chain and artifact digests detect inconsistent
 local changes, not an attacker who can rewrite the entire store.
 
-Sources: [`artifacts.ts`](https://github.com/0sec-labs/0sec/blob/main/packages/core/src/improvement/artifacts.ts)
-and [`registry.ts`](https://github.com/0sec-labs/0sec/blob/main/packages/core/src/improvement/registry.ts).
+Sources: [`artifacts.ts`](https://github.com/0sec-labs/0/blob/main/packages/core/src/improvement/artifacts.ts)
+and [`registry.ts`](https://github.com/0sec-labs/0/blob/main/packages/core/src/improvement/registry.ts).
 
 ## Promotion gates
 
@@ -1177,7 +1177,7 @@ runner executes candidate code separately under this worker contract:
 Finder-lens evolution (`0 lens-synth`) works alongside the evolve system but
 remains a separate command. It evolves **additive appsec finder lenses** from
 curated misses into a user-owned registry. Promotions go to
-`~/.0sec/lenses/appsec-archetypes.json`, never the bundled registry. Each
+`~/.0/lenses/appsec-archetypes.json`, never the bundled registry. Each
 promotion or retirement is recorded in the registry's hash-linked ledger.
 
 ### TUI automatic mode
@@ -1200,7 +1200,7 @@ This is a TUI settings file, **not** the source-worker `evolution.json` above.
 Evaluation can consume model usage even with promotion disabled.
 
 The watcher reads the curated inbox at
-`~/.0sec/lens-synthesis/miss-input.json` and approved observations from the
+`~/.0/lens-synthesis/miss-input.json` and approved observations from the
 feedback queue. Enabling it does not manufacture fixtures or approve captured
 misses. Use `0 evolve feedback capture`, then operator-curated
 `0 evolve feedback approve`, as described in the [CLI reference](#0-evolve).
@@ -1208,7 +1208,7 @@ After reviewing validation evidence, enable `autoPromoteFinderLenses` if desired
 
 Status distinguishes `evolve:dry-run`, `evolve:auto`, `evolve:waiting input`,
 `evolve:promoted`, and `evolve:error`. Source:
-[`tui/lens-evolution.ts`](https://github.com/0sec-labs/0sec/blob/main/packages/cli/src/tui/lens-evolution.ts).
+[`tui/lens-evolution.ts`](https://github.com/0sec-labs/0/blob/main/packages/cli/src/tui/lens-evolution.ts).
 
 ### Lens corpus and receipts
 
@@ -1375,13 +1375,13 @@ approval, canaries, deployment, existing-reader pinning, and rollback using a
 small credential-detector benchmark. It does not measure general scanner quality.
 
 The executable plugin smoke check (`smoke-executable-plugins.mjs`) requires the
-built `@0sec/core` package and a local Docker daemon (or smolvm with
-`0SEC_SMOLVM_IMAGE_ARCHIVE`). It exercises the full lifecycle: submission,
+built `@0/core` package and a local Docker daemon (or smolvm with
+`ZERO_SMOLVM_IMAGE_ARCHIVE`). It exercises the full lifecycle: submission,
 execution, TypeScript argument passing, multi-owner plugins, skill composition
 with `Promise.all` broker calls, source replacement, retained version discovery,
 persisted failure counters, cold manager restore, rollback, nested call-budget
 termination, and malformed-source rejection. An optional
-`0SEC_EVOLVE_REAL=1` flag enables a real provider evolution stage using the
+`ZERO_EVOLVE_REAL=1` flag enables a real provider evolution stage using the
 configured model.
 
 This smoke does not yet qualify live root-driver replacement, browser/desktop
@@ -1416,8 +1416,8 @@ To exercise that same source lifecycle with smolvm, use `env` (the setting names
 start with a digit and therefore are not POSIX shell variable identifiers):
 
 ```bash
-env 0SEC_EVOLUTION_BACKEND=smolvm \
-  0SEC_SMOLVM_IMAGE_ARCHIVE=/absolute/path/to/node.tar \
+env ZERO_EVOLUTION_BACKEND=smolvm \
+  ZERO_SMOLVM_IMAGE_ARCHIVE=/absolute/path/to/node.tar \
   node scripts/smoke-source-evolution.mjs
 ```
 
@@ -1432,7 +1432,7 @@ protection, fresh workspaces, credentials, ambient configuration, host loopback
 denial, storage exhaustion, identity mismatch, absent runtimes, cancellation,
 deadlines, output floods, and process teardown. It does not skip missing runtime
 prerequisites. `pnpm test:smolvm:e2e` runs it when
-`0SEC_SMOLVM_IMAGE_ARCHIVE` is set in the process environment.
+`ZERO_SMOLVM_IMAGE_ARCHIVE` is set in the process environment.
 
 The lens check exercises synthesis, labelled positive/held-out/clean fixtures,
 promotion, next-reader reload, and retirement. Both consume real provider usage,

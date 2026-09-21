@@ -57,7 +57,7 @@ function defaultSpawnCodexDeviceAuth(
 
 /**
  * Run Codex's official device-auth flow without ever asking the operator to
- * paste a ChatGPT API key or OAuth token into 0sec. The Codex CLI owns the
+ * paste a ChatGPT API key or OAuth token into 0. The Codex CLI owns the
  * browser/device protocol and writes ~/.codex/auth.json; on success we reload
  * that file explicitly, replacing only this process's stale Codex tokens.
  */
@@ -117,7 +117,7 @@ export function startCodexDeviceAuth(options: StartCodexDeviceAuthOptions): Code
       return;
     }
     maybeLoadCodexAuth({ env, home: options.homeDir, force: true });
-    if (!env["0SEC_CHATGPT_ACCESS_TOKEN"] && !env["0SEC_CHATGPT_OAUTH_REFRESH_TOKEN"]) {
+    if (!env["ZERO_CHATGPT_ACCESS_TOKEN"] && !env["ZERO_CHATGPT_OAUTH_REFRESH_TOKEN"]) {
       finish("failed", "Codex completed without a readable ChatGPT subscription credential.");
       return;
     }

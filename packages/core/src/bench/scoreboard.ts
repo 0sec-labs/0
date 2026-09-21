@@ -1,5 +1,5 @@
 /**
- * Benchmark scoreboard — the "benchmark in public" report layer (0sec#656).
+ * Benchmark scoreboard — the "benchmark in public" report layer (0#656).
  *
  * This turns an existing {@link BenchmarkLedger} into a PUBLISHABLE artifact:
  * a clean GitHub-flavored markdown report plus a stable-key JSON document for a
@@ -22,11 +22,11 @@ import {
   type RegressionThresholds,
 } from "./ledger.js";
 
-const DEFAULT_TITLE = "0sec benchmark scoreboard";
+const DEFAULT_TITLE = "0 benchmark scoreboard";
 const DEFAULT_KEEP_RUNS = 10;
 
 export interface RenderScoreboardOptions {
-  /** Report title/header. Default "0sec benchmark scoreboard". */
+  /** Report title/header. Default "0 benchmark scoreboard". */
   title?: string;
   /** How many trailing ledger entries to show in the trend table. Default 10. */
   keepRuns?: number;

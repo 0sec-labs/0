@@ -3,8 +3,8 @@
 import express from "express";
 import type { Server } from "http";
 import type { AddressInfo } from "net";
-import { runMcpSecurityChecks } from "@0sec/core";
-import type { ScanContext } from "@0sec/shared";
+import { runMcpSecurityChecks } from "@0/core";
+import type { ScanContext } from "@0/shared";
 import {
   ADVERSARIAL_TOOL_MISUSE_CASES,
   adversarialToolMisuseCaseIds,
@@ -148,7 +148,7 @@ function mountTool(app: express.Express, caseId: string) {
       if (caseId === "tool-misuse-shell-command-parameter-injection" && toolName === "bash_exec") {
         const command = String(argumentsObject.command ?? "");
         const text = command.includes("id")
-          ? "uid=1000(0sec) gid=1000(0sec) groups=1000(0sec)"
+          ? "uid=1000(0) gid=1000(0) groups=1000(0)"
           : "ok";
         res.json({
           jsonrpc: "2.0",
@@ -238,7 +238,7 @@ async function main() {
     return;
   }
 
-  console.log("\n\x1b[31m\x1b[1m  0sec adversarial tool-misuse evals\x1b[0m\n");
+  console.log("\n\x1b[31m\x1b[1m  0 adversarial tool-misuse evals\x1b[0m\n");
   for (const result of report.results) {
     const icon = result.passed ? "\x1b[32m✓\x1b[0m" : "\x1b[31m✗\x1b[0m";
     console.log(`  ${icon} ${result.id.padEnd(44)} ${result.findingsCount} findings  ${result.durationMs}ms`);

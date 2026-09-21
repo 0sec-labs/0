@@ -66,14 +66,14 @@ describe("compareVersions", () => {
 describe("shouldRunCheck", () => {
   it("requires an explicit opt-in", () => {
     expect(shouldRunCheck({}, true)).toBe(false);
-    expect(shouldRunCheck({ "0SEC_UPDATE_CHECK": "1" }, true)).toBe(true);
+    expect(shouldRunCheck({ "ZERO_UPDATE_CHECK": "1" }, true)).toBe(true);
   });
 
   it("honors explicit privacy and CI disablement", () => {
-    expect(shouldRunCheck({ "0SEC_UPDATE_CHECK": "1", "0SEC_NO_UPDATE_CHECK": "1" }, true)).toBe(false);
-    expect(shouldRunCheck({ "0SEC_UPDATE_CHECK": "1", "0SEC_OFFLINE": "1" }, true)).toBe(false);
-    expect(shouldRunCheck({ "0SEC_UPDATE_CHECK": "1", CI: "true" }, true)).toBe(false);
-    expect(shouldRunCheck({ "0SEC_UPDATE_CHECK": "1" }, false)).toBe(false);
+    expect(shouldRunCheck({ "ZERO_UPDATE_CHECK": "1", "ZERO_NO_UPDATE_CHECK": "1" }, true)).toBe(false);
+    expect(shouldRunCheck({ "ZERO_UPDATE_CHECK": "1", "ZERO_OFFLINE": "1" }, true)).toBe(false);
+    expect(shouldRunCheck({ "ZERO_UPDATE_CHECK": "1", CI: "true" }, true)).toBe(false);
+    expect(shouldRunCheck({ "ZERO_UPDATE_CHECK": "1" }, false)).toBe(false);
   });
 
   describe("with explicit policy", () => {
@@ -81,12 +81,12 @@ describe("shouldRunCheck", () => {
       // Hard env gates beat policy too, but if those are clear, "off" wins.
       expect(shouldRunCheck({}, true, "off")).toBe(false);
       // Even with explicit opt-in env, "off" wins.
-      expect(shouldRunCheck({ "0SEC_UPDATE_CHECK": "1" }, true, "off")).toBe(false);
+      expect(shouldRunCheck({ "ZERO_UPDATE_CHECK": "1" }, true, "off")).toBe(false);
     });
 
     it('policy "notify" returns true when no hard gate blocks', () => {
       expect(shouldRunCheck({}, true, "notify")).toBe(true);
-      // notify does not require 0SEC_UPDATE_CHECK=1
+      // notify does not require ZERO_UPDATE_CHECK=1
     });
 
     it('policy "automatic" returns true when no hard gate blocks', () => {
@@ -98,11 +98,11 @@ describe("shouldRunCheck", () => {
       expect(shouldRunCheck({ CI: "1" }, true, "notify")).toBe(false);
       expect(shouldRunCheck({ CI: "true" }, true, "automatic")).toBe(false);
       // NO_UPDATE_CHECK beats everything
-      expect(shouldRunCheck({ "0SEC_NO_UPDATE_CHECK": "1" }, true, "notify")).toBe(false);
-      expect(shouldRunCheck({ "0SEC_NO_UPDATE_CHECK": "1" }, true, "automatic")).toBe(false);
+      expect(shouldRunCheck({ "ZERO_NO_UPDATE_CHECK": "1" }, true, "notify")).toBe(false);
+      expect(shouldRunCheck({ "ZERO_NO_UPDATE_CHECK": "1" }, true, "automatic")).toBe(false);
       // OFFLINE beats everything
-      expect(shouldRunCheck({ "0SEC_OFFLINE": "1" }, true, "notify")).toBe(false);
-      expect(shouldRunCheck({ "0SEC_OFFLINE": "1" }, true, "automatic")).toBe(false);
+      expect(shouldRunCheck({ "ZERO_OFFLINE": "1" }, true, "notify")).toBe(false);
+      expect(shouldRunCheck({ "ZERO_OFFLINE": "1" }, true, "automatic")).toBe(false);
     });
 
     it("non-TTY beats explicit policy", () => {
@@ -110,9 +110,9 @@ describe("shouldRunCheck", () => {
       expect(shouldRunCheck({}, false, "automatic")).toBe(false);
     });
 
-    it("no policy + 0SEC_UPDATE_CHECK=1 is unchanged legacy behavior", () => {
-      // When policy is undefined, 0SEC_UPDATE_CHECK=1 + TTY is the gate.
-      expect(shouldRunCheck({ "0SEC_UPDATE_CHECK": "1" }, true)).toBe(true);
+    it("no policy + ZERO_UPDATE_CHECK=1 is unchanged legacy behavior", () => {
+      // When policy is undefined, ZERO_UPDATE_CHECK=1 + TTY is the gate.
+      expect(shouldRunCheck({ "ZERO_UPDATE_CHECK": "1" }, true)).toBe(true);
       expect(shouldRunCheck({}, true)).toBe(false);
     });
   });
@@ -127,13 +127,13 @@ describe.skipIf(process.platform === "win32")("installer pipeline", () => {
   });
 
   function fakeCurl(script: string): string {
-    fixture = mkdtempSync(join(tmpdir(), "0sec-update-pipeline-"));
+    fixture = mkdtempSync(join(tmpdir(), "0-update-pipeline-"));
     writeFileSync(join(fixture, "curl"), `#!/bin/sh\n${script}\n`, { mode: 0o700 });
     vi.stubEnv("PATH", `${fixture}:/usr/bin:/bin`);
     vi.stubEnv("HOME", fixture);
     vi.stubEnv("BASH_ENV", "");
-    vi.stubEnv("0SEC_OFFLINE", undefined);
-    vi.stubEnv("0SEC_NO_UPDATE_CHECK", undefined);
+    vi.stubEnv("ZERO_OFFLINE", undefined);
+    vi.stubEnv("ZERO_NO_UPDATE_CHECK", undefined);
     return fixture;
   }
 
@@ -155,7 +155,7 @@ INSTALL`);
     const result = await performAutoUpdate({ version: "999.1.2", installDir: destination });
     expect(result.success).toBe(true);
     expect(readFileSync(receipt, "utf8").split("\n")).toEqual([
-      "https://github.com/0sec-labs/0sec/releases/download/v999.1.2", destination, "",
+      "https://github.com/0sec-labs/0/releases/download/v999.1.2", destination, "",
     ]);
   });
 });

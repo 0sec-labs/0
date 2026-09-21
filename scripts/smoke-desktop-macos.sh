@@ -5,11 +5,11 @@
 # session, while the physical Mac-mini UI smoke is an explicit SSH operation.
 set -euo pipefail
 
-APP_BUNDLE="${1:-packages/desktop/release/mac-arm64/0sec.app}"
+APP_BUNDLE="${1:-packages/desktop/release/mac-arm64/0.app}"
 RESOURCES_DIR="$APP_BUNDLE/Contents/Resources"
-SIDECAR="$RESOURCES_DIR/sidecars/0sec-darwin-arm64"
+SIDECAR="$RESOURCES_DIR/sidecars/0-darwin-arm64"
 DASHBOARD="$RESOURCES_DIR/dashboard"
-READY_LOG="$(mktemp "${TMPDIR:-/tmp}/0sec-desktop-ready.XXXXXX")"
+READY_LOG="$(mktemp "${TMPDIR:-/tmp}/0-desktop-ready.XXXXXX")"
 PID=""
 
 cleanup() {
@@ -39,9 +39,9 @@ while [ "$attempt" -lt 80 ]; do
 const fs = require("node:fs");
 const lines = fs.readFileSync(process.argv[1], "utf8").split("\n");
 for (const line of lines) {
-  if (!line.startsWith("0SEC_DASHBOARD_READY ")) continue;
+  if (!line.startsWith("ZERO_DASHBOARD_READY ")) continue;
   try {
-    const value = JSON.parse(line.slice("0SEC_DASHBOARD_READY ".length));
+    const value = JSON.parse(line.slice("ZERO_DASHBOARD_READY ".length));
     if (typeof value.url === "string") process.stdout.write(value.url);
   } catch {}
 }

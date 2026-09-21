@@ -4,7 +4,7 @@ import { sleekScrollbar } from "./scrollbar.js";
 import { useKeyboard, usePaste } from "@opentui/react";
 import { decodePasteBytes } from "@opentui/core";
 import type { ScrollBoxRenderable } from "@opentui/core";
-import type { HarnessSetting, HarnessView, HarnessViewBlock } from "@0sec/shared";
+import type { HarnessSetting, HarnessView, HarnessViewBlock } from "@0/shared";
 import { useHarness } from "./harness-context.js";
 import { useTheme } from "./theme-context.js";
 import { useSymbols } from "./symbol-context.js";

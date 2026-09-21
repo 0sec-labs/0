@@ -1,6 +1,6 @@
 # Skill self-improvement loop (`/refine`)
 
-A dry-run-first `/refine` flywheel for 0sec's JIT methodology **skills** — the
+A dry-run-first `/refine` flywheel for 0's JIT methodology **skills** — the
 skill-side sibling of `active_learning_loop.py` (which does the same for the
 triage router). It scores each skill by the **verified** outcomes of the
 findings produced while it was active, flags under-performers as refinement
@@ -91,7 +91,7 @@ the artifact against the evolution registry:
 | `--evolution-artifact <relative-path>` | Relative path of the artifact within the version's immutable snapshot (e.g. `agent/skills/vulnerabilities/sqli-advanced.yaml` for skills) |
 
 If `--promote` is passed without these, the script exits with code 3 and an
-actionable error directing the user to the `0sec evolve` workflow.
+actionable error directing the user to the `0 evolve` workflow.
 
 The authorization uses `artifact-bridge.mjs` (sibling to `check_skill.mjs`):
 
@@ -129,13 +129,13 @@ python3 skill_refine_loop.py --dataset results/skill-trajectories.jsonl \
     --candidate-skill ssrf-bypass \
     --operator alice \
     --promote --promote-dest packages/core/src/agent/skills/vulnerabilities/ssrf-bypass.yaml \
-    --evolution-store ~/.0sec/evolution \
+    --evolution-store ~/.0/evolution \
     --evolution-version a1b2c3d4-... \
     --evolution-artifact agent/skills/vulnerabilities/sqli-advanced.yaml
 ```
 
 The load-check needs the core build. If `check_skill.mjs` reports the build is
-missing, run `pnpm --filter @0sec/core build` (or pass `--core-dist <dir>`).
+missing, run `pnpm --filter @0/core build` (or pass `--core-dist <dir>`).
 
 ## Available flags
 

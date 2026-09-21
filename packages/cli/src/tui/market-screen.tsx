@@ -23,13 +23,13 @@
  *    the separate, explicit step an operator must take to enable a plugin.
  *
  * 3. **Default endpoint = the Hackstore.** The registry URL comes from
- *    `$0SEC_REGISTRY_URL` or the core `DEFAULT_REGISTRY_URL` (the community
+ *    `$ZERO_REGISTRY_URL` or the core `DEFAULT_REGISTRY_URL` (the community
  *    Hackstore index). When it is explicitly disabled, or the fetch fails, the
  *    screen renders an honest empty state — guidance, not a crash.
  *
  * The registry fetch, the install action and the installed-state read are all
  * INJECTED (`load`, `installItem`, `readInstalled`) with real defaults that
- * lazily import `@0sec/core`, so the screen can be driven under a test without
+ * lazily import `@0/core`, so the screen can be driven under a test without
  * touching the network or the filesystem.
  */
 
@@ -89,7 +89,7 @@ const PAGE_STEP = 5;
 
 /** The registry index URL: prop, then env, then the (empty) core default. */
 function resolveRegistryUrl(explicit?: string): string {
-  return (explicit ?? process.env["0SEC_REGISTRY_URL"] ?? "").trim();
+  return (explicit ?? process.env["ZERO_REGISTRY_URL"] ?? "").trim();
 }
 
 // ---------------------------------------------------------------------------
@@ -109,7 +109,7 @@ export interface MarketScreenProps {
   onBack: () => void;
   /** Leave the console entirely — ctrl+c. */
   onExit: () => void;
-  /** Registry URL override. Defaults to $0SEC_REGISTRY_URL then the empty core default. */
+  /** Registry URL override. Defaults to $ZERO_REGISTRY_URL then the empty core default. */
   registryUrl?: string;
   /** Pre-fetched registry (tests / synchronous). When given, no fetch runs. */
   initialData?: MarketRegistryView;
@@ -583,7 +583,7 @@ export function MarketScreen({
         : notice
           ? notice
           : url.length === 0
-            ? "registry: not configured — set 0SEC_REGISTRY_URL"
+            ? "registry: not configured — set ZERO_REGISTRY_URL"
             : `registry: ${url}`;
 
   const statusTone =

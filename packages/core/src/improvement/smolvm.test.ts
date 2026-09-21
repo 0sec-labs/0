@@ -10,7 +10,7 @@ import { resolveSmolvmImage } from "../runtime/smolvm.js";
 const roots: string[] = [];
 afterEach(() => { for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true }); });
 function fixture() {
-  const root = mkdtempSync(join(tmpdir(), "0sec-smol-config-"));
+  const root = mkdtempSync(join(tmpdir(), "0-smol-config-"));
   roots.push(root);
   const archive = join(root, "image.tar");
   writeFileSync(archive, "operator-owned image bytes");
