@@ -28,6 +28,8 @@ on the published npm package and the GitHub Release tag.
 
 ### Fixed
 
+- Onboarding theme swatches and sample text now preview the highlighted choice
+  before confirmation; Back still discards the draft and Enter saves it.
 - Onboarding Escape returns to the previous decision; skipping setup enters
   chat without completing setup or quitting. Provider login/search cancellation
   stays local, confirmed choices survive navigation, and setup has clickable
