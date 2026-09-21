@@ -1,6 +1,6 @@
 import type { Finding } from "@0sec/shared";
 import type { NativeRuntime, SourceFixResult, SourceFixStatus } from "@0sec/core";
-import type { getRuntimeAvailability } from "../utils.js";
+import type { RuntimeAvailability } from "../utils.js";
 import { fitTuiText, fitTuiUrl } from "./text.js";
 
 
@@ -66,11 +66,17 @@ export interface FindingGroup {
 }
 
 export interface DoctorState {
+  cliVersion: string;
+  releaseChannel: "dev" | "beta";
+  runtimeEngine: "Bun" | "Node.js";
+  runtimeVersion: string;
+  platform: string;
+  arch: string;
   nodeOk: boolean;
   nodeVersion: string;
   hasApiKey: boolean;
   availableRuntimes: string[];
-  apiRuntime: Awaited<ReturnType<typeof getRuntimeAvailability>>["apiRuntime"];
+  apiRuntime: RuntimeAvailability["apiRuntime"];
 }
 
 export interface ReplayScanRow {

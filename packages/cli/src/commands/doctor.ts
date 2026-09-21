@@ -7,7 +7,7 @@ export function registerDoctorCommand(program: Command): void {
     .command("doctor")
     .description("Check local runtime prerequisites and suggest the next command")
     .action(async () => {
-      const { isBunRuntime, canUseOpenTui } = await import("../tui/runtime.js");
+      const { isBunRuntime, canUseOpenTui, getRuntimeMetadata } = await import("../tui/runtime.js");
       if (isBunRuntime() && canUseOpenTui()) {
         const { showOpenTuiDoctor } = await import("../tui/run.js");
         await showOpenTuiDoctor();
@@ -15,12 +15,16 @@ export function registerDoctorCommand(program: Command): void {
       }
 
       const { hasApiKey, availableRuntimes, apiRuntime } = await getRuntimeAvailability();
+      const runtime = getRuntimeMetadata();
       const nodeMajor = Number.parseInt(process.versions.node.split(".")[0] ?? "0", 10);
       const hasSupportedNode = nodeMajor >= 24;
 
       console.log("");
       console.log(chalk.red.bold("  ◆ 0sec") + chalk.gray(" doctor"));
       console.log("");
+      console.log(`  CLI version   v${runtime.cliVersion} [${runtime.releaseChannel}]`);
+      console.log(`  Runtime       ${runtime.engine} ${runtime.engineVersion}`);
+      console.log(`  Platform      ${runtime.platform}  ${runtime.arch}`);
       console.log(`  Node.js       ${hasSupportedNode ? chalk.green("ok") : chalk.red("bad")}  ${process.version}`);
       const apiStatus = hasApiKey
         ? `${chalk.yellow("configured")}  ${apiRuntime.providerLabel}`

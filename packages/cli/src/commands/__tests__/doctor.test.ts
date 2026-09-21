@@ -10,6 +10,14 @@ vi.mock("../../utils.js", () => ({
 vi.mock("../../tui/runtime.js", () => ({
   canUseOpenTui: () => false,
   isBunRuntime: () => false,
+  getRuntimeMetadata: () => ({
+    cliVersion: "0.17.0",
+    releaseChannel: "beta",
+    engine: "Node.js",
+    engineVersion: process.version,
+    platform: process.platform,
+    arch: process.arch,
+  }),
 }));
 
 import { registerDoctorCommand } from "../doctor.js";
@@ -51,6 +59,9 @@ describe("doctor Node prerequisites", () => {
       const output = await runDoctor();
       const nodeStatus = output.split("\n").find((line) => line.includes("Node.js"));
       expect(nodeStatus).toMatch(new RegExp(`Node\\.js\\s+${status}\\s+v${version.replaceAll(".", "\\.")}`));
+      expect(output).toContain("CLI version   v0.17.0 [beta]");
+      expect(output).toContain(`Runtime       Node.js v${version}`);
+      expect(output).toContain(`Platform      ${process.platform}  ${process.arch}`);
     } finally {
       Object.defineProperty(process.versions, "node", nodeDescriptor);
       Object.defineProperty(process, "version", versionDescriptor);

@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { useKeyboard } from "@opentui/react";
 import { getRuntimeAvailability } from "../utils.js";
+import { getRuntimeMetadata } from "./runtime.js";
 import { useTheme } from "./theme-context.js";
 import { DialogSelectBody, type DialogItem } from "./dialog-select.js";
 import {
@@ -58,8 +59,15 @@ export function DoctorScreen({ onExit, shell }: { onExit: () => void; shell?: Sh
     void getRuntimeAvailability()
       .then((result) => {
         if (!alive) return;
+        const runtime = getRuntimeMetadata();
         const nodeMajor = Number.parseInt(process.versions.node.split(".")[0] ?? "0", 10);
         setState({
+          cliVersion: runtime.cliVersion,
+          releaseChannel: runtime.releaseChannel,
+          runtimeEngine: runtime.engine,
+          runtimeVersion: runtime.engineVersion,
+          platform: runtime.platform,
+          arch: runtime.arch,
           nodeOk: nodeMajor >= 24,
           nodeVersion: process.version,
           ...result,
@@ -111,9 +119,9 @@ export function DoctorScreen({ onExit, shell }: { onExit: () => void; shell?: Sh
           : "Install Claude/Codex/Gemini CLI or set an API key.";
 
   // ── dialog interior ──────────────────────────────────────────────────────
-  // The three environment probes and the next-step guidance, projected onto
-  // the shared picker. A probe that has not returned reads "checking" and
-  // carries no tone: an unrun check is never a pass.
+  // Runtime metadata, the three environment probes, and the next-step
+  // guidance, projected onto the shared picker. A probe that has not returned
+  // reads "checking" and carries no tone: an unrun check is never a pass.
   const nodeStatus = !state ? "checking" : state.nodeOk ? "ok" : "bad";
   const apiStatus = !state ? "checking" : state.hasApiKey ? "ok" : state.apiRuntime.configured ? "bad" : "missing";
   const cliStatus = !state ? "checking" : state.availableRuntimes.length > 0 ? "ok" : "missing";
@@ -125,6 +133,25 @@ export function DoctorScreen({ onExit, shell }: { onExit: () => void; shell?: Sh
   };
   const showDoctorExamples = state != null && (state.hasApiKey || state.availableRuntimes.length > 0);
   const doctorItems: DialogItem[] = [
+    {
+      id: "check:version",
+      label: "CLI version",
+      description: state ? `v${state.cliVersion}` : "checking",
+      meta: state?.releaseChannel,
+      category: "Environment",
+    },
+    {
+      id: "check:runtime",
+      label: "Runtime",
+      description: state ? `${state.runtimeEngine} ${state.runtimeVersion}` : "checking",
+      category: "Environment",
+    },
+    {
+      id: "check:platform",
+      label: "Platform",
+      description: state ? `${state.platform} / ${state.arch}` : "checking",
+      category: "Environment",
+    },
     {
       id: "check:node",
       label: "Node.js",
@@ -184,7 +211,16 @@ export function DoctorScreen({ onExit, shell }: { onExit: () => void; shell?: Sh
   const renderDoctorDetail = (item: DialogItem, pane: { width: number; height: number }) => {
     const inner = Math.max(1, pane.width - SCROLLBAR_COLUMN);
     const lines: DialogDetailLine[] = [];
-    if (item.id === "check:node") {
+    if (item.id === "check:version") {
+      lines.push({ text: "CLI VERSION", fg: theme.PRIMARY });
+      lines.push({ text: state ? `v${state.cliVersion} [${state.releaseChannel}]` : "checking", fg: theme.TEXT });
+    } else if (item.id === "check:runtime") {
+      lines.push({ text: "RUNTIME", fg: theme.PRIMARY });
+      lines.push(...wrapDialogLines(state ? `${state.runtimeEngine} ${state.runtimeVersion}` : "checking", inner, theme.TEXT));
+    } else if (item.id === "check:platform") {
+      lines.push({ text: "PLATFORM", fg: theme.PRIMARY });
+      lines.push(...wrapDialogLines(state ? `${state.platform} / ${state.arch}` : "checking", inner, theme.TEXT));
+    } else if (item.id === "check:node") {
       lines.push({ text: "NODE.JS", fg: theme.PRIMARY });
       lines.push({ text: nodeStatus, fg: statusTone(nodeStatus) ?? theme.MUTED });
       lines.push({ text: "" });
