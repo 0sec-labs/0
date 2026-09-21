@@ -35,7 +35,7 @@ describe("H1Client.get — auth + headers", () => {
     const expectedAuth = "Basic " + Buffer.from(`${ID}:${SECRET}`).toString("base64");
     expect(headers.Authorization).toBe(expectedAuth);
     expect(headers.Accept).toBe("application/json");
-    expect(headers["User-Agent"]).toMatch(/^@0/cli\//);
+    expect(headers["User-Agent"]).toMatch(/^@0\/cli\//);
   });
 
   it("URL-encodes bracketed query parameters as %5B / %5D", async () => {

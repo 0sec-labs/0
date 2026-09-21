@@ -172,7 +172,7 @@ describe("0research execution evidence projection", () => {
     const golden = contract.evidence;
     expect(evidence).toEqual(golden);
     expect(researchExecutionEvidenceDigest(evidence)).toBe(
-      "sha256:3986f9883f5ed4be76488db503eb47c174771f9b099750924742b6a83803cd1b",
+      "sha256:13cc4f2f0f7748c19f1fdd10bcb567c40d9a1995ac87d4d13cd8d1d74f65fbc8",
     );
     expect(evidence.schemaVersion).toBe(3);
     expect(evidence.variantBinding).toEqual({

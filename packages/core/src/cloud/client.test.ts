@@ -97,7 +97,7 @@ describe("CloudClient.pingHealth — auth + headers", () => {
     const headers = (captured!.init.headers ?? {}) as Record<string, string>;
     expect(headers.Authorization).toBe(`Bearer ${SECRET}`);
     expect(headers.Accept).toBe("application/json");
-    expect(headers["User-Agent"]).toMatch(/^@0/cli\//);
+    expect(headers["User-Agent"]).toMatch(/^@0\/cli\//);
   });
   it.each(["https://cloud.0.ai", "https://cloud.0.security"])(
     "uses the hosted API health endpoint for %s",
