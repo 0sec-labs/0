@@ -9,6 +9,78 @@ export type RuntimeMode = "api" | "claude" | "codex" | "gemini" | "ollama" | "au
 export type ScanMode = "probe" | "deep" | "mcp" | "web" | "http_audit" | "llm-ipi";
 export type PackageEcosystem = "npm" | "pypi" | "cargo" | "oci";
 
+/** The operator-visible objective used to derive a bounded scan plan. */
+export type ScanGoal =
+  | "known-vulnerabilities"
+  | "unknown-vulnerabilities"
+  | "misconfigurations";
+
+/** Whether multiple planned runs share one sequential or concurrent lane. */
+export type ScanExecutionMode = "sequential" | "parallel";
+
+/**
+ * The complete pre-launch contract. Limits cover the whole plan, including
+ * every selected run and its subagents; they are not multiplied per run.
+ */
+export interface ScanPlan {
+  goal: ScanGoal;
+  depth: ScanDepth;
+  runCount: number;
+  executionMode: ScanExecutionMode;
+  timeCapMs: number;
+  costCapUsd: number;
+}
+
+export const SCAN_TASKS = [
+  "discovery",
+  "source-analysis",
+  "attack",
+  "verify",
+  "report",
+] as const;
+
+export type ScanTask = (typeof SCAN_TASKS)[number];
+
+/**
+ * Explicit task-to-model routing. Values are model ids, not provider names;
+ * the runtime owns the approved/reachable model allowlist.
+ */
+export type ScanTaskRouteMap = Readonly<Record<ScanTask, string>>;
+
+export function validateScanPlan(plan: ScanPlan): void {
+  if (!Number.isInteger(plan.runCount) || plan.runCount < 1) {
+    throw new Error("Scan plan runCount must be a positive integer");
+  }
+  if (!Number.isFinite(plan.timeCapMs) || plan.timeCapMs <= 0) {
+    throw new Error("Scan plan timeCapMs must be a positive finite number");
+  }
+  if (!Number.isFinite(plan.costCapUsd) || plan.costCapUsd <= 0) {
+    throw new Error("Scan plan costCapUsd must be a positive finite number");
+  }
+  if (plan.executionMode !== "sequential" && plan.executionMode !== "parallel") {
+    throw new Error(`Unknown scan execution mode "${String(plan.executionMode)}"`);
+  }
+  if (
+    plan.goal !== "known-vulnerabilities" &&
+    plan.goal !== "unknown-vulnerabilities" &&
+    plan.goal !== "misconfigurations"
+  ) {
+    throw new Error(`Unknown scan goal "${String(plan.goal)}"`);
+  }
+}
+
+export function validateScanTaskRoutes(routes: ScanTaskRouteMap): void {
+  const keys = Object.keys(routes);
+  const unknown = keys.filter((key) => !(SCAN_TASKS as readonly string[]).includes(key));
+  if (unknown.length > 0) {
+    throw new Error(`Unknown scan task route(s): ${unknown.join(", ")}`);
+  }
+  const missing = SCAN_TASKS.filter((task) => typeof routes[task] !== "string" || !routes[task].trim());
+  if (missing.length > 0) {
+    throw new Error(`Missing approved scan task route(s): ${missing.join(", ")}`);
+  }
+}
+
 // ── Authentication ──
 
 export type AuthType = "bearer" | "cookie" | "basic" | "header";
@@ -79,6 +151,10 @@ export interface ScanConfig {
   format: OutputFormat;
   runtime?: RuntimeMode;
   mode?: ScanMode;
+  /** Explicit pre-launch limits and execution intent. Omitted keeps legacy one-run behavior. */
+  plan?: ScanPlan;
+  /** Approved model id per task; validated by the selected runtime before use. */
+  taskRoutes?: ScanTaskRouteMap;
   repoPath?: string;
   /**
    * Package ecosystem of the target (npm / pypi / cargo / …). Optional; when

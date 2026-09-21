@@ -18,6 +18,8 @@ import type {
   SeedFinding,
   SemgrepFinding,
   ScanConfig,
+  ScanPlan,
+  ScanTaskRouteMap,
 } from "@0sec/shared";
 import type { InferSelectModel } from "drizzle-orm";
 import { restoreFindingReviewFields } from "@0sec/db";
@@ -138,6 +140,10 @@ export interface PipelineOptions {
   format: OutputFormat;
   runtime?: RuntimeMode;
   mode?: ScanMode;
+  /** Optional bounded guided plan. */
+  plan?: ScanPlan;
+  /** Operator-approved model id per task. */
+  taskRoutes?: ScanTaskRouteMap;
   resumeScanId?: string;
   diffBase?: string;
   changedOnly?: boolean;
@@ -1498,6 +1504,8 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineReport
     format: opts.format,
     runtime: opts.runtime ?? "api",
     mode: opts.mode ?? "deep",
+    ...(opts.plan ? { plan: opts.plan } : {}),
+    ...(opts.taskRoutes ? { taskRoutes: opts.taskRoutes } : {}),
     // Thread the resolved package identity through to the publishability /
     // novelty gate (issue #851). Without this the gate defaulted ecosystem to
     // npm and dropped the version, so it could only do package-level dedup. We

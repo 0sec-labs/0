@@ -5,8 +5,22 @@ import { execFile } from "node:child_process";
 import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import chalk from "chalk";
-import { VERSION } from "@0sec/shared";
-import type { ScanDepth, OutputFormat, RuntimeMode, ScanMode, AuthConfig, ScanReport, SeedFinding } from "@0sec/shared";
+import {
+  VERSION,
+  validateScanPlan,
+  validateScanTaskRoutes,
+} from "@0sec/shared";
+import type {
+  ScanDepth,
+  OutputFormat,
+  RuntimeMode,
+  ScanMode,
+  AuthConfig,
+  ScanReport,
+  SeedFinding,
+  ScanPlan,
+  ScanTaskRouteMap,
+} from "@0sec/shared";
 import type { CostBreakdownEntry } from "@0sec/core";
 import { formatAuditReport, formatReviewReport, formatReport, generatePdfReport } from "../formatters/index.js";
 import { buildShareUrl, checkRuntimeAvailability, getRuntimeAvailability } from "../utils.js";
@@ -57,6 +71,14 @@ export interface RunOptions {
   format: OutputFormat;
   runtime: RuntimeMode;
   mode?: ScanMode;
+  /** Explicit guided setup contract; omitted preserves the legacy single run. */
+  plan?: ScanPlan;
+  /** Explicit approved model id per task; never silently substituted. */
+  taskRoutes?: ScanTaskRouteMap;
+  /** Source review execution strategy. The primary control plane uses
+   * `lenses`, which is the validated self-evolving source-review path.
+   */
+  reviewStrategy?: "pipeline" | "lenses";
   timeout: number;
   verbose: boolean;
   dbPath?: string;
@@ -410,9 +432,18 @@ async function postFinalResultToCloud(report: unknown): Promise<void> {
   }
 }
 export async function runUnified(opts: RunOptions): Promise<void> {
+  if (opts.plan) {
+    validateScanPlan(opts.plan);
+    if (opts.taskRoutes) validateScanTaskRoutes(opts.taskRoutes);
+  }
   const { target, depth, format, runtime, timeout } = opts;
+  const planCostCap = opts.plan?.costCapUsd;
+  const effectiveCostCeilingUsd =
+    planCostCap === undefined || opts.costCeilingUsd === undefined
+      ? opts.costCeilingUsd ?? planCostCap
+      : Math.min(opts.costCeilingUsd, planCostCap);
+  const effectiveTimeout = opts.plan?.timeCapMs ?? timeout;
   const core = await loadCoreModule();
-
   // ── Journal-based resume (0sec#374) ───────────────────────────────
   let effectiveResumeScanId = opts.resumeScanId;
 
@@ -544,16 +575,18 @@ export async function runUnified(opts: RunOptions): Promise<void> {
           format,
           runtime,
           mode: opts.mode ?? "deep",
-          timeout,
+          timeout: effectiveTimeout,
           verbose: opts.verbose,
           apiKey: opts.apiKey,
           model: opts.model,
+          ...(opts.plan ? { plan: opts.plan } : {}),
+          ...(opts.taskRoutes ? { taskRoutes: opts.taskRoutes } : {}),
           repoPath: opts.repoPath,
           auth: opts.auth,
           apiSpecPath: opts.apiSpecPath,
           race: opts.race,
           egats: opts.egats,
-          costCeilingUsd: opts.costCeilingUsd,
+          costCeilingUsd: effectiveCostCeilingUsd,
           scopeFile: opts.scopeFile,
           rateLimit: opts.rateLimit,
           allowScanners: opts.allowScanners,
@@ -587,9 +620,11 @@ export async function runUnified(opts: RunOptions): Promise<void> {
         dbPath: opts.dbPath,
         apiKey: opts.apiKey,
         model: opts.model,
-        timeout,
+        timeout: effectiveTimeout,
         packageVersion: opts.packageVersion,
-        costCeilingUsd: opts.costCeilingUsd,
+        costCeilingUsd: effectiveCostCeilingUsd,
+        ...(opts.plan ? { plan: opts.plan } : {}),
+        ...(opts.taskRoutes ? { taskRoutes: opts.taskRoutes } : {}),
         reviewProfile: opts.reviewProfile,
         reviewPackageEcosystem: opts.reviewPackageEcosystem,
         subsystem: opts.subsystem,

@@ -7,6 +7,7 @@ import type {
   PocStep,
   Severity,
   TriageLayerName,
+  ScanTask,
 } from "@0sec/shared";
 import { loadTemplates } from "@0sec/templates";
 import { createRuntime } from "./runtime/index.js";
@@ -31,7 +32,7 @@ import {
   shellPentestPrompt,
   buildAccessControlPromptBlock,
 } from "./agent/prompts.js";
-import { createJevEvaluator, jevConfigFromEnvironment, resolveIdentities } from "@0sec/shared";
+import { createJevEvaluator, jevConfigFromEnvironment, resolveIdentities, validateScanPlan, validateScanTaskRoutes } from "@0sec/shared";
 import type { RuntimeMode, PipelineEvent } from "@0sec/shared";
 import { createScanMemoryStore } from "./triage/memories.js";
 import { features } from "./agent/features.js";
@@ -49,6 +50,7 @@ import { generateRemediation } from "./remediation.js";
 import { parseImpactAssessment } from "./triage/impact-assessment.js";
 import { attachRemediation, attachImpactAssessment, countFlagsInFindings } from "./agentic/report-enrichment.js";
 import { getOrCreateRateLimiter, resolveEngagementForConfig, attachEngagementPosture, resolveEnforcementForConfig, attachEnforcementSummary, resolveScopeForConfig, buildAttributionForConfig, cacheScopePolicy } from "./agentic/scan-config.js";
+import { ScanCostLedger } from "./agent/cost-ledger.js";
 
 
 import { parseApiSpec } from "./api-spec.js";
@@ -606,8 +608,10 @@ export async function agenticScan(opts: AgenticScanOptions): Promise<ScanReport>
     }
     return runCraftScanStage(opts.config, opts.craftTarget, opts.craft, emit);
   }
-
-  let config = normalizeScanConfig(opts.config);
+let config = normalizeScanConfig(opts.config);
+  if (config.plan) validateScanPlan(config.plan);
+  if (config.taskRoutes) validateScanTaskRoutes(config.taskRoutes);
+  const scanCostLedger = new ScanCostLedger();
 
   // Programmatic scope ingestion (0sec#215). Load once at the top and
   // pass the parsed `ScopePolicy` to every agent config below. The CLI
@@ -766,14 +770,12 @@ export async function agenticScan(opts: AgenticScanOptions): Promise<ScanReport>
 
   // Determine runtime mode
   const requestedRuntime = config.runtime ?? "api";
-
-  // Native API runtime is only valid for explicit API mode, or for auto mode
-  // when we intentionally choose the native API strategy.
   const nativeApiRuntime = new LlmApiRuntime({
     type: "api",
     timeout: config.timeout ?? 120_000,
     model: config.model,
     apiKey: config.apiKey,
+    ...(config.taskRoutes ? { agentModels: { ...config.taskRoutes } } : {}),
   });
   const nativeApiDiagnostics = nativeApiRuntime.getConfigurationDiagnostics();
   assertApiRuntimeSelection(config.runtime, nativeApiDiagnostics);
@@ -1310,9 +1312,17 @@ export async function agenticScan(opts: AgenticScanOptions): Promise<ScanReport>
         });
       }
     }
-
     const discoveryState = useNative
-      ? await runNativeDiscovery(nativeRuntime, db, config, scanId, emit, apiSpecPromptText, getPendingUserMessages)
+      ? await runNativeDiscovery(
+          await runtimeForTask(nativeRuntime, config, "discovery"),
+          db,
+          config,
+          scanId,
+          emit,
+          apiSpecPromptText,
+          getPendingUserMessages,
+          scanCostLedger,
+        )
       : await runLegacyDiscovery(legacyRuntime, db, config, scanId, emit, effectiveDbPath, apiSpecPromptText);
 
     // Merge the deterministic pre-pass findings into discovery output (once).
@@ -1476,8 +1486,31 @@ export async function agenticScan(opts: AgenticScanOptions): Promise<ScanReport>
       }
     } else {
       attackState = useNative
-        ? await runNativeAttack(nativeRuntime, db, config, scanId, discoveryState.targetInfo, categories, maxAttackTurns, emit, opts.challengeHint, apiSpecPromptText, getPendingUserMessages)
-        : await runLegacyAttack(legacyRuntime, db, config, scanId, discoveryState.targetInfo, categories, maxAttackTurns, emit, effectiveDbPath, apiSpecPromptText);
+        ? await runNativeAttack(
+            await runtimeForTask(nativeRuntime, config, config.repoPath ? "source-analysis" : "attack"),
+            db,
+            config,
+            scanId,
+            discoveryState.targetInfo,
+            categories,
+            maxAttackTurns,
+            emit,
+            opts.challengeHint,
+            apiSpecPromptText,
+            getPendingUserMessages,
+          )
+        : await runLegacyAttack(
+            legacyRuntime,
+            db,
+            config,
+            scanId,
+            discoveryState.targetInfo,
+            categories,
+            maxAttackTurns,
+            emit,
+            effectiveDbPath,
+            apiSpecPromptText,
+          );
     }
 
     allFindings = [...attackState.findings];
@@ -3127,7 +3160,14 @@ export async function agenticScan(opts: AgenticScanOptions): Promise<ScanReport>
           message: "All candidates rejected by consensus — skipping agentic verify.",
         });
       } else if (useNative) {
-        await runNativeVerify(nativeRuntime, db, config, scanId, consensusFiltered, emit);
+        await runNativeVerify(
+          await runtimeForTask(nativeRuntime, config, "verify"),
+          db,
+          config,
+          scanId,
+          consensusFiltered,
+          emit,
+        );
       } else {
         await runLegacyVerify(legacyRuntime, db, config, scanId, consensusFiltered, emit, effectiveDbPath);
       }
@@ -3311,4 +3351,5 @@ export async function agenticScan(opts: AgenticScanOptions): Promise<ScanReport>
     db.close();
   }
 }
+
 
