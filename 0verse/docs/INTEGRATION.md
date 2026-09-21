@@ -18,7 +18,7 @@
           ▲
           │ signed evidence import: Hyper-V-specific today;
           │ provider-neutral import remains planned (dispatch is parked)
-  0verse             Apache-2.0, public in 0sec-labs/0sec · out-of-band binary RE + verifier/notary
+  0verse             Apache-2.0, public in 0sec-labs/0 · out-of-band binary RE + verifier/notary
                      ingest → decompile → lift → analyze → reason → dynamic → PoV → report
           │            │                                    │
           │            └── analyze: shell out to ──►  foxguard (OSS, Rust C SAST)
@@ -108,7 +108,7 @@ triage + dynamic confirmation like any other hypothesis.
 
 ## Source-side engine oracles — concepts reimplemented openly; learned versions stay the moat
 
-The source-side engine is public in `0sec-labs/0sec`; the managed platform's
+The source-side engine is public in `0sec-labs/0`; the managed platform's
 managed operations, trained models, and dataset stay private. 0verse reimplements
 from **concepts only — never copy tuned prompt text or learned state.** The split
 (from reading the source-side engine's `packages/core` triage/oracle code and the
@@ -349,7 +349,7 @@ system Python. For example, replace the absolute checkout path below:
   "mcpServers": {
     "0verse": {
       "command": "uv",
-      "args": ["run", "--directory", "/absolute/path/to/0sec/0verse", "--frozen", "--extra", "mcp", "python", "-m", "zeroverse.mcp"]
+      "args": ["run", "--directory", "/absolute/path/to/0/0verse", "--frozen", "--extra", "mcp", "python", "-m", "zeroverse.mcp"]
     }
   }
 }

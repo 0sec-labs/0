@@ -50,7 +50,7 @@ pinned FoxGuard download.
 
 ```bash
 # Install without FoxGuard
-INSTALL_FOXGUARD=0 bash <(curl -fsSL https://raw.githubusercontent.com/0sec-labs/0sec/main/install.sh)
+INSTALL_FOXGUARD=0 bash <(curl -fsSL https://raw.githubusercontent.com/0sec-labs/0/main/install.sh)
 ```
 
 <span id="0sec-command-not-found-after-install"></span>
@@ -71,7 +71,7 @@ warning with the command to add it.
 
 Windows support is experimental. `install.sh` does not support Windows.
 Download the release asset manually from the
-[releases page](https://github.com/0sec-labs/0sec/releases/latest):
+[releases page](https://github.com/0sec-labs/0/releases/latest):
 
 ```
 0sec-windows-x64.exe

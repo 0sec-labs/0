@@ -155,7 +155,7 @@ INSTALL`);
     const result = await performAutoUpdate({ version: "999.1.2", installDir: destination });
     expect(result.success).toBe(true);
     expect(readFileSync(receipt, "utf8").split("\n")).toEqual([
-      "https://github.com/0sec-labs/0sec/releases/download/v999.1.2", destination, "",
+      "https://github.com/0sec-labs/0/releases/download/v999.1.2", destination, "",
     ]);
   });
 });

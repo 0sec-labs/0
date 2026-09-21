@@ -702,7 +702,7 @@ on the published npm package and the GitHub Release tag.
 ### Changed — pwnkit is now 0sec
 
 The engine and CLI are renamed from pwnkit to 0sec, matching the public
-repository (`0sec-labs/0sec`):
+repository (`0sec-labs/0`):
 
 - **Package identity:** the root bundle is `0sec`. The workspace CLI package is
   `0sec-cli`; the binary shipped by both is **`0sec`**, with **`0`** as a
@@ -710,7 +710,7 @@ repository (`0sec-labs/0sec`):
 - **Container image**: `ghcr.io/0sec-labs/0sec` (was `ghcr.io/0sec-labs/pwnkit`).
 - **Standalone distribution:** GitHub Releases ship verified binaries for Apple
   Silicon macOS, Linux x64 and arm64, and Windows x64. Install with
-  `curl -fsSL https://raw.githubusercontent.com/0sec-labs/0sec/main/install.sh | bash`
+  `curl -fsSL https://raw.githubusercontent.com/0sec-labs/0/main/install.sh | bash`
   on supported Unix hosts, or download the matching release asset directly.
 - **Environment variables**: the public env contract moved from `PWNKIT_*` to
   `0SEC_*` (e.g. `0SEC_MODEL`, `0SEC_CLOUD_TOKEN`). At CLI startup, any legacy

@@ -3,7 +3,7 @@ title: Dynamic Triage Routing — v0 Implementation
 description: Rule-based layer selection, routing traces, and the planned learned classifier.
 ---
 
-> **Status:** Rule-based v0 is gated by `0SEC_FEATURE_DYNAMIC_TRIAGE`. The learned classifier remains planned in the [design](/research/dynamic-routing-design/) and [0sec#113](https://github.com/0sec-labs/0sec/issues/113).
+> **Status:** Rule-based v0 is gated by `0SEC_FEATURE_DYNAMIC_TRIAGE`. The learned classifier remains planned in the [design](/research/dynamic-routing-design/) and [0sec#113](https://github.com/0sec-labs/0/issues/113).
 
 ## What shipped in v0
 
@@ -186,8 +186,8 @@ every layer runs on every workflow or target.
 
 ## Related work
 
-- [0sec#113](https://github.com/0sec-labs/0sec/issues/113) — issue tracking this work
-- [0sec#112](https://github.com/0sec-labs/0sec/issues/112) — per-layer telemetry (prerequisite, already shipped)
-- [0sec#67](https://github.com/0sec-labs/0sec/issues/67) — joint paper plan
-- [0sec#72](https://github.com/0sec-labs/0sec/issues/72) — the ablation that motivated this
+- [0sec#113](https://github.com/0sec-labs/0/issues/113) — issue tracking this work
+- [0sec#112](https://github.com/0sec-labs/0/issues/112) — per-layer telemetry (prerequisite, already shipped)
+- [0sec#67](https://github.com/0sec-labs/0/issues/67) — joint paper plan
+- [0sec#72](https://github.com/0sec-labs/0/issues/72) — the ablation that motivated this
 - [Dynamic Routing Design Doc](/research/dynamic-routing-design/) — full design discussion

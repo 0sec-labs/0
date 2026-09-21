@@ -122,7 +122,7 @@ installation directory to `PATH`:
 ```yaml
 - name: Install 0
   run: |
-    curl -fsSL https://raw.githubusercontent.com/0sec-labs/0sec/main/install.sh | bash
+    curl -fsSL https://raw.githubusercontent.com/0sec-labs/0/main/install.sh | bash
     echo "$HOME/.0sec/bin" >> "$GITHUB_PATH"
 - name: Run review
   run: 0 review . --runtime api --cost-ceiling 5 --format sarif > results.sarif
@@ -309,7 +309,7 @@ GitHub App's deployed repository policy.
 
 ## Known limitations
 
-- The composite action `0sec-labs/0sec/.github/actions/0sec-scan` is not shipped.
+- The composite action `0sec-labs/0/.github/actions/0sec-scan` is not shipped.
   Proposed action inputs are not a supported public contract.
 - Managed App enrollment and service execution depend on the account and
   deployed backend, not merely a successful browser login.

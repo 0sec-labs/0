@@ -186,7 +186,7 @@ async function showInteractiveMenu(): Promise<void> {
   console.log(`  ${chalk.dim("The full TUI (mission control + live scan view) needs Bun's runtime.")}`);
   console.log("");
   console.log(`  ${chalk.bold("Install")} (single curl, no Node / Bun required):`);
-  console.log(`    curl -fsSL https://raw.githubusercontent.com/0sec-labs/0sec/main/install.sh | bash`);
+  console.log(`    curl -fsSL https://raw.githubusercontent.com/0sec-labs/0/main/install.sh | bash`);
   console.log("");
   console.log(`  ${chalk.dim("After install, run:")}`);
   console.log(`    0sec scan --target https://example.com`);

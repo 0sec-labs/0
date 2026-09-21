@@ -9,7 +9,7 @@ true-positive / false-positive classifiers.
 
 The dataset supports text classifiers and hybrid models combining text with
 the current 55-feature vector (45 original finding features plus 10 kernel features). The model plan is tracked in
-[issue #67](https://github.com/0sec-labs/0sec/issues/67).
+[issue #67](https://github.com/0sec-labs/0/issues/67).
 
 ## Inputs
 

@@ -62,7 +62,7 @@ function buildIssueBody(finding: Finding): string {
   }
 
   lines.push("---");
-  lines.push(`*Exported by [0sec](https://github.com/0sec-labs/0sec) | Finding ID: \`${finding.id}\`*`);
+  lines.push(`*Exported by [0sec](https://github.com/0sec-labs/0) | Finding ID: \`${finding.id}\`*`);
 
   return lines.join("\n");
 }

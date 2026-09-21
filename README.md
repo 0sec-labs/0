@@ -22,7 +22,7 @@
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-1A1815?style=flat-square&labelColor=1A1815" alt="License: MIT OR Apache-2.0"></a>
-  <a href="https://github.com/0sec-labs/0sec/releases/latest"><img src="https://img.shields.io/github/v/release/0sec-labs/0sec?style=flat-square&labelColor=1A1815&color=1A1815" alt="Latest release"></a>
+  <a href="https://github.com/0sec-labs/0/releases/latest"><img src="https://img.shields.io/github/v/release/0sec-labs/0?style=flat-square&labelColor=1A1815&color=1A1815" alt="Latest release"></a>
   <a href="#status"><img src="https://img.shields.io/badge/status-research%20preview-FD802E?style=flat-square&labelColor=1A1815" alt="Status: research preview"></a>
 </p>
 
@@ -35,7 +35,7 @@
 
 Give this to your AI agent, or run the following in your terminal:
 
-> Install 0 with `curl -fsSL https://raw.githubusercontent.com/0sec-labs/0sec/main/install.sh | bash`, then use 0 to test this repository for security issues.
+> Install 0 with `curl -fsSL https://raw.githubusercontent.com/0sec-labs/0/main/install.sh | bash`, then use 0 to test this repository for security issues.
 [Website](https://0.security/) · [Documentation](https://docs.0.security/)
 
 ## License

@@ -11,7 +11,7 @@ description: "Historical XBOW cost accounting: $0.48 per recorded run and $5.20 
 > sweep” is historical, not a current refresh guarantee.
 > See [Methodology](/methodology/) for the corrected interpretation.
 
-*Published 2026-05-08. Numbers come from the canonical [benchmark ledger](https://github.com/0sec-labs/0sec/blob/main/packages/benchmark/results/benchmark-ledger.json) and are recomputed on every CI consolidation run.*
+*Published 2026-05-08. Numbers come from the canonical [benchmark ledger](https://github.com/0sec-labs/0/blob/main/packages/benchmark/results/benchmark-ledger.json) and are recomputed on every CI consolidation run.*
 
 <span id="lead"></span>
 ## Measurement
@@ -41,7 +41,7 @@ The recorded Azure gpt-5.4 cohort used up to three retries per challenge and a $
 >
 > Total spend across the 95 attempted challenges in the consolidation window: **$483.75**.
 
-Computed from the canonical [`packages/benchmark/results/benchmark-ledger.json`](https://github.com/0sec-labs/0sec/blob/main/packages/benchmark/results/benchmark-ledger.json), specifically the `xbow.retainedArtifactBacked.perModel` section:
+Computed from the canonical [`packages/benchmark/results/benchmark-ledger.json`](https://github.com/0sec-labs/0/blob/main/packages/benchmark/results/benchmark-ledger.json), specifically the `xbow.retainedArtifactBacked.perModel` section:
 
 ```json
 "gpt-5.4": {
@@ -83,7 +83,7 @@ identify contractual or self-hosted pricing assumptions.
 
 - Per-token cost tracking lives in `packages/core/src/agent/cost.ts`. Every model has an input/output/cached-input rate. Unknown models fall back to a conservative default and emit a log line.
 - Per-model breakdown is computed by `packages/benchmark/src/scripts/consolidate-xbow.ts`, which walks the retained CI artifacts and groups results by the `model` field in each run.
-- [issue #231](https://github.com/0sec-labs/0sec/issues/231) tracks adding `cost_usd`, `cost_breakdown` (by provider/model), and `cost_per_flag` to the `scan_completed` event payload.
+- [issue #231](https://github.com/0sec-labs/0/issues/231) tracks adding `cost_usd`, `cost_breakdown` (by provider/model), and `cost_per_flag` to the `scan_completed` event payload.
 
 ## What is still missing
 

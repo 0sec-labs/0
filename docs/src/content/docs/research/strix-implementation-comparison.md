@@ -5,7 +5,7 @@ description: "Code-level comparison of the open-source Strix pentesting agent (A
 
 > **Historical comparison, 2026-05-23.** Findings apply to the inspected source snapshots.
 
-Read of `usestrix/strix@HEAD` (Apache-2.0, ~18.7k LOC Python) on 2026-05-23, mapped against `0sec-labs/0sec@research/strix-comparison`. Every claim below is anchored to a `strix/<path>:<line>` or `0sec packages/<path>:<line>` reference; sections marked "not observed in public repo" are exactly that.
+Read of `usestrix/strix@HEAD` (Apache-2.0, ~18.7k LOC Python) on 2026-05-23, mapped against `0sec-labs/0@research/strix-comparison`. Every claim below is anchored to a `strix/<path>:<line>` or `0sec packages/<path>:<line>` reference; sections marked "not observed in public repo" are exactly that.
 
 ## 1. Executive summary
 
@@ -290,7 +290,7 @@ Strix references (all on `usestrix/strix@HEAD`, cloned 2026-05-23):
 - CI: `.github/workflows/build-release.yml`
 - Tests: `tests/` (totals from `wc -l`, no integration tests in `tests/agents/`)
 
-0 references (all on `0sec-labs/0sec@research/strix-comparison`):
+0 references (all on `0sec-labs/0@research/strix-comparison`):
 
 - Agent loop: `packages/core/src/agent/loop.ts:38-120`, `:350`
 - Native loop: `packages/core/src/agent/native-loop.ts` (1449 LOC)

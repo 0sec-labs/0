@@ -153,7 +153,7 @@ describe("0research execution evidence projection", () => {
       ...options,
       candidateChange,
       producer: {
-        repository: "0sec-labs/0sec",
+        repository: "0sec-labs/0",
         commitSha: "a".repeat(40),
         treeDigest: `sha256:${"7".repeat(64)}`,
       },
@@ -208,7 +208,7 @@ describe("0research execution evidence projection", () => {
     expect(() => projectResearchExecutionEvidence({
       ...drift,
       candidateChange: { kind: "prompt", knobs: { "source_audit.hypothesis": "Inspect parser state transitions." } },
-      producer: { repository: "0sec-labs/0sec", commitSha: "a".repeat(40), treeDigest: `sha256:${"7".repeat(64)}` },
+      producer: { repository: "0sec-labs/0", commitSha: "a".repeat(40), treeDigest: `sha256:${"7".repeat(64)}` },
     })).toThrow(/drift/);
 
     const hidden = inputs();
@@ -221,7 +221,7 @@ describe("0research execution evidence projection", () => {
     expect(() => projectResearchExecutionEvidence({
       ...hidden,
       candidateChange: { kind: "prompt", knobs: { "source_audit.hypothesis": "Inspect parser state transitions." } },
-      producer: { repository: "0sec-labs/0sec", commitSha: "a".repeat(40), treeDigest: `sha256:${"7".repeat(64)}` },
+      producer: { repository: "0sec-labs/0", commitSha: "a".repeat(40), treeDigest: `sha256:${"7".repeat(64)}` },
     })).toThrow(/not exactly/);
   });
 
@@ -233,7 +233,7 @@ describe("0research execution evidence projection", () => {
     expect(() => projectResearchExecutionEvidence({
       ...options,
       candidateChange: { kind: "feature_flag", knobs: { invented_flag: true } },
-      producer: { repository: "0sec-labs/0sec", commitSha: "a".repeat(40), treeDigest: `sha256:${"7".repeat(64)}` },
+      producer: { repository: "0sec-labs/0", commitSha: "a".repeat(40), treeDigest: `sha256:${"7".repeat(64)}` },
     })).toThrow(/unsupported/);
 
     const baseline = inputs();
@@ -243,7 +243,7 @@ describe("0research execution evidence projection", () => {
     expect(() => projectResearchExecutionEvidence({
       ...baseline,
       candidateChange: { kind: "feature_flag", knobs: { web_search: true } },
-      producer: { repository: "0sec-labs/0sec", commitSha: "a".repeat(40), treeDigest: `sha256:${"7".repeat(64)}` },
+      producer: { repository: "0sec-labs/0", commitSha: "a".repeat(40), treeDigest: `sha256:${"7".repeat(64)}` },
     })).toThrow(/explicitly bind/);
   });
 

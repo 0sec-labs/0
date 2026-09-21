@@ -55,11 +55,11 @@ evaluation or [executable-plugin setup](/integrations/#model-authored-executable
 for session tools. Model credentials configure proposal generation; guest
 images configure execution. Neither substitutes for the other.
 
-**Implementation map:** [`improvement/config.ts`](https://github.com/0sec-labs/0sec/blob/main/packages/core/src/improvement/config.ts),
-[`improvement/loop.ts`](https://github.com/0sec-labs/0sec/blob/main/packages/core/src/improvement/loop.ts),
-[`commands/evolve.ts`](https://github.com/0sec-labs/0sec/blob/main/packages/cli/src/commands/evolve.ts),
-[`plugins/executable.ts`](https://github.com/0sec-labs/0sec/blob/main/packages/core/src/plugins/executable.ts),
-[`console/turn-engine.ts`](https://github.com/0sec-labs/0sec/blob/main/packages/core/src/console/turn-engine.ts).
+**Implementation map:** [`improvement/config.ts`](https://github.com/0sec-labs/0/blob/main/packages/core/src/improvement/config.ts),
+[`improvement/loop.ts`](https://github.com/0sec-labs/0/blob/main/packages/core/src/improvement/loop.ts),
+[`commands/evolve.ts`](https://github.com/0sec-labs/0/blob/main/packages/cli/src/commands/evolve.ts),
+[`plugins/executable.ts`](https://github.com/0sec-labs/0/blob/main/packages/core/src/plugins/executable.ts),
+[`console/turn-engine.ts`](https://github.com/0sec-labs/0/blob/main/packages/core/src/console/turn-engine.ts).
 
 ## Engagement boundary
 
@@ -598,11 +598,11 @@ gains remain unestablished.
 
 Tracked implementation work:
 
-- [Crash-safe campaigns and feedback-driven resume (#41)](https://github.com/0sec-labs/0sec/issues/41)
-- [Longitudinal capability retention (#37)](https://github.com/0sec-labs/0sec/issues/37)
-- [Adaptive holdout exposure and rotation (#40)](https://github.com/0sec-labs/0sec/issues/40)
-- [Measured, development-only archive search (#39)](https://github.com/0sec-labs/0sec/issues/39)
-- [Evidence provenance and incompatible comparisons (#38)](https://github.com/0sec-labs/0sec/issues/38)
+- [Crash-safe campaigns and feedback-driven resume (#41)](https://github.com/0sec-labs/0/issues/41)
+- [Longitudinal capability retention (#37)](https://github.com/0sec-labs/0/issues/37)
+- [Adaptive holdout exposure and rotation (#40)](https://github.com/0sec-labs/0/issues/40)
+- [Measured, development-only archive search (#39)](https://github.com/0sec-labs/0/issues/39)
+- [Evidence provenance and incompatible comparisons (#38)](https://github.com/0sec-labs/0/issues/38)
 
 ## Autonomy and hot-reload boundaries
 
@@ -636,10 +636,10 @@ The historical candidate measurements below cover particular executions, not
 every current frontend, desktop installation, real-provider route, or hosted
 deployment.
 
-**Sources:** [`plugins/live-harness.ts`](https://github.com/0sec-labs/0sec/blob/main/packages/core/src/plugins/live-harness.ts),
-[`console/turn-engine.ts`](https://github.com/0sec-labs/0sec/blob/main/packages/core/src/console/turn-engine.ts),
-[`tui/harness-context.tsx`](https://github.com/0sec-labs/0sec/blob/main/packages/cli/src/tui/harness-context.tsx),
-[`tui/harness-trust-controls.tsx`](https://github.com/0sec-labs/0sec/blob/main/packages/cli/src/tui/harness-trust-controls.tsx).
+**Sources:** [`plugins/live-harness.ts`](https://github.com/0sec-labs/0/blob/main/packages/core/src/plugins/live-harness.ts),
+[`console/turn-engine.ts`](https://github.com/0sec-labs/0/blob/main/packages/core/src/console/turn-engine.ts),
+[`tui/harness-context.tsx`](https://github.com/0sec-labs/0/blob/main/packages/cli/src/tui/harness-context.tsx),
+[`tui/harness-trust-controls.tsx`](https://github.com/0sec-labs/0/blob/main/packages/cli/src/tui/harness-trust-controls.tsx).
 
 ### Composition and language support
 
@@ -721,8 +721,8 @@ leave it off for sandboxed components. It authorizes **arbitrary host ESM for
 that workspace**, not just one tool call. Revoking it does not undo external
 effects already performed.
 
-Source: [`agent/tools/system.ts`](https://github.com/0sec-labs/0sec/blob/main/packages/core/src/agent/tools/system.ts)
-and [`agent/tools.ts`](https://github.com/0sec-labs/0sec/blob/main/packages/core/src/agent/tools.ts).
+Source: [`agent/tools/system.ts`](https://github.com/0sec-labs/0/blob/main/packages/core/src/agent/tools/system.ts)
+and [`agent/tools.ts`](https://github.com/0sec-labs/0/blob/main/packages/core/src/agent/tools.ts).
 
 ### Autonomy without a second permission system
 
@@ -790,7 +790,7 @@ goals. Ordinary session history, task ledgers, retained plugin versions and
 development-engine checkpoints are useful but do not constitute durable
 evolution spending, holdout-exposure accounting, or exactly-once tool effects.
 See [feedback across passes](#feedback-across-evolution-passes) and the
-[campaign work](https://github.com/0sec-labs/0sec/issues/41).
+[campaign work](https://github.com/0sec-labs/0/issues/41).
 First-class Python components require further implementation.
 
 ### Local candidate measurements
@@ -1129,8 +1129,8 @@ them is not. The mutable registry instead uses a serialized temporary-file
 write and rename. Its event chain and artifact digests detect inconsistent
 local changes, not an attacker who can rewrite the entire store.
 
-Sources: [`artifacts.ts`](https://github.com/0sec-labs/0sec/blob/main/packages/core/src/improvement/artifacts.ts)
-and [`registry.ts`](https://github.com/0sec-labs/0sec/blob/main/packages/core/src/improvement/registry.ts).
+Sources: [`artifacts.ts`](https://github.com/0sec-labs/0/blob/main/packages/core/src/improvement/artifacts.ts)
+and [`registry.ts`](https://github.com/0sec-labs/0/blob/main/packages/core/src/improvement/registry.ts).
 
 ## Promotion gates
 
@@ -1208,7 +1208,7 @@ After reviewing validation evidence, enable `autoPromoteFinderLenses` if desired
 
 Status distinguishes `evolve:dry-run`, `evolve:auto`, `evolve:waiting input`,
 `evolve:promoted`, and `evolve:error`. Source:
-[`tui/lens-evolution.ts`](https://github.com/0sec-labs/0sec/blob/main/packages/cli/src/tui/lens-evolution.ts).
+[`tui/lens-evolution.ts`](https://github.com/0sec-labs/0/blob/main/packages/cli/src/tui/lens-evolution.ts).
 
 ### Lens corpus and receipts
 

@@ -20,7 +20,7 @@ const RICH_INPUT: StatusBarInput = {
   model: "claude-opus-5[1m]",
   effort: "max",
   mode: "Standard",
-  cwd: "/home/dev/coding/0sec-labs/0sec",
+  cwd: "/home/dev/coding/0sec-labs/0",
   home: "/home/dev",
   branch: "publish/main-integration",
   modified: 54,
@@ -189,7 +189,7 @@ describe("buildStatusSegments", () => {
   it("parenthesizes the plan and abbreviates the cwd", () => {
     const segments = buildStatusSegments(RICH_INPUT);
     expect(textOf(segments, "plan")).toBe("(sub)");
-    expect(textOf(segments, "cwd")).toBe("~/coding/0sec-labs/0sec");
+    expect(textOf(segments, "cwd")).toBe("~/coding/0sec-labs/0");
   });
 
 });

@@ -50,7 +50,7 @@ export default defineConfig({
         {
           icon: "github",
           label: "GitHub",
-          href: "https://github.com/0sec-labs/0sec",
+          href: "https://github.com/0sec-labs/0",
         },
         {
           icon: "external",
@@ -59,7 +59,7 @@ export default defineConfig({
         },
       ],
       defaultLocale: "root",
-      editLink: { baseUrl: "https://github.com/0sec-labs/0sec/edit/main/docs/" },
+      editLink: { baseUrl: "https://github.com/0sec-labs/0/edit/main/docs/" },
       components: {
         Header: "./src/components/DocsHeader.astro",
         Hero: "./src/components/DocsHero.astro",

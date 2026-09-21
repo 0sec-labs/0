@@ -28,7 +28,7 @@
  *
  * `0SEC_REQUIRE_SCOPE` remains available to make every mode fail closed.
  *
- * @see https://github.com/0sec-labs/0sec/issues/133
+ * @see https://github.com/0sec-labs/0/issues/133
  */
 
 /**

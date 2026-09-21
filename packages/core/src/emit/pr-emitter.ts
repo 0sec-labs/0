@@ -311,7 +311,7 @@ export function buildPrBody(finding: Finding, opts: { fixApplied?: UnifiedDiff; 
   }
 
   lines.push(`---`);
-  lines.push(`*Emitted by [0sec](https://github.com/0sec-labs/0sec) \`--emit pr\` | Finding ID: \`${finding.id}\`*`);
+  lines.push(`*Emitted by [0sec](https://github.com/0sec-labs/0) \`--emit pr\` | Finding ID: \`${finding.id}\`*`);
 
   return lines.join("\n");
 }

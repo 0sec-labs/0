@@ -181,7 +181,7 @@ export function formatSarif(report: ScanReport): string {
           driver: {
             name: "0sec",
             version: VERSION,
-            informationUri: "https://github.com/0sec-labs/0sec",
+            informationUri: "https://github.com/0sec-labs/0",
             rules: Array.from(rulesMap.values()),
           },
         },

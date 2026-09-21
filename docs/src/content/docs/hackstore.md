@@ -20,11 +20,11 @@ workflow below. The 0.16.3 binary has a tool-registry bug in `plugin run`.
 Check `0 --version` and command-specific `--help` before following this guide.
 
 The implementation references for this guide are
-[`hackstore.ts`](https://github.com/0sec-labs/0sec/blob/main/packages/cli/src/commands/hackstore.ts)
+[`hackstore.ts`](https://github.com/0sec-labs/0/blob/main/packages/cli/src/commands/hackstore.ts)
 (scaffolding/validation),
-[`plugin.ts`](https://github.com/0sec-labs/0sec/blob/main/packages/cli/src/commands/plugin.ts)
+[`plugin.ts`](https://github.com/0sec-labs/0/blob/main/packages/cli/src/commands/plugin.ts)
 (installation/approval/direct calls), and
-[`loader.ts`](https://github.com/0sec-labs/0sec/blob/main/packages/core/src/plugins/loader.ts)
+[`loader.ts`](https://github.com/0sec-labs/0/blob/main/packages/core/src/plugins/loader.ts)
 (spawn/handshake/dispatch). Check the help for your installed release rather
 than assuming an SDK method has a matching CLI command.
 
@@ -142,7 +142,7 @@ Document external executables such as `foxguard` as prerequisites.
 
 The [JSON schema](https://raw.githubusercontent.com/0sec-labs/hackstore/main/hackstore-manifest.schema.json)
 provides editor checks. The runtime validator in
-[`manifest.ts`](https://github.com/0sec-labs/0sec/blob/main/packages/core/src/plugins/manifest.ts) is authoritative.
+[`manifest.ts`](https://github.com/0sec-labs/0/blob/main/packages/core/src/plugins/manifest.ts) is authoritative.
 
 | Field | Contract |
 | --- | --- |
@@ -200,7 +200,7 @@ reading credentials from the operator's home directory.
 
 ## Wire protocol
 
-See [`protocol.ts`](https://github.com/0sec-labs/0sec/blob/main/packages/core/src/plugins/protocol.ts) for exact message
+See [`protocol.ts`](https://github.com/0sec-labs/0/blob/main/packages/core/src/plugins/protocol.ts) for exact message
 types and validation. Registry plugins use newline-delimited JSON over stdin and
 stdout. Every frame has `v: 1`. Each request and response shares a printable,
 bounded correlation `id`.
@@ -277,7 +277,7 @@ refresh through the marketplace and start a new chat. Existing chats keep their
 leased host until cleanup; disablement does not retroactively kill that running
 code. Close the old chats when revocation must take effect immediately. This
 host ownership is implemented in
-[`session-plugin-host.ts`](https://github.com/0sec-labs/0sec/blob/main/packages/cli/src/tui/session-plugin-host.ts).
+[`session-plugin-host.ts`](https://github.com/0sec-labs/0/blob/main/packages/cli/src/tui/session-plugin-host.ts).
 Other CLI workflows do not automatically acquire this TUI host.
 
 ### Update deliberately

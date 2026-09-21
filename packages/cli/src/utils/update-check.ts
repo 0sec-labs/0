@@ -4,7 +4,7 @@ import { spawn } from "node:child_process";
 import { homeStateDir } from "@0sec/shared";
 import { loadLayeredSettings } from "../tui/settings.js";
 
-const REPO = "0sec-labs/0sec";
+const REPO = "0sec-labs/0";
 const INSTALL_URL = `https://raw.githubusercontent.com/${REPO}/main/install.sh`;
 const CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000;
 const FETCH_TIMEOUT_MS = 4_000;
@@ -138,7 +138,7 @@ const attemptedAutomaticTags = new Set<string>();
 
 /** One canonical installer, shared by explicit upgrade and startup auto-update. */
 export async function performAutoUpdate(options: AutoUpdateOptions = {}): Promise<AutoUpdateResult> {
-  if (process.platform === "win32") return { success: false, installed: false, error: "Automatic installation is unavailable on Windows; download a release from https://github.com/0sec-labs/0sec/releases/latest." };
+  if (process.platform === "win32") return { success: false, installed: false, error: "Automatic installation is unavailable on Windows; download a release from https://github.com/0sec-labs/0/releases/latest." };
   if (disabled(process.env["0SEC_OFFLINE"]) || disabled(process.env["0SEC_NO_UPDATE_CHECK"])) {
     return { success: false, installed: false, error: "Updates are disabled by the current offline/update policy." };
   }

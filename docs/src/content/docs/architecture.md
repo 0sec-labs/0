@@ -250,9 +250,9 @@ limits and per-finding provenance.
 
 > **EGATS caveat.** The 2026-04-11 ablation found `egatsTreeSearch` regresses
 > solve rate on hard challenges at ~10× the cost of the next-worst layer. It's
-> removed from the default moat aliases and opt-in only ([0sec#116](https://github.com/0sec-labs/0sec/issues/116)).
+> removed from the default moat aliases and opt-in only ([0sec#116](https://github.com/0sec-labs/0/issues/116)).
 > Results varied by slice. npm-bench attribution needs repeated runs;
-> [routing research](https://github.com/0sec-labs/0sec/issues/113) remains separate.
+> [routing research](https://github.com/0sec-labs/0/issues/113) remains separate.
 
 ### 3. Verify agent (blind validation)
 

@@ -39,7 +39,7 @@
 ## Scope decision and maturity vocabulary
 
 This repository follows
-[0sec ADR-066](https://github.com/0sec-labs/0sec/blob/main/docs/DECISIONS.md#adr-066--2026-07-17--0verse-is-an-evidence-producernotary-input-not-a-dispatchable-engine-yet):
+[0sec ADR-066](https://github.com/0sec-labs/0/blob/main/docs/DECISIONS.md#adr-066--2026-07-17--0verse-is-an-evidence-producernotary-input-not-a-dispatchable-engine-yet):
 **0verse produces and notarizes evidence out of band; it is not a generic
 managed dispatch engine.** Dispatch investment is gated on a blind run that
 confirms a known-CVE stripped x86-64 ELF. Until that gate passes, the generic

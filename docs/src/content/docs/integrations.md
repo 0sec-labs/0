@@ -51,7 +51,7 @@ Use an MCP client that supports launching local stdio servers. Client-specific
 configuration formats differ; the example below uses the common `mcpServers`
 shape, not a claim of qualification for every named client.
 
-**Source:** [`mcp-server.ts`](https://github.com/0sec-labs/0sec/blob/main/packages/cli/src/commands/mcp-server.ts)
+**Source:** [`mcp-server.ts`](https://github.com/0sec-labs/0/blob/main/packages/cli/src/commands/mcp-server.ts)
 
 ### Usage
 
@@ -214,9 +214,9 @@ server connected successfully. The CLI configuration here supports stdio,
 not an HTTP/SSE URL. An SDK caller can supply its own transport to
 `McpHost.register`; that does not create a remote-transport CLI option.
 
-**Sources:** [`mcp-host.ts`](https://github.com/0sec-labs/0sec/blob/main/packages/core/src/agent/mcp-host.ts),
-[`console.ts`](https://github.com/0sec-labs/0sec/blob/main/packages/cli/src/commands/console.ts),
-[`tui/run.tsx`](https://github.com/0sec-labs/0sec/blob/main/packages/cli/src/tui/run.tsx).
+**Sources:** [`mcp-host.ts`](https://github.com/0sec-labs/0/blob/main/packages/core/src/agent/mcp-host.ts),
+[`console.ts`](https://github.com/0sec-labs/0/blob/main/packages/cli/src/commands/console.ts),
+[`tui/run.tsx`](https://github.com/0sec-labs/0/blob/main/packages/cli/src/tui/run.tsx).
 
 ## Native workers and multiple models
 
@@ -244,9 +244,9 @@ it. Hosted children must pass the hosted model catalog check. Model selection
 does not change tool permissions or establish that a model is better at
 verification. Ordinary worker consensus is not independent reproduction.
 
-**Sources:** [`tools.ts`](https://github.com/0sec-labs/0sec/blob/main/packages/core/src/agent/tools.ts),
-[`runtime/types.ts`](https://github.com/0sec-labs/0sec/blob/main/packages/core/src/runtime/types.ts),
-[`llm-api.ts`](https://github.com/0sec-labs/0sec/blob/main/packages/core/src/runtime/llm-api.ts).
+**Sources:** [`tools.ts`](https://github.com/0sec-labs/0/blob/main/packages/core/src/agent/tools.ts),
+[`runtime/types.ts`](https://github.com/0sec-labs/0/blob/main/packages/core/src/runtime/types.ts),
+[`llm-api.ts`](https://github.com/0sec-labs/0/blob/main/packages/core/src/runtime/llm-api.ts).
 
 ## HackerOne integration
 
@@ -278,7 +278,7 @@ H1_API_TOKEN=your-api-token
 ```
 
 Do not add `export` prefixes, shell quoting, or multiline values to this file.
-See [`h1/credentials.ts`](https://github.com/0sec-labs/0sec/blob/main/packages/core/src/h1/credentials.ts).
+See [`h1/credentials.ts`](https://github.com/0sec-labs/0/blob/main/packages/core/src/h1/credentials.ts).
 
 ### Exit codes
 
@@ -408,8 +408,8 @@ ghcr.io/0sec-labs/0sec:<sha>
 ghcr.io/0sec-labs/0sec:main
 ```
 
-**Sources:** [`Dockerfile`](https://github.com/0sec-labs/0sec/blob/main/Dockerfile),
-[`docker-publish.yml`](https://github.com/0sec-labs/0sec/blob/main/.github/workflows/docker-publish.yml).
+**Sources:** [`Dockerfile`](https://github.com/0sec-labs/0/blob/main/Dockerfile),
+[`docker-publish.yml`](https://github.com/0sec-labs/0/blob/main/.github/workflows/docker-publish.yml).
 Use a digest or the published short-SHA tag when repeatability matters;
 `latest` follows eligible main builds, not a promise of a stable release.
 
@@ -564,8 +564,8 @@ command for this path. For measured evolution, start the session with
 and use the `default` profile. Source-access consent and promotion settings in
 that operator-owned config are separate from self-extension enablement.
 
-**Sources:** [`agent/executable-plugins.ts`](https://github.com/0sec-labs/0sec/blob/main/packages/core/src/agent/executable-plugins.ts),
-[`plugins/executable.ts`](https://github.com/0sec-labs/0sec/blob/main/packages/core/src/plugins/executable.ts).
+**Sources:** [`agent/executable-plugins.ts`](https://github.com/0sec-labs/0/blob/main/packages/core/src/agent/executable-plugins.ts),
+[`plugins/executable.ts`](https://github.com/0sec-labs/0/blob/main/packages/core/src/plugins/executable.ts).
 
 #### Storage
 
@@ -672,7 +672,7 @@ Direct `plugin run` reloads and checks the current approval on each invocation.
 Do not assume every batch command or the readline console auto-loads Hackstore
 plugins merely because the core supports a `PluginHost`.
 
-**Source:** [`session-plugin-host.ts`](https://github.com/0sec-labs/0sec/blob/main/packages/cli/src/tui/session-plugin-host.ts).
+**Source:** [`session-plugin-host.ts`](https://github.com/0sec-labs/0/blob/main/packages/cli/src/tui/session-plugin-host.ts).
 
 ## Disclose and evidence
 

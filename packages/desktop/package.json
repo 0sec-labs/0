@@ -5,7 +5,7 @@
   "author": "0.security",
   "repository": {
     "type": "git",
-    "url": "https://github.com/0sec-labs/0sec.git"
+    "url": "https://github.com/0sec-labs/0.git"
   },
   "private": true,
   "type": "module",

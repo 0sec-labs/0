@@ -3,7 +3,7 @@ title: False-positive reduction
 description: Measured behavior of 0's 11-layer triage pipeline across benchmark slices, plus layer-by-layer implementation notes and references.
 ---
 
-Measured from the 21-profile ablation (2026-04-11) and follow-up reruns after EGATS was removed from default moat aliases. The measured effect is slice-dependent: strong on XBOW black-box, a precision/recall trade on XBOW white-box, and variance-sensitive on npm-bench at current sample size. See the [2026-04-11 ablation results log](/research/2026-04-11-ablation/) for full tables, [0sec#72](https://github.com/0sec-labs/0sec/issues/72) for run tracking, and [0sec#116](https://github.com/0sec-labs/0sec/issues/116) for the EGATS profile change.
+Measured from the 21-profile ablation (2026-04-11) and follow-up reruns after EGATS was removed from default moat aliases. The measured effect is slice-dependent: strong on XBOW black-box, a precision/recall trade on XBOW white-box, and variance-sensitive on npm-bench at current sample size. See the [2026-04-11 ablation results log](/research/2026-04-11-ablation/) for full tables, [0sec#72](https://github.com/0sec-labs/0/issues/72) for run tracking, and [0sec#116](https://github.com/0sec-labs/0/issues/116) for the EGATS profile change.
 
 The tables below preserve the April experiment's profiles. They are not a
 current pipeline inventory: feature flags, gates, and verification paths have
@@ -74,7 +74,7 @@ On black-box, `moat` dominates `none`: more flags, fewer findings, lower cost pe
 | `moat` | 0.956 | 1.00 | 0.19 | 27/27 | 27/27 | 22/27 |
 | `default` | 0.956 | 1.00 | 0.19 | 27/27 | 27/27 | 22/27 |
 
-`default` and `moat` are identical on this run. Batch-1 attribution suggested the FPR shift from `none` to `default` came from stable features. Follow-up reruns showed significant variance — provisional until repeated runs. 100% TPR across every profile — every malicious/vulnerable package caught regardless of triage layers. The earlier `npm-bench-latest.json` snapshot (F1=0.444) was on a different 30-package slice — see [0sec#111](https://github.com/0sec-labs/0sec/issues/111).
+`default` and `moat` are identical on this run. Batch-1 attribution suggested the FPR shift from `none` to `default` came from stable features. Follow-up reruns showed significant variance — provisional until repeated runs. 100% TPR across every profile — every malicious/vulnerable package caught regardless of triage layers. The earlier `npm-bench-latest.json` snapshot (F1=0.444) was on a different 30-package slice — see [0sec#111](https://github.com/0sec-labs/0/issues/111).
 
 ### Single-feature isolation on stubborn-14 (white-box)
 
@@ -95,15 +95,15 @@ To figure out which moat layer causes the flag losses in white-box, each one was
 
 `feat-reach` is the clear winner: +3 flags at $1.61 per flag, less than half the cost of the default baseline.
 
-`egats` has been flagged for disable-by-default in [0sec#116](https://github.com/0sec-labs/0sec/issues/116).
+`egats` has been flagged for disable-by-default in [0sec#116](https://github.com/0sec-labs/0/issues/116).
 
 <span id="takeaways"></span>
 
-1. No single static policy wins on all three slices. The moat helps on black-box XBOW, costs 2 flags on white-box XBOW, and is a batch-1 no-op on npm-bench. Direct motivation for learned dynamic routing — see [0sec#113](https://github.com/0sec-labs/0sec/issues/113).
+1. No single static policy wins on all three slices. The moat helps on black-box XBOW, costs 2 flags on white-box XBOW, and is a batch-1 no-op on npm-bench. Direct motivation for learned dynamic routing — see [0sec#113](https://github.com/0sec-labs/0/issues/113).
 2. The attack agent baseline is 86% on the first 50 XBOW white-box challenges with triage disabled, and 100% recall on npm-bench across profiles.
 3. `egats` is the regressing layer in this isolation run. Keep disabled by default and opt-in for research.
 4. npm-bench FPR attribution needs repeat runs — batch-2 showed high variance at this sample size.
-5. Per-layer telemetry (`layerVerdicts`) is live on findings after 2026-04-11 — supervision signal for learned routing ([0sec#113](https://github.com/0sec-labs/0sec/issues/113)). See [0sec#112](https://github.com/0sec-labs/0sec/issues/112) for the instrumentation commit.
+5. Per-layer telemetry (`layerVerdicts`) is live on findings after 2026-04-11 — supervision signal for learned routing ([0sec#113](https://github.com/0sec-labs/0/issues/113)). See [0sec#112](https://github.com/0sec-labs/0/issues/112) for the instrumentation commit.
 
 ## Data foundation
 
@@ -174,7 +174,7 @@ independently runnable feature flag.
 
 <span id="dataset-pipeline"></span>
 
-The moat has an offline data-generation surface in addition to live runtime filters. The collector emits labeled rows from benchmark flag extraction, npm-bench package verdicts, and blind-verify statuses in the local SQLite DB. See [Triage Dataset](/research/triage-dataset/) for the JSONL schema and [issue #67](https://github.com/0sec-labs/0sec/issues/67).
+The moat has an offline data-generation surface in addition to live runtime filters. The collector emits labeled rows from benchmark flag extraction, npm-bench package verdicts, and blind-verify statuses in the local SQLite DB. See [Triage Dataset](/research/triage-dataset/) for the JSONL schema and [issue #67](https://github.com/0sec-labs/0/issues/67).
 
 <span id="conservative-by-default"></span>
 

@@ -22,7 +22,7 @@ Autonomous pentesting agents are usually communicated through single benchmark p
 
 The key result is methodological: for non-deterministic autonomous security agents, protocol disclosure and retained-evidence lineage are not reporting accessories; they are part of the core technical contribution.
 
-Current source/license pointer: <https://github.com/0sec-labs/0sec>, dual-licensed
+Current source/license pointer: <https://github.com/0sec-labs/0>, dual-licensed
 MIT OR Apache-2.0 (see root `LICENSE` and `LICENSE-MIT`). This does not imply
 that private research artifacts or expired CI receipts are publicly recoverable.
 

@@ -33,23 +33,23 @@ FoxGuard companion used by default for static analysis.
 
 ```bash
 # Verified release binary (macOS Apple Silicon / Linux x64/arm64)
-curl -fsSL https://raw.githubusercontent.com/0sec-labs/0sec/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/0sec-labs/0/main/install.sh | bash
 export PATH="$HOME/.0sec/bin:$PATH"
 0 --help
 ```
 
 Add the `export` line to your shell profile for future shells. Inspect
-[install.sh](https://github.com/0sec-labs/0sec/blob/main/install.sh) before running
+[install.sh](https://github.com/0sec-labs/0/blob/main/install.sh) before running
 it if your environment requires script review. `INSTALL_DIR` changes the install
 location; `INSTALL_FOXGUARD=0` skips the companion on a pre-provisioned host.
 
 To install a specific release, set `RELEASE_BASE_URL` on the shell running the
-installer to `https://github.com/0sec-labs/0sec/releases/download/<tag>`.
+installer to `https://github.com/0sec-labs/0/releases/download/<tag>`.
 Use the checksums from that same release. The installer does not modify your
 shell profile, and checksum verification is not a signature or code audit.
 
 Windows release builds are experimental. Download the Windows asset from
-[GitHub Releases](https://github.com/0sec-labs/0sec/releases/latest);
+[GitHub Releases](https://github.com/0sec-labs/0/releases/latest);
 `install.sh` supports Linux and macOS only. See
 [Windows installation](/troubleshooting/#install-on-windows).
 On Windows, invoke the downloaded executable by its actual filename; the
@@ -75,8 +75,8 @@ Use Node.js 24 or newer and pnpm 9 or newer. The repository pins pnpm through
 commands. See [Console](/console/) for that runtime distinction.
 
 ```bash
-git clone https://github.com/0sec-labs/0sec.git
-cd 0sec
+git clone https://github.com/0sec-labs/0.git
+cd 0
 corepack enable
 pnpm install --frozen-lockfile
 pnpm build

@@ -13,7 +13,7 @@ import chalk from "chalk";
 import { performAutoUpdate } from "../utils/update-check.js";
 import { scanDependencies } from "./deps.js";
 
-const RELEASES_URL = "https://github.com/0sec-labs/0sec/releases/latest";
+const RELEASES_URL = "https://github.com/0sec-labs/0/releases/latest";
 
 interface UpgradeOptions {
   version?: string;

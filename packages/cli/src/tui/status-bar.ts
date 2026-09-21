@@ -3,7 +3,7 @@
  *
  * The bar we are reproducing looks like this:
  *
- *     GPT-5.6-Terra · max   ~/coding/0sec-labs/0sec   publish/main-integration *54 ?29   1.4%/1M  (sub)
+ *     GPT-5.6-Terra · max   ~/coding/0sec-labs/0   publish/main-integration *54 ?29   1.4%/1M  (sub)
  *
  * Everything here is pure: segments in, string out. The renderer owns the
  * colours, the grouping and the cell allocation, because those are the parts

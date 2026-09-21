@@ -73,7 +73,7 @@ Retain the following alongside any new XBOW claim:
 The specialized XBOW runner emits `repeatProtocol` and per-cell aggregation fields
 when `--repeat > 1`; those fields alone do not encode all of the provenance above.
 Keep configuration and checkout revisions with the result. The repository's
-[benchmark ledger](https://github.com/0sec-labs/0sec/blob/main/packages/benchmark/results/benchmark-ledger.json)
+[benchmark ledger](https://github.com/0sec-labs/0/blob/main/packages/benchmark/results/benchmark-ledger.json)
 is a dated summary separating retained artifact-backed and historical publication
 lines, not an automatically current score.
 

@@ -3,7 +3,7 @@ title: Append-only execution journal + Orchestrator — Design Doc
 description: Historical design for an execution journal, specialist dispatch, replay, and recovery.
 ---
 
-> Historical proposal tracked in [0sec#224](https://github.com/0sec-labs/0sec/issues/224). The commands and recovery behavior below describe the design.
+> Historical proposal tracked in [0sec#224](https://github.com/0sec-labs/0/issues/224). The commands and recovery behavior below describe the design.
 > `0SEC_FEATURE_JOURNAL_LOOP`, `scan --resume`, `--branch`, and `run gc`
 > below are proposal vocabulary, not current command instructions. The referenced
 > journal-ablation workflow is absent from this checkout. Journal primitives
@@ -162,10 +162,10 @@ Phase 4 — once stable, remove the legacy code path. Not before two consecutive
 
 The proposed orchestrator dispatches sequentially. Existing tool signatures and
 per-specialist in-memory state remain. YAML-FSM workflows are separate work in
-[#225](https://github.com/0sec-labs/0sec/issues/225).
+[#225](https://github.com/0sec-labs/0/issues/225).
 
 ## Tracking
 
-- Tracking issue: [0sec#224](https://github.com/0sec-labs/0sec/issues/224)
-- Companion issues: [#225 (YAML FSM workflows)](https://github.com/0sec-labs/0sec/issues/225), [#226 (C/C++ review profile)](https://github.com/0sec-labs/0sec/issues/226), [#227 (cost telemetry)](https://github.com/0sec-labs/0sec/issues/227)
+- Tracking issue: [0sec#224](https://github.com/0sec-labs/0/issues/224)
+- Companion issues: [#225 (YAML FSM workflows)](https://github.com/0sec-labs/0/issues/225), [#226 (C/C++ review profile)](https://github.com/0sec-labs/0/issues/226), [#227 (cost telemetry)](https://github.com/0sec-labs/0/issues/227)
 - Prior work referenced: [Provos — Finding Zero-Days with Any Model](https://www.provos.org/post/finding-zero-days-with-any-model/), [BoxPwnr](https://github.com/0ca/boxpwnr) (97.1% XBOW)

@@ -32,7 +32,7 @@ fi
 # from leaking in; the binary uses its saved DEV credentials.
 if [ ! -x "$O_SEC_BIN" ]; then
   echo "0dev: packaged 0sec binary not found at $O_SEC_BIN" >&2
-  echo "0dev:   install the latest release from https://github.com/0sec-labs/0sec" >&2
+  echo "0dev:   install the latest release from https://github.com/0sec-labs/0" >&2
   echo "0dev:   or use --build to run from source" >&2
   exit 1
 fi
