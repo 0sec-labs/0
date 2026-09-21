@@ -215,6 +215,7 @@ import { resolveScopedPath } from "./tools/scope-path.js";
 import { windowFileContent } from "./tools/read-file-window.js";
 import { buildEvalCommand, parseEvalArgs, type EvalLanguage } from "./tools/eval.js";
 import { executeOverseScan, validateOverseArgs } from "./tools/0verse.js";
+import { executeJevPrepass } from "./tools/jev-prepass.js";
 
 
 // ── Tool registry (0#611) ──
@@ -8299,6 +8300,10 @@ export class ToolExecutor {
   private intelTool(args: Record<string, unknown>): Promise<ToolResult> {
     return executeIntel(this.ctx, args);
   }
+  private jevPrepassTool(args: Record<string, unknown>): Promise<ToolResult> {
+    return executeJevPrepass(this.ctx, args);
+  }
+
 
   // ── Offline / read-only security engines (dev-live-engine-recovery) ──
   // Thin delegates to the free-function handlers in tools/security-engines.ts,

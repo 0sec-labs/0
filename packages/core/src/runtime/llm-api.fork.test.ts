@@ -196,7 +196,7 @@ describe("isolated child runtimes", () => {
     const auto = new LlmApiRuntime({ ...base, agentModels: { review: "auto" } });
     const accessible = auto.accessibleModels();
     expect(accessible).toContain("parent");
-    expect(accessible).toContain("gpt-5.6-terra");
+    expect(accessible).toContain("gpt-4o");
     expect(accessible).toContain("claude-sonnet-4-6");
     expect(accessible).not.toContain("glm-5.3");
 

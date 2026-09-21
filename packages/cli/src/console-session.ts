@@ -1,10 +1,24 @@
 import { randomUUID } from "node:crypto";
-import { createConsoleSession, type ConsoleSession, type ConsoleSessionConfig } from "@0/core";
+import { createConsoleJevRuntime, createConsoleSession, toToolContextJevRuntime, type ConsoleSession, type ConsoleSessionConfig } from "@0/core";
 import { osecDB } from "@0/db";
 import { createConversationHistory } from "./conversation-history.js";
 import { withDevEngineUpdates } from "./dev-engine-updates.js";
+import type { JevFeature } from "@0/shared";
 
 /** Local frontends share the findings store with history and own its connection. */
+const CONSOLE_JEV_FEATURES = new Set<JevFeature>([
+  "browser", "memory", "dedupe", "redteam", "kernel", "crash", "radar", "foxguard",
+]);
+
+function consoleJevRuntimeFromEnvironment() {
+  const features = [...new Set(
+    (process.env["ZERO_JEV_FEATURES"] ?? "").split(",")
+      .map((feature) => feature.trim())
+      .filter((feature): feature is JevFeature => CONSOLE_JEV_FEATURES.has(feature as JevFeature)),
+  )];
+  return toToolContextJevRuntime(createConsoleJevRuntime({ provider: "direct", features }));
+}
+
 export function createLocalConsoleSession(
   config: Omit<ConsoleSessionConfig, "db">,
   dbPath?: string,
@@ -27,6 +41,7 @@ export function createLocalConsoleSession(
       scanId,
       db,
       conversationHistory: config.conversationHistory ?? createConversationHistory(),
+      jevRuntime: config.jevRuntime ?? consoleJevRuntimeFromEnvironment(),
     };
     const session = createConsoleSession(engineConfig);
     return withDevEngineUpdates(session, engineConfig, (completed) => {

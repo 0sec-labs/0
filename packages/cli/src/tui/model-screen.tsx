@@ -321,7 +321,6 @@ export function ModelScreen({
   // under a screen that has no way to set them; re-deriving them on every
   // keystroke would only make the filter slower.
   const states = useMemo(() => providerStates(env ?? process.env), [env]);
-  const configuredIds = useMemo(() => states.filter((state) => state.configured).map((state) => state.id), [states]);
   const configured = useMemo(() => configuredProviderLabels(states), [states]);
 
   // The identity of the connection this load belongs to. A hosted snapshot is
@@ -426,8 +425,8 @@ export function ModelScreen({
     [isByok, catalogNonce],
   );
   const scopedCatalog = useMemo(
-    () => isByok ? scopeModelCatalog(catalog, { showAll, filter, currentModel: activeModel, configuredProviderIds: configuredIds }) : [],
-    [catalog, activeModel, configuredIds, filter, isByok, showAll],
+    () => isByok ? scopeModelCatalog(catalog, { showAll, filter, currentModel: activeModel }) : [],
+    [catalog, activeModel, filter, isByok, showAll],
   );
 
   // `buildModelRows` does all the domain work — grouping by provider, credential
@@ -602,7 +601,6 @@ export function ModelScreen({
           showAll: showAllRef.current,
           filter: filterRef.current,
           currentModel: activeModel,
-          configuredProviderIds: configuredIds,
         }),
         states,
         filter: filterRef.current,

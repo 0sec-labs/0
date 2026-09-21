@@ -90,7 +90,7 @@ describe("PROVIDERS", () => {
     // Mirrors the ApiProvider union + VALID_PROVIDERS table in
     // packages/core/src/runtime/llm-api.ts (L580, L626-629). A drift here
     // means the picker is lying about what the machine can reach.
-    expect(PROVIDERS.filter((provider) => !provider.evaluatorOnly).map((provider) => provider.id).sort()).toEqual(
+    expect(PROVIDERS.map((provider) => provider.id).sort()).toEqual(
       [
         "anthropic",
         "azure",
@@ -113,7 +113,7 @@ describe("PROVIDERS", () => {
 describe("providerStates", () => {
   it("marks nothing configured under an empty environment", () => {
     const states = providerStates(EMPTY);
-    expect(states).toHaveLength(PROVIDERS.filter((provider) => !provider.evaluatorOnly).length);
+    expect(states).toHaveLength(PROVIDERS.length);
     expect(states.every((state) => state.configured === false)).toBe(true);
     expect(states.every((state) => state.via === undefined)).toBe(true);
   });
@@ -181,7 +181,7 @@ describe("providerStates", () => {
   });
 
   it("configures each provider from its own documented var", () => {
-    for (const provider of PROVIDERS.filter((candidate) => !candidate.evaluatorOnly)) {
+    for (const provider of PROVIDERS) {
       for (const name of provider.envVars) {
         const state = stateFor(provider.id, { [name]: "value" });
         expect(state.configured).toBe(true);

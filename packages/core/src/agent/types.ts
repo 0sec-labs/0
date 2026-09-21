@@ -16,6 +16,8 @@ import type { SelfExtensionRegistry } from "../plugins/self-extension.js";
 import type { ExecutablePluginManager, ExecutablePluginContext } from "../plugins/executable.js";
 import type { ExecutablePluginConfiguration } from "./executable-plugins.js";
 import type { EvolutionConfig } from "../improvement/types.js";
+import type { ToolContextJevRuntime } from "../console/jev-runtime.js";
+export type { ToolContextJevRuntime } from "../console/jev-runtime.js";
 
 // ── Agent Roles ──
 
@@ -500,6 +502,8 @@ export interface ToolContext {
   /** Named evaluation profiles are controller-owned, never supplied as model code. */
   executableEvolutionProfiles?: Record<string, EvolutionConfig>;
   evolveExecutablePlugin?: (pluginId: string, profile: string, signal?: AbortSignal) => Promise<ToolResult>;
+  /** Budgeted Jev evaluator bridge for explicitly configured console sessions. */
+  jevRuntime?: ToolContextJevRuntime;
   /** Host-bound source-note writer; absent during verification or when memory is disabled. */
   rememberCodebase?: (note: {
     title: string;

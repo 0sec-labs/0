@@ -61,6 +61,7 @@ import { renderInboundBatch } from "../agent/agent-messaging.js";
 import type { MessagingRuntime } from "../agent/agent-messaging.js";
 import { captureNativeRuntime, currentContributionAgent, currentRunContribution, getConfiguredRunContributionClient, withRunContribution, type RunCapture, type RunManifest } from "../telemetry/run-contribution.js";
 import { registerSignalCleanup } from "../agent/signal-cleanup.js";
+import type { ToolContextJevRuntime } from "./jev-runtime.js";
 
 /**
  * Unified interactive chat console — engine-side turn driver.
@@ -584,6 +585,8 @@ export interface ConsoleSessionConfig {
   executablePlugins?: ExecutablePluginConfiguration;
   /** Evaluation contracts owned by the operator, not editable by generated code. */
   executableEvolutionProfiles?: Record<string, EvolutionConfig>;
+  /** Optional budgeted Jev bridge available to Jev prepass tools. */
+  jevRuntime?: ToolContextJevRuntime;
   /** Actual provider model ID, used for evolution cost accounting. */
   costModel?: string;
   /**
@@ -1858,6 +1861,7 @@ export function createConsoleSession(config: ConsoleSessionConfig): ConsoleSessi
     // Information-gathering only — grants no authority (see ConsoleSessionConfig).
     askOperator: config.askOperator,
     agentMessaging: config.agentMessaging,
+    jevRuntime: config.jevRuntime,
   };
 
   // Audit notifications are routed to the active turn's renderer.

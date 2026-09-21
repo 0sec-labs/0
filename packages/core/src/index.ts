@@ -2367,6 +2367,8 @@ export {
   createSessionObjectiveService,
   MAX_OBJECTIVE_CHARS,
   MAX_OBJECTIVE_WORDS,
+  createConsoleJevRuntime,
+  toToolContextJevRuntime,
 } from "./console/index.js";
 export type {
   ConsoleConversationHistory,
@@ -2387,6 +2389,7 @@ export type {
   SessionObjectiveService,
   SessionObjectiveServiceConfig,
 } from "./console/index.js";
+export type { ToolContextJevRuntime } from "./console/index.js";
 
 // ── Recon mode: domain surface enumeration (0#769) ──
 // Given a domain, probes well-known OpenAPI/Swagger + MCP endpoints and emits
