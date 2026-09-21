@@ -5,7 +5,7 @@
  * The core loader remains the only registry and enablement authority.
  */
 
-import type { PluginHost } from "@0/core"
+import type { PluginHost } from "@0/core";
 
 import type { CoreLoadResult, CorePluginApi, PluginHostLike } from "./plugin-service.js";
 

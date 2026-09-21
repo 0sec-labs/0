@@ -1,5 +1,5 @@
 /**
- * Production default adapters for the bench harness (0sec#556).
+ * Production default adapters for the bench harness (0#556).
  *
  * These wire the harness to the real engine + real Docker. They are the
  * "batteries included" path; every one is optional and replaced by a mock
@@ -19,7 +19,7 @@
 import { execFileSync } from "node:child_process";
 import { agenticScan } from "../agentic-scanner.js";
 import { packageAudit } from "../audit.js";
-import type { ScanReport, RuntimeMode, AuditReport, ScanDepth } from "@0/shared"
+import type { ScanReport, RuntimeMode, AuditReport, ScanDepth } from "@0/shared";
 import type { BenchCase } from "./manifest.js";
 import type { BenchScanResult, BenchTargetProvenance } from "./oracle.js";
 import type {
@@ -367,7 +367,7 @@ export function createDockerWebProvisioner(corpusRoot?: string): TargetProvision
       }
 
       if (t.image) {
-        const containerName = `0sec-bench-${c.id.replace(/[^a-zA-Z0-9_.-]/g, "-")}`;
+        const containerName = `0-bench-${c.id.replace(/[^a-zA-Z0-9_.-]/g, "-")}`;
         try {
           docker(["rm", "-f", containerName], { timeoutMs: 15_000 });
         } catch {

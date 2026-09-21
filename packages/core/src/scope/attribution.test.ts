@@ -6,11 +6,11 @@ import {
   formatUserAgent,
 } from "./attribution.js";
 import { ScopePolicy } from "./scope.js";
-import { VERSION } from "@0/shared"
+import { VERSION } from "@0/shared";
 
 // ── resolveAttribution ──
 
-describe("resolveAttribution — config sources & precedence (0sec#216)", () => {
+describe("resolveAttribution — config sources & precedence (0#216)", () => {
   it("returns undefined when no source contributes anything", () => {
     expect(resolveAttribution()).toBeUndefined();
     expect(resolveAttribution({ env: {} })).toBeUndefined();
@@ -91,7 +91,7 @@ describe("resolveAttribution — config sources & precedence (0sec#216)", () => 
       env: { "ZERO_ATTRIBUTION_HEADERS": '{"X-Engagement-ID":"env-42"}' },
       cliHeaders: ["X-Researcher=brian"],
     });
-    // Names are canonicalized to title-case (0sec#239), so "X-Engagement-ID"
+    // Names are canonicalized to title-case (0#239), so "X-Engagement-ID"
     // becomes "X-Engagement-Id" in the merged dict.
     expect(cfg?.headers).toEqual({
       "X-Pentest": "file-pin",
@@ -126,7 +126,7 @@ describe("resolveAttribution — config sources & precedence (0sec#216)", () => 
     expect(cfg?.userAgentToken).toBe("real-token");
   });
 
-  // ── canonical-case dedup (0sec#239) ──
+  // ── canonical-case dedup (0#239) ──
 
   it("dedupes header names that differ only in case across sources", () => {
     const cfg = resolveAttribution({
@@ -230,19 +230,19 @@ describe("applyAttribution — header injection", () => {
       scope,
     );
     const headers = (out as RequestInit).headers as Record<string, string>;
-    expect(headers["User-Agent"]).toBe(`0sec/${VERSION} (engagement: engagement-123)`);
+    expect(headers["User-Agent"]).toBe(`0/${VERSION} (engagement: engagement-123)`);
   });
 
   it("preserves caller-supplied User-Agent (caller wins)", () => {
     const scope = ScopePolicy.fromJson({ in_scope: ["api.example.com"] });
     const out = applyAttribution(
       "https://api.example.com/",
-      { headers: { "User-Agent": "0sec-crawler/1.0" } },
+      { headers: { "User-Agent": "0-crawler/1.0" } },
       attribution,
       scope,
     );
     const headers = (out as RequestInit).headers as Record<string, string>;
-    expect(headers["User-Agent"]).toBe("0sec-crawler/1.0");
+    expect(headers["User-Agent"]).toBe("0-crawler/1.0");
   });
 
   it("caller-supplied attribution-shaped headers win over the resolved config", () => {
@@ -292,7 +292,7 @@ describe("applyAttribution — header injection", () => {
       undefined,
     );
     const headers = (out as RequestInit).headers as Record<string, string>;
-    expect(headers["User-Agent"]).toBe(`0sec/${VERSION} (engagement: engagement-only)`);
+    expect(headers["User-Agent"]).toBe(`0/${VERSION} (engagement: engagement-only)`);
     expect(Object.keys(headers).filter((k) => k.toLowerCase() !== "user-agent")).toHaveLength(0);
   });
 });
@@ -347,7 +347,7 @@ describe("extractAttributionFromScopeJson — scope file ingestion", () => {
 // ── formatUserAgent ──
 
 describe("formatUserAgent", () => {
-  it("formats as `0sec/<ver> (engagement: <token>)`", () => {
-    expect(formatUserAgent("eng-1")).toBe(`0sec/${VERSION} (engagement: eng-1)`);
+  it("formats as `0/<ver> (engagement: <token>)`", () => {
+    expect(formatUserAgent("eng-1")).toBe(`0/${VERSION} (engagement: eng-1)`);
   });
 });

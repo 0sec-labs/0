@@ -1,4 +1,4 @@
-// `0sec plugin` manages registry installation, project enablement, and tool calls.
+// `0 plugin` manages registry installation, project enablement, and tool calls.
 // Install writes files; enable records approval. Neither executes plugin code.
 // `run` loads an enabled plugin before choosing and authorizing a tool call.
 // Loading starts a child process under the operator's account, not an OS sandbox.
@@ -17,7 +17,7 @@ import type { Command } from "commander";
 // Declared locally (not imported from the barrel) so the command type-checks
 // without depending on barrel exports that land in a separate change.
 
-import type { PluginCapability } from "@0/core"
+import type { PluginCapability } from "@0/core";
 
 export interface ManifestView {
   id: string;
@@ -415,7 +415,7 @@ export async function runInstall(id: string, deps: PluginCommandDeps): Promise<v
   d.out("");
   d.out(chalk.yellow("This plugin is INSTALLED, NOT ENABLED. No plugin code has run."));
   d.out(`  It will not load in any project until you explicitly enable it:`);
-  d.out(chalk.cyan(`    0sec plugin enable ${entry.id}`));
+  d.out(chalk.cyan(`    0 plugin enable ${entry.id}`));
   process.exitCode = EXIT_OK;
 }
 
@@ -471,7 +471,7 @@ export function runEnable(id: string, deps: PluginCommandDeps): void {
   const discovered = d.core.readInstalledPlugin(root, id);
   if (!discovered.ok || !discovered.plugin) {
     d.err(chalk.red(`Plugin "${id}" is not installed. Install it first:`));
-    d.err(chalk.cyan(`    0sec plugin install ${id}`));
+    d.err(chalk.cyan(`    0 plugin install ${id}`));
     if (discovered.errors) for (const e of discovered.errors) d.err(chalk.dim(`  ${e}`));
     process.exitCode = EXIT_USER_ERROR;
     return;
@@ -653,7 +653,7 @@ export async function runRun(
   const record = d.core.readEnablement(d.projectPath, d.homeDir);
   if (!d.core.isEnabled(record, id)) {
     d.err(chalk.red(`Plugin "${id}" is not enabled for this project.`));
-    d.err(chalk.cyan(`    0sec plugin enable ${id}`));
+    d.err(chalk.cyan(`    0 plugin enable ${id}`));
     process.exitCode = EXIT_USER_ERROR;
     return;
   }
@@ -663,7 +663,7 @@ export async function runRun(
     const r = reconciled.find((x) => x.pluginId === id);
     d.err(chalk.red(`Plugin "${id}" cannot run: it needs re-approval.`));
     if (r?.reason) d.err(chalk.yellow(`  ${r.reason}`));
-    d.err(chalk.cyan(`    0sec plugin enable ${id}`));
+    d.err(chalk.cyan(`    0 plugin enable ${id}`));
     process.exitCode = EXIT_USER_ERROR;
     return;
   }

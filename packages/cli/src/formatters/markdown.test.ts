@@ -11,7 +11,7 @@
  */
 
 import { describe, it, expect } from "vitest";
-import type { Finding, ScanReport } from "@0/shared"
+import type { Finding, ScanReport } from "@0/shared";
 import { formatMarkdown } from "./markdown.js";
 
 function mkFinding(overrides: Partial<Finding> = {}): Finding {
@@ -162,7 +162,7 @@ describe("formatMarkdown — enrichment reaches the page", () => {
 describe("formatMarkdown — report skeleton", () => {
   it("keeps the summary table and severity counts", () => {
     const out = formatMarkdown(mkReport([mkFinding()]));
-    expect(out).toContain("# 0sec Scan Report");
+    expect(out).toContain("# 0 Scan Report");
     expect(out).toContain("| Target | https://example.com |");
     expect(out).toContain("- **High:** 1");
   });

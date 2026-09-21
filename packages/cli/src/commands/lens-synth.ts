@@ -1,5 +1,5 @@
 /**
- * `0sec lens-synth --miss-input <path>` — run the self-evolving lens loop.
+ * `0 lens-synth --miss-input <path>` — run the self-evolving lens loop.
  *
  *   miss capture → synthesize → independent corpus validation → durable
  *   promotion → next-review lens snapshot
@@ -21,25 +21,27 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import type { Command } from "commander";
-import { harvestMissesFromLedgerEntry,
-inspectLensRegistry,
-lastGreen,
-loadLedger,
-loadManifest,
-makeFinderLensProbe,
-mergeHarvestedMisses,
-retireArchetype,
-runLensSynthesisLoop,
-type ConfirmedMiss,
-type LensProbe,
-type LensSynthesisInput,
-type LensSynthesisModel,
-type LensSynthesisResult,
-type LensRegistryStatus,
-type MissHarvestResult,
-type MissInput,
-type ValidationCorpus,
-type ValidationFixture, } from "@0/core"
+import {
+  harvestMissesFromLedgerEntry,
+  inspectLensRegistry,
+  lastGreen,
+  loadLedger,
+  loadManifest,
+  makeFinderLensProbe,
+  mergeHarvestedMisses,
+  retireArchetype,
+  runLensSynthesisLoop,
+  type ConfirmedMiss,
+  type LensProbe,
+  type LensSynthesisInput,
+  type LensSynthesisModel,
+  type LensSynthesisResult,
+  type LensRegistryStatus,
+  type MissHarvestResult,
+  type MissInput,
+  type ValidationCorpus,
+  type ValidationFixture,
+} from "@0/core";
 
 // ── Miss-input parsing (defensive) ────────────────────────────────────────
 

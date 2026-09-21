@@ -1,14 +1,14 @@
-// Bearer-authenticated 0sec client for health, hosted model catalog,
+// Bearer-authenticated 0 client for health, hosted model catalog,
 // inference balance, and request usage. Provider keys stay on the service.
 //
 // SECURITY:
 //   - The Authorization header value is built from the token but never
 //     emitted back to the caller. Errors include status + path + host,
 //     never headers or the token itself.
-//   - `User-Agent` includes `0sec-cli/<version>` so server-side ops can
+//   - `User-Agent` includes `@0/cli/<version>` so server-side ops can
 //     identify CLI traffic if it looks anomalous.
 
-import { VERSION } from "@0/shared"
+import { VERSION } from "@0/shared";
 
 export class CloudError extends Error {
   constructor(
@@ -29,14 +29,14 @@ export class CloudError extends Error {
 /** 401 — token rejected. Distinct from CloudAuthMissingError, which means no token was configured. */
 export class CloudUnauthorizedError extends CloudError {
   constructor(path: string) {
-    super(`0sec-cloud auth rejected (HTTP 401) on ${path}. Run \`0sec auth login\` to refresh.`, 401, path);
+    super(`0-cloud auth rejected (HTTP 401) on ${path}. Run \`0 auth login\` to refresh.`, 401, path);
     this.name = "CloudUnauthorizedError";
   }
 }
 export class CloudForbiddenError extends CloudError {
   constructor(path: string) {
     super(
-      `0sec-cloud forbidden (HTTP 403) on ${path}. Token lacks scope for this resource.`,
+      `0-cloud forbidden (HTTP 403) on ${path}. Token lacks scope for this resource.`,
       403,
       path,
     );
@@ -45,7 +45,7 @@ export class CloudForbiddenError extends CloudError {
 }
 export class CloudNetworkError extends CloudError {
   constructor(message: string, path: string) {
-    super(`0sec-cloud network error on ${path}: ${message}`, undefined, path);
+    super(`0-cloud network error on ${path}: ${message}`, undefined, path);
     this.name = "CloudNetworkError";
   }
 }
@@ -202,80 +202,112 @@ export interface AuditSkillsByProjectResponse {
   availableSkills: AuditSkillSummary[];
 }
 
-// ── Usage account types (v2 direct /account DTO) ──
+// ── Credit account types (v1 direct /account DTO) ──
 
 /**
- * Customer usage account from GET /api/inference/account.
+ * Customer credit account from GET /api/inference/account.
  *
- * All monetary fields are decimal strings (e.g. "39.00", "10.50") or
- * `null`. No client-side Number coercion beyond what JSON.parse produces
- * for the USD decimal strings (which arrive as strings).
+ * All CREDIT NANO fields are decimal integer strings or `null`
+ * (numeric(30,0) on the server). No client-side Number coercion.
+ * The caller preserves them as-is for display using BigInt/string
+ * operations.
  *
  * Authenticated `disabled`/`unavailable`/`restricted` returns HTTP 200
  * with `state`/`reason` and nullable amounts. A missing, unknown, or
  * malformed response is `null` — not an auth error. HTTP 401/403 still
  * throw the existing typed errors.
- *
- * Sanitised: unknown/private server fields are stripped from the returned
- * object. The type guard rejects malformed or legacy schemas at runtime.
  */
-export interface UsageAccount {
-  schemaVersion: "usage-v2";
+export interface CreditAccount {
+  schemaVersion: "credits-v1";
   snapshotAt: string;
+  policyVersion: string;
   scope: { orgId: string };
   state: "ready" | "disabled" | "unavailable" | "restricted";
   reason: string | null;
-  plan: UsageAccountPlan;
-  included: UsageAccountIncluded;
-  prepaid: UsageAccountPrepaid;
-  canManageBilling: boolean;
-  admission: UsageAccountAdmission;
+  free: CreditAccountFree;
+  subscription: CreditAccountSubscription;
+  prepaid: CreditAccountPrepaid;
+  purchase: CreditAccountPurchase;
+  admission: CreditAccountAdmission;
 }
 
-export interface UsageAccountPlan {
-  id: "pro" | "gold" | "startup" | "enterprise" | null;
-  name: string | null;
-  monthlyPriceUsd: string | null;
+export interface CreditAccountFree {
+  state:
+    | "unverified"
+    | "ineligible"
+    | "eligible_unclaimed"
+    | "active"
+    | "expired"
+    | "revoked"
+    | "unresolved";
+  claimableCreditNanos: string | null;
+  spendableCreditNanos: string | null;
+  heldCreditNanos: string | null;
+  resetAt: string | null;
 }
 
-export interface UsageAccountIncluded {
-  state: "active" | "exhausted" | "none" | "unavailable";
-  usedPercent: number | null;
-  resetsAt: string | null;
+export interface CreditAccountSubscriptionWindow {
+  kind: "monthly" | "weekly" | "five_hour";
+  limitCreditNanos: string | null;
+  settledCreditNanos: string | null;
+  heldCreditNanos: string | null;
+  availableCreditNanos: string | null;
+  resetsAt: string;
 }
 
-export interface UsageAccountPrepaid {
-  balanceUsd: string | null;
-  fallbackEnabled: boolean;
+export interface CreditAccountSubscription {
+  state: "none" | "active" | "inactive_verified" | "expired" | "revoked" | "unresolved";
+  priceCents: 1500;
+  periodStart: string | null;
+  periodEnd: string | null;
+  windows: CreditAccountSubscriptionWindow[];
 }
 
-export interface UsageAccountAdmission {
+export interface CreditAccountPrepaid {
+  spendableCreditNanos: string | null;
+  heldCreditNanos: string | null;
+  settledDeficitCreditNanos: string | null;
+  holdShortfallCreditNanos: string | null;
+  consentEnabled: boolean;
+}
+
+export interface CreditAccountPurchasePreset {
+  principalCents: number;
+  creditNanos: string;
+}
+
+export interface CreditAccountPurchase {
+  enabled: boolean;
+  presets: CreditAccountPurchasePreset[];
+  customMinCents: number;
+  customMaxCents: number;
+  stepCents: 100;
+  currency: "usd";
+}
+
+export interface CreditAccountAdmission {
   eligible: boolean;
   reason: string | null;
 }
 
 /**
- * Bounded runtime type guard for the UsageAccount v2 direct wire shape.
+ * Bounded runtime type guard for the CreditAccount v1 direct wire shape.
  *
- * Checks the top-level discriminator (`schemaVersion === "usage-v2"`),
- * structural fields, and monetary string discipline (string or null for
- * amounts, number for usedPercent).
+ * Checks the top-level discriminator (`schemaVersion === "credits-v1"`),
+ * structural fields, and credit-nano type discipline (string or null).
  * Unrecognised / legacy / structurally invalid payloads return `false`,
  * which surfaces as a `null` account — never an auth failure.
- *
- * Sanitisation: only the fields enumerated here are returned to callers;
- * unknown/private server fields are structurally excluded by the explicit
- * projection in `getInferenceAccount`.
  */
-function isUsageAccount(raw: unknown): raw is UsageAccount {
+function isCreditAccount(raw: unknown): raw is CreditAccount {
   if (!raw || typeof raw !== "object") return false;
   const obj = raw as Record<string, unknown>;
 
   // ── Discriminator — reject legacy and unknown schemas ──
-  if (obj.schemaVersion !== "usage-v2") return false;
+  if (obj.schemaVersion !== "credits-v1") return false;
 
   // ── Required top-level fields ──
   if (!isUtcDate(obj.snapshotAt)) return false;
+  if (typeof obj.policyVersion !== "string") return false;
 
   // ── Scope ──
   if (!obj.scope || typeof obj.scope !== "object") return false;
@@ -288,34 +320,69 @@ function isUsageAccount(raw: unknown): raw is UsageAccount {
   // ── Reason (string or null) ──
   if (obj.reason !== null && typeof obj.reason !== "string") return false;
 
-  // ── canManageBilling ──
-  if (typeof obj.canManageBilling !== "boolean") return false;
-
   // ── Section objects ──
-  if (!obj.plan || typeof obj.plan !== "object") return false;
-  if (!obj.included || typeof obj.included !== "object") return false;
+  if (!obj.free || typeof obj.free !== "object") return false;
+  if (!obj.subscription || typeof obj.subscription !== "object") return false;
   if (!obj.prepaid || typeof obj.prepaid !== "object") return false;
+  if (!obj.purchase || typeof obj.purchase !== "object") return false;
   if (!obj.admission || typeof obj.admission !== "object") return false;
 
-  const plan = obj.plan as Record<string, unknown>;
-  const included = obj.included as Record<string, unknown>;
+  const free = obj.free as Record<string, unknown>;
+  const sub = obj.subscription as Record<string, unknown>;
   const prepaid = obj.prepaid as Record<string, unknown>;
+  const purchase = obj.purchase as Record<string, unknown>;
 
-  // ── plan ──
-  if (plan.id !== null && typeof plan.id !== "string") return false;
-  if (plan.id && !["pro", "gold", "startup", "enterprise"].includes(plan.id as string)) return false;
-  if (plan.name !== null && typeof plan.name !== "string") return false;
-  if (plan.monthlyPriceUsd !== null && !isDecimalString(plan.monthlyPriceUsd)) return false;
+  // ── free ──
+  if (typeof free.state !== "string") return false;
+  if (
+    !["unverified", "ineligible", "eligible_unclaimed", "active", "expired", "revoked", "unresolved"].includes(
+      free.state as string,
+    )
+  ) return false;
+  if (!isNanoStringOrNull(free.claimableCreditNanos)) return false;
+  if (!isNanoStringOrNull(free.spendableCreditNanos)) return false;
+  if (!isNanoStringOrNull(free.heldCreditNanos)) return false;
+  if (free.resetAt !== null && !isUtcDate(free.resetAt)) return false;
 
-  // ── included ──
-  if (typeof included.state !== "string") return false;
-  if (!["active", "exhausted", "none", "unavailable"].includes(included.state as string)) return false;
-  if (included.usedPercent !== null && (typeof included.usedPercent !== "number" || !Number.isFinite(included.usedPercent) || included.usedPercent < 0 || included.usedPercent > 100)) return false;
-  if (included.resetsAt !== null && !isUtcDate(included.resetsAt)) return false;
+  // ── subscription ──
+  if (typeof sub.state !== "string") return false;
+  if (!["none", "active", "inactive_verified", "expired", "revoked", "unresolved"].includes(sub.state as string)) return false;
+  if (sub.priceCents !== 1500) return false;
+  if (sub.periodStart !== null && !isUtcDate(sub.periodStart)) return false;
+  if (sub.periodEnd !== null && !isUtcDate(sub.periodEnd)) return false;
+  if (!Array.isArray(sub.windows)) return false;
+  for (const w of sub.windows as unknown[]) {
+    if (!w || typeof w !== "object") return false;
+    const win = w as Record<string, unknown>;
+    if (typeof win.kind !== "string") return false;
+    if (!["monthly", "weekly", "five_hour"].includes(win.kind as string)) return false;
+    if (!isNanoStringOrNull(win.limitCreditNanos)) return false;
+    if (!isNanoStringOrNull(win.settledCreditNanos)) return false;
+    if (!isNanoStringOrNull(win.heldCreditNanos)) return false;
+    if (!isNanoStringOrNull(win.availableCreditNanos)) return false;
+    if (!isUtcDate(win.resetsAt)) return false;
+  }
 
   // ── prepaid ──
-  if (prepaid.balanceUsd !== null && !isDecimalString(prepaid.balanceUsd)) return false;
-  if (typeof prepaid.fallbackEnabled !== "boolean") return false;
+  if (!isNanoStringOrNull(prepaid.spendableCreditNanos)) return false;
+  if (!isNanoStringOrNull(prepaid.heldCreditNanos)) return false;
+  if (!isNanoStringOrNull(prepaid.settledDeficitCreditNanos)) return false;
+  if (!isNanoStringOrNull(prepaid.holdShortfallCreditNanos)) return false;
+  if (typeof prepaid.consentEnabled !== "boolean") return false;
+
+  // ── purchase ──
+  if (typeof purchase.enabled !== "boolean") return false;
+  if (!isOfferCents(purchase.customMinCents)) return false;
+  if (!isOfferCents(purchase.customMaxCents)) return false;
+  if (purchase.stepCents !== 100) return false;
+  if (purchase.currency !== "usd") return false;
+  if (!Array.isArray(purchase.presets)) return false;
+  for (const p of purchase.presets as unknown[]) {
+    if (!p || typeof p !== "object") return false;
+    const preset = p as Record<string, unknown>;
+    if (!isOfferCents(preset.principalCents)) return false;
+    if (typeof preset.creditNanos !== "string" || !isNanoStringOrNull(preset.creditNanos)) return false;
+  }
 
   // ── admission ──
   const admission = obj.admission as Record<string, unknown>;
@@ -325,10 +392,15 @@ function isUsageAccount(raw: unknown): raw is UsageAccount {
   return true;
 }
 
-/** Checks for a non-negative decimal string (e.g. "0", "39.00", "10.50"). */
-function isDecimalString(v: unknown): v is string {
+/** Canonical unsigned numeric(30,0) text, without Number coercion. */
+function isNanoStringOrNull(v: unknown): v is string | null {
+  if (v === null) return true;
   if (typeof v !== "string") return false;
-  return /^(0|[1-9]\d*)(\.\d+)?$/.test(v);
+  return /^(0|[1-9]\d{0,29})$/.test(v);
+}
+
+function isOfferCents(value: unknown): value is number {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
 }
 
 function isUtcDate(value: unknown): value is string {
@@ -380,95 +452,73 @@ export class CloudClient {
   }
 
   /**
-   * Fetch the organization's usage account — plan details, included monthly
-   * usage with reset schedule, prepaid USD balance, and fallback consent.
+   * Fetch the organization's credit account — reported credit balances,
+   * subscription windows, prepaid spends, and purchase presets.
    *
    * Returns `null` when the response is a recognised HTTP 200 (customer is
    * authenticated) but the payload is missing, legacy, or structurally
    * unrecognised — not an auth failure. HTTP 401/403 still throw the
    * existing typed errors so the caller can distinguish a credential
-   * problem from unsupported account data.
+   * problem from unsupported credit data.
    *
-   * Monetary amounts are decimal strings (e.g. "39.00", "10.50").
-   * The caller preserves them for exact display.
-   *
-   * Sanitised: unknown/private server fields are stripped from the
-   * returned object. Only the fields enumerated in UsageAccount are
-   * projected out.
+   * All credit nano amounts are decimal integer strings (no Number
+   * coercion); the caller preserves them for exact display. The server's
+   * `state` field carries readiness independently of amount presence.
    */
-  async getInferenceAccount(): Promise<UsageAccount | null> {
+  async getInferenceAccount(): Promise<CreditAccount | null> {
     const raw = await this.getJson<unknown>("/api/inference/account");
-    if (!isUsageAccount(raw)) return null;
-    // Return only the customer contract. A valid v2 payload must not
-    // smuggle private accounting metadata into CLI JSON.
-    const { plan, included, prepaid, admission } = raw;
+    if (!isCreditAccount(raw)) return null;
+    // Return only the customer contract, including inside arrays. A valid v1
+    // payload must not smuggle private accounting metadata into CLI JSON.
+    const { free, subscription, prepaid, purchase, admission } = raw;
     return {
       schemaVersion: raw.schemaVersion,
       snapshotAt: raw.snapshotAt,
+      policyVersion: raw.policyVersion,
       scope: { orgId: raw.scope.orgId },
       state: raw.state,
       reason: raw.reason,
-      plan: {
-        id: plan.id,
-        name: plan.name,
-        monthlyPriceUsd: plan.monthlyPriceUsd,
+      free: {
+        state: free.state,
+        claimableCreditNanos: free.claimableCreditNanos,
+        spendableCreditNanos: free.spendableCreditNanos,
+        heldCreditNanos: free.heldCreditNanos,
+        resetAt: free.resetAt,
       },
-      included: {
-        state: included.state,
-        usedPercent: included.usedPercent,
-        resetsAt: included.resetsAt,
+      subscription: {
+        state: subscription.state,
+        priceCents: subscription.priceCents,
+        periodStart: subscription.periodStart,
+        periodEnd: subscription.periodEnd,
+        windows: subscription.windows.map((window) => ({
+          kind: window.kind,
+          limitCreditNanos: window.limitCreditNanos,
+          settledCreditNanos: window.settledCreditNanos,
+          heldCreditNanos: window.heldCreditNanos,
+          availableCreditNanos: window.availableCreditNanos,
+          resetsAt: window.resetsAt,
+        })),
       },
       prepaid: {
-        balanceUsd: prepaid.balanceUsd,
-        fallbackEnabled: prepaid.fallbackEnabled,
+        spendableCreditNanos: prepaid.spendableCreditNanos,
+        heldCreditNanos: prepaid.heldCreditNanos,
+        settledDeficitCreditNanos: prepaid.settledDeficitCreditNanos,
+        holdShortfallCreditNanos: prepaid.holdShortfallCreditNanos,
+        consentEnabled: prepaid.consentEnabled,
       },
-      canManageBilling: raw.canManageBilling,
+      purchase: {
+        enabled: purchase.enabled,
+        presets: purchase.presets.map((preset) => ({
+          principalCents: preset.principalCents,
+          creditNanos: preset.creditNanos,
+        })),
+        customMinCents: purchase.customMinCents,
+        customMaxCents: purchase.customMaxCents,
+        stepCents: purchase.stepCents,
+        currency: purchase.currency,
+      },
       admission: { eligible: admission.eligible, reason: admission.reason },
     };
-  }
-
-  /**
-   * Toggle prepaid fallback consent for the organization.
-   *
-   * When fallback is enabled and the monthly included usage is exhausted,
-   * inference requests may consume prepaid USD balance instead of failing.
-   *
-   * The server validates that the current token has `billing:write` scope
-   * and that the caller is an owner of the organization. If the billing
-   * configuration is unavailable for fallback (e.g. prepaid not configured),
-   * the server rejects enable. Disabling is always permitted for owners.
-   *
-   * Returns the updated fallback state from the server.
-   *
-   * @throws CloudUnauthorizedError (401) — token rejected
-   * @throws CloudForbiddenError (403) — insufficient scope or not an owner
-   * @throws CloudError — server rejection (e.g. billing config unavailable)
-   */
-  async patchInferenceAccountPrepaid(enabled: boolean): Promise<{ enabled: boolean }> {
-    const path = "/api/inference/account/prepaid";
-    let response: Response;
-    try {
-      response = await this.fetchImpl(`${this.host}${path}`, {
-        method: "PATCH",
-        headers: { ...this.headers(), "Content-Type": "application/json" },
-        body: JSON.stringify({ enabled }),
-      });
-    } catch (err) {
-      throw new CloudNetworkError(this.scrub(err instanceof Error ? err.message : String(err)), path);
-    }
-    if (!response.ok) {
-      let code: string | undefined;
-      try {
-        const body = await response.json() as { error?: { code?: unknown } };
-        if (typeof body?.error?.code === "string") code = body.error.code;
-      } catch { /* The HTTP status remains authoritative. */ }
-      this.throwForStatus(response.status, path, code);
-    }
-    const result = await response.json() as { enabled?: unknown };
-    if (typeof result?.enabled !== "boolean") {
-      throw new CloudError("0sec-cloud returned an invalid prepaid setting.", response.status, path);
-    }
-    return { enabled: result.enabled };
   }
 
   /**
@@ -577,7 +627,7 @@ export class CloudClient {
 
   /**
    * Generic JSON DELETE helper with the same error mapping as getJson/postJson.
-   * Used by `0sec service disconnect` to remove scan schedules.
+   * Used by `0 service disconnect` to remove scan schedules.
    */
   async deleteJson<T = unknown>(path: string): Promise<T> {
     const url = `${this.host}${path}`;
@@ -609,7 +659,7 @@ export class CloudClient {
 
   /**
    * Generic JSON POST helper with the same error mapping as getJson.
-   * Used by `0sec connect` to enqueue scans and schedules.
+   * Used by `0 connect` to enqueue scans and schedules.
    */
   async postJson<T = unknown>(path: string, body: unknown): Promise<T> {
     const url = `${this.host}${path}`;
@@ -674,7 +724,7 @@ export class CloudClient {
     if (status === 401) throw new CloudUnauthorizedError(path);
     if (status === 403) throw new CloudForbiddenError(path);
     throw new CloudError(
-      `0sec-cloud request failed (HTTP ${status}${code ? ` ${code}` : ""}) on ${path}.`,
+      `0-cloud request failed (HTTP ${status}${code ? ` ${code}` : ""}) on ${path}.`,
       status,
       path,
       code,
@@ -690,7 +740,7 @@ export class CloudClient {
     if (res.status === 401) throw new CloudUnauthorizedError(path);
     if (res.status === 403) throw new CloudForbiddenError(path);
     throw new CloudError(
-      `0sec-cloud request failed (HTTP ${res.status}) on ${path}.`,
+      `0-cloud request failed (HTTP ${res.status}) on ${path}.`,
       res.status,
       path,
     );
@@ -702,7 +752,7 @@ export class CloudClient {
     return {
       Authorization: `Bearer ${this.token}`,
       Accept: "application/json",
-      "User-Agent": `0sec-cli/${VERSION}`,
+      "User-Agent": `@0/cli/${VERSION}`,
     };
   }
 

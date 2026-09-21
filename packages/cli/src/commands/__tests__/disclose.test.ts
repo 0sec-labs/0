@@ -1,6 +1,6 @@
 /**
- * Coverage seed for `0sec-cli`'s `disclose` command. This is the H1
- * disclosure pipeline — the place where 0sec drafts advisories from
+ * Coverage seed for `@0/cli`'s `disclose` command. This is the H1
+ * disclosure pipeline — the place where 0 drafts advisories from
  * findings, runs the filing-state gate (decideFilingState), and writes
  * the bundle (INDEX.md + advisories + _dropped/). The CLI side had zero
  * tests prior to this seed; a bug here ships bad advisories to external
@@ -36,7 +36,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Command } from "commander";
-import type { Finding } from "@0/shared"
+import type { Finding } from "@0/shared";
 
 // ── Module-level mocks ──────────────────────────────────────────────────────
 //
@@ -161,7 +161,7 @@ async function runCli(argv: string[]): Promise<void> {
   });
   registerDiscloseCommand(program);
   try {
-    await program.parseAsync(["node", "0sec-cli", ...argv]);
+    await program.parseAsync(["node", "@0/cli", ...argv]);
   } catch {
     // Commander throws on usage error; the action throws on validation
     // failures (which then surfaces as an unhandled rejection in
@@ -611,7 +611,7 @@ describe("disclose — multi-scan guardrail", () => {
     await runCli([
       "disclose",
       "--output-dir",
-      "/tmp/0sec-disclose-multi",
+      "/tmp/0-disclose-multi",
       "--dry-run",
     ]);
     // Both rows reach the renderer when the multi-scan guard is satisfied.

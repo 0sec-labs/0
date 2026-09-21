@@ -26,7 +26,7 @@ import { mkdtempSync, rmSync, existsSync } from "node:fs";
 import { tmpdir, homedir } from "node:os";
 import { join } from "node:path";
 import { createHash } from "node:crypto";
-import type { Finding } from "@0/shared"
+import type { Finding } from "@0/shared";
 
 // ── Module-level mocks (hoisted) ────────────────────────────────────────────
 
@@ -107,13 +107,13 @@ const { runPipeline } = await import("./unified-pipeline.js");
 const tempDirs: string[] = [];
 
 function freshTmpDir(prefix: string): string {
-  const dir = mkdtempSync(join(tmpdir(), `0sec-novelty-pipeline-${prefix}-`));
+  const dir = mkdtempSync(join(tmpdir(), `0-novelty-pipeline-${prefix}-`));
   tempDirs.push(dir);
   return dir;
 }
 
 function freshDbPath(): string {
-  return join(freshTmpDir("db"), "0sec.db");
+  return join(freshTmpDir("db"), "0.db");
 }
 
 function fakeInstalledPackage(
@@ -151,7 +151,7 @@ const OSV_HIT = {
       references: [
         { type: "ADVISORY", url: "https://github.com/advisories/GHSA-f82v-jwr5-mffw" },
       ],
-      affected: [{ package: { ecosystem: "npm", name: "0sec-novelty-851-fixture" } }],
+      affected: [{ package: { ecosystem: "npm", name: "0-novelty-851-fixture" } }],
     },
   ],
 };
@@ -175,7 +175,7 @@ function stubGlobalFetch(json: unknown): typeof fetch {
 
 // The unique fixture package name keeps the on-disk intel cache from colliding
 // with any real entry; clean up its cache file after each test.
-const FIXTURE_PKG = "0sec-novelty-851-fixture";
+const FIXTURE_PKG = "0-novelty-851-fixture";
 
 // ── Lifecycle ───────────────────────────────────────────────────────────────
 

@@ -5,7 +5,7 @@
  * do*; this module answers *what it found*, in one bounded line, from the
  * ACTUAL `ToolResult.output` shapes in `@0/core`'s agent/tools registry.
  * OMP gives every tool a bespoke result line (`7 matches · 3 files`, `5
- * sources`, `Exit: 0`); this is the 0sec equivalent for our domain tools —
+ * sources`, `Exit: 0`); this is the 0 equivalent for our domain tools —
  * findings ledgers, the intel lookups, the scanner fan-out, the crawler.
  *
  * It is PURE and total: `output` may be any shape at all (a bare array, a

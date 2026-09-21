@@ -1,4 +1,4 @@
-import type { Finding, RuntimeMode, ScanDepth } from "@0/shared"
+import type { Finding, RuntimeMode, ScanDepth } from "@0/shared";
 import type { NativeRuntime } from "../runtime/types.js";
 import type { PreparedProjectContext, ProjectContextSuggestions } from "./project-context.js";
 
@@ -32,7 +32,7 @@ export interface BehavioralRepairResult {
 }
 
 
-/** One recorded developer decision on a past 0sec repair for this tenant. */
+/** One recorded developer decision on a past 0 repair for this tenant. */
 export interface PriorRepairOutcome {
   category: string;
   title: string;
@@ -40,7 +40,7 @@ export interface PriorRepairOutcome {
   mergedAt?: string;
 }
 
-/** A reviewer's comment on a past 0sec repair PR for this tenant. */
+/** A reviewer's comment on a past 0 repair PR for this tenant. */
 export interface RepairGuidance {
   title: string;
   comment: string;

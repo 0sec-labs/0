@@ -1,8 +1,8 @@
 /**
  * Hunt memory flywheel — a preseeded 5-layer cognitive memory that PRIMES
- * 0sec's kernel hunt (`runHuntScan`). Ports 0verse's PoV-dataset flywheel
+ * 0's kernel hunt (`runHuntScan`). Ports 0verse's PoV-dataset flywheel
  * (bench:`/root/0verse/src/zeroverse/flywheel.py`, "#43 (M7 Bet B)") into
- * 0sec, reusing what's already here instead of re-inventing it:
+ * 0, reusing what's already here instead of re-inventing it:
  *
  *   - PRINCIPLE / SEMANTIC / PROCEDURAL are preseeded from the 34-entry kernel
  *     archetype registry (`archetype-catalog.ts`'s `loadKernelArchetypes()`) —
@@ -42,7 +42,7 @@
  */
 
 import { readFileSync } from "node:fs";
-import type { Finding } from "@0/shared"
+import type { Finding } from "@0/shared";
 import { loadKernelArchetypes, symbolsFromDetectionSignature } from "./archetype-catalog.js";
 import type { HuntBrief, HuntFindingRecord } from "./hunt-scan.js";
 import type { LensCandidate } from "./lens-synthesis/types.js";

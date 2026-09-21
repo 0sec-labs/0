@@ -1,6 +1,6 @@
 /**
  * Tests for the `scan_completed` event payload shape, with a focus on
- * the cost-surfacing fields added in 0sec#231 (`cost_usd`,
+ * the cost-surfacing fields added in 0#231 (`cost_usd`,
  * `cost_breakdown`, `cost_per_flag`).
  *
  * These tests exercise the bus mechanics — a sink subscribed before
@@ -60,7 +60,7 @@ describe("eventBus.emit('scan_completed', …) cost fields", () => {
     expect(observed[0]!.payload).toEqual(payload);
   });
 
-  // 0sec#659 / 0cloud#1278 — the always-on OAST-confirmation event must flow
+  // 0#659 / 0cloud#1278 — the always-on OAST-confirmation event must flow
   // through the bus AND serialize to the exact ZERO_EVENT line the worker
   // relays into scan_events (event_type='oast_confirmed'), which the cloud
   // verify-claim EXISTS + #570 badge correlate on.

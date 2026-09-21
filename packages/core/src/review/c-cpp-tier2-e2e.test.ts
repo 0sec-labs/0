@@ -1,6 +1,6 @@
 /**
  * End-to-end Tier-2 builder test against the synthetic
- * `test-targets/c-cpp-tier2/` library. Verifies the artifacts 0sec
+ * `test-targets/c-cpp-tier2/` library. Verifies the artifacts 0
  * promises in its README — harness, linker script, Makefile fragment —
  * are all produced and contain the expected hooks.
  */
@@ -22,7 +22,7 @@ const TARGET = join(REPO_ROOT, "test-targets", "c-cpp-tier2");
 describe("Tier-2 E2E against test-targets/c-cpp-tier2", () => {
   it("emits a complete artifact bundle for the synthetic library", async () => {
     expect(existsSync(TARGET)).toBe(true);
-    const outDir = await mkdtemp(join(tmpdir(), "0sec-tier2-e2e-"));
+    const outDir = await mkdtemp(join(tmpdir(), "0-tier2-e2e-"));
     const corpusOut = join(outDir, "corpus-staged");
     try {
       const seeds = await extractCorpus(TARGET, { outputDir: corpusOut });

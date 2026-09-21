@@ -2,7 +2,7 @@
 import { appendFileSync } from "node:fs";
 import React, { useState } from "react";
 import { useKeyboard } from "@opentui/react";
-import { VERSION } from "@0/shared"
+import { VERSION } from "@0/shared";
 import { useTheme } from "./theme-context.js";
 import { fitTuiText, fitTuiUrl } from "./text.js";
 import {
@@ -33,7 +33,7 @@ export function appendTuiTrace(record: Record<string, unknown>): void {
  * overridable with `ZERO_TUI_LOG`.
  */
 export function appendTuiEvent(record: Record<string, unknown>): void {
-  const file = process.env["ZERO_TUI_LOG"] ?? "/tmp/0sec-tui.log";
+  const file = process.env["ZERO_TUI_LOG"] ?? "/tmp/0-tui.log";
   try {
     appendFileSync(file, `${JSON.stringify({ ts: new Date().toISOString(), ...record })}\n`, "utf8");
   } catch {
@@ -54,7 +54,7 @@ export function serializeError(error: unknown): Record<string, unknown> {
 
 /** The always-on log path {@link appendTuiEvent} writes to (env-overridable). */
 export function tuiLogPath(): string {
-  return process.env["ZERO_TUI_LOG"] ?? "/tmp/0sec-tui.log";
+  return process.env["ZERO_TUI_LOG"] ?? "/tmp/0-tui.log";
 }
 
 /** First `at …` frame of a stack (trimmed, without the leading `at `), if any. */
@@ -120,7 +120,7 @@ export function logProblem(kind: string, error: unknown, toolName?: string): voi
 }
 
 export function appendTuiCrash(record: Record<string, unknown>): void {
-  const file = process.env["ZERO_TRACE_TUI_EVENTS"] ?? "/tmp/0sec-tui-crashes.ndjson";
+  const file = process.env["ZERO_TRACE_TUI_EVENTS"] ?? "/tmp/0-tui-crashes.ndjson";
   try {
     appendFileSync(file, `${JSON.stringify({ ts: new Date().toISOString(), kind: "tui-crash", ...record })}\n`, "utf8");
   } catch {
@@ -337,7 +337,7 @@ function CrashPanel({ crash, onRestart, onQuit }: { crash: CrashInfo; onRestart:
   const contentWidth = Math.max(1, width - SHELL_HORIZONTAL_PADDING * 2 - PANEL_HORIZONTAL_CHROME);
   const footerWidth = Math.max(1, width - SHELL_HORIZONTAL_PADDING * 2);
   const inputWidth = Math.max(1, contentWidth - 3);
-  const tracePath = process.env["ZERO_TRACE_TUI_EVENTS"] ?? "/tmp/0sec-tui-crashes.ndjson";
+  const tracePath = process.env["ZERO_TRACE_TUI_EVENTS"] ?? "/tmp/0-tui-crashes.ndjson";
 
   const cleanMessage = sanitizeCrashText(crash.message) || "unknown TUI error";
   // Budget the stack against the rows the frame can actually spare so the

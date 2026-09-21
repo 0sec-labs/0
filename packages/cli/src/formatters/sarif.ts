@@ -1,5 +1,5 @@
-import type { PocStep, ScanReport, Finding, Severity } from "@0/shared"
-import { VERSION } from "@0/shared"
+import type { PocStep, ScanReport, Finding, Severity } from "@0/shared";
+import { VERSION } from "@0/shared";
 
 interface SarifResult {
   ruleId: string;
@@ -179,9 +179,9 @@ export function formatSarif(report: ScanReport): string {
       {
         tool: {
           driver: {
-            name: "0sec",
+            name: "0",
             version: VERSION,
-            informationUri: "https://github.com/0sec-labs/0sec",
+            informationUri: "https://github.com/0sec-labs/0",
             rules: Array.from(rulesMap.values()),
           },
         },

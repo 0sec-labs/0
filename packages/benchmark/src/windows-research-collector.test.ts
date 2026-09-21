@@ -26,7 +26,7 @@ function sha256(path: string): string {
 function importVerdict(): string {
   const path = join(root, "import-verdict.json");
   writeFileSync(path, JSON.stringify({
-    verdictSchema: "0sec.windows-hyperv-import-verdict/v1",
+    verdictSchema: "0.windows-hyperv-import-verdict/v1",
     executionOrigin: "external",
     producer: "0verse",
     schemaVersion: "0verse.hyperv-evidence/v1",
@@ -61,7 +61,7 @@ function attempt(
   updates: Partial<WindowsResearchAttemptInput> = {},
 ): WindowsResearchAttemptInput {
   const result: WindowsResearchAttemptInput = {
-    schemaVersion: "0sec.windows-research-attempt/v1",
+    schemaVersion: "0.windows-research-attempt/v1",
     mode: "contract",
     campaignId: "windows-contract-v1",
     caseId: "positive-1",
@@ -76,7 +76,7 @@ function attempt(
     },
     repoShas: {
       zeroverse: "a".repeat(40),
-      "0sec": "b".repeat(40),
+      "0": "b".repeat(40),
       zeroCloud: "c".repeat(40),
     },
     windowsBuildLabEx: "28020.1.amd64fre.rs_prerelease",

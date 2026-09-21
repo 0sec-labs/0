@@ -1,11 +1,11 @@
 /**
- * `0sec hunt` — novel-bug variant hunt CLI (the `runHuntScan` engine stage).
+ * `0 hunt` — novel-bug variant hunt CLI (the `runHuntScan` engine stage).
  *
  * Turns a proven fix into a tree-wide hunt for the SAME bug class at OTHER
  * sites: seed diff → `generateVariantCandidates` (LLM bug-class + grep'd
  * candidate sites) → `runHuntScan` (parallel finders → adversarial skeptic
- * gate). The discovery sibling of `0sec exploit` (weaponize) and
- * `0sec scan` (single-target). Engine-driven; this command is the surface.
+ * gate). The discovery sibling of `0 exploit` (weaponize) and
+ * `0 scan` (single-target). Engine-driven; this command is the surface.
  *
  * `--invariant` (Engine A) layers the seed-touched subsystem's stored invariant
  * model on top: before candidate generation it builds (or loads) the model and
@@ -18,7 +18,7 @@
  * fixed?) is a downstream gate. Treat `confirmed` as "worth verifying", and
  * verify the real sink + upstream-fix status before any disclosure.
  *
- * Exit codes (mirroring `0sec exploit`/`verify` so dispatchers branch on code):
+ * Exit codes (mirroring `0 exploit`/`verify` so dispatchers branch on code):
  *   0 → ≥1 finding survived the skeptic gate (leads to verify)
  *   1 → ran, no finding survived the gate
  *   2 → skipped (no candidate sites generated from the seed)
@@ -28,9 +28,9 @@
 import type { Command } from "commander";
 import { readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
-import type { Finding, RuntimeMode } from "@0/shared"
-import type { ImpactCeiling } from "@0/core"
-import { stampDeploymentContext } from "@0/core"
+import type { Finding, RuntimeMode } from "@0/shared";
+import type { ImpactCeiling } from "@0/core";
+import { stampDeploymentContext } from "@0/core";
 
 /**
  * #1051 — map a gated hunt LEAD onto the cloud-sink finding shape as a

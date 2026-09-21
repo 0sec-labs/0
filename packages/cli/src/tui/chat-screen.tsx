@@ -18,36 +18,38 @@ import {
   useRenderer,
   useTerminalDimensions,
 } from "@opentui/react";
-import { DEFAULT_AUTONOMY_MODE } from "@0/shared"
-import { ScopePolicy,
-CloudClient,
-loadCloudCredentials,
-createConsoleRuntime,
-eventBus,
-type ConsoleAutonomyMode,
-type ConsoleScopeRequest,
-type ConsoleScopeResolution,
-claimDiagnostics,
-type ConsoleLocalScopeRequest,
-type ConsoleLocalScopeResolution,
-type ScopedAuditEscalationRequest,
-type ConsoleSession,
-type RuntimeConfig,
-type NativeMessage,
-type OperatorQuestionRequest,
-type OperatorQuestionAnswer,
-type SubagentLifecyclePayload,
-type SubagentMessagePayload,
-type PeerMessagePayload,
-type TodosEventPayload,
-type SessionObjectivePayload,
-type ToolCall,
-type ToolRisk,
-describeDestructiveCategory,
-sendOperatorMessage,
-renderInboundMessage,
-type MessagingRuntime,
-type McpHost, } from "@0/core"
+import { DEFAULT_AUTONOMY_MODE } from "@0/shared";
+import {
+  ScopePolicy,
+  CloudClient,
+  loadCloudCredentials,
+  createConsoleRuntime,
+  eventBus,
+  type ConsoleAutonomyMode,
+  type ConsoleScopeRequest,
+  type ConsoleScopeResolution,
+  claimDiagnostics,
+  type ConsoleLocalScopeRequest,
+  type ConsoleLocalScopeResolution,
+  type ScopedAuditEscalationRequest,
+  type ConsoleSession,
+  type RuntimeConfig,
+  type NativeMessage,
+  type OperatorQuestionRequest,
+  type OperatorQuestionAnswer,
+  type SubagentLifecyclePayload,
+  type SubagentMessagePayload,
+  type PeerMessagePayload,
+  type TodosEventPayload,
+  type SessionObjectivePayload,
+  type ToolCall,
+  type ToolRisk,
+  describeDestructiveCategory,
+  sendOperatorMessage,
+  renderInboundMessage,
+  type MessagingRuntime,
+  type McpHost,
+} from "@0/core";
 import { decodePasteBytes, type ScrollBoxRenderable } from "@opentui/core";
 import {
   useSettings,
@@ -56,7 +58,7 @@ import {
   reloadSettings,
 } from "./settings-store.js";
 import { useTheme, type Theme } from "./theme-context.js";
-import { createTranscriptDocument, modelProvider } from "@0/shared"
+import { createTranscriptDocument, modelProvider } from "@0/shared";
 import { homedir } from "node:os";
 import { existsSync } from "node:fs";
 import {
@@ -147,11 +149,10 @@ import {
   connectionRecoveryForError,
   type ConnectionRecovery,
 } from "./connection-recovery.js";
-import { VERSION } from "@0/shared"
+import { VERSION } from "@0/shared";
 import {
   type TuiSettings,
 } from "./settings.js";
-import { buildConsoleJevConfig } from "./jev-helper.js";
 import {
   pushHistory,
   recallNext,
@@ -998,6 +999,9 @@ export function ChatScreen({
   const cloudSource = useRef<{ owner: ConsoleSession; isHosted: () => boolean; env: NodeJS.ProcessEnv } | null>(null);
   const [cloudBalance, setCloudBalance] = useState<{ owner: ConsoleSession; state: HostedBalanceState } | null>(null);
   const [hostedCatalog, setHostedCatalog] = useState<{ owner: ConsoleSession; models: readonly HostedCatalogModel[]; expiresAt: number } | null>(null);
+  // Private cache identity: never rendered or logged. A retained window belongs
+  // to the account that supplied it, not merely to this runtime's model name.
+  const hostedCatalogAccount = useRef<{ owner: ConsoleSession; host: string; token: string } | null>(null);
   const [cloudConfigured, setCloudConfigured] = useState<boolean>();
   const [cloudHintDismissed, setCloudHintDismissed] = useState(false);
   const initialPromptRef = useRef(options?.initialPrompt?.trim() || null);
@@ -1746,13 +1750,13 @@ export function ChatScreen({
     if (closingRef.current || stoppingAuditRef.current) throw new Error("This audit is stopping.");
     // Resolve credentials into this construction only. Explicit shell exports
     // win, and changing a connection never mutates a live runtime's environment.
-    const env = credentialEnvPatch(loadCredentials(), process.env);
+    const env = { ...process.env, ...credentialEnvPatch(loadCredentials(), process.env) };
     const runtime = createConsoleRuntime({
       model: opts.model ?? options?.model,
       provider: opts.providerId ?? options?.providerId,
       agentModels: options?.agentModels,
       singleModel: options?.singleModel,
-      env,
+      env: Object.fromEntries(Object.entries(env).filter((entry): entry is [string, string] => entry[1] !== undefined)),
     });
     const resolvedModel = runtime.resolvedModel();
     // Initial compaction window: resolved synchronously from the just-built
@@ -1797,19 +1801,6 @@ export function ChatScreen({
       // Capture the operator's current mode when a session is first constructed.
       autonomyMode: modeRef.current,
       initialMessages: opts.initialMessages,
-      // Jev evaluator config from operator settings and stored credentials.
-      // Built here (not hoisted to a React effect) so every session
-      // construction reflects the latest operator choices.
-      jev: buildConsoleJevConfig({
-        jevFunding: settingsRef.current.jevFunding,
-        jevBrowser: settingsRef.current.jevBrowser,
-        jevKernel: settingsRef.current.jevKernel,
-        jevCrash: settingsRef.current.jevCrash,
-        jevRadar: settingsRef.current.jevRadar,
-        jevFoxguard: settingsRef.current.jevFoxguard,
-        jevMaxRequests: settingsRef.current.jevMaxRequests,
-        jevMaxCostUsd: settingsRef.current.jevMaxCostUsd,
-      }),
       // The parent messaging runtime. WITHOUT this, no subagent gets the
       // send_message/check_messages tools and the model correctly reports it
       // cannot coordinate — which is exactly what an operator was seeing.
@@ -1945,7 +1936,7 @@ export function ChatScreen({
     if (!interactive) return;
     try {
       const source = cloudSource.current;
-      const env = source && source.owner === session ? source.env : credentialEnvPatch(loadCredentials(), process.env);
+      const env = source && source.owner === session ? source.env : { ...process.env, ...credentialEnvPatch(loadCredentials(), process.env) };
       loadCloudCredentials({ env, warn: () => {} });
       setCloudConfigured(true);
     } catch (error) {
@@ -1959,35 +1950,65 @@ export function ChatScreen({
     if (!session || !source || source.owner !== session || !source.isHosted()) {
       setCloudBalance(null);
       setHostedCatalog(null);
+      hostedCatalogAccount.current = null;
       return;
     }
     let active = true;
     let pending = false;
     const refresh = async () => {
       if (pending || !active) return;
-      setHostedCatalog(null);
-      if (!source.isHosted()) { setCloudBalance(null); return; }
+      // Keep still-valid metadata while refreshing. Clearing it here would
+      // disable compaction at every busy/idle transition and polling interval.
+      if (!source.isHosted()) { setCloudBalance(null); setHostedCatalog(null); return; }
       pending = true;
       setCloudBalance({ owner: session, state: { status: "loading" } });
+      const readCredentials = () => {
+        try {
+          const credentials = loadCloudCredentials({ env: source.env, warn: () => {} });
+          const cachedAccount = hostedCatalogAccount.current;
+          if (cachedAccount && (cachedAccount.owner !== session || cachedAccount.host !== credentials.host || cachedAccount.token !== credentials.token)) {
+            setHostedCatalog(null);
+            hostedCatalogAccount.current = null;
+          }
+          return credentials;
+        }
+        catch (error) {
+          setHostedCatalog(null);
+          hostedCatalogAccount.current = null;
+          throw error;
+        }
+      };
       try {
-        const credentials = loadCloudCredentials({ env: source.env, warn: () => {} });
+        const credentials = readCredentials();
         const client = new CloudClient({ host: credentials.host, token: credentials.token });
         const [account, catalog] = await Promise.all([
           client.getInferenceAccount(),
-          settings.showContextMeter ? client.getInferenceModels().catch(() => null) : Promise.resolve(null),
+          // Model windows drive compaction even when the meter is hidden.
+          // Distinguish transport failure from a successful malformed payload.
+          client.getInferenceModels().then((value) => ({ ok: true as const, value }), () => ({ ok: false as const })),
         ]);
         if (!active || cloudSource.current !== source) return;
-        const current = loadCloudCredentials({ env: source.env, warn: () => {} });
-        if (!source.isHosted()) { setCloudBalance(null); return; }
+        const current = readCredentials();
+        if (!source.isHosted()) { setCloudBalance(null); setHostedCatalog(null); return; }
         const sameCredentials = current.host === credentials.host && current.token === credentials.token;
         setCloudBalance({ owner: session, state: sameCredentials ? hostedBalanceState(account) : { status: "unavailable" } });
-        if (sameCredentials && catalog) {
+        if (sameCredentials && catalog.ok) {
           try {
-            setHostedCatalog({ owner: session, models: buildHostedModelCatalog(catalog.data), expiresAt: Date.now() + 60_000 });
-          } catch { /* Malformed catalog metadata cannot establish a context limit. */ }
+            const models = buildHostedModelCatalog(catalog.value.data);
+            hostedCatalogAccount.current = { owner: session, host: credentials.host, token: credentials.token };
+            setHostedCatalog({ owner: session, models, expiresAt: Date.now() + 60_000 });
+          } catch {
+            hostedCatalogAccount.current = null;
+            setHostedCatalog(null); // Malformed metadata cannot establish a limit.
+          }
+        } else if (!sameCredentials) {
+          hostedCatalogAccount.current = null;
+          setHostedCatalog(null);
         }
       } catch {
         if (active && cloudSource.current === source) {
+          // A transport failure may coincide with logout/account replacement.
+          try { readCredentials(); } catch { /* The reader invalidates the cache. */ }
           setCloudBalance(source.isHosted() ? { owner: session, state: { status: "unavailable" } } : null);
         }
       } finally { pending = false; }
@@ -1995,7 +2016,7 @@ export function ChatScreen({
     void refresh();
     const interval = setInterval(() => { void refresh(); }, 30_000);
     return () => { active = false; clearInterval(interval); };
-  }, [session, busy, interactive, settings.showContextMeter]);
+  }, [session, busy, interactive]);
   // Marketplace changes never replace this session's runtime or live harness.
   // Its leased host remains usable until cleanup; new chats acquire the new set.
   useEffect(() => {
@@ -2025,10 +2046,10 @@ export function ChatScreen({
     if (!runtime) return;
     // Explicit shell exports win; a live switch re-resolves the account from
     // this environment, exactly as construction does.
-    const env = credentialEnvPatch(loadCredentials(), process.env);
+    const env = { ...process.env, ...credentialEnvPatch(loadCredentials(), process.env) };
     const currentProvider = runtime.getConfigurationDiagnostics().provider;
     // Which provider would this selection switch the live runtime into? An
-    // explicit hint (e.g. a 0sec Cloud row's "hosted") wins over the model id,
+    // explicit hint (e.g. a 0 Cloud row's "hosted") wins over the model id,
     // so a hosted model whose id also lives in a BYOK catalog still forces
     // hosted; otherwise derive it from the model and only treat it as a switch
     // when it actually differs from the running provider.
@@ -2229,7 +2250,7 @@ export function ChatScreen({
     });
   }, [appendEntry]);
 
-  // Tell herdr when 0sec is parked on a human decision, so the pane joins
+  // Tell herdr when 0 is parked on a human decision, so the pane joins
   // its attention queue instead of looking busy. No-op outside herdr.
   useEffect(() => {
     reportOperatorGate(Boolean(pendingScope || pendingLocalScope || pendingEscalation || pendingToolApproval || secretPrompt));
@@ -3697,9 +3718,8 @@ export function ChatScreen({
           if (usage.kind === "planner") {
             const planned = Number.isFinite(usage.inputTokens) && usage.inputTokens > 0 ? usage.inputTokens : undefined;
             setLastContext(planned);
-            // Stream A emits `tokensAfter` undefined — the rewrite is only sized
-            // once the model actually receives it, which is THIS next planner
-            // sample. Patch it into both the stored recap and the inline
+            // Replace the pending count with measured occupancy once the model
+            // actually receives the rewrite. Patch both the recap and inline
             // indicator so the operator sees the real before→after.
             const pending = pendingTokensAfterRef.current;
             if (pending !== undefined && planned !== undefined) {
@@ -3720,7 +3740,9 @@ export function ChatScreen({
           // sample patches it in (see onUsage above).
           compactionRecapsRef.current.set(event.compactionNumber, {
             tokensBefore: event.tokensBefore,
-            tokensAfter: event.tokensAfter,
+            // Core's immediate count is a local estimate. Wait for measured
+            // planner usage before presenting an exact post-compaction count.
+            tokensAfter: undefined,
             summaryText: event.summaryText,
             preCompactionMessages: event.preCompactionMessages,
             degraded: event.degraded,
@@ -3734,7 +3756,7 @@ export function ChatScreen({
             kind: "notice",
             text: event.degraded
               ? "⊟ compacted · summary unavailable"
-              : compactionIndicatorText(event.tokensBefore, event.tokensAfter),
+              : compactionIndicatorText(event.tokensBefore),
             turn: currentTurn,
             compactionNumber: event.compactionNumber,
           });
@@ -3742,17 +3764,6 @@ export function ChatScreen({
         onNotice: (notice) => {
           setScopeRules(session.scope?.raw.in_scope ?? []);
           appendEntry({ kind: "notice", text: notice, turn: currentTurn });
-        },
-        onJevActivity: (activity) => {
-          appendEntry({
-            kind: "notice",
-            text: activity.status === "started"
-              ? `Jev/${activity.feature} evaluating${activity.model ? ` (${activity.model})` : ""}`
-              : activity.status === "completed"
-                ? `Jev/${activity.feature} ✓${activity.durationMs ? ` ${activity.durationMs}ms` : ""}${activity.estimatedCostUsd ? ` · ~$${activity.estimatedCostUsd.toFixed(6)}` : ""}${activity.billing?.chargedUsd ? ` · settled $${activity.billing.chargedUsd.toFixed(4)}` : ""}`
-                : `Jev/${activity.feature} unavailable${activity.message ? ` — ${activity.message}` : ""}`,
-            turn: currentTurn,
-          });
         },
 
       }, { signal: controller.signal });
@@ -4783,12 +4794,11 @@ export function ChatScreen({
   // Re-base the live session's compaction trigger whenever that window changes:
   // a `/model` switch to a different-window model, or the per-account hosted
   // catalog loading after the session was built (when the window was unknown).
-  // An empty/undefined value is a no-op in core (it only re-bases on a real
-  // number), so this never disables a window the session already had.
+  // Unknown metadata explicitly clears a previous model's window. Keeping that
+  // stale limit would compact against the wrong model after a switch.
   useEffect(() => {
-    if (compactionContextWindow === undefined) return;
-    sessionRef.current?.reconfigureRuntime({ contextWindowTokens: compactionContextWindow });
-  }, [compactionContextWindow]);
+    sessionRef.current?.reconfigureRuntime({ contextWindowTokens: compactionContextWindow ?? null });
+  }, [compactionContextWindow, activeModel, activeProvider]);
   // The live "what it's doing" one-liner: the active tool + its args, truthfully
   // (never fabricated). Only while the root turn is running and not focused on a
   // worker. Computed here because the status bar is built above the later
@@ -4840,7 +4850,7 @@ export function ChatScreen({
   });
   // Feed herdr the same live facts the status bar shows — model/provider,
   // context %, the target/objective topic and the current activity — so the
-  // pane's sidebar chrome names 0sec's work. Gated on `interactive`: only the
+  // pane's sidebar chrome names 0's work. Gated on `interactive`: only the
   // selected, non-overlay audit owns the single pane's topic, so hidden audits
   // never fight over it. Percent mirrors the status-bar meter exactly. All
   // reporters are no-ops off-herdr and fail-soft.
@@ -4961,7 +4971,7 @@ export function ChatScreen({
   // paddingX (folded into the sidebar layout), which an entry's own border must
   // live within. Shrinks to make room when a sidebar is shown.
   const transcriptWidth = sidebars.transcriptWidth;
-  // "0sec" is 4 cells. The optional objective sits at the top-right; target,
+  // "0" is 4 cells. The optional objective sits at the top-right; target,
   // scope, and readiness take the remaining header cells. Autonomy mode lives
   // in the bottom status bar rather than competing with engagement posture.
   const sidebarControlWidth = contentWidth >= 64 ? 24 : 8;
@@ -5430,7 +5440,7 @@ export function ChatScreen({
         <text fg={TEXT}>{fitTuiText(`${"•".repeat(Math.min(secretPrompt.value.length, 40))}█`, approvalWidth)}</text>
       </box>
       <box width={approvalWidth} flexShrink={0} minWidth={0}>
-        <text fg={MUTED}>{fitTuiText(`Stored owner-only in your 0sec state dir and exported as ${secretPrompt.envVar}. Never transmitted by 0sec.`, approvalWidth, { mode: "middle" })}</text>
+        <text fg={MUTED}>{fitTuiText(`Stored owner-only in your 0 state dir and exported as ${secretPrompt.envVar}. Never transmitted by 0.`, approvalWidth, { mode: "middle" })}</text>
       </box>
       <box width={approvalWidth} flexShrink={0} minWidth={0}>
         <text fg={MUTED}>{fitLegend(approvalWidth, "[⏎] save · [esc] cancel")}</text>
@@ -6110,7 +6120,7 @@ export function ChatScreen({
         * flexShrink is disabled because this box is two stacked rows with
         * no explicit height: when the column is over-subscribed Yoga
         * collapses it to one row and the two lines overlap, which is how
-        * "0sec / chat" bled into "target: none" as "target:cnone".
+        * "0 / chat" bled into "target: none" as "target:cnone".
         */}
       {/*
         * ONE header row. It carries identity plus the two facts that are
@@ -6121,7 +6131,7 @@ export function ChatScreen({
         */}
       <box flexDirection="row" width="100%" minWidth={0} flexShrink={0} marginBottom={1} gap={1} paddingLeft={1} paddingRight={1} backgroundColor={PRIMARY}>
         <box flexDirection="row" flexShrink={0} minWidth={0}>
-          <text fg={headerFg}>0sec</text>
+          <text fg={headerFg}>0</text>
         </box>
         <box width={headerEngagementWidth} flexShrink={0} minWidth={0}>
           <text fg={headerFg}>{fitTuiText(headerEngagement, headerEngagementWidth, { mode: "middle" })}</text>
@@ -6129,7 +6139,7 @@ export function ChatScreen({
         {headerObjectiveWidth > 0 ? (
           // The async AI objective summary, right-aligned at the top-right.
           // Legible on the orange strip via the contrast-picked header fg; the
-          // 0sec voice (BRAND) reads on canvas but not on PRIMARY. Empty/compact
+          // 0 voice (BRAND) reads on canvas but not on PRIMARY. Empty/compact
           // hides it and the engagement summary reclaims the cells.
           <box width={headerObjectiveWidth} flexShrink={0} minWidth={0} flexDirection="row" justifyContent="flex-end">
             <text fg={headerFg}>{fitTuiText(headerObjective, headerObjectiveWidth, { mode: "end" })}</text>

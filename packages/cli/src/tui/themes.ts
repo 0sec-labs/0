@@ -46,7 +46,7 @@
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
-import { homeStateDir } from "@0/shared"
+import { homeStateDir } from "@0/shared";
 
 import type { SettingDef } from "./settings.js";
 import { loadUserThemes } from "./user-themes.js";
@@ -282,7 +282,7 @@ export function contrastRatio(a: string, b: string): number {
  * strip — the orange header bar. Picks whichever of `CANVAS` / `TEXT` has the
  * higher WCAG contrast against `PRIMARY`, so a dark glyph reads on a light
  * signature colour and a light glyph reads on a dark one, across every theme
- * (0sec orange, blue-team blue, golden-gate tan, the light and high-contrast
+ * (0 orange, blue-team blue, golden-gate tan, the light and high-contrast
  * palettes). Both candidates are always `#RRGGBB` (degrade snaps to hex), so
  * `contrastRatio` never throws here.
  */
@@ -320,7 +320,7 @@ export const MIN_SEMANTIC_CONTRAST = 1.15;
 /* ----------------------------------------------------------------- palettes */
 
 /**
- * `0sec Dark` ("Carbon") — the palette shipped originally, byte-for-byte from
+ * `0 Dark` ("Carbon") — the palette shipped originally, byte-for-byte from
  * `ui/theme.ts`.
  *
  * No longer the default (Midnight is), but preserved exactly so an operator who
@@ -625,7 +625,7 @@ const SWISS: Theme = {
  * The signature the operator asked for: near-black stepped surfaces
  * (#0A0A0A → #1E1E1E), a warm tan `#FAB283` PRIMARY selection bar / cursor, a
  * purple `#B48EE8` ACCENT for headers, and near-white body text. Restrained
- * chrome, polychrome syntax. Where OpenCode's exact hues fell short of 0sec's
+ * chrome, polychrome syntax. Where OpenCode's exact hues fell short of 0's
  * no-waiver AA contract (its #808080 muted and #484848 border), the values are
  * nudged just light enough to clear AA (MUTED #9A9A9A ≥5.9:1, BORDER #6E6E6E
  * ≥3.3:1) — every text token clears 4.5:1 on all three backgrounds with no
@@ -672,7 +672,7 @@ const GOLDEN: Theme = {
  * pi". This is a direct transcription of OMP's built-in `titanium` theme —
  * https://github.com/can1357/oh-my-pi/blob/main/packages/coding-agent/src/modes/theme/defaults/titanium.json
  * (the dark slot in OMP's default selection; see docs/theme.md). OMP's `vars`
- * map onto 0sec's tokens as follows:
+ * map onto 0's tokens as follows:
  *
  *   brushedTitanium #151820  -> CANVAS / background  (OMP export.pageBg)
  *   darkTitanium    #0F1216  -> PANEL / surface      (OMP export.cardBg)
@@ -686,7 +686,7 @@ const GOLDEN: Theme = {
  *   warningAmber    #FFB347  -> WARNING
  *   alertRed        #FF4757  -> ERROR (see contrast note)
  *
- * Two values are nudged off OMP's exact hex to clear 0sec's no-waiver AA
+ * Two values are nudged off OMP's exact hex to clear 0's no-waiver AA
  * contract (every text token >= 4.5:1 on all three backgrounds, BORDER >= 3:1):
  *
  *   - BORDER: OMP's base `border` is subtleGray #2A3038, which sits at only
@@ -737,7 +737,7 @@ const OH_MY_PI: Theme = {
 };
 
 /**
- * `0sec` — the flagship 0sec look: signature orange on warm graphite.
+ * `0` — the flagship 0 look: signature orange on warm graphite.
  *
  * The brand palette. Two anchors drive everything: the signature orange
  * `#FD802E` (PRIMARY / BRAND — the hero the eye lands on: rails, titles, the
@@ -793,7 +793,7 @@ const OSEC_THEME: Theme = {
   surface: "#26221D",
   surfaceAlt: "#35302A",
   overlay: "#403D39", // the #403D39 graphite anchor itself, as the topmost raised surface tier
-  // Code palette HARMONIZED to the 0sec warm palette (oh-my-pi dark-volcanic
+  // Code palette HARMONIZED to the 0 warm palette (oh-my-pi dark-volcanic
   // philosophy: draw the syntax hues from the theme's OWN colours rather than a
   // foreign rainbow, so code reads as part of the brand, not confetti). A warm
   // family carries the meaningful tokens — keyword=amber (ACCENT), function=soft
@@ -818,7 +818,7 @@ const OSEC_THEME: Theme = {
 /* ----------------------------------------------------------------- registry */
 
 export const THEME_NAMES = [
-  "0sec",
+  "0",
   "midnight",
   "dark",
   "light",
@@ -841,11 +841,11 @@ export const THEME_ALIASES: Readonly<Record<string, ThemeName>> = {
   opencode: "golden-gate",
   golden: "golden-gate",
   "oh-my-pi": "blue-team",
-  ember: "0sec",
+  ember: "0",
 };
 
 /**
- * The theme a fresh session gets. `0sec` — the flagship 0sec look, signature
+ * The theme a fresh session gets. `0` — the flagship 0 look, signature
  * orange (`#FD802E`) on warm graphite — is the shipped default: it puts the
  * brand hue front and centre while a rich, semantically-coloured transcript
  * reads far less flat than a neutral grey. `blue-team` (electric-blue on
@@ -867,7 +867,7 @@ export const THEME_ALIASES: Readonly<Record<string, ThemeName>> = {
  * preferred the old warm-grey look can opt back into it. That preservation — not
  * being the default — is why `dark` is the sole carrier of `CONTRAST_WAIVERS`.
  */
-export const DEFAULT_THEME_NAME: ThemeName = "0sec";
+export const DEFAULT_THEME_NAME: ThemeName = "0";
 
 /**
  * The one palette pinned byte-for-byte to the original `ui/theme.ts`, and so the
@@ -892,10 +892,10 @@ export interface ThemeEntry {
 }
 
 export const THEMES: Readonly<Record<ThemeName, ThemeEntry>> = {
-  "0sec": {
-    name: "0sec",
-    label: "0sec",
-    description: "The flagship 0sec look: signature orange on warm graphite, with an amber accent.",
+  "0": {
+    name: "0",
+    label: "0",
+    description: "The flagship 0 look: signature orange on warm graphite, with an amber accent.",
     mode: "dark",
     palette: OSEC_THEME,
   },
@@ -1500,7 +1500,7 @@ export const THEME_SETTING_DEF: SettingDef<ThemeName> & {
 // NO capabilities — they are a palette plus display metadata, nothing more, so
 // loading one can never reach the tool loader or a capability gate.
 
-/** Directory name for installed themes inside the 0sec state dir. */
+/** Directory name for installed themes inside the 0 state dir. */
 export const INSTALLED_THEMES_DIRNAME = "themes";
 
 /** On-disk shape of an installed theme file. `id` is authoritative (the file's

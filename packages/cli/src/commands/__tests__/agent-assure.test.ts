@@ -35,14 +35,14 @@ async function runCli(args: string[]): Promise<void> {
   program.configureOutput({ writeOut: () => undefined, writeErr: () => undefined });
   registerAgentAssureCommand(program);
   try {
-    await program.parseAsync(["node", "0sec", ...args]);
+    await program.parseAsync(["node", "0", ...args]);
   } catch {
     // Expected for a rejected scope or Commander usage error.
   }
 }
 
 beforeEach(() => {
-  root = mkdtempSync(join(tmpdir(), "0sec-agent-assure-cli-"));
+  root = mkdtempSync(join(tmpdir(), "0-agent-assure-cli-"));
   process.exitCode = undefined;
   stdoutOutput = "";
   const outputSpy = vi.spyOn(process.stdout, "write").mockImplementation((chunk: string | Uint8Array) => {

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { Finding } from "@0/shared"
+import type { Finding } from "@0/shared";
 
 vi.mock("./kernel-vm-runner.js", () => ({
   runReproducerInKernelVm: vi.fn(),

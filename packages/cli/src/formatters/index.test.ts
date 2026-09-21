@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { createAuditReportDocument,
-createScanReportDocument,
-type AuditReport,
-type ScanReport, } from "@0/shared"
+import {
+  createAuditReportDocument,
+  createScanReportDocument,
+  type AuditReport,
+  type ScanReport,
+} from "@0/shared";
 import {
   formatAuditReport,
   formatPresentationDocument,

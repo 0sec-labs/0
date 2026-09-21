@@ -2,7 +2,7 @@
  * MCP client host — the networked half of the MCP client.
  *
  * Connects to external MCP tool servers (over stdio, or any injected transport),
- * discovers their tools, exposes them to the agent as namespaced 0sec
+ * discovers their tools, exposes them to the agent as namespaced 0
  * `ToolDefinition`s, and routes invocations back. Sibling to the plugin
  * `PluginHost`: an out-of-process tool provider whose tools flow through the same
  * gates. The deterministic name/schema/result adaptation lives in `mcp-adapt.ts`
@@ -78,7 +78,7 @@ export class McpHost {
   async register(id: string, transport: ClientTransport): Promise<ToolDefinition[]> {
     if (!isSafeMcpServerId(id)) throw new Error(`unsafe MCP server id: ${JSON.stringify(id)}`);
     if (this.servers.has(id)) throw new Error(`MCP server "${id}" is already connected`);
-    const client = new Client({ name: "0sec", version: "0.1.0" }, { capabilities: {} });
+    const client = new Client({ name: "0", version: "0.1.0" }, { capabilities: {} });
     await client.connect(transport);
     let defs: ToolDefinition[];
     try {
@@ -109,7 +109,7 @@ export class McpHost {
   }
 
   /**
-   * Invoke a namespaced MCP tool. Returns a 0sec `ToolResult`; the flattened text
+   * Invoke a namespaced MCP tool. Returns a 0 `ToolResult`; the flattened text
    * output is still routed through the untrusted fence by the caller via the
    * `mcp__` name. Never throws — a transport/tool error is data.
    */

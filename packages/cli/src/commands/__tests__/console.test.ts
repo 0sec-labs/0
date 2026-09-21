@@ -56,6 +56,14 @@ describe("console launch authorization", () => {
     expect(process.exitCode).toBeUndefined();
   });
 
+  it("uses the engine's round default unless the operator supplies a cap", async () => {
+    const { DEFAULT_MAX_TOOL_ITERATIONS } = await import("@0/core");
+    await launch();
+    expect(startup.showConsole).toHaveBeenLastCalledWith(expect.objectContaining({ maxToolIterations: DEFAULT_MAX_TOOL_ITERATIONS }));
+    await launch(["--max-tool-calls", "7"]);
+    expect(startup.showConsole).toHaveBeenLastCalledWith(expect.objectContaining({ maxToolIterations: 7 }));
+  });
+
   it("retains configured-scope requirements for the Node fallback", async () => {
     startup.bun = false;
     await launch();

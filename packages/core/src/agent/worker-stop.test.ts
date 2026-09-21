@@ -68,7 +68,7 @@ afterEach(() => {
 
 describe("owned worker stop and drain", () => {
   it("delivers operator mail to workers created under UUID audit identities", async () => {
-    const home = mkdtempSync(join(tmpdir(), "0sec-worker-mailbox-"));
+    const home = mkdtempSync(join(tmpdir(), "0-worker-mailbox-"));
     const executor = new ToolExecutor(
       context("0b61d1cc-613c-4081-97d6-b718b786b012"), null, undefined, async () => runtime(),
     );

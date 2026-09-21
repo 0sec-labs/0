@@ -1,5 +1,5 @@
 /**
- * `0sec cve` CLI tests. The parent command groups two subcommands:
+ * `0 cve` CLI tests. The parent command groups two subcommands:
  *
  *   - `cve find`  — issue #272 v0 part 1 (artifact scraper). Tested
  *     end-to-end against a stubbed `globalThis.fetch`, asserting argv →
@@ -80,7 +80,7 @@ async function runCli(argv: string[]): Promise<void> {
   const program = new Command();
   program.exitOverride();
   registerCveCommand(program);
-  await program.parseAsync(["node", "0sec-cli", ...argv]);
+  await program.parseAsync(["node", "@0/cli", ...argv]);
 }
 
 function jsonResponse(body: unknown, init: ResponseInit = {}): Response {
@@ -124,9 +124,9 @@ const NVD_JSON_OK = {
   ],
 };
 
-// ── `0sec cve find` tests ────────────────────────────────────────
+// ── `0 cve find` tests ────────────────────────────────────────
 
-describe("0sec cve find", () => {
+describe("0 cve find", () => {
   let io: ReturnType<typeof captureIO>;
   let originalFetch: typeof globalThis.fetch;
 
@@ -170,7 +170,7 @@ describe("0sec cve find", () => {
       return notFoundResponse();
     }) as typeof fetch;
 
-    const cacheDir = mkdtempSync(join(tmpdir(), "0sec-cve-cli-"));
+    const cacheDir = mkdtempSync(join(tmpdir(), "0-cve-cli-"));
     await runCli([
       "cve",
       "find",
@@ -207,7 +207,7 @@ describe("0sec cve find", () => {
       return notFoundResponse();
     }) as typeof fetch;
 
-    const cacheDir = mkdtempSync(join(tmpdir(), "0sec-cve-cli-"));
+    const cacheDir = mkdtempSync(join(tmpdir(), "0-cve-cli-"));
     await runCli([
       "cve",
       "find",
@@ -246,7 +246,7 @@ describe("0sec cve find", () => {
       return notFoundResponse();
     }) as typeof fetch;
 
-    const cacheDir = mkdtempSync(join(tmpdir(), "0sec-cve-cli-"));
+    const cacheDir = mkdtempSync(join(tmpdir(), "0-cve-cli-"));
     await runCli([
       "cve",
       "find",
@@ -295,7 +295,7 @@ describe("0sec cve find", () => {
       return notFoundResponse();
     }) as typeof fetch;
 
-    const cacheDir = mkdtempSync(join(tmpdir(), "0sec-cve-cli-"));
+    const cacheDir = mkdtempSync(join(tmpdir(), "0-cve-cli-"));
     await runCli([
       "cve",
       "find",
@@ -320,7 +320,7 @@ describe("0sec cve find", () => {
 
   it("exits non-zero when every source misses and nothing is collected", async () => {
     globalThis.fetch = (async () => notFoundResponse()) as typeof fetch;
-    const cacheDir = mkdtempSync(join(tmpdir(), "0sec-cve-cli-"));
+    const cacheDir = mkdtempSync(join(tmpdir(), "0-cve-cli-"));
     await runCli([
       "cve",
       "find",
@@ -347,7 +347,7 @@ describe("0sec cve find", () => {
   });
 });
 
-// ── `0sec cve adapt` tests ───────────────────────────────────────
+// ── `0 cve adapt` tests ───────────────────────────────────────
 
 function makeResult(overrides: Partial<AdaptationResult> = {}): AdaptationResult {
   return {
@@ -474,7 +474,7 @@ describe("runCveAdapt — arg parsing", () => {
   });
 
   it("loads --artifacts from disk and forwards as the provider", async () => {
-    const dir = mkdtempSync(join(tmpdir(), "0sec-cve-artifacts-"));
+    const dir = mkdtempSync(join(tmpdir(), "0-cve-artifacts-"));
     const path = join(dir, "artifacts.json");
     writeFileSync(
       path,
@@ -503,7 +503,7 @@ describe("runCveAdapt — arg parsing", () => {
   });
 
   it("rejects --artifacts files that do not match the schema", async () => {
-    const dir = mkdtempSync(join(tmpdir(), "0sec-cve-bad-"));
+    const dir = mkdtempSync(join(tmpdir(), "0-cve-bad-"));
     const path = join(dir, "bad.json");
     writeFileSync(path, JSON.stringify({ not_what_we_want: true }), "utf-8");
     await expect(

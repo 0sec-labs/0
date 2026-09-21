@@ -203,7 +203,7 @@ describe("describeErrorForSurface", () => {
     expect(text).not.toBe("unknown");
     expect(text).toContain("Error");
     expect(text).toContain("doThing (/home/op/turn.ts:88:3)");
-    expect(text).toContain("0sec-tui.log");
+    expect(text).toContain("0-tui.log");
   });
 
   it("uses the error name and a log hint when there is no stack at all", () => {
@@ -211,7 +211,7 @@ describe("describeErrorForSurface", () => {
     err.stack = undefined;
     const text = describeErrorForSurface(err);
     expect(text).toContain("RangeError");
-    expect(text).toContain("0sec-tui.log");
+    expect(text).toContain("0-tui.log");
   });
 
   it("handles null/empty non-Errors without producing 'unknown'", () => {

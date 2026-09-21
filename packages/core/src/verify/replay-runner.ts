@@ -1,5 +1,5 @@
 /**
- * 0sec#193 — Deterministic replay runner.
+ * 0#193 — Deterministic replay runner.
  *
  * It consumes a finding's `pocSteps`, executes each through a selected local,
  * Docker, or QEMU runner, evaluates declared assertions, and emits a
@@ -47,13 +47,15 @@ import { tmpdir } from "node:os";
 import { join, resolve, isAbsolute, posix, win32 } from "node:path";
 import { arch as nodeArch, platform as nodePlatform } from "node:process";
 import { gzipSync } from "node:zlib";
-import type { Finding, PocStep, PocStepExpect } from "@0/shared"
-import { VERSION,
-type EvidenceArtifact,
-type RunnerKind,
-type VerificationAssertion,
-type VerificationCommand,
-type VerificationResult, } from "@0/shared"
+import type { Finding, PocStep, PocStepExpect } from "@0/shared";
+import {
+  VERSION,
+  type EvidenceArtifact,
+  type RunnerKind,
+  type VerificationAssertion,
+  type VerificationCommand,
+  type VerificationResult,
+} from "@0/shared";
 import type { ScopePolicy } from "../scope/scope.js";
 import { allowlistedChildEnv } from "../agent/sanitized-env.js";
 
@@ -909,7 +911,7 @@ export class QemuRunner implements ReplayRunner {
       "-append",
       "console=ttyS0 rdinit=/init panic=-1",
       "-virtfs",
-      `local,path=${resolve(runDir)},mount_tag=0sec-replay,security_model=none,id=osecshare`,
+      `local,path=${resolve(runDir)},mount_tag=0-replay,security_model=none,id=osecshare`,
       "-net",
       "none",
       "-sandbox",
@@ -919,10 +921,10 @@ export class QemuRunner implements ReplayRunner {
 }
 
 function qemuGuestWorkingDirectory(cwd: string | undefined): string | undefined {
-  if (!cwd) return "/mnt/0sec";
+  if (!cwd) return "/mnt/0";
   if (isAbsolute(cwd)) return undefined;
   const relative = resolve("/", cwd).slice(1);
-  return relative ? `/mnt/0sec/${relative}` : "/mnt/0sec";
+  return relative ? `/mnt/0/${relative}` : "/mnt/0";
 }
 
 function buildQemuInitramfs(args: {
@@ -937,7 +939,7 @@ function buildQemuInitramfs(args: {
     { name: "bin", mode: 0o040755, body: empty },
     { name: "dev", mode: 0o040755, body: empty },
     { name: "mnt", mode: 0o040755, body: empty },
-    { name: "mnt/0sec", mode: 0o040755, body: empty },
+    { name: "mnt/0", mode: 0o040755, body: empty },
     { name: "proc", mode: 0o040755, body: empty },
     { name: "sys", mode: 0o040755, body: empty },
     { name: "tmp", mode: 0o040755, body: empty },
@@ -984,18 +986,18 @@ function appendNewcEntry(chunks: Buffer[], entry: CpioEntry, inode: number): voi
 }
 
 function renderQemuInit(workspaceName: string, guestCwd: string): string {
-  const workspace = `/mnt/0sec/${workspaceName}`;
+  const workspace = `/mnt/0/${workspaceName}`;
   const step = `${workspace}/step.sh`;
   const stdout = `${workspace}/stdout.log`;
   const stderr = `${workspace}/stderr.log`;
   const exitCode = `${workspace}/exit-code`;
   return [
     "#!/bin/busybox sh",
-    "/bin/busybox mkdir -p /proc /sys /dev /tmp /mnt/0sec",
+    "/bin/busybox mkdir -p /proc /sys /dev /tmp /mnt/0",
     "/bin/busybox mount -t proc proc /proc",
     "/bin/busybox mount -t sysfs sysfs /sys",
     "/bin/busybox mount -t devtmpfs devtmpfs /dev 2>/dev/null || true",
-    "if ! /bin/busybox mount -t 9p -o trans=virtio,version=9p2000.L 0sec-replay /mnt/0sec; then",
+    "if ! /bin/busybox mount -t 9p -o trans=virtio,version=9p2000.L 0-replay /mnt/0; then",
     '  echo "__ZERO_QEMU_MOUNT_FAILED__"',
     "  /bin/busybox poweroff -f",
     "fi",
@@ -1383,7 +1385,7 @@ export async function runDeterministicReplay(
   const stepTimeoutMs = opts.stepTimeoutMs ?? DEFAULT_STEP_TIMEOUT_MS;
   const engineVersion = opts.engineVersion ?? VERSION;
   const runDir =
-    opts.runDir ?? mkdtempSync(join(tmpdir(), "0sec-replay-"));
+    opts.runDir ?? mkdtempSync(join(tmpdir(), "0-replay-"));
   mkdirSync(runDir, { recursive: true });
 
   const startedAt = new Date();

@@ -3,7 +3,7 @@ import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import type { JevEvaluator } from "@0/shared"
+import type { JevEvaluator } from "@0/shared";
 import {
   radarCandidatesToSeedFindings,
   scanRepoCommitsWithJev,
@@ -23,7 +23,7 @@ function git(cwd: string, args: string[]): void {
  * like plausible security fixes (one silent). Returns the repo path.
  */
 function setupRepo(): string {
-  const root = mkdtempSync(join(tmpdir(), "0sec-radar-"));
+  const root = mkdtempSync(join(tmpdir(), "0-radar-"));
   repos.push(root);
 
   git(root, ["init", "-q"]);
@@ -189,7 +189,7 @@ describe("scanRepoCommitsWithJev", () => {
   });
 
   it("handles empty repo gracefully", async () => {
-    const emptyRepo = mkdtempSync(join(tmpdir(), "0sec-radar-empty-"));
+    const emptyRepo = mkdtempSync(join(tmpdir(), "0-radar-empty-"));
     repos.push(emptyRepo);
     git(emptyRepo, ["init", "-q"]);
 
@@ -207,7 +207,7 @@ describe("scanRepoCommitsWithJev", () => {
   });
 
   it("handles non-git directory gracefully", async () => {
-    const notARepo = mkdtempSync(join(tmpdir(), "0sec-radar-nogit-"));
+    const notARepo = mkdtempSync(join(tmpdir(), "0-radar-nogit-"));
     repos.push(notARepo);
 
     const evaluator = evaluatorThatScores({}, {});

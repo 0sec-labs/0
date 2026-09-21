@@ -6,7 +6,7 @@ import {
   kernelRunArgsSchema,
   validateKernelRunArgs,
 } from "./kernel-run.js";
-import type { Finding } from "@0/shared"
+import type { Finding } from "@0/shared";
 import type { KernelVerifyOracleResult } from "../../verify/kernel-verify-types.js";
 
 function fakeFinding(): Finding {

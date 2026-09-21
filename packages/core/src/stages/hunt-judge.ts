@@ -11,7 +11,7 @@
  * other native LLM judge in this stage directory.
  */
 
-import type { Finding, RuntimeMode } from "@0/shared"
+import type { Finding, RuntimeMode } from "@0/shared";
 import { LlmApiRuntime } from "../runtime/llm-api.js";
 import type { HuntBrief } from "./hunt-scan.js";
 

@@ -1,5 +1,5 @@
 /**
- * `0sec review --harness-tier` dispatch tests.
+ * `0 review --harness-tier` dispatch tests.
  *
  * We stub both `runUnified` (the agent pipeline) and `runHarnessTier2`
  * (the Tier-2 scaffolder) so neither actually runs. The contract under
@@ -37,10 +37,10 @@ async function runCli(argv: string[]): Promise<void> {
   const program = new Command();
   program.exitOverride();
   registerReviewCommand(program);
-  await program.parseAsync(["node", "0sec-cli", ...argv]);
+  await program.parseAsync(["node", "@0/cli", ...argv]);
 }
 
-describe("0sec review --harness-tier", () => {
+describe("0 review --harness-tier", () => {
   beforeEach(() => {
     runUnifiedMock.mockClear();
     runUnifiedMock.mockResolvedValue(undefined);

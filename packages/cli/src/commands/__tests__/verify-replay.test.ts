@@ -1,5 +1,5 @@
 /**
- * 0sec#193 — CLI tests for the deterministic-replay path.
+ * 0#193 — CLI tests for the deterministic-replay path.
  *
  * Separate from the existing `verify.test.ts` (#194) so the two contracts
  * stay legible. Strategy: drive `runDeterministicReplayCli` directly with
@@ -11,14 +11,14 @@ import { describe, expect, it, beforeEach, afterEach } from "vitest";
 import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { VerificationResultSchema } from "@0/shared"
-import type { Finding } from "@0/shared"
+import { VerificationResultSchema } from "@0/shared";
+import type { Finding } from "@0/shared";
 import { runDeterministicReplayCli, parseRunnerKind } from "../verify.js";
 
 let tmpRoot: string;
 
 beforeEach(() => {
-  tmpRoot = mkdtempSync(join(tmpdir(), "0sec-verify-replay-test-"));
+  tmpRoot = mkdtempSync(join(tmpdir(), "0-verify-replay-test-"));
 });
 
 afterEach(() => {

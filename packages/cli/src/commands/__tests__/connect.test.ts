@@ -10,7 +10,7 @@ let tmp: string;
 let previousExitCode: typeof process.exitCode;
 
 beforeEach(() => {
-  tmp = mkdtempSync(join(tmpdir(), "0sec-connect-test-"));
+  tmp = mkdtempSync(join(tmpdir(), "0-connect-test-"));
   previousExitCode = process.exitCode;
   process.exitCode = undefined;
   vi.stubEnv("ZERO_CLOUD_TOKEN", "");

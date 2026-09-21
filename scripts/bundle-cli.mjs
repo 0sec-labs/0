@@ -65,6 +65,7 @@ await build({
   outdir,
   outExtension: { ".js": ".js" },
   entryNames: "0",
+  chunkNames: "chunks/[name]-[hash]",
   bundle: true,
   format: "esm",
   platform: "node",
@@ -74,7 +75,7 @@ await build({
   // never call it.
   splitting: true,
   banner: {
-    js: '#!/usr/bin/env node\nimport { createRequire as __zeroCreateRequire } from "node:module";\nconst require = __zeroCreateRequire(import.meta.url);',
+    js: '#!/usr/bin/env node\nimport { createRequire as __0CreateRequire } from "node:module";\nconst require = __0CreateRequire(import.meta.url);',
   },
   external: [
     // node-sqlite3-wasm ships a .wasm sidecar that is resolved relative to
@@ -132,7 +133,6 @@ cpSync("packages/dashboard/dist", `${outdir}/dashboard`, { recursive: true });
 // `dist/chunks/`, so the JSON must sit next to the chunk too — otherwise
 // `0 bench run` (the nightly regression gate) fails with
 // `ENOENT dist/chunks/corpus-v1.json`. Keep in sync with the files paths.ts reads.
-mkdirSync(`${outdir}/chunks`, { recursive: true });
 for (const benchFile of ["corpus-v1.json", "example-manifest.json"]) {
   const source = `packages/core/src/bench/${benchFile}`;
   if (existsSync(source)) {
@@ -184,7 +184,7 @@ const copySkillYaml = (relDir) => {
 copySkillYaml("");
 console.log(`Copied ${skillYamlCopied} skill YAML files → chunks/agent/skills/`);
 
-// Fix double shebang.
+// Fix double shebang
 const bundlePath = `${outdir}/0.js`;
 const bundle = readFileSync(bundlePath, "utf8").replace(
   "#!/usr/bin/env node\n#!/usr/bin/env node\n",
@@ -194,12 +194,13 @@ writeFileSync(bundlePath, bundle);
 
 // Write a clean package.json for publishing (no workspace: deps).
 const publishPkg = {
-  name: cliPkg.name,
+  name: rootPkg.name,
   version: rootPkg.version,
   type: "module",
   description: rootPkg.description,
   bin: { "0": "0.js" },
   files: ["0.js", "chunks", "attacks", "dashboard"],
+  keywords: rootPkg.keywords,
   author: rootPkg.author,
   homepage: rootPkg.homepage,
   bugs: rootPkg.bugs,

@@ -2,9 +2,11 @@ import type { Command } from "commander";
 import { existsSync } from "node:fs";
 import chalk from "chalk";
 import { writePresentationLine } from "../presentation/process-output.js";
-import { listOsecRunDatabasePaths,
-osecDB,
-resolveOsecDbPath, } from "@0/db"
+import {
+  listOsecRunDatabasePaths,
+  osecDB,
+  resolveOsecDbPath,
+} from "@0/db";
 
 type HistoryOptions = {
   dbPath?: string;
@@ -53,7 +55,7 @@ export function registerHistoryCommand(program: Command): void {
       }
 
       writePresentationLine("", "history.list.blank");
-      writePresentationLine(chalk.red.bold("  \u25C6 0sec") + chalk.gray(" scan history"), "history.list.header");
+      writePresentationLine(chalk.red.bold("  \u25C6 0") + chalk.gray(" scan history"), "history.list.header");
       writePresentationLine("", "history.list.blank");
 
       for (const s of scans) {

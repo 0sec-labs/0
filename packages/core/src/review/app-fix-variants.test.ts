@@ -43,8 +43,8 @@ function buildTestRepo(name: string, files: Record<string, string>): TestRepo {
 
   try {
     git(dir, ["init", "-b", "main"]);
-    git(dir, ["config", "user.email", "test@0sec.dev"]);
-    git(dir, ["config", "user.name", "0sec Test"]);
+    git(dir, ["config", "user.email", "test@0.dev"]);
+    git(dir, ["config", "user.name", "0 Test"]);
 
     for (const [filePath, content] of Object.entries(files)) {
       const fullPath = join(dir, filePath);

@@ -1,5 +1,5 @@
 /**
- * `0sec h1` CLI smoke tests. We register the command on a fresh
+ * `0 h1` CLI smoke tests. We register the command on a fresh
  * Commander program, install a fake `fetch` global so the action talks
  * to a stubbed H1 API, then `parseAsync` the same argv the user would
  * type. Exit codes are observed via `process.exitCode`; stdout/stderr
@@ -18,7 +18,7 @@ import { join } from "node:path";
 import { registerH1Command } from "../h1.js";
 
 const SECRET = "S3CR3T_TOKEN_DO_NOT_LEAK_999";
-const ID = "0sec-test";
+const ID = "0-test";
 
 interface CapturedIO {
   stdout: string[];
@@ -27,7 +27,7 @@ interface CapturedIO {
 }
 
 function setupHomeWithCreds(): string {
-  const home = mkdtempSync(join(tmpdir(), "0sec-h1-cli-"));
+  const home = mkdtempSync(join(tmpdir(), "0-h1-cli-"));
   mkdirSync(join(home, ".0"), { recursive: true, mode: 0o700 });
   const path = join(home, ".0", "h1.env");
   writeFileSync(path, `H1_API_IDENTIFIER=${ID}\nH1_API_TOKEN=${SECRET}\n`, { mode: 0o600 });
@@ -72,10 +72,10 @@ async function runCli(argv: string[]): Promise<void> {
   const program = new Command();
   program.exitOverride();
   registerH1Command(program);
-  await program.parseAsync(["node", "0sec-cli", ...argv]);
+  await program.parseAsync(["node", "@0/cli", ...argv]);
 }
 
-describe("0sec h1 — exit codes", () => {
+describe("0 h1 — exit codes", () => {
   let home: string;
   let originalHome: string | undefined;
   let originalEnvId: string | undefined;

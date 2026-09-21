@@ -1,15 +1,17 @@
 import { randomBytes } from "node:crypto";
 
-import { createAgenticScanAdapter,
-ObjectiveOracle,
-objectiveOracleEvaluatorAttestation,
-parseManifest,
-withVariantFeatureFlags,
-type BenchIntegration,
-type BenchManifest,
-type BenchScan,
-type BenchVariant,
-type TargetProvisioner, } from "@0/core"
+import {
+  createAgenticScanAdapter,
+  ObjectiveOracle,
+  objectiveOracleEvaluatorAttestation,
+  parseManifest,
+  withVariantFeatureFlags,
+  type BenchIntegration,
+  type BenchManifest,
+  type BenchScan,
+  type BenchVariant,
+  type TargetProvisioner,
+} from "@0/core";
 import {
   buildXbowChallenge,
   loadXbowChallenges,
@@ -150,7 +152,7 @@ export function createXbowBenchIntegration(
         provisioner,
         oracle: new ObjectiveOracle(),
         executionMetadata: {
-          harnessId: variant.harnessId ?? "0sec-agentic",
+          harnessId: variant.harnessId ?? "0-agentic",
           ...(variant.model ? { model: variant.model } : {}),
           ...(variant.runtime ? { runtime: variant.runtime } : {}),
         },

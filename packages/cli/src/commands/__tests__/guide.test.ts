@@ -17,7 +17,7 @@ afterEach(() => {
 });
 
 function program() {
-  const cli = new Command().name("0sec").exitOverride();
+  const cli = new Command().name("0").exitOverride();
   registerGuideCommand(cli);
   // Registration after guide must still appear in discovery at invocation time.
   registerAuthCommand(cli);

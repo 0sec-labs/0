@@ -25,7 +25,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
-import { DEFAULT_ALLOW_MODEL_SELF_EXTENSION, homeStateDir } from "@0/shared"
+import { DEFAULT_ALLOW_MODEL_SELF_EXTENSION, homeStateDir } from "@0/shared";
 
 import { sanitizeKeybindingOverrides } from "./keybindings.js";
 import {
@@ -70,7 +70,7 @@ export interface TuiSettings {
    * works again; every keyboard path is unaffected either way.
    */
   mouseSupport: boolean;
-  /** Block "0SECURITY" wordmark on the empty transcript. */
+  /** Block "ZEROSECURITY" wordmark on the empty transcript. */
   showLogo: boolean;
   /** Surface runtime stdout/stderr as transcript notices. */
   showRuntimeNotices: boolean;
@@ -189,7 +189,7 @@ export interface TuiSettings {
    */
   elapsedTimer: "left" | "off";
   /**
-   * Intro animation style for the "0SECURITY" wordmark. One-shot reveals: "glitch" (a
+   * Intro animation style for the "ZEROSECURITY" wordmark. One-shot reveals: "glitch" (a
    * neon-flecked scramble that resolves — the default), "matrix" (a green
    * matrix-rain cascade), "wave" (a rippling cyan wavefront), "neon" (a
    * neon-sign warm-up flicker), "strike" (a red slash strikes through the 0),
@@ -271,38 +271,6 @@ export interface TuiSettings {
    * load; unknown ids and protected/duplicate chords are dropped.
    */
   keybindings: Record<string, string>;
-
-  // ── Jev evaluator settings (operator-only) ────────────────────────────────
-
-  /**
-   * Jev evaluator funding source. 'environment' resolves legacy env vars
-   * (ZERO_JEV_PROVIDER, ZERO_JEV_FEATURES, etc.); 'off' disables Jev even
-   * if env vars are present. Explicit selection ('typesafe'/'vercel'/'cloud')
-   * uses stored or env-supplied credentials independent of chat provider.
-   * Operator-only: a project cannot enable spending or egress.
-   */
-  jevFunding: "off" | "typesafe" | "vercel" | "cloud" | "environment";
-  /** Enable browser assist pre-evaluation. */
-  jevBrowser: boolean;
-  /** Enable kernel function pre-evaluation. */
-  jevKernel: boolean;
-  /** Enable crash triage pre-evaluation. */
-  jevCrash: boolean;
-  /** Enable commit radar pre-evaluation. */
-  jevRadar: boolean;
-  /** Enable foxguard advisory SAST pre-evaluation. Explicit opt-in only, never auto-enabled. */
-  jevFoxguard: boolean;
-  /**
-   * Max evaluation requests per session. Preset string mapped to number
-   * by jev-helper. Operator-only: controls provider egress.
-   */
-  jevMaxRequests: "10" | "25" | "50" | "100" | "250" | "1000" | "unlimited";
-  /**
-   * Max estimated USD spend per session (advisory reservation model).
-   * Preset string mapped to number by jev-helper. Never a customer charge.
-   * Operator-only: controls provider egress.
-   */
-  jevMaxCostUsd: "5" | "10" | "25" | "50" | "100" | "250" | "unlimited";
 }
 
 /** Keys of `TuiSettings` whose value is a boolean. */
@@ -349,11 +317,7 @@ type TuiSettingDef =
   | EnumSettingDef<"theme">
   | EnumSettingDef<"symbolPreset">
   | EnumSettingDef<"rosterSort">
-  | EnumSettingDef<"leaderKey">
-  // Jev evaluator settings (operator-only)
-  | EnumSettingDef<"jevFunding">
-  | EnumSettingDef<"jevMaxRequests">
-  | EnumSettingDef<"jevMaxCostUsd">;
+  | EnumSettingDef<"leaderKey">;
 
 /**
  * Selectable values for the `theme` setting: the built-ins, plus any user
@@ -421,7 +385,7 @@ const DEFS: readonly TuiSettingDef[] = [
   {
     key: "showLogo",
     label: "Logo",
-    description: 'Block "0SECURITY" wordmark shown on an empty transcript.',
+    description: 'Block "ZEROSECURITY" wordmark shown on an empty transcript.',
     kind: "boolean",
     default: true,
     group: "Display",
@@ -550,7 +514,7 @@ const DEFS: readonly TuiSettingDef[] = [
   {
     key: "roleLabelStyle",
     label: "Role label",
-    description: 'Speaker name on each message: "You" for your turns, "0sec" for answers. Full and short add the elapsed age when one is known; glyph shows the name alone; off omits the label entirely. Bubble cards carry it top-left on the card border, with your messages right-aligned and answers left.',
+    description: 'Speaker name on each message: "You" for your turns, "0" for answers. Full and short add the elapsed age when one is known; glyph shows the name alone; off omits the label entirely. Bubble cards carry it top-left on the card border, with your messages right-aligned and answers left.',
     kind: "enum",
     default: "full",
     choices: ["full", "short", "glyph", "off"],
@@ -694,7 +658,7 @@ const DEFS: readonly TuiSettingDef[] = [
     key: "logoAnimation",
     label: "Logo animation",
     description:
-      'Intro animation for the "0SECURITY" wordmark: glitch (a neon-flecked scramble that resolves — the default), rainbow (a looping hue sweep), matrix (a green matrix-rain cascade), wave (a rippling cyan wavefront), neon (a neon-sign warm-up flicker), shimmer (a bright comet with a gradient tail), pulse (the slash breathes), strike (an orange slash strikes through the 0), draw (letters draw in behind a pen tip), fade (a centre-out bloom), typein (per-cell reveal), sweep (a bright bar wipes across) or off (static).',
+      'Intro animation for the "ZEROSECURITY" wordmark: glitch (a neon-flecked scramble that resolves — the default), rainbow (a looping hue sweep), matrix (a green matrix-rain cascade), wave (a rippling cyan wavefront), neon (a neon-sign warm-up flicker), shimmer (a bright comet with a gradient tail), pulse (the slash breathes), strike (an orange slash strikes through the 0), draw (letters draw in behind a pen tip), fade (a centre-out bloom), typein (per-cell reveal), sweep (a bright bar wipes across) or off (static).',
     kind: "enum",
     default: "glitch",
     choices: [
@@ -779,76 +743,6 @@ const DEFS: readonly TuiSettingDef[] = [
     choices: ["off", "ctrl+a", "ctrl+b", "ctrl+space"],
     group: "Display",
   },
-  // ── Jev evaluator settings (operator-only) ──
-  {
-    key: "jevFunding",
-    label: "Jev assistance",
-    description:
-      "Jev evaluator funding. 'Environment' reads ZERO_JEV_PROVIDER / TYPESAFE_API_KEY etc. from env (existing console users). 'Off' disables even if env vars exist. TypeSafe/Vercel/Cloud use stored or env-supplied credentials. Operator-only — a project cannot enable spending. See also standalone feature toggles (Browser, Kernel, Crash, Radar) and spend presets below.",
-    kind: "enum",
-    default: "environment",
-    choices: ["off", "typesafe", "vercel", "cloud", "environment"],
-    group: "Jev",
-  },
-  {
-    key: "jevBrowser",
-    label: "Browser assist",
-    description:
-      "Browser-assist pre-evaluation for URL analysis. Enabled features require Jev funding and must have explicit scope + operator-approved readOnlyUrls (env ZERO_JEV_READONLY_URLS) to be usable. Feature toggle alone does not grant access or derive permissions.",
-    kind: "boolean",
-    default: false,
-    group: "Jev",
-  },
-  {
-    key: "jevKernel",
-    label: "Kernel prepass",
-    description: "Kernel-function pre-evaluation for triage and hypothesis ranking.",
-    kind: "boolean",
-    default: false,
-    group: "Jev",
-  },
-  {
-    key: "jevCrash",
-    label: "Crash triage",
-    description: "Crash-record triage and signal pre-evaluation.",
-    kind: "boolean",
-    default: false,
-    group: "Jev",
-  },
-  {
-    key: "jevRadar",
-    label: "Commit radar",
-    description: "Recent-commit radar scanning and classification via Jev evaluator.",
-    kind: "boolean",
-    default: false,
-    group: "Jev",
-  },
-  {
-    key: "jevFoxguard",
-    label: "Foxguard advisory SAST",
-    description: "Foxguard advisory SAST pre-evaluation. Explicit opt-in only — must be toggled on, never auto-enabled. Feature availability is not egress/spend consent.",
-    kind: "boolean",
-    default: false,
-    group: "Jev",
-  },
-  {
-    key: "jevMaxRequests",
-    label: "Max requests",
-    description: "Maximum evaluation requests per session. Operator-only budget gate — a project cannot raise this cap.",
-    kind: "enum",
-    default: "100",
-    choices: ["10", "25", "50", "100", "250", "1000", "unlimited"],
-    group: "Jev",
-  },
-  {
-    key: "jevMaxCostUsd",
-    label: "Max estimated spend",
-    description: "Maximum estimated USD spend per session (advisory, not a customer charge — provider estimate for BYOK, server tariff cap for Cloud). Operator-only — a project cannot enable spending.",
-    kind: "enum",
-    default: "10",
-    choices: ["5", "10", "25", "50", "100", "250", "unlimited"],
-    group: "Jev",
-  },
 ];
 
 export const SETTING_DEFS: readonly SettingDef[] = DEFS;
@@ -902,19 +796,9 @@ export const DEFAULT_SETTINGS: TuiSettings = {
   rosterSort: "attention",
   leaderKey: "off",
   keybindings: {},
-
-  // Jev evaluator defaults (operator-only)
-  jevFunding: "environment",
-  jevBrowser: false,
-  jevKernel: false,
-  jevCrash: false,
-  jevRadar: false,
-  jevFoxguard: false,
-  jevMaxRequests: "100",
-  jevMaxCostUsd: "10",
 };
 
-/** Basename of the settings file inside the 0sec state directory. */
+/** Basename of the settings file inside the 0 state directory. */
 const SETTINGS_FILENAME = "tui-settings.json";
 
 /**
@@ -1041,16 +925,7 @@ export function isOperatorSetting(key: keyof TuiSettings): boolean {
     || key === "diagnosticReporting"
     || key === "diagnosticReportingPrompted"
     || key === "updatePolicy"
-    || key === "allowDevSourceUpdates"
-    // Jev evaluator settings — operator-only: project cannot enable spending/egress
-    || key === "jevFunding"
-    || key === "jevBrowser"
-    || key === "jevKernel"
-    || key === "jevCrash"
-    || key === "jevRadar"
-    || key === "jevFoxguard"
-    || key === "jevMaxRequests"
-    || key === "jevMaxCostUsd";
+    || key === "allowDevSourceUpdates";
 }
 
 /**
@@ -1218,16 +1093,6 @@ export function normalizeSettings(raw: unknown): TuiSettings {
     rosterSort: enumAt(raw, "rosterSort"),
     leaderKey: enumAt(raw, "leaderKey"),
     keybindings: keybindingsAt(raw),
-
-    // Jev evaluator settings
-    jevFunding: enumAt(raw, "jevFunding"),
-    jevBrowser: booleanAt(raw, "jevBrowser"),
-    jevKernel: booleanAt(raw, "jevKernel"),
-    jevCrash: booleanAt(raw, "jevCrash"),
-    jevRadar: booleanAt(raw, "jevRadar"),
-    jevFoxguard: booleanAt(raw, "jevFoxguard"),
-    jevMaxRequests: enumAt(raw, "jevMaxRequests"),
-    jevMaxCostUsd: enumAt(raw, "jevMaxCostUsd"),
   };
 }
 

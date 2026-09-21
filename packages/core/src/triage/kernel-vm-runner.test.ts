@@ -31,7 +31,7 @@ import {
 } from "./kernel-vm-runner.js";
 
 const provenance = {
-  expectedKernelRelease: "6.8.0-0sec",
+  expectedKernelRelease: "6.8.0-0",
   kernelImageSha256: "c".repeat(64),
   kernelConfigSha256: "d".repeat(64),
 };
@@ -64,7 +64,7 @@ describe("kernel execution attestation", () => {
     expect(() => parseKernelExecutionAttestation(receiptText().replace("boot_id=00000000-0000-4000-8000-000000000001", "boot_id=not-a-uuid"))).toThrow(/invalid/);
     const expected = request();
     for (const raw of [
-      receiptText().replace("observed_kernel_release=6.8.0-0sec", "observed_kernel_release=6.12.93"),
+      receiptText().replace("observed_kernel_release=6.8.0-0", "observed_kernel_release=6.12.93"),
       receiptText().replace(provenance.kernelImageSha256, "e".repeat(64)),
       receiptText().replace(provenance.kernelConfigSha256, "f".repeat(64)),
     ]) expect(() => bindKernelExecutionAttestation(parseKernelExecutionAttestation(raw), expected)).toThrow(/runtime kernel identity/);
@@ -137,13 +137,13 @@ describe("prepareKernelVmArtifacts", () => {
   });
 
   function makeTree(): string {
-    const tree = mkdtempSync(join(tmpdir(), "0sec-kernel-tree-"));
+    const tree = mkdtempSync(join(tmpdir(), "0-kernel-tree-"));
     writeFileSync(join(tree, "Makefile"), "VERSION = 6\nPATCHLEVEL = 8\n");
     return tree;
   }
 
   it("uses configured VM artifacts as the fastest cache hit", () => {
-    const dir = mkdtempSync(join(tmpdir(), "0sec-kernel-env-"));
+    const dir = mkdtempSync(join(tmpdir(), "0-kernel-env-"));
     const kernel = join(dir, "bzImage");
     const disk = join(dir, "rootfs.img");
     const config = join(dir, "kernel.config");
@@ -170,7 +170,7 @@ describe("prepareKernelVmArtifacts", () => {
 
   it("builds a cache miss and reuses it as a cache hit", () => {
     const tree = makeTree();
-    const cacheDir = mkdtempSync(join(tmpdir(), "0sec-kernel-cache-"));
+    const cacheDir = mkdtempSync(join(tmpdir(), "0-kernel-cache-"));
 
     const logLines: string[] = [];
     const miss = prepareKernelVmArtifacts({
@@ -206,7 +206,7 @@ describe("prepareKernelVmArtifacts", () => {
 
   it("keys the cache by config name so kasan and defconfig+kasan diverge", () => {
     const tree = makeTree();
-    const cacheDir = mkdtempSync(join(tmpdir(), "0sec-kernel-cache-"));
+    const cacheDir = mkdtempSync(join(tmpdir(), "0-kernel-cache-"));
 
     const a = prepareKernelVmArtifacts({
       kernelTree: tree,
@@ -251,25 +251,25 @@ describe("verifyKernelFinding", () => {
   });
 
   function makeTree(): string {
-    const tree = mkdtempSync(join(tmpdir(), "0sec-kernel-tree-"));
+    const tree = mkdtempSync(join(tmpdir(), "0-kernel-tree-"));
     writeFileSync(join(tree, "Makefile"), "VERSION = 6\nPATCHLEVEL = 8\n");
     return tree;
   }
 
   function makeReproducer(name: string, content = "int main(void) { return 0; }\n"): string {
-    const dir = mkdtempSync(join(tmpdir(), "0sec-kernel-repro-"));
+    const dir = mkdtempSync(join(tmpdir(), "0-kernel-repro-"));
     const repro = join(dir, name);
     writeFileSync(repro, content, "utf-8");
     return repro;
   }
 
   it("reports build_cache_hit=true on cache reuse + reproduced signature match", async () => {
-    const cacheDir = mkdtempSync(join(tmpdir(), "0sec-kernel-cache-"));
+    const cacheDir = mkdtempSync(join(tmpdir(), "0-kernel-cache-"));
     const tree = makeTree();
     // First call populates the cache.
     primeCacheForTree(tree, cacheDir);
     const reproPath = makeReproducer("poc.c");
-    const dmesgOut = join(mkdtempSync(join(tmpdir(), "0sec-verify-")), "dmesg.log");
+    const dmesgOut = join(mkdtempSync(join(tmpdir(), "0-verify-")), "dmesg.log");
 
     const result = await verifyKernelFinding({
       reproducerPath: reproPath,
@@ -299,10 +299,10 @@ describe("verifyKernelFinding", () => {
   });
 
   it("binds and persists a requested zero-cap receipt", async () => {
-    const cacheDir = mkdtempSync(join(tmpdir(), "0sec-kernel-cache-"));
+    const cacheDir = mkdtempSync(join(tmpdir(), "0-kernel-cache-"));
     const tree = makeTree(); primeCacheForTree(tree, cacheDir);
     const reproPath = makeReproducer("poc.c");
-    const dmesgOut = join(mkdtempSync(join(tmpdir(), "0sec-attest-")), "dmesg.log");
+    const dmesgOut = join(mkdtempSync(join(tmpdir(), "0-attest-")), "dmesg.log");
     const result = await verifyKernelFinding({ reproducerPath: reproPath, kernelTree: tree, cacheDir, dmesgOutPath: dmesgOut, expectedSignature: "KASAN: uaf", executionIdentity: { uid: 65534, gid: 65534 }, logger: () => undefined, buildRunner: () => { throw new Error("cache hit"); }, vmRunner: async (report) => ({ compiled: true, executed: true, output: "", dmesg: "KASAN: uaf", exitCode: 0, timedOut: false, executionAttestation: parseKernelExecutionAttestation(receiptForRequest(report.executionAttestationRequest!)) }) });
     expect(result.status).toBe("reproduced");
     expect(result.executionAttestation?.effectiveUid).toBe(65534);
@@ -311,13 +311,13 @@ describe("verifyKernelFinding", () => {
   });
 
   it("fails closed when an explicit drop produces no receipt", async () => {
-    const cacheDir = mkdtempSync(join(tmpdir(), "0sec-kernel-cache-")); const tree = makeTree(); primeCacheForTree(tree, cacheDir); const reproPath = makeReproducer("poc.c");
+    const cacheDir = mkdtempSync(join(tmpdir(), "0-kernel-cache-")); const tree = makeTree(); primeCacheForTree(tree, cacheDir); const reproPath = makeReproducer("poc.c");
     const result = await verifyKernelFinding({ reproducerPath: reproPath, kernelTree: tree, cacheDir, executionIdentity: { uid: 65534, gid: 65534 }, logger: () => undefined, buildRunner: () => { throw new Error("cache hit"); }, vmRunner: async () => ({ compiled: true, executed: true, output: "", dmesg: "KASAN: uaf", exitCode: 0, timedOut: false }) });
     expect(result.status).toBe("run_failed");
   });
 
   it("fails closed if the host kernel image changes while the VM is running", async () => {
-    const cacheDir = mkdtempSync(join(tmpdir(), "0sec-kernel-cache-")); const tree = makeTree(); primeCacheForTree(tree, cacheDir); const reproPath = makeReproducer("poc.c");
+    const cacheDir = mkdtempSync(join(tmpdir(), "0-kernel-cache-")); const tree = makeTree(); primeCacheForTree(tree, cacheDir); const reproPath = makeReproducer("poc.c");
     const result = await verifyKernelFinding({ reproducerPath: reproPath, kernelTree: tree, cacheDir, executionIdentity: { uid: 65534, gid: 65534 }, logger: () => undefined, buildRunner: () => { throw new Error("cache hit"); }, vmRunner: async (report) => {
       const image = process.env["ZERO_KERNEL_QEMU_KERNEL"]!;
       chmodSync(image, 0o644);
@@ -329,7 +329,7 @@ describe("verifyKernelFinding", () => {
   });
 
   it("launches from a private staged image so mutation of the cache artifact cannot swap the boot", async () => {
-    const cacheDir = mkdtempSync(join(tmpdir(), "0sec-kernel-cache-")); const tree = makeTree(); primeCacheForTree(tree, cacheDir); const reproPath = makeReproducer("poc.c");
+    const cacheDir = mkdtempSync(join(tmpdir(), "0-kernel-cache-")); const tree = makeTree(); primeCacheForTree(tree, cacheDir); const reproPath = makeReproducer("poc.c");
     const artifacts = prepareKernelVmArtifacts({ kernelTree: tree, cacheDir, logger: () => undefined, buildRunner: () => { throw new Error("cache hit"); } });
     let launchedPath = "";
     const result = await verifyKernelFinding({ reproducerPath: reproPath, kernelTree: tree, cacheDir, expectedSignature: "KASAN: uaf", executionIdentity: { uid: 65534, gid: 65534 }, logger: () => undefined, buildRunner: () => { throw new Error("cache hit"); }, vmRunner: async (report) => {
@@ -342,7 +342,7 @@ describe("verifyKernelFinding", () => {
   });
 
   it("converts malformed runtime receipts to run_failed instead of throwing", async () => {
-    const cacheDir = mkdtempSync(join(tmpdir(), "0sec-kernel-cache-")); const tree = makeTree(); primeCacheForTree(tree, cacheDir); const reproPath = makeReproducer("poc.c");
+    const cacheDir = mkdtempSync(join(tmpdir(), "0-kernel-cache-")); const tree = makeTree(); primeCacheForTree(tree, cacheDir); const reproPath = makeReproducer("poc.c");
     const result = await verifyKernelFinding({ reproducerPath: reproPath, kernelTree: tree, cacheDir, executionIdentity: { uid: 65534, gid: 65534 }, logger: () => undefined, buildRunner: () => { throw new Error("cache hit"); }, vmRunner: async (report) => {
       const receipt = parseKernelExecutionAttestation(receiptForRequest(report.executionAttestationRequest!));
       return { compiled: true, executed: true, output: "", dmesg: "KASAN: uaf", exitCode: 0, timedOut: false, executionAttestation: { ...receipt, observedKernelRelease: "6.12.93" } };
@@ -351,7 +351,7 @@ describe("verifyKernelFinding", () => {
   });
 
   it("detects an unexpected-but-recognised crash as no-match when expectedSignature mismatches", async () => {
-    const cacheDir = mkdtempSync(join(tmpdir(), "0sec-kernel-cache-"));
+    const cacheDir = mkdtempSync(join(tmpdir(), "0-kernel-cache-"));
     const tree = makeTree();
     primeCacheForTree(tree, cacheDir);
     const reproPath = makeReproducer("poc.syz", "r0 = openat$sysfs(0)\n");
@@ -382,7 +382,7 @@ describe("verifyKernelFinding", () => {
   });
 
   it("returns no_signal when the reproducer ran but dmesg has no crash markers", async () => {
-    const cacheDir = mkdtempSync(join(tmpdir(), "0sec-kernel-cache-"));
+    const cacheDir = mkdtempSync(join(tmpdir(), "0-kernel-cache-"));
     const tree = makeTree();
     primeCacheForTree(tree, cacheDir);
     const reproPath = makeReproducer("poc.c");
@@ -411,7 +411,7 @@ describe("verifyKernelFinding", () => {
   });
 
   it("returns build_failed when the build runner throws", async () => {
-    const cacheDir = mkdtempSync(join(tmpdir(), "0sec-kernel-cache-"));
+    const cacheDir = mkdtempSync(join(tmpdir(), "0-kernel-cache-"));
     const tree = makeTree();
     const reproPath = makeReproducer("poc.c");
 
@@ -435,7 +435,7 @@ describe("verifyKernelFinding", () => {
   });
 
   it("returns run_failed when the VM runner throws", async () => {
-    const cacheDir = mkdtempSync(join(tmpdir(), "0sec-kernel-cache-"));
+    const cacheDir = mkdtempSync(join(tmpdir(), "0-kernel-cache-"));
     const tree = makeTree();
     primeCacheForTree(tree, cacheDir);
     const reproPath = makeReproducer("poc.c");
@@ -459,7 +459,7 @@ describe("verifyKernelFinding", () => {
   });
 
   it("rejects passing both --syz and --reproducer paths", async () => {
-    const cacheDir = mkdtempSync(join(tmpdir(), "0sec-kernel-cache-"));
+    const cacheDir = mkdtempSync(join(tmpdir(), "0-kernel-cache-"));
     const tree = makeTree();
     primeCacheForTree(tree, cacheDir);
     const reproPath = makeReproducer("poc.c");
@@ -485,7 +485,7 @@ describe("verifyKernelFinding", () => {
   });
 
   it("matches a widened KCSAN data-race splat and confirms (closes the race loop)", async () => {
-    const cacheDir = mkdtempSync(join(tmpdir(), "0sec-kernel-cache-"));
+    const cacheDir = mkdtempSync(join(tmpdir(), "0-kernel-cache-"));
     const tree = makeTree();
     primeCacheForTree(tree, cacheDir);
     const reproPath = makeReproducer("race.c");
@@ -525,7 +525,7 @@ describe("verifyKernelFinding", () => {
   });
 
   it("confirms a KCSAN race against the patch-to-poc expected signature", async () => {
-    const cacheDir = mkdtempSync(join(tmpdir(), "0sec-kernel-cache-"));
+    const cacheDir = mkdtempSync(join(tmpdir(), "0-kernel-cache-"));
     const tree = makeTree();
     primeCacheForTree(tree, cacheDir);
     const reproPath = makeReproducer("race.c");
@@ -584,13 +584,13 @@ describe("verifyAcrossBoots — N-boot reproducibility gate (AIxCC T2)", () => {
   });
 
   function makeTree(): string {
-    const tree = mkdtempSync(join(tmpdir(), "0sec-kernel-tree-"));
+    const tree = mkdtempSync(join(tmpdir(), "0-kernel-tree-"));
     writeFileSync(join(tree, "Makefile"), "VERSION = 6\nPATCHLEVEL = 8\n");
     return tree;
   }
 
   function makeReproducer(name: string): string {
-    const dir = mkdtempSync(join(tmpdir(), "0sec-kernel-repro-"));
+    const dir = mkdtempSync(join(tmpdir(), "0-kernel-repro-"));
     const repro = join(dir, name);
     writeFileSync(repro, "int main(void) { return 0; }\n", "utf-8");
     return repro;
@@ -633,7 +633,7 @@ describe("verifyAcrossBoots — N-boot reproducibility gate (AIxCC T2)", () => {
   }
 
   it("declares reproduced + nbootStable when the signature fires in 2 of 3 boots", async () => {
-    const cacheDir = mkdtempSync(join(tmpdir(), "0sec-kernel-cache-"));
+    const cacheDir = mkdtempSync(join(tmpdir(), "0-kernel-cache-"));
     const tree = makeTree();
     primeCacheForTree(tree, cacheDir);
 
@@ -670,7 +670,7 @@ describe("verifyAcrossBoots — N-boot reproducibility gate (AIxCC T2)", () => {
   });
 
   it("writes a schema-v2 manifest only for invariant provenance and distinct fresh boots", async () => {
-    const cacheDir = mkdtempSync(join(tmpdir(), "0sec-kernel-cache-"));
+    const cacheDir = mkdtempSync(join(tmpdir(), "0-kernel-cache-"));
     const tree = makeTree(); primeCacheForTree(tree, cacheDir);
     let boot = 0;
     const result = await verifyAcrossBoots({
@@ -689,7 +689,7 @@ describe("verifyAcrossBoots — N-boot reproducibility gate (AIxCC T2)", () => {
   });
 
   it("revokes N-boot stability when two hits claim the same boot ID", async () => {
-    const cacheDir = mkdtempSync(join(tmpdir(), "0sec-kernel-cache-"));
+    const cacheDir = mkdtempSync(join(tmpdir(), "0-kernel-cache-"));
     const tree = makeTree(); primeCacheForTree(tree, cacheDir);
     const result = await verifyAcrossBoots({
       reproducerPath: makeReproducer("poc.c"), kernelTree: tree, cacheDir, boots: 2, minHits: 2,
@@ -704,7 +704,7 @@ describe("verifyAcrossBoots — N-boot reproducibility gate (AIxCC T2)", () => {
   });
 
   it("declares NOT stable when the signature fires in only 1 of 3 boots", async () => {
-    const cacheDir = mkdtempSync(join(tmpdir(), "0sec-kernel-cache-"));
+    const cacheDir = mkdtempSync(join(tmpdir(), "0-kernel-cache-"));
     const tree = makeTree();
     primeCacheForTree(tree, cacheDir);
 
@@ -731,7 +731,7 @@ describe("verifyAcrossBoots — N-boot reproducibility gate (AIxCC T2)", () => {
   });
 
   it("stops early once the M-of-K threshold is unreachable", async () => {
-    const cacheDir = mkdtempSync(join(tmpdir(), "0sec-kernel-cache-"));
+    const cacheDir = mkdtempSync(join(tmpdir(), "0-kernel-cache-"));
     const tree = makeTree();
     primeCacheForTree(tree, cacheDir);
 
@@ -799,7 +799,7 @@ describe("parseCoveragePcs — KCOV coverage parsing (AIxCC T1)", () => {
     // `coverage_prog<N>.<call>` (e.g. coverage_prog0.0). The guest cats every
     // shard into coverage.log; parseCoveragePcs dedupes PCs across them. This
     // simulates that concatenation end-to-end so #948's feedback loop sees PCs.
-    const share = mkdtempSync(join(tmpdir(), "0sec-cov-shards-"));
+    const share = mkdtempSync(join(tmpdir(), "0-cov-shards-"));
     try {
       writeFileSync(
         join(share, "coverage_prog0.0"),
@@ -838,7 +838,7 @@ describe("buildKernelAppend — KASLR knob", () => {
     expect(append).toContain("nokaslr");
     expect(append).not.toMatch(/\bkaslr\b(?<!nokaslr)/);
     // historical contract preserved otherwise.
-    expect(append).toContain("init=/sbin/0sec-init");
+    expect(append).toContain("init=/sbin/0-init");
     expect(append).toContain("root=/dev/vda");
   });
 
@@ -936,7 +936,7 @@ describe("weaponize-initramfs lane", () => {
     expect(init).not.toContain("timeout -t");
     // poweroff so the host's QEMU-exit wait returns
     expect(init).toContain("poweroff -f");
-    expect(init).toContain("0SEC-INITRAMFS done");
+    expect(init).toContain("ZERO-INITRAMFS done");
   });
 
   it("forwards only validated race environment keys into the guest command", () => {
@@ -1033,7 +1033,7 @@ describe("renderRealIpiRaceHarness — ExpRace userspace race harness", () => {
     expect(c).toContain('osec_env_long("ZERO_RACE_RETRIES", 12345)');
     expect(c).toContain('osec_env_long("ZERO_RACE_SECONDS", 30)');
     expect(c).toContain("time(NULL) < deadline");
-    expect(c).toContain("0SEC-RACE");
+    expect(c).toContain("ZERO-RACE");
   });
 
   it("splices the composed gadget setup C once, before the race loop", () => {
@@ -1116,13 +1116,13 @@ describe("prepareKernelVmArtifacts — KCSAN fail-soft config gate", () => {
   });
 
   function makeTree(): string {
-    const tree = mkdtempSync(join(tmpdir(), "0sec-kernel-tree-"));
+    const tree = mkdtempSync(join(tmpdir(), "0-kernel-tree-"));
     writeFileSync(join(tree, "Makefile"), "VERSION = 6\nPATCHLEVEL = 8\n");
     return tree;
   }
 
   it("WARNS (fail-soft) when the kcsan build produced a .config without CONFIG_KCSAN", () => {
-    const cacheDir = mkdtempSync(join(tmpdir(), "0sec-kernel-cache-"));
+    const cacheDir = mkdtempSync(join(tmpdir(), "0-kernel-cache-"));
     const logs: string[] = [];
     prepareKernelVmArtifacts({
       kernelTree: makeTree(),
@@ -1140,7 +1140,7 @@ describe("prepareKernelVmArtifacts — KCSAN fail-soft config gate", () => {
   });
 
   it("does NOT warn when CONFIG_KCSAN is present, and never warns for kasan", () => {
-    const cacheDir = mkdtempSync(join(tmpdir(), "0sec-kernel-cache-"));
+    const cacheDir = mkdtempSync(join(tmpdir(), "0-kernel-cache-"));
     const logs: string[] = [];
     prepareKernelVmArtifacts({
       kernelTree: makeTree(),
@@ -1158,7 +1158,7 @@ describe("prepareKernelVmArtifacts — KCSAN fail-soft config gate", () => {
     const logs2: string[] = [];
     prepareKernelVmArtifacts({
       kernelTree: makeTree(),
-      cacheDir: mkdtempSync(join(tmpdir(), "0sec-kernel-cache-")),
+      cacheDir: mkdtempSync(join(tmpdir(), "0-kernel-cache-")),
       configProfile: "kasan",
       logger: (l) => logs2.push(l),
       buildRunner: ({ outDir }) => {
@@ -1176,9 +1176,9 @@ describe("bug-attribution guard — out-of-band module-load denier", () => {
 
   it("passes a legit insmod of the sanctioned target module", () => {
     const serial = [
-      "=== 0SEC-INITRAMFS weaponize lane up ===",
+      "=== ZERO-INITRAMFS weaponize lane up ===",
       "insmod snd-mtpav.ko ok",
-      `0SEC-CANARY:${CANARY}:ROOT uid=0`,
+      `ZERO-CANARY:${CANARY}:ROOT uid=0`,
     ].join("\n");
     const v = detectOutOfBandModuleLoad(serial, ["snd-mtpav.ko"]);
     expect(v.denied).toBe(false);
@@ -1224,7 +1224,7 @@ describe("bug-attribution guard — hardcoded kernel-address static scan", () =>
   });
 
   it("allows a leak-derived address (ARB-READ marker present) even under KASLR-on", () => {
-    const out = `0SEC-CANARY:x:ARB-READ:${KADDR}\nleaked kernel base ${KADDR}`;
+    const out = `ZERO-CANARY:x:ARB-READ:${KADDR}\nleaked kernel base ${KADDR}`;
     const v = scanHardcodedKernelAddresses(`unsigned long base = ${KADDR};`, out, { kaslrOn: true });
     expect(v.flagged).toBe(true);
     expect(v.leakProvenance).toBe(true);

@@ -21,7 +21,7 @@ import {
 const tempHomes: string[] = [];
 
 function makeHome(): string {
-  const dir = mkdtempSync(join(tmpdir(), "0sec-session-store-"));
+  const dir = mkdtempSync(join(tmpdir(), "0-session-store-"));
   tempHomes.push(dir);
   return dir;
 }
@@ -62,7 +62,7 @@ afterEach(() => {
 });
 
 describe("sessionsDir", () => {
-  it("places transcripts inside the shared 0sec state directory", () => {
+  it("places transcripts inside the shared 0 state directory", () => {
     expect(sessionsDir("/home/someone")).toBe("/home/someone/.0/console-sessions");
   });
 

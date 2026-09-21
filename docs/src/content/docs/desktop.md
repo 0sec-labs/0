@@ -28,7 +28,7 @@ From the monorepo root, build the CLI and dashboard before launching:
 
 ```bash
 pnpm install --frozen-lockfile
-pnpm --filter '0sec-cli...' build
+pnpm --filter '@0/cli...' build
 pnpm --filter @0/dashboard build
 pnpm --filter @0/desktop start
 ```
@@ -43,7 +43,7 @@ The development sidecar can also run through Node.js 24+:
 The desktop resolves assets from `packages/dashboard/dist/` (development) or
 `process.resourcesPath/dashboard/` (packaged), and the sidecar from
 `packages/cli/dist/index.js` run through `bun` (development) or from
-`resources/sidecars/0sec-<platform>-<arch>` (packaged).
+`resources/sidecars/0-<platform>-<arch>` (packaged).
 
 ### Environment
 
@@ -109,8 +109,8 @@ The desktop separates the renderer (web UI) from engine operations through a
 
 In development, the sidecar runs through the local `bun` CLI entrypoint
 (`packages/cli/dist/index.js`). In packaged builds, it runs the pre-bundled
-binary from `process.resourcesPath/sidecars/0sec-<platform>-<arch>`
-(Windows uses `0sec-windows-<arch>.exe`).
+binary from `process.resourcesPath/sidecars/0-<platform>-<arch>`
+(Windows uses `0-windows-<arch>.exe`).
 
 On macOS, closing the last window leaves the application and sidecar running.
 Dock activation or **New Session** recreates the window without starting another
@@ -167,7 +167,7 @@ The main process accepts renderer requests only from the current window's main
 frame at the trusted dashboard origin. External URLs must be credential-free
 HTTPS URLs. The directory picker accepts directories only and returns `null`
 on cancellation. Picking a directory sets context; it does not grant access.
-Preference writes accept only namespaced `0sec:` UI values. They do not expose
+Preference writes accept only namespaced `0:` UI values. They do not expose
 arbitrary filesystem paths, provider credentials, or engine configuration.
 
 Menu subscriptions return an unsubscribe function. Commands that arrive while
@@ -290,19 +290,19 @@ pnpm build
 
 # Compile the host sidecar (this example must run on Linux x64).
 # pnpm build above also builds the dashboard required by this script.
-bash scripts/bun-compile.sh "" "dist-bin/0sec-linux-x64"
+bash scripts/bun-compile.sh "" "dist-bin/0-linux-x64"
 
 # Package the desktop (Linux example)
 pnpm --filter @0/desktop package:linux
 ```
 
-The sidecar binary filename pattern is `0sec-<platform>-<arch>` (Linux/macOS)
-or `0sec-windows-<arch>.exe` (Windows). The example above is for a Linux x64
+The sidecar binary filename pattern is `0-<platform>-<arch>` (Linux/macOS)
+or `0-windows-<arch>.exe` (Windows). The example above is for a Linux x64
 host: the empty first argument means **compile for the host**, not "target the
 platform named in the output file." On Apple Silicon, use
-`dist-bin/0sec-darwin-arm64` and `package:mac`; on Intel macOS use
-`dist-bin/0sec-darwin-x64`. Windows requires a compatible shell for
-`bun-compile.sh` and the matching `0sec-windows-<arch>.exe` output.
+`dist-bin/0-darwin-arm64` and `package:mac`; on Intel macOS use
+`dist-bin/0-darwin-x64`. Windows requires a compatible shell for
+`bun-compile.sh` and the matching `0-windows-<arch>.exe` output.
 
 Although the Bun compiler accepts an explicit cross-target, desktop resource
 preparation currently copies only the host-matching sidecar. Build/package on
@@ -313,7 +313,7 @@ The `package:*` scripts (`package:linux`, `package:mac`, `package:win`) run
 `prepare-desktop-resources.mjs` before invoking electron-builder:
 
 1. Validates that the built dashboard's `index.html` and the host-matching
-   `dist-bin/0sec-*` sidecar exist.
+   `dist-bin/0-*` sidecar exist.
 2. Removes the desktop package's existing `resources/` directory.
 3. Copies `packages/dashboard/dist` to `resources/dashboard` and the compiled
    sidecar to `resources/sidecars/`, marking it executable.
@@ -324,7 +324,7 @@ archive), the dashboard web UI, and the sidecar binary.
 
 ### Package metadata
 
-- **Linux**: app ID `com.0urity.osec`, category `Development`,
+- **Linux**: app ID `com.0security.osec`, category `Development`,
   `syncDesktopName: true`
 - **macOS**: category `public.app-category.developer-tools`. Code signing and
   notarisation require an Apple Developer account and are not configured in the
@@ -336,7 +336,7 @@ archive), the dashboard web UI, and the sidecar binary.
 | Build mode | Dashboard assets | Sidecar binary |
 |------------|------------------|----------------|
 | Development | `packages/dashboard/dist/` | Bun entrypoint at `packages/cli/dist/index.js` (run through `bun`) |
-| Packaged (`app.isPackaged === true`) | `process.resourcesPath/dashboard/` | `process.resourcesPath/sidecars/0sec-<platform>-<arch>` (`0sec-windows-<arch>.exe` on Windows) |
+| Packaged (`app.isPackaged === true`) | `process.resourcesPath/dashboard/` | `process.resourcesPath/sidecars/0-<platform>-<arch>` (`0-windows-<arch>.exe` on Windows) |
 
 Both are validated at launch — the application exits with an error dialog if
 either is missing.

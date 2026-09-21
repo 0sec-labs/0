@@ -15,7 +15,7 @@ import { mkdtempSync, writeFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { EventEmitter } from "node:events";
-import type { Finding } from "@0/shared"
+import type { Finding } from "@0/shared";
 import {
   runTier3Validation,
   promoteFindingsWithTier3Result,
@@ -29,7 +29,7 @@ import type { KernelVmConfig } from "../triage/kernel-vm-runner.js";
  * can stage without compiling anything.
  */
 function makeTier2Artifact(): Tier2HarnessArtifact {
-  const dir = mkdtempSync(join(tmpdir(), "0sec-tier3-fixture-"));
+  const dir = mkdtempSync(join(tmpdir(), "0-tier3-fixture-"));
   const harnessPath = join(dir, "harness.c");
   const objPath = join(dir, "lib.c");
   writeFileSync(harnessPath, "/* fixture harness */\nint main(){return 0;}\n");
@@ -145,8 +145,8 @@ describe("runTier3Validation — dry-run / env probe", () => {
   it("returns qemu_failed when the kernel image path does not exist", async () => {
     const artifact = makeTier2Artifact();
     const result = await runTier3Validation(artifact, {
-      qemuKernel: "/tmp/does-not-exist-bzImage-0sec-test",
-      qemuDisk: "/tmp/does-not-exist-rootfs-0sec-test",
+      qemuKernel: "/tmp/does-not-exist-bzImage-0-test",
+      qemuDisk: "/tmp/does-not-exist-rootfs-0-test",
     });
     expect(result.status).toBe("qemu_failed");
     expect(result.reason).toMatch(/does not exist/);
@@ -155,7 +155,7 @@ describe("runTier3Validation — dry-run / env probe", () => {
 
 describe("runTier3Validation — mocked QEMU", () => {
   function stageKernelDisk(): { kernel: string; disk: string } {
-    const dir = mkdtempSync(join(tmpdir(), "0sec-tier3-vm-"));
+    const dir = mkdtempSync(join(tmpdir(), "0-tier3-vm-"));
     const kernel = join(dir, "bzImage");
     const disk = join(dir, "rootfs.img");
     writeFileSync(kernel, "fake-kernel");
@@ -244,7 +244,7 @@ describe("runTier3Validation — mocked QEMU", () => {
   it("counts the corpus inputs that were staged into the VM share", async () => {
     const artifact = makeTier2Artifact();
     const { kernel, disk } = stageKernelDisk();
-    const corpusDir = mkdtempSync(join(tmpdir(), "0sec-tier3-corpus-"));
+    const corpusDir = mkdtempSync(join(tmpdir(), "0-tier3-corpus-"));
     const seedA = join(corpusDir, "seed-a");
     const seedB = join(corpusDir, "seed-b");
     writeFileSync(seedA, "AAA");
@@ -258,7 +258,7 @@ describe("runTier3Validation — mocked QEMU", () => {
     const result = await runTier3Validation(artifact, {
       qemuKernel: kernel,
       qemuDisk: disk,
-      runCorpus: [seedA, seedB, "/tmp/does-not-exist-seed-0sec-test"],
+      runCorpus: [seedA, seedB, "/tmp/does-not-exist-seed-0-test"],
       spawnImpl,
       loadConfigImpl: makeKernelVmConfig,
       wallClockMs: 10_000,
@@ -339,7 +339,7 @@ describe("promoteFindingsWithTier3Result — confidence promotion", () => {
     expect(promoted.status).toBe("confirmed");
     expect(promoted.confidence).toBe(1.0);
     expect(promoted.triageNote).toMatch(/tier3:sanitizer:ubsan:signed-integer-overflow/);
-    expect(promoted.evidence.analysis).toMatch(/0sec tier-3/);
+    expect(promoted.evidence.analysis).toMatch(/0 tier-3/);
   });
 
   it("promotes an out-of-bounds-read hypothesis when ASan heap-buffer-overflow READ fires", () => {

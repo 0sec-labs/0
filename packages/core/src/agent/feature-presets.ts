@@ -36,7 +36,7 @@
  *
  * Exactly one layer was measured as genuinely broken: `egats` tree search went
  * 2 → 1 flags at 10× the worst per-flag cost on stubborn-14, and was removed
- * from the default aliases (0sec#116). Its flag no longer exists in this
+ * from the default aliases (0#116). Its flag no longer exists in this
  * codebase, so it cannot reappear through this preset.
  *
  * The preset exists so that measurement can be REPEATED — the profile aliases
@@ -47,14 +47,14 @@
  * ## Precedence: an explicit env var always wins
  *
  * {@link applyFeaturePreset} never overwrites a variable that is already set.
- * An operator running `env ZERO_FEATURE_POV_GATE=0 0sec …` with the moat preset
+ * An operator running `env ZERO_FEATURE_POV_GATE=0 0 …` with the moat preset
  * gets the moat minus the PoV gate — which is exactly the single-layer ablation
  * you need to attribute an effect to one layer. Silently overriding the operator
  * would make per-layer ablation impossible, so the precedence is deliberate.
  *
  * Usage:
- *   env ZERO_FEATURE_PRESET=fp-moat 0sec scan …
- *   0sec scan --features fp-moat …
+ *   env ZERO_FEATURE_PRESET=fp-moat 0 scan …
+ *   0 scan --features fp-moat …
 
  */
 /** Names of the presets this module knows how to apply. */

@@ -259,7 +259,7 @@ precedence (first match wins):
 1. `--benchmark-path <dir>` — use an existing local checkout as-is
 2. `XBOW_PATH` environment variable — use an existing local checkout as-is
 3. `--benchmark-repo <git-url>` — clone into a workspace cache dir
-   (`$TMPDIR/0sec-xbow-cache/<slug>`) and reuse the clone on subsequent
+   (`$TMPDIR/0-xbow-cache/<slug>`) and reuse the clone on subsequent
    runs
 4. Default `/tmp/xbow-benchmarks`
 
@@ -340,7 +340,7 @@ approximation) because N is small and rates can be near 0 or 1, where
 Wald produces degenerate intervals like `[0, 0]` or extends outside
 `[0, 1]`.
 
-[#81]: https://github.com/0sec-labs/0sec/issues/81
+[#81]: https://github.com/0sec-labs/0/issues/81
 
 #### Flags
 
@@ -388,7 +388,7 @@ pnpm --filter @0/benchmark xbow:jit-skills-ab \
   --only XBEN-010,XBEN-051,XBEN-061 --repeat 3 --json
 ```
 
-[#410]: https://github.com/0sec-labs/0sec/issues/410
+[#410]: https://github.com/0sec-labs/0/issues/410
 
 #### JSON output schema
 
@@ -524,7 +524,7 @@ pnpm --filter @0/benchmark cybergym \
 ### CyberGym harness environment
 
 Every CyberGym coordinate is read from the environment — nothing is
-hardcoded (0sec#132):
+hardcoded (0#132):
 
 | Env | Meaning | Default |
 |---|---|---|

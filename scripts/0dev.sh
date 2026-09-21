@@ -13,7 +13,7 @@ if [ "${1:-}" = "--build" ]; then
     echo "0dev: pnpm is required to build the development CLI" >&2
     exit 1
   fi
-  pnpm --dir "$DEV_ROOT" --filter 0... build
+  pnpm --dir "$DEV_ROOT" --filter @0/cli... build
   if [ ! -f "$DEV_ENTRY" ]; then
     echo "0dev: build did not produce $DEV_ENTRY" >&2
     exit 1

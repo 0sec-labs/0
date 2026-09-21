@@ -33,7 +33,7 @@
  */
 
 import { createHash } from "node:crypto";
-import { homeStateDir } from "@0/shared"
+import { homeStateDir } from "@0/shared";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
@@ -601,7 +601,7 @@ async function fetchGhsa(
   const url = `https://api.github.com/advisories?cve_id=${encodeURIComponent(cveId)}`;
   const headers: Record<string, string> = {
     accept: "application/vnd.github+json",
-    "user-agent": "0sec-cve-scraper",
+    "user-agent": "0-cve-scraper",
   };
   if (githubToken) headers.authorization = `Bearer ${githubToken}`;
   const result = await fetchJsonWithRetry<unknown>(url, {
@@ -1033,7 +1033,7 @@ async function fetchGithubPocSearch(
 ): Promise<PocCandidate[]> {
   const headers: Record<string, string> = {
     accept: "application/vnd.github+json",
-    "user-agent": "0sec-cve-scraper",
+    "user-agent": "0-cve-scraper",
   };
   if (githubToken) headers.authorization = `Bearer ${githubToken}`;
 

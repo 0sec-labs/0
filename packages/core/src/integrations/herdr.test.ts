@@ -166,8 +166,8 @@ describe("report shape", () => {
     expect(typeof agent!.id).toBe("string");
     expect(agent!.params).toMatchObject({
       pane_id: "pane-7",
-      source: "0sec",
-      agent: "0sec",
+      source: "0",
+      agent: "0",
       state: "working",
     });
     expect(typeof agent!.params.seq).toBe("number");
@@ -199,7 +199,7 @@ describe("report shape", () => {
     const meta = harness.requests().filter((r) => r.method === "pane.report_metadata").pop();
     expect(meta).toBeDefined();
     expect(meta!.params.pane_id).toBe("pane-7");
-    expect(meta!.params.source).toBe("0sec");
+    expect(meta!.params.source).toBe("0");
     expect(meta!.params.ttl_ms).toBeLessThanOrEqual(86_400_000);
     expect(meta!.params.tokens).toMatchObject({ findings: "1", phase: "research" });
     expect(Object.keys(meta!.params.tokens).length).toBeLessThanOrEqual(16);
@@ -249,7 +249,7 @@ describe("report shape", () => {
 
     const release = harness.requests().pop();
     expect(release!.method).toBe("pane.release_agent");
-    expect(release!.params).toMatchObject({ pane_id: "pane-7", source: "0sec", agent: "0sec" });
+    expect(release!.params).toMatchObject({ pane_id: "pane-7", source: "0", agent: "0" });
   });
 });
 
@@ -598,8 +598,8 @@ describe("session lifecycle (pane.report_agent_session)", () => {
     expect(session).toBeDefined();
     expect(session!.params).toMatchObject({
       pane_id: "pane-7",
-      source: "0sec",
-      agent: "0sec",
+      source: "0",
+      agent: "0",
       agent_session_id: "scan-42",
       session_start_source: "new",
     });

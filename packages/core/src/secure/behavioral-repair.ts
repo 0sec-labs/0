@@ -51,7 +51,7 @@ export async function runBehavioralRepair(options: BehavioralRepairOptions): Pro
     const repo = await realpath(options.repoRoot);
     if (artifactDir === repo || artifactDir.startsWith(repo + sep)) throw new Error("Repair artifacts must be outside the source checkout");
     await mkdir(artifactDir, { recursive: true, mode: 0o700 });
-    scratch = await mkdtemp(join(tmpdir(), "0sec-behavioral-"));
+    scratch = await mkdtemp(join(tmpdir(), "0-behavioral-"));
     const command = async (cwd: string, binary: string, args: string[], label: string) => {
       const output = await runSecureCommand(binary, args, cwd, signal);
       await writeFile(join(artifactDir, `${++logIndex}-${label}.json`), JSON.stringify(output), { mode: 0o600 });

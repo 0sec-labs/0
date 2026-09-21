@@ -131,7 +131,7 @@ HTML and PDF output write a timestamped report under the system temporary direct
 
 ### SQLite database
 
-Current scan storage is run-local: by default `~/.0/runs/<scan-id>/state.db`, subject to the configured state root. `--db-path` selects an explicit database. Do not assume every command uses a single `~/.0/0sec.db`.
+Current scan storage is run-local: by default `~/.0/runs/<scan-id>/state.db`, subject to the configured state root. `--db-path` selects an explicit database. Do not assume every command uses a single `~/.0/0.db`.
 
 ```bash
 0 scan --target https://staging.example.com --scope ./scope.json \
@@ -209,7 +209,7 @@ verification. Deterministic replay executes a finding, fixture, or reproduction
 bundle and records concrete assertions. Verification availability depends on the
 selected path.
 
-<span id="explicit-verification-with-0sec-verify"></span>
+<span id="explicit-verification-with-0-verify"></span>
 ### Explicit verification with `0 verify`
 
 ```bash

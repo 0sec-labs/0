@@ -10,7 +10,7 @@
  */
 
 import { describe, it, expect, vi } from "vitest";
-import type { Finding } from "@0/shared"
+import type { Finding } from "@0/shared";
 import {
   generateRemediation,
   generateRemediationWithLLM,

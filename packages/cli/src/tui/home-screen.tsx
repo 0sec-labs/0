@@ -114,11 +114,10 @@ export function HomeScreen({
     }
     if (palette.handlePaletteKey(key)) return;
     if (key.name === "escape") {
-      if (shell?.canGoBack) shell.goBack();
-      else onExit();
+      shell?.goBack();
       return;
     }
-    if (key.name === "up") {
+    if (key.name === "up" || (key.name === "tab" && key.shift)) {
       setFocusIndex((current) => Math.max(0, current - 1));
       return;
     }

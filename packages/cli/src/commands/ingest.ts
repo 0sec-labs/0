@@ -2,11 +2,13 @@ import { Option, type Command } from "commander";
 import chalk from "chalk";
 import { readFileSync, statSync } from "node:fs";
 import { resolve } from "node:path";
-import { osecDB,
-resolveOsecRunStorage,
-writeOsecRunReport, } from "@0/db"
-import type { Finding, RuntimeMode, ScanReport, Severity } from "@0/shared"
-import type { KernelOracleResult, KernelVmArtifacts } from "@0/core"
+import {
+  osecDB,
+  resolveOsecRunStorage,
+  writeOsecRunReport,
+} from "@0/db";
+import type { Finding, RuntimeMode, ScanReport, Severity } from "@0/shared";
+import type { KernelOracleResult, KernelVmArtifacts } from "@0/core";
 import { formatSarif } from "../formatters/sarif.js";
 
 const VALID_FORMATS = ["auto", "kasan", "ubsan", "oops", "syzkaller", "generic"] as const;
@@ -88,7 +90,7 @@ export function registerIngestCommand(program: Command): void {
     .option("--cost-ceiling <usd>", "Hard USD cost ceiling for --review-subsystem")
     .addOption(new Option("--review-subsystem-fixture <path>").hideHelp())
     .option("-v, --verbose", "Verbose output")
-    .option("--persist", "Write ingested findings to an isolated 0sec run database (default: classify only)")
+    .option("--persist", "Write ingested findings to an isolated 0 run database (default: classify only)")
     .option("--db-path <path>", "Explicit SQLite path for --persist (default: a new ~/.0/runs/<run-id>/state.db)")
     .action(async (inputPath: string | undefined, opts: IngestOpts) => {
       try {
@@ -302,7 +304,7 @@ export function registerIngestCommand(program: Command): void {
           db.close();
           console.error(
             chalk.gray(
-              `persisted ${findings.length} finding(s) → 0sec run ${scanId.slice(0, 8)}`,
+              `persisted ${findings.length} finding(s) → 0 run ${scanId.slice(0, 8)}`,
             ),
           );
         }

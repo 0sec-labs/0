@@ -1,4 +1,4 @@
-// Fix-template registry for the `--emit pr` flow (0sec#377).
+// Fix-template registry for the `--emit pr` flow (0#377).
 //
 // A fix template is a deterministic, *conservative* mapping from a finding to
 // a unified diff that a human reviewer can accept or reject. Templates do NOT
@@ -16,7 +16,7 @@
 // intentionally serialisable (no functions, no closures) so it can be logged
 // and asserted on in tests.
 
-import type { Finding, AttackCategory } from "@0/shared"
+import type { Finding, AttackCategory } from "@0/shared";
 
 /** A single hunk of a unified diff. Line counts are recomputed at render time. */
 export interface UnifiedDiffHunk {
@@ -231,11 +231,11 @@ export const hardCodedSecretTemplate: FixTemplate = (finding) => {
 
   const isPy = lang === "python";
   const oldLine = isPy
-    ? `# TODO: secret literal removed by 0sec; original at ${anchor.file}:${anchor.line}`
-    : `// TODO: secret literal removed by 0sec; original at ${anchor.file}:${anchor.line}`;
+    ? `# TODO: secret literal removed by 0; original at ${anchor.file}:${anchor.line}`
+    : `// TODO: secret literal removed by 0; original at ${anchor.file}:${anchor.line}`;
   const newLine = isPy
-    ? `import os  # 0sec#377 starter patch`
-    : `// 0sec#377 starter patch — replace with process.env.${envName}`;
+    ? `import os  # 0#377 starter patch`
+    : `// 0#377 starter patch — replace with process.env.${envName}`;
   const envExpr = isPy
     ? `value = os.environ["${envName}"]`
     : `const value = process.env.${envName};`;
@@ -286,8 +286,8 @@ export const missingInputValidationTemplate: FixTemplate = (finding) => {
   // by a couple of lines; that's a normal PR-review interaction.
   const inputName = extractInputHint(finding) ?? "input";
   const guard = isPy
-    ? `    if not isinstance(${inputName}, str):  # 0sec#377 starter guard\n        raise TypeError("${inputName} must be str")`
-    : `  if (typeof ${inputName} !== "string") {  // 0sec#377 starter guard\n    throw new TypeError("${inputName} must be a string");\n  }`;
+    ? `    if not isinstance(${inputName}, str):  # 0#377 starter guard\n        raise TypeError("${inputName} must be str")`
+    : `  if (typeof ${inputName} !== "string") {  // 0#377 starter guard\n    throw new TypeError("${inputName} must be a string");\n  }`;
 
   // Split the guard back into lines for the diff body.
   const guardLines = guard.split("\n").map((text) => ({ kind: "add" as const, text }));
@@ -337,7 +337,7 @@ export const integerTruncationGuardTemplate: FixTemplate = (finding) => {
 
   const var_ = extractInputHint(finding) ?? "size";
   const guard = [
-    `    /* 0sec#377 starter guard — replace SIZE_MAX/sizeof bound with the`,
+    `    /* 0#377 starter guard — replace SIZE_MAX/sizeof bound with the`,
     `     * real maximum for this allocation (and -EINVAL with the project's`,
     `     * preferred error code). */`,
     `    if (${var_} > SIZE_MAX / sizeof(*ptr)) {`,

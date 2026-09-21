@@ -9,7 +9,7 @@ vi.mock("@0/core", async (importOriginal) => {
   const actual = await importOriginal<typeof Core>();
   return { ...actual, runEvolution: vi.fn(), executeEvolutionVersion: vi.fn() };
 });
-import { executeEvolutionVersion, runEvolution } from "@0/core"
+import { executeEvolutionVersion, runEvolution } from "@0/core";
 import { registerEvolveCommand } from "../evolve.js";
 
 const directories: string[] = [];
@@ -31,7 +31,7 @@ afterEach(() => {
 });
 
 function configFile(): string {
-  const directory = mkdtempSync(join(tmpdir(), "0sec-evolve-cli-"));
+  const directory = mkdtempSync(join(tmpdir(), "0-evolve-cli-"));
   directories.push(directory);
   const path = join(directory, "config.json");
   writeFileSync(path, JSON.stringify({

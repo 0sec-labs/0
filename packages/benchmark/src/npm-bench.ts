@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 /**
- * 0sec npm audit benchmark — issue #21
+ * 0 npm audit benchmark — issue #21
  *
  * Ground-truth test suite for npm package security scanning.
  * 81 cases: 27 known-malicious, 27 known-CVE, 27 known-safe.
@@ -19,8 +19,8 @@
 import { writeFileSync, appendFileSync, mkdirSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { packageAudit } from "@0/core"
-import type { ScanDepth, RuntimeMode } from "@0/shared"
+import { packageAudit } from "@0/core";
+import type { ScanDepth, RuntimeMode } from "@0/shared";
 import { computeNpmBenchMetrics } from "./npm-bench-metrics.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -417,7 +417,7 @@ async function runNpmBench(): Promise<NpmBenchReport> {
 
 async function main() {
   if (!jsonOutput) {
-    console.log("\n\x1b[31m\x1b[1m  0sec npm audit benchmark\x1b[0m");
+    console.log("\n\x1b[31m\x1b[1m  0 npm audit benchmark\x1b[0m");
     console.log(`  depth: ${depth}  cases: ${TEST_CASES.length}  repeat: ${repeat}\n`);
   }
 

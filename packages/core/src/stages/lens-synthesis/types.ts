@@ -23,7 +23,7 @@
  * ============================================================================
  */
 
-import type { Finding } from "@0/shared"
+import type { Finding } from "@0/shared";
 import type { CoverageGap, FinderLens } from "../hunt-scan.js";
 
 // ── Stage 1: miss capture ─────────────────────────────────────────────────

@@ -1,4 +1,4 @@
-import type { SemgrepFinding } from "@0/shared"
+import type { SemgrepFinding } from "@0/shared";
 import { spawn } from "node:child_process";
 import { allowlistedChildEnv } from "../agent/sanitized-env.js";
 import { mkdir, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
@@ -90,11 +90,11 @@ ${semgrepSection}
 Every finding must be backed by a tier-1 (or higher) harness that triggers the bug under ASan or UBSan. A static-analysis-only finding is a hypothesis, not a finding. Refuse to file findings that lack execution proof.
 
 When you build a harness:
-- Drop it under \`/tmp/0sec-harness/<finding-id>/harness.c\`
+- Drop it under \`/tmp/0-harness/<finding-id>/harness.c\`
 - Compile with \`clang -O1 -g -fsanitize=address,undefined -fno-omit-frame-pointer\`
 - Run with \`-runs=100000 -timeout=10\` (libFuzzer) or until the sanitizer trips
 - Capture the sanitizer log as evidence
-- These \`/tmp/0sec-harness/...\` and cloned-repo paths exist ONLY in this scan
+- These \`/tmp/0-harness/...\` and cloned-repo paths exist ONLY in this scan
   sandbox. Do NOT reference them in poc_steps — the verify replay runs in a fresh
   sandbox. The poc_steps must clone the source + write the harness inline first
   (see the self-contained poc_steps rules below).
@@ -120,9 +120,9 @@ For each finding, call save_finding with these parameters:
 
   CRITICAL — poc_steps MUST be SELF-CONTAINED. They are replayed VERBATIM in a
   FRESH sandbox during verification, where NOTHING from this scan exists: not the
-  harness file you wrote, not the cloned repo, not any \`/tmp/0sec-harness/...\`
-  or \`/tmp/0sec-pipeline-.../repo\` path. A step that only runs
-  \`gcc /tmp/0sec-harness/<id>/harness.c ...\` will fail with
+  harness file you wrote, not the cloned repo, not any \`/tmp/0-harness/...\`
+  or \`/tmp/0-pipeline-.../repo\` path. A step that only runs
+  \`gcc /tmp/0-harness/<id>/harness.c ...\` will fail with
   "No such file or directory" and your finding will be discarded as unproven.
   Each poc_steps array must RECREATE everything it needs, in order:
 
@@ -206,7 +206,7 @@ export function buildTier1Harness(sig: FunctionSignature): string {
   const inputShape = sig.inputShape ?? "bytesAndLen";
   const callBlock = renderHarnessCall(sig.functionName, inputShape);
 
-  return `// 0sec tier-1 libFuzzer harness — generated, do not edit by hand.
+  return `// 0 tier-1 libFuzzer harness — generated, do not edit by hand.
 //
 // Target:
 //   ${sig.declaration}
@@ -409,7 +409,7 @@ async function discoverSourceFiles(srcDir: string, outputDir: string): Promise<s
 }
 
 async function assertLibFuzzerToolchain(clangPath: string): Promise<void> {
-  const workDir = await mkdtemp(join(tmpdir(), "0sec-libfuzzer-"));
+  const workDir = await mkdtemp(join(tmpdir(), "0-libfuzzer-"));
   try {
     const sourcePath = join(workDir, "toolchain-check.c");
     const outputPath = join(workDir, "toolchain-check");

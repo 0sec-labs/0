@@ -1,4 +1,4 @@
-// ── Attribution-header injection (0sec#216) ──
+// ── Attribution-header injection (0#216) ──
 //
 // Coordinated-disclosure venues and pentest engagements commonly require an
 // identifying header on test traffic so the receiving party can deconflict
@@ -40,12 +40,12 @@
 //
 // When NO scope file is loaded, attribution is opt-in: only injected when
 // the operator explicitly set it via env or CLI. This avoids leaking
-// engagement headers when 0sec is used outside an engagement (e.g.
+// engagement headers when 0 is used outside an engagement (e.g.
 // against a personal target). The DoD calls this out:
 // "never injected on out-of-scope traffic".
 
 import type { ScopePolicy, ScopeJson } from "./scope.js";
-import { VERSION } from "@0/shared"
+import { VERSION } from "@0/shared";
 
 export interface AttributionConfig {
   /** Headers to attach to every in-scope outbound request. */
@@ -224,7 +224,7 @@ export function applyAttribution(
  * stable and we don't accidentally drift between fetch sites.
  */
 export function formatUserAgent(token: string): string {
-  return `0sec/${VERSION} (engagement: ${token})`;
+  return `0/${VERSION} (engagement: ${token})`;
 }
 
 /**
@@ -284,7 +284,7 @@ function assertHeaderObject(value: unknown, label: string): void {
 // RFC 7230 token characters for header names. Names are canonicalized to
 // HTTP title-case (X-Hackerone-Research) before they enter our internal
 // merge dict so two sources disagreeing on casing can't both ride the wire
-// (0sec#239). On-the-wire casing then matches whatever this canonical
+// (0#239). On-the-wire casing then matches whatever this canonical
 // form produces; HTTP is case-insensitive so this is operator-invisible.
 const HEADER_NAME_RE = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/;
 
@@ -296,7 +296,7 @@ function normalizeHeaderName(name: string): string {
   // Canonicalize to HTTP title-case (X-Hackerone-Research) so two configs
   // that disagree only on casing collapse to one key. Without this, scope
   // file `X-Pentest: foo` and env `x-pentest: foo` would both ride the wire
-  // as separate headers (0sec#239). Header names are case-insensitive per
+  // as separate headers (0#239). Header names are case-insensitive per
   // RFC 7230 §3.2; the canonical form is purely an internal dedup key.
   return name
     .split("-")

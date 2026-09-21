@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createTranscriptDocument } from "@0/shared"
+import { createTranscriptDocument } from "@0/shared";
 import { compileTranscriptReview } from "./transcript-review.js";
 import type { ChatEntry } from "./chat/types.js";
 
@@ -16,7 +16,7 @@ describe("compileTranscriptReview", () => {
 
     expect(document.text).toContain("OPERATOR");
     expect(document.text).toContain("check this");
-    expect(document.text).toContain("0SEC");
+    expect(document.text).toContain("ZERO");
     expect(document.text).toContain("# Result");
     expect(document.text).toContain("verified");
   });

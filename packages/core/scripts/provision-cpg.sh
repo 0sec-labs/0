@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# provision-cpg.sh — build the pre-exported Joern CPG that `0sec hunt
+# provision-cpg.sh — build the pre-exported Joern CPG that `0 hunt
 # --graph-slice` consumes. Produces the graphson JSON the graph-slice stage
 # loads (packages/core/src/stages/graph-slice.ts).
 #
@@ -21,7 +21,7 @@
 #   provision-cpg.sh /root/linux-6.12-git net/unix
 #     -> writes <source-root>/.0/cpg/net__unix.json  (the convention the
 #        stage loads by default). Then run:
-#        0sec hunt --source /root/linux-6.12-git --seed fix.patch --graph-slice
+#        0 hunt --source /root/linux-6.12-git --seed fix.patch --graph-slice
 # For code selected by kernel Kconfig, pass its enabled symbols as a
 # comma-separated environment variable, for example:
 #   env ZERO_CPG_DEFINES=CONFIG_SMB_SERVER_KERBEROS5=1 provision-cpg.sh …
@@ -30,7 +30,7 @@
 #
 # Phase-1 static dispatch can use either a precomputed `<slug>.ops.json` next
 # to the CPG, or the in-process harvester:
-#   0sec hunt ... --graph-slice --ops-harvest net/unix/af_unix.c
+#   0 hunt ... --graph-slice --ops-harvest net/unix/af_unix.c
 set -euo pipefail
 
 SRC_ROOT="${1:?usage: provision-cpg.sh <source-root> <subsystem> [out-dir] [joern-cli-dir]}"
@@ -87,4 +87,4 @@ SRC_JSON="${EXPORT_DIR}/export.json"
 DEST="${OUT_DIR}/${SLUG}.json"
 cp "$SRC_JSON" "$DEST"
 echo "[provision-cpg] wrote ${DEST} ($(du -h "$DEST" | cut -f1))" >&2
-echo "[provision-cpg] next: 0sec hunt --source ${SRC_ROOT} --seed <fix.patch> --graph-slice" >&2
+echo "[provision-cpg] next: 0 hunt --source ${SRC_ROOT} --seed <fix.patch> --graph-slice" >&2

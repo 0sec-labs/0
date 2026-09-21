@@ -5,7 +5,7 @@ import type {
 } from "./types.js";
 
 /** Versioned canonical input for every UI and output adapter. */
-export const PRESENTATION_PROTOCOL = "0sec.presentation/v1" as const;
+export const PRESENTATION_PROTOCOL = "0.presentation/v1" as const;
 
 export type PresentationSource = "core" | "cli" | "dashboard" | "adapter";
 

@@ -1,4 +1,4 @@
-# 0sec mobile support issue drafts
+# 0 mobile support issue drafts
 
 Date: 2026-05-31
 
@@ -14,10 +14,10 @@ directories/manifests.
 
 ### Problem
 
-0sec can audit web apps, APIs, packages, source trees, and kernel artifacts,
+0 can audit web apps, APIs, packages, source trees, and kernel artifacts,
 but it has no first-class intake path for native mobile app artifacts. Bug bounty
 programs commonly list iOS/Android apps alongside backend API wildcard scopes,
-so 0sec needs a mobile entry point that can safely extract metadata and network
+so 0 needs a mobile entry point that can safely extract metadata and network
 indicators without executing the app.
 
 ### Proposed scope
@@ -53,7 +53,7 @@ indicators without executing the app.
 
 ### Acceptance criteria
 
-- `0sec scan --target ./app.apk --mode mobile --scope ./scope.json` runs a
+- `0 scan --target ./app.apk --mode mobile --scope ./scope.json` runs a
   static-only mobile intake.
 - Out-of-scope extracted hosts are recorded but never requested. The core helper
   already classifies endpoints with `ScopePolicy`; the CLI must preserve that
@@ -98,7 +98,7 @@ candidate endpoints from untrusted binaries and config files.
 ### Problem
 
 Programs like SBB's Intigriti scope allow mobile/API testing but forbid automatic
-scanner behavior. 0sec needs a workflow that keeps mobile-derived backend
+scanner behavior. 0 needs a workflow that keeps mobile-derived backend
 testing explicit, rate-limited, attributed, and human-gated.
 
 ### Proposed scope
@@ -128,7 +128,7 @@ testing explicit, rate-limited, attributed, and human-gated.
 ### Problem
 
 Full mobile pentesting needs emulator/simulator operation, proxy capture, and
-optional instrumentation. That is materially different from 0sec's current
+optional instrumentation. That is materially different from 0's current
 web/source/package architecture and should not be bolted into the first static
 intake PR.
 

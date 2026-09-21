@@ -1,10 +1,10 @@
 import type { Command } from "commander";
 import chalk from "chalk";
 import { readFileSync, writeFileSync } from "node:fs";
-import { generateSyzChoiceWeights, syzChoiceWeightsFromPlan } from "@0/core"
-import type { CrashRecord, KernelVariantHuntReport, SyzJevPrepassInput } from "@0/core"
-import { createJevEvaluator, findingSchema, jevConfigFromEnvironment } from "@0/shared"
-import type { Finding, ScanReport, Severity } from "@0/shared"
+import { generateSyzChoiceWeights, syzChoiceWeightsFromPlan } from "@0/core";
+import type { CrashRecord, KernelVariantHuntReport, SyzJevPrepassInput } from "@0/core";
+import { createJevEvaluator, findingSchema, jevConfigFromEnvironment } from "@0/shared";
+import type { Finding, ScanReport, Severity } from "@0/shared";
 import { formatSarif } from "../formatters/sarif.js";
 
 const VALID_OUTPUT_FORMATS = ["terminal", "json", "sarif"] as const;

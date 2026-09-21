@@ -1,5 +1,5 @@
 /**
- * Race-widening smell-hunter candidate generation — 0sec's kernelCTF Pipeline #3.
+ * Race-widening smell-hunter candidate generation — 0's kernelCTF Pipeline #3.
  *
  * A sibling of `generateVariantCandidates` (variant-candidates.ts) and
  * `generateInvariantCandidates` (invariant-candidates.ts). This hunts the ONE
@@ -46,7 +46,7 @@
 
 import { readFileSync } from "node:fs";
 import { isAbsolute, join } from "node:path";
-import type { RuntimeMode } from "@0/shared"
+import type { RuntimeMode } from "@0/shared";
 import { LlmApiRuntime } from "../runtime/llm-api.js";
 import type { HuntBrief, HuntCandidate } from "./hunt-scan.js";
 

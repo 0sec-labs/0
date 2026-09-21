@@ -14,9 +14,11 @@
  * answer the tool awaits.
  */
 
-import type { OperatorQuestionRequest,
-OperatorQuestionAnswer,
-OperatorQuestionAnswerItem, } from "@0/core"
+import type {
+  OperatorQuestionRequest,
+  OperatorQuestionAnswer,
+  OperatorQuestionAnswerItem,
+} from "@0/core";
 
 /** One answerable (navigable) row: an option toggle, or a question's free-text field. */
 export interface OperatorNavRow {

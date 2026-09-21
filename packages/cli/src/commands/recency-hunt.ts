@@ -1,5 +1,5 @@
 /**
- * `0sec recency-hunt` — the RECENCY FLYWHEEL surface.
+ * `0 recency-hunt` — the RECENCY FLYWHEEL surface.
  *
  * Continuous kernel-LPE discovery on the freshness window: git-diff a fresh
  * linux-next range → reachability filter → SEMANTIC-vs-COSMETIC classifier →
@@ -22,7 +22,7 @@
 import type { Command } from "commander";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import type { RuntimeMode } from "@0/shared"
+import type { RuntimeMode } from "@0/shared";
 
 interface RecencyOpts {
   tree?: string;

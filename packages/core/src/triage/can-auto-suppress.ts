@@ -33,7 +33,7 @@
  * 0cloud copy + both parity fixtures.
  */
 
-import type { AttackCategory, Finding, Severity } from "@0/shared"
+import type { AttackCategory, Finding, Severity } from "@0/shared";
 
 /**
  * Severities that always get at least one verification pass and may never be
@@ -94,7 +94,7 @@ const HIGH_IMPACT_CATEGORIES: ReadonlySet<AttackCategory> = new Set<AttackCatego
   // HS-vs-RS), and predictable RNG for secrets are direct key-leak / auth-bypass
   // primitives, so the class is protected from score-only auto-drop.
   "crypto-misuse",
-  // AI-system adversarial classes — the core 0sec "adversarial reliability"
+  // AI-system adversarial classes — the core 0 "adversarial reliability"
   // thesis (authorization-boundary break, unsafe tool use, data exfiltration,
   // prompt hijack). A missed one of these is a disclosure-grade loss.
   "prompt-injection",

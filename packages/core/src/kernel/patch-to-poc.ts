@@ -61,7 +61,7 @@
  * Analysis / plan-producing ONLY. No build, no boot, no network, no new deps.
  */
 
-import type { Finding } from "@0/shared"
+import type { Finding } from "@0/shared";
 import type {
   NativeContentBlock,
   NativeMessage,

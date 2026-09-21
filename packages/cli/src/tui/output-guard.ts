@@ -31,7 +31,7 @@
  * screen clean would trade one bug for a worse one.
  */
 
-import { createPresentationEvent } from "@0/shared"
+import { createPresentationEvent } from "@0/shared";
 import { presentationEventBus } from "../presentation/event-bus.js";
 
 import { sanitizeTuiText } from "./text.js";

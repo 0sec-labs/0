@@ -50,8 +50,8 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import { copyFileSync, mkdtempSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { Finding, NpmAuditFinding, SemgrepFinding } from "@0/shared"
-import { osecDB } from "@0/db"
+import type { Finding, NpmAuditFinding, SemgrepFinding } from "@0/shared";
+import { osecDB } from "@0/db";
 
 // ── Module-level mocks ──────────────────────────────────────────────────────
 //
@@ -137,7 +137,7 @@ let schemaDirectory: string;
 let schemaPath: string;
 
 beforeAll(() => {
-  schemaDirectory = mkdtempSync(join(tmpdir(), "0sec-dispatch-schema-"));
+  schemaDirectory = mkdtempSync(join(tmpdir(), "0-dispatch-schema-"));
   schemaPath = join(schemaDirectory, "empty.db");
   const db = new osecDB(schemaPath);
   db.close();
@@ -148,13 +148,13 @@ afterAll(() => {
 });
 
 function freshTmpDir(prefix: string): string {
-  const dir = mkdtempSync(join(tmpdir(), `0sec-unified-pipeline-${prefix}-`));
+  const dir = mkdtempSync(join(tmpdir(), `0-unified-pipeline-${prefix}-`));
   tempDirs.push(dir);
   return dir;
 }
 
 function freshDbPath(): string {
-  const dbPath = join(freshTmpDir("db"), "0sec.db");
+  const dbPath = join(freshTmpDir("db"), "0.db");
   // Share only schema initialization; each test retains its own real database.
   copyFileSync(schemaPath, dbPath);
   return dbPath;
@@ -332,7 +332,7 @@ describe("runPipeline — targetType dispatch", () => {
 
   it("npm-package: 'name@version' string is split before reaching the installer (latest fallback shape)", async () => {
     // The npm path has its own split logic *before* installPackageForEcosystem,
-    // matching the public CLI contract `0sec run node-forge@0.10.0`.
+    // matching the public CLI contract `0 run node-forge@0.10.0`.
     installPackageMock.mockReturnValue(fakeInstalledPackage("npm", "node-forge", "0.10.0"));
 
     await runPipeline({

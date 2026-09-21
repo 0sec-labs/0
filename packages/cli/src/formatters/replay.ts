@@ -1,9 +1,11 @@
 import chalk from "chalk";
-import type { ScanReport,
-Finding,
-AttackResult,
-TargetInfo,
-Severity, } from "@0/shared"
+import type {
+  ScanReport,
+  Finding,
+  AttackResult,
+  TargetInfo,
+  Severity,
+} from "@0/shared";
 
 // ── Types ──
 
@@ -318,7 +320,7 @@ function buildReplayLines(data: ReplayData): ReplayLine[] {
     text: boxRow(
       chalk.white(`Completed in ${duration}`) +
         chalk.dim(" \u2192 ") +
-        chalk.gray("./0sec-report.json")
+        chalk.gray("./0-report.json")
     ),
     delay: MED,
   });
@@ -336,7 +338,7 @@ export async function renderReplay(data: ReplayData): Promise<void> {
   // Banner
   process.stdout.write("\n");
   process.stdout.write(
-    chalk.red.bold("  \u25c6 0sec") +
+    chalk.red.bold("  \u25c6 0") +
       chalk.gray(" attack replay") +
       "\n"
   );

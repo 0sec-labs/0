@@ -1,5 +1,5 @@
 import type { RuntimeType } from "./types.js";
-import type { PipelineStage } from "@0/shared"
+import type { PipelineStage } from "@0/shared";
 
 export interface RuntimeInfo {
   type: RuntimeType;
@@ -43,7 +43,7 @@ export const RUNTIME_REGISTRY: readonly RuntimeInfo[] = [
     // so detection tools that key off `command` don't crash; the registry
     // uses `isAvailable()` not `which(command)` for ollama.
     command: "ollama",
-    description: "Ollama (local) — Gemma 4 27B via /api/chat with native function-calling. Pairs with `--seed-findings` for full-local hunts. See 0sec#369.",
+    description: "Ollama (local) — Gemma 4 27B via /api/chat with native function-calling. Pairs with `--seed-findings` for full-local hunts. See 0#369.",
     strengths: ["source-analysis", "discovery"],
     supportsSystemPrompt: true,
   },

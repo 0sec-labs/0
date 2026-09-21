@@ -26,7 +26,7 @@
  *
  * DEFAULT-SAFE: with `ZERO_EVM_VERIFY` unset (the default), `runEvmVerify` is a
  * no-op that returns `{ status: "skipped", ran: false }` — nothing spawns, no
- * RPC is touched. `0sec review` on an EVM repo is harmless on a box with no
+ * RPC is touched. `0 review` on an EVM repo is harmless on a box with no
  * foundry toolchain, matching the kernel verify-path gating.
  */
 

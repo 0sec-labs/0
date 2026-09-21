@@ -1,6 +1,6 @@
 /** @jsxImportSource @opentui/react */
 import React, { createContext, useContext, useEffect, useState } from "react";
-import { VERSION } from "@0/shared"
+import { VERSION } from "@0/shared";
 import { useTheme } from "./theme-context.js";
 import { readableOnPrimary } from "./themes.js";
 import { useSymbols } from "./symbol-context.js";
@@ -48,18 +48,18 @@ export function OverlayFrame({
 }
 
 // Keep every frame four cells wide so the footer never jitters. The animation
-// may glitch the wordmark, but it must remain recognizably 0sec (executable name).
+// may glitch the wordmark, but it must remain recognizably 0 (executable name).
 const BRAND_WORD_FRAMES = [
-  "0sec",
-  "0sec",
+  "0",
+  "0",
   "0S3c",
   "0sEc",
   "0s3c",
   "0s.c",
-  "0sec",
-  "0sec",
-  "0sec",
-  "0sec",
+  "0",
+  "0",
+  "0",
+  "0",
 ];
 
 function useAnimatedBrand(enabled: boolean) {
@@ -82,7 +82,7 @@ function useAnimatedBrand(enabled: boolean) {
 
   return {
     frame,
-    word: animate ? BRAND_WORD_FRAMES[frame] : "0sec",
+    word: animate ? BRAND_WORD_FRAMES[frame] : "0",
   };
 }
 
@@ -93,7 +93,7 @@ function BrandStamp({ animated = false }: { animated?: boolean }) {
 
   return (
     <box flexDirection="row" width={BRAND_STAMP_WIDTH} flexShrink={0}>
-      <text width={4} flexShrink={0} fg={theme.MUTED}>{animated ? brand.word : "0sec"}</text>
+      <text width={4} flexShrink={0} fg={theme.MUTED}>{animated ? brand.word : "0"}</text>
       <text flexShrink={0} fg={theme.MUTED}>{` v${VERSION}`}</text>
       {/* Build-channel badge: [dev] when launched from a dev source checkout
           (the `0dev` wrapper exports ZERO_DEV_SOURCE_ROOT), else [beta] for a

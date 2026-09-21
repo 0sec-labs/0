@@ -4,7 +4,7 @@ import { join, sep } from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { homeStateDir } from "@0/shared"
+import { homeStateDir } from "@0/shared";
 
 import { gateFlagsFor, type PluginManifest } from "./manifest.js";
 import {
@@ -195,7 +195,7 @@ function install(
 }
 
 beforeEach(() => {
-  root = mkdtempSync(join(tmpdir(), "0sec-plugins-"));
+  root = mkdtempSync(join(tmpdir(), "0-plugins-"));
 });
 
 afterEach(() => {
@@ -259,7 +259,7 @@ describe("plugin id safety", () => {
 
 describe("discovery", () => {
   it("defaults to the per-user state dir and never the project tree", () => {
-    const home = mkdtempSync(join(tmpdir(), "0sec-home-"));
+    const home = mkdtempSync(join(tmpdir(), "0-home-"));
     try {
       expect(pluginsRootDir(home)).toBe(join(homeStateDir(home), "plugins"));
       expect(pluginsRootDir(home).startsWith(homeStateDir(home) + sep)).toBe(true);

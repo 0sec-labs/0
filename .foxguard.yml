@@ -1,6 +1,19 @@
-# FoxGuard configuration for the 0sec repository.
+# PR security policy (foxguard v2 contract).
 #
-# Refreshed with Foxguard 0.14.0 against released 0sec 0.17.0:
+# Diff scope: a pull request is judged by the lines it changes, not by the
+# whole tree. Under repository scope the standing backlog blocked PRs that
+# introduced nothing, and every merge that shifted a fingerprint re-blocked
+# the next one. The baseline below still records that debt for any surface
+# evaluating repository scope, and #2061-style triage is unaffected.
+pr_security_policy:
+  version: v2
+  scope: diff
+  reporting_threshold: medium
+  blocking_threshold: high
+
+# FoxGuard configuration for the 0 repository.
+#
+# Refreshed with Foxguard 0.14.0 against released 0 0.17.0:
 # 6a34d78085f2d3edfe8c42c85f5261f1bf6f39f6. This records debt, not remediation.
 # The PR security policy scans the whole repository, so without a baseline it
 # reports the entire pre-existing backlog on every pull request and blocks

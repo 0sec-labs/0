@@ -30,7 +30,7 @@ afterEach(() => {
   else process.env["ZERO_FEATURE_JIT_SKILLS"] = ORIGINAL_JIT_SKILLS_ENV;
   if (ORIGINAL_LOOT_LEDGER_ENV === undefined) delete process.env["ZERO_FEATURE_LOOT_LEDGER"];
   else process.env["ZERO_FEATURE_LOOT_LEDGER"] = ORIGINAL_LOOT_LEDGER_ENV;
-  // 0sec#925: cloud-surface defaults OFF; reset so tests that pin it ON don't leak.
+  // 0#925: cloud-surface defaults OFF; reset so tests that pin it ON don't leak.
   if (ORIGINAL_CLOUD_SURFACE_ENV === undefined) delete process.env["ZERO_FEATURE_CLOUD_SURFACE"];
   else process.env["ZERO_FEATURE_CLOUD_SURFACE"] = ORIGINAL_CLOUD_SURFACE_ENV;
   if (ORIGINAL_ZEROVERSE_ENV === undefined) delete process.env["ZERO_FEATURE_ZEROVERSE"];
@@ -143,10 +143,10 @@ describe("getToolsForRole", () => {
   it("audit role gets all enabled tools", () => {
     process.env["ZERO_FEATURE_JIT_SKILLS"] = "0";
     // Pin the loot flag ON so the count is deterministic regardless of ambient
-    // env: use_loot (0sec#567) is then in the enabled set, leaving exactly
+    // env: use_loot (0#567) is then in the enabled set, leaving exactly
     // the two JIT-skill tools gated out below.
     process.env["ZERO_FEATURE_LOOT_LEDGER"] = "1";
-    // Pin the cloud-surface flag ON too (0sec#925): the cloud tools are then
+    // Pin the cloud-surface flag ON too (0#925): the cloud tools are then
     // in the enabled set, so they cancel out of both sides of the count below
     // and the assertion stays deterministic regardless of ambient env.
     process.env["ZERO_FEATURE_CLOUD_SURFACE"] = "1";
@@ -172,9 +172,9 @@ describe("getToolsForRole", () => {
     expect(names).toContain("load_skill");
   });
 
-  // ── Engagement-gated scanner wrappers (0sec#555) ──
+  // ── Engagement-gated scanner wrappers (0#555) ──
   // allowScanners=false (default) MUST keep all four wrappers out of EVERY
-  // role's tool set — no regression of the 0sec#217 stealthy default.
+  // role's tool set — no regression of the 0#217 stealthy default.
   it("omits scanner wrappers from all roles when allowScanners is unset", () => {
     process.env["ZERO_FEATURE_JIT_SKILLS"] = "0";
     for (const role of ["discovery", "attack", "verify", "audit", "review"]) {
@@ -201,7 +201,7 @@ describe("getToolsForRole", () => {
     expect(on).toContain("run_scanner");
   });
 
-  // ── Cloud-surface tools (0sec#925) — default OFF, opt-in ──
+  // ── Cloud-surface tools (0#925) — default OFF, opt-in ──
   it("omits cloud-surface tools from every role when the flag is unset (default OFF)", () => {
     process.env["ZERO_FEATURE_JIT_SKILLS"] = "0";
     delete process.env["ZERO_FEATURE_CLOUD_SURFACE"]; // exercise the default
@@ -223,11 +223,11 @@ describe("getToolsForRole", () => {
   });
 });
 
-// ── Cloud-surface handlers (0sec#925) — enablement + deny-by-default scope ──
+// ── Cloud-surface handlers (0#925) — enablement + deny-by-default scope ──
 // These exercise ONLY the gate paths (flag-off, no-scope, out-of-scope), which
 // short-circuit BEFORE any network call — so no live cloud traffic occurs.
 
-describe("ToolExecutor cloud-surface gating (0sec#925)", () => {
+describe("ToolExecutor cloud-surface gating (0#925)", () => {
   const baseCtx = (scope?: unknown): ToolContext =>
     ({
       target: "https://target.test",
@@ -348,7 +348,7 @@ describe("ToolExecutor", () => {
   });
 
   it("rejects direct execution calls from a scoped source audit", async () => {
-    const root = mkdtempSync(join(tmpdir(), "0sec-scoped-audit-"));
+    const root = mkdtempSync(join(tmpdir(), "0-scoped-audit-"));
     try {
       const scopedAudit = new ToolExecutor({ ...ctx, role: "audit", scopePath: root }, null);
       for (const name of ["bash", "run_command", "apply_patch"]) {
@@ -370,7 +370,7 @@ describe("ToolExecutor", () => {
     expect(withoutScope.success).toBe(false);
     expect(withoutScope.error).toMatch(/requires a local scoped source root/);
 
-    const root = mkdtempSync(join(tmpdir(), "0sec-binary-scope-"));
+    const root = mkdtempSync(join(tmpdir(), "0-binary-scope-"));
     try {
       const scoped = new ToolExecutor({ ...ctx, role: "verify", scopePath: root }, null);
       const escaped = await scoped.execute({
@@ -408,7 +408,7 @@ describe("ToolExecutor", () => {
   });
 
   it("save_finding records a workspace-contained 0review annotation", async () => {
-    const root = mkdtempSync(join(tmpdir(), "0sec-0review-"));
+    const root = mkdtempSync(join(tmpdir(), "0-0review-"));
     try {
       writeFileSync(join(root, "parser.ts"), "unsafe(input)\n");
       ctx.scopePath = root;
@@ -439,7 +439,7 @@ describe("ToolExecutor", () => {
   });
 
   it("marks an exact cited source range with an in-tree maintainer marker", async () => {
-    const root = mkdtempSync(join(tmpdir(), "0sec-known-marker-"));
+    const root = mkdtempSync(join(tmpdir(), "0-known-marker-"));
     try {
       writeFileSync(join(root, "parser.ts"), "// HACK: temporary compatibility path\nparse(input);\n");
       ctx.scopePath = root;
@@ -465,7 +465,7 @@ describe("ToolExecutor", () => {
   });
 
   it("does not mark a citation because a marker appears outside its exact range", async () => {
-    const root = mkdtempSync(join(tmpdir(), "0sec-known-marker-range-"));
+    const root = mkdtempSync(join(tmpdir(), "0-known-marker-range-"));
     try {
       writeFileSync(join(root, "parser.ts"), "// TODO: unrelated cleanup\nparse(input);\n");
       ctx.scopePath = root;
@@ -494,7 +494,7 @@ describe("ToolExecutor", () => {
   });
 
   it("save_finding rejects an annotation path outside the workspace", async () => {
-    const root = mkdtempSync(join(tmpdir(), "0sec-0review-"));
+    const root = mkdtempSync(join(tmpdir(), "0-0review-"));
     try {
       ctx.scopePath = root;
       const result = await executor.execute({
@@ -519,7 +519,7 @@ describe("ToolExecutor", () => {
   });
 
   it("save_finding rejects a backslash annotation path (cloud schema would 400 it)", async () => {
-    const root = mkdtempSync(join(tmpdir(), "0sec-0review-"));
+    const root = mkdtempSync(join(tmpdir(), "0-0review-"));
     try {
       writeFileSync(join(root, "parser.ts"), "unsafe(input)\n");
       ctx.scopePath = root;
@@ -545,7 +545,7 @@ describe("ToolExecutor", () => {
   });
 
   it("save_finding rejects a non-existent source_path (interactive path — repairable error)", async () => {
-    const root = mkdtempSync(join(tmpdir(), "0sec-0review-"));
+    const root = mkdtempSync(join(tmpdir(), "0-0review-"));
     try {
       ctx.scopePath = root;
       const result = await executor.execute({
@@ -575,7 +575,7 @@ describe("ToolExecutor", () => {
   });
 
   it("save_finding rejects an out-of-range source_start_line (interactive path — repairable error)", async () => {
-    const root = mkdtempSync(join(tmpdir(), "0sec-0review-"));
+    const root = mkdtempSync(join(tmpdir(), "0-0review-"));
     try {
       writeFileSync(join(root, "parser.ts"), "unsafe(input)\n"); // 1 line + terminal newline
       ctx.scopePath = root;
@@ -603,7 +603,7 @@ describe("ToolExecutor", () => {
   });
 
   it("save_finding rejects an out-of-range end_line but keeps an in-range one", async () => {
-    const root = mkdtempSync(join(tmpdir(), "0sec-0review-"));
+    const root = mkdtempSync(join(tmpdir(), "0-0review-"));
     try {
       writeFileSync(join(root, "parser.ts"), "// 1\n// 2\n// 3\n// 4\n// 5\n");
       ctx.scopePath = root;
@@ -655,7 +655,7 @@ describe("ToolExecutor", () => {
   });
 
   it("save_finding accepts a directory source_path conservatively (no line check)", async () => {
-    const root = mkdtempSync(join(tmpdir(), "0sec-0review-"));
+    const root = mkdtempSync(join(tmpdir(), "0-0review-"));
     try {
       mkdirSync(join(root, "src"));
       ctx.scopePath = root;
@@ -687,7 +687,7 @@ describe("ToolExecutor", () => {
   });
 
   it("save_finding drops an oversized suggestion instead of rejecting or truncating", async () => {
-    const root = mkdtempSync(join(tmpdir(), "0sec-0review-"));
+    const root = mkdtempSync(join(tmpdir(), "0-0review-"));
     try {
       writeFileSync(join(root, "parser.ts"), "unsafe(input)\n");
       ctx.scopePath = root;
@@ -720,7 +720,7 @@ describe("ToolExecutor", () => {
   });
 
   it("save_finding drops fenced or unified-diff suggestions but keeps the location", async () => {
-    const root = mkdtempSync(join(tmpdir(), "0sec-0review-"));
+    const root = mkdtempSync(join(tmpdir(), "0-0review-"));
     try {
       writeFileSync(join(root, "parser.ts"), "unsafe(input)\n");
       ctx.scopePath = root;
@@ -735,7 +735,7 @@ describe("ToolExecutor", () => {
             severity: "high",
             category: "missing-validation",
             description: "test",
-            // Distinct evidence prefixes keep the fuzzy dedup (0sec#281)
+            // Distinct evidence prefixes keep the fuzzy dedup (0#281)
             // from merging the two iterations — this test is about the
             // suggestion gate, not dedup.
             evidence_request: `test-${i}`,
@@ -762,7 +762,7 @@ describe("ToolExecutor", () => {
     // no way to ask the agent for a correction. The interactive tool path
     // (save_finding) rejects the call instead — verified in the preceding
     // tests.
-    const root = mkdtempSync(join(tmpdir(), "0sec-0review-"));
+    const root = mkdtempSync(join(tmpdir(), "0-0review-"));
     try {
       writeFileSync(join(root, "parser.ts"), "unsafe(input)\n"); // 1 line
       ctx.scopePath = root;
@@ -796,7 +796,7 @@ describe("ToolExecutor", () => {
   // rejected it. These tests verify the fix.
 
   it("save_finding rejects a terminal-newline boundary — line 7 in 6-line proxy.py", async () => {
-    const root = mkdtempSync(join(tmpdir(), "0sec-tn-boundary-"));
+    const root = mkdtempSync(join(tmpdir(), "0-tn-boundary-"));
     try {
       // Six source lines with a terminal newline (the common git checkout case).
       const lines = [
@@ -836,7 +836,7 @@ describe("ToolExecutor", () => {
   });
 
   it("save_finding rejects a terminal-newline boundary — end_line 7 when file has 5 lines with terminal newline", async () => {
-    const root = mkdtempSync(join(tmpdir(), "0sec-tn-boundary-"));
+    const root = mkdtempSync(join(tmpdir(), "0-tn-boundary-"));
     try {
       writeFileSync(
         join(root, "fixture.py"),
@@ -873,7 +873,7 @@ describe("ToolExecutor", () => {
   it("save_finding accepts the last real line in a file with terminal newline", async () => {
     // The same fixture with the correct line = 6 (the last content line).
     // Verifies that the fix did not reject valid citations.
-    const root = mkdtempSync(join(tmpdir(), "0sec-tn-boundary-"));
+    const root = mkdtempSync(join(tmpdir(), "0-tn-boundary-"));
     try {
       const lines = [
         "#!/usr/bin/env python3",
@@ -913,7 +913,7 @@ describe("ToolExecutor", () => {
     }
   });
 
-  // ── save_finding pocSteps emission (0sec#179) ──
+  // ── save_finding pocSteps emission (0#179) ──
 
   it("save_finding populates pocSteps from prose when agent didn't supply them", async () => {
     await executor.execute({
@@ -992,7 +992,7 @@ describe("ToolExecutor", () => {
 
   // ── save_finding confidence emission ──
   // Closes the cloud-side gap where every `findings.confidence` row was NULL
-  // because 0sec-cli never emitted a value. See agent/finding-confidence.ts
+  // because @0/cli never emitted a value. See agent/finding-confidence.ts
   // for the hybrid heuristic.
 
   it("save_finding stamps confidence onto the finding when the agent reports one", async () => {
@@ -1073,7 +1073,7 @@ describe("ToolExecutor", () => {
     expect(ctx.findings[0].confidence).toBeUndefined();
   });
 
-  // ── save_finding empty-PoC gate (0sec#283) ──
+  // ── save_finding empty-PoC gate (0#283) ──
   // Disclose already refuses empty PoCs at render time; we pull the gate
   // upstream so the agent sees its own bad finding rejected and can retry
   // with real evidence rather than burning turns on findings that disclose
@@ -1523,7 +1523,7 @@ describe("ToolExecutor", () => {
     const BIG_FILE = Array.from({ length: 1200 }, (_, i) => `line ${i + 1}`).join("\n");
 
     beforeEach(() => {
-      tmp = mkdtempSync(join(tmpdir(), "0sec-read-file-exec-"));
+      tmp = mkdtempSync(join(tmpdir(), "0-read-file-exec-"));
       writeFileSync(join(tmp, "big.c"), BIG_FILE);
       scopedExecutor = new ToolExecutor({ ...ctx, scopePath: tmp }, null);
     });
@@ -1576,7 +1576,7 @@ describe("ToolExecutor", () => {
 
       expect(result.success).toBe(true);
       const out = result.output as { content: string };
-      expect(out.content).toContain("[0sec:read_file] TRUNCATED");
+      expect(out.content).toContain("[0:read_file] TRUNCATED");
       expect(out.content).toContain("showed lines 800-802 of 1200");
       expect(out.content).toContain("offset=803");
     });
@@ -1651,7 +1651,7 @@ describe("ToolExecutor", () => {
     const BIG_FILE = Array.from({ length: 1200 }, (_, i) => `line ${i + 1}`).join("\n");
 
     beforeEach(() => {
-      tmp = mkdtempSync(join(tmpdir(), "0sec-read-file-exec-"));
+      tmp = mkdtempSync(join(tmpdir(), "0-read-file-exec-"));
       writeFileSync(join(tmp, "big.c"), BIG_FILE);
       const scopedCtx: ToolContext = { ...ctx, scopePath: tmp };
       scopedExecutor = new ToolExecutor(scopedCtx, null);
@@ -1705,7 +1705,7 @@ describe("ToolExecutor", () => {
 
       expect(result.success).toBe(true);
       const out = result.output as { content: string };
-      expect(out.content).toContain("[0sec:read_file] TRUNCATED");
+      expect(out.content).toContain("[0:read_file] TRUNCATED");
       expect(out.content).toContain("showed lines 800-802 of 1200");
       expect(out.content).toContain("offset=803");
     });
@@ -1750,7 +1750,7 @@ describe("ToolExecutor", () => {
     let scopedExecutor: ToolExecutor;
 
     beforeEach(() => {
-      const parent = mkdtempSync(join(tmpdir(), "0sec-scope-symlink-"));
+      const parent = mkdtempSync(join(tmpdir(), "0-scope-symlink-"));
       root = join(parent, "audit");
       secret = join(parent, "operator-secret.txt");
       mkdirSync(root);
@@ -1830,14 +1830,14 @@ describe("ToolExecutor", () => {
     });
   });
 
-  // ── apply_patch — 0sec#230 (executor-level integration) ──
+  // ── apply_patch — 0#230 (executor-level integration) ──
 
   describe("apply_patch", () => {
     let tmp: string;
     let scopedExecutor: ToolExecutor;
 
     beforeEach(() => {
-      tmp = mkdtempSync(join(tmpdir(), "0sec-apply-patch-exec-"));
+      tmp = mkdtempSync(join(tmpdir(), "0-apply-patch-exec-"));
       const scopedCtx: ToolContext = { ...ctx, scopePath: tmp };
       scopedExecutor = new ToolExecutor(scopedCtx, null);
     });
@@ -1925,7 +1925,7 @@ describe("ToolExecutor", () => {
     beforeEach(() => {
       const scopedCtx: ToolContext = {
         ...ctx,
-        scopePath: "/tmp/0sec-test-scope",
+        scopePath: "/tmp/0-test-scope",
       };
       scopedExecutor = new ToolExecutor(scopedCtx, null);
     });
@@ -2046,7 +2046,7 @@ describe("ToolExecutor", () => {
 
   // ── bash tool wallclock ceiling ──
   //
-  // Regression test for https://github.com/0sec-labs/0sec/issues/181
+  // Regression test for https://github.com/0sec-labs/0/issues/181
   // A hung subprocess (canonical case: `python3 -c 'requests.post(…)'` with
   // no timeout) used to wedge the tool indefinitely. The wallclock ceiling
   // must reap the process group and return an `is_error`-shaped result.
@@ -2107,7 +2107,7 @@ describe("ToolExecutor", () => {
     it("cancels an executing subprocess without waiting for its wallclock ceiling", async () => {
       process.env["ZERO_BASH_TIMEOUT_MS"] = "30000";
       const controller = new AbortController();
-      const directory = mkdtempSync(join(tmpdir(), "0sec-cancel-"));
+      const directory = mkdtempSync(join(tmpdir(), "0-cancel-"));
       const ready = join(directory, "ready");
       const pending = executor.execute(
         { name: "bash", arguments: { command: `printf ready > ${JSON.stringify(ready)}; sleep 30` } },
@@ -2226,7 +2226,7 @@ describe("run_command autonomy gating", () => {
       findings: [],
       attackResults: [],
       targetInfo: {},
-      scopePath: mkdtempSync(join(tmpdir(), "0sec-runcmd-")),
+      scopePath: mkdtempSync(join(tmpdir(), "0-runcmd-")),
       ...(autonomyMode ? { autonomyMode } : {}),
     }) as ToolContext;
 
@@ -2294,7 +2294,7 @@ describe("splitOnTopLevelPipes", () => {
   });
 });
 
-// ── Auth injection in shellExec (0sec#282) ────────────────────────
+// ── Auth injection in shellExec (0#282) ────────────────────────
 //
 // `shellExec` historically only EXPOSED `$AUTH_HEADER` / `$AUTH_VALUE`
 // / `$AUTH_CURL_FLAG` env vars and trusted the agent to interpolate
@@ -2304,7 +2304,7 @@ describe("splitOnTopLevelPipes", () => {
 // exec, so unauth-by-omission is no longer possible against in-scope
 // hosts. These tests pin the rewrite surface and the no-leak invariants.
 
-describe("injectAuthIntoBashCommand (0sec#282)", () => {
+describe("injectAuthIntoBashCommand (0#282)", () => {
   it("rewrites a bare curl invocation with $AUTH_CURL_FLAG when URL is in-scope", async () => {
     const { injectAuthIntoBashCommand } = await import("./tools.js");
     const { ScopePolicy } = await import("../scope/scope.js");
@@ -2458,9 +2458,9 @@ describe("injectAuthIntoBashCommand (0sec#282)", () => {
   });
 });
 
-// ── ToolExecutor.shellExec auth-injection wiring (0sec#282) ───────
+// ── ToolExecutor.shellExec auth-injection wiring (0#282) ───────
 
-describe("ToolExecutor — shellExec auth injection (0sec#282)", () => {
+describe("ToolExecutor — shellExec auth injection (0#282)", () => {
   it("does NOT touch the command when authConfig is unset", async () => {
     const ctx: ToolContext = {
       target: "https://target.test",
@@ -2503,7 +2503,7 @@ describe("ToolExecutor — shellExec auth injection (0sec#282)", () => {
   });
 });
 
-// ── Programmatic scope integration (0sec#215) ─────────────────────
+// ── Programmatic scope integration (0#215) ─────────────────────
 //
 // The DoD requires that out-of-scope URLs return as `ToolResult.error`
 // at every chokepoint. These tests pin that behaviour at the surface
@@ -2513,7 +2513,7 @@ describe("ToolExecutor — shellExec auth injection (0sec#282)", () => {
 // so we use a target whose origin matches the URL we're testing and
 // check that scope is the layer doing the rejecting.
 
-describe("ToolExecutor — scope enforcement (0sec#215)", () => {
+describe("ToolExecutor — scope enforcement (0#215)", () => {
   it("http_request returns ToolResult.error when target host is out of scope", async () => {
     const { ScopePolicy } = await import("../scope/scope.js");
     const scope = ScopePolicy.fromJson({ in_scope: ["api.example.com"] });
@@ -2535,7 +2535,7 @@ describe("ToolExecutor — scope enforcement (0sec#215)", () => {
   });
 
   it("http_request succeeds when both target and URL are in scope", async () => {
-    // 0sec#218 review: stub `fetch` so this test exercises only the
+    // 0#218 review: stub `fetch` so this test exercises only the
     // scope gate — the previous version relied on real DNS/network
     // behaviour for `api.example.com` and could sit on http_request's
     // 30s timeout before failing. The stub returns a minimal
@@ -2959,7 +2959,7 @@ describe("ToolExecutor — cross-origin in-scope authorization", () => {
   });
 });
 
-// 0sec#133. The guards above all live inside `if (this.ctx.scope)`, and
+// 0#133. The guards above all live inside `if (this.ctx.scope)`, and
 // `ctx.scope` is undefined on every local run without `--scope` and on every
 // cloud scan mode except http_audit. That is not going to change (fail-closed
 // by default would break every shipping mode), so the requirement is that the
@@ -2969,7 +2969,7 @@ describe("ToolExecutor — cross-origin in-scope authorization", () => {
 //
 // These tests fail if someone deletes the signal.
 
-describe("ToolExecutor — unscoped bash egress is visible (0sec#133)", () => {
+describe("ToolExecutor — unscoped bash egress is visible (0#133)", () => {
   const ORIGINAL_REQUIRE_SCOPE = process.env["ZERO_REQUIRE_SCOPE"];
 
   afterEach(() => {
@@ -3072,7 +3072,7 @@ describe("ToolExecutor — unscoped bash egress is visible (0sec#133)", () => {
   });
 });
 
-// 0sec#217. Generic-scanner-traffic suppression. When scope is loaded
+// 0#217. Generic-scanner-traffic suppression. When scope is loaded
 // the agent must refuse `sqlmap`, `nikto`, `gobuster`, `dirb`, `wfuzz`,
 // `ffuf`, and the noisy nmap modes (`-sV`, `-A`). The unit tests for
 // the detector live in `scope/scanner-binaries.test.ts`; these tests
@@ -3081,7 +3081,7 @@ describe("ToolExecutor — unscoped bash egress is visible (0sec#133)", () => {
 // in as `ctx.allowScanners`) actually overrides, and that pass-through
 // is preserved when scope is absent.
 
-describe("ToolExecutor — scanner suppression (0sec#217)", () => {
+describe("ToolExecutor — scanner suppression (0#217)", () => {
   async function makeCtx(opts: { withScope: boolean; allowScanners?: boolean }) {
     const { ScopePolicy } = await import("../scope/scope.js");
     const scope = opts.withScope
@@ -3214,7 +3214,7 @@ describe("ToolExecutor — scanner suppression (0sec#217)", () => {
   });
 });
 
-// ── Structured scanner wrappers at the executor surface (0sec#555) ──
+// ── Structured scanner wrappers at the executor surface (0#555) ──
 //
 // The argv-builder / parser unit tests live in `scanner-tools.test.ts`. These
 // pin the gating + scope/argument wiring at the ToolExecutor boundary: the
@@ -3222,7 +3222,7 @@ describe("ToolExecutor — scanner suppression (0sec#217)", () => {
 // validate required arguments — all BEFORE any binary is spawned, so they run
 // without sqlmap/nmap/ffuf/nuclei installed.
 
-describe("ToolExecutor — structured scanner wrappers (0sec#555)", () => {
+describe("ToolExecutor — structured scanner wrappers (0#555)", () => {
   async function makeCtx(opts: { allowScanners?: boolean }) {
     const { ScopePolicy } = await import("../scope/scope.js");
     const ctx: ToolContext = {
@@ -3253,7 +3253,7 @@ describe("ToolExecutor — structured scanner wrappers (0sec#555)", () => {
     });
   }
 
-  it("run_sqlmap refuses (deny-by-default) when allowScanners=true but NO scope is configured (0sec#926)", async () => {
+  it("run_sqlmap refuses (deny-by-default) when allowScanners=true but NO scope is configured (0#926)", async () => {
     const ctx: ToolContext = {
       target: "https://api.example.com",
       scanId: `test-noscope-${Math.random().toString(36).slice(2)}`,
@@ -3309,7 +3309,7 @@ describe("ToolExecutor — structured scanner wrappers (0sec#555)", () => {
     expect(result.error).toMatch(/FUZZ/);
   });
 
-  it("gracefully skips run_sqlmap when the binary is missing (0sec#tool-reliability)", async () => {
+  it("gracefully skips run_sqlmap when the binary is missing (0#tool-reliability)", async () => {
     // allowScanners + in-scope target → preflight passes and we attempt to
     // spawn `sqlmap`. On a runner without sqlmap installed this is now a
     // GRACEFUL skip (success:true + { skipped:true }) rather than a hard
@@ -3334,7 +3334,7 @@ describe("ToolExecutor — structured scanner wrappers (0sec#555)", () => {
   });
 });
 
-// ── Attribution-header injection at the executor surface (0sec#216) ──
+// ── Attribution-header injection at the executor surface (0#216) ──
 //
 // The unit tests in attribution.test.ts cover the helper directly. These
 // integration tests pin that http_request actually attaches the configured
@@ -3342,7 +3342,7 @@ describe("ToolExecutor — structured scanner wrappers (0sec#555)", () => {
 // ToolContext. The transport mock records the outbound RequestInit without
 // making network calls; executor authorization remains real.
 
-describe("ToolExecutor — attribution-header injection (0sec#216)", () => {
+describe("ToolExecutor — attribution-header injection (0#216)", () => {
   it("http_request attaches configured attribution headers on in-scope traffic", async () => {
     const { ScopePolicy } = await import("../scope/scope.js");
     const scope = ScopePolicy.fromJson({ in_scope: ["api.example.com"] });
@@ -3451,7 +3451,7 @@ describe("ToolExecutor — attribution-header injection (0sec#216)", () => {
   });
 });
 
-describe("ToolExecutor — crawl redirect handling (0sec#238)", () => {
+describe("ToolExecutor — crawl redirect handling (0#238)", () => {
   it("does NOT leak attribution headers across an out-of-scope redirect", async () => {
     const { ScopePolicy } = await import("../scope/scope.js");
     const scope = ScopePolicy.fromJson({
@@ -3585,7 +3585,7 @@ describe("ToolExecutor — crawl redirect handling (0sec#238)", () => {
   });
 
   it("non-redirect 200 path is unaffected by manual-redirect handling", async () => {
-    // Sanity check: the manual-redirect plumbing (0sec#238) must not
+    // Sanity check: the manual-redirect plumbing (0#238) must not
     // change behaviour on the happy path. A plain 200 should be processed
     // exactly as before — single fetch, body parsed, attribution sent on
     // the (only) request.
@@ -4006,7 +4006,7 @@ describe("ToolExecutor — http_audit enforcement (FROZEN CONTRACT)", () => {
     expect(ctx.enforcement!.summarize().requests_out_of_scope_blocked).toBe(0);
   });
 
-  // ── 0sec#568: close the bash rate-limiter bypass ──
+  // ── 0#568: close the bash rate-limiter bypass ──
   // Bash curl/wget previously bypassed both the per-host RateLimiter and the
   // enforcement counters entirely. These pin that bash-issued HTTP is now
   // paced (acquire) and counted (noteInScope) BEFORE exec.
@@ -4057,8 +4057,8 @@ describe("ToolExecutor — http_audit enforcement (FROZEN CONTRACT)", () => {
   });
 });
 
-// ── 0sec#568: WAF detection + adaptive evasion (http_request) ──
-describe("ToolExecutor — WAF detection + adaptive evasion (0sec#568)", () => {
+// ── 0#568: WAF detection + adaptive evasion (http_request) ──
+describe("ToolExecutor — WAF detection + adaptive evasion (0#568)", () => {
   function wafCtx(overrides: Partial<ToolContext> = {}): ToolContext {
     return {
       target: "https://api.example.com",
@@ -4259,7 +4259,7 @@ function ScopePolicyFromHosts(hosts: string[]) {
   return HttpAuditScopePolicy.fromJson({ in_scope: hosts });
 }
 
-// ── Credential hygiene in the child env (0sec#134) ────────────────────────
+// ── Credential hygiene in the child env (0#134) ────────────────────────
 //
 // `sanitizedEnv()` strips a name denylist from the env handed to `bash` and to
 // the scanner subprocesses. Two things need pinning:
@@ -4277,7 +4277,7 @@ function ScopePolicyFromHosts(hosts: string[]) {
 // `process.env` and /proc/<ppid>/environ is same-uid readable. These tests pin
 // the stopgap's contract, they do not assert containment.
 
-describe("sanitizedEnv — child-process credential filtering (0sec#134)", () => {
+describe("sanitizedEnv — child-process credential filtering (0#134)", () => {
   const INJECTED_CREDENTIALS = [
     "ZERO_CLOUD_TOKEN",
     "ZERO_CHATGPT_ACCESS_TOKEN",
@@ -4402,7 +4402,7 @@ describe("sanitizedEnv — child-process credential filtering (0sec#134)", () =>
     const envName = "Z_AI_API_KEY";
     const previous = process.env[envName];
     const canary = "canary-zai-must-not-leak";
-    const scopePath = mkdtempSync(join(tmpdir(), "0sec-credential-pipeline-"));
+    const scopePath = mkdtempSync(join(tmpdir(), "0-credential-pipeline-"));
     process.env[envName] = canary;
     try {
       const ex = new ToolExecutor(
@@ -4441,7 +4441,7 @@ describe("ToolExecutor engine handoff", () => {
   });
 
   it.each([false, true])("retains an operator's scoped execution decision (%s) without prompting again", async (approved) => {
-    const root = mkdtempSync(join(tmpdir(), "0sec-handoff-permission-"));
+    const root = mkdtempSync(join(tmpdir(), "0-handoff-permission-"));
     const approve = vi.fn(async () => approved);
     const reconsider = vi.fn(async () => !approved);
     const ctx: ToolContext = { ...context(), role: "audit", scopePath: root, autonomyMode: "standard", escalateScopedAudit: approve };

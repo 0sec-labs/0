@@ -8,7 +8,7 @@
  *
  * Every line is a JSON object on stderr, one per bus event:
  *
- *   {"timestamp":"…","level":"info","service":"0sec","event":"step_started","step":"analyze"}
+ *   {"timestamp":"…","level":"info","service":"0","event":"step_started","step":"analyze"}
  *
  * The sink is designed for an SRE / operator who wants to observe scan
  * lifecycle and cost without seeing internal agent transcripts or finding
@@ -337,7 +337,7 @@ export function createOperationalEventSink(): EventSink {
       const envelope: Record<string, unknown> = {
         timestamp: new Date().toISOString(),
         level: type === "tool_health" ? "warn" : "info",
-        service: "0sec",
+        service: "0",
         event: type,
       };
 

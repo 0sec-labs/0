@@ -1,4 +1,4 @@
-// `0sec theme` — list, install, apply, export, and remove console colour themes.
+// `0 theme` — list, install, apply, export, and remove console colour themes.
 //
 // Themes are shareable ARTIFACTS, not code. A theme is a colour palette (a token
 // → #RRGGBB map) plus display metadata. It rides the same registry the plugin
@@ -164,7 +164,7 @@ export function runThemeList(deps: ThemeCommandDeps = {}): void {
     for (const entry of installed) line(entry);
   }
   out("");
-  out(chalk.dim("Apply one with `0sec theme apply <id>`; install more with `0sec theme install <id>`."));
+  out(chalk.dim("Apply one with `0 theme apply <id>`; install more with `0 theme install <id>`."));
   process.exitCode = EXIT_OK;
 }
 
@@ -240,7 +240,7 @@ export async function runThemeInstall(id: string, deps: ThemeCommandDeps = {}): 
   out(`  Signature: ${artifact.signatureState}`);
   out(chalk.dim("  No code ran — a theme is data (a palette), never an executable plugin."));
   out(`  Apply it with:`);
-  out(chalk.cyan(`    0sec theme apply ${id}`));
+  out(chalk.cyan(`    0 theme apply ${id}`));
   process.exitCode = EXIT_OK;
 }
 
@@ -257,7 +257,7 @@ export function runThemeApply(id: string, deps: ThemeCommandDeps = {}): void {
 
   if (!isKnownTheme(id)) {
     err(chalk.red(`"${id}" is not a known theme (neither a built-in nor an installed id).`));
-    err("  See `0sec theme list`, or install it with `0sec theme install <id>`.");
+    err("  See `0 theme list`, or install it with `0 theme install <id>`.");
     process.exitCode = EXIT_USER_ERROR;
     return;
   }

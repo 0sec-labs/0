@@ -1,4 +1,4 @@
-import type { NativeMessage, TodoStatus } from "@0/core"
+import type { NativeMessage, TodoStatus } from "@0/core";
 import type { PanelData } from "../panels.js";
 import type { ToolPreview, ToolPreviewImage } from "../tool-format.js";
 import type {
@@ -26,7 +26,7 @@ export type ChatImageAttachment = ToolPreviewImage & {
  * A retained record of one context-compaction event, kept by chat-screen so the
  * Ctrl+O review overlay can render a readable pre-compaction recap. Mirrors the
  * load-bearing fields of core's `ConsoleCompactionEvent`; `tokensAfter` is back-
- * filled from the next planner usage sample (Stream A emits it undefined).
+ * filled from the next planner usage sample rather than the local estimate.
  */
 export interface CompactionRecap {
   /** Planner input tokens that tripped the trigger (pre-compaction occupancy). */

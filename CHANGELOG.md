@@ -3,7 +3,7 @@
 All notable changes to 0 (the open-source CLI + agent harness) are tracked
 here. The history before v0.11.0 lives in the git log and on the GitHub
 Releases page; this file starts the human-readable summary from v0.11.0
-onwards. Entries before v0.13.0 predate the pwnkit → 0sec rename and keep the
+onwards. Entries before v0.13.0 predate the pwnkit → 0 rename and keep the
 old product name as written.
 
 The format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
@@ -25,19 +25,31 @@ on the published npm package and the GitHub Release tag.
   managed source research opts in through the Cloud sink. Session history is separate.
 - Recursive descendants inherit root policy and their own task without accumulating
   ancestor task prompts.
-- Hosted accounts report monthly included usage as a percentage and prepaid API
-  funds in USD; owners control fallback with `0sec prepaid on|off`.
+
+### Fixed
+
+- Onboarding Escape returns to the previous decision; skipping setup enters
+  chat without completing setup or quitting. Provider login/search cancellation
+  stays local, confirmed choices survive navigation, and setup has clickable
+  Back/Confirm/Skip controls.
+- Use Alt+Left/Right for consistent route history and Shift+Tab for backward
+  launcher focus, preserving nested popup and text-input ownership.
+- Maintain context between continuing tool rounds, re-arm after reduction,
+  and recover bounded context-overflow errors without replaying completed tools.
+  Explicit budgets, provider failures, and operator cancellation remain distinct.
+- Align console and resume launch defaults with the engine's 100-round limit;
+  retain the unlimited default cumulative turn-token budget.
 
 ## [0.21.0] - 2026-09-20
 
 ### Added
 
-- Enroll repositories through `0sec project enroll`, with browser handoff when
+- Enroll repositories through `0 project enroll`, with browser handoff when
   GitHub App access is required and agent-readable setup guidance.
 
 ### Changed
 
-- Managed project setup uses per-run credit limits. The published `0sec` CLI
+- Managed project setup uses per-run credit limits. The published `0` CLI
   can select development or production with `auth login --host`; the `0dev`
   wrapper remains a contributor convenience, not an installation requirement.
 
@@ -68,7 +80,7 @@ on the published npm package and the GitHub Release tag.
   IDs and capabilities without supplier prices or routing metadata; BYOK pricing
   remains unchanged.
 - `0dev` defaults to the development Cloud host and stores Cloud credentials
-  separately, without changing normal `0sec` credentials or BYOK configuration.
+  separately, without changing normal `0` credentials or BYOK configuration.
 
 ### Fixed
 
@@ -84,7 +96,7 @@ on the published npm package and the GitHub Release tag.
 
 ### Added
 
-- `0sec guide` provides an agent-readable product and capability reference,
+- `0 guide` provides an agent-readable product and capability reference,
   with command contracts discovered from registered CLI metadata.
 
 ### Security
@@ -103,7 +115,7 @@ on the published npm package and the GitHub Release tag.
   admissions. Docker remains the default; guests are not reused.
 - Present the product as **0security**, with a full wordmark and orange branding
   across the CLI, dashboard, desktop app, documentation, and README assets.
-  The `0sec` executable, package identifiers, configuration paths, desktop
+  The `0` executable, package identifiers, configuration paths, desktop
   profile location, and release artifact names remain compatible.
 - Clarify the Research Preview mission and 0cloud's hosted inference and managed
   security roles while preserving local and BYOK operation.
@@ -128,7 +140,7 @@ on the published npm package and the GitHub Release tag.
 
 ### Added
 
-- **`0sec secure` — the self-securing lifecycle.** Point the CLI at a
+- **`0 secure` — the self-securing lifecycle.** Point the CLI at a
   repository and it investigates, behaviorally reproduces each finding with a
   frozen probe, repairs across multiple files, runs your regression command,
   and independently verifies the fix in a fresh checkout before retaining the
@@ -136,8 +148,8 @@ on the published npm package and the GitHub Release tag.
   rejected; unresolved findings block the run instead of reporting clean.
   Runs are resumable with identity checks, persist an exclusive lock, and
   track real token cost. `--publish` opens PRs for verified patches only.
-- **`0sec connect` — one-command cloud onboarding.** `0sec auth login` once,
-  then `0sec connect <repo-url>`: auth is verified, the test command is
+- **`0 connect` — one-command cloud onboarding.** `0 auth login` once,
+  then `0 connect <repo-url>`: auth is verified, the test command is
   auto-detected (package.json / Makefile / pytest / Cargo / Go), the first
   secure run starts immediately, and a recurring schedule is installed.
 - **Learning loop.** Verified and failed repair outcomes are recorded in the
@@ -154,11 +166,11 @@ on the published npm package and the GitHub Release tag.
 
 ### Changed
 
-- `0sec update` is now an alias of `0sec upgrade`.
+- `0 update` is now an alias of `0 upgrade`.
 
 
-- Show a consistently spaced `0SECURITY` hero wordmark on wide terminals, with
-  the original `0SEC` mark retained for narrow columns.
+- Show a consistently spaced `ZEROSECURITY` hero wordmark on wide terminals, with
+  the original `ZERO` mark retained for narrow columns.
 - Replace the duplicate aperture above the wordmark with Zero peeking over an
   edge, facing forward with both gloves visible. Preserve the original image
   resolution and antialias the silhouette without its white fringe. Native
@@ -198,7 +210,7 @@ on the published npm package and the GitHub Release tag.
   evaluation tools, and additional security-engine tools and skills.
 - Additional provider connection flows, live model/provider selection,
   per-agent routing, context compaction, and consent-gated redacted analytics.
-- A publishable benchmark scoreboard through `0sec bench scoreboard`, with
+- A publishable benchmark scoreboard through `0 bench scoreboard`, with
   benchmark-miss harvesting available through `lens-synth --from-bench`.
 
 ### Changed
@@ -234,7 +246,7 @@ on the published npm package and the GitHub Release tag.
 
 ### Release
 
-- Publish the established `0sec-cli` npm package through the release workflow
+- Publish the established `@0/cli` npm package through the release workflow
   after the standalone platform builds, using the repository's CI credential.
   An npm-only recovery run leaves existing tags and native assets unchanged.
 
@@ -263,7 +275,7 @@ on the published npm package and the GitHub Release tag.
   connection choices. Cancelling sign-in returns to the current conversation;
   changing the provider or model applies to the next chat. Login alone does not
   establish model availability or a funded account.
-- `0sec balance` displays the service-reported percentage of inference credits
+- `0 balance` displays the service-reported percentage of inference credits
   remaining. Missing percentage data stays unavailable; JSON retains accounting
   fields, and reservations remain distinct from settled spending. Small positive
   balances display `<0.1%`; nearly full balances display `>99.9%`.
@@ -428,7 +440,7 @@ on the published npm package and the GitHub Release tag.
 - Real Docker replay CI covering container isolation, workspace paths, timeout
   cleanup, scoped HTTP, and vulnerable/patched negative controls.
 
-- `0sec evolve` — autonomous self-improvement plane with config-driven source
+- `0 evolve` — autonomous self-improvement plane with config-driven source
   candidate proposals, three-lane (development/held-out/negative-control)
   evaluation in isolated Docker containers, and durable promotion with canary
   and rollback. Subcommands: `run`, `status`, `promote`, `rollback`, `exec`,
@@ -459,7 +471,7 @@ on the published npm package and the GitHub Release tag.
   have no ground truth and are never auto-labelled.
 - Hash-chained registry event log (`recorded`, `canary_started`, `promoted`,
   `rolled_back`) with atomic O_EXCL artifact publication and fsync.
-- `0sec lens-synth --status` and `--rollback` — inspect and retire overlay
+- `0 lens-synth --status` and `--rollback` — inspect and retire overlay
   lenses from the durable appsec-archetypes registry.
 - `artifact-bridge.mjs` — CLI bridge for skill/router promotion authorization
   against the evolution registry. Used by skill-refine and active-learning loops
@@ -534,7 +546,7 @@ on the published npm package and the GitHub Release tag.
 - Approved feedback claims record process ownership. Startup recovers only
   demonstrably dead owners in the same process scope; live or unverifiable
   owners remain claimed, and obsolete completion tokens cannot publish results.
-- Benchmark fixtures now bind the `0sec` schema namespace introduced by the
+- Benchmark fixtures now bind the `0` schema namespace introduced by the
   earlier rename. Recomputed commitments preserve the original labels and
   MSRC source-byte hashes; validators still reject tampered provenance.
 - Finding and PoC JSON validation is shared between CLI ingestion and bundle
@@ -568,7 +580,7 @@ on the published npm package and the GitHub Release tag.
 ### Fixed
 
 - Standalone binaries now embed the dashboard's built assets and materialize
-  them only while `0sec dashboard` is running, so the dashboard works without
+  them only while `0 dashboard` is running, so the dashboard works without
   a checkout or `node_modules`.
 
 
@@ -576,11 +588,11 @@ on the published npm package and the GitHub Release tag.
 
 ### Added
 
-- `0sec lens-synth --watch --promote` now evolves additive appsec finder lenses
+- `0 lens-synth --watch --promote` now evolves additive appsec finder lenses
   from curated, corpus-gated misses into a user-owned registry. Promotions and
   rollbacks are hash-linked and hot-load only for future source engagements;
   active engagements remain pinned.
-- `0` and `0sec tui` retain chat as the primary OpenTUI surface. Chat-owned
+- `0` and `0 tui` retain chat as the primary OpenTUI surface. Chat-owned
   `/run` opens one explicit-target engagement pane rather than separate
   scan/audit/review/deep-review launch modes; a deep source engagement uses the
   current validated finder-lens strategy through the shared unified runner.
@@ -600,7 +612,7 @@ on the published npm package and the GitHub Release tag.
 
 ### Added
 
-- A versioned `0sec.presentation/v1` contract now carries canonical reports,
+- A versioned `0.presentation/v1` contract now carries canonical reports,
   renderer-neutral console transcripts, and semantic events across the CLI,
   browser dashboard, and output adapters.
 - The console can open a virtualized transcript review with `/transcript` (or
@@ -624,7 +636,7 @@ on the published npm package and the GitHub Release tag.
   framebuffer corruption.
 - Console defaults now use the Midnight theme; transcript, tool-card, composer,
   sidebar, and focused-subagent surfaces were refined for legibility.
-- The optional `0sec-cli` npm launcher downloads the matching platform-specific
+- The optional `@0/cli` npm launcher downloads the matching platform-specific
   release asset on first invocation when published to npm.
 
 ### Fixed
@@ -645,7 +657,7 @@ on the published npm package and the GitHub Release tag.
 - `/settings` is now a tabbed screen (one tab per category) instead of one long
   scroll; a `/shortcuts` reference lists every keybinding (also reachable from
   settings via `?`).
-- `0sec console` gains `--yolo` / `--mode <standard|recon|copilot|yolo>` launch
+- `0 console` gains `--yolo` / `--mode <standard|recon|copilot|yolo>` launch
   flags (YOLO still requires `--scope`).
 
 - `bench improvement-assess` binds sealed improvement results to champion and
@@ -653,15 +665,15 @@ on the published npm package and the GitHub Release tag.
   create-once decision plus hash-chained ledger snapshot. Generic artifacts
   require human approval; the command never executes or deploys a candidate.
 - The stdio MCP server accepts `--tools <comma-separated-names>` to limit the
-  model-visible 0sec tool set. The source-checkout DSH runner defaults to the
+  model-visible 0 tool set. The source-checkout DSH runner defaults to the
   bounded recon profile rather than exposing every live tool schema.
 
 ### Changed
 
 - Fresh `scan`, `audit`, `review`, legacy scanner, MCP, and persisted-ingest
   executions now own `~/.0/runs/<run-id>/state.db` rather than contending
-  on one user-global SQLite file. `0sec history` and `0sec findings list`
-  aggregate run-local state; `0sec resume` resolves an unambiguous abbreviated
+  on one user-global SQLite file. `0 history` and `0 findings list`
+  aggregate run-local state; `0 resume` resolves an unambiguous abbreviated
   run id.
 - Managed workers bind the local run directory, database, and final report to
   their managed scan id. The worker controller retrieves that report after the
@@ -687,18 +699,18 @@ on the published npm package and the GitHub Release tag.
 
 ## [0.13.0] - 2026-08-19
 
-### Changed — pwnkit is now 0sec
+### Changed — pwnkit is now 0
 
-The engine and CLI are renamed from pwnkit to 0sec, matching the public
-repository (`0sec-labs/0sec`):
+The engine and CLI are renamed from pwnkit to 0, matching the public
+repository (`0sec-labs/0`):
 
-- **Package identity:** the root bundle is `0sec`. The workspace CLI package is
-  `0sec-cli`; the binary shipped by both is **`0sec`**, with **`0`** as a
+- **Package identity:** the root bundle is `0`. The workspace CLI package is
+  `@0/cli`; the binary shipped by both is **`0`**, with **`0`** as a
   short shell alias (`0 scan ...`). Neither package is published to npm yet.
-- **Container image**: `ghcr.io/0sec-labs/0sec` (was `ghcr.io/0sec-labs/pwnkit`).
+- **Container image**: `ghcr.io/0sec-labs/0` (was `ghcr.io/0sec-labs/pwnkit`).
 - **Standalone distribution:** GitHub Releases ship verified binaries for Apple
   Silicon macOS, Linux x64 and arm64, and Windows x64. Install with
-  `curl -fsSL https://raw.githubusercontent.com/0sec-labs/0sec/main/install.sh | bash`
+  `curl -fsSL https://raw.githubusercontent.com/0sec-labs/0/main/install.sh | bash`
   on supported Unix hosts, or download the matching release asset directly.
 - **Environment variables**: the public env contract moved from `PWNKIT_*` to
   `ZERO_*` (e.g. `ZERO_MODEL`, `ZERO_CLOUD_TOKEN`). At CLI startup, any legacy
@@ -706,10 +718,10 @@ repository (`0sec-labs/0sec`):
   unset, so existing deployments keep working; the new name always wins
   (`packages/cli/src/env-legacy.ts`).
   Note: POSIX shells reject digit-leading variable names, so `ZERO_*` vars
-  cannot be set or expanded in bash/sh directly — use `env ZERO_FOO=... 0sec
+  cannot be set or expanded in bash/sh directly — use `env ZERO_FOO=... 0
   ...`, or keep using the permanently supported `PWNKIT_*` names in shell
   contexts. Docker `-e`, CI env blocks, and systemd units are unaffected.
-- **Workspace packages** moved from the `@pwnkit/*` scope to `@0sec/*`.
+- **Workspace packages** moved from the `@pwnkit/*` scope to `@0/*`.
 - Internal canary/marker strings (`PWNKIT-CANARY:`, `PWNKIT-INITRAMFS-*`,
   `PWNKIT-INJ-OK`) are wire protocol tokens between generated exploits and the
   verifier; they are unchanged and not part of the public interface.

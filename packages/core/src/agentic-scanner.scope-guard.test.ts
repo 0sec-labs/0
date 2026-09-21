@@ -12,13 +12,13 @@ import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { agenticScan } from "./agentic-scanner.js";
 import { LlmApiRuntime } from "./runtime/llm-api.js";
-import type { ScanConfig } from "@0/shared"
+import type { ScanConfig } from "@0/shared";
 import type { ScanEvent } from "./scanner.js";
 
 function tmpDbPath(): string {
   return path.join(
     os.tmpdir(),
-    `0sec-scope-guard-${Date.now()}-${Math.random().toString(36).slice(2)}.db`,
+    `0-scope-guard-${Date.now()}-${Math.random().toString(36).slice(2)}.db`,
   );
 }
 
@@ -32,7 +32,7 @@ function baseConfig(overrides: Partial<ScanConfig> = {}): ScanConfig {
   } as ScanConfig;
 }
 
-describe("agenticScan — scope-guard visibility (0sec#133)", () => {
+describe("agenticScan — scope-guard visibility (0#133)", () => {
   let dbPath: string;
   let events: ScanEvent[];
   const ORIGINAL_REQUIRE_SCOPE = process.env["ZERO_REQUIRE_SCOPE"];

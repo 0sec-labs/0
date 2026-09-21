@@ -1,31 +1,35 @@
 import { randomUUID } from "node:crypto";
 import { createLocalConsoleSession } from "../console-session.js";
 
-import { ScopePolicy,
-createConsoleRuntime,
-type AgentRole,
-type ConsoleAutonomyMode,
-type ConsoleLocalScopeRequest,
-type ConsoleScopeRequest,
-type ConsoleSession,
-type OperatorQuestionAnswer,
-type OperatorQuestionRequest,
-type ScopedAuditEscalationRequest,
-type ToolCall, } from "@0/core"
-import { DEFAULT_AUTONOMY_MODE,
-DESKTOP_CONSOLE_SCHEMA_VERSION,
-type DesktopConsoleAutonomyMode,
-type DesktopConsoleDecision,
-type DesktopConsoleDecisionResponse,
-type DesktopConsoleEvent,
-type DesktopConsoleEventPayload,
-type DesktopConsoleOperatorAnswer,
-type DesktopConsoleOperatorQuestion,
-type DesktopConsoleRole,
-type DesktopConsoleSession,
-type DesktopConsoleSessionStatus,
-type DesktopConsoleToolCall,
-type DesktopConsoleUsage, } from "@0/shared"
+import {
+  ScopePolicy,
+  createConsoleRuntime,
+  type AgentRole,
+  type ConsoleAutonomyMode,
+  type ConsoleLocalScopeRequest,
+  type ConsoleScopeRequest,
+  type ConsoleSession,
+  type OperatorQuestionAnswer,
+  type OperatorQuestionRequest,
+  type ScopedAuditEscalationRequest,
+  type ToolCall,
+} from "@0/core";
+import {
+  DEFAULT_AUTONOMY_MODE,
+  DESKTOP_CONSOLE_SCHEMA_VERSION,
+  type DesktopConsoleAutonomyMode,
+  type DesktopConsoleDecision,
+  type DesktopConsoleDecisionResponse,
+  type DesktopConsoleEvent,
+  type DesktopConsoleEventPayload,
+  type DesktopConsoleOperatorAnswer,
+  type DesktopConsoleOperatorQuestion,
+  type DesktopConsoleRole,
+  type DesktopConsoleSession,
+  type DesktopConsoleSessionStatus,
+  type DesktopConsoleToolCall,
+  type DesktopConsoleUsage,
+} from "@0/shared";
 
 const MAX_EVENTS_PER_SESSION = 2_000;
 const MAX_MESSAGE_LENGTH = 32_000;

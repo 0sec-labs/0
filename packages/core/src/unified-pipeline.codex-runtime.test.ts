@@ -103,13 +103,13 @@ const { runPipeline } = await import("./unified-pipeline.js");
 const tempDirs: string[] = [];
 
 function freshTmpDir(prefix: string): string {
-  const dir = mkdtempSync(join(tmpdir(), `0sec-codex-runtime-${prefix}-`));
+  const dir = mkdtempSync(join(tmpdir(), `0-codex-runtime-${prefix}-`));
   tempDirs.push(dir);
   return dir;
 }
 
 function freshDbPath(): string {
-  return join(freshTmpDir("db"), "0sec.db");
+  return join(freshTmpDir("db"), "0.db");
 }
 
 function fakeInstalledPackage(

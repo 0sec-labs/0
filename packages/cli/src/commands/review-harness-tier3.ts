@@ -1,5 +1,5 @@
 /**
- * `0sec review --harness-tier 3` glue.
+ * `0 review --harness-tier 3` glue.
  *
  * Chains Tier-2 (multi-component harness build) → Tier-3 (QEMU
  * validation). Prints the Tier-3 result JSON so downstream tooling

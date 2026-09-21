@@ -38,7 +38,7 @@
 import { chmodSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
-import { homeStateDir } from "@0/shared"
+import { homeStateDir } from "@0/shared";
 
 import { PROVIDERS, providerSupportsMethod } from "./provider-status.js";
 
@@ -57,7 +57,7 @@ export interface StoredCredentials {
   [providerId: string]: string;
 }
 
-/** Basename of the credential file inside the 0sec state directory. */
+/** Basename of the credential file inside the 0 state directory. */
 const CREDENTIALS_FILENAME = "credentials.json";
 
 /** Owner-only: nobody else on the machine has business reading this file. */

@@ -1,4 +1,4 @@
-import type { AttackCategory, Finding, ReachabilityTier, Severity } from "@0/shared"
+import type { AttackCategory, Finding, ReachabilityTier, Severity } from "@0/shared";
 
 export interface CvssSuggestion {
   vector: string;

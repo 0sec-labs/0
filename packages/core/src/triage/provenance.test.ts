@@ -7,7 +7,7 @@
  */
 
 import { describe, it, expect, afterEach } from "vitest";
-import type { Finding, LayerVerdict, TriageLayerName } from "@0/shared"
+import type { Finding, LayerVerdict, TriageLayerName } from "@0/shared";
 import {
   summarizeTriageProvenance,
   formatTriageProvenance,

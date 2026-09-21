@@ -13,7 +13,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import type { Finding } from "@0/shared"
+import type { Finding } from "@0/shared";
 import {
   HuntMemory,
   classTokens,

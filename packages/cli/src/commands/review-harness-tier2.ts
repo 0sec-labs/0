@@ -1,5 +1,5 @@
 /**
- * `0sec review --harness-tier 2` glue.
+ * `0 review --harness-tier 2` glue.
  *
  * Translates CLI flags into a Tier-2 harness build, extracts the
  * corpus, and prints a summary plus the compile + run commands the
@@ -99,7 +99,7 @@ export async function runHarnessTier2(args: RunHarnessTier2Args): Promise<void> 
   console.log(`  ${artifact.run_command}`);
   console.log(
     chalk.dim(
-      "\nOsec does not compile or execute the harness. Run the compile + run commands manually, or escalate to Tier-3 (QEMU validation, tracked: 0sec#226).",
+      "\nOsec does not compile or execute the harness. Run the compile + run commands manually, or escalate to Tier-3 (QEMU validation, tracked: 0#226).",
     ),
   );
 }

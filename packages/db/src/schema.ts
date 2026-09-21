@@ -44,7 +44,7 @@ export type ArtifactKindDB = (typeof artifactKinds)[number];
 export const workerStatuses = ["idle", "claiming", "running", "sleeping", "stopped", "error"] as const;
 export type WorkerStatusDB = (typeof workerStatuses)[number];
 
-// ── Persistent credential store (0sec#771, extends #687) ──
+// ── Persistent credential store (0#771, extends #687) ──
 //
 // Durable cross-scan home for the footholds the in-memory LootLedger
 // (single-scan; core/src/agent/loot.ts) harvests. The `credentialKinds` mirror
@@ -123,7 +123,7 @@ export const findings = sqliteTable(
      * JSON-stringified LayerVerdict[] (see @0/shared types). NULL until
      * the triage stage runs. Stored as text rather than a join table because
      * the array is read-and-write together at finding-save time and we never
-     * query individual verdict rows. See 0sec#112.
+     * query individual verdict rows. See 0#112.
      */
     layerVerdicts: text("layerVerdicts"),
     impactAssessment: text("impactAssessment"), // JSON: ImpactAssessment (reachability/blast/weaponizability/business)
@@ -132,7 +132,7 @@ export const findings = sqliteTable(
      * agent only produced prose evidence (the legacy default). Stored as
      * text rather than a join table because the array is read-and-write
      * together at finding-save time and we never query individual steps.
-     * See 0sec#170.
+     * See 0#170.
      */
     pocSteps: text("pocSteps"),
     /**
@@ -140,8 +140,8 @@ export const findings = sqliteTable(
      * when the agent produced a finding without a deterministic re-check
      * contract — every reader must continue to work in that case. Stored
      * as text because the spec is an opaque blob that the verifier reads
-     * whole; we never query individual predicates. See 0sec#193 /
-     * 0sec-cloud#111.
+     * whole; we never query individual predicates. See 0#193 /
+     * 0-cloud#111.
      */
     verificationSpec: text("verificationSpec"),
     /**
@@ -157,7 +157,7 @@ export const findings = sqliteTable(
     /**
      * JSON-stringified PocExecutionReport written when `disclose --target-url`
      * runs the step graph against a live target. NULL until that runs. See
-     * 0sec#171.
+     * 0#171.
      */
     pocExecution: text("pocExecution"),
     /**
@@ -378,7 +378,7 @@ export const workers = sqliteTable(
   ]
 );
 
-// ── Persistent credentials (0sec#771) ──
+// ── Persistent credentials (0#771) ──
 //
 // Durable, cross-scan store of discovered footholds keyed by
 // (credentialKind, valueHash). A row is upserted the first time a value is
@@ -417,7 +417,7 @@ export const persistentCredentials = sqliteTable(
   ]
 );
 
-// ── Trust graph edges (0sec#771) ──
+// ── Trust graph edges (0#771) ──
 //
 // Directed edges describing how one node (a credential, target, finding, or
 // host) grants reach to another — the substrate for "leaked here, reused

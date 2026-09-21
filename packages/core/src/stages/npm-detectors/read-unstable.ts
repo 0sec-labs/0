@@ -28,7 +28,7 @@ import type {
 // ── phased-getter harness (the deterministic dispose) ────────────────────────
 
 /** Sentinel forbidden value — never a member of a candidate allowlist. */
-const EVIL = "__0sec_toctou_forbidden__";
+const EVIL = "__0_toctou_forbidden__";
 
 /**
  * A property whose reads return `clean` during the validate phase and `evil`

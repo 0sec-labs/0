@@ -58,10 +58,10 @@ async function runCli(argv: string[]): Promise<void> {
   const program = new Command();
   program.exitOverride();
   registerAdGraphCommand(program);
-  await program.parseAsync(["node", "0sec-cli", ...argv]);
+  await program.parseAsync(["node", "@0/cli", ...argv]);
 }
 
-describe("0sec adgraph", () => {
+describe("0 adgraph", () => {
   let io: ReturnType<typeof captureIO>;
   let dir: string;
   let singleFile: string;

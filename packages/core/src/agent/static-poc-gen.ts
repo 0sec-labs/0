@@ -1,4 +1,4 @@
-// 0sec#666 / EPIC #674 Part A — agentic PoC-gen for static / no-PoC findings.
+// 0#666 / EPIC #674 Part A — agentic PoC-gen for static / no-PoC findings.
 //
 // THE GAP (root-caused 2026-05-30): high/critical findings emitted by the
 // static / code-analysis path ship with `pocSteps === undefined`. The cloud
@@ -25,10 +25,12 @@
 // A/B-able via the #656 harness and safe to merge dark. Wired into
 // agentic-scanner.ts after the PoV gate.
 
-import type { Finding,
-LayerVerdict,
-PocStep,
-PocStepAction, } from "@0/shared"
+import type {
+  Finding,
+  LayerVerdict,
+  PocStep,
+  PocStepAction,
+} from "@0/shared";
 import type { NativeRuntime } from "../runtime/types.js";
 import {
   generatePov,

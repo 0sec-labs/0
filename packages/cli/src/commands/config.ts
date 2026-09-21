@@ -1,4 +1,4 @@
-// `0sec config` — inspect, export, and import the console configuration.
+// `0 config` — inspect, export, and import the console configuration.
 //
 // Configuration is TWO-LEVEL (see tui/settings.ts): a per-user GLOBAL file
 // (`~/.0/tui-settings.json`) with a per-project OVERRIDE

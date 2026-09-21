@@ -13,7 +13,7 @@ import { MAX_CONTENT_BYTES, REDACTED_OPENAI, REDACTED_SECRET } from "./redaction
 
 const dirs: string[] = [];
 function tmpHome(): string {
-  const d = mkdtempSync(join(tmpdir(), "0sec-analytics-pipeline-"));
+  const d = mkdtempSync(join(tmpdir(), "0-analytics-pipeline-"));
   dirs.push(d);
   return d;
 }

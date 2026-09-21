@@ -20,7 +20,7 @@ function writeAuth(name: string, tokens: unknown): string {
 }
 
 beforeEach(() => {
-  dir = mkdtempSync(join(tmpdir(), "0sec-codex-auth-"));
+  dir = mkdtempSync(join(tmpdir(), "0-codex-auth-"));
 });
 
 afterEach(() => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { Finding } from "@0/shared"
+import type { Finding } from "@0/shared";
 import {
   emitFindingsAsPRs,
   buildBranchName,
@@ -146,11 +146,11 @@ describe("isReproduced", () => {
 
 describe("buildBranchName", () => {
   it("sanitizes finding id to a safe ref", () => {
-    expect(buildBranchName(mkFinding("abc-123", "xss"))).toBe("0sec/finding-abc123");
+    expect(buildBranchName(mkFinding("abc-123", "xss"))).toBe("0/finding-abc123");
   });
   it("truncates long ids", () => {
     const f = mkFinding("0123456789abcdefghij", "xss");
-    expect(buildBranchName(f)).toBe("0sec/finding-0123456789ab");
+    expect(buildBranchName(f)).toBe("0/finding-0123456789ab");
   });
 });
 
@@ -417,7 +417,7 @@ describe("emitFindingsAsPRs", () => {
     // add, commit (for the fix-template patch).
     const argvs = git.calls.map((c) => c.argv.join(" "));
     expect(argvs[0]).toBe("checkout develop");
-    expect(argvs[1]).toMatch(/^checkout -b 0sec\/finding-rep1$/);
-    expect(argvs.some((a) => a.startsWith("commit -m 0sec(information-disclosure)"))).toBe(true);
+    expect(argvs[1]).toMatch(/^checkout -b 0\/finding-rep1$/);
+    expect(argvs.some((a) => a.startsWith("commit -m 0(information-disclosure)"))).toBe(true);
   });
 });

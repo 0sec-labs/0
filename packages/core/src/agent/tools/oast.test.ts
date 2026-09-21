@@ -1,4 +1,4 @@
-// 0sec#659 — OAST tool layer: oast_register / oast_poll on ToolExecutor.
+// 0#659 — OAST tool layer: oast_register / oast_poll on ToolExecutor.
 // The oracle + collaborator cores are unit-tested in src/oast/*.test.ts; here
 // we pin the tool wiring: registration surfaces a handle, polling runs the
 // oracle, a confirmed callback lands in the loot ledger, and the tools degrade

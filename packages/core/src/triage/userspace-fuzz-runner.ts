@@ -55,7 +55,7 @@ import type {
   MemSafetyTarget,
 } from "./memsafety-types.js";
 
-const MEMSAFETY_ARTIFACT_SCHEMA = "0sec-memsafety-artifacts/v1";
+const MEMSAFETY_ARTIFACT_SCHEMA = "0-memsafety-artifacts/v1";
 const MAX_RETAINED_CRASHES = 16;
 const MAX_RETAINED_REPRODUCER_BYTES = 1024 * 1024;
 const MAX_RETAINED_LOG_BYTES = 256 * 1024;
@@ -496,9 +496,9 @@ function makeArtifactDir(artifactDir: string | undefined): {
   ephemeral: boolean;
 } {
   if (artifactDir) {
-    return { dir: mkdtempSync(join(artifactDir, "0sec-uf-")), ephemeral: false };
+    return { dir: mkdtempSync(join(artifactDir, "0-uf-")), ephemeral: false };
   }
-  return { dir: mkdtempSync(join(tmpdir(), "0sec-uf-")), ephemeral: true };
+  return { dir: mkdtempSync(join(tmpdir(), "0-uf-")), ephemeral: true };
 }
 
 /** Count files under a corpus dir, tolerating its absence. */

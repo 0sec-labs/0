@@ -31,7 +31,7 @@ import {
 
 const temps: string[] = [];
 function tempHome(): string {
-  const dir = mkdtempSync(join(tmpdir(), "0sec-feedback-"));
+  const dir = mkdtempSync(join(tmpdir(), "0-feedback-"));
   temps.push(dir);
   return dir;
 }
@@ -44,7 +44,7 @@ afterEach(() => {
 });
 
 describe("feedbackFilePath", () => {
-  it("lives under the operator's own 0sec directory", () => {
+  it("lives under the operator's own 0 directory", () => {
     expect(feedbackFilePath("/home/op")).toBe("/home/op/.0/feedback.md");
   });
 });
@@ -776,8 +776,8 @@ describe("buildDiagnosticFeedback — consented full detail (analyticsLevel comm
     const err = new TypeError("boom in the scanner");
     err.stack = [
       "TypeError: boom in the scanner",
-      "    at scan (/home/dev/coding/0sec/packages/core/src/scan.ts:42:7)",
-      "    at runAudit (/home/dev/coding/0sec/packages/cli/src/run.ts:10:3)",
+      "    at scan (/home/dev/coding/0/packages/core/src/scan.ts:42:7)",
+      "    at runAudit (/home/dev/coding/0/packages/cli/src/run.ts:10:3)",
     ].join("\n");
     const result = buildDiagnosticFeedback(diagInfo({ error: err, kind: "tool" }), consent);
     // Finite header is still present.

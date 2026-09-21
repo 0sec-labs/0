@@ -4,7 +4,7 @@
 // source content digests; stale or tampered notes simply do not recall.
 
 import { HuntMemoryStore } from "../memory/hunt-memory.js";
-import type { Finding } from "@0/shared"
+import type { Finding } from "@0/shared";
 import type { BehavioralRepairResult, SecureEvent } from "./types.js";
 
 export interface RepairLearning {

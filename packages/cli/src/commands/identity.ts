@@ -1,10 +1,12 @@
 import type { Command } from "commander";
 import chalk from "chalk";
-import { runIdentityAssessment,
-ScopePolicy,
-type IdentityAssessmentResult,
-type IdentityFinding,
-type IdentitySeverity, } from "@0/core"
+import {
+  runIdentityAssessment,
+  ScopePolicy,
+  type IdentityAssessmentResult,
+  type IdentityFinding,
+  type IdentitySeverity,
+} from "@0/core";
 
 /** Env var holding the Graph bearer token. Never a CLI argument — see below. */
 const TOKEN_ENV = "ZERO_GRAPH_ACCESS_TOKEN";
@@ -71,7 +73,7 @@ export function registerIdentityCommand(program: Command): void {
           chalk.red(
             `Missing ${TOKEN_ENV}. Export a Microsoft Graph access token with directory read scopes, e.g.\n` +
               `  export ${TOKEN_ENV}="$(az account get-access-token --resource https://graph.microsoft.com --query accessToken -o tsv)"\n` +
-              `The token is read from the environment only — 0sec never accepts it as a command-line argument.`,
+              `The token is read from the environment only — 0 never accepts it as a command-line argument.`,
           ),
         );
         process.exitCode = 2;

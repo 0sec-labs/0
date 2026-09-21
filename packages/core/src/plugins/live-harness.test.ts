@@ -2,7 +2,7 @@ import { chmodSync, mkdtempSync, readFileSync, readdirSync, rmSync } from "node:
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { HarnessGenerationSpec } from "@0/shared"
+import type { HarnessGenerationSpec } from "@0/shared";
 import { ExecutablePluginManager, type PluginVersionRecord } from "./executable.js";
 import { SelfExtensionRegistry } from "./self-extension.js";
 import { BUILTIN_GUARDS } from "./guards.js";
@@ -70,7 +70,7 @@ function waitForGuest(ms: number, signal?: AbortSignal): Promise<void> {
 }
 beforeEach(() => {
   trusted = true;
-  root = mkdtempSync(join(tmpdir(), "0sec-live-regression-"));
+  root = mkdtempSync(join(tmpdir(), "0-live-regression-"));
   manager = new ExecutablePluginManager({ registry: new SelfExtensionRegistry({ enabled: true, baseGuards: BUILTIN_GUARDS }), root: join(root, "executable"), backend: "docker", image: "unused-for-trusted-fixtures" });
   host = new LiveHarnessHost({ executablePlugins: manager, root: join(root, "harness"), workspaceRoot: root, allowTrusted: () => trusted });
 });

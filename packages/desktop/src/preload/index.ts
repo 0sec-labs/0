@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from "electron";
-import type { DesktopHostBridge, DesktopHostCommand } from "@0/shared"
+import type { DesktopHostBridge, DesktopHostCommand } from "@0/shared";
 
 const VALID_COMMANDS = ["new-thread", "open-folder", "toggle-sidebar", "settings"] as const satisfies readonly DesktopHostCommand[];
 

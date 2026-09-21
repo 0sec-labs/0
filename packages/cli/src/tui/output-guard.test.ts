@@ -14,12 +14,12 @@ describe("installTuiOutputGuard", () => {
     });
     try {
       expect(process.stderr.write).not.toBe(originalWrite);
-      process.stderr.write("[0sec] plan quota exhausted\n");
+      process.stderr.write("[0] plan quota exhausted\n");
     } finally {
       guard.restore();
     }
 
-    expect(lines).toEqual(["stderr:[0sec] plan quota exhausted"]);
+    expect(lines).toEqual(["stderr:[0] plan quota exhausted"]);
     expect(process.stderr.write).toBe(originalWrite);
   });
 

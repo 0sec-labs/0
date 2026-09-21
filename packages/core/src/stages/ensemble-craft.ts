@@ -33,7 +33,7 @@
  *     (`LlmApiRuntime`), never raw keys.
  */
 
-import type { RuntimeMode } from "@0/shared"
+import type { RuntimeMode } from "@0/shared";
 import { LlmApiRuntime } from "../runtime/llm-api.js";
 import {
   runCraftScan,

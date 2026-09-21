@@ -1,6 +1,6 @@
-// Credentials supplied to the 0sec process must not reach agent-controlled
+// Credentials supplied to the 0 process must not reach agent-controlled
 // child processes. This is defense in depth only: credentials retained by the
-// parent process are a separate process-isolation problem (0sec#134).
+// parent process are a separate process-isolation problem (0#134).
 //
 // Two layers, most-general first:
 //
@@ -16,7 +16,7 @@
 //
 //   2. VENDOR-SPECIFIC NAMES — kept for documentation / auditability even where
 //      a generic shape already covers them, so the security boundary reads as an
-//      explicit inventory of what 0sec knows it handles.
+//      explicit inventory of what 0 knows it handles.
 const SENSITIVE_ENV_PATTERNS = [
   // ── Generic credential shapes (see note above) ──────────────────────────
   "TOKEN", // *_TOKEN, AWS_SESSION_TOKEN, API_TOKEN, …

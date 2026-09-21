@@ -1,5 +1,5 @@
 /**
- * OAST collaborator implementations (0sec#659).
+ * OAST collaborator implementations (0#659).
  *
  * Three shapes behind the one `OastCollaborator` interface:
  *

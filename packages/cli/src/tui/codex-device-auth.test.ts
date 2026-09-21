@@ -11,7 +11,7 @@ import {
 const directories: string[] = [];
 
 function temporaryHome(): string {
-  const home = mkdtempSync(join(tmpdir(), "0sec-codex-device-auth-"));
+  const home = mkdtempSync(join(tmpdir(), "0-codex-device-auth-"));
   directories.push(home);
   return home;
 }

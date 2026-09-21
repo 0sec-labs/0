@@ -1,9 +1,9 @@
 /**
- * `0sec deep-review <target>` — the SEEDLESS depth-review scan (G-A).
+ * `0 deep-review <target>` — the SEEDLESS depth-review scan (G-A).
  *
  * This is the "depth method" (PR #1162: specialized finder lenses × best-of-N +
  * the multi-lens verify quorum) exposed as a dispatchable, seedless product.
- * Unlike `0sec hunt` (which REQUIRES a `--seed` fix diff to derive variant
+ * Unlike `0 hunt` (which REQUIRES a `--seed` fix diff to derive variant
  * candidate sites), deep-review needs no seed: it enumerates candidate files
  * straight from the prepared source tree and re-hunts each through the profile's
  * `*FinderLenses`, gating survivors through the profile's `*VerifyLenses`
@@ -37,16 +37,16 @@
 import type { Command } from "commander";
 import { readFileSync, realpathSync, statSync } from "node:fs";
 import { resolve, join, sep, relative } from "node:path";
-import type { Finding, RuntimeMode, ScanReport } from "@0/shared"
-import type { EvolutionConfig, FinderLens, ThreatLane, VerifyLens } from "@0/core"
+import type { Finding, RuntimeMode, ScanReport } from "@0/shared";
+import type { EvolutionConfig, FinderLens, ThreatLane, VerifyLens } from "@0/core";
 // The loader is called once for each review invocation, before target
 // preparation. That creates a stable lens snapshot for the engagement while
 // allowing the next review in a long-lived CLI process to observe a completed
 // durable-registry promotion.
-import { eventBus, loadAppsecFinderLenses, ScanCostLedger, captureObservation, createEvolvedFinder } from "@0/core"
+import { eventBus, loadAppsecFinderLenses, ScanCostLedger, captureObservation, createEvolvedFinder } from "@0/core";
 import { leadToCandidateFinding, type HuntOutcome } from "./hunt.js";
-import { loadEvolutionConfigFile } from "@0/core"
-import { resolveOsecRunStorage, writeOsecRunReport } from "@0/db"
+import { loadEvolutionConfigFile } from "@0/core";
+import { resolveOsecRunStorage, writeOsecRunReport } from "@0/db";
 import { createHash, randomUUID } from "node:crypto";
 
 export interface DeepReviewOutcome extends HuntOutcome {

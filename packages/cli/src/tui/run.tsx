@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import React, { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { CliRenderEvents, createCliRenderer, type CliRenderer } from "@opentui/core";
 import { AppContext, createRoot, useKeyboard } from "@opentui/react";
-import { type Finding } from "@0/shared"
+import { type Finding } from "@0/shared";
 import { resolveEngagement } from "../engagement-plan.js";
 import { getRuntimeAvailability } from "../utils.js";
 import { buildFindingChatPrompt, loadFindingFocus } from "../finding-focus.js";
@@ -33,6 +33,7 @@ import { HistoryScreen } from "./history-screen.js";
 import { FindingsScreen } from "./findings-screen.js";
 import { ReplayScreen } from "./replay-screen.js";
 import { PanePalette } from "./command-palette.js";
+import { RouteHistoryKeys } from "./route-history-keys.js";
 import { PopupStackProvider } from "./popup-stack.js";
 import type { FindingsScreenOptions } from "./findings-data.js";
 import { DialogSurface, useSurfaceDimensions } from "./dialog-surface.js";
@@ -45,7 +46,7 @@ import {
 import { AuditWorkspace, type AuditRecord } from "./audit-workspace.js";
 import type { HerdSubagentMap } from "./herd-layout.js";
 import { AuditSwitcher } from "./audit-switcher.js";
-import { OnboardingScreen } from "./onboarding-screen.js";
+import { OnboardingScreen, OnboardingSubstep } from "./onboarding-screen.js";
 import { HerdScreen } from "./herd-screen.js";
 import { AgentsCommsScreen } from "./agents-comms-screen.js";
 import { SettingsScreen } from "./settings-screen.js";
@@ -58,7 +59,7 @@ import { listSessions, loadSession, deleteSession } from "./session-store.js";
 import { MarketScreen } from "./market-screen.js";
 import { createPluginService } from "./plugin-service.js";
 import { createSessionPluginHostManager, type SessionPluginHostManager } from "./session-plugin-host.js";
-import { connectMcpServers, parseMcpConfig, DEFAULT_REGISTRY_URL, TOOL_DEFINITIONS } from "@0/core"
+import { connectMcpServers, parseMcpConfig, DEFAULT_REGISTRY_URL, TOOL_DEFINITIONS } from "@0/core";
 import { ConnectScreen } from "./connect-screen.js";
 import type { ConnectionRecovery } from "./connection-recovery.js";
 import { UsageScreen } from "./usage-screen.js";
@@ -610,7 +611,7 @@ function ConsoleApp({
   const selectedId = workspace.selectedId;
   const selectedRecord = workspace.selected;
   // Link the herdr pane to the selected audit's agent session so herdr can tie
-  // the pane to a 0sec session (its lifecycle signal). Re-links whenever the
+  // the pane to a 0 session (its lifecycle signal). Re-links whenever the
   // selected session changes (a new/resumed audit). No-op off-herdr, fail-soft.
   const selectedScanId = selectedRecord?.session?.scanId;
   useEffect(() => {
@@ -641,7 +642,7 @@ function ConsoleApp({
     exitRequested.current = true;
     setClosingAll(true);
     // Release this pane's herdr agent slot on the way out so the sidebar stops
-    // showing 0sec's stale state/topic. Fire-and-forget and fail-soft.
+    // showing 0's stale state/topic. Fire-and-forget and fail-soft.
     reportHerdrSessionClose();
     appendTuiEvent({ kind: "shutdown", stage: "requested", audits: creations.current.size });
     for (const gate of legacyLaunches.current.keys()) gate.close();
@@ -1002,8 +1003,8 @@ function ConsoleApp({
       const previousTuiTracePath = process.env["ZERO_TRACE_TUI_EVENTS"];
       try {
         process.env["ZERO_SUPPRESS_PROVIDER_STARTUP_LOG"] = "1";
-        process.env["ZERO_TRACE_NATIVE_RESPONSES"] = `/tmp/0sec-native-responses-${Date.now()}.ndjson`;
-        process.env["ZERO_TRACE_TUI_EVENTS"] = `/tmp/0sec-tui-events-${Date.now()}.ndjson`;
+        process.env["ZERO_TRACE_NATIVE_RESPONSES"] = `/tmp/0-native-responses-${Date.now()}.ndjson`;
+        process.env["ZERO_TRACE_TUI_EVENTS"] = `/tmp/0-tui-events-${Date.now()}.ndjson`;
         appendTuiTrace({
           kind: "session-start",
           target: plan.target,
@@ -1194,24 +1195,28 @@ function ConsoleApp({
     <OnboardingScreen
       key={`${onboardingOwner}:${onboardingIndex}`}
       interactive={routeType === "onboard" && !closingAll}
-      frame={({ body, hint }) => <ShellFrame view="onboarding" dialogContent>{body}<FooterBar hint={hint} /></ShellFrame>}
+      frame={({ body, hint, actions }) => <ShellFrame view="onboarding" dialogContent>{body}{actions}<FooterBar hint={hint} /></ShellFrame>}
       renderConnect={(nav) => (
+        <OnboardingSubstep nav={nav}>
         <ConnectScreen
           onConnected={(providerId) => {
             const owner = ownerForAction();
             if (owner) owner.onNextOptions({ providerId: providerId as ChatScreenOptions["providerId"] });
             nav.onDone();
           }}
-          onBack={nav.onSkip}
-          onExit={nav.onCancel}
+          onBack={nav.onBack}
+          onSkip={nav.onSkip}
+          onExit={nav.onExit}
           frame={({ body, hint }) => (
             <ShellFrame view="connect" dialogContent>{body}<FooterBar hint={hint} /></ShellFrame>
           )}
         />
+        </OnboardingSubstep>
       )}
       renderModels={(nav) => {
         const sel = routeOwner;
         return (
+          <OnboardingSubstep nav={nav}>
           <ModelScreen
             currentModel={sel?.nextOptions.model ?? sel?.runtimeInfo.current?.model() ?? sel?.options?.model}
             providerId={sel?.nextOptions.providerId ?? sel?.runtimeInfo.current?.providerId() ?? sel?.options?.providerId}
@@ -1220,8 +1225,9 @@ function ConsoleApp({
             onAgentModelsChange={(map) => { applyOrStage({ agentModels: map }); }}
             onSingleModelChange={(enabled) => { applyOrStage({ singleModel: enabled }); }}
             onSelect={(id) => { applyOrStage({ model: id }); nav.onDone(); }}
-            onBack={nav.onSkip}
-            onExit={nav.onCancel}
+            onBack={nav.onBack}
+            onSkip={nav.onSkip}
+            onExit={nav.onExit}
             frame={({ body, hint }) => (
               <ShellFrame view="models" dialogContent>
                 {body}
@@ -1229,10 +1235,12 @@ function ConsoleApp({
               </ShellFrame>
             )}
           />
+          </OnboardingSubstep>
         );
       }}
       onComplete={() => { if (firstRun) finishSetup(); else showChat(onboardingOwner); }}
-      onCancel={() => { if (firstRun) appExit(); else showChat(onboardingOwner); }}
+      onDismiss={() => { if (firstRun) finishSetup(); else showChat(onboardingOwner); }}
+      onExit={appExit}
     />
   ) : null;
 
@@ -1377,6 +1385,7 @@ function ConsoleApp({
         level-0 route/DialogSurface with a sized parent for their absolute
         layout, and only the topmost one is interactive. Route stack = level 0. */}
     <PopupStackProvider>
+      <RouteHistoryKeys shell={shell} enabled={!firstRun && !closingAll && routeType !== "onboard"}>
       {pluginError ? <text fg={theme.ERROR} wrapMode="word">{pluginError}</text> : null}
       {shellError ? <text fg={theme.ERROR} wrapMode="word">{shellError}</text> : null}
       {closingAll ? (
@@ -1394,7 +1403,7 @@ function ConsoleApp({
         {onboarding ? (
           <box position="absolute" top={0} left={0} width={routeType === "onboard" ? "100%" : 0}
             height={routeType === "onboard" ? "100%" : 0} overflow="hidden" zIndex={100}>
-            <DialogSurface onDismiss={() => { if (!firstRun && !closingAll) showChat(onboardingOwner); }}>
+            <DialogSurface onDismiss={() => { if (!closingAll) { if (firstRun) finishSetup(); else showChat(onboardingOwner); } }}>
               {onboarding}
             </DialogSurface>
           </box>
@@ -1407,6 +1416,7 @@ function ConsoleApp({
           </DialogSurface>
         ) : null}
       </box>
+      </RouteHistoryKeys>
     </PopupStackProvider>
     </box>
     </HarnessProvider>
@@ -1509,10 +1519,10 @@ async function mountApp(mode: AppMode): Promise<void> {
       if (captured.length > 0 || dropped > 0) {
         // Labelled so the replay reads as a session log rather than a
         // duplicate of what the transcript already showed.
-        process.stderr.write(`[0sec] runtime output captured during this session:\n`);
+        process.stderr.write(`[0] runtime output captured during this session:\n`);
       }
       if (dropped > 0) {
-        process.stderr.write(`[0sec] ${dropped} earlier line(s) dropped (buffer full)\n`);
+        process.stderr.write(`[0] ${dropped} earlier line(s) dropped (buffer full)\n`);
       }
       for (const line of captured) {
         const stream = line.stream === "stderr" ? process.stderr : process.stdout;
@@ -1704,4 +1714,3 @@ export async function createOpenTuiSession(options: {
     },
   };
 }
-

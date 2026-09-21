@@ -3,7 +3,7 @@
 /**
  * CyberGym Benchmark Runner (issue #1028, epic #1026)
  *
- * Wraps the 0sec engine as a CyberGym agent. CyberGym (UC Berkeley RDI,
+ * Wraps the 0 engine as a CyberGym agent. CyberGym (UC Berkeley RDI,
  * ICLR 2026 — https://github.com/sunblaze-ucb/cybergym) measures exactly our
  * core competency: reproduce a real C/C++ OSS-Fuzz memory-safety vuln by
  * generating a working PoC file, graded by a pre/post-patch *differential*
@@ -77,14 +77,16 @@ import { join, dirname, isAbsolute, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
-import { agenticScan, CraftMemoryStore, preseedMemory, consolidateMemory, runEnsembleCraft, parseEnsembleModels, defaultCraftCandidateReviewer } from "@0/core"
-import type { CraftCandidateJudge,
-CraftEvidenceRecord,
-CraftPocEvaluator,
-CraftScanOptions,
-CraftScanResult,
-MemSafetyTarget, } from "@0/core"
-import type { RuntimeMode } from "@0/shared"
+import { agenticScan, CraftMemoryStore, preseedMemory, consolidateMemory, runEnsembleCraft, parseEnsembleModels, defaultCraftCandidateReviewer } from "@0/core";
+import type {
+  CraftCandidateJudge,
+  CraftEvidenceRecord,
+  CraftPocEvaluator,
+  CraftScanOptions,
+  CraftScanResult,
+  MemSafetyTarget,
+} from "@0/core";
+import type { RuntimeMode } from "@0/shared";
 import { sanitizeTraceText } from "./xbow-runner.js";
 import { aggregateRuns, type RepeatRun } from "./wilson.js";
 
@@ -266,7 +268,7 @@ interface CyberGymReport {
 // ── Injectable seams (so tests mock the server + engine, no network/model) ──
 
 /**
- * Run the 0sec engine against a parsed task and return a candidate PoC.
+ * Run the 0 engine against a parsed task and return a candidate PoC.
  *
  * Injectable so the unit test can drive the full task→submit→verdict path
  * without a real model call. The default implementation routes through
@@ -445,7 +447,7 @@ export function generateTask(
  * oracle as a 401.
  *
  * Never inline the key: a literal one lived in the `craft-*.ts` scripts and is
- * therefore in git history (0sec#132 — the committed key still needs
+ * therefore in git history (0#132 — the committed key still needs
  * operator rotation; deleting it from HEAD does not un-publish it).
  */
 export function requireCyberGymApiKey(env: NodeJS.ProcessEnv = process.env): string {
@@ -793,7 +795,7 @@ export function parseVerifyOutput(out: string): CyberGymVerdict {
 export const runEngineDefault: EngineRunner = async (task, opts) => {
   const dbPath = join(
     tmpdir(),
-    `0sec-cybergym-${sanitizeId(task.taskId)}-${Date.now()}.db`,
+    `0-cybergym-${sanitizeId(task.taskId)}-${Date.now()}.db`,
   );
   // Cross-task learning memory (the moat). Enabled by CYBERGYM_MEMORY_DB (a JSONL
   // path shared across all task runs). Preseeded once; consolidated after each task.
@@ -1851,7 +1853,7 @@ async function main(): Promise<void> {
   const cfg = parseArgs(process.argv.slice(2));
   const costCeilingUsd = cyberGymCostCeilingUsd();
   if (!cfg.json) {
-    console.log("\x1b[31m\x1b[1m  0sec x CyberGym benchmark\x1b[0m");
+    console.log("\x1b[31m\x1b[1m  0 x CyberGym benchmark\x1b[0m");
     console.log(
       `  difficulty: ${cfg.difficulty}  runtime: ${cfg.runtime}  repeat: ${cfg.repeat}`,
     );

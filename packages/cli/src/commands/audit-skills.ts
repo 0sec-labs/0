@@ -1,4 +1,4 @@
-// `0sec skills` — manage audit-skills methodology bundles via 0cloud.
+// `0 skills` — manage audit-skills methodology bundles via 0cloud.
 //
 // Capability catalogue:
 //   skills list            — list all audit skills for the authenticated org
@@ -20,13 +20,15 @@ import { readFileSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 import type { Command } from "commander";
 import chalk from "chalk";
-import { CloudClient,
-CloudUnauthorizedError,
-CloudAuthMissingError,
-CloudForbiddenError,
-loadCloudCredentials, } from "@0/core"
+import {
+  CloudClient,
+  CloudUnauthorizedError,
+  CloudAuthMissingError,
+  CloudForbiddenError,
+  loadCloudCredentials,
+} from "@0/core";
 // Wire DTOs mirroring the frozen /api/audit-skills contract
-// (0sec-audit-skills-v1). The @0/core root barrel is a shared-release
+// (0-audit-skills-v1). The @0/core root barrel is a shared-release
 // surface this feature must not extend, so the CLI owns its view of the
 // HTTP contract. Field shapes must stay assignable to the CloudClient
 // method responses in packages/core/src/cloud/client.ts.
@@ -122,10 +124,10 @@ function handleCloudError(error: unknown, isJson: boolean): never {
   if (error instanceof CloudAuthMissingError) {
     if (isJson) {
       process.stdout.write(
-        JSON.stringify({ error: "no-credentials", message: "Run `0sec auth login` first." }) + "\n",
+        JSON.stringify({ error: "no-credentials", message: "Run `0 auth login` first." }) + "\n",
       );
     } else {
-      process.stderr.write(chalk.red("Run `0sec auth login` first.\n"));
+      process.stderr.write(chalk.red("Run `0 auth login` first.\n"));
     }
     process.exitCode = 1;
     return undefined as never;

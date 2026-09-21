@@ -1,6 +1,6 @@
 /**
- * Coverage seed for `0sec-cli`'s `findings` command — the operator-facing
- * triage surface (`0sec findings`, `findings list`, `findings show <id>`,
+ * Coverage seed for `@0/cli`'s `findings` command — the operator-facing
+ * triage surface (`0 findings`, `findings list`, `findings show <id>`,
  * `findings accept <id>`, `findings suppress <id>`, `findings reopen <id>`).
  * The file had zero tests before this seed; a regression here breaks the
  * core triage workflow that AGENTS.md documents and that the dashboard's
@@ -67,7 +67,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Command } from "commander";
-import type { FindingTriageStatus } from "@0/shared"
+import type { FindingTriageStatus } from "@0/shared";
 
 // ── Module-level mocks ──────────────────────────────────────────────────────
 //
@@ -191,7 +191,7 @@ async function runCli(argv: string[]): Promise<unknown> {
   });
   registerFindingsCommand(program);
   try {
-    await program.parseAsync(["node", "0sec-cli", ...argv]);
+    await program.parseAsync(["node", "@0/cli", ...argv]);
     return undefined;
   } catch (err) {
     return err;
@@ -409,7 +409,7 @@ describe("findings list — read surface", () => {
   });
 
   it("default action (no subcommand) renders the list view too", async () => {
-    // `0sec findings` (no `list`) should hit the parent action, which
+    // `0 findings` (no `list`) should hit the parent action, which
     // also routes to renderFindingsList when OpenTUI is unavailable.
     dbState.rows.push(makeRow({ id: "row-a" }));
     const err = await runCli(["findings"]);
@@ -640,7 +640,7 @@ describe("findings accept/suppress/reopen — triage transitions", () => {
   // Regression for #324: parent and subcommand both declared --db-path, so
   // Commander bound the parsed value to the parent's opts. The triage
   // handlers were reading `opts.dbPath` off the subcommand (always
-  // undefined) and silently falling through to ~/.0/0sec.db.
+  // undefined) and silently falling through to ~/.0/0.db.
   // After the fix, the value threads into the osecDB constructor whether
   // it's placed after the subcommand or after the parent.
   it("accept threads --db-path placed after the subcommand into the DB constructor (regression #324)", async () => {
@@ -682,7 +682,7 @@ describe("findings accept/suppress/reopen — triage transitions", () => {
     const id = "abcdef0011223344";
     dbState.rows.push(makeRow({ id }));
 
-    // `0sec findings --db-path /tmp/parent.db accept <id>` — the
+    // `0 findings --db-path /tmp/parent.db accept <id>` — the
     // parent-position form Commander binds to the parent opts. The
     // subcommand action must still resolve it.
     const err = await runCli(["findings", "--db-path", "/tmp/parent.db", "accept", id]);

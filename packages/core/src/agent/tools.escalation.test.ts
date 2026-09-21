@@ -35,7 +35,7 @@ const patchCall: ToolCall = { name: "apply_patch", arguments: {} };
 
 describe("scoped source-audit escalation gate", () => {
   it("rechecks host authority after asynchronous admission before applying a patch", async () => {
-    const root = mkdtempSync(join(tmpdir(), "0sec-authority-admission-"));
+    const root = mkdtempSync(join(tmpdir(), "0-authority-admission-"));
     let authorized = true;
     let entered!: () => void;
     let approve!: (value: boolean) => void;
@@ -61,7 +61,7 @@ describe("scoped source-audit escalation gate", () => {
 
 
   it("YOLO + configured scope → a previously-blocked tool dispatches", async () => {
-    const root = mkdtempSync(join(tmpdir(), "0sec-esc-"));
+    const root = mkdtempSync(join(tmpdir(), "0-esc-"));
     try {
       const exec = new ToolExecutor(
         baseCtx({ scopePath: root, autonomyMode: "yolo" }),
@@ -90,7 +90,7 @@ describe("scoped source-audit escalation gate", () => {
   });
 
   it("standard + approving callback → tool runs; a second call does NOT re-invoke the callback", async () => {
-    const root = mkdtempSync(join(tmpdir(), "0sec-esc-"));
+    const root = mkdtempSync(join(tmpdir(), "0-esc-"));
     try {
       const escalate = vi.fn(async (_req: ScopedAuditEscalationRequest) => true);
       const exec = new ToolExecutor(
@@ -112,7 +112,7 @@ describe("scoped source-audit escalation gate", () => {
   });
 
   it("standard + denying callback → error; a retry does NOT re-invoke the callback", async () => {
-    const root = mkdtempSync(join(tmpdir(), "0sec-esc-"));
+    const root = mkdtempSync(join(tmpdir(), "0-esc-"));
     try {
       const escalate = vi.fn(async (_req: ScopedAuditEscalationRequest) => false);
       const exec = new ToolExecutor(
@@ -139,7 +139,7 @@ describe("scoped source-audit escalation gate", () => {
     // Under the current autonomy model copilot has no per-action prompts, so the
     // scoped-audit allow-list is auto-lifted inside the configured scope exactly
     // like yolo — the escalation callback is never consulted.
-    const root = mkdtempSync(join(tmpdir(), "0sec-esc-"));
+    const root = mkdtempSync(join(tmpdir(), "0-esc-"));
     try {
       const escalate = vi.fn(async (_req: ScopedAuditEscalationRequest) => true);
       const exec = new ToolExecutor(
@@ -161,7 +161,7 @@ describe("scoped source-audit escalation gate", () => {
     // this gate in recon is a genuine allow-list escalation decision, so the
     // callback is invoked exactly as in standard. (In practice the console
     // refuses effectful recon tools upstream; this pins the gate's own policy.)
-    const root = mkdtempSync(join(tmpdir(), "0sec-esc-"));
+    const root = mkdtempSync(join(tmpdir(), "0-esc-"));
     try {
       const escalate = vi.fn(async (_req: ScopedAuditEscalationRequest) => true);
       const exec = new ToolExecutor(
@@ -177,7 +177,7 @@ describe("scoped source-audit escalation gate", () => {
   });
 
   it("a tool already in SCOPED_SOURCE_AUDIT_TOOLS never triggers escalation", async () => {
-    const root = mkdtempSync(join(tmpdir(), "0sec-esc-"));
+    const root = mkdtempSync(join(tmpdir(), "0-esc-"));
     try {
       const escalate = vi.fn(async (_req: ScopedAuditEscalationRequest) => true);
       const exec = new ToolExecutor(
@@ -194,7 +194,7 @@ describe("scoped source-audit escalation gate", () => {
   });
 
   it("switching the autonomy field between calls changes the outcome without rebuilding the executor", async () => {
-    const root = mkdtempSync(join(tmpdir(), "0sec-esc-"));
+    const root = mkdtempSync(join(tmpdir(), "0-esc-"));
     try {
       // Standard, no callback → hard denial (default behaviour).
       const ctx = baseCtx({ scopePath: root, autonomyMode: "standard" });

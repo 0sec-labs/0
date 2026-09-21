@@ -7,7 +7,7 @@ tableOfContents:
 ---
 
 Find the command, arguments, and options for your task. This reference covers
-**65 top-level commands** and their registered subcommands.
+**64 top-level commands** and their registered subcommands.
 
 For a worked example, start with [Scan Workflows](/scan-workflows/),
 [Console](/console/), or [Research Workflows](/research-workflows/).
@@ -91,7 +91,7 @@ Guide: [Read the workflow](/console/).
 | `--mode <mode>` | — | Autonomy mode: standard, recon, copilot, yolo. YOLO accepts absolute public-network targets without a launch target; explicit restrictions and exclusions still apply. |
 | `--yolo` | — | Shortcut for --mode yolo. Omits per-action approval prompts; explicit restrictions and exclusions still apply. |
 | `--autonomy <mode>` | — | Alias of --mode (standard\|copilot\|yolo\|recon); --mode/--yolo take precedence. |
-| `--max-tool-calls <n>` | `20` | Safety cap on tool-call rounds per operator message |
+| `--max-tool-calls <n>` | `100` | Safety cap on tool-call rounds per operator message |
 | `--allow-scanners` | — | Expose generic-scanner tool wrappers (sqlmap/nikto/…); default off |
 | `--resume [id]` | — | Reopen a saved console session by id (or unique prefix); with no id, opens a session picker. Also reachable as `0 -r [id]`. |
 | `--continue` | — | Reopen the most recent console session, no picker. Also reachable as `0 -c`. |
@@ -425,11 +425,11 @@ Guide: [Read the workflow](/scan-workflows/).
 | `-m, --model <model>` | — | LLM model to use |
 | `--repo <path>` | — | Source code path for white-box scanning (read code before attacking) |
 | `--auth <json>` | — | Auth credentials as JSON string or path to JSON file (types: bearer, cookie, basic, header) |
-| `--scope <path>` | — | Path to a JSON scope file ({in_scope, out_of_scope} arrays of host / *.domain / cidr rules). Out-of-scope URLs return as ToolResult.error at every fetch site. See 0sec#215. |
-| `--allow-scanners` | `false` | Disable the generic-scanner suppression gate (0sec#217). When --scope is set, the agent refuses to spawn sqlmap/wpscan/nikto/gobuster/dirb/wfuzz/ffuf/`nmap -sV`/`nmap -A` by default; pass this flag only when the engagement explicitly permits generic-scanner traffic. |
+| `--scope <path>` | — | Path to a JSON scope file ({in_scope, out_of_scope} arrays of host / *.domain / cidr rules). Out-of-scope URLs return as ToolResult.error at every fetch site. See 0#215. |
+| `--allow-scanners` | `false` | Disable the generic-scanner suppression gate (0#217). When --scope is set, the agent refuses to spawn sqlmap/wpscan/nikto/gobuster/dirb/wfuzz/ffuf/`nmap -sV`/`nmap -A` by default; pass this flag only when the engagement explicitly permits generic-scanner traffic. |
 | `--require-scope` | `false` | Set ZERO_REQUIRE_SCOPE for scope-aware execution paths. Ordinary live-target scan already refuses missing scope, independently of this flag. |
-| `--attribution-header <name=value>` | — | Attribution header to attach to in-scope outbound requests (0sec#216). Repeatable: pass `--attribution-header X-A=1 --attribution-header X-B=2`. Lower precedence than the scope file's `attribution.headers` block and ZERO_ATTRIBUTION_HEADERS env var. NEVER attached to out-of-scope traffic. |
-| `--attribution-ua <token>` | — | Engagement token to embed in the User-Agent on in-scope traffic (0sec#216). Resulting UA: `0sec/&lt;ver&gt; (engagement: &lt;token&gt;)`. Lower precedence than the scope file's `attribution.user_agent_token` and ZERO_ATTRIBUTION_UA_TOKEN env var. |
+| `--attribution-header <name=value>` | — | Attribution header to attach to in-scope outbound requests (0#216). Repeatable: pass `--attribution-header X-A=1 --attribution-header X-B=2`. Lower precedence than the scope file's `attribution.headers` block and ZERO_ATTRIBUTION_HEADERS env var. NEVER attached to out-of-scope traffic. |
+| `--attribution-ua <token>` | — | Engagement token to embed in the User-Agent on in-scope traffic (0#216). Resulting UA: `0/&lt;ver&gt; (engagement: &lt;token&gt;)`. Lower precedence than the scope file's `attribution.user_agent_token` and ZERO_ATTRIBUTION_UA_TOKEN env var. |
 | `--api-spec <path>` | — | Path to OpenAPI 3.x / Swagger 2.0 spec file (JSON or YAML) for pre-loaded endpoint knowledge |
 | `--export <target>` | — | Export findings to issue tracker (e.g. github:owner/repo) |
 | `--race` | `false` | Enable benchmark/CTF best-of-N strategy racing: run multiple flag-oriented attack strategies in parallel. Do not use for normal live-target audits. |
@@ -441,12 +441,12 @@ Guide: [Read the workflow](/scan-workflows/).
 | `--tui` | `false` | Open the local terminal UI after the scan completes |
 | `--features <list>` | — | Comma-separated list of opt-in feature flags to enable for this scan (e.g. 'wp_fingerprint,web_search'). Each flag maps to the corresponding ZERO_FEATURE_&lt;NAME&gt; environment variable. The token 'fp-moat' is a preset that enables the full false-positive moat (reachability, multi-modal, publishability, pov-gate, poc-gen, consensus) for an A/B run; an env var you set yourself always wins over the preset, so 'ZERO_FEATURE_POV_GATE=0 --features fp-moat' is a single-layer ablation. |
 | `--no-decoy-detection` | — | Disable the anti-honeypot flag-shape validator (default: on). When enabled, the `done` tool rejects low-confidence flags (e.g. `FLAG{I'm_a_Script_Kiddie}`) once with a hint to keep exploring. See GitHub issue #82. |
-| `--dispatch <mode>` | `auto` | Tool-call protocol for the legacy text agent loop (0sec#232): 'json' (default TOOL_CALL JSON lines), 'xml' (&lt;command&gt;/&lt;flag&gt;/&lt;finding&gt;/&lt;note&gt; tags — survives malformed JSON from cheap OpenRouter / Gemini / DeepSeek models), or 'auto' (xml for cheap providers, json otherwise). No effect on the native API loop. Env override: ZERO_DISPATCH=xml. |
-| `--emit <target>` | — | Emit target. Default unset → existing terminal/json/etc. `pr` → emit each reproduced finding as a GitHub PR with repro + suggested patch (0sec#377). Unverified findings roll up into `hypotheses.md`. |
+| `--dispatch <mode>` | `auto` | Tool-call protocol for the legacy text agent loop (0#232): 'json' (default TOOL_CALL JSON lines), 'xml' (&lt;command&gt;/&lt;flag&gt;/&lt;finding&gt;/&lt;note&gt; tags — survives malformed JSON from cheap OpenRouter / Gemini / DeepSeek models), or 'auto' (xml for cheap providers, json otherwise). No effect on the native API loop. Env override: ZERO_DISPATCH=xml. |
+| `--emit <target>` | — | Emit target. Default unset → existing terminal/json/etc. `pr` → emit each reproduced finding as a GitHub PR with repro + suggested patch (0#377). Unverified findings roll up into `hypotheses.md`. |
 | `--base <branch>` | — | Base branch for `--emit pr` (default: main) |
 | `--dry-run` | `false` | For --emit pr only: print proposed git/gh emission commands. The scan itself still executes. |
 | `--emit-out-dir <path>` | — | Directory for `--emit pr` rollup files (default: system temp) |
-| `--resume <run-id>` | — | Resume a previous run from its journal on disk (0sec#374). Locates the run's journal, rehydrates agent state, and continues from the last entry. |
+| `--resume <run-id>` | — | Resume a previous run from its journal on disk (0#374). Locates the run's journal, rehydrates agent state, and continues from the last entry. |
 | `--branch-from <entry-index>` | — | Branch the journal at the given entry index before resuming (requires --resume). Copies entries 0..N into a new run and resumes from there. |
 | `--verbose` | `false` | Show detailed output |
 | `--replay` | `false` | Replay the last scan's results |
@@ -518,7 +518,7 @@ Guide: [Read the workflow](/scan-workflows/).
 | `-m, --model <model>` | — | LLM model to use |
 | `--cost-ceiling <usd>` | — | Soft estimated-model-cost ceiling; partial findings are retained when enforcement trips. In-flight work may overshoot. Overrides ZERO_COST_CEILING_USD. |
 | `--tui` | `false` | Open the local terminal UI after the audit completes |
-| `--resume <run-id>` | — | Resume a previous run from its journal on disk (0sec#374) |
+| `--resume <run-id>` | — | Resume a previous run from its journal on disk (0#374) |
 | `--branch-from <entry-index>` | — | Branch the journal at the given entry index before resuming (requires --resume). |
 | `--verbose` | `false` | Show detailed output |
 | `--timeout <ms>` | `600000` | AI agent timeout in milliseconds |
@@ -555,9 +555,9 @@ Guide: [Read the workflow](/scan-workflows/).
 | `--target <target>` | — | Alias for --profile; accepts the supported review profiles, with app normalized to default. |
 | `--ecosystem <ecosystem>` | — | Review the SOURCE of a published package instead of a repo: npm, pypi, cargo, or oci. When set, &lt;repo&gt; is the package NAME — 0 installs it and reviews its extracted source. Omit for a local path or git URL. |
 | `--package-version <version>` | — | Pin the package version to review (only with --ecosystem). Defaults to latest. |
-| `--seed-findings <path>` | — | Path to ND-JSON leads from an external producer. "-" reads stdin. Schema: gemmaforge.leads/v1. Tracked: 0sec#368. |
+| `--seed-findings <path>` | — | Path to ND-JSON leads from an external producer. "-" reads stdin. Schema: gemmaforge.leads/v1. Tracked: 0#368. |
 | `--seed-only` | `false` | Skip static scanner prioritisation and rely solely on --seed-findings. Only meaningful when --seed-findings is set. |
-| `--emit <target>` | — | Emit target. Default unset → existing terminal/json/etc. `pr` → emit each reproduced finding as a GitHub PR with repro + suggested patch (0sec#377). Unverified findings roll up into `hypotheses.md`. |
+| `--emit <target>` | — | Emit target. Default unset → existing terminal/json/etc. `pr` → emit each reproduced finding as a GitHub PR with repro + suggested patch (0#377). Unverified findings roll up into `hypotheses.md`. |
 | `--base <branch>` | — | Base branch for `--emit pr` (default: main) |
 | `--dry-run` | `false` | For --emit pr only: print proposed git/gh emission commands. The source review itself still executes. |
 | `--emit-out-dir <path>` | — | Directory for `--emit pr` rollup files (default: system temp) |
@@ -577,7 +577,7 @@ Guide: [Read the workflow](/scan-workflows/).
 | `--fix-commit <sha>` | — | Analyze a security-fix commit and hunt for structurally similar unpatched code paths (variant hunting). Requires a local git repo. Resolves the commit to its full SHA and first-parent preimage. When used alone, feeds candidates as SeedFindings into the review pipeline. Combine with --variants-only to emit candidates as JSON without model/network calls. |
 | `--variants-only` | `false` | Emit full variant-hunt result as JSON (candidates, language coverage, errors) and exit. Requires --fix-commit. No model, cloud, or network calls are made. |
 | `--npm-dynamic` | `false` | Also run the npm dynamic-discovery detector sweep (SSPP fuzz / validation read-stability / SSRF parser-diff) over the package in a disposable sandbox. Only effective with --ecosystem npm. Confirmed leads flow into the same verify → disclosure path. |
-| `--resume <run-id>` | — | Resume a previous run from its journal on disk (0sec#374) |
+| `--resume <run-id>` | — | Resume a previous run from its journal on disk (0#374) |
 | `--branch-from <entry-index>` | — | Branch the journal at the given entry index before resuming (requires --resume). |
 | `--verbose` | `false` | Show detailed output |
 | `--timeout <ms>` | `600000` | AI agent timeout in milliseconds |
@@ -996,7 +996,7 @@ Guide: [Read the workflow](/verification-result/).
 
 | Argument | Required | Description |
 | --- | --- | --- |
-| `finding` | No | Path to a finding.json (0sec#193 deterministic-replay path). Equivalent to --finding when --runner is supplied. |
+| `finding` | No | Path to a finding.json (0#193 deterministic-replay path). Equivalent to --finding when --runner is supplied. |
 
 | Option | Registered default | Description |
 | --- | --- | --- |
@@ -1006,7 +1006,7 @@ Guide: [Read the workflow](/verification-result/).
 | `--qemu-binary <path>` | — | QEMU emulator for --runner qemu. |
 | `--qemu-kernel <path>` | — | Guest kernel image for --runner qemu. |
 | `--qemu-busybox <path>` | — | Static BusyBox binary used to build the offline QEMU guest. |
-| `--out <dir>` | — | 0sec#193 run directory (artifacts go under &lt;out&gt;/artifacts/). Defaults to a fresh tmpdir. |
+| `--out <dir>` | — | 0#193 run directory (artifacts go under &lt;out&gt;/artifacts/). Defaults to a fresh tmpdir. |
 | `--finding <path>` | — | Path to a finding.json. |
 | `--bundle <path>` | — | Path to a reproduction bundle directory; requires --runner local\|docker. Replays the bundle's vulnerable and patched snapshots through the configured runner and emits an aggregate ReproductionBundleResult. |
 | `--create-bundle <plan.json>` | — | Path to a BundlePlan JSON. Creates a reproduction bundle without executing any PoC steps. Requires --out &lt;bundle-dir&gt;. |
@@ -1044,7 +1044,7 @@ Subcommands: [evidence-pack](#disclose-evidence-pack) · [track](#disclose-track
 | --- | --- | --- |
 | `--db-path <path>` | — | Path to SQLite database |
 | `--scan <scanId>` | — | Restrict to findings from this scan |
-| `--output-dir <path>` | — | Directory to write advisories into (default ~/0sec/disclosures/scan-&lt;id&gt;) |
+| `--output-dir <path>` | — | Directory to write advisories into (default ~/0/disclosures/scan-&lt;id&gt;) |
 | `--severity-floor <severity>` | `medium` | In batch mode, only draft findings at or above this severity |
 | `--no-screenshots` | — | Skip terminal-screenshot rendering even when freeze is available |
 | `--repo <path>` | — | Local git checkout of the target repo to re-verify findings against |
@@ -2824,21 +2824,7 @@ Guide: [Cloud authentication](/api-keys/).
 
 | Option | Registered default | Description |
 | --- | --- | --- |
-| `--json` | — | Output the validated usage account as JSON |
-
-### prepaid
-
-Enable or disable prepaid API fallback for the authenticated organization.
-
-```text
-0 prepaid <setting>
-```
-
-`<setting>` is `on` or `off`. Requires Cloud credentials and organization-owner access. The command changes only this fallback setting. It does not purchase credits, start a scan, or change a codebase configuration.
-
-| Argument | Required | Description |
-| --- | --- | --- |
-| `setting` | Yes | on or off |
+| `--json` | — | Output the validated credit account as JSON |
 
 ### service
 

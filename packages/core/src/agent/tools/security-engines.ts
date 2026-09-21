@@ -41,7 +41,7 @@ export const securityEngineToolDefinitions: Record<string, ToolDefinition> = {
       scope: { type: "string", description: "Optional path to a JSON scope file ({in_scope,out_of_scope}); when supplied, graph.microsoft.com must be explicitly in scope or no request goes out." },
     },
   },
-
+  
   assemble_advisory: {
     name: "assemble_advisory",
     description:
@@ -49,7 +49,7 @@ export const securityEngineToolDefinitions: Record<string, ToolDefinition> = {
     parameters: {
       finding_id: { type: "string", description: "Finding id (or unique prefix). Omit to pick the most recent finding that is not discovered/false-positive." },
       scan_id: { type: "string", description: "Optional: restrict the lookup to findings from this scan." },
-      db_path: { type: "string", description: "Optional path to the findings SQLite database (defaults to the standard 0sec DB)." },
+      db_path: { type: "string", description: "Optional path to the findings SQLite database (defaults to the standard 0 DB)." },
       allow_unreproduced: { type: "boolean", description: "Also stage the vendor-notification draft for an unreproduced finding (default false)." },
     },
   },
@@ -66,7 +66,7 @@ export const securityEngineToolDefinitions: Record<string, ToolDefinition> = {
   },
 };
 
-// Tool-name → ToolExecutor handler-method name (0sec#614). Assembled by
+// Tool-name → ToolExecutor handler-method name (0#614). Assembled by
 // ./dispatch.ts; the executor's same-named methods delegate to the free
 // functions below.
 export const securityEngineDispatch: Record<string, string> = {
@@ -288,7 +288,7 @@ export async function executeEntraPosture(
   if (!accessToken) {
     return errResult(
       `Missing ${GRAPH_TOKEN_ENV}. Export a Microsoft Graph access token with directory read scopes; ` +
-        "0sec never accepts it as an argument.",
+        "0 never accepts it as an argument.",
     );
   }
 

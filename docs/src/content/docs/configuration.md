@@ -384,7 +384,7 @@ have separate paths; moving one directory does not relocate every subsystem.
 
 Fresh scans default to `~/.0/runs/<scan-id>/state.db`. `--db-path` overrides
 `ZERO_DB_PATH`; `ZERO_RUN_DIR` controls the run directory. Managed workers can
-bind the local run ID through `ZERO_CLOUD_SCAN_ID`. The legacy `0sec.db` is a
+bind the local run ID through `ZERO_CLOUD_SCAN_ID`. The legacy `0.db` is a
 resume fallback, not the default database for every new scan.
 
 | Path | Purpose |
@@ -395,7 +395,7 @@ resume fallback, not the default database for every new scan.
 | `console-sessions/` | Transcript JSON files, one per session. Owner-only (`0600` file, `0700` dir). |
 | `feedback.md` | Locally staged feedback entries. |
 
-<span id="0sec-config--console-settings-cli"></span>
+<span id="0-config--console-settings-cli"></span>
 ## `0 config` — console settings CLI
 
 The `0 config` command lets you inspect, export, and import the console
@@ -494,14 +494,16 @@ updates** in global settings only for a trusted source checkout. Project setting
 cannot grant it. Loading that code runs with the console process's host
 permissions, including credential access.
 
-Start a new development console from the built checkout:
+Build the checkout and start a development console explicitly:
 
 ```bash
-./scripts/0dev.sh console
+./scripts/0dev.sh --build console
 ```
 
-The `0dev` launcher targets `https://dev.cloud.0.security` and sets
-`ZERO_DEV_SOURCE_ROOT` to its checkout. Cloud login, reads and logout use
+Without `--build`, `0dev` uses the installed packaged `0` release, so Cloud
+reads remain available while workspace packages are unfinished. `--build`
+rebuilds Core/CLI and sets `ZERO_DEV_SOURCE_ROOT` to the checkout.
+Both modes target `https://dev.cloud.0.security`. Cloud login, reads and logout use
 `~/.0/dev/cloud.env`; production `~/.0/cloud.env` and private CLI
 `~/.0cloud/credentials.json` are not changed. Inherited Cloud tokens are ignored.
 HOME, BYOK credentials and other console settings remain unchanged.
@@ -987,7 +989,7 @@ An explicit operator cancellation is terminal, not a reason to fail over.
 
 Hosted transport errors and HTTP 5xx have unknown charge outcomes and are not
 automatically replayed. Hosted 429 is eligible only when the server marks it
-`x-0sec-retry-safe: 1`. Consult usage records before manually resubmitting.
+`x-0-retry-safe: 1`. Consult usage records before manually resubmitting.
 
 Auth errors (**401/403**) are never retried: the agent loop exits immediately,
 `warnings[]` carries the provider error, and the run is marked failed, never
@@ -1052,7 +1054,7 @@ env \
 `${ZERO_CLOUD_SINK}/scans/${ZERO_CLOUD_SCAN_ID}/findings`. Set
 `ZERO_FEATURE_CLOUD_SINK=0` to disable even when the env vars are present.
 
-Optional: `ZERO_CLOUD_ORG_ID` sends the `X-0sec-Org-Id` header for
+Optional: `ZERO_CLOUD_ORG_ID` sends the `X-0-Org-Id` header for
 organization-scoped sinks.
 
 ## Machine-readable result line

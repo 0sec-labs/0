@@ -31,7 +31,7 @@ import { PROVIDERS } from "./provider-status.js";
 const tempHomes: string[] = [];
 
 function makeHome(): string {
-  const dir = mkdtempSync(join(tmpdir(), "0sec-credential-store-"));
+  const dir = mkdtempSync(join(tmpdir(), "0-credential-store-"));
   tempHomes.push(dir);
   return dir;
 }
@@ -49,7 +49,7 @@ afterEach(() => {
 });
 
 describe("credentialsFilePath", () => {
-  it("places the file inside the shared 0sec state directory", () => {
+  it("places the file inside the shared 0 state directory", () => {
     expect(credentialsFilePath("/home/someone")).toBe("/home/someone/.0/credentials.json");
   });
 

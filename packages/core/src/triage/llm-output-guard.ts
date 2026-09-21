@@ -9,7 +9,7 @@
  */
 
 import { mkdirSync, writeFileSync } from "node:fs";
-import { homeStateDir } from "@0/shared"
+import { homeStateDir } from "@0/shared";
 import { homedir } from "node:os";
 import { join } from "node:path";
 

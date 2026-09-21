@@ -1,5 +1,5 @@
-import wordmarkInkUrl from "../../../../assets/0sec-aperture-ink.svg";
-import wordmarkWhiteUrl from "../../../../assets/0sec-aperture-white.svg";
+import wordmarkInkUrl from "../../../../assets/0-aperture-ink.svg";
+import wordmarkWhiteUrl from "../../../../assets/0-aperture-white.svg";
 import { cn } from "@/lib/utils";
 
 export function BrandMark({

@@ -37,7 +37,7 @@ export interface AuthConfigHeader {
 
 export type AuthConfig = AuthConfigBearer | AuthConfigCookie | AuthConfigBasic | AuthConfigHeader;
 
-// ── Multi-identity access-control testing (0sec#564) ──
+// ── Multi-identity access-control testing (0#564) ──
 
 /**
  * Privilege tier of a named identity, used for vertical-privilege-escalation
@@ -50,7 +50,7 @@ export type IdentityRole = "admin" | "user" | "anonymous" | (string & {});
 
 /**
  * One named identity for broken-access-control testing (BOLA/IDOR/BFLA,
- * 0sec#564). Holds a human label, an optional privilege role, and the
+ * 0#564). Holds a human label, an optional privilege role, and the
  * credential the engine acts with when this identity is active. An identity
  * with no `auth` is treated as unauthenticated (anonymous) — exactly what you
  * want as the negative-control principal in an authz diff.
@@ -126,7 +126,7 @@ export interface ScanConfig {
   auth?: AuthConfig;
   /**
    * Named identities for multi-principal access-control testing (BOLA/IDOR/
-   * BFLA + horizontal/vertical privesc, 0sec#564). When ≥2 entries are
+   * BFLA + horizontal/vertical privesc, 0#564). When ≥2 entries are
    * present the engine can act as identity A, capture an authorized response,
    * replay the same request as identity B / unauthenticated, and diff
    * status + body to flag broken object-/function-level authorization.
@@ -150,7 +150,7 @@ export interface ScanConfig {
    */
   costCeilingUsd?: number;
   /**
-   * Path to a JSON scope file (0sec#215). Format: `{ "in_scope": [...],
+   * Path to a JSON scope file (0#215). Format: `{ "in_scope": [...],
    * "out_of_scope": [...] }` with rules of the form `host`, `*.domain`,
    * or `cidr/prefix`. When set, every URL the agent touches is checked
    * against this policy and out-of-scope URLs return as
@@ -169,7 +169,7 @@ export interface ScanConfig {
    */
   rateLimit?: string;
   /**
-   * Generic-scanner-traffic suppression opt-out (0sec#217). Default
+   * Generic-scanner-traffic suppression opt-out (0#217). Default
    * `false`. When scope is loaded the agent refuses to spawn `sqlmap`,
    * `nikto`, `gobuster`, `dirb`, `wfuzz`, `ffuf`, and `nmap -sV` /
    * `nmap -A`. Setting this to `true` disables that gate (use only
@@ -178,21 +178,21 @@ export interface ScanConfig {
    */
   allowScanners?: boolean;
   /**
-   * Attribution headers from CLI (0sec#216). Each entry is `NAME=VALUE`.
+   * Attribution headers from CLI (0#216). Each entry is `NAME=VALUE`.
    * Lower precedence than env vars and the scope file's `attribution`
    * block. Headers are injected ONLY on in-scope outbound traffic so
    * attribution doesn't leak to non-engagement targets.
    */
   attributionHeaders?: string[];
   /**
-   * Attribution User-Agent token from CLI (0sec#216). When set (and not
+   * Attribution User-Agent token from CLI (0#216). When set (and not
    * overridden by env/scope file), the agent's User-Agent on in-scope
-   * traffic becomes `0sec/<ver> (engagement: <token>)`.
+   * traffic becomes `0/<ver> (engagement: <token>)`.
    */
   attributionUaToken?: string;
   /**
    * Tool-call dispatch protocol for the legacy text-based agent loop
-   * (0sec#232). `"json"` (default) keeps the `TOOL_CALL: <name> {...}`
+   * (0#232). `"json"` (default) keeps the `TOOL_CALL: <name> {...}`
    * format. `"xml"` switches to the `<command>` / `<flag>` / `<finding>` /
    * `<note>` protocol from `agent/xml-dispatch.ts` — survives malformed-
    * JSON output from cheap OpenRouter / Gemini / DeepSeek models. `"auto"`
@@ -250,7 +250,7 @@ export type AttackCategory =
   | "output-manipulation"
   | "encoding-bypass"
   | "multi-turn"
-  // Source-code audit categories (0sec audit)
+  // Source-code audit categories (0 audit)
   | "prototype-pollution"
   | "path-traversal"
   | "command-injection"
@@ -382,7 +382,7 @@ export interface FindingRemediation {
  * model trains on it: given the layerVerdicts a finding accumulates, can a
  * cheaper subset of layers reach the same final verdict?
  *
- * See 0sec#112 for the design and 0sec#113 for the dynamic-routing
+ * See 0#112 for the design and 0#113 for the dynamic-routing
  * model that consumes this telemetry.
  */
 export type TriageLayerName =
@@ -569,13 +569,13 @@ export interface Finding {
   workflowStatus?: FindingWorkflowStatus;
   workflowAssignee?: string | null;
   /**
-   * ISO-8601 timestamp of the last workflow-state transition (0sec#414).
+   * ISO-8601 timestamp of the last workflow-state transition (0#414).
    * Optional and additive — set by the DB writer on every save and threaded
    * back through the restore mapper so resume paths preserve audit ordering.
    */
   workflowUpdatedAt?: string | null;
   /**
-   * CVSS-like 0–100 score, populated during the "scored" stage (0sec#414).
+   * CVSS-like 0–100 score, populated during the "scored" stage (0#414).
    * Optional and additive. The shared `Finding` keeps it loosely typed
    * (numeric only) so it can be threaded through the persistence round-trip
    * without coupling shared to the scoring engine.
@@ -605,7 +605,7 @@ export interface Finding {
     knownMarker?: boolean;
   };
   /**
-   * Ordered proof-of-concept step graph (0sec#170). Optional and additive —
+   * Ordered proof-of-concept step graph (0#170). Optional and additive —
    * findings produced before this field existed leave it undefined, and every
    * renderer/exporter/sink must continue to work in that case. When populated,
    * downstream consumers (screenshot renderer, behavioural re-verify, advisory
@@ -613,14 +613,14 @@ export interface Finding {
    */
   pocSteps?: PocStep[];
   /**
-   * Machine-executable verification contract (0sec#193 / 0sec-cloud#111).
+   * Machine-executable verification contract (0#193 / 0-cloud#111).
    * Optional and additive. When populated, cloud's canary watcher (and any
    * OSS caller) can re-evaluate whether the finding is still real against
    * a fresh checkout of the target repo. See {@link VerificationSpec}.
    */
   verificationSpec?: VerificationSpec;
   /**
-   * Prior PoC execution report (0sec#171 / 0sec#414). Optional and
+   * Prior PoC execution report (0#171 / 0#414). Optional and
    * additive. Typed as `unknown` here because the concrete
    * `PocExecutionReport` shape lives in `@0/core/disclose` and shared
    * must not import from core. Consumers that need the full shape
@@ -629,7 +629,7 @@ export interface Finding {
   pocExecution?: unknown;
   /**
    * Last deterministic-replay verification result attached to this finding
-   * (0sec#193). Optional and additive — populated by the replay runner
+   * (0#193). Optional and additive — populated by the replay runner
    * (or by cloud after re-running the verifier) and consumed by the
    * disclosure / promotion gates. The shape is validated by
    * `VerificationResultSchema` in this same module; we type it as the
@@ -976,11 +976,11 @@ export interface Evidence {
   analysis?: string;
 }
 
-// ── PoC Step Graph (0sec#170) ──────────────────────────────────────────────
+// ── PoC Step Graph (0#170) ──────────────────────────────────────────────
 //
 // Today, `Finding.evidence` is three free-text strings. Everything downstream
 // that wants to *act* on the PoC — multi-frame screenshot rendering, behavioural
-// re-verification (0sec#171), advisory rendering, machine-checkable
+// re-verification (0#171), advisory rendering, machine-checkable
 // verification specs — has to re-parse that prose.
 //
 // `pocSteps` formalises the proof-of-concept as an ordered list of named
@@ -1057,7 +1057,7 @@ export interface PocStep {
   expect?: PocStepExpect;
 }
 
-// ── Verification Spec (0sec#193 / 0sec-cloud#111) ───────────────────────
+// ── Verification Spec (0#193 / 0-cloud#111) ───────────────────────
 //
 // A `VerificationSpec` is a *machine-executable* contract attached to a
 // finding. It answers a single question: "is this finding still real?".
@@ -1123,7 +1123,7 @@ export type VerificationCodePredicate =
  * - `{ status: number }` — exact status code match.
  *
  * The runtime executor that consumes this is OUT OF SCOPE for the OSS
- * verifier in 0sec#193 — code predicates only. The shape is recorded
+ * verifier in 0#193 — code predicates only. The shape is recorded
  * here so cloud's canary watcher can dispatch it later.
  */
 export interface VerificationBehaviorStep {
@@ -1366,7 +1366,7 @@ export interface ReportSummary {
   info: number;
 }
 
-// ── Package Audit (0sec audit) ──
+// ── Package Audit (0 audit) ──
 
 export interface AuditConfig {
   package: string;
@@ -1480,7 +1480,7 @@ export interface AuditReport {
   sourceProvenance?: SourceProvenance;
 }
 
-// ── Source Code Review (0sec review) ──
+// ── Source Code Review (0 review) ──
 
 /**
  * Review profile selects the prompt + harness strategy.
@@ -1491,7 +1491,7 @@ export interface AuditReport {
  * - `linux-kernel`: Linux kernel source review — syscall/ioctl/netlink
  *   surface, copy_from_user discipline, refcount races, skb cow/share
  *   violations (Dirty Frag class), TOCTOU on inode fields. Static-only;
- *   verification phase is 0sec#271 (kernel oracle) and 0sec#272
+ *   verification phase is 0#271 (kernel oracle) and 0#272
  *   (syzkaller harness scaffold).
  * - `cardano-onchain`: Cardano on-chain smart-contract review (Aiken /
  *   Plutus / Plutarch). EUTXO validator *logic* bugs — double satisfaction,
@@ -1696,7 +1696,7 @@ export interface CrossValidatedLead {
 
 /**
  * Structured view of the ranked/deduped foxguard leads that also feed the review
- * prompt (0sec FoxGuard cross-validation, Phase 2). Additive: the prompt
+ * prompt (0 FoxGuard cross-validation, Phase 2). Additive: the prompt
  * injection is unchanged; this surfaces the SAME leads as typed data. Populated
  * (possibly empty) on the linux-kernel review path; empty for other profiles.
  */
@@ -1721,7 +1721,7 @@ export interface ReviewReport {
   researchFailed?: boolean;
   /**
    * Ranked/deduped cross-validated foxguard leads surfaced as structured data,
-   * in ADDITION to the review-prompt injection (0sec FoxGuard cross-validation,
+   * in ADDITION to the review-prompt injection (0 FoxGuard cross-validation,
    * Phase 2). Present (possibly empty) on the linux-kernel review path so
    * downstream consumers can read the leads instead of parsing prompt text.
    */

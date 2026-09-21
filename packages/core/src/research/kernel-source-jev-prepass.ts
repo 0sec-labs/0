@@ -1,6 +1,6 @@
 import { readFileSync, readdirSync, realpathSync, statSync } from "node:fs";
 import { isAbsolute, relative, resolve, sep } from "node:path";
-import type { JevAnswer, JevEvaluator, JevUsage } from "@0/shared"
+import type { JevAnswer, JevEvaluator, JevUsage } from "@0/shared";
 
 const MAX_SOURCE_CHARS = 12_000;
 /** Eight keeps a 786-function Tier-1 sweep within Jev's default 100-request budget. */

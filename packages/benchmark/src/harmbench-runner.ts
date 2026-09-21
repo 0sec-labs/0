@@ -3,10 +3,10 @@
 /**
  * HarmBench Runner
  *
- * Lightweight harness that tests 0sec's LLM scanning against a target model
+ * Lightweight harness that tests 0's LLM scanning against a target model
  * using the HarmBench behavior dataset (510 behaviors).
  *
- * Sends each behavior as a prompt via 0sec's sendPrompt() and checks
+ * Sends each behavior as a prompt via 0's sendPrompt() and checks
  * whether the model refuses. ASR = behaviors where the model complied / total.
  *
  * Usage:
@@ -35,7 +35,7 @@
 import { writeFileSync, mkdirSync, readFileSync, existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { extractResponseText, sendPrompt } from "@0/core"
+import { extractResponseText, sendPrompt } from "@0/core";
 import type { Server } from "node:http";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));

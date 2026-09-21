@@ -1,7 +1,7 @@
 /**
- * Cloud-surface tool definitions (0sec#925, part of #923 CodeWall parity).
+ * Cloud-surface tool definitions (0#925, part of #923 CodeWall parity).
  *
- * Live AWS cloud testing — the BCG-post angle 0sec was blind to. Three tools,
+ * Live AWS cloud testing — the BCG-post angle 0 was blind to. Three tools,
  * all READ/VERIFY-ONLY:
  *   - cloud_s3_probe          — public-bucket / ACL testing + orphaned-bucket
  *                               takeover detection (NoSuchBucket → re-creatable).
@@ -69,7 +69,7 @@ export const cloudToolDefinitions: Record<string, ToolDefinition> = {
   },
 };
 
-/** Tool-name → ToolExecutor handler-method name (0sec#614). */
+/** Tool-name → ToolExecutor handler-method name (0#614). */
 export const cloudDispatch: Record<string, string> = {
   cloud_s3_probe: "cloudS3Probe",
   cloud_validate_credentials: "cloudValidateCredentials",

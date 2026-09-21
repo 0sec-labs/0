@@ -54,7 +54,7 @@ it("removes the mascot and its space when native graphics would fall back to blo
   const root = createRoot(setup.renderer);
   root.render(React.createElement("box", { flexDirection: "column" }, React.createElement(Masthead, {
     showTerminalMark: true, showTagline: true, contentWidth: 130,
-    logoFrameGrid: finalLogoFrame(TERMINAL_BLOCK_LOGO), theme: getTheme("0sec"),
+    logoFrameGrid: finalLogoFrame(TERMINAL_BLOCK_LOGO), theme: getTheme("0"),
   })));
   async function logoRow() {
     await delay(0);

@@ -1,10 +1,10 @@
 {
-"name": "0",
+  "name": "@0/cli",
   "version": "0.21.0",
   "description": "0.security CLI — the self-improving, open-source cybersecurity harness for agent-driven security research and verification.",
   "type": "module",
   "bin": {
-"0": "dist/index.js"
+    "0": "dist/index.js"
   },
   "files": [
     "dist"
@@ -21,13 +21,13 @@
     "@modelcontextprotocol/sdk": "^1.30.0",
     "@opentui/core": "0.5.4",
     "@opentui/react": "0.5.4",
-"@0/benchmark": "workspace:*",
-"@0/core": "workspace:*",
-"@0/llm-redteam": "workspace:*",
-"@0/db": "workspace:*",
-"@0/shared": "workspace:*",
-"@0/templates": "workspace:*",
-"@0/test-targets": "workspace:*",
+    "@0/benchmark": "workspace:*",
+    "@0/core": "workspace:*",
+    "@0/llm-redteam": "workspace:*",
+    "@0/db": "workspace:*",
+    "@0/shared": "workspace:*",
+    "@0/templates": "workspace:*",
+    "@0/test-targets": "workspace:*",
     "chalk": "^5.3.0",
     "commander": "^12.1.0",
     "pdfkit": "^0.15.2",

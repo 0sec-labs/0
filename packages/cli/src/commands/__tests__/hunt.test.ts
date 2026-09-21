@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { Finding } from "@0/shared"
+import type { Finding } from "@0/shared";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -210,7 +210,7 @@ describe("runHunt — novelty gate wiring", () => {
   let seedPath: string;
 
   beforeEach(() => {
-    tmpRoot = mkdtempSync(join(tmpdir(), "0sec-hunt-test-"));
+    tmpRoot = mkdtempSync(join(tmpdir(), "0-hunt-test-"));
     seedPath = join(tmpRoot, "seed.patch");
     writeFileSync(seedPath, "diff --git a/foo.c b/foo.c\n", "utf8");
 
@@ -421,8 +421,8 @@ describe("runHunt — novelty gate wiring", () => {
     const cleanup = vi.fn();
     prepareMock.mockResolvedValueOnce({
       targetType: "source-code",
-      resolvedTarget: "/tmp/0sec-review/repo",
-      repoPath: "/tmp/0sec-review/repo",
+      resolvedTarget: "/tmp/0-review/repo",
+      repoPath: "/tmp/0-review/repo",
       cleanup,
     });
 
@@ -439,7 +439,7 @@ describe("runHunt — novelty gate wiring", () => {
       expect.any(Function),
     );
     expect(generateVariantCandidatesMock).toHaveBeenCalledWith(expect.objectContaining({
-      sourceRoot: "/tmp/0sec-review/repo",
+      sourceRoot: "/tmp/0-review/repo",
     }));
     expect(cleanup).toHaveBeenCalledOnce();
   });
@@ -614,7 +614,7 @@ describe("runHunt — PROVE stage (--exploitability) dispatch", () => {
   let seedPath: string;
 
   beforeEach(() => {
-    tmpRoot = mkdtempSync(join(tmpdir(), "0sec-hunt-prove-"));
+    tmpRoot = mkdtempSync(join(tmpdir(), "0-hunt-prove-"));
     seedPath = join(tmpRoot, "seed.patch");
     writeFileSync(seedPath, "diff --git a/foo.c b/foo.c\n", "utf8");
 

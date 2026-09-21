@@ -1,7 +1,7 @@
 /**
- * Coverage seed for `0sec-cli`'s `db` command. This is the local SQLite
- * management surface — `0sec db reset` (destructive: deletes the local
- * DB + reseeds the verification workbench) and `0sec db repair` (backs
+ * Coverage seed for `@0/cli`'s `db` command. This is the local SQLite
+ * management surface — `0 db reset` (destructive: deletes the local
+ * DB + reseeds the verification workbench) and `0 db repair` (backs
  * up a malformed file and recreates a clean one). Both call into
  * `@0/db` (WASM SQLite per memory `project_db_wasm` — we never want
  * to touch a real DB from a unit test).
@@ -147,7 +147,7 @@ async function runCli(argv: string[]): Promise<unknown> {
   });
   registerDbCommand(program);
   try {
-    await program.parseAsync(["node", "0sec-cli", ...argv]);
+    await program.parseAsync(["node", "@0/cli", ...argv]);
     return null;
   } catch (err) {
     // The `db reset --seed bogus` path throws an Error from inside
@@ -171,10 +171,10 @@ beforeEach(() => {
   dbState.closed = false;
   dbState.scanIdCounter = 0;
 
-  resetOsecDatabaseMock.mockReset().mockReturnValue("/fake/0sec.db");
+  resetOsecDatabaseMock.mockReset().mockReturnValue("/fake/0.db");
   repairOsecDatabaseMock
     .mockReset()
-    .mockReturnValue({ path: "/fake/0sec.db" });
+    .mockReturnValue({ path: "/fake/0.db" });
 
   logSpy = vi.spyOn(console, "log").mockImplementation(() => undefined);
   errSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
@@ -255,13 +255,13 @@ describe("db reset — destructive happy path", () => {
       "db",
       "reset",
       "--db-path",
-      "/tmp/custom-0sec.db",
+      "/tmp/custom-0.db",
       "--seed",
       "empty",
     ]);
     expect(err).toBeNull();
-    expect(resetOsecDatabaseMock).toHaveBeenCalledWith("/tmp/custom-0sec.db");
-    expect(dbState.lastConstructorArg).toBe("/tmp/custom-0sec.db");
+    expect(resetOsecDatabaseMock).toHaveBeenCalledWith("/tmp/custom-0.db");
+    expect(dbState.lastConstructorArg).toBe("/tmp/custom-0.db");
   });
 
   it("closes the DB even if the seed helper throws (no leaked handle)", async () => {
@@ -294,7 +294,7 @@ describe("db reset — destructive happy path", () => {
 
 describe("db repair", () => {
   it("happy path: calls repairOsecDatabase and logs the resulting path", async () => {
-    repairOsecDatabaseMock.mockReturnValueOnce({ path: "/fake/0sec.db" });
+    repairOsecDatabaseMock.mockReturnValueOnce({ path: "/fake/0.db" });
     const err = await runCli(["db", "repair"]);
     expect(err).toBeNull();
     expect(repairOsecDatabaseMock).toHaveBeenCalledOnce();
@@ -302,21 +302,21 @@ describe("db repair", () => {
 
     const out = logSpy.mock.calls.map((c: unknown[]) => String(c[0])).join("\n");
     expect(out).toMatch(/db repair/);
-    expect(out).toMatch(/\/fake\/0sec\.db/);
+    expect(out).toMatch(/\/fake\/0\.db/);
     // No backupPath means no `backup:` line.
     expect(out).not.toMatch(/backup:/);
   });
 
   it("logs a `backup:` line when repair quarantined a corrupt file", async () => {
     repairOsecDatabaseMock.mockReturnValueOnce({
-      path: "/fake/0sec.db",
-      backupPath: "/fake/0sec.db.corrupt-2026-05-13",
+      path: "/fake/0.db",
+      backupPath: "/fake/0.db.corrupt-2026-05-13",
     });
     const err = await runCli(["db", "repair"]);
     expect(err).toBeNull();
 
     const out = logSpy.mock.calls.map((c: unknown[]) => String(c[0])).join("\n");
-    expect(out).toMatch(/backup: \/fake\/0sec\.db\.corrupt-2026-05-13/);
+    expect(out).toMatch(/backup: \/fake\/0\.db\.corrupt-2026-05-13/);
   });
 
   it("--db-path is threaded through to repairOsecDatabase", async () => {
@@ -324,10 +324,10 @@ describe("db repair", () => {
       "db",
       "repair",
       "--db-path",
-      "/tmp/custom-0sec.db",
+      "/tmp/custom-0.db",
     ]);
     expect(err).toBeNull();
-    expect(repairOsecDatabaseMock).toHaveBeenCalledWith("/tmp/custom-0sec.db");
+    expect(repairOsecDatabaseMock).toHaveBeenCalledWith("/tmp/custom-0.db");
   });
 
   it("does NOT open a osecDB handle from the CLI layer (repair owns the open/close)", async () => {

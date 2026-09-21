@@ -1,5 +1,5 @@
 /**
- * 0sec#416 — verify-resume cluster fixes.
+ * 0#416 — verify-resume cluster fixes.
  *
  * Three sibling bugs in the verify phase of `unified-pipeline.ts`:
  *
@@ -34,8 +34,8 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import { copyFileSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { Finding } from "@0/shared"
-import { osecDB } from "@0/db"
+import type { Finding } from "@0/shared";
+import { osecDB } from "@0/db";
 
 type PipelineEvent = {
   type: string;
@@ -125,7 +125,7 @@ let schemaDirectory: string;
 let schemaPath: string;
 
 beforeAll(() => {
-  schemaDirectory = mkdtempSync(join(tmpdir(), "0sec-verify-resume-schema-"));
+  schemaDirectory = mkdtempSync(join(tmpdir(), "0-verify-resume-schema-"));
   schemaPath = join(schemaDirectory, "empty.db");
   const db = new osecDB(schemaPath);
   db.close();
@@ -136,13 +136,13 @@ afterAll(() => {
 });
 
 function freshTmpDir(prefix: string): string {
-  const dir = mkdtempSync(join(tmpdir(), `0sec-verify-resume-${prefix}-`));
+  const dir = mkdtempSync(join(tmpdir(), `0-verify-resume-${prefix}-`));
   tempDirs.push(dir);
   return dir;
 }
 
 function freshDbPath(): string {
-  const dbPath = join(freshTmpDir("db"), "0sec.db");
+  const dbPath = join(freshTmpDir("db"), "0.db");
   // Reuse only the empty schema; verdicts still cross real file close/reopens.
   copyFileSync(schemaPath, dbPath);
   return dbPath;

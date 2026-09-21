@@ -126,10 +126,10 @@ function makeLedger(): BenchmarkLedger {
 
 describe("renderScoreboard — markdown", () => {
   const ledger = makeLedger();
-  const { markdown } = renderScoreboard(ledger, { title: "0sec public benchmark" });
+  const { markdown } = renderScoreboard(ledger, { title: "0 public benchmark" });
 
   it("renders the title and champion", () => {
-    expect(markdown).toContain("# 0sec public benchmark");
+    expect(markdown).toContain("# 0 public benchmark");
     expect(markdown).toContain("## Champion: `champion-b`");
     expect(markdown).toContain("`run-004`");
     expect(markdown).toContain("`corpus-v1`");

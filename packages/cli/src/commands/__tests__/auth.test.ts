@@ -1,5 +1,5 @@
 /**
- * `0sec auth` CLI smoke tests. Pattern-matches h1.test.ts: we drive
+ * `0 auth` CLI smoke tests. Pattern-matches h1.test.ts: we drive
  * the action functions directly (exported from auth.ts) so we can pass
  * test seams for fetch / sleep / homeDir / openBrowser without having to
  * thread them through Commander. The argv → exit code shape is covered
@@ -25,7 +25,7 @@ interface CapturedIO {
 }
 
 function freshHome(): string {
-  return mkdtempSync(join(tmpdir(), "0sec-cloud-cli-"));
+  return mkdtempSync(join(tmpdir(), "0-cloud-cli-"));
 }
 
 function seedHomeWithCreds(home: string, host: string = HOST, token: string = SECRET): string {
@@ -66,7 +66,7 @@ function captureIO(): CapturedIO & { restore: () => void } {
   };
 }
 
-describe("0sec auth login", () => {
+describe("0 auth login", () => {
   let home: string;
   let originalEnvHost: string | undefined;
   let originalEnvTok: string | undefined;
@@ -232,7 +232,7 @@ describe("development Cloud authentication", () => {
   });
 });
 
-describe("0sec auth logout", () => {
+describe("0 auth logout", () => {
   let home: string;
   let io: ReturnType<typeof captureIO>;
 
@@ -261,7 +261,7 @@ describe("0sec auth logout", () => {
   });
 });
 
-describe("0sec auth status", () => {
+describe("0 auth status", () => {
   let home: string;
   let originalHome: string | undefined;
   let originalEnvHost: string | undefined;
@@ -307,7 +307,7 @@ describe("0sec auth status", () => {
     // No cloud.env in this home.
     await runStatus({});
     expect(process.exitCode).toBe(2);
-    expect(io.stderr.join("\n")).toMatch(/0sec auth login/);
+    expect(io.stderr.join("\n")).toMatch(/0 auth login/);
   });
 
   it("exit 2 on 401, stderr does NOT contain token", async () => {
@@ -334,7 +334,7 @@ describe("0sec auth status", () => {
   });
 });
 
-describe("0sec auth — command registration", () => {
+describe("0 auth — command registration", () => {
   it("registers login / logout / status under `auth`", () => {
     const program = new Command();
     program.exitOverride();

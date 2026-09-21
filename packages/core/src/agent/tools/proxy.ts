@@ -131,7 +131,7 @@ export const proxyToolDefinitions: Record<string, ToolDefinition> = {
 };
 
 /**
- * Tool-name → ToolExecutor handler-method name (0sec#614). Assembled by
+ * Tool-name → ToolExecutor handler-method name (0#614). Assembled by
  * ./dispatch.ts; resolved off the executor instance in agent/tools.ts. The
  * handler is a thin delegate that calls {@link executeProxy} (mirrors
  * `startScan → executeStartScan`), holding the cross-turn {@link ProxyHost}.

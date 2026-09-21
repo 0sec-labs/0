@@ -1,7 +1,7 @@
 /** @jsxImportSource @opentui/react */
 import React from "react";
 import { TextAttributes } from "@opentui/core";
-import { MODEL_PRICING, type ModelRates } from "@0/shared"
+import { MODEL_PRICING, type ModelRates } from "@0/shared";
 import { fitTuiText, sanitizeTuiText } from "../text.js";
 import { ShimmerText } from "./shimmer.js";
 import { renderMarkdown } from "../markdown.js";
@@ -61,7 +61,7 @@ function normalizeReasoning(text: string): string {
 /** Compact relative age, e.g. "12s" / "4m" / "2h". */
 function relativeAge(at: number | undefined, now: number): string {
   // Restored entries carry no timestamp; return empty so the caller can omit
-  // the separator entirely rather than rendering a dangling "0sec ·".
+  // the separator entirely rather than rendering a dangling "0 ·".
   if (!at) return "";
   const seconds = Math.max(0, Math.floor((now - at) / 1000));
   if (seconds < 60) return `${seconds}s`;
@@ -247,7 +247,7 @@ export function renderEntry(
       // card"); OpenCode's answer is a faint left bar + label, which demarcates a
       // turn without the weight. The SPINE TONE tells the two apart: the operator
       // turn takes the neutral ACCENT (it reads like the composer that produced
-      // it), the AI turn takes the BRAND purple (the "0sec" voice) and carries a
+      // it), the AI turn takes the BRAND purple (the "0" voice) and carries a
       // small brand label so the answer announces itself.
       const spine = isUser ? ACCENT : BRAND;
       // The AI turn's footer is quiet provenance only — the per-turn telemetry
@@ -258,7 +258,7 @@ export function renderEntry(
       // bar, so tagging every answer with "YOLO"/"Co-pilot" was redundant noise.
       return (
         <box key={entry.id} flexDirection="column" width={maxWidth} flexShrink={0} minWidth={0} marginTop={marginTop}>
-          {/* External label row: 0sec at upper-left, You at upper-right */}
+          {/* External label row: 0 at upper-left, You at upper-right */}
           {label ? (
             isUser ? (
               // Operator: "You" right-aligned at top edge
@@ -267,7 +267,7 @@ export function renderEntry(
                 <text height={1} wrapMode="none" truncate fg={labelTone} attributes={TextAttributes.BOLD}>{fitTuiText(label, maxWidth)}</text>
               </box>
             ) : (
-              // Assistant: "0sec" left-aligned at top edge
+              // Assistant: "0" left-aligned at top edge
               <box flexDirection="row" minWidth={0}>
                 <text height={1} wrapMode="none" truncate fg={labelTone} attributes={TextAttributes.BOLD}>{fitTuiText(label, maxWidth)}</text>
                 <box flexGrow={1} />

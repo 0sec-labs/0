@@ -1,4 +1,4 @@
-// Generic web stack fingerprinting (0sec gap B).
+// Generic web stack fingerprinting (0 gap B).
 //
 // Pure-HTTP reconnaissance that, given a web target, identifies:
 //   1. The server-side / meta framework (Next.js, Nuxt, Remix, SvelteKit, …)

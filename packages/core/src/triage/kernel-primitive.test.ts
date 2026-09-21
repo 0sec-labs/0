@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { CrashReport } from "@0/shared"
+import type { CrashReport } from "@0/shared";
 import {
   classifyKernelPrimitive,
   classifyPrimitiveFromDmesg,

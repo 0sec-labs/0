@@ -13,8 +13,8 @@ import type {
   ResearchTarget,
   TargetResearchAdapter,
 } from "./target-research-adapter.js";
-import type { ResearchEvidenceEnvelope } from "@0/shared"
-import type { Finding } from "@0/shared"
+import type { ResearchEvidenceEnvelope } from "@0/shared";
+import type { Finding } from "@0/shared";
 import { checkResearchNovelty, type ResearchNoveltyProvider } from "./novelty-provider.js";
 
 export interface RunResearchOptions<T = unknown> {

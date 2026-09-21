@@ -8,10 +8,10 @@ const OLD = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 const HEAD = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
 
 function makeRepo(): { repoRoot: string; bundlePath: string } {
-  const repoRoot = mkdtempSync(join(tmpdir(), "0sec-freshness-"));
+  const repoRoot = mkdtempSync(join(tmpdir(), "0-freshness-"));
   mkdirSync(join(repoRoot, ".git"));
   mkdirSync(join(repoRoot, "dist"));
-  const bundlePath = join(repoRoot, "dist", "0sec.js");
+  const bundlePath = join(repoRoot, "dist", "0.js");
   writeFileSync(bundlePath, "#!/usr/bin/env node\n");
   return { repoRoot: realpathSync(repoRoot), bundlePath: realpathSync(bundlePath) };
 }
@@ -31,7 +31,7 @@ describe("source dist freshness guard", () => {
 
     expect(result.checked).toBe(true);
     expect(result.stale).toBe(true);
-    expect(result.message).toContain("dist/0sec.js was built from aaaaaaaaaaaa");
+    expect(result.message).toContain("dist/0.js was built from aaaaaaaaaaaa");
     expect(result.message).toContain("checkout HEAD is bbbbbbbbbbbb");
     expect(result.message).toContain("pnpm run build");
   });
@@ -61,7 +61,7 @@ describe("source dist freshness guard", () => {
     });
     expect(bypassed.reason).toBe("bypassed");
 
-    const otherBundlePath = join(dirname(bundlePath), "not-0sec.js");
+    const otherBundlePath = join(dirname(bundlePath), "not-0.js");
     writeFileSync(otherBundlePath, "#!/usr/bin/env node\n");
     const nonRootDist = checkSourceDistFreshness({
       entryPath: otherBundlePath,

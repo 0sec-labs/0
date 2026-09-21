@@ -69,10 +69,10 @@ const BASE_SETTINGS: Record<string, unknown> = {
 export function withDeterministicEnv(
   overrides: Record<string, unknown> = {},
 ): DeterministicEnv {
-  const homeDir = mkdtempSync(join(tmpdir(), "0sec-tui-"));
+  const homeDir = mkdtempSync(join(tmpdir(), "0-tui-"));
   const stateDir = join(homeDir, ".0");
   mkdirSync(stateDir, { recursive: true });
-  const dbPath = join(homeDir, "0sec.db");
+  const dbPath = join(homeDir, "0.db");
 
   const settings = { ...BASE_SETTINGS, ...overrides };
   writeFileSync(

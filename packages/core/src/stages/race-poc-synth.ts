@@ -71,7 +71,7 @@ export function renderRaceHarness(req: RacePocRequest): string {
   return `${includes.join("\n")}
 
 /*
- * Auto-generated race-PoC scaffold (0sec invariant-checker, issue #1113).
+ * Auto-generated race-PoC scaffold (0 invariant-checker, issue #1113).
  *
  * Invariant under test : ${cComment(c.invariant)}
  * Racing syscall pair  : A=${cComment(c.racingSyscallPair.A)}  B=${cComment(c.racingSyscallPair.B)}

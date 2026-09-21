@@ -2,7 +2,7 @@
  * Userspace / Rust memory-safety scan stage ("Monty-mode" integration spine).
  *
  * This is the focused module the integration spine in
- * `docs/0sec-rust-memsafety-pipeline.md` calls for: it chains the three
+ * `docs/0-rust-memsafety-pipeline.md` calls for: it chains the three
  * tracks that already exist in `@0/core` into a single, side-effect-light
  * flow, *without* growing the `agentic-scanner.ts` god-module.
  *
@@ -30,9 +30,11 @@
  */
 
 import { randomUUID } from "node:crypto";
-import type { AttackCategory,
-Finding,
-Severity, } from "@0/shared"
+import type {
+  AttackCategory,
+  Finding,
+  Severity,
+} from "@0/shared";
 import { buildPlaybookInjection } from "../agent/playbooks.js";
 import {
   runUserspaceFuzzLoop,

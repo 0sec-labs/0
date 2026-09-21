@@ -72,7 +72,7 @@ if (typeof mod.loadSkillRegistry !== "function") {
 
 // Isolate the candidate in a temp dir so the loader validates ONLY it and we
 // don't collide with real skill IDs (duplicate-id check would false-fail).
-const staging = mkdtempSync(join(tmpdir(), "0sec-skill-check-"));
+const staging = mkdtempSync(join(tmpdir(), "0-skill-check-"));
 try {
   copyFileSync(yamlPath, join(staging, basename(yamlPath)));
   mod.clearSkillRegistry?.();

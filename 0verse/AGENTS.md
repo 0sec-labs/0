@@ -7,7 +7,7 @@
 >
 > The parent monorepo has its own `AGENTS.md` covering company-wide rules
 > (claim gates, disclosure embargo, branch norms). Read that too when a
-> change crosses into `0sec-labs/0sec`.
+> change crosses into `0sec-labs/0`.
 
 ## The one thing to internalise first
 

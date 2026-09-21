@@ -1,10 +1,10 @@
-// `0sec login`, `0sec models`, `0sec balance` — 0.security Cloud hosted
+// `0 login`, `0 models`, `0 balance` — 0.security Cloud hosted
 // inference CLI commands.
 //
 // Subcommands:
-//   - login        alias for `0sec auth login` (opens browser/polls)
+//   - login        alias for `0 auth login` (opens browser/polls)
 //   - models       list available hosted inference models
-//   - balance      show included usage and prepaid API balance
+//   - balance      show credit account balance
 //
 // All use CloudClient from @0/core, which reads scoped creds from
 // env or ~/.0/cloud.env. 401 → clear auth error, not silent fallback.
@@ -15,13 +15,15 @@
 import type { Command } from "commander";
 import chalk from "chalk";
 import { consolePresentationOutput } from "../presentation/process-output.js";
-import { loadCloudCredentials,
-CloudAuthMissingError,
-CloudClient,
-CloudUnauthorizedError,
-CloudForbiddenError,
-CloudNetworkError,
-CloudError, } from "@0/core"
+import {
+  loadCloudCredentials,
+  CloudAuthMissingError,
+  CloudClient,
+  CloudUnauthorizedError,
+  CloudForbiddenError,
+  CloudNetworkError,
+  CloudError,
+} from "@0/core";
 import { runLogin } from "./auth.js";
 import { formatBalanceDetail } from "../tui/hosted-balance.js";
 
@@ -31,7 +33,7 @@ const EXIT_AUTH = 2;
 const EXIT_NET = 3;
 
 export function registerHostedCommand(program: Command): void {
-  // ── 0sec login (alias for 0sec auth login) ──
+  // ── 0 login (alias for 0 auth login) ──
   program
     .command("login")
     .description("Sign in to 0.security Cloud (optional for your own provider)")
@@ -41,7 +43,7 @@ export function registerHostedCommand(program: Command): void {
       await runLogin(opts);
     });
 
-  // ── 0sec models ──
+  // ── 0 models ──
   program
     .command("models")
     .description("List 0.security Cloud models and capabilities")
@@ -50,37 +52,13 @@ export function registerHostedCommand(program: Command): void {
       await runModels(opts);
     });
 
-  // ── 0sec balance ──
+  // ── 0 balance ──
   program
     .command("balance")
-    .description("Show included usage and prepaid API balance")
-    .option("--json", "Output the validated usage account as JSON")
+    .description("Show 0.security Cloud credit account balance")
+    .option("--json", "Output the validated credit account as JSON")
     .action(async (opts: { json?: boolean }) => {
       await runBalance(opts);
-    });
-
-  program
-    .command("prepaid")
-    .description("Enable or disable prepaid API fallback (organization owner only)")
-    .argument("<setting>", "on or off")
-    .action(async (setting: string) => {
-      if (setting !== "on" && setting !== "off") {
-        consolePresentationOutput.stderr("Use: 0 prepaid on|off", "hosted.prepaid-invalid");
-        process.exitCode = EXIT_USER_ERROR;
-        return;
-      }
-      let client: CloudClient;
-      try { client = await loadClient(); } catch { return; }
-      try {
-        const result = await client.patchInferenceAccountPrepaid(setting === "on");
-        consolePresentationOutput.stdout(
-          `Prepaid API fallback ${result.enabled ? "on" : "off"}.`,
-          "hosted.prepaid",
-        );
-        process.exitCode = EXIT_OK;
-      } catch (err) {
-        handleApiError(err);
-      }
     });
 }
 

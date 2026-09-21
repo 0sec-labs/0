@@ -1,5 +1,5 @@
 import type { Command } from "commander";
-import type { ScanDepth, OutputFormat, RuntimeMode } from "@0/shared"
+import type { ScanDepth, OutputFormat, RuntimeMode } from "@0/shared";
 import { runUnified } from "./run.js";
 
 const SUPPORTED_AUDIT_ECOSYSTEMS = new Set(["npm", "pypi", "cargo", "oci"]);
@@ -30,7 +30,7 @@ export function registerAuditCommand(program: Command): void {
     .option("-m, --model <model>", "LLM model to use")
     .option("--cost-ceiling <usd>", "Hard per-audit USD cost ceiling. Aborts cleanly with partial findings if exceeded.")
     .option("--tui", "Open the local terminal UI after the audit completes", false)
-    .option("--resume <run-id>", "Resume a previous run from its journal on disk (0sec#374)")
+    .option("--resume <run-id>", "Resume a previous run from its journal on disk (0#374)")
     .option("--branch-from <entry-index>", "Branch the journal at the given entry index before resuming (requires --resume).")
     .option("--verbose", "Show detailed output", false)
     .option("--timeout <ms>", "AI agent timeout in milliseconds", "600000")

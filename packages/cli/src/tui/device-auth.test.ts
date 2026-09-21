@@ -21,7 +21,7 @@ import { providerSupportsMethod } from "./provider-status.js";
 const directories: string[] = [];
 
 function temporaryHome(): string {
-  const home = mkdtempSync(join(tmpdir(), "0sec-device-auth-"));
+  const home = mkdtempSync(join(tmpdir(), "0-device-auth-"));
   directories.push(home);
   return home;
 }

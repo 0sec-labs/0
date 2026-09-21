@@ -12,7 +12,7 @@ let manager: ExecutablePluginManager;
 let records: Record<string, unknown>[];
 
 beforeEach(() => {
-  root = mkdtempSync(join(tmpdir(), "0sec-submitted-code-"));
+  root = mkdtempSync(join(tmpdir(), "0-submitted-code-"));
   records = [];
   analyticsPipeline.__resetForTests();
   for (const name of ["ZERO_OFFLINE", "ZERO_NO_TELEMETRY", "DO_NOT_TRACK"]) {

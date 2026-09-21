@@ -24,10 +24,12 @@ import {
 } from "lucide-react";
 import * as Dialog from "@radix-ui/react-dialog";
 import { Command } from "cmdk";
-import { DEFAULT_AUTONOMY_MODE,
-type DesktopConsoleAutonomyMode,
-type DesktopConsoleRole,
-type DesktopConsoleSession, } from "@0/shared"
+import {
+  DEFAULT_AUTONOMY_MODE,
+  type DesktopConsoleAutonomyMode,
+  type DesktopConsoleRole,
+  type DesktopConsoleSession,
+} from "@0/shared";
 import { useWorkspace, type Workspace } from "./use-workspace";
 import { useStoredState } from "./use-stored-state";
 import { Conversation, Inspector } from "./conversation";
@@ -69,12 +71,12 @@ const projectName = (target: string) =>
 
 export function DesktopApp() {
   const ws = useWorkspace();
-  const [theme, setTheme] = useStoredState<ThemeMode>("0sec:theme", "system");
-  const [tabs, setTabs] = useStoredState<string[]>("0sec:tabs", [HOME]);
-  const [activeTab, setActiveTab] = useStoredState("0sec:active-tab", HOME);
-  const [sidebar, setSidebar] = useStoredState("0sec:sidebar", true);
+  const [theme, setTheme] = useStoredState<ThemeMode>("0:theme", "system");
+  const [tabs, setTabs] = useStoredState<string[]>("0:tabs", [HOME]);
+  const [activeTab, setActiveTab] = useStoredState("0:active-tab", HOME);
+  const [sidebar, setSidebar] = useStoredState("0:sidebar", true);
   const [projects, setProjects] = useStoredState<Project[]>(
-    "0sec:projects",
+    "0:projects",
     [],
   );
   const [inspector, setInspector] = useState(false);
@@ -216,7 +218,7 @@ export function DesktopApp() {
 
   useEffect(
     () =>
-      window.osecDesktop?.onCommand((command: string) => {
+      window.osecDesktop?.onCommand((command) => {
         if (command === "new-thread") setNewTarget("");
         if (command === "open-folder") void openFolder();
         if (command === "toggle-sidebar") setSidebar((p) => !p);
@@ -1028,7 +1030,7 @@ function SettingsDialog({
             </div>
             <p className="form-hint">
               Other providers and model selection use the CLI configuration. Run{" "}
-              <code>0sec console</code> and use its provider controls. Quitting
+              <code>0 console</code> and use its provider controls. Quitting
               the desktop ends its live sidecar sessions; UI preferences are
               retained.
             </p>

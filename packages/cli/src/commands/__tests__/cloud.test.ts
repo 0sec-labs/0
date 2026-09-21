@@ -32,7 +32,7 @@ async function runCli(argv: string[]): Promise<void> {
   const program = new Command();
   program.exitOverride();
   registerCloudCommand(program);
-  await program.parseAsync(["node", "0sec-cli", ...argv]);
+  await program.parseAsync(["node", "@0/cli", ...argv]);
 }
 
 const ORIGINAL_FLAG = process.env["ZERO_FEATURE_CLOUD_SURFACE"];

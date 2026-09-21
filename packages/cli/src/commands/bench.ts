@@ -1,16 +1,16 @@
 /**
- * `0sec bench` — A/B variant tournament + CI regression gate over the
- * labeled corpus (0sec#656).
+ * `0 bench` — A/B variant tournament + CI regression gate over the
+ * labeled corpus (0#656).
  *
- * Lives in the 0sec CLI (not the remote `0cloud` HTTP client) because a
+ * Lives in the 0 CLI (not the remote `0cloud` HTTP client) because a
  * tournament runs the engine locally — it installs packages, runs audits, and
  * grades against the in-tree corpus. Two subcommands:
  *
- *   0sec bench run   — run N variants over the corpus, emit per-variant
+ *   0 bench run   — run N variants over the corpus, emit per-variant
  *                        scorecards + pairwise Wilson-95 deltas, append the
  *                        champion to a benchmark ledger, and (with --gate)
  *                        fail when the champion regressed vs the last green.
- *   0sec bench diff  — compare two recorded runs (by id) in a ledger.
+ *   0 bench diff  — compare two recorded runs (by id) in a ledger.
  */
 
 import { readFileSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
@@ -18,29 +18,31 @@ import { resolve, join } from "node:path";
 import { performance } from "node:perf_hooks";
 import type { Command } from "commander";
 import chalk from "chalk";
-import type { RuntimeMode, ScanDepth } from "@0/shared"
-import { createBenchIntegrationRegistry,
-createCoreBenchIntegration,
-createVariantExecutionFactory,
-loadManifest,
-subsetManifest,
-corpusV1Path,
-runTournament,
-formatTournamentSummary,
-compareScorecards,
-loadLedger,
-saveLedger,
-appendLedgerEntry,
-lastGreen,
-evaluateRegression,
-renderScoreboard,
-type BenchAttemptPolicy,
-type BenchIntegration,
-type BenchManifest,
-type BenchVariant,
-type LedgerEntry,
-type TournamentSchedule,
-type VariantExecutionFactory, } from "@0/core"
+import type { RuntimeMode, ScanDepth } from "@0/shared";
+import {
+  createBenchIntegrationRegistry,
+  createCoreBenchIntegration,
+  createVariantExecutionFactory,
+  loadManifest,
+  subsetManifest,
+  corpusV1Path,
+  runTournament,
+  formatTournamentSummary,
+  compareScorecards,
+  loadLedger,
+  saveLedger,
+  appendLedgerEntry,
+  lastGreen,
+  evaluateRegression,
+  renderScoreboard,
+  type BenchAttemptPolicy,
+  type BenchIntegration,
+  type BenchManifest,
+  type BenchVariant,
+  type LedgerEntry,
+  type TournamentSchedule,
+  type VariantExecutionFactory,
+} from "@0/core";
 import {
   createCyberGymBenchIntegration,
   createCyberGymManifest,
@@ -269,7 +271,7 @@ export function registerBenchCommand(program: Command): void {
 
       if (!isJson) {
         console.log("");
-        console.log(chalk.red.bold("  0sec bench — canonical tournament"));
+        console.log(chalk.red.bold("  0 bench — canonical tournament"));
         console.log(chalk.dim(`  integration: ${integrationId}`));
         console.log(chalk.dim(`  corpus:      ${manifest.id} (${manifest.cases.length} cases)`));
         console.log(chalk.dim(`  variants:    ${variants.map((v) => v.id).join(", ")}`));

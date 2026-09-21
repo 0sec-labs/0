@@ -3,7 +3,7 @@
  *
  * ## Why this module exists
  *
- * `finding.layerVerdicts` (0sec#112) is an append-only log that each triage
+ * `finding.layerVerdicts` (0#112) is an append-only log that each triage
  * layer writes to as it executes. It is the only per-finding record of what
  * the triage stack did. But until now it had **no reader outside the router's
  * own feature extractor** — nothing rendered it, nothing summarized it, and
@@ -62,7 +62,7 @@
  * A/B run becomes possible.
  */
 
-import type { Finding, LayerVerdict, TriageLayerName } from "@0/shared"
+import type { Finding, LayerVerdict, TriageLayerName } from "@0/shared";
 import { LAYER_REGISTRY, LAYER_REGISTRY_BY_ID } from "./router/layer-registry.js";
 
 /**

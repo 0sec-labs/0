@@ -12,7 +12,7 @@
  * shape is what the TUI wants to render as a live tree — each write is a
  * complete snapshot it can diff and repaint.
  *
- * Design deliberately mirrors `tool-health.ts` (0sec#tool-reliability): a tiny,
+ * Design deliberately mirrors `tool-health.ts` (0#tool-reliability): a tiny,
  * fail-soft, in-memory tracker created once per run, threaded through
  * `ToolContext`, that fans a snapshot out on the event bus on every change and
  * exposes a concise `summaryLine()` roll-up. Like the tool-health tracker it

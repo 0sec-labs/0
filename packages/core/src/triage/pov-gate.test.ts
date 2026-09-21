@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import type { AttackCategory, Finding } from "@0/shared"
+import type { AttackCategory, Finding } from "@0/shared";
 import type {
   NativeRuntime,
   NativeMessage,
@@ -416,7 +416,7 @@ describe("oracleForCategory", () => {
 });
 
 // ────────────────────────────────────────────────────────────────────
-// oastConfirmedPayload (0sec#659 / 0cloud#1278) — the always-on
+// oastConfirmedPayload (0#659 / 0cloud#1278) — the always-on
 // OAST-confirmation event decision, independent of the FP-moat pov_gate.
 // ────────────────────────────────────────────────────────────────────
 

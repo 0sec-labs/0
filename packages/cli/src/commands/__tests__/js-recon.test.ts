@@ -30,10 +30,10 @@ async function runCli(argv: string[]): Promise<void> {
   const program = new Command();
   program.exitOverride();
   registerJsReconCommand(program);
-  await program.parseAsync(["node", "0sec-cli", ...argv]);
+  await program.parseAsync(["node", "@0/cli", ...argv]);
 }
 
-describe("0sec js-recon", () => {
+describe("0 js-recon", () => {
   let io: ReturnType<typeof captureIO>;
   let dir: string;
   let scopePath: string;

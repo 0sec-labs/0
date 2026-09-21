@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { SourceFixResult, SourceFixStatus } from "@0/core"
+import type { SourceFixResult, SourceFixStatus } from "@0/core";
 
 import {
   describeFixStatus,
@@ -251,7 +251,7 @@ describe("fixResultLines", () => {
     expect(fixResultLines(result)).toEqual([
       "source src/extract.ts",
       "test command passed in 1200ms",
-      "patch produced, not applied — re-run `0sec fix --output` to write it out",
+      "patch produced, not applied — re-run `0 fix --output` to write it out",
       "rationale Normalise the member path before joining.",
       "attempt 1 rejected: patch touches src/other.ts",
     ]);

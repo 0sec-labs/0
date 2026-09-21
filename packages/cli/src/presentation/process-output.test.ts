@@ -25,13 +25,13 @@ describe("createProcessPresentationOutput", () => {
     expect(stderr).toEqual(["warning\n"]);
     expect(events).toEqual([
       expect.objectContaining({
-        protocol: "0sec.presentation/v1",
+        protocol: "0.presentation/v1",
         sequence: 1,
         eventType: "console.assistant.delta",
         payload: { channel: "stdout", text: "answer" },
       }),
       expect.objectContaining({
-        protocol: "0sec.presentation/v1",
+        protocol: "0.presentation/v1",
         sequence: 2,
         eventType: "console.notice",
         payload: { channel: "stderr", text: "warning\n" },

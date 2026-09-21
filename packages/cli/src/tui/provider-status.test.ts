@@ -230,7 +230,7 @@ describe("isProviderConfigured", () => {
 describe("cloudConfigured", () => {
   // A home with no ~/.0/cloud.env, so only the injected env can supply a
   // token — the real user's cloud.env can never leak into these assertions.
-  const emptyHome = mkdtempSync(join(tmpdir(), "0sec-cloud-test-"));
+  const emptyHome = mkdtempSync(join(tmpdir(), "0-cloud-test-"));
 
   it("is true when ZERO_CLOUD_TOKEN is set in env (host optional)", () => {
     expect(cloudConfigured({ "ZERO_CLOUD_TOKEN": "tok-123" }, emptyHome)).toBe(true);

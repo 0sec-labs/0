@@ -1,8 +1,8 @@
-// 0sec#179 — agent-side `pocSteps` emission from prose evidence.
+// 0#179 — agent-side `pocSteps` emission from prose evidence.
 //
 // Today the agent's `save_finding` tool writes three free-text strings
-// (`request`, `response`, `analysis`). Cloud and renderer code (0sec#170,
-// 0sec#171, 0sec-cloud#168) prefer the structured `Finding.pocSteps`
+// (`request`, `response`, `analysis`). Cloud and renderer code (0#170,
+// 0#171, 0-cloud#168) prefer the structured `Finding.pocSteps`
 // graph but the agent rarely supplies it. This module is a best-effort
 // fallback: parse the prose, extract a small step graph, and let the caller
 // attach it to the finding. If the heuristic isn't confident it returns
@@ -13,7 +13,7 @@
 // shell snippets, response status codes) and stitch them into a 2–5 step
 // graph. Anything we can't parse cleanly is skipped, never guessed.
 
-import type { PocStep, PocStepKind } from "@0/shared"
+import type { PocStep, PocStepKind } from "@0/shared";
 
 /**
  * Inputs are the three prose evidence fields the agent already produces. All

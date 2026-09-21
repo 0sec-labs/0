@@ -27,7 +27,7 @@ describe("Codex refresh-token rotation write-back", () => {
   ];
 
   beforeEach(() => {
-    dir = mkdtempSync(join(tmpdir(), "0sec-codex-auth-"));
+    dir = mkdtempSync(join(tmpdir(), "0-codex-auth-"));
     authPath = join(dir, "auth.json");
     for (const k of CODEX_ENV) delete process.env[k];
     __resetChatGptCodexAuthStateForTests();

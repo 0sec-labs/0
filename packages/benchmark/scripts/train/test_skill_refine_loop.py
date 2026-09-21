@@ -141,7 +141,7 @@ def test_selftest_entrypoint_passes():
 def test_promote_without_evolution_flags_returns_actionable_error(tmp_path):
     """--promote without --evolution-store / --evolution-version /
     --evolution-artifact must exit dry-run with actionable error
-    instructing the user to use the 0sec evolve workflow."""
+    instructing the user to use the 0 evolve workflow."""
     entries = [{"skill_id": "prototype-pollution", "decision": srl.DECISION_FLAGGED}]
     args = _make_basic_args(
         tmp_path,

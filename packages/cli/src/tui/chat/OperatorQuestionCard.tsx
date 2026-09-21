@@ -61,7 +61,7 @@ export function OperatorQuestionCard({
         <text fg={BRAND} attributes={TextAttributes.BOLD}>{fitTuiText("ASK", innerWidth)}</text>
       </box>
       <box width={innerWidth} flexShrink={0} minWidth={0}>
-        <text fg={BRAND} attributes={TextAttributes.BOLD}>{fitTuiText("0sec has a question for you", innerWidth)}</text>
+        <text fg={BRAND} attributes={TextAttributes.BOLD}>{fitTuiText("0 has a question for you", innerWidth)}</text>
       </box>
       <scrollbox
         ref={scrollRef}

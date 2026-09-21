@@ -1,5 +1,5 @@
 /**
- * Coverage seed for `0sec-cli`'s `run.ts` entry point. The two files
+ * Coverage seed for `@0/cli`'s `run.ts` entry point. The two files
  * (`run.ts` + `scan.ts`) are the on-ramp every CLI user hits, yet they
  * had zero tests prior to this seed.
  *
@@ -20,7 +20,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { ScanReport } from "@0/shared"
+import type { ScanReport } from "@0/shared";
 
 // ── Module-level mocks ──────────────────────────────────────────────────────
 //
@@ -292,7 +292,7 @@ describe("runUnified — runtime gating", () => {
   });
 
   it("skips the Codex CLI availability probe when only ZERO_CHATGPT_ACCESS_TOKEN is set (cloud sandbox path)", async () => {
-    // The 0sec-cloud worker forwards ZERO_CHATGPT_ACCESS_TOKEN to
+    // The 0-cloud worker forwards ZERO_CHATGPT_ACCESS_TOKEN to
     // sandboxes — NOT the refresh token — so the gate must accept the
     // access token alone, otherwise the CLI preflight tries to find a
     // Codex binary the sandbox image doesn't ship.
@@ -666,7 +666,7 @@ describe("runUnified — emitResultLine env gate", () => {
   });
 });
 
-describe("runUnified — cost summary (0sec#231)", () => {
+describe("runUnified — cost summary (0#231)", () => {
   let exitSpy: { mockRestore: () => void };
   let logSpy: ReturnType<typeof vi.spyOn>;
   let errSpy: ReturnType<typeof vi.spyOn>;
@@ -853,7 +853,7 @@ describe("runUnified — cross-validated leads (FoxGuard Phase 4)", () => {
   });
 });
 
-describe("runUnified — resume / branch (0sec#374)", () => {
+describe("runUnified — resume / branch (0#374)", () => {
   let exitSpy: { mockRestore: () => void };
   let errSpy: ReturnType<typeof vi.spyOn>;
   let logSpy: ReturnType<typeof vi.spyOn>;

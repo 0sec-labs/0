@@ -81,7 +81,7 @@ describe("buildRuleInjection", () => {
   it("renders a fenced, attributed block", () => {
     const out = buildRuleInjection([r({ id: "x", trigger: {}, rule: "do the thing" })]);
     expect(out).toContain('<rule id="x">do the thing</rule>');
-    expect(out).toContain("0sec rules");
+    expect(out).toContain("0 rules");
   });
 });
 

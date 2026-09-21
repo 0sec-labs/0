@@ -1,7 +1,7 @@
 """Seed-bug-classes for the #4 variant-analysis funnel — the binary-only kernel fold-in.
 
 Big Sleep's lesson (guidance §#4): seeding a *known* bug class and hunting its
-siblings is far higher signal than open-ended search. This module encodes 0sec
+siblings is far higher signal than open-ended search. This module encodes 0
 kernel reverse-engineering knowledge as a **reusable 0verse asset** — declarative
 ``SeedBugClass`` records — instead of leaving it as tribal knowledge or a comment.
 Pointing 0verse at a binary-only kernel artifact primes the matching hypotheses

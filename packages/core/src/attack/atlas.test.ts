@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import type { AttackCategory } from "@0/shared"
+import type { AttackCategory } from "@0/shared";
 import { atlasTechniquesForCategory, atlasTechniquesForEvent } from "./index.js";
 import type { AtlasTechnique } from "./index.js";
 
@@ -231,8 +231,8 @@ describe("atlasTechniquesForEvent", () => {
   });
 
   // The opposite of ./mitre.ts, deliberately: ATT&CK falls back to a generic
-  // active-scanning tag because every 0sec action is active scanning. ATLAS
-  // must not, because not every 0sec action touches an AI system.
+  // active-scanning tag because every 0 action is active scanning. ATLAS
+  // must not, because not every 0 action touches an AI system.
   it("does not fall back to a generic tag for non-AI or unknown tools", () => {
     for (const tool of ["http_request", "run_nmap", "bash", "cloud_s3_probe", "no_such_tool"]) {
       expect(atlasTechniquesForEvent("tool_calls", tool)).toEqual([]);
@@ -241,9 +241,9 @@ describe("atlasTechniquesForEvent", () => {
     expect(atlasTechniquesForEvent("tool_calls")).toEqual([]);
   });
 
-  // 0sec's own planner and reviewer model calls are the operator's tooling,
+  // 0's own planner and reviewer model calls are the operator's tooling,
   // not an attack on anyone's AI system.
-  it("does not tag 0sec's own LLM usage", () => {
+  it("does not tag 0's own LLM usage", () => {
     expect(atlasTechniquesForEvent("llm_planner_invoked")).toEqual([]);
     expect(atlasTechniquesForEvent("llm_review")).toEqual([]);
   });

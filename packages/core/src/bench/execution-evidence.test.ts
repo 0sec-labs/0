@@ -121,7 +121,7 @@ function inputs() {
 }
 
 describe("0research execution evidence projection", () => {
-  it("matches the exact canonical digest independently computed by 0brain (re-pinned 2026-08-19 for the 0sec → 0sec candidateId rename)", () => {
+  it("matches the exact canonical digest independently computed by 0brain (re-pinned 2026-08-19 for the 0 → 0 candidateId rename)", () => {
     const fixture = JSON.parse(
       readFileSync(new URL("./improvement-execution-evidence.fixture.json", import.meta.url), "utf8"),
     ) as ResearchExecutionEvidence;
@@ -153,7 +153,7 @@ describe("0research execution evidence projection", () => {
       ...options,
       candidateChange,
       producer: {
-        repository: "0sec-labs/0sec",
+        repository: "0sec-labs/0",
         commitSha: "a".repeat(40),
         treeDigest: `sha256:${"7".repeat(64)}`,
       },
@@ -167,12 +167,12 @@ describe("0research execution evidence projection", () => {
       evidence: ResearchExecutionEvidence;
     };
     expect(Object.keys(contract).sort()).toEqual(["contract", "evidence", "promotable", "schemaVersion"]);
-    expect(contract.contract).toBe("0sec-0brain-execution-evidence-v3-synthetic-golden-v1");
+    expect(contract.contract).toBe("0-0brain-execution-evidence-v3-synthetic-golden-v1");
     expect(contract.promotable).toBe(false);
     const golden = contract.evidence;
     expect(evidence).toEqual(golden);
     expect(researchExecutionEvidenceDigest(evidence)).toBe(
-      "sha256:3986f9883f5ed4be76488db503eb47c174771f9b099750924742b6a83803cd1b",
+      "sha256:13cc4f2f0f7748c19f1fdd10bcb567c40d9a1995ac87d4d13cd8d1d74f65fbc8",
     );
     expect(evidence.schemaVersion).toBe(3);
     expect(evidence.variantBinding).toEqual({
@@ -208,7 +208,7 @@ describe("0research execution evidence projection", () => {
     expect(() => projectResearchExecutionEvidence({
       ...drift,
       candidateChange: { kind: "prompt", knobs: { "source_audit.hypothesis": "Inspect parser state transitions." } },
-      producer: { repository: "0sec-labs/0sec", commitSha: "a".repeat(40), treeDigest: `sha256:${"7".repeat(64)}` },
+      producer: { repository: "0sec-labs/0", commitSha: "a".repeat(40), treeDigest: `sha256:${"7".repeat(64)}` },
     })).toThrow(/drift/);
 
     const hidden = inputs();
@@ -221,7 +221,7 @@ describe("0research execution evidence projection", () => {
     expect(() => projectResearchExecutionEvidence({
       ...hidden,
       candidateChange: { kind: "prompt", knobs: { "source_audit.hypothesis": "Inspect parser state transitions." } },
-      producer: { repository: "0sec-labs/0sec", commitSha: "a".repeat(40), treeDigest: `sha256:${"7".repeat(64)}` },
+      producer: { repository: "0sec-labs/0", commitSha: "a".repeat(40), treeDigest: `sha256:${"7".repeat(64)}` },
     })).toThrow(/not exactly/);
   });
 
@@ -233,7 +233,7 @@ describe("0research execution evidence projection", () => {
     expect(() => projectResearchExecutionEvidence({
       ...options,
       candidateChange: { kind: "feature_flag", knobs: { invented_flag: true } },
-      producer: { repository: "0sec-labs/0sec", commitSha: "a".repeat(40), treeDigest: `sha256:${"7".repeat(64)}` },
+      producer: { repository: "0sec-labs/0", commitSha: "a".repeat(40), treeDigest: `sha256:${"7".repeat(64)}` },
     })).toThrow(/unsupported/);
 
     const baseline = inputs();
@@ -243,7 +243,7 @@ describe("0research execution evidence projection", () => {
     expect(() => projectResearchExecutionEvidence({
       ...baseline,
       candidateChange: { kind: "feature_flag", knobs: { web_search: true } },
-      producer: { repository: "0sec-labs/0sec", commitSha: "a".repeat(40), treeDigest: `sha256:${"7".repeat(64)}` },
+      producer: { repository: "0sec-labs/0", commitSha: "a".repeat(40), treeDigest: `sha256:${"7".repeat(64)}` },
     })).toThrow(/explicitly bind/);
   });
 

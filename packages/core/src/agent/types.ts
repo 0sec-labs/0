@@ -1,4 +1,4 @@
-import type { Finding, AttackResult, TargetInfo, AuthConfig, NamedIdentity, JevEvaluationRequest, JevEvaluationResult } from "@0/shared"
+import type { Finding, AttackResult, TargetInfo, AuthConfig, NamedIdentity } from "@0/shared";
 import type { ScopePolicy } from "../scope/scope.js";
 import type { RateLimiter } from "../scope/rate-limit.js";
 import type { AttributionConfig } from "../scope/attribution.js";
@@ -345,6 +345,16 @@ export interface AgentConfig {
   systemPrompt: string;
   tools: ToolDefinition[];
   maxTurns: number;
+  /**
+   * Hard cost ceiling in USD for the whole loop. When set, the loop reprices
+   * running token usage after every turn (via `estimateCost`) and stops cleanly
+   * once the estimate reaches the ceiling — mirroring the native loop
+   * (`native-loop.ts`). `maxTurns` stays the runaway backstop. When unset, only
+   * the turn cap applies.
+   */
+  costCeilingUsd?: number;
+  /** Pricing model id for `estimateCost`; defaults to the shared default rates. */
+  costModel?: string;
   target: string;
   scanId: string;
   scopePath?: string;
@@ -353,20 +363,20 @@ export interface AgentConfig {
   dbPath?: string;
   authConfig?: AuthConfig;
   /**
-   * Resolved named identities for access-control testing (0sec#564).
+   * Resolved named identities for access-control testing (0#564).
    * Passed through to the `ToolContext` so the prompt + `access_control_probe`
    * can enumerate principals. The active identity's `auth` is mirrored into
    * `authConfig` for back-compat with the env-var / fallback paths.
    */
   identities?: NamedIdentity[];
   /**
-   * Stateful per-identity HTTP session engine (0sec#564). Built once per
+   * Stateful per-identity HTTP session engine (0#564). Built once per
    * scan and shared across discovery/attack/verify phases so cookies persist.
    * Passed straight through to the `ToolContext`.
    */
   session?: SessionEngine;
   /**
-   * Programmatic engagement scope (0sec#215). When set, every URL the
+   * Programmatic engagement scope (0#215). When set, every URL the
    * agent touches — http_request, submit_form, browser navigate, crawl,
    * shellExec URL extraction, wp_fingerprint, web_search inputs — is
    * checked against this policy and out-of-scope URLs return as
@@ -392,14 +402,14 @@ export interface AgentConfig {
    */
   enforcement?: EnforcementTracker;
   /**
-   * WAF detection + adaptive evasion aggregator (0sec#568). When omitted
+   * WAF detection + adaptive evasion aggregator (0#568). When omitted
    * but an engagement scope (`scope`/`enforcement`) is configured, one is
    * created automatically so authorized engagements get WAF fingerprinting +
    * adaptive evasion. Pass `null` to disable explicitly.
    */
   wafDetector?: WafDetector | null;
   /**
-   * Generic-scanner-traffic suppression opt-out (0sec#217). When
+   * Generic-scanner-traffic suppression opt-out (0#217). When
    * scope is loaded the agent refuses to spawn `sqlmap`, `wpscan`,
    * `nikto`, `gobuster`, `dirb`, `wfuzz`, `ffuf`, and the noisy `nmap -sV` /
    * `nmap -A` modes — those binaries fingerprint themselves on the
@@ -409,7 +419,7 @@ export interface AgentConfig {
    */
   allowScanners?: boolean;
   /**
-   * Resolved attribution-header config (0sec#216). When set, every
+   * Resolved attribution-header config (0#216). When set, every
    * fetch site merges these headers + applies the User-Agent override on
    * IN-SCOPE requests. Out-of-scope hosts are never tagged. When `scope`
    * is also undefined, attribution behaves as opt-in: present here means
@@ -425,7 +435,7 @@ export interface AgentConfig {
    */
   engagement?: EngagementPosture;
   /**
-   * Tool-call dispatch protocol (0sec#232). When unset or `"json"`, the
+   * Tool-call dispatch protocol (0#232). When unset or `"json"`, the
    * legacy `TOOL_CALL: <name> {...}` line format is used. When `"xml"`,
    * the loop drives the model with the `<command>` / `<flag>` /
    * `<finding>` / `<note>` XML protocol from `xml-dispatch.ts`. `"auto"`
@@ -452,22 +462,11 @@ export interface AgentState {
   targetInfo: Partial<TargetInfo>;
   done: boolean;
   summary: string;
+  /** True when the loop stopped because the cost ceiling was reached (vs `done` or max turns). */
+  costCeilingExceeded?: boolean;
 }
 
 // ── Tool Execution Context ──
-
-/**
- * Console-owned Jev authority. Implementations must enforce the shared
- * session budget and must never expose provider credentials.
- */
-export interface ToolContextJevRuntime {
-  readonly enabled: boolean;
-  readonly features: readonly string[];
-  evaluator(feature: string): {
-    evaluate(request: JevEvaluationRequest): Promise<JevEvaluationResult | undefined>;
-  } | undefined;
-  evaluate(feature: string, request: JevEvaluationRequest): Promise<JevEvaluationResult | undefined>;
-}
 
 export interface ToolContext {
   target: string;
@@ -491,8 +490,6 @@ export interface ToolContext {
   delegationTools?: readonly ToolDefinition[];
   /** Current parent instructions, inherited by delegated agent sessions. */
   delegationSystemPrompt?: string;
-  /** Budgeted console Jev authority inherited unchanged by delegated agents. */
-  jevRuntime?: ToolContextJevRuntime;
   scopePath?: string;
   /** Session policy registry and durable, isolated executable implementation. */
   selfExtension?: SelfExtensionRegistry;
@@ -575,14 +572,14 @@ export interface ToolContext {
   persistFindings?: boolean;
   authConfig?: AuthConfig;
   /**
-   * Resolved named identities for access-control testing (0sec#564).
+   * Resolved named identities for access-control testing (0#564).
    * Present when the scan configured ≥1 identity (via `identities` or the
    * legacy `auth` shim). Used by the prompt builder and `access_control_probe`
    * to enumerate the principals it can replay requests as.
    */
   identities?: NamedIdentity[];
   /**
-   * Stateful per-identity HTTP session engine (0sec#564). When present, the
+   * Stateful per-identity HTTP session engine (0#564). When present, the
    * HTTP tools (`http_request`/`crawl`/`submit_form`) act as `session.activeLabel`,
    * persist captured `Set-Cookie` across turns, and re-auth on 401/403. When
    * absent, tools fall back to the stateless `buildAuthHeaders(authConfig)`
@@ -605,7 +602,7 @@ export interface ToolContext {
    */
   enforcement?: EnforcementTracker;
   /**
-   * WAF detection + adaptive evasion aggregator (0sec#568). When set, the
+   * WAF detection + adaptive evasion aggregator (0#568). When set, the
    * `http_request` chokepoint fingerprints each response for known WAF
    * vendors; on a detected block it runs a bounded adaptive-evasion campaign
    * (re-encoding / casing / jitter) through the same rate-limited fetch path
@@ -616,12 +613,12 @@ export interface ToolContext {
   wafDetector?: WafDetector;
   /**
    * See `AgentConfig.allowScanners`. Opt-out for the scanner-binary
-   * suppression gate (0sec#217). Only consulted when `scope` is set.
+   * suppression gate (0#217). Only consulted when `scope` is set.
    */
   allowScanners?: boolean;
   /** See `AgentConfig.engagement`. */
   engagement?: EngagementPosture;
-  /** See `AgentConfig.attribution` (0sec#216). */
+  /** See `AgentConfig.attribution` (0#216). */
   attribution?: AttributionConfig;
   /**
    * Recent tool result texts for JIT skill trigger matching (#457).
@@ -636,7 +633,7 @@ export interface ToolContext {
    */
   loadedSkills?: Set<string>;
   /**
-   * Typed loot / foothold ledger (0sec#567). When set, `save_finding`
+   * Typed loot / foothold ledger (0#567). When set, `save_finding`
    * harvests reusable artifacts (credentials, tokens, cookies, hashes,
    * endpoints, paths) from the finding's evidence into it, and the `use_loot`
    * tool reads from it so the agent can replay a captured artifact in a
@@ -665,7 +662,7 @@ export interface ToolContext {
    */
   currentTurn?: number;
   /**
-   * Hosted OAST interaction collaborator (0sec#659). When set, the
+   * Hosted OAST interaction collaborator (0#659). When set, the
    * `oast_register` / `oast_poll` tools mint unique interaction handles and
    * poll for DNS/HTTP/LDAP callbacks to confirm blind/out-of-band classes
    * (blind SSRF/XSS, OOB RCE/SQLi, XXE-OOB, JNDI) via correlation-token
@@ -713,7 +710,7 @@ export interface ToolContext {
    */
   costModel?: string;
   /**
-   * Tool-health recorder (0sec#tool-reliability). When present, the executor
+   * Tool-health recorder (0#tool-reliability). When present, the executor
    * routes structured tool-failure / skip events (missing binary, buffer
    * limit, wrong lockfile, policy/scope denial) into it so the run can surface
    * a concise "N tool issues" summary and the CLI /doctor path can explain WHY
@@ -735,7 +732,7 @@ export interface ToolContext {
   todos?: TodoTracker;
 }
 
-// ── Dispatch Mode (0sec#232) ──
+// ── Dispatch Mode (0#232) ──
 
 /**
  * How tool calls flow between the model and the harness in `runAgentLoop`.
@@ -745,7 +742,7 @@ export interface ToolContext {
  * - `"xml"`: an XML-tag protocol (`<command>`, `<flag>`, `<finding>`,
  *   `<note>`) parsed by regex. Cheap models (DeepSeek, Gemini-flash,
  *   Qwen, etc.) emit malformed JSON under load; XML survives that. See
- *   `agent/xml-dispatch.ts` and 0sec#232.
+ *   `agent/xml-dispatch.ts` and 0#232.
  * - `"auto"`: pick by model substring (gemini / deepseek / openrouter /
  *   qwen / mistral / llama → xml; otherwise json). Resolved by
  *   `resolveDispatchMode()` in `xml-dispatch.ts`.

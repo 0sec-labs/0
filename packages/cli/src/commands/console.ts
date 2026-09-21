@@ -3,17 +3,21 @@ import { stdin, stdout } from "node:process";
 
 import type { Command } from "commander";
 import chalk from "chalk";
-import { createConsoleRuntime,
-loadScope,
-parseMcpConfig,
-connectMcpServers, } from "@0/core"
-import type { ConsoleAutonomyMode,
-ConsoleSession,
-NativeMessage,
-ToolCall,
-ToolResult, } from "@0/core"
-import { DEFAULT_AUTONOMY_MODE } from "@0/shared"
-import type { ConsoleJevConfig } from "@0/shared"
+import {
+  createConsoleRuntime,
+  loadScope,
+  parseMcpConfig,
+  connectMcpServers,
+  DEFAULT_MAX_TOOL_ITERATIONS,
+} from "@0/core";
+import type {
+  ConsoleAutonomyMode,
+  ConsoleSession,
+  NativeMessage,
+  ToolCall,
+  ToolResult,
+} from "@0/core";
+import { DEFAULT_AUTONOMY_MODE } from "@0/shared";
 import { canUseOpenTui, isBunRuntime } from "../tui/runtime.js";
 import {
   findCommand,
@@ -30,8 +34,6 @@ import {
   resolveFindingChatIntent,
 } from "../finding-focus.js";
 
-import { loadSettings } from "../tui/settings.js";
-import { buildConsoleJevConfig, describeJevState, formatJevActivity } from "../tui/jev-helper.js";
 import { createLocalConsoleSession } from "../console-session.js";
 interface ConsoleOptions {
   target?: string;
@@ -119,10 +121,10 @@ export function resolveConsoleAutonomyMode(opts: {
 }
 
 /**
- * `0sec console` — the unified interactive chat cockpit.
+ * `0 console` — the unified interactive chat cockpit.
  *
  * A single conversational surface where the operator talks to the engine and it
- * can invoke every 0sec tool (recon, web pentest, source/package scan,
+ * can invoke every 0 tool (recon, web pentest, source/package scan,
  * variant hunt, verify, patch-gen) in one place. Thin REPL over the engine-side
  * driver in `@0/core` (`createConsoleSession`) — the tool registry and LLM
  * runtime are the real ones the autonomous scanner uses; this command only owns
@@ -144,13 +146,13 @@ export function registerConsoleCommand(program: Command): void {
     .option("--mode <mode>", "Autonomy mode to start in: standard|recon|copilot|yolo (default yolo). YOLO drops per-action prompts but stays target/scope-anchored; cycle live with Shift+Tab.")
     .option("--yolo", "Shortcut for --mode yolo — start the console in YOLO autonomy (no per-action prompts; still target-anchored and SSRF-railed).")
     .option("--autonomy <mode>", "Alias of --mode (standard|copilot|yolo|recon); --mode/--yolo take precedence.")
-    .option("--max-tool-calls <n>", "Safety cap on tool-call rounds per operator message", "20")
+    .option("--max-tool-calls <n>", "Safety cap on tool-call rounds per operator message", String(DEFAULT_MAX_TOOL_ITERATIONS))
     .option("--allow-scanners", "Expose generic-scanner tool wrappers (sqlmap/nikto/…); default off")
     .option("--resume [id]", "Reopen a saved console session by id (or unique prefix); with no id, opens a session picker. Also reachable as `0 -r [id]`.")
     .option("--continue", "Reopen the most recent console session, no picker. Also reachable as `0 -c`.")
     .option("-p, --print [prompt]", "Non-interactive: run ONE prompt through the engine, print the result, and exit (no TUI). Reads the prompt from the argument or piped stdin. Combine with --continue/--resume to query a saved session. Also reachable as `0 -p <prompt>`.")
     .action(async (opts: ConsoleOptions) => {
-      let maxToolIterations = 20;
+      let maxToolIterations = DEFAULT_MAX_TOOL_ITERATIONS;
       if (opts.maxToolCalls !== undefined) {
         const parsed = Number(opts.maxToolCalls);
         if (!Number.isFinite(parsed) || parsed <= 0) {
@@ -282,18 +284,6 @@ export function registerConsoleCommand(program: Command): void {
         try {
           const runtime = createConsoleRuntime({ model: resumedModel ?? opts.model });
           const resolvedModel = runtime.resolvedModel();
-          // Load operator settings for Jev config. Headless still respects env.
-          const jevSettings = loadSettings();
-          const jev = buildConsoleJevConfig({
-            jevFunding: jevSettings.jevFunding,
-            jevBrowser: jevSettings.jevBrowser,
-            jevKernel: jevSettings.jevKernel,
-            jevCrash: jevSettings.jevCrash,
-            jevRadar: jevSettings.jevRadar,
-            jevFoxguard: jevSettings.jevFoxguard,
-            jevMaxRequests: jevSettings.jevMaxRequests,
-            jevMaxCostUsd: jevSettings.jevMaxCostUsd,
-          }, process.env);
           printSession = createLocalConsoleSession({
             runtime,
             target: focusedTarget,
@@ -303,7 +293,6 @@ export function registerConsoleCommand(program: Command): void {
             allowScanners: opts.allowScanners,
             scope,
             autonomyMode,
-            jev,
             ...(resumeMessages ? { initialMessages: resumeMessages as NativeMessage[] } : {}),
             // Headless: no operator to approve a scope extension or a copilot gate.
             requestScope: async () => null,
@@ -370,7 +359,7 @@ export function registerConsoleCommand(program: Command): void {
       }
 
       if (!scope) {
-        console.error(chalk.red("0sec console under Node requires --scope <file>."));
+        console.error(chalk.red("0 console under Node requires --scope <file>."));
         console.error(chalk.dim("The readline fallback cannot approve session-only scope extensions; use the Bun TUI for scope-on-demand."));
         if (mcpHost) await mcpHost.closeAll();
         process.exitCode = 2;
@@ -378,19 +367,6 @@ export function registerConsoleCommand(program: Command): void {
       }
 
       let session: ConsoleSession;
-      // Load operator settings for Jev config (used in session construction and
-      // the printBanner/printStatus lines below, so declared before try).
-      const jevSettings = loadSettings();
-      const jev = buildConsoleJevConfig({
-        jevFunding: jevSettings.jevFunding,
-        jevBrowser: jevSettings.jevBrowser,
-        jevKernel: jevSettings.jevKernel,
-        jevCrash: jevSettings.jevCrash,
-        jevRadar: jevSettings.jevRadar,
-        jevFoxguard: jevSettings.jevFoxguard,
-        jevMaxRequests: jevSettings.jevMaxRequests,
-        jevMaxCostUsd: jevSettings.jevMaxCostUsd,
-      }, process.env);
       try {
         const runtime = createConsoleRuntime({ model: opts.model });
         const resolvedModel = runtime.resolvedModel();
@@ -405,7 +381,6 @@ export function registerConsoleCommand(program: Command): void {
           allowScanners: opts.allowScanners,
           scope,
           autonomyMode,
-          jev,
           ...(mcpHost ? { mcpHost } : {}),
           // A resumed session seeds the model's history so it continues where it
           // left off (the readline fallback can't repaint the old transcript, but
@@ -427,7 +402,7 @@ export function registerConsoleCommand(program: Command): void {
       }
       const presentationOutput = processPresentationOutput;
 
-      printBanner(session, focusedTarget, jev);
+      printBanner(session, focusedTarget);
       if (findingPrompt) {
         await runTurn(session, findingPrompt, presentationOutput);
       }
@@ -482,7 +457,7 @@ export function registerConsoleCommand(program: Command): void {
           console.log(
             chalk.yellow(
               `\n"${text}" requires the Bun-backed TUI console. ` +
-              `Use the \`0sec\` command (no flags) for the full interactive experience.\n`,
+              `Use the \`0\` command (no flags) for the full interactive experience.\n`,
             ),
           );
           rl.prompt();
@@ -506,7 +481,7 @@ export function registerConsoleCommand(program: Command): void {
             return;
           }
           case "status": {
-            printStatus(session, jev);
+            printStatus(session);
             rl.prompt();
             return;
           }
@@ -528,7 +503,7 @@ export function registerConsoleCommand(program: Command): void {
             console.log(
               chalk.yellow(
                 `\n/${parsed.command} isn't available in the line-mode console. ` +
-                `Use the \`0sec\` command (no flags) for the full interactive TUI.\n`,
+                `Use the \`0\` command (no flags) for the full interactive TUI.\n`,
               ),
             );
             rl.prompt();
@@ -570,10 +545,6 @@ async function runTurn(
     onNotice: (msg) => {
       output.stdout("\n" + chalk.dim(`  (${msg})`), "console.notice");
     },
-    onJevActivity: (activity) => {
-      const line = formatJevActivity(activity);
-      output.stdout("\n" + chalk.dim(line), "console.jev.activity");
-    },
   });
 
   // If nothing streamed token-by-token (provider without delta support), print
@@ -606,13 +577,12 @@ function previewResult(result: ToolResult): string {
   return flat.length > 100 ? flat.slice(0, 97) + "…" : flat;
 }
 
-function printBanner(session: ConsoleSession, target?: string, jev?: ConsoleJevConfig | false | undefined): void {
+function printBanner(session: ConsoleSession, target?: string): void {
   console.log("");
-  console.log(chalk.bold("0sec console") + chalk.dim(" — interactive operator cockpit"));
+  console.log(chalk.bold("0 console") + chalk.dim(" — interactive operator cockpit"));
   console.log(chalk.dim(`  session ${session.scanId}`));
   console.log(chalk.dim(`  ${session.tools.length} tools available${target ? ` · target ${target}` : " · no target set"}`));
   console.log(chalk.dim(`  mode: ${modeLabel(session.autonomyMode)}`));
-  console.log(chalk.dim(`  ${describeJevState(jev)}`));
   console.log(chalk.dim("  /help for commands · /exit to quit"));
   console.log("");
 }
@@ -654,7 +624,7 @@ function printHelp(): void {
   console.log(chalk.dim("  The Node fallback cannot approve scope extensions or Co-pilot actions; use the Bun TUI for those approvals."));
   console.log(chalk.dim("  anything else is sent to the engine as an operator message.\n"));
   console.log(chalk.dim("  Navigation commands (/chat, /scope, /agents, …) require the Bun TUI."));
-  console.log(chalk.dim("  Run the bare `0sec` command for the full interactive experience.\n"));
+  console.log(chalk.dim("  Run the bare `0` command for the full interactive experience.\n"));
 }
 
 function findCategory(name: string): string {
@@ -662,14 +632,14 @@ function findCategory(name: string): string {
   return cmd?.category ?? "system";
 }
 
-function printStatus(session: ConsoleSession, jev?: ConsoleJevConfig | false | undefined): void {
+function printStatus(session: ConsoleSession): void {
   console.log(chalk.bold("\nsession status:"));
   console.log(`  ${chalk.cyan("id")}       ${session.scanId}`);
   console.log(`  ${chalk.cyan("mode")}     ${modeLabel(session.autonomyMode)}`);
   console.log(`  ${chalk.cyan("target")}  ${session.target || "(not set)"}`);
   console.log(`  ${chalk.cyan("tools")}   ${session.tools.length} available`);
   console.log(`  ${chalk.cyan("scope")}   ${hasConfiguredScope(session.scope) ? "configured" : "not configured"}`);
-  console.log(`  ${chalk.cyan("jev")}     ${describeJevState(jev)}`);
+  console.log(`  ${chalk.cyan("turns")}   ${Math.ceil(session.messages.length / 2)}`);
   console.log("");
 }
 

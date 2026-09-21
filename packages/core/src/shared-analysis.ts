@@ -2,7 +2,7 @@ import { execFileSync } from "node:child_process";
 import { mkdtempSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
-import type { SemgrepFinding } from "@0/shared"
+import type { SemgrepFinding } from "@0/shared";
 import type { RuntimeType } from "./runtime/index.js";
 import type { ScanListener } from "./scanner.js";
 
@@ -169,7 +169,7 @@ interface FoxguardJsonFinding {
 
 /**
  * Run foxguard as a sibling source analyzer and translate its JSON output
- * into 0sec's `SemgrepFinding` shape so the existing review pipeline can
+ * into 0's `SemgrepFinding` shape so the existing review pipeline can
  * consume either scanner without changing prompt/report contracts.
  *
  * Uses an installed Foxguard binary when available, otherwise the pinned npm
@@ -234,7 +234,7 @@ export function runFoxguardScan(
         }
         return selected.split(sep).join("/");
       });
-      selectionDir = mkdtempSync(join(tmpdir(), "0sec-foxguard-"));
+      selectionDir = mkdtempSync(join(tmpdir(), "0-foxguard-"));
       selectionFile = join(selectionDir, "changed-files.txt");
       writeFileSync(selectionFile, `${paths.join("\n")}\n`, { mode: 0o600 });
     }
@@ -290,7 +290,7 @@ export function runFoxguardScan(
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     logger(
-      `[0sec] foxguard scan failed (${message}). ` +
+      `[0] foxguard scan failed (${message}). ` +
         `Npm pin: foxguard@${foxguardTag}. Set ZERO_STATIC=semgrep to use semgrep.`,
     );
     emit({ type: "error", stage: "source-analysis", message: `Foxguard scan failed: ${message}` });
@@ -326,7 +326,7 @@ export function runSelectedStaticScan(
  *   - `line` / `end_line` → `startLine` / `endLine` (end_line defaults
  *                          to startLine when missing — Foxguard omits
  *                          it for some single-line patterns)
- *   - `severity`          → `severity` (already in 0sec's 4-tier
+ *   - `severity`          → `severity` (already in 0's 4-tier
  *                          vocabulary; we normalize via
  *                          `mapFoxguardSeverity` so unexpected values
  *                          land on `info` instead of leaking through)

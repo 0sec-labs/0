@@ -15,20 +15,20 @@ the days after a commit lands and before that same machinery hardens it. This is
 the only structure that beats the audit-density wall.
 
 The engine + CLI live in `@0/core` (`stages/recency-hunt.ts`) and
-`0sec recency-hunt`. This directory is just the **daily driver** on bench.
+`0 recency-hunt`. This directory is just the **daily driver** on bench.
 
 ## Files
 
 | File | Role |
 |---|---|
-| `run-recency-flywheel.sh` | The driver: `git fetch` linux-next → `0sec recency-hunt --report-dir …`. Idle-priority, additive, non-disruptive. |
+| `run-recency-flywheel.sh` | The driver: `git fetch` linux-next → `0 recency-hunt --report-dir …`. Idle-priority, additive, non-disruptive. |
 | `recency-flywheel.service` | `oneshot` systemd unit that runs the driver with `HOME=/root` (for `/root/.codex/auth.json`). |
 | `recency-flywheel.timer` | Daily `OnCalendar=06:30` trigger, `Persistent=true` (catches missed runs). |
 
 ## Install on bench (one-time)
 
-The driver expects a **built** engine checkout at `/root/0sec-recency-flywheel`
-(a git worktree of the `tools/0sec` submodule on the `feat/recency-flywheel`
+The driver expects a **built** engine checkout at `/root/0-recency-flywheel`
+(a git worktree of the `tools/0` submodule on the `feat/recency-flywheel`
 branch, `pnpm build`-ed). Then:
 
 ```sh
@@ -82,7 +82,7 @@ touch:
 A high-confidence **survivor** in the report is shaped as a `bugSpec` +
 trigger-seed ready for the next step:
 
-- **Weaponize**: `0sec exploit --autoclimb --source <tree> --target <file>`.
+- **Weaponize**: `0 exploit --autoclimb --source <tree> --target <file>`.
 - **Disclose**: hand the survivor to the disclosure stager.
 
 Nothing is auto-sent. Disclosure is operator-gated (embargo discipline). A

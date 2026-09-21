@@ -7,14 +7,14 @@
  *
  * Cost factors are relative, not absolute USD: 0 = pure regex/grep (no LLM,
  * no network), 1 = full LLM-driven verify with tool use. The numbers come
- * from the per-layer telemetry shipped in 0sec#112 and the per-layer
- * ablation in 0sec#72's 2026-04-11 comment. They will be replaced by
+ * from the per-layer telemetry shipped in 0#112 and the per-layer
+ * ablation in 0#72's 2026-04-11 comment. They will be replaced by
  * measured medians once #112's telemetry has accumulated enough samples.
  *
- * See 0sec#113 for the design doc, 0sec#67 for the joint-paper plan.
+ * See 0#113 for the design doc, 0#67 for the joint-paper plan.
  */
 
-import type { TriageLayerName } from "@0/shared"
+import type { TriageLayerName } from "@0/shared";
 
 export type LayerId = TriageLayerName;
 

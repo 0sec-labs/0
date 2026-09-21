@@ -73,7 +73,7 @@ export function checkSourceDistFreshness(
     opts.entryPath ??
     (opts.entryUrl ? fileURLToPath(opts.entryUrl) : fileURLToPath(import.meta.url));
   const realBundlePath = realpathSync(bundlePath);
-  if (basename(realBundlePath) !== "0sec.js" || basename(dirname(realBundlePath)) !== "dist") {
+  if (basename(realBundlePath) !== "0.js" || basename(dirname(realBundlePath)) !== "dist") {
     return { checked: false, stale: false, reason: "not-root-dist-bundle", bundlePath: realBundlePath };
   }
 
@@ -108,9 +108,9 @@ export function checkSourceDistFreshness(
   }
 
   const message = [
-    "0sec source checkout bundle is stale.",
-    `dist/0sec.js was built from ${buildCommit.slice(0, 12)}, but checkout HEAD is ${headCommit.slice(0, 12)}.`,
-    `Run \`pnpm run build\` from ${repoRoot} before invoking dist/0sec.js.`,
+    "0 source checkout bundle is stale.",
+    `dist/0.js was built from ${buildCommit.slice(0, 12)}, but checkout HEAD is ${headCommit.slice(0, 12)}.`,
+    `Run \`pnpm run build\` from ${repoRoot} before invoking dist/0.js.`,
     `Set ${BYPASS_ENV}=1 only if you intentionally want to run the stale bundle.`,
   ].join(" ");
 

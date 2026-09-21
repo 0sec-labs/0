@@ -19,15 +19,15 @@ import { agenticScan } from "./agentic-scanner.js";
 import { eventBus, type EventType } from "./events/bus.js";
 import { LlmApiRuntime } from "./runtime/llm-api.js";
 import { ProcessRuntime } from "./runtime/process.js";
-import { osecDB } from "@0/db"
-import type { ScanConfig } from "@0/shared"
+import { osecDB } from "@0/db";
+import type { ScanConfig } from "@0/shared";
 import type { NativeRuntimeResult } from "./runtime/types.js";
 
 let schemaDirectory: string;
 let schemaPath: string;
 
 beforeAll(() => {
-  schemaDirectory = fs.mkdtempSync(path.join(os.tmpdir(), "0sec-agentic-events-schema-"));
+  schemaDirectory = fs.mkdtempSync(path.join(os.tmpdir(), "0-agentic-events-schema-"));
   schemaPath = path.join(schemaDirectory, "empty.db");
   const db = new osecDB(schemaPath);
   db.close();
@@ -56,7 +56,7 @@ afterEach(() => {
 function tmpDbPath(): string {
   const dbPath = path.join(
     os.tmpdir(),
-    `0sec-agentic-events-${Date.now()}-${Math.random().toString(36).slice(2)}.db`,
+    `0-agentic-events-${Date.now()}-${Math.random().toString(36).slice(2)}.db`,
   );
   // Each test owns its database; empty-schema migration is shared setup.
   fs.copyFileSync(schemaPath, dbPath);
@@ -68,7 +68,7 @@ let activeScopePath: string | undefined;
 function tmpScopePath(): string {
   return path.join(
     os.tmpdir(),
-    `0sec-agentic-events-${Date.now()}-${Math.random().toString(36).slice(2)}.scope.json`,
+    `0-agentic-events-${Date.now()}-${Math.random().toString(36).slice(2)}.scope.json`,
   );
 }
 

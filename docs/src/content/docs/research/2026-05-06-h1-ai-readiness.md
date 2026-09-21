@@ -168,10 +168,10 @@ pie showData
   paid/open/web-shaped high-score group contains 21.
 - Resolve missing structured scope before execution or submission.
 
-<span id="what-0sec-does-about-it"></span>
+<span id="what-0-does-about-it"></span>
 ## What 0 does about it
 
-The historical [PR #206](https://github.com/0sec-labs/0sec/pull/206) proposal covered:
+The historical [PR #206](https://github.com/0sec-labs/0/pull/206) proposal covered:
 
 - Normalize loopback addresses including `::1` and `127.0.0.1` before scope checks.
 - Redact secrets and personal data from reproduction steps.
@@ -194,5 +194,5 @@ submitting a report. Consult current policies; this audit is a historical sample
 - HackerOne API documentation — <https://docs.hackerone.com/en/articles/8475119-hackerone-api>
 - The New Stack on the curl programme closure — <https://thenewstack.io/curl-bug-bounty-flooded-by-ai-slop/>
 - BleepingComputer on AI-slop bug reports — <https://www.bleepingcomputer.com/news/security/curl-project-founder-snaps-over-ai-slop-bug-reports/>
-- 0 disclose command (PR #206) — <https://github.com/0sec-labs/0sec/pull/206>
+- 0 disclose command (PR #206) — <https://github.com/0sec-labs/0/pull/206>
 - Gold Standard Safe Harbor wording — <https://www.hackerone.com/security-compliance/gold-standard-safe-harbor>

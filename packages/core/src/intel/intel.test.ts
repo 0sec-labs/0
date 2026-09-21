@@ -98,7 +98,7 @@ describe("vulnerability intel", () => {
   let cacheDir: string;
 
   beforeEach(() => {
-    cacheDir = mkdtempSync(join(tmpdir(), "0sec-intel-test-"));
+    cacheDir = mkdtempSync(join(tmpdir(), "0-intel-test-"));
   });
 
   afterEach(() => {
@@ -324,7 +324,7 @@ describe("vulnerability intel", () => {
   });
 
   it("infers target-history hints from local repo metadata", () => {
-    const repo = mkdtempSync(join(tmpdir(), "0sec-intel-repo-"));
+    const repo = mkdtempSync(join(tmpdir(), "0-intel-repo-"));
     try {
       mkdirSync(join(repo, ".git"), { recursive: true });
       writeFileSync(join(repo, "package.json"), JSON.stringify({
@@ -352,7 +352,7 @@ describe("vulnerability intel", () => {
   });
 
   it("infers target-history hints from pyproject.toml", () => {
-    const repo = mkdtempSync(join(tmpdir(), "0sec-intel-repo-"));
+    const repo = mkdtempSync(join(tmpdir(), "0-intel-repo-"));
     try {
       writeFileSync(join(repo, "pyproject.toml"), [
         "[project]",
@@ -376,7 +376,7 @@ describe("vulnerability intel", () => {
   });
 
   it("infers target-history hints from Cargo.toml", () => {
-    const repo = mkdtempSync(join(tmpdir(), "0sec-intel-repo-"));
+    const repo = mkdtempSync(join(tmpdir(), "0-intel-repo-"));
     try {
       writeFileSync(join(repo, "Cargo.toml"), [
         "[package]",
@@ -398,7 +398,7 @@ describe("vulnerability intel", () => {
   });
 
   it("infers target-history hints from go.mod", () => {
-    const repo = mkdtempSync(join(tmpdir(), "0sec-intel-repo-"));
+    const repo = mkdtempSync(join(tmpdir(), "0-intel-repo-"));
     try {
       writeFileSync(join(repo, "go.mod"), [
         "module github.com/gin-gonic/gin",
@@ -420,7 +420,7 @@ describe("vulnerability intel", () => {
   });
 
   it("infers target-history hints from .git/config alone", () => {
-    const repo = mkdtempSync(join(tmpdir(), "0sec-intel-repo-"));
+    const repo = mkdtempSync(join(tmpdir(), "0-intel-repo-"));
     try {
       mkdirSync(join(repo, ".git"), { recursive: true });
       writeFileSync(join(repo, ".git", "config"), [
@@ -440,7 +440,7 @@ describe("vulnerability intel", () => {
   });
 
   it("prefers package.json ecosystem over pyproject.toml when both exist", () => {
-    const repo = mkdtempSync(join(tmpdir(), "0sec-intel-repo-"));
+    const repo = mkdtempSync(join(tmpdir(), "0-intel-repo-"));
     try {
       writeFileSync(join(repo, "package.json"), JSON.stringify({
         name: "my-tool",
@@ -463,8 +463,8 @@ describe("vulnerability intel", () => {
   });
 
   it("rejects leaf symlink that resolves outside repo root", () => {
-    const repo = mkdtempSync(join(tmpdir(), "0sec-intel-repo-"));
-    const outsideDir = mkdtempSync(join(tmpdir(), "0sec-intel-outside-"));
+    const repo = mkdtempSync(join(tmpdir(), "0-intel-repo-"));
+    const outsideDir = mkdtempSync(join(tmpdir(), "0-intel-outside-"));
     try {
       // Create a legitimate-looking external metadata file
       writeFileSync(join(outsideDir, "package.json"), JSON.stringify({
@@ -490,8 +490,8 @@ describe("vulnerability intel", () => {
   });
 
   it("rejects intermediate directory symlink that escapes repo root", () => {
-    const repo = mkdtempSync(join(tmpdir(), "0sec-intel-repo-"));
-    const outsideDir = mkdtempSync(join(tmpdir(), "0sec-intel-outside-"));
+    const repo = mkdtempSync(join(tmpdir(), "0-intel-repo-"));
+    const outsideDir = mkdtempSync(join(tmpdir(), "0-intel-outside-"));
     try {
       // External metadata file
       writeFileSync(join(outsideDir, "Cargo.toml"), [
@@ -515,8 +515,8 @@ describe("vulnerability intel", () => {
   });
 
   it("preserves normal in-root inference alongside symlink rejections", () => {
-    const repo = mkdtempSync(join(tmpdir(), "0sec-intel-repo-"));
-    const outsideDir = mkdtempSync(join(tmpdir(), "0sec-intel-outside-"));
+    const repo = mkdtempSync(join(tmpdir(), "0-intel-repo-"));
+    const outsideDir = mkdtempSync(join(tmpdir(), "0-intel-outside-"));
     try {
       // A legitimate in-root package.json
       mkdirSync(join(repo, ".git"), { recursive: true });
@@ -559,7 +559,7 @@ describe("vulnerability intel", () => {
   });
 
   it("uses inferred repo metadata for target-history searches while preserving overrides", async () => {
-    const repo = mkdtempSync(join(tmpdir(), "0sec-intel-repo-"));
+    const repo = mkdtempSync(join(tmpdir(), "0-intel-repo-"));
     try {
       writeFileSync(join(repo, "package.json"), JSON.stringify({
         name: "@org/zipper",

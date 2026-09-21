@@ -19,7 +19,7 @@ fail() { printf '\033[31m[cloud-smoke] FAIL:\033[0m %s\n' "$*" >&2; exit 1; }
 
 if ! printenv ZERO_CLOUD_TOKEN >/dev/null 2>&1 && ! printenv ZERO_CLOUD_HOST >/dev/null 2>&1 \
   && [ ! -f "${HOME}/.0/cloud.env" ]; then
-  fail "no Cloud credentials found; run 0sec auth login first"
+  fail "no Cloud credentials found; run 0 auth login first"
 fi
 
 say "auth status"

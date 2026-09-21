@@ -1,5 +1,5 @@
 /**
- * XML-tag dispatch fallback for cheap-model resilience (0sec#232).
+ * XML-tag dispatch fallback for cheap-model resilience (0#232).
  *
  * Cheap OpenRouter models (DeepSeek, Gemini-flash, etc.) routinely emit
  * malformed JSON tool calls under load — strings break, brackets stay
@@ -299,7 +299,7 @@ export function buildXmlDispatchPrompt(opts: {
 }): string {
   const { role, target, scanId } = opts;
   return [
-    `You are a ${role} agent for 0sec, an AI red-teaming toolkit.`,
+    `You are a ${role} agent for 0, an AI red-teaming toolkit.`,
     `Target: ${target}`,
     `Scan ID: ${scanId}`,
     "Authorization: The operator has confirmed this target is owned by them or explicitly authorized for this assessment.",

@@ -24,7 +24,7 @@
  * calls this when `ZERO_FEATURE_PUBLISHABILITY_GATE` is on.
  */
 
-import type { AttackCategory, Finding } from "@0/shared"
+import type { AttackCategory, Finding } from "@0/shared";
 import { searchAdvisories, normalizeRepositoryHint, type VulnerabilityIntel } from "../intel/index.js";
 import { toOsvEcosystem, queryOsvAdvisories } from "../intel/osv.js";
 import type { AdvisoryRef, PublishabilityInputs } from "./publishability.js";
@@ -253,7 +253,7 @@ function githubSearchHeaders(): Record<string, string> {
   const headers: Record<string, string> = {
     Accept: "application/vnd.github+json",
     "X-GitHub-Api-Version": "2022-11-28",
-    "User-Agent": "0sec-publishability/0.1",
+    "User-Agent": "0-publishability/0.1",
   };
   const token = process.env.GITHUB_TOKEN ?? process.env.GH_TOKEN;
   if (token) headers.Authorization = `Bearer ${token}`;
@@ -425,7 +425,7 @@ export async function resolveRepository(
   const timer = setTimeout(() => controller.abort(), opts.timeoutMs ?? 15_000);
   try {
     const res = await fetchImpl(url, {
-      headers: { Accept: "application/json", "User-Agent": "0sec-publishability/0.1" },
+      headers: { Accept: "application/json", "User-Agent": "0-publishability/0.1" },
       signal: controller.signal,
     });
     if (!res.ok) return undefined;

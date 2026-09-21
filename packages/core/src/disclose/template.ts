@@ -1,4 +1,4 @@
-import type { Finding, ReachabilityTier, Weaponizability } from "@0/shared"
+import type { Finding, ReachabilityTier, Weaponizability } from "@0/shared";
 import { suggestCwesForCategory, formatCweSection } from "./cwe.js";
 import type { CweEntry } from "./cwe.js";
 import {
@@ -248,14 +248,14 @@ export function renderAdvisoryMarkdown(finding: Finding, ctx: AdvisoryContext = 
   } else if (ctx.target) {
     affectedLine = `\`${ctx.target}\`${ctx.targetRef ? ` at \`${ctx.targetRef}\`` : ""}${ctx.commitHash ? ` (commit \`${ctx.commitHash.slice(0, 12)}\`)` : ""}`;
   } else {
-    affectedLine = "_Pass `--repo <path>` to `0sec-cli disclose` to auto-detect the affected version range from git tags._";
+    affectedLine = "_Pass `--repo <path>` to `@0/cli disclose` to auto-detect the affected version range from git tags._";
   }
 
   const cvssSource =
     cvss.source === "finding"
-      ? "populated on the finding by 0sec"
+      ? "populated on the finding by 0"
       : cvss.source === "impact-assessment"
-        ? "exploitability metrics derived from 0sec's reachability assessment; impact from category — verify against your deployment"
+        ? "exploitability metrics derived from 0's reachability assessment; impact from category — verify against your deployment"
         : "heuristic from category + severity — override in the GHSA editor if the operator disagrees";
 
   const remediation = finding.remediation;
@@ -274,7 +274,7 @@ export function renderAdvisoryMarkdown(finding: Finding, ctx: AdvisoryContext = 
   } else if (ctx.siblingFix) {
     const ref = `${ctx.siblingFix.fileRef.file}${ctx.siblingFix.fileRef.line ? `:${ctx.siblingFix.fileRef.line}` : ""}`;
     suggestedFixParts.push(
-      `**Correct pattern already present in the repo at \`${ref}\`** *(extracted by 0sec):*\n\n\`\`\`${ctx.siblingFix.language}\n${ctx.siblingFix.snippet}\n\`\`\``,
+      `**Correct pattern already present in the repo at \`${ref}\`** *(extracted by 0):*\n\n\`\`\`${ctx.siblingFix.language}\n${ctx.siblingFix.snippet}\n\`\`\``,
     );
   }
   const suggestedFix = suggestedFixParts.length > 0
@@ -314,7 +314,7 @@ export function renderAdvisoryMarkdown(finding: Finding, ctx: AdvisoryContext = 
 
   if (ctx.osecVersion || ctx.scanId) {
     const bits: string[] = [];
-    if (ctx.osecVersion) bits.push(`0sec \`${ctx.osecVersion}\``);
+    if (ctx.osecVersion) bits.push(`0 \`${ctx.osecVersion}\``);
     if (ctx.scanId) bits.push(`scan \`${ctx.scanId.slice(0, 8)}\``);
     // Honesty gate: only claim "code-verified" when BOTH the canary
     // patch-status check (#170) and the behavioural reverify (#171)
@@ -392,7 +392,7 @@ export function renderAdvisoryMarkdown(finding: Finding, ctx: AdvisoryContext = 
   if (ctx.patchStatus) {
     out.push(formatPatchStatusSection(ctx.patchStatus), "");
   } else {
-    out.push("_Pass `--repo <path>` to `0sec-cli disclose` to auto-verify this against the target's current HEAD or a specific tag._", "");
+    out.push("_Pass `--repo <path>` to `@0/cli disclose` to auto-verify this against the target's current HEAD or a specific tag._", "");
   }
   if (ctx.pocExecution) {
     const verdict = ctx.pocExecution.overallVerdict === "exploit_still_works"
@@ -573,7 +573,7 @@ function buildRemediation(finding: Finding, ctx: AdvisoryContext): string {
   } else if (ctx.siblingFix) {
     const ref = `${ctx.siblingFix.fileRef.file}${ctx.siblingFix.fileRef.line ? `:${ctx.siblingFix.fileRef.line}` : ""}`;
     parts.push(
-      `**Correct pattern already present in the repo at \`${ref}\`** *(extracted by 0sec):*\n\n\`\`\`${ctx.siblingFix.language}\n${ctx.siblingFix.snippet}\n\`\`\``,
+      `**Correct pattern already present in the repo at \`${ref}\`** *(extracted by 0):*\n\n\`\`\`${ctx.siblingFix.language}\n${ctx.siblingFix.snippet}\n\`\`\``,
     );
   }
   return parts.length > 0
@@ -885,9 +885,9 @@ const GENERIC_TEMPLATE: PlatformReportTemplate = {
 
 function cvssSourceLabel(cvss: CvssSuggestion): string {
   return cvss.source === "finding"
-    ? "CVSS source: populated on the finding by 0sec."
+    ? "CVSS source: populated on the finding by 0."
     : cvss.source === "impact-assessment"
-      ? "CVSS source: exploitability derived from 0sec's reachability assessment; impact from category — verify against your deployment."
+      ? "CVSS source: exploitability derived from 0's reachability assessment; impact from category — verify against your deployment."
       : "CVSS source: heuristic from category + severity — verify before submission.";
 }
 

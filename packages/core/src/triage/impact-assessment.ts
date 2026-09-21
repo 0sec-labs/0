@@ -27,11 +27,13 @@
  * mutates a finding; ranking consumers decide what to do with `business_impact`.
  */
 
-import type { BusinessImpact,
-Finding,
-ImpactAssessment,
-ReachabilityTier,
-Weaponizability, } from "@0/shared"
+import type {
+  BusinessImpact,
+  Finding,
+  ImpactAssessment,
+  ReachabilityTier,
+  Weaponizability,
+} from "@0/shared";
 import type { NativeRuntime } from "../runtime/types.js";
 
 // ────────────────────────────────────────────────────────────────────

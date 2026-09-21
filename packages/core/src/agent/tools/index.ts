@@ -1,5 +1,5 @@
 /**
- * Tool registry barrel (0sec#611).
+ * Tool registry barrel (0#611).
  *
  * Assembles the canonical `TOOL_DEFINITIONS` map from the per-domain
  * definition modules. Splitting the old 600-line object literal into
@@ -142,7 +142,7 @@ const TOOL_REGISTRY_ORDER = [
   "ask_operator",
   "update_todos",
   "write_todos",
-  // Model self-extension front door (0sec self-extension). In the registry so it
+  // Model self-extension front door (0 self-extension). In the registry so it
   // is a first-class, dispatchable, tested tool — but deliberately kept OUT of
   // every getToolsForRole set; native-loop injects it into the model-facing tool
   // set only when the operator enabled `allowModelSelfExtension` (default OFF).

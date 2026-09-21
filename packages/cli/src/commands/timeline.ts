@@ -1,5 +1,5 @@
 /**
- * `0sec timeline <scanId>` — forensic timeline export.
+ * `0 timeline <scanId>` — forensic timeline export.
  *
  * Every other command in the CLI is finding-centric: it answers "what did we
  * find?". This one answers "what did we DO, and when?" — the question a client
@@ -25,7 +25,7 @@
 import type { Command } from "commander";
 import chalk from "chalk";
 import { writePresentationLine, writePresentationErrorLine } from "../presentation/process-output.js";
-import { atlasTechniquesForEvent, techniquesForEvent } from "@0/core"
+import { atlasTechniquesForEvent, techniquesForEvent } from "@0/core";
 import {
   formatTimeline,
   isTimelineFormat,
@@ -74,7 +74,7 @@ export function registerTimelineCommand(program: Command): void {
     .description(
       "Export a scan's immutable pipeline-event audit trail as a chronological, MITRE ATT&CK- and ATLAS-tagged forensic record — UTC ISO-8601 timestamps, per-event action summaries, ready to hand to a client SOC for detection cross-referencing.",
     )
-    .argument("<scanId>", "Scan id to export (see `0sec history`)")
+    .argument("<scanId>", "Scan id to export (see `0 history`)")
     .option("--format <format>", `Output format: ${TIMELINE_FORMATS.join(", ")}`, "markdown")
     .option("--since <iso>", "Only include events at or after this timestamp (ISO-8601, e.g. 2026-07-28T09:00:00Z)")
     .option("--until <iso>", "Only include events at or before this timestamp (ISO-8601)")
@@ -122,7 +122,7 @@ export function registerTimelineCommand(program: Command): void {
         scan = db.getScan(id) as { id: string; target?: string | null } | undefined;
         if (!scan) {
           console.error(
-            chalk.red(`No scan '${id}' in the database. Run \`0sec history\` to list known scan ids.`),
+            chalk.red(`No scan '${id}' in the database. Run \`0 history\` to list known scan ids.`),
           );
           process.exitCode = 2;
           return;

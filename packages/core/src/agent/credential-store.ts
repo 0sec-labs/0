@@ -1,5 +1,5 @@
 /**
- * PersistentCredentialStore (0sec#771, extends #687).
+ * PersistentCredentialStore (0#771, extends #687).
  *
  * The in-memory {@link LootLedger} (loot.ts) is single-scan: every foothold it
  * harvests evaporates when the scan ends. This store is the durable companion —
@@ -14,16 +14,18 @@
  * `valuePreview` for human/agent recognition. The full value stays in the
  * in-memory ledger for the lifetime of the scan and is discarded with it.
  *
- * This is a FIRST SLICE (0sec#771): the load/save APIs and the durable schema
+ * This is a FIRST SLICE (0#771): the load/save APIs and the durable schema
  * exist and are unit-tested, but the native agent loop is only stubbed to call
  * them (see native-loop.ts TODO). The loop wiring is deliberately not rewritten
  * here.
  */
 
 import { createHash } from "node:crypto";
-import type { osecDB,
-PersistentCredentialRow,
-CredentialKindDB, } from "@0/db"
+import type {
+  osecDB,
+  PersistentCredentialRow,
+  CredentialKindDB,
+} from "@0/db";
 import type { LootItem } from "./loot.js";
 import { LootLedger } from "./loot.js";
 

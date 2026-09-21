@@ -184,7 +184,7 @@ function ensureRegistry(path: string): void {
   mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
   const initial: RegistryFile = {
     schemaVersion: 1,
-    provenance: "0sec validated self-evolving appsec lens overlay",
+    provenance: "0 validated self-evolving appsec lens overlay",
     archetypes: [],
     ledger: [],
   };

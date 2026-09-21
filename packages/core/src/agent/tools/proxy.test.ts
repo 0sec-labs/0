@@ -36,7 +36,7 @@ function fakeDriver(): ProxyDriver {
   return {
     async start(opts) {
       running = true;
-      return { port: opts.port, caCertPath: "/tmp/0sec-proxy-ca.pem" };
+      return { port: opts.port, caCertPath: "/tmp/0-proxy-ca.pem" };
     },
     isRunning: () => running,
     async send(req) {

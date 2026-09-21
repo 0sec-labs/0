@@ -47,7 +47,7 @@ describe("feature presets — fp-moat membership", () => {
   /**
    * `egats` is the one layer our own ablation measured as genuinely broken
    * (2 -> 1 flags at 10x the worst per-flag cost on stubborn-14; removed from
-   * the default aliases in 0sec#116). Its flag no longer exists in the
+   * the default aliases in 0#116). Its flag no longer exists in the
    * codebase, and the preset must never resurrect it — an A/B arm containing a
    * known-regressing layer would invalidate the comparison.
    */

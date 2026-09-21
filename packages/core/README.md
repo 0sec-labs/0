@@ -6,7 +6,7 @@
 
 The engine behind the [0 CLI](../../README.md): agent loops, tools,
 model runtimes, source review, verification and self-extension. The CLI package
-is named `0sec-cli`; it registers the `0` and `0sec` commands.
+is named `@0/cli`; it registers the `0` and `0` commands.
 
 <p>
   <a href="https://docs.0.security/architecture/"><img src="https://img.shields.io/badge/docs-architecture-DC2626?style=flat-square&amp;labelColor=1A1815" alt="Architecture documentation"></a>
@@ -47,7 +47,7 @@ and [architecture guide](https://docs.0.security/architecture/).
 ## Feature flags
 
 Feature flags are declared in `src/agent/features.ts`. Each flag maps to a
-`ZERO_FEATURE_<NAME>` environment variable. The `0sec-cli` `scan` command
+`ZERO_FEATURE_<NAME>` environment variable. The `@0/cli` `scan` command
 also accepts a `--features` flag that sets those env vars automatically:
 
 ```bash

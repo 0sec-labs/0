@@ -17,7 +17,7 @@ triggers:
   - "source review"
   - "review the (repo|codebase|source|code)"
   - "whole-repo"
-estimated_tokens: 400
+estimated_tokens: 350
 content: |
   ## Agent-led source review
 
@@ -31,14 +31,10 @@ content: |
   scope, advertised capabilities and scan-wide accounting are inherited.
   Do not launch another opaque review pipeline inside a tool call.
 
-  ## Inspect reachable paths
-
   Prioritize reachable, high-impact paths rather than running a fixed lens
   matrix over every file. Scanner hits and prior outcomes are leads, not
   findings. Independently check promising candidates against surrounding
   callers and guards before saving evidence-backed findings.
-
-  ## Record evidence and limits
 
   Report which surfaces were inspected, which remain unreviewed, and where
   verification is incomplete. Zero findings is a valid result, not a claim

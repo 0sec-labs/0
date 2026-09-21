@@ -16,7 +16,7 @@ import { LlmApiRuntime } from "./llm-api.js";
 
 /** Point HOME at a throwaway dir holding just this config.toml. */
 function withCodexConfig(toml: string): string {
-  const home = mkdtempSync(join(tmpdir(), "0sec-codex-config-"));
+  const home = mkdtempSync(join(tmpdir(), "0-codex-config-"));
   mkdirSync(join(home, ".codex"));
   writeFileSync(join(home, ".codex", "config.toml"), toml);
   return home;

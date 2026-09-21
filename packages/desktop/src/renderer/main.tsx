@@ -34,7 +34,7 @@ async function startDesktop(): Promise<void> {
     if (window.osecDesktop) {
       const preferences = await window.osecDesktop.getPreferences();
       for (const [key, value] of Object.entries(preferences)) {
-        if (key.startsWith("0sec:"))
+        if (key.startsWith("0:"))
           localStorage.setItem(key, JSON.stringify(value));
       }
     }

@@ -1,12 +1,14 @@
-import type { ScanConfig,
-ScanReport,
-Finding,
-LayerVerdict,
-LayerVerdictKind,
-PocStep,
-Severity,
-TriageLayerName, } from "@0/shared"
-import { loadTemplates } from "@0/templates"
+import type {
+  ScanConfig,
+  ScanReport,
+  Finding,
+  LayerVerdict,
+  LayerVerdictKind,
+  PocStep,
+  Severity,
+  TriageLayerName,
+} from "@0/shared";
+import { loadTemplates } from "@0/templates";
 import { createRuntime } from "./runtime/index.js";
 import { LlmApiRuntime } from "./runtime/llm-api.js";
 import type { ApiRuntimeDiagnostics } from "./runtime/llm-api.js";
@@ -29,8 +31,8 @@ import {
   shellPentestPrompt,
   buildAccessControlPromptBlock,
 } from "./agent/prompts.js";
-import { createJevEvaluator, jevConfigFromEnvironment, resolveIdentities } from "@0/shared"
-import type { RuntimeMode, PipelineEvent } from "@0/shared"
+import { createJevEvaluator, jevConfigFromEnvironment, resolveIdentities } from "@0/shared";
+import type { RuntimeMode, PipelineEvent } from "@0/shared";
 import { createScanMemoryStore } from "./triage/memories.js";
 import { features } from "./agent/features.js";
 import { diag } from "./diagnostics/channel.js";
@@ -43,154 +45,12 @@ import { runLlmIpiAudit } from "./llm-ipi-audit.js";
 import { z } from "zod";
 import { layerVerdictArraySchema, formatZodError } from "./schemas.js";
 import { createScanContext, finalize } from "./context.js";
-import { generateRemediation, generateRemediationWithLLM } from "./remediation.js";
-import { assessImpact, parseImpactAssessment } from "./triage/impact-assessment.js";
-import type { RemediationObservation } from "./remediation.js";
-import { mapWithConcurrency } from "./concurrency.js";
+import { generateRemediation } from "./remediation.js";
+import { parseImpactAssessment } from "./triage/impact-assessment.js";
+import { attachRemediation, attachImpactAssessment, countFlagsInFindings } from "./agentic/report-enrichment.js";
+import { getOrCreateRateLimiter, resolveEngagementForConfig, attachEngagementPosture, resolveEnforcementForConfig, attachEnforcementSummary, resolveScopeForConfig, buildAttributionForConfig, cacheScopePolicy } from "./agentic/scan-config.js";
 
-/**
- * How many model-written remediation calls may be in flight at once.
- *
- * The static knowledge-base path is a synchronous map lookup, so the call sites
- * are plain `for` loops. Swapping in an LLM call would turn those into one
- * sequential round-trip per finding — a 50-finding scan would serialise 50
- * model calls at report-assembly time, after the user already believes the scan
- * is done. Bounded fan-out keeps the wall-clock flat without letting a noisy
- * scan open an unbounded number of sessions. Override with
- * `ZERO_REMEDIATION_CONCURRENCY`.
- */
-const REMEDIATION_CONCURRENCY = 4;
 
-function remediationConcurrency(): number {
-  const raw = process.env["ZERO_REMEDIATION_CONCURRENCY"];
-  if (raw !== undefined) {
-    const parsed = Number.parseInt(raw, 10);
-    if (Number.isFinite(parsed) && parsed > 0) return parsed;
-  }
-  return REMEDIATION_CONCURRENCY;
-}
-
-/**
- * Attach remediation guidance to every finding that should carry it.
- *
- * Default path is the static knowledge base — a synchronous category lookup,
- * byte-identical to the behaviour before the LLM path was wired. When
- * `ZERO_FEATURE_LLM_REMEDIATION` is on AND a live runtime is actually
- * reachable, each finding instead gets model-written guidance that can cite its
- * own evidence rather than a generic category snippet.
- *
- * Two properties this function is responsible for:
- *
- *  - **Never regress on a keyless run.** `generateRemediationWithLLM` is
- *    fail-open: with no credentials it quietly returns the KB answer for every
- *    finding, which looks identical to success. So availability is checked here
- *    rather than discovered per-call, and the outcome is logged — a 100%
- *    fallback rate is a misconfiguration, and it must be visible as one.
- *  - **Do not spend silently.** The LLM path bills tokens that the scan's
- *    stage-level cost accounting does not see, so the observed usage is summed
- *    and logged explicitly instead of vanishing.
- *
- * `select` decides which findings are eligible; callers differ on that.
- */
-async function attachRemediation(
-  findings: Finding[],
-  select: (f: Finding) => boolean,
-  deps: {
-    llmEnabled: boolean;
-    runtime: NativeRuntime | null;
-    // Structural rather than the file's usual `db: any` — this helper needs
-    // exactly one method, and using the real event type keeps the payload
-    // shape checked instead of silently accepting a malformed event.
-    db: { logEvent: (event: Omit<PipelineEvent, "id">) => unknown } | null;
-    scanId: string;
-    stage: string;
-  },
-): Promise<void> {
-  const targets = findings.filter(select);
-  if (targets.length === 0) return;
-
-  if (!deps.llmEnabled || !deps.runtime) {
-    for (const finding of targets) finding.remediation = generateRemediation(finding);
-    return;
-  }
-
-  let llmCount = 0;
-  let inputTokens = 0;
-  let outputTokens = 0;
-  const fallbackReasons: Record<string, number> = {};
-
-  await mapWithConcurrency(targets, remediationConcurrency(), async (finding) => {
-    const onObservation = (observation: RemediationObservation): void => {
-      if (observation.source === "llm") llmCount++;
-      else if (observation.fallbackReason) {
-        fallbackReasons[observation.fallbackReason] =
-          (fallbackReasons[observation.fallbackReason] ?? 0) + 1;
-      }
-      inputTokens += observation.usage?.inputTokens ?? 0;
-      outputTokens += observation.usage?.outputTokens ?? 0;
-    };
-    // Never let an enrichment failure take down report assembly: the finding
-    // is already confirmed, and shipping it with KB guidance beats losing it.
-    try {
-      finding.remediation = await generateRemediationWithLLM(finding, deps.runtime!, { onObservation });
-    } catch {
-      finding.remediation = generateRemediation(finding);
-      fallbackReasons["error"] = (fallbackReasons["error"] ?? 0) + 1;
-    }
-  });
-
-  deps.db?.logEvent({
-    scanId: deps.scanId,
-    stage: deps.stage,
-    eventType: "llm_remediation",
-    payload: {
-      findings: targets.length,
-      llm: llmCount,
-      baseline: targets.length - llmCount,
-      fallbackReasons,
-      inputTokens,
-      outputTokens,
-    },
-    timestamp: Date.now(),
-  });
-}
-
-/**
- * Populate `finding.impactAssessment` for eligible findings.
- *
- * Gated on `ZERO_FEATURE_IMPACT_ASSESSMENT` and a reachable runtime. `assessImpact`
- * is total (never throws; falls back to the deterministic heuristic when no
- * model is available), so the only failure mode to guard here is the wave
- * itself. Bounded fan-out shares the remediation concurrency knob — both are
- * per-finding report-time LLM calls with the same cost profile.
- */
-async function attachImpactAssessment(
-  findings: Finding[],
-  select: (f: Finding) => boolean,
-  deps: { enabled: boolean; runtime: NativeRuntime | null; db: { logEvent: (event: Omit<PipelineEvent, "id">) => unknown } | null; scanId: string; stage: string },
-): Promise<void> {
-  if (!deps.enabled || !deps.runtime) return;
-  const targets = findings.filter(select);
-  if (targets.length === 0) return;
-
-  await mapWithConcurrency(targets, remediationConcurrency(), async (finding) => {
-    try {
-      finding.impactAssessment = await assessImpact(finding, { runtime: deps.runtime! });
-    } catch {
-      // assessImpact is already total; this is belt-and-suspenders so a
-      // surprise never takes down report assembly for a confirmed finding.
-    }
-  });
-
-  const assessed = targets.filter((f) => f.impactAssessment).length;
-  deps.db?.logEvent({
-    scanId: deps.scanId,
-    stage: deps.stage,
-    eventType: "impact_assessment",
-    payload: { findings: targets.length, assessed },
-    timestamp: Date.now(),
-  });
-}
 import { parseApiSpec } from "./api-spec.js";
 import { raceWithDefaults } from "./racing.js";
 import type { RaceResult } from "./racing.js";
@@ -262,167 +122,23 @@ import type { CraftTarget, CraftScanOptions } from "./stages/craft-scan.js";
 import { runEnsembleCraft, resolveEnsembleModels } from "./stages/ensemble-craft.js";
 import { runReportStage } from "./agentic/stages/report.js";
 import { applyFindingPostProcess, loadPriorScanAnchors, type DedupeItem } from "./agentic/finding-postprocess.js";
+import {
+  runNativeDiscovery,
+  runNativeAttack,
+  runNativeVerify,
+  runLegacyDiscovery,
+  runLegacyAttack,
+  runLegacyVerify,
+  dbFindingToFinding,
+} from "./agentic/phase-runners.js";
+import type { AgentOutput } from "./agentic/phase-runners.js";
 
-/**
- * Per-scan rate-limiter cache (#214). The limiter is stateful — buckets
- * track per-host token availability and 429 cool-offs across the entire
- * scan — so we build one instance keyed on the ScanConfig object and
- * thread it into every agent loop and every stage that fetches.
- *
- * Default 5 rps when the operator did not pass `--rate-limit`. The
- * issue body is explicit on this: the primitive should default
- * conservative even without an explicit operator flag, so an
- * unconfigured `0sec scan` can't accidentally hammer a target.
- */
-const RATE_LIMITER_CACHE = new WeakMap<ScanConfig, RateLimiter>();
-function getOrCreateRateLimiter(config: ScanConfig): RateLimiter {
-  let rl = RATE_LIMITER_CACHE.get(config);
-  if (!rl) {
-    // In http_audit mode the per-host rps comes from the env-bridge
-    // (ZERO_TARGET_RATE_LIMIT_RPS, default 5) rather than the --rate-limit
-    // flag; the flag form isn't part of the worker contract. Otherwise we
-    // honour the parsed --rate-limit spec with the usual 5 rps default.
-    const modeFallbackRps = config.mode === "http_audit"
-      ? (config.httpAuditRateLimitRps ?? 5)
-      : 5;
-    // Engagement hardening: an active profile lowers the default rps and adds
-    // full jitter so the request train stops being periodic. It can only ever
-    // make the scan QUIETER — we take the min, never the profile's number when
-    // the operator already configured something slower. An explicit
-    // `--rate-limit` default still wins (parseRateLimitFlag only consumes the
-    // fallback when the spec carries no default).
-    const posture = resolveEngagementForConfig(config);
-    const cfg = parseRateLimitFlag(
-      config.rateLimit ?? "",
-      effectiveFallbackRps(posture, modeFallbackRps),
-    );
-    if (posture.jitter) cfg.jitter = { baseMs: posture.jitter.baseMs };
-    // Wire the throttle observer into the http_audit enforcement tracker so
-    // every blocked acquire / 429 park bumps `rate_limited_count`. No-op for
-    // every other mode (tracker is undefined).
-    const enforcement = resolveEnforcementForConfig(config);
-    rl = new RateLimiter(cfg, {
-      onThrottle: enforcement ? () => enforcement.noteRateLimited() : undefined,
-    });
-    RATE_LIMITER_CACHE.set(config, rl);
-  }
-  return rl;
-}
+// Re-exported for external consumers (tests import runNativeVerify and the
+// AgentOutput type from this module; report stage imports the AgentOutput type).
+export { runNativeVerify } from "./agentic/phase-runners.js";
+export type { AgentOutput } from "./agentic/phase-runners.js";
 
-/**
- * Per-scan engagement-posture cache. The posture is pure config (no I/O beyond
- * the already-cached scope file) but it is read at several call sites — the
- * rate limiter, the web-recon pre-pass, every agent config, and the report —
- * so resolve it once per ScanConfig and hand the same object around.
- *
- * Returns the `standard` posture (unchanged engine behaviour) when nothing is
- * configured, so this is safe to call unconditionally.
- */
-const ENGAGEMENT_CACHE = new WeakMap<ScanConfig, EngagementPosture>();
-function resolveEngagementForConfig(config: ScanConfig): EngagementPosture {
-  const cached = ENGAGEMENT_CACHE.get(config);
-  if (cached) return cached;
-  const scope = resolveScopeForConfig(config);
-  const posture = resolveEngagementProfile({
-    scopeFileBlock: scope ? extractEngagementFromScopeJson(scope.raw) : undefined,
-    env: process.env,
-    cliProfile: config.engagementProfile,
-    cliWafEvasion: config.wafEvasion,
-  });
-  ENGAGEMENT_CACHE.set(config, posture);
-  return posture;
-}
 
-/**
- * Attach the engagement-posture audit record to a report. Only present when a
- * hardening profile was actually applied, so default scans emit byte-for-byte
- * identical reports. Mutates `report` in place; called on every report return
- * path so the evidence is always there when it applies.
- */
-function attachEngagementPosture(report: ScanReport, config: ScanConfig): void {
-  const posture = resolveEngagementForConfig(config);
-  if (!posture.active) return;
-  report.engagementPosture = describeEngagementPosture(posture);
-}
-
-/**
- * Per-scan enforcement-tracker cache (http_audit only). Created lazily the
- * first time any helper needs it and reused for the whole scan so the
- * scope/rate counters and the kill-switch clock aggregate across discovery +
- * attack + verify stages. Returns undefined for every non-http_audit scan,
- * leaving the legacy behaviour untouched.
- *
- * The tracker owns the path-prefix allowlist (PathPolicy) and the auth mode;
- * the host allowlist is enforced separately via the ScopePolicy built in
- * `resolveScopeForConfig`.
- */
-const ENFORCEMENT_CACHE = new WeakMap<ScanConfig, EnforcementTracker>();
-function resolveEnforcementForConfig(config: ScanConfig): EnforcementTracker | undefined {
-  if (config.mode !== "http_audit") return undefined;
-  const cached = ENFORCEMENT_CACHE.get(config);
-  if (cached) return cached;
-  const tracker = new EnforcementTracker({
-    pathPolicy: new PathPolicy(config.httpAuditAllowedPaths ?? []),
-    auth: config.auth,
-    killAfterSec: config.httpAuditKillAfterSec ?? 1800,
-  });
-  ENFORCEMENT_CACHE.set(config, tracker);
-  return tracker;
-}
-
-/**
- * Attach the frozen `enforcement_summary` block to a report when the scan ran
- * in http_audit mode. No-op for every other mode (tracker is undefined), so
- * non-http_audit reports are byte-for-byte unchanged. Mutates `report` in
- * place; called on every http_audit report return path (happy, kill-switch,
- * cost-ceiling) so the block is always present.
- */
-function attachEnforcementSummary(report: ScanReport, config: ScanConfig): void {
-  const enforcement = resolveEnforcementForConfig(config);
-  if (!enforcement) return;
-  report.enforcementSummary = enforcement.summarize();
-}
-
-/**
- * Count distinct `FLAG{...}` matches across a finding set. Used by
- * `emitScanCompleted` to derive `cost_per_flag` for the
- * `scan_completed` event (0sec#231).
- *
- * Mirrors the regex in `agent/flag-validator.ts` (`FLAG_WRAPPER_RE`)
- * so anything the validator would accept counts here. Walks
- * `title` / `description` / evidence fields — the agent normally
- * commits a flag into one of these when `save_finding` fires after a
- * successful exploit. Dedupes by inner content so retries that save the
- * same flag twice don't double-count.
- *
- * Note: this does NOT validate flag shape — a decoy `FLAG{Im_a_Script_Kiddie}`
- * would still increment the counter. The triage pipeline already
- * downgrades decoy flags to `false-positive` / `info`; the cost-per-flag
- * metric is honest about cost-per-claimed-flag, not cost-per-real-flag.
- * Cleaner separation than guessing which findings are "real" here.
- */
-const FLAG_PATTERN = /FLAG\{([^}]+)\}/gi;
-function countFlagsInFindings(findings: Finding[]): number {
-  if (!Array.isArray(findings) || findings.length === 0) return 0;
-  const seen = new Set<string>();
-  for (const f of findings) {
-    if (!f) continue;
-    const haystack = [
-      typeof f.title === "string" ? f.title : "",
-      typeof f.description === "string" ? f.description : "",
-      typeof f.evidence?.request === "string" ? f.evidence.request : "",
-      typeof f.evidence?.response === "string" ? f.evidence.response : "",
-      typeof f.evidence?.analysis === "string" ? f.evidence.analysis : "",
-    ].join("\n");
-    const matches = haystack.matchAll(FLAG_PATTERN);
-    for (const m of matches) {
-      // Normalize on inner content so `FLAG{abc}` and `flag{abc}` collapse.
-      const inner = (m[1] ?? "").trim().toLowerCase();
-      if (inner) seen.add(inner);
-    }
-  }
-  return seen.size;
-}
 
 export interface AgenticScanOptions {
   config: ScanConfig;
@@ -445,7 +161,7 @@ export interface AgenticScanOptions {
    */
   emitTerminalEvent?: boolean;
   /**
-   * Userspace / Rust memory-safety scan role ("Monty-mode", 0sec#700). When
+   * Userspace / Rust memory-safety scan role ("Monty-mode", 0#700). When
    * set, the scan dispatches to the focused `runMemSafetyScan` stage
    * (audit-playbook → closed fuzz loop → crash triage) and returns early,
    * BEFORE any of the live-target / DB / runtime machinery below runs. The
@@ -649,7 +365,7 @@ async function detectScanMode(config: ScanConfig): Promise<ScanConfig> {
  * Sessions are saved so interrupted scans can be resumed.
  */
 /**
- * Memory-safety scan dispatch ("Monty-mode", 0sec#700). Adapts the focused
+ * Memory-safety scan dispatch ("Monty-mode", 0#700). Adapts the focused
  * `runMemSafetyScan` stage result into the unified `ScanReport` the rest of the
  * product consumes. Lives here only as the thin bridge between the scan entry
  * point and the stage module; all real orchestration is in
@@ -856,7 +572,7 @@ export async function agenticScan(opts: AgenticScanOptions): Promise<ScanReport>
   const emit = onEvent ?? (() => {});
 
   if (runId && resumeScanId && runId !== resumeScanId) {
-    throw new Error("0sec scan runId must match resumeScanId when resuming.");
+    throw new Error("0 scan runId must match resumeScanId when resuming.");
   }
 
   // #978 (ADR-060) — cloud control channel. The agent loop injects "pending
@@ -872,7 +588,7 @@ export async function agenticScan(opts: AgenticScanOptions): Promise<ScanReport>
   const getPendingUserMessages =
     optsGetPendingUserMessages ?? cloudInbox?.drain;
 
-  // Memory-safety scan role ("Monty-mode", 0sec#700). This is the minimal
+  // Memory-safety scan role ("Monty-mode", 0#700). This is the minimal
   // dispatch seam for the userspace/Rust pipeline: when a `memSafetyTarget` is
   // supplied we delegate to the focused `runMemSafetyScan` stage and return,
   // before the DB / runtime / live-target machinery below. Keeping the actual
@@ -893,7 +609,7 @@ export async function agenticScan(opts: AgenticScanOptions): Promise<ScanReport>
 
   let config = normalizeScanConfig(opts.config);
 
-  // Programmatic scope ingestion (0sec#215). Load once at the top and
+  // Programmatic scope ingestion (0#215). Load once at the top and
   // pass the parsed `ScopePolicy` to every agent config below. The CLI
   // is responsible for catching ENOENT / parse errors before this point;
   // here we just propagate. Pre-validate the configured target so an
@@ -904,9 +620,9 @@ export async function agenticScan(opts: AgenticScanOptions): Promise<ScanReport>
     scope = loadScope(config.scopeFile);
     // Seed the per-scan cache so every downstream helper reuses this
     // exact policy instance instead of re-reading the JSON file. See
-    // `resolveScopeForConfig` for the TOCTOU rationale (0sec#218
+    // `resolveScopeForConfig` for the TOCTOU rationale (0#218
     // review).
-    scopePolicyCache.set(config, scope);
+    cacheScopePolicy(config, scope);
     const verdict = scope.match(config.target);
     if (!verdict.allowed) {
       throw new Error(
@@ -926,7 +642,7 @@ export async function agenticScan(opts: AgenticScanOptions): Promise<ScanReport>
     throw new Error(scopeRequiredRefusal("scan"));
   }
 
-  // Attribution-header config (0sec#216). Resolved by every per-stage
+  // Attribution-header config (0#216). Resolved by every per-stage
   // helper below via `buildAttributionForConfig(config)` — see that
   // function for the actual three-source merge. We pre-flight here so a
   // malformed `attribution` block in the scope file or a malformed
@@ -944,7 +660,7 @@ export async function agenticScan(opts: AgenticScanOptions): Promise<ScanReport>
   const detectedConfig = await detectScanMode(config);
   if (detectedConfig !== config) {
     // Keep the admitted scope snapshot across the mode-only config copy.
-    if (scope) scopePolicyCache.set(detectedConfig, scope);
+    if (scope) cacheScopePolicy(detectedConfig, scope);
     config = detectedConfig;
   }
 
@@ -970,7 +686,7 @@ export async function agenticScan(opts: AgenticScanOptions): Promise<ScanReport>
     } catch (err) {
       const cause = err instanceof Error ? err.message : String(err);
       throw new Error(
-        `0sec: failed to initialize the local database (@0/db). ` +
+        `0: failed to initialize the local database (@0/db). ` +
           `Agentic scans require SQLite persistence. Underlying error: ${cause}`,
       );
     }
@@ -998,7 +714,7 @@ export async function agenticScan(opts: AgenticScanOptions): Promise<ScanReport>
     emit({ type: "stage:start", stage: "discovery", message: "Resuming scan..." });
   }
 
-  // Record the inert-guard fact in the scan's OWN event log (0sec#133), not
+  // Record the inert-guard fact in the scan's OWN event log (0#133), not
   // just on stdout: cloud scans have no console to read, and the whole point
   // of the issue is that a reviewer must be able to answer "did the bash
   // egress guards run on this scan?" after the fact. Paired with the operator-
@@ -1215,7 +931,7 @@ export async function agenticScan(opts: AgenticScanOptions): Promise<ScanReport>
   // still tells the operator how much work happened. Tracked here in
   // the scanner (the producer) so the cloud doesn't re-derive these
   // from raw scan_events on every page load — see
-  // 0sec-cloud/services/dashboard/src/routes/_authed/$orgSlug/scans/index.tsx.
+  // 0-cloud/services/dashboard/src/routes/_authed/$orgSlug/scans/index.tsx.
   let toolCallsTotal = 0;
   let lastDoneSummary = "";
   const unsubscribeMetrics = eventBus.subscribe({
@@ -1288,7 +1004,7 @@ export async function agenticScan(opts: AgenticScanOptions): Promise<ScanReport>
         lastDoneSummary ||
         undefined;
 
-      // ── Cost surfacing (0sec#231) ──
+      // ── Cost surfacing (0#231) ──
       // Aggregate per-(provider, model) so a multi-model run (Haiku
       // discovery + Opus attack) emits one entry per model with split
       // input/output/cache costs. The cloud relay / consolidator can
@@ -1533,7 +1249,7 @@ export async function agenticScan(opts: AgenticScanOptions): Promise<ScanReport>
         "Codex CLI live target scanning is not supported. " +
         "The MCP-backed Codex wrapper was removed because it adds a target-interaction bottleneck. " +
         "For live target scans with Codex, run `codex login`, set " +
-        "ZERO_CHATGPT_OAUTH_REFRESH_TOKEN from ~/.codex/auth.json, and retry `0sec scan --runtime codex`; " +
+        "ZERO_CHATGPT_OAUTH_REFRESH_TOKEN from ~/.codex/auth.json, and retry `0 scan --runtime codex`; " +
         "otherwise use runtime=api or runtime=claude.",
       );
     }
@@ -1554,7 +1270,7 @@ export async function agenticScan(opts: AgenticScanOptions): Promise<ScanReport>
     });
 
     // Deterministic web-recon pre-pass — runs ONCE here on the common path so it
-    // applies to BOTH native and legacy discovery. The cloud worker invokes 0sec
+    // applies to BOTH native and legacy discovery. The cloud worker invokes 0
     // with `--runtime codex`, which resolves to the legacy discovery loop; a hook
     // wired only into runNativeDiscovery never fires there (the reason the pre-pass
     // produced nothing in cloud scans). Never breaks the scan; emits findings
@@ -2029,14 +1745,14 @@ export async function agenticScan(opts: AgenticScanOptions): Promise<ScanReport>
         ...(repository ? { repository } : {}),
       });
     }
-    // ── Dynamic per-finding triage routing (0sec#113) ──
+    // ── Dynamic per-finding triage routing (0#113) ──
     // When `ZERO_FEATURE_DYNAMIC_TRIAGE=1`, a per-finding decision says
     // which layers to skip. The decision is recorded in this map so we
     // can (a) gate layer execution below and (b) emit `routing-trace.jsonl`
     // at scan teardown for offline learned-router training.
     const routingDecisions = new Map<string, RoutingDecision>();
     // Phase 3: accumulate cross-validated leads (findings the multi-modal layer
-    // scored `both_fire` — 0sec AND foxguard agree) so we can surface ONE
+    // scored `both_fire` — 0 AND foxguard agree) so we can surface ONE
     // aggregate summary event after the loop. Purely observational: reading the
     // already-computed `mm` result here does NOT change any triage decision.
     const crossValidatedLeadEntries: CrossValidatedLeadEntry[] = [];
@@ -2053,7 +1769,7 @@ export async function agenticScan(opts: AgenticScanOptions): Promise<ScanReport>
         evidenceCompletenessIdx >= 0 ? featureVector[evidenceCompletenessIdx] ?? 0 : 0;
 
       // Layer telemetry: holding-it-wrong always runs (just may not enforce).
-      // 0sec#112 — feeds the dynamic routing model in #113.
+      // 0#112 — feeds the dynamic routing model in #113.
       //
       // The blocklist drop is a heuristic, so it routes through the one
       // disclosure predicate: a disclosure-grade finding is held for
@@ -2215,7 +1931,7 @@ export async function agenticScan(opts: AgenticScanOptions): Promise<ScanReport>
         startedAt: evidenceGateStartedAt,
       });
 
-      // ── Learned router (0sec#113) ──
+      // ── Learned router (0#113) ──
       // When enabled, the XGBoost model decides per-finding whether to
       // auto-accept, auto-reject, or run a subset of layers. This runs
       // AFTER the two free always-on filters (holding-it-wrong +
@@ -2298,7 +2014,7 @@ export async function agenticScan(opts: AgenticScanOptions): Promise<ScanReport>
         // still control which layers run for now).
       }
 
-      // ── Dynamic per-finding triage routing (0sec#113) ──
+      // ── Dynamic per-finding triage routing (0#113) ──
       // Gated behind ZERO_FEATURE_DYNAMIC_TRIAGE (default OFF). When
       // enabled, the router decides per-finding which subset of the
       // 11 triage layers to invoke. Layers NOT in `layers_to_invoke`
@@ -2949,7 +2665,7 @@ export async function agenticScan(opts: AgenticScanOptions): Promise<ScanReport>
           finding.confidence = 1.0;
           finding.triageStatus = "accepted";
           finding.triageNote = `oracle_verified: ${oracle.evidence}`;
-          // 0sec#659 / 0cloud#1278 — when this deterministic pass came from the
+          // 0#659 / 0cloud#1278 — when this deterministic pass came from the
           // OAST-callback oracle (SSRF / OOB-RCE / OOB-SQLi), emit an ALWAYS-ON
           // `oast_confirmed` bus event so cloudEventSink relays it to
           // scan_events. Unlike `pov_oracle` (below, gated behind the default-off
@@ -3065,7 +2781,7 @@ export async function agenticScan(opts: AgenticScanOptions): Promise<ScanReport>
             timestamp: Date.now(),
           });
           // Mirror onto the typed EventBus (#570). `db.logEvent` only writes
-          // 0sec's LOCAL sqlite, which the cloud worker never relays — so
+          // 0's LOCAL sqlite, which the cloud worker never relays — so
           // without this the per-finding "deterministic vs heuristic" badge
           // never reaches the dashboard. cloudEventSink serializes this to a
           // `ZERO_EVENT_POV_ORACLE` line → worker → orchestrator
@@ -3496,7 +3212,7 @@ export async function agenticScan(opts: AgenticScanOptions): Promise<ScanReport>
     );
 
     // ── Stage 4: Report ──
-    // Extracted to `agentic/stages/report.ts` (0sec#1285) — the terminal
+    // Extracted to `agentic/stages/report.ts` (0#1285) — the terminal
     // stage assembles the report, persists completion, emits the routing
     // trace + webhook, and fires `scan_completed`. `emitScanCompleted` and
     // `attachEnforcementSummary` stay owned here (they close over the bus /
@@ -3596,1082 +3312,3 @@ export async function agenticScan(opts: AgenticScanOptions): Promise<ScanReport>
   }
 }
 
-// ── Shared state type for agent outputs ──
-
-export interface AgentOutput {
-  findings: Finding[];
-  targetInfo: Partial<import("@0/shared").TargetInfo>;
-  summary: string;
-  turnCount: number;
-  estimatedCostUsd: number;
-  /**
-   * Raw token-usage tally from the loop state. Surfaced separately
-   * from `estimatedCostUsd` so the `scan_completed` event payload
-   * can build per-(provider, model) cost splits via `splitCost()`
-   * (0sec#231) instead of just emitting a fused dollar total.
-   * Optional for back-compat with legacy CLI runtimes that don't
-   * report tokens.
-   */
-  totalUsage?: {
-    inputTokens: number;
-    outputTokens: number;
-    cachedInputTokens?: number;
-  };
-  /** True when this stage terminated because the cost ceiling was hit. */
-  costCeilingExceeded?: boolean;
-  /**
-   * Set when the agent loop bailed because the planner LLM returned an
-   * error (or empty response). Propagated up from `NativeAgentState.errorExit`
-   * so the top-level scan can flip `exit_reason` from "completed" to "failed"
-   * — the legacy `summary` field still carries the raw "Error: ..." marker
-   * for back-compat with older readers.
-   */
-  errorExit?: { error: string; turn: number };
-  /** Full conversation trace (messages) from the agent loop. */
-  messages?: NativeMessage[];
-}
-
-// ── Native (Claude API) stage runners ──
-
-/**
- * Per-scan cache of parsed scope policies (0sec#218 review). The first
- * helper that needs a policy parses the JSON file once; every subsequent
- * helper for the same `ScanConfig` reuses the same `ScopePolicy`
- * instance.
- *
- * Why a WeakMap instead of a plain `Map` keyed by path: callers can
- * construct multiple `ScanConfig`s pointing at the same scope file, and
- * we want each top-level `agenticScan()` call to see a consistent
- * snapshot — but we also don't want to leak parsed policies for the
- * lifetime of the process. Tying lifetime to the `ScanConfig` object
- * itself fixes both.
- *
- * Why this matters: without it, every stage helper called
- * `loadScope(config.scopeFile)` again, which is a TOCTOU window. If the
- * file changed mid-scan, later tool calls would run under a different
- * policy than the one that admitted `--target` at scan start.
- */
-const scopePolicyCache = new WeakMap<ScanConfig, ScopePolicy>();
-
-function resolveScopeForConfig(config: ScanConfig): ScopePolicy | undefined {
-  const cached = scopePolicyCache.get(config);
-  if (cached) return cached;
-  // http_audit mode synthesises an in-memory host-allowlist ScopePolicy from
-  // the env-bridge `httpAuditAllowedHosts` rather than reading a scope file.
-  // This is the host half of the enforcement; the path half lives on the
-  // EnforcementTracker's PathPolicy.
-  if (config.mode === "http_audit") {
-    const hosts = config.httpAuditAllowedHosts ?? [];
-    const policy = ScopePolicy.fromJson({ in_scope: hosts });
-    scopePolicyCache.set(config, policy);
-    return policy;
-  }
-  if (!config.scopeFile) return undefined;
-  const policy = loadScope(config.scopeFile);
-  scopePolicyCache.set(config, policy);
-  return policy;
-}
-
-/**
- * Resolve the attribution config (0sec#216) from a ScanConfig. Called
- * inline at every helper-function call site that constructs an
- * `AgentConfig`/`NativeAgentConfig`. Reuses the cached `ScopePolicy`
- * via `resolveScopeForConfig` so the scope file isn't reparsed.
- * Returns `undefined` when no source contributed anything.
- */
-function buildAttributionForConfig(config: ScanConfig): AttributionConfig | undefined {
-  const scope = resolveScopeForConfig(config);
-  return resolveAttribution({
-    scopeFileBlock: scope ? extractAttributionFromScopeJson(scope.raw) : undefined,
-    env: process.env,
-    cliHeaders: config.attributionHeaders,
-    cliUaToken: config.attributionUaToken,
-  });
-}
-
-async function runNativeDiscovery(
-  runtime: NativeRuntime,
-  db: any,
-  config: ScanConfig,
-  scanId: string,
-  emit: ScanListener,
-  apiSpecPromptText?: string,
-  getPendingUserMessages?: () => string[],
-): Promise<AgentOutput> {
-  // http_audit reuses the web-pentest prompts + tools wholesale; the only
-  // additions are the env-driven scope/path/rate/kill enforcement layered on
-  // via the EnforcementTracker. So it is "web" for every prompt/tool decision.
-  const isWeb = config.mode === "web" || config.mode === "http_audit";
-  // Multi-identity access-control testing (0sec#564): reconcile legacy
-  // `auth` with `identities` and surface the access_control_probe guidance.
-  const identities = resolveIdentities(config);
-  const basePrompt = isWeb
-    ? webPentestDiscoveryPrompt(config.target, config.auth) + buildAccessControlPromptBlock(identities)
-    : discoveryPrompt(config.target, config.auth) + buildAccessControlPromptBlock(identities);
-  let systemPrompt = apiSpecPromptText
-    ? basePrompt + "\n\n" + apiSpecPromptText
-    : basePrompt;
-  const tools = isWeb
-    ? getToolsForRole("discovery", { webMode: true, allowScanners: config.allowScanners })
-    : getToolsForRole("discovery", { allowScanners: config.allowScanners });
-
-  // NOTE: the deterministic web-recon pre-pass runs once on the COMMON discovery
-  // path in agenticScan (so it covers both native and legacy/codex runtimes) —
-  // not here. Its leads arrive via apiSpecPromptText, injected into systemPrompt above.
-
-  const state = await runNativeAgentLoop({
-    config: {
-      role: "discovery",
-      systemPrompt,
-      tools,
-      maxTurns: isWeb ? 12 : 8,
-      target: config.target,
-      scanId,
-      sessionId: db.getSession(scanId, "discovery")?.id,
-      authConfig: config.auth,
-      identities,
-      scope: resolveScopeForConfig(config),
-      rateLimiter: getOrCreateRateLimiter(config),
-      enforcement: resolveEnforcementForConfig(config),
-      allowScanners: config.allowScanners,
-      attribution: buildAttributionForConfig(config),
-      engagement: resolveEngagementForConfig(config),
-      costCeilingUsd: config.costCeilingUsd,
-      costModel: config.model,
-    },
-    runtime,
-    db,
-    getPendingUserMessages,
-    onEvent: (eventType, payload) => {
-      if (eventType === "user:injected") {
-        emit({ type: "user:injected", stage: "discovery", message: String(payload.text ?? ""), data: payload });
-      }
-    },
-    onTurn: (turn, toolCalls) => {
-      // One sub-action per tool call with a real preview of what the tool
-      // was invoked with — e.g. `turn 3: bash: curl -sI https://t/admin`
-      // instead of a useless `turn 3: bash`. Uses `stage:start` (not
-      // `stage:end`) because the stage is still running; `stage:end` would
-      // prematurely mark Discover as ✓ done every turn, which was the exact
-      // bug we carried pre-0.7.7.
-      if (toolCalls.length === 0) {
-        emit({ type: "stage:start", stage: "discovery", message: `turn ${turn}: thinking` });
-      } else {
-        for (const call of toolCalls) {
-          emit({
-            type: "stage:start",
-            stage: "discovery",
-            message: `turn ${turn}: ${toolCallPreview(call)}`,
-          });
-        }
-      }
-    },
-  });
-  return {
-    findings: state.findings,
-    targetInfo: state.targetInfo,
-    summary: state.summary,
-    turnCount: state.turnCount,
-    estimatedCostUsd: state.estimatedCostUsd,
-    totalUsage: state.totalUsage,
-    errorExit: state.errorExit,
-    messages: state.messages,
-  };
-}
-
-async function runNativeAttack(
-  runtime: NativeRuntime,
-  db: any,
-  config: ScanConfig,
-  scanId: string,
-  targetInfo: Partial<import("@0/shared").TargetInfo>,
-  categories: string[],
-  maxTurns: number,
-  emit: ScanListener,
-  challengeHint?: string,
-  apiSpecPromptText?: string,
-  getPendingUserMessages?: () => string[],
-): Promise<AgentOutput> {
-  // http_audit reuses the web-pentest prompts + tools wholesale; the only
-  // additions are the env-driven scope/path/rate/kill enforcement layered on
-  // via the EnforcementTracker. So it is "web" for every prompt/tool decision.
-  const isWeb = config.mode === "web" || config.mode === "http_audit";
-
-  // Detect playwright availability for browser tool
-  let hasBrowser = false;
-  // @ts-ignore — playwright is an optional dependency
-  try { await import("playwright"); hasBrowser = true; } catch { /* playwright not installed */ }
-
-  // Shell-first for web targets: minimal tool set (bash + save_finding + done)
-  // White-box mode: add read_file + run_command when source code path is provided
-  const hasSource = !!config.repoPath;
-  const identities = resolveIdentities(config);
-  let basePrompt = isWeb
-    ? shellPentestPrompt(config.target, config.repoPath, { hasBrowser, auth: config.auth })
-    : attackPrompt(config.target, targetInfo, categories, config.auth);
-  basePrompt += buildAccessControlPromptBlock(identities);
-  // Inject API spec knowledge if available
-  if (apiSpecPromptText) basePrompt += "\n\n" + apiSpecPromptText;
-
-  // Pre-recon CVE check (white-box mode only). Walk the source tree,
-  // run `npm audit` / `pip-audit` against any detected manifests, and
-  // surface high/critical advisories as priority leads in the system
-  // prompt. Defends against expensive thrash on CVE-tagged challenges
-  // like XBEN-030 / XBEN-034 where the agent had source access but no
-  // concrete leads and burned $6+ producing 0 findings.
-  // Gated behind ZERO_FEATURE_PRE_RECON_CVE (default ON in white-box).
-  let preReconBlock = "";
-  if (hasSource && config.repoPath && features.preReconCve) {
-    try {
-      const { runPreReconCveCheck, formatPreReconForPrompt } = await import(
-        "./pre-recon-cve.js"
-      );
-      const report = runPreReconCveCheck(config.repoPath);
-      const formatted = formatPreReconForPrompt(report);
-      if (formatted) {
-        preReconBlock = "\n\n" + formatted;
-        emit({
-          type: "stage:end",
-          stage: "discovery",
-          message: `Pre-recon CVE check: ${report.advisories.length} high/critical advisor${report.advisories.length === 1 ? "y" : "ies"} across ${report.manifestsScanned.length} manifest${report.manifestsScanned.length === 1 ? "" : "s"} (${report.durationMs}ms)`,
-        });
-      }
-    } catch (err) {
-      // Pre-recon must never break the scan
-      diag.warn("pre_recon_cve_failed", "pre-recon CVE check failed", {
-        error: err instanceof Error ? err.message : String(err),
-      });
-    }
-  }
-
-  // Phase-4 WordPress pre-recon. Runs three cheap probes against the
-  // target; if WP is detected, invokes runWpFingerprint directly (not
-  // via the agent loop) and folds the structured CVE leads into the
-  // system prompt alongside the source-tree CVE block above. Gated by
-  // the `wpFingerprint` feature flag so it stays off in runs where
-  // network egress is not wanted. See GitHub issue #83.
-  if (isWeb && features.wpFingerprint) {
-    try {
-      const { runPreReconWordPress, formatPreReconWordPressForPrompt } =
-        await import("./pre-recon-cve.js");
-      const wpReport = await runPreReconWordPress({
-        target: config.target,
-      });
-      if (wpReport.isWordPress && wpReport.fingerprint) {
-        const formatted = formatPreReconWordPressForPrompt(wpReport);
-        if (formatted) {
-          preReconBlock += "\n\n" + formatted;
-          const pluginCount = wpReport.fingerprint.plugins.length;
-          const cveCount = wpReport.fingerprint.findings.reduce(
-            (sum, f) => sum + f.cves.length,
-            0,
-          );
-          emit({
-            type: "stage:end",
-            stage: "discovery",
-            message: `Pre-recon WordPress: ${pluginCount} plugin${pluginCount === 1 ? "" : "s"} enumerated, ${cveCount} CVE hit${cveCount === 1 ? "" : "s"} (${wpReport.durationMs}ms)`,
-          });
-        }
-      }
-    } catch (err) {
-      diag.warn("pre_recon_wordpress_failed", "pre-recon WordPress probe failed", {
-        error: err instanceof Error ? err.message : String(err),
-      });
-    }
-  }
-
-  // Append challenge hint if provided (standard practice for XBOW benchmarks)
-  const systemPrompt =
-    (challengeHint ? basePrompt + "\n" + challengeHint : basePrompt) + preReconBlock;
-
-  const shellToolNames = hasSource
-    ? [
-        "bash",
-        ...(hasBrowser ? ["browser"] : []),
-        "payload_lookup",
-        ...(features.wpFingerprint ? ["wp_fingerprint"] : []),
-        ...(features.mongoObjectIdForge ? ["mongo_objectid"] : []),
-        ...(features.jitSkills ? ["list_skills", "load_skill"] : []),
-        "read_file",
-        "run_command",
-        "spawn_agent",
-        "spawn_agents",
-        "spawn_persistent_agent",
-        "save_finding",
-        "done",
-      ]
-    : [
-        "bash",
-        ...(hasBrowser ? ["browser"] : []),
-        "payload_lookup",
-        ...(features.wpFingerprint ? ["wp_fingerprint"] : []),
-        ...(features.mongoObjectIdForge ? ["mongo_objectid"] : []),
-        ...(features.jitSkills ? ["list_skills", "load_skill"] : []),
-        "spawn_agent",
-        "spawn_agents",
-        "spawn_persistent_agent",
-        "save_finding",
-        "done",
-      ];
-  const shellTools: import("./agent/types.js").ToolDefinition[] = shellToolNames
-    .map((n) => TOOL_DEFINITIONS[n])
-    .filter((t): t is import("./agent/types.js").ToolDefinition => t !== undefined);
-
-  // A white-box SOURCE review (repoPath set, no live web/http target) is a
-  // code audit, not a network/LLM pentest: give it the source-scoped tool set
-  // (read_file/run_command/bash — no send_prompt/http_request), the same set an
-  // isWeb white-box run already gets. Previously a source-only run (isWeb=false,
-  // hasSource=true — every seedless `deep_review` finder/verify) fell through to
-  // the full "attack" role, which hands it the live-target LLM/web attack tools
-  // (send_prompt, http_request). On repos with no such surface the finder burned
-  // its turns probing for prompt-injection / SSO-federation instead of auditing
-  // code, then found nothing. Scoping the toolset removes that drift.
-  const tools = (isWeb || hasSource) ? shellTools : getToolsForRole("attack", { hasBrowser, allowScanners: config.allowScanners });
-
-  const effectiveMaxTurns =
-    isWeb && config.maxAttackTurns === undefined ? Math.max(maxTurns, 15) : maxTurns;
-
-  const cloudSinkCfg = getCloudSinkConfig();
-  const onTurnHandler = (turn: number, toolCalls: ToolCall[]) => {
-    // One sub-action per tool call with a full preview (tool + first-order
-    // argument) so the verbose TUI can show what the attack agent is
-    // actually running on each turn — e.g. `turn 7: bash: nmap -sV t.com`
-    // instead of `turn 7: bash`. Compact view still clips to last 3.
-    if (toolCalls.length === 0) {
-      emit({ type: "stage:start", stage: "attack", message: `turn ${turn}: thinking` });
-    } else {
-      for (const call of toolCalls) {
-        emit({
-          type: "stage:start",
-          stage: "attack",
-          message: `turn ${turn}: ${toolCallPreview(call)}`,
-        });
-      }
-    }
-  };
-
-  // First attempt: give the full budget. The loop's early-stop logic will
-  // bail at 50% if no save_finding has been called (retryCount=0 enables this).
-  const state = await runNativeAgentLoop({
-    config: {
-      role: "attack",
-      systemPrompt,
-      tools,
-      maxTurns: effectiveMaxTurns,
-      target: config.target,
-      scanId,
-      scopePath: config.repoPath,
-      sessionId: db.getSession(scanId, "attack")?.id,
-      retryCount: 0,
-      authConfig: config.auth,
-      identities,
-      scope: resolveScopeForConfig(config),
-      rateLimiter: getOrCreateRateLimiter(config),
-      enforcement: resolveEnforcementForConfig(config),
-      allowScanners: config.allowScanners,
-      attribution: buildAttributionForConfig(config),
-      engagement: resolveEngagementForConfig(config),
-      costCeilingUsd: config.costCeilingUsd,
-      costModel: config.model,
-    },
-    runtime,
-    db,
-    getPendingUserMessages,
-    onEvent: (eventType, payload) => {
-      if (eventType === "user:injected") {
-        emit({ type: "user:injected", stage: "attack", message: String(payload.text ?? ""), data: payload });
-      }
-    },
-    onFindingSaved: (finding) => {
-      emit({
-        type: "finding",
-        message: `[${finding.severity}] ${finding.title}`,
-        data: finding,
-      });
-      void postFinding(finding, cloudSinkCfg);
-    },
-    onTurn: onTurnHandler,
-  });
-
-  // ── Early-stop retry: if no findings by halfway, retry with a different strategy ──
-  if (features.earlyStopRetry && state.earlyStopNoProgress) {
-    const remainingBudget = effectiveMaxTurns - state.turnCount;
-
-    emit({
-      type: "stage:start",
-      stage: "attack",
-      message: `No findings after ${state.turnCount} turns — retrying with different strategy (${remainingBudget} turns remaining)...`,
-    });
-
-    db.logEvent?.({
-      scanId,
-      stage: "attack",
-      eventType: "early_stop_retry",
-      agentRole: "attack",
-      payload: {
-        firstAttemptTurns: state.turnCount,
-        remainingBudget,
-        attemptSummary: state.attemptSummary,
-      },
-      timestamp: Date.now(),
-    });
-
-    // Build structured progress handoff: prefer LLM-generated summary from
-    // the agent loop (richer context, captures reasoning), fall back to regex
-    // extraction if the LLM summary wasn't generated.
-    let progressSection = "";
-    if (features.progressHandoff) {
-      if (state.progressSummary) {
-        progressSection = `## Previous Attempt — Structured Progress\n\n${state.progressSummary}`;
-      } else {
-        progressSection = formatProgressHandoff(extractProgressFromAttempt(state.messages));
-      }
-    }
-
-    const retrySystemPrompt = systemPrompt + `\n\n## RETRY — Previous Attempt Failed\n\nA previous attack attempt used ${state.turnCount} turns and found NOTHING.\n${state.attemptSummary}\n${progressSection}\nYou MUST try a COMPLETELY DIFFERENT approach:\n- Different entry points and endpoints\n- Different vulnerability classes (if SQLi failed, try SSTI/command injection/SSRF/path traversal)\n- Different tools and techniques (if curl failed, try Python scripts; if GET failed, try POST)\n- Different encoding and bypass techniques\n- Look for indirect/second-order vulnerabilities\n\nDo NOT repeat the same strategies. Be creative and aggressive.`;
-
-    const retryState = await runNativeAgentLoop({
-      config: {
-        role: "attack",
-        systemPrompt: retrySystemPrompt,
-        tools,
-        maxTurns: remainingBudget,
-        target: config.target,
-        scanId,
-        scopePath: config.repoPath,
-        retryCount: 1,
-        authConfig: config.auth,
-        identities,
-        scope: resolveScopeForConfig(config),
-        rateLimiter: getOrCreateRateLimiter(config),
-        enforcement: resolveEnforcementForConfig(config),
-      allowScanners: config.allowScanners,
-      attribution: buildAttributionForConfig(config),
-      engagement: resolveEngagementForConfig(config),
-        costCeilingUsd: config.costCeilingUsd,
-        costModel: config.model,
-      },
-      runtime,
-      db,
-      getPendingUserMessages,
-      onEvent: (eventType, payload) => {
-        if (eventType === "user:injected") {
-          emit({ type: "user:injected", stage: "attack", message: String(payload.text ?? ""), data: payload });
-        }
-      },
-      onTurn: onTurnHandler,
-    });
-
-    // Merge results from both attempts
-    const combinedFindings = [...state.findings, ...retryState.findings];
-    const totalTurns = state.turnCount + retryState.turnCount;
-    const combinedSummary = retryState.findings.length > 0
-      ? retryState.summary
-      : `First attempt (${state.turnCount} turns): no findings. Retry (${retryState.turnCount} turns): ${retryState.summary}`;
-
-    return {
-      findings: combinedFindings,
-      targetInfo: { ...state.targetInfo, ...retryState.targetInfo },
-      summary: combinedSummary,
-      turnCount: totalTurns,
-      estimatedCostUsd: state.estimatedCostUsd + retryState.estimatedCostUsd,
-      // The native-loop's state.totalUsage today only carries
-      // input/output (no cachedInputTokens). When the runtime starts
-      // tracking cache reads (likely via a separate runtime-level
-      // hook), this merge will need to fold that field in too.
-      totalUsage: {
-        inputTokens:
-          (state.totalUsage?.inputTokens ?? 0) +
-          (retryState.totalUsage?.inputTokens ?? 0),
-        outputTokens:
-          (state.totalUsage?.outputTokens ?? 0) +
-          (retryState.totalUsage?.outputTokens ?? 0),
-      },
-      costCeilingExceeded: state.costCeilingExceeded || retryState.costCeilingExceeded,
-      // If either attempt bailed on a planner error, surface the latest
-      // one (retry takes precedence — it ran most recently).
-      errorExit: retryState.errorExit ?? state.errorExit,
-      messages: [...state.messages, ...retryState.messages],
-    };
-  }
-
-  // First attempt completed normally (found something, or exhausted turns).
-  // No retry needed.
-  return {
-    findings: state.findings,
-    targetInfo: state.targetInfo,
-    summary: state.summary,
-    turnCount: state.turnCount,
-    estimatedCostUsd: state.estimatedCostUsd,
-    totalUsage: state.totalUsage,
-    costCeilingExceeded: state.costCeilingExceeded,
-    errorExit: state.errorExit,
-    messages: state.messages,
-  };
-}
-
-// ── Progress Handoff: extract structured findings from a failed attempt's conversation ──
-
-interface AttemptProgress {
-  endpoints: string[];
-  credentials: string[];
-  technologies: string[];
-  attacksTried: string[];
-}
-
-/**
- * Regex-extract structured progress from the first attempt's messages.
- * No LLM call — pure pattern matching on tool results.
- */
-function extractProgressFromAttempt(messages: NativeMessage[]): AttemptProgress {
-  const endpoints = new Set<string>();
-  const credentials = new Set<string>();
-  const technologies = new Set<string>();
-  const attacksTried = new Set<string>();
-
-  // Patterns
-  const urlPattern = /https?:\/\/[^\s"'<>)\]}{,]+/g;
-  const credPatterns = [
-    /(?:login|username|user|email)[\s:="']+([^\s"'<>,;}{)(\]]{2,60})/gi,
-    /(?:password|passwd|pass|pwd)[\s:="']+([^\s"'<>,;}{)(\]]{2,60})/gi,
-    /(?:token|cookie|session[_-]?id|api[_-]?key|bearer|jwt|authorization)[\s:="']+([^\s"'<>,;}{)(\]]{2,80})/gi,
-  ];
-  const techPatterns = [
-    /(?:server|x-powered-by|x-framework):\s*([^\r\n]+)/gi,
-    /(?:express|flask|django|rails|spring|laravel|next\.?js|fastapi|gin|fiber|sinatra|koa)/gi,
-    /(?:mysql|postgres(?:ql)?|sqlite|mongodb|redis|mariadb)/gi,
-    /(?:php|python|ruby|node(?:\.?js)?|java|golang|go|rust|\.net)/gi,
-  ];
-  const curlPattern = /curl\s+[^\n]{10,}/g;
-
-  for (const msg of messages) {
-    for (const block of msg.content) {
-      let text = "";
-      if (block.type === "tool_result") {
-        text = block.content;
-      } else if (block.type === "text") {
-        text = block.text;
-      } else if (block.type === "tool_use") {
-        // Extract curl commands from shell_exec / run_command arguments
-        const input = block.input as Record<string, unknown>;
-        const cmd = (input.command ?? input.cmd ?? "") as string;
-        if (cmd) text = cmd;
-        // Also capture the URL from http_request tool
-        const url = (input.url ?? "") as string;
-        if (url) endpoints.add(url);
-      }
-
-      if (!text) continue;
-
-      // Extract URLs/endpoints
-      for (const match of text.matchAll(urlPattern)) {
-        const u = match[0].replace(/[.,;:!?)}\]]+$/, ""); // strip trailing punctuation
-        if (u.length < 200) endpoints.add(u);
-      }
-
-      // Extract credentials
-      for (const pattern of credPatterns) {
-        for (const match of text.matchAll(pattern)) {
-          const full = match[0].trim();
-          if (full.length < 200) credentials.add(full);
-        }
-      }
-
-      // Extract technologies
-      for (const pattern of techPatterns) {
-        for (const match of text.matchAll(pattern)) {
-          const tech = (match[1] ?? match[0]).trim();
-          if (tech.length < 100) technologies.add(tech);
-        }
-      }
-
-      // Extract curl commands (as attacks tried)
-      for (const match of text.matchAll(curlPattern)) {
-        const cmd = match[0].trim();
-        if (cmd.length < 300) attacksTried.add(cmd);
-      }
-    }
-  }
-
-  return {
-    endpoints: [...endpoints].slice(0, 30),
-    credentials: [...credentials].slice(0, 20),
-    technologies: [...technologies].slice(0, 15),
-    attacksTried: [...attacksTried].slice(0, 25),
-  };
-}
-
-/** Format extracted progress into a section for the retry system prompt. */
-function formatProgressHandoff(progress: AttemptProgress): string {
-  const sections: string[] = ["## Previous Attempt Summary", ""];
-
-  if (progress.endpoints.length > 0) {
-    sections.push("### URLs/Endpoints Discovered");
-    for (const ep of progress.endpoints) sections.push(`- ${ep}`);
-    sections.push("");
-  }
-
-  if (progress.credentials.length > 0) {
-    sections.push("### Credentials / Tokens Found");
-    for (const c of progress.credentials) sections.push(`- ${c}`);
-    sections.push("");
-  }
-
-  if (progress.technologies.length > 0) {
-    sections.push("### Technologies Identified");
-    for (const t of progress.technologies) sections.push(`- ${t}`);
-    sections.push("");
-  }
-
-  if (progress.attacksTried.length > 0) {
-    sections.push("### Attacks Already Tried (do NOT repeat these)");
-    for (const a of progress.attacksTried) sections.push(`- \`${a}\``);
-    sections.push("");
-  }
-
-  // Only return if we actually extracted something useful
-  const hasContent = progress.endpoints.length > 0
-    || progress.credentials.length > 0
-    || progress.technologies.length > 0
-    || progress.attacksTried.length > 0;
-
-  return hasContent ? sections.join("\n") : "";
-}
-
-/** Format targetInfo from the discovery stage into a human-readable summary for the web attack prompt. */
-function formatWebDiscoveryInfo(targetInfo: Partial<import("@0/shared").TargetInfo>): string {
-  const parts: string[] = [];
-  if (targetInfo.type) parts.push(`Type: ${targetInfo.type}`);
-  if (targetInfo.model) parts.push(`Server/Framework: ${targetInfo.model}`);
-  if (targetInfo.endpoints?.length) {
-    parts.push(`Discovered endpoints:\n${targetInfo.endpoints.map((e) => `  - ${e}`).join("\n")}`);
-  }
-  if (targetInfo.detectedFeatures?.length) {
-    parts.push(`Features: ${targetInfo.detectedFeatures.join(", ")}`);
-  }
-  if (targetInfo.systemPrompt) {
-    parts.push(`Additional info: ${targetInfo.systemPrompt.slice(0, 1000)}`);
-  }
-  return parts.length > 0 ? parts.join("\n") : "No prior discovery information available. Start by crawling the target.";
-}
-
-/**
- * Per-finding verify budget. Reference: `pov-gate.ts:367 buildPovSystemPrompt`
- * runs one-finding-per-agent-session with a tight 5-turn cap; mirroring that
- * here ensures one runaway finding can't burn the whole verify pass.
- *
- * Background (from #285 — control-flow audit H2): the previous implementation
- * passed every finding into a single `runNativeAgentLoop` with
- * `maxTurns: Math.min(findings.length * 3, 15)`. With ≥6 findings the model
- * silently skipped, deduped, or condensed, producing under-coverage that's
- * invisible in benchmarks.
- */
-const VERIFY_TURNS_PER_FINDING = 5;
-
-export async function runNativeVerify(
-  runtime: NativeRuntime,
-  db: any,
-  config: ScanConfig,
-  scanId: string,
-  findings: Finding[],
-  emit: ScanListener,
-): Promise<void> {
-  // Per-finding verify loop (#285). One agent session per finding so each
-  // gets its own turn budget — N findings → N runtime calls, never a shared
-  // pool the model can starve from.
-  const memoryStore = db ? createScanMemoryStore(db) : undefined;
-  for (const finding of findings) {
-    let memoryContext = "";
-    if (memoryStore) {
-      try {
-        memoryContext = await memoryStore.formatForPrompt(await memoryStore.getRelevantMemories(finding, config.target));
-      } catch { /* Historical context never replaces independent verification. */ }
-    }
-    await runNativeAgentLoop({
-      config: {
-        role: "verify",
-        systemPrompt: verifyPromptSingleFinding(config.target, finding, config.auth) + "\n\n" + memoryContext,
-        tools: getToolsForRole("verify", { hasScope: !!config.repoPath, allowScanners: config.allowScanners }),
-        maxTurns: VERIFY_TURNS_PER_FINDING,
-        target: config.target,
-        scanId,
-        sessionId: db?.getSession?.(scanId, "verify")?.id,
-        authConfig: config.auth,
-        identities: resolveIdentities(config),
-        scope: resolveScopeForConfig(config),
-        rateLimiter: getOrCreateRateLimiter(config),
-        enforcement: resolveEnforcementForConfig(config),
-        allowScanners: config.allowScanners,
-        attribution: buildAttributionForConfig(config),
-        engagement: resolveEngagementForConfig(config),
-        costCeilingUsd: config.costCeilingUsd,
-        costModel: config.model,
-      },
-      runtime,
-      db,
-      onTurn: (turn, toolCalls) => {
-        // One sub-action per tool call with a full preview, matching the
-        // discovery and attack handlers. Without this the verify stage is
-        // completely silent in the TUI, even under verbose mode.
-        if (toolCalls.length === 0) {
-          emit({
-            type: "stage:start",
-            stage: "verify",
-            message: `[${finding.id}] turn ${turn}: thinking`,
-          });
-        } else {
-          for (const call of toolCalls) {
-            emit({
-              type: "stage:start",
-              stage: "verify",
-              message: `[${finding.id}] turn ${turn}: ${toolCallPreview(call)}`,
-            });
-          }
-        }
-      },
-    });
-  }
-}
-
-// ── Legacy (text-based) stage runners ──
-
-async function runLegacyDiscovery(
-  runtime: import("./runtime/types.js").Runtime,
-  db: any,
-  config: ScanConfig,
-  scanId: string,
-  emit: ScanListener,
-  dbPath?: string,
-  apiSpecPromptText?: string,
-): Promise<AgentOutput> {
-  // http_audit reuses the web-pentest prompts + tools wholesale; the only
-  // additions are the env-driven scope/path/rate/kill enforcement layered on
-  // via the EnforcementTracker. So it is "web" for every prompt/tool decision.
-  const isWeb = config.mode === "web" || config.mode === "http_audit";
-  const identities = resolveIdentities(config);
-  const basePrompt =
-    (isWeb
-      ? webPentestDiscoveryPrompt(config.target, config.auth)
-      : discoveryPrompt(config.target, config.auth)) + buildAccessControlPromptBlock(identities);
-  const systemPrompt = apiSpecPromptText
-    ? basePrompt + "\n\n" + apiSpecPromptText
-    : basePrompt;
-  const tools = isWeb
-    ? getToolsForRole("discovery", { webMode: true, allowScanners: config.allowScanners })
-    : getToolsForRole("discovery", { allowScanners: config.allowScanners });
-
-  const state = await runAgentLoop({
-    config: {
-      role: "discovery",
-      systemPrompt,
-      tools,
-      maxTurns: isWeb ? 12 : 8,
-      target: config.target,
-      scanId,
-      sessionId: db?.getSession(scanId, "discovery")?.id,
-      attachTargetToolsMcp: true,
-      dbPath,
-      authConfig: config.auth,
-      identities,
-      scope: resolveScopeForConfig(config),
-      rateLimiter: getOrCreateRateLimiter(config),
-      enforcement: resolveEnforcementForConfig(config),
-      allowScanners: config.allowScanners,
-      attribution: buildAttributionForConfig(config),
-      engagement: resolveEngagementForConfig(config),
-      dispatchMode: config.dispatchMode,
-      modelHint: config.model,
-    },
-    runtime,
-    db,
-    onTurn: (turn, msg) => {
-      // Sub-action while the stage is still running — must be `stage:start`,
-      // not `stage:end`, or the UI marks Discover as ✓ done every turn.
-      const preview = msg.content.replace(/\s+/g, " ").trim().slice(0, 100);
-      emit({
-        type: "stage:start",
-        stage: "discovery",
-        message: `turn ${turn}: ${preview}`,
-      });
-    },
-  });
-  return {
-    findings: state.findings,
-    targetInfo: state.targetInfo,
-    summary: state.summary,
-    turnCount: state.turnCount,
-    estimatedCostUsd: 0, // Legacy runtime does not track token usage
-  };
-}
-
-async function runLegacyAttack(
-  runtime: import("./runtime/types.js").Runtime,
-  db: any,
-  config: ScanConfig,
-  scanId: string,
-  targetInfo: Partial<import("@0/shared").TargetInfo>,
-  categories: string[],
-  maxTurns: number,
-  emit: ScanListener,
-  dbPath?: string,
-  apiSpecPromptText?: string,
-): Promise<AgentOutput> {
-  // http_audit reuses the web-pentest prompts + tools wholesale; the only
-  // additions are the env-driven scope/path/rate/kill enforcement layered on
-  // via the EnforcementTracker. So it is "web" for every prompt/tool decision.
-  const isWeb = config.mode === "web" || config.mode === "http_audit";
-
-  // Detect playwright availability for browser tool (mirrors native path)
-  let hasBrowser = false;
-  // @ts-ignore — playwright is an optional dependency
-  try { await import("playwright"); hasBrowser = true; } catch { /* playwright not installed */ }
-
-  const identities = resolveIdentities(config);
-  let baseAttackPrompt = isWeb
-    ? webPentestAttackPrompt(config.target, formatWebDiscoveryInfo(targetInfo), config.auth)
-    : attackPrompt(config.target, targetInfo, categories, config.auth);
-  baseAttackPrompt += buildAccessControlPromptBlock(identities);
-  if (apiSpecPromptText) baseAttackPrompt += "\n\n" + apiSpecPromptText;
-  const systemPrompt = baseAttackPrompt;
-  const tools = isWeb
-    ? getToolsForRole("attack", { webMode: true, hasBrowser, allowScanners: config.allowScanners })
-    : getToolsForRole("attack", { hasBrowser, allowScanners: config.allowScanners });
-
-  const cloudSinkCfg = getCloudSinkConfig();
-  const effectiveMaxTurns =
-    isWeb && config.maxAttackTurns === undefined ? Math.max(maxTurns, 25) : maxTurns;
-  const state = await runAgentLoop({
-    config: {
-      role: "attack",
-      systemPrompt,
-      tools,
-      maxTurns: effectiveMaxTurns,
-      target: config.target,
-      scanId,
-      sessionId: db?.getSession(scanId, "attack")?.id,
-      attachTargetToolsMcp: true,
-      dbPath,
-      identities,
-      authConfig: config.auth,
-      scope: resolveScopeForConfig(config),
-      rateLimiter: getOrCreateRateLimiter(config),
-      enforcement: resolveEnforcementForConfig(config),
-      allowScanners: config.allowScanners,
-      attribution: buildAttributionForConfig(config),
-      engagement: resolveEngagementForConfig(config),
-      dispatchMode: config.dispatchMode,
-      modelHint: config.model,
-    },
-    runtime,
-    db,
-    onTurn: (turn, msg) => {
-      const calls = msg.toolCalls ?? [];
-      // One sub-action per tool call with a full preview (tool + first-
-      // order argument), same as the native-API path. Previously this
-      // handler only emitted finding events; the verbose TUI showed an
-      // empty actions list between finding discoveries.
-      if (calls.length === 0) {
-        emit({ type: "stage:start", stage: "attack", message: `turn ${turn}: thinking` });
-      } else {
-        for (const call of calls) {
-          emit({
-            type: "stage:start",
-            stage: "attack",
-            message: `turn ${turn}: ${toolCallPreview(call)}`,
-          });
-        }
-      }
-    },
-    onFindingSaved: (finding) => {
-      emit({
-        type: "finding",
-        message: `[${finding.severity}] ${finding.title}`,
-        data: finding,
-      });
-      void postFinding(finding, cloudSinkCfg);
-    },
-  });
-  return {
-    findings: state.findings,
-    targetInfo: state.targetInfo,
-    summary: state.summary,
-    turnCount: state.turnCount,
-    estimatedCostUsd: 0, // Legacy runtime does not track token usage
-  };
-}
-
-async function runLegacyVerify(
-  runtime: import("./runtime/types.js").Runtime,
-  db: any,
-  config: ScanConfig,
-  scanId: string,
-  findings: Finding[],
-  _emit: ScanListener,
-  dbPath?: string,
-): Promise<void> {
-  await runAgentLoop({
-    config: {
-      role: "verify",
-      systemPrompt: verifyPrompt(config.target, findings, config.auth),
-      tools: getToolsForRole("verify", { hasScope: !!config.repoPath, allowScanners: config.allowScanners }),
-      maxTurns: Math.min(findings.length * 3, 15),
-      target: config.target,
-      scanId,
-      sessionId: db?.getSession(scanId, "verify")?.id,
-      attachTargetToolsMcp: true,
-      dbPath,
-      authConfig: config.auth,
-      identities: resolveIdentities(config),
-      scope: resolveScopeForConfig(config),
-      rateLimiter: getOrCreateRateLimiter(config),
-      enforcement: resolveEnforcementForConfig(config),
-      allowScanners: config.allowScanners,
-      attribution: buildAttributionForConfig(config),
-      engagement: resolveEngagementForConfig(config),
-      dispatchMode: config.dispatchMode,
-      modelHint: config.model,
-    },
-    runtime,
-    db,
-  });
-}
-
-// ── Helper: convert DB finding row to Finding type ──
-
-function dbFindingToFinding(dbf: {
-  id: string;
-  templateId: string;
-  title: string;
-  description: string;
-  severity: string;
-  category: string;
-  status: string;
-  confidence: number | null;
-  cvssVector: string | null;
-  cvssScore: number | null;
-  evidenceRequest: string;
-  evidenceResponse: string;
-  evidenceAnalysis: string | null;
-  pocSteps?: string | null;
-  layerVerdicts?: string | null;
-  impactAssessment?: string | null;
-  semanticDedupe?: string | null;
-  findingRank?: number | null;
-  timestamp: number;
-}): Finding {
-  let layerVerdicts: LayerVerdict[] | undefined;
-  if (dbf.layerVerdicts) {
-    try {
-      // Validated parse: zod enforces the LayerVerdict shape so a corrupt or
-      // legacy DB row can't silently leak a malformed verdict into the
-      // hydrated Finding (which would surface as a deep TypeError when the
-      // dashboard / dynamic-routing model touches verdict.changedSeverity
-      // or verdict.confidence). Schema `.passthrough()`s unknown fields so
-      // newer telemetry columns keep round-tripping.
-      const parsed: unknown = JSON.parse(dbf.layerVerdicts);
-      const validated = layerVerdictArraySchema.parse(parsed);
-      if (validated.length > 0) layerVerdicts = validated as LayerVerdict[];
-    } catch (err) {
-      // Corrupt or legacy row — drop the field rather than crashing the
-      // hydration. The triage stage will repopulate on the next scan.
-      if (err instanceof z.ZodError) {
-        diag.warn(
-          "layer_verdicts_dropped",
-          `dropping layerVerdicts for finding ${dbf.id}`,
-          {
-            finding_id: dbf.id,
-            cause: "schema-mismatch",
-            detail: formatZodError(err, "layerVerdicts"),
-          },
-        );
-      } else if (err instanceof SyntaxError) {
-        diag.warn(
-          "layer_verdicts_dropped",
-          `dropping layerVerdicts for finding ${dbf.id}`,
-          { finding_id: dbf.id, cause: "invalid-json", detail: err.message },
-        );
-      }
-    }
-  }
-  let pocSteps: PocStep[] | undefined;
-  if (dbf.pocSteps) {
-    try {
-      const parsed = JSON.parse(dbf.pocSteps) as unknown;
-      // Validate each element via the same predicate the agent tool path uses,
-      // so a half-corrupt array degrades to "drop bad steps" rather than
-      // letting malformed rows escape into Finding.pocSteps.
-      const valid = parsePocStepsArg(parsed);
-      if (valid && valid.length > 0) {
-        pocSteps = valid;
-      }
-    } catch {
-      // Corrupt or legacy row — drop the field rather than crashing
-      // hydration. The agent loop is free to repopulate on a future scan.
-    }
-  }
-  let semanticDedupe: Finding["semanticDedupe"];
-  if (dbf.semanticDedupe) {
-    try {
-      const parsed: unknown = JSON.parse(dbf.semanticDedupe);
-      if (
-        typeof parsed === "object" &&
-        parsed !== null &&
-        "canonicalId" in parsed &&
-        typeof parsed.canonicalId === "string" &&
-        "isCanonical" in parsed &&
-        typeof parsed.isCanonical === "boolean" &&
-        "clusterId" in parsed &&
-        typeof parsed.clusterId === "string" &&
-        "reason" in parsed &&
-        typeof parsed.reason === "string"
-      ) {
-        semanticDedupe = {
-          canonicalId: parsed.canonicalId,
-          isCanonical: parsed.isCanonical,
-          clusterId: parsed.clusterId,
-          reason: parsed.reason,
-        };
-      }
-    } catch {
-      // Corrupt post-process metadata must not prevent a resume.
-    }
-  }
-  let impactAssessment: Finding["impactAssessment"];
-  if (dbf.impactAssessment) {
-    // Reuse the module's own validated parser so a corrupt or legacy row
-    // (e.g. an out-of-vocabulary reachability tier) degrades to "drop the
-    // field" rather than leaking a malformed assessment into the Finding.
-    impactAssessment = parseImpactAssessment(dbf.impactAssessment) ?? undefined;
-  }
-  const persistedFindingRank = dbf.findingRank;
-  const findingRank =
-    typeof persistedFindingRank === "number" &&
-    Number.isSafeInteger(persistedFindingRank) &&
-    persistedFindingRank > 0
-      ? persistedFindingRank
-      : undefined;
-  return {
-    id: dbf.id,
-    templateId: dbf.templateId,
-    title: dbf.title,
-    description: dbf.description,
-    severity: dbf.severity as Finding["severity"],
-    category: dbf.category as Finding["category"],
-    status: dbf.status as Finding["status"],
-    confidence: dbf.confidence ?? undefined,
-    cvssVector: dbf.cvssVector ?? undefined,
-    cvssScore: dbf.cvssScore ?? undefined,
-    evidence: {
-      request: dbf.evidenceRequest,
-      response: dbf.evidenceResponse,
-      analysis: dbf.evidenceAnalysis ?? undefined,
-    },
-    ...(pocSteps ? { pocSteps } : {}),
-    ...(layerVerdicts ? { layerVerdicts } : {}),
-    ...(pocSteps ? { pocSteps } : {}),
-    ...(impactAssessment ? { impactAssessment } : {}),
-    ...(semanticDedupe ? { semanticDedupe } : {}),
-    ...(findingRank !== undefined ? { findingRank } : {}),
-    timestamp: dbf.timestamp,
-  };
-}

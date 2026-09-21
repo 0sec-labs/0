@@ -1,5 +1,5 @@
 /**
- * Coverage for `0sec timeline` — the forensic timeline export.
+ * Coverage for `0 timeline` — the forensic timeline export.
  *
  * This output is handed to a client's SOC to cross-reference against their own
  * detections, so the invariants under test are the ones that would make the
@@ -156,7 +156,7 @@ async function runCli(argv: string[]): Promise<void> {
   const program = new Command();
   program.exitOverride();
   registerTimelineCommand(program);
-  await program.parseAsync(["node", "0sec-cli", ...argv]);
+  await program.parseAsync(["node", "@0/cli", ...argv]);
 }
 
 beforeEach(() => {
@@ -577,7 +577,7 @@ describe("timeline — argument handling and DB lifecycle", () => {
     expect(io.err()).toContain("Invalid --format");
   });
 
-  it("fails with a pointer to `0sec history` when the scan is unknown", async () => {
+  it("fails with a pointer to `0 history` when the scan is unknown", async () => {
     const io = captureIO();
     await runCli(["timeline", "no-such-scan"]);
     io.restore();
@@ -591,10 +591,10 @@ describe("timeline — argument handling and DB lifecycle", () => {
     dbState.events = sampleEvents();
 
     const io = captureIO();
-    await runCli(["timeline", SCAN_ID, "--format", "json", "--db-path", "/tmp/0sec-test.db"]);
+    await runCli(["timeline", SCAN_ID, "--format", "json", "--db-path", "/tmp/0-test.db"]);
     io.restore();
 
     expect(dbState.closes).toBe(1);
-    expect(dbState.ctorPaths).toEqual(["/tmp/0sec-test.db"]);
+    expect(dbState.ctorPaths).toEqual(["/tmp/0-test.db"]);
   });
 });

@@ -12,10 +12,10 @@ import type { ToolContext } from "./types.js";
 
 // ── Fix 2: package-manager detection from the lockfile ───────────────────────
 
-describe("detectPackageManager (0sec#tool-reliability)", () => {
+describe("detectPackageManager (0#tool-reliability)", () => {
   let root: string;
   beforeEach(() => {
-    root = mkdtempSync(join(tmpdir(), "0sec-pm-detect-"));
+    root = mkdtempSync(join(tmpdir(), "0-pm-detect-"));
   });
   afterEach(() => rmSync(root, { recursive: true, force: true }));
 
@@ -45,10 +45,10 @@ describe("detectPackageManager (0sec#tool-reliability)", () => {
   });
 });
 
-describe("resolveDependencyAuditCommand (0sec#tool-reliability)", () => {
+describe("resolveDependencyAuditCommand (0#tool-reliability)", () => {
   let root: string;
   beforeEach(() => {
-    root = mkdtempSync(join(tmpdir(), "0sec-audit-resolve-"));
+    root = mkdtempSync(join(tmpdir(), "0-audit-resolve-"));
   });
   afterEach(() => rmSync(root, { recursive: true, force: true }));
 
@@ -103,13 +103,13 @@ describe("resolveDependencyAuditCommand (0sec#tool-reliability)", () => {
 
 // ── Executor-level integration for the four fixes ────────────────────────────
 
-describe("ToolExecutor reliability fixes (0sec#tool-reliability)", () => {
+describe("ToolExecutor reliability fixes (0#tool-reliability)", () => {
   let root: string;
   let ctx: ToolContext;
   let executor: ToolExecutor;
 
   beforeEach(() => {
-    root = mkdtempSync(join(tmpdir(), "0sec-reliability-"));
+    root = mkdtempSync(join(tmpdir(), "0-reliability-"));
     ctx = {
       target: "https://example.com",
       scanId: "reliability-scan",

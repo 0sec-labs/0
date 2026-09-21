@@ -1,9 +1,9 @@
 /**
- * Shared wire contracts between the 0sec `cloud-sink` and the
- * 0sec-cloud orchestrator.
+ * Shared wire contracts between the 0 `cloud-sink` and the
+ * 0-cloud orchestrator.
  *
  * These types MUST stay in sync with the zod schema in
- * `0sec-cloud/services/orchestrator/src/routes/scans.ts`. The orchestrator
+ * `0-cloud/services/orchestrator/src/routes/scans.ts`. The orchestrator
  * validates every `/scans/:id/findings` POST with strict zod, so any drift
  * silently 400s the whole scan. Keep both sides of the contract aligned.
  *
@@ -43,7 +43,7 @@ export interface CloudSinkEvidence {
 }
 
 /**
- * Optional structured proof-of-concept step graph (0sec#170). Emitted only
+ * Optional structured proof-of-concept step graph (0#170). Emitted only
  * when the OSS agent has structured execution data; otherwise undefined and
  * the cloud falls back to the prose `evidence.*` strings as before.
  *
@@ -56,8 +56,8 @@ export interface CloudSinkEvidence {
 export type CloudSinkPocSteps = unknown[];
 
 /**
- * Optional machine-executable verification contract (0sec#193 /
- * 0sec-cloud#111). Pass-through field; the OSS sink does not enrich or
+ * Optional machine-executable verification contract (0#193 /
+ * 0-cloud#111). Pass-through field; the OSS sink does not enrich or
  * validate beyond a shape check. Cloud's canary watcher imports
  * `evaluateVerificationSpec` from `@0/core` to evaluate it; the
  * orchestrator schema strips unknown keys today and will land its own zod
@@ -66,7 +66,7 @@ export type CloudSinkPocSteps = unknown[];
 export type CloudSinkVerificationSpec = Record<string, unknown>;
 
 /**
- * Strict finding shape the 0sec-cloud orchestrator accepts at
+ * Strict finding shape the 0-cloud orchestrator accepts at
  * POST /scans/:id/findings.
  */
 export interface CloudSinkFinding {
@@ -97,13 +97,13 @@ export interface CloudSinkFinding {
   /** Unix epoch milliseconds. */
   timestamp: number;
   /**
-   * Optional ordered PoC step graph (0sec#170). Pass-through field — the
+   * Optional ordered PoC step graph (0#170). Pass-through field — the
    * OSS sink does not enrich or validate it beyond a shape check, and the
    * cloud orchestrator will silently strip it until its schema is updated.
    */
   pocSteps?: CloudSinkPocSteps;
   /**
-   * Optional machine-executable verification spec (0sec#193). Pass-through;
+   * Optional machine-executable verification spec (0#193). Pass-through;
    * the cloud orchestrator strips it today and will accept it once its
    * schema mirrors `VerificationSpec` in `@0/shared/types.ts`.
    */

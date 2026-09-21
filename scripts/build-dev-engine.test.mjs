@@ -11,7 +11,7 @@ const execute = promisify(execFile);
 const builder = fileURLToPath(new URL("./build-dev-engine.mjs", import.meta.url));
 
 async function fixture(t) {
-  const root = await mkdtemp(join(tmpdir(), "0sec-engine-generation-test-"));
+  const root = await mkdtemp(join(tmpdir(), "0-engine-generation-test-"));
   t.after(() => rm(root, { recursive: true, force: true }));
   const source = join(root, "source");
   const output = join(root, "generation");

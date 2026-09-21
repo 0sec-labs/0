@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { closeSync, constants, fstatSync, openSync, readSync, realpathSync } from "node:fs";
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
-import type { Finding } from "@0/shared"
+import type { Finding } from "@0/shared";
 import { hasKnownMarkerText } from "../disclose/known-marker.js";
 import { readEvolutionArtifact } from "../improvement/artifacts.js";
 import { parseEvolutionConfig } from "../improvement/config.js";
@@ -10,8 +10,8 @@ import { configsDir, evolutionDigest, pinEvolutionVersion } from "../improvement
 import type { EvolutionConfig } from "../improvement/types.js";
 import type { HuntFinder } from "./hunt-scan.js";
 
-const INPUT_SCHEMA = "0sec.finder.input/v1";
-const OUTPUT_SCHEMA = "0sec.finder.output/v1";
+const INPUT_SCHEMA = "0.finder.input/v1";
+const OUTPUT_SCHEMA = "0.finder.output/v1";
 const MAX_FILE_BYTES = 1024 * 1024;
 const SEVERITIES = new Set(["critical", "high", "medium", "low", "info"]);
 

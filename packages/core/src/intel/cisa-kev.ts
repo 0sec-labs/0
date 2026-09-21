@@ -49,7 +49,7 @@ async function fetchKevCatalog(
     cache,
     "cisa-kev",
     url,
-    async () => await fetchJson(url, { headers: { "User-Agent": "0sec-intel/0.1" } }, opts) as KevCatalog,
+    async () => await fetchJson(url, { headers: { "User-Agent": "0-intel/0.1" } }, opts) as KevCatalog,
     { offline: input.offline, ttlMs: input.ttlMs },
   );
 }

@@ -42,7 +42,7 @@ const LEGACY_AUTH_FILE_ENV = "ZERO_CODEX_AUTH_JSON_PATH";
  * The engine's provider priority (`llm-api.ts` detectProvider) ranks
  * `chatgpt-codex` HIGHEST, above `AZURE_OPENAI_API_KEY` / `OPENAI_API_KEY`.
  * So loading the codex token here means a logged-in `codex` session wins over
- * stale Azure/OpenAI keys left in a dev shell — `0sec review` "just works"
+ * stale Azure/OpenAI keys left in a dev shell — `0 review` "just works"
  * on the subscription backend instead of silently falling through to a dead
  * Azure endpoint.
  *

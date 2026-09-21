@@ -1,4 +1,4 @@
-import type { TargetInfo, Finding, AuthConfig, NamedIdentity } from "@0/shared"
+import type { TargetInfo, Finding, AuthConfig, NamedIdentity } from "@0/shared";
 import { features as featureFlags } from "./features.js";
 
 /**
@@ -45,7 +45,7 @@ export function buildAuthHeaders(auth?: AuthConfig): Record<string, string> {
 
 /**
  * Build a prompt block describing the configured identities and the
- * access_control_probe tool (0sec#564). Returns "" unless ≥2 identities are
+ * access_control_probe tool (0#564). Returns "" unless ≥2 identities are
  * configured, so single-credential scans are unaffected.
  */
 export function buildAccessControlPromptBlock(identities?: NamedIdentity[]): string {
@@ -111,7 +111,7 @@ Save important discoveries (credentials, endpoints, tokens, attack plans) to {{E
 \`echo '{"creds":["admin:pass"],"endpoints":["/api/users"],"plan":"try IDOR on /api/users/2"}' > {{EXTERNAL_MEMORY_PATH}}\`
 Update it whenever you discover something new.`;
 
-// 0sec#567 — loot / foothold ledger guidance. Appended to the attack-oriented
+// 0#567 — loot / foothold ledger guidance. Appended to the attack-oriented
 // system prompts (flag-gated, mirrors EXTERNAL_MEMORY_INSTRUCTION). The ledger
 // itself is populated and re-injected by the agent loop; this primes the agent
 // to expect a "known footholds" block and to actively reuse it for chaining.
@@ -281,7 +281,7 @@ function formatAdvisorySection(
 // ---------------------------------------------------------------------------
 
 export function discoveryPrompt(target: string, auth?: AuthConfig): string {
-  return `You are the Discovery Agent for 0sec AI red-teaming toolkit.
+  return `You are the Discovery Agent for 0 AI red-teaming toolkit.
 
 Your job: probe the target and build a complete profile.
 
@@ -321,7 +321,7 @@ export function attackPrompt(
     ? `Known system prompt:\n${targetInfo.systemPrompt.slice(0, 500)}`
     : "System prompt: not yet extracted";
 
-  return `You are the Attack Agent for 0sec AI red-teaming toolkit.
+  return `You are the Attack Agent for 0 AI red-teaming toolkit.
 
 Your job: test the target for security vulnerabilities across these categories: ${templateCategories.join(", ")}.
 
@@ -587,7 +587,7 @@ export function verifyPrompt(target: string, findings: Finding[], auth?: AuthCon
     )
     .join("\n\n");
 
-  return `You are the Verification Agent for 0sec AI red-teaming toolkit.
+  return `You are the Verification Agent for 0 AI red-teaming toolkit.
 
 Your job: verify each finding by replaying the attack and confirming exploitability.
 
@@ -625,7 +625,7 @@ export function verifyPromptSingleFinding(
   finding: Finding,
   auth?: AuthConfig,
 ): string {
-  return `You are the Verification Agent for 0sec AI red-teaming toolkit.
+  return `You are the Verification Agent for 0 AI red-teaming toolkit.
 
 Your job: verify ONE finding by replaying the attack and confirming exploitability.
 
@@ -667,7 +667,7 @@ export function sourceVerifyPrompt(scopePath: string, findings: Finding[]): stri
     )
     .join("\n\n");
 
-  return `You are the Source Verification Agent for 0sec security toolkit.
+  return `You are the Source Verification Agent for 0 security toolkit.
 
 Your job: independently verify each finding by re-reading the source code, tracing data flow, and confirming or rejecting exploitability.
 
@@ -726,7 +726,7 @@ export function researchPrompt(
   targetDescription: string,
   advisoryLabel = "npm audit",
 ): string {
-  return `You are the Research Agent for 0sec — a combined discovery, attack, and PoC-generation agent.
+  return `You are the Research Agent for 0 — a combined discovery, attack, and PoC-generation agent.
 
 TARGET: ${targetDescription}
 SOURCE: ${scopePath}
@@ -795,7 +795,7 @@ export function researchPromptSingleFile(
     (f) => f.path === filePath || f.path.endsWith(filePath) || filePath.endsWith(f.path),
   );
 
-  return `You are the Research Agent for 0sec — focused single-file pass.
+  return `You are the Research Agent for 0 — focused single-file pass.
 
 TARGET: ${targetDescription}
 SOURCE: ${scopePath}
@@ -840,7 +840,7 @@ export function blindVerifyPrompt(
   claimedSeverity: string,
   scopePath: string,
 ): string {
-  return `You are a blind verification agent for 0sec. You must independently verify a claimed vulnerability.
+  return `You are a blind verification agent for 0. You must independently verify a claimed vulnerability.
 
 You are given ONLY:
 - A file path where the vulnerability allegedly exists
@@ -1030,7 +1030,7 @@ export function reportPrompt(findings: Finding[]): string {
   const confirmed = findings.filter((f) => f.status === "confirmed");
   const discovered = findings.filter((f) => f.status === "discovered");
 
-  return `You are the Report Agent for 0sec AI red-teaming toolkit.
+  return `You are the Report Agent for 0 AI red-teaming toolkit.
 
 Your job: generate a final summary of the security assessment.
 

@@ -1,5 +1,5 @@
 /**
- * Plugin loader — discovery, spawn, handshake, dispatch (0sec plugin system,
+ * Plugin loader — discovery, spawn, handshake, dispatch (0 plugin system,
  * stages 2 + 3 of DESIGN.md).
  *
  * This is the HOST side of the boundary whose wire format lives in
@@ -44,7 +44,7 @@
  * `tools/pre-execute` waterfall lets a listener return without calling
  * `next()`, which short-circuits the remainder of the chain — i.e. any plugin
  * that can register an interceptor can SUPPRESS the authorization pipeline that
- * is supposed to be authorizing it. Since 0sec's gates are the only thing
+ * is supposed to be authorizing it. Since 0's gates are the only thing
  * standing between a model and un-scoped egress on an authorized engagement,
  * handing that switch to third-party code would void the entire capability
  * model. So: guards are HOST-side only. `plugins/guards.ts` is deny-only and
@@ -77,7 +77,7 @@ import { spawn } from "node:child_process";
 import { chmodSync, existsSync, mkdirSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { isAbsolute, join } from "node:path";
 
-import { homeStateDir } from "@0/shared"
+import { homeStateDir } from "@0/shared";
 
 import { allowlistedChildEnv } from "../agent/sanitized-env.js";
 import type { ToolDefinition, ToolParam } from "../agent/types.js";
@@ -341,7 +341,7 @@ export type PluginSpawner = (
  * leaks from children handed `process.env`; this is not going to be the sixth.
  *
  * Plugins then get LESS than that baseline. The allowlist deliberately carries
- * `TARGET` / `AUTH_HEADER` / `AUTH_VALUE` / `AUTH_CURL_FLAG` because 0sec's own
+ * `TARGET` / `AUTH_HEADER` / `AUTH_VALUE` / `AUTH_CURL_FLAG` because 0's own
  * scanner children legitimately authenticate to the engagement target. A
  * third-party plugin is a strictly lower trust tier and, per the plugin
  * security contract, receives no auth config at all — so those four names are
@@ -725,7 +725,7 @@ export class PluginHost {
       };
     }
 
-    // Compiled Bun must run its embedded interpreter, not re-enter the 0sec CLI.
+    // Compiled Bun must run its embedded interpreter, not re-enter the 0 CLI.
     const env = buildPluginEnv(pluginId, this.env);
     if (process.versions.bun) env.BUN_BE_BUN = "1";
     const spec: PluginSpawnSpec = {

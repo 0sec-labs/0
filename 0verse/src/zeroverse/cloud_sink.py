@@ -7,7 +7,7 @@ module is the producer that drives it.
 It mirrors the canonical TypeScript cloud-sink (``@0/core`` ``cloud-sink.ts``)
 and the ``mapOversePoVToCloudFinding`` mapper:
 
-  * the SAME ``ZERO_CLOUD_*`` env contract 0sec-cli reads,
+  * the SAME ``ZERO_CLOUD_*`` env contract @0/cli reads,
   * the SAME two POST shapes — ``{"finding": <CloudSinkFinding>}`` per finding and
     ``{"report": <ScanReport>, "final": true}`` on completion (the completion
     marker), to ``<sink>/scans/<scanId>/findings``,
@@ -73,7 +73,7 @@ def build_config(
     """Resolve the sink config from env + CLI flags.
 
     Env takes precedence over the matching flag (the ``ZERO_CLOUD_*`` contract is
-    env-driven, same as 0sec-cli). The bearer ``token`` is read from the
+    env-driven, same as @0/cli). The bearer ``token`` is read from the
     environment ONLY — it is never accepted on the command line. Returns ``None``
     when no sink URL or scan id is resolvable (the caller treats that as a usage
     error in ``--cloud`` mode).
@@ -360,13 +360,13 @@ def _log(msg: str) -> None:
 def _headers(config: CloudSinkConfig) -> dict[str, str]:
     headers = {
         "Content-Type": "application/json",
-        "X-0sec-Scan-Id": config.scan_id,
+        "X-0-Scan-Id": config.scan_id,
         "x-cloud-sink-version": CLOUD_SINK_VERSION,
     }
     if config.token:
         headers["Authorization"] = f"Bearer {config.token}"
     if config.org_id:
-        headers["X-0sec-Org-Id"] = config.org_id
+        headers["X-0-Org-Id"] = config.org_id
     return headers
 
 

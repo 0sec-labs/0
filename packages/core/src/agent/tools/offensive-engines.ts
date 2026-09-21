@@ -75,7 +75,7 @@ export const offensiveEngineToolDefinitions: Record<string, ToolDefinition> = {
       finding_id: { type: "string", description: "Finding id (or unique prefix) to remediate; must be a reproduced finding." },
       repo: { type: "string", description: "Repo root (a clean local worktree) the patch applies to; defaults to the scoped source path when one is set." },
       test_command: { type: "string", description: "Regression command run to check the fix does not break the valid path (e.g. \"make test\"). Required." },
-      db_path: { type: "string", description: "Optional path to the findings SQLite database (defaults to the standard 0sec DBs)." },
+      db_path: { type: "string", description: "Optional path to the findings SQLite database (defaults to the standard 0 DBs)." },
     },
     required: ["finding_id", "test_command"],
   },
@@ -88,7 +88,7 @@ export const offensiveEngineToolDefinitions: Record<string, ToolDefinition> = {
     parameters: {
       finding_id: { type: "string", description: "Finding id (or unique prefix) to replay." },
       target: { type: "string", description: "Optional in-scope target override; an out-of-scope override is refused. When omitted, the finding's own recorded target/PoC steps drive the replay." },
-      db_path: { type: "string", description: "Optional path to the findings SQLite database (defaults to the standard 0sec DBs)." },
+      db_path: { type: "string", description: "Optional path to the findings SQLite database (defaults to the standard 0 DBs)." },
     },
     required: ["finding_id"],
   },
@@ -258,7 +258,7 @@ function refuseOutOfScope(ctx: ToolContext, url: string): string | null {
 
 /**
  * Reconstruct the CLI's `loadFindingFocus`: resolve a persisted finding by id
- * (or unique prefix) from the standard 0sec findings DB(s), rebuilding the
+ * (or unique prefix) from the standard 0 findings DB(s), rebuilding the
  * full Finding (including the verification result + verificationSpec that the
  * fix precondition depends on). CLI-only in the CLI package, re-implemented
  * here over the exported @0/db + @0/shared primitives.
@@ -510,7 +510,7 @@ export async function executeAssumptionHunt(ctx: ToolContext, args: Record<strin
       };
     }
 
-    modelDir = await mkdtemp(join(tmpdir(), "0sec-assumption-"));
+    modelDir = await mkdtemp(join(tmpdir(), "0-assumption-"));
     const modelPath = join(modelDir, `${subsystem.replace(/[^a-zA-Z0-9_.-]/g, "_")}.json`);
     const verify = makeSkepticVerifier({ sourceRoot, runtime: "api" });
 

@@ -2,7 +2,7 @@
 # Full 104-challenge sweep, 5-way parallel, parametrized.
 # Usage: env ZERO_MODEL=<model> ZERO_REPEAT=1 ZERO_BENCH_DEPTH=default ./run-full-sweep.sh <tag> <bb|wb>
 set -uo pipefail
-BENCH=/home/peak/xbow-bench/0sec/packages/benchmark
+BENCH=/home/peak/xbow-bench/0/packages/benchmark
 TAG="${1:?tag}"; MODE="${2:-bb}"
 cd "$BENCH"
 export PATH="$HOME/.cache/cpkbin:$PATH"

@@ -24,7 +24,7 @@
  *      enable via `ZERO_CLOUD_EVENTS=1` (checked at subscribe time).
  *
  * Cloud wire format (matches the cloud worker-controller's
- * `parseEventLines` in `0sec-cloud/services/worker-controller/src/poller.ts`):
+ * `parseEventLines` in `0-cloud/services/worker-controller/src/poller.ts`):
  *
  *     ZERO_EVENT_<TYPE_UPPER> {"…json payload…"}
  *
@@ -32,9 +32,11 @@
  */
 import type { ScanEvent, ScanListener } from "../scanner.js";
 import type { ToolCall, ToolResult } from "../agent/types.js";
-import { createPresentationEvent,
-type PresentationEvent,
-type PresentationSource, } from "@0/shared"
+import {
+  createPresentationEvent,
+  type PresentationEvent,
+  type PresentationSource,
+} from "@0/shared";
 
 // ── Event taxonomy ──────────────────────────────────────────────────────────
 //
@@ -44,7 +46,7 @@ type PresentationSource, } from "@0/shared"
 // enforce payload shapes at every call site.
 //
 // Canonical event types the cloud already understands (schema comment in
-// `0sec-cloud/services/dashboard/src/db/schema.ts:680`):
+// `0-cloud/services/dashboard/src/db/schema.ts:680`):
 //
 //   step_started, step_completed, finding_ingested, cost_update,
 //   scan_completed
@@ -252,7 +254,7 @@ export interface ReasoningSummaryPayload {
   summary: string;
 }
 
-// ── Skill events (0sec#458 — JIT skill A/B tracking) ────────────────────
+// ── Skill events (0#458 — JIT skill A/B tracking) ────────────────────
 
 export interface SkillLoadedPayload {
   skill_id: string;
@@ -320,7 +322,7 @@ export interface InlineValidationPayload {
  * decides which deterministic oracle (or the regex fallback) adjudicated a
  * finding — mirroring the existing `db.logEvent("pov_oracle")` trace.
  *
- * Why both: `db.logEvent` only writes 0sec's LOCAL sqlite `pipeline_events`,
+ * Why both: `db.logEvent` only writes 0's LOCAL sqlite `pipeline_events`,
  * which the cloud worker never relays. Putting the same signal on the typed
  * bus lets `cloudEventSink` serialize it (→ worker → orchestrator
  * `scan_events`), so the dashboard can join it to the finding by `findingId`
@@ -351,7 +353,7 @@ export interface PovOraclePayload {
 }
 
 /**
- * Confirmed OAST out-of-band callback (0sec#659 / 0cloud#1278). Emitted by the
+ * Confirmed OAST out-of-band callback (0#659 / 0cloud#1278). Emitted by the
  * deterministic per-category `oracle` triage layer in `agentic-scanner.ts` when
  * the OAST-callback oracle (SSRF / OOB-RCE / OOB-SQLi …) reproduces a
  * token-matched callback.
@@ -713,10 +715,10 @@ export interface SessionObjectivePayload {
 }
 
 /**
- * Aggregate multi-modal cross-validation summary (0sec FoxGuard cross-validation,
+ * Aggregate multi-modal cross-validation summary (0 FoxGuard cross-validation,
  * Phase 3). Emitted ONCE per scan, after the per-finding triage loop, when the
  * multi-modal agreement layer ran (`ZERO_FEATURE_MULTIMODAL=1` + white-box) and
- * at least one finding reached `both_fire` agreement — i.e. both the 0sec agent
+ * at least one finding reached `both_fire` agreement — i.e. both the 0 agent
  * AND the foxguard pattern scanner fired on the same file. Lets the console / TUI
  * / cloud show "both scanners agree on N findings" without re-deriving it from
  * per-finding `multi_modal_agreement` DB events.
@@ -731,7 +733,7 @@ export interface CrossValidatedLeadEntry {
   title: string;
   severity: string;
   category?: string;
-  /** foxguard × 0sec agreement confidence in [0,1] from the multi-modal check. */
+  /** foxguard × 0 agreement confidence in [0,1] from the multi-modal check. */
   confidence: number;
   /** Number of foxguard SARIF findings that matched this finding's file. */
   foxguardMatches: number;
@@ -884,7 +886,7 @@ class EventBus {
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         try {
-          process.stderr.write(`[0sec event-bus] sink threw on ${type}: ${msg}\n`);
+          process.stderr.write(`[0 event-bus] sink threw on ${type}: ${msg}\n`);
         } catch {
           /* stderr gone — nothing more we can do */
         }

@@ -21,7 +21,7 @@ A maintained build recipe at `packages/core/src/triage/kernel-vm/` builds:
   support; inspect the generated config rather than assuming every requested
   option survives `olddefconfig`. Tree builds use separate `kasan` and `kcsan` profiles.
 - `rootfs.img` — 512 MB Debian Bookworm ext4 with `gcc`, `binutils`, `make`,
-  `procps`, `kmod`, `strace`, `gdb`, OpenSSH, and `/sbin/0sec-init`.
+  `procps`, `kmod`, `strace`, `gdb`, OpenSSH, and `/sbin/0-init`.
 - `kernel.config` — the exact config used for the build.
 - `osec_vm_key[.pub]` — root SSH keypair for manual debugging only (the verifier
   uses a QEMU 9p share, not SSH).
@@ -63,7 +63,7 @@ $HOME/.0/kernel-vm/linux-6.8.12-kasan/
 Treat the output directory as a local cache; regenerate it when the Dockerfile,
 kernel version, or guest package list changes.
 
-<span id="configure-0sec"></span>
+<span id="configure-0"></span>
 ## Configure 0
 
 Required values must be passed with `env`: `ZERO_*` names begin with a digit and
@@ -101,7 +101,7 @@ On Linux hosts with KVM, add `ZERO_KERNEL_QEMU_ACCEL=kvm` to that `env` invocati
 Leave `ZERO_KERNEL_QEMU_APPEND` unset unless using a custom guest. Default:
 
 ```text
-console=ttyS0 root=/dev/vda rw nokaslr panic=-1 init=/sbin/0sec-init
+console=ttyS0 root=/dev/vda rw nokaslr panic=-1 init=/sbin/0-init
 ```
 
 The release above applies only to the unmodified 6.8.12 recipe. For custom
@@ -143,8 +143,8 @@ when you intend to test the supplied tree. `--syz ./program.syz` requires
 `syz-execprog` in the guest; the stock rootfs recipe does not install it.
 
 For each C reproducer 0 writes `repro.c` and `runner.sh` to a temp dir, boots
-QEMU with a 9p share (`osecshare`), lets `/sbin/0sec-init` run
-`/mnt/0sec/runner.sh`, compiles and runs the reproducer under the timeout, and
+QEMU with a 9p share (`osecshare`), lets `/sbin/0-init` run
+`/mnt/0/runner.sh`, compiles and runs the reproducer under the timeout, and
 copies `compile.log`, `run.log`, `dmesg.log`, markers, and the serial log back
 to the artifact directory (when configured).
 
@@ -176,9 +176,9 @@ A custom guest must satisfy:
 | --- | --- |
 | Architecture | x86_64, bootable by `qemu-system-x86_64` |
 | Root device | `root=/dev/vda` (or matching custom append) |
-| Init path | `/sbin/0sec-init` (unless `ZERO_KERNEL_QEMU_APPEND` changed) |
-| Host share | Mount 9p tag `osecshare` at `/mnt/0sec` |
-| Runner | Execute `/mnt/0sec/runner.sh`, leave results in the share |
+| Init path | `/sbin/0-init` (unless `ZERO_KERNEL_QEMU_APPEND` changed) |
+| Host share | Mount 9p tag `osecshare` at `/mnt/0` |
+| Runner | Execute `/mnt/0/runner.sh`, leave results in the share |
 | Compiler | `/usr/bin/gcc` plus libc headers and `binutils` |
 | Logs | `dmesg` readable after the reproducer runs |
 | Kernel | Debug-friendly, crash signal visible in `dmesg` |

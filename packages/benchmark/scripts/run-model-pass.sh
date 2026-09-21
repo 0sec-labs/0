@@ -3,7 +3,7 @@
 # best-of-10. Unions into the existing results/shards/ via mm-<model>-*.json files.
 # Usage: env ZERO_MODEL=gpt-5.4 ./run-model-pass.sh <tag>
 set -uo pipefail
-BENCH=/home/peak/xbow-bench/0sec/packages/benchmark
+BENCH=/home/peak/xbow-bench/0/packages/benchmark
 TAG="${1:-mm}"
 cd "$BENCH"
 export PATH="$HOME/.cache/cpkbin:$PATH"

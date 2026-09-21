@@ -29,11 +29,11 @@
  *
  * COMPLETION IS WRITTEN IN EXACTLY ONE PLACE. `onboardingCompleted` is set only
  * by `finalizeOnboarding()`, called only from the `done` step's Enter. Every
- * other choice (connection, model, each preference) persists at the moment it
- * is made, independently of completion. So cancelling — Ctrl+C, Esc, or a
- * dialog dismiss — leaves the user's choices intact (already-persisted
- * connection/model/setting changes stay) and does NOT mark onboarding as done,
- * so the next session shows it again. `onboardingCompleted` is operator-owned
+ * confirmed preference or connection persists independently of completion.
+ * Model choices are staged on the audit and applied on Finish or Skip setup.
+ * Escape goes back one decision; at Welcome it skips into chat without marking
+ * setup complete. Ctrl+C quits; confirmed disk writes remain, while staged
+ * audit choices last only for this process. `onboardingCompleted` is operator-owned
  * and refused at project scope by the store; the completion write below is
  * un-scoped, so it always lands in the global layer.
  */
@@ -48,13 +48,13 @@ import React, {
 import { sleekScrollbar } from "./scrollbar.js";
 import { useKeyboard } from "@opentui/react";
 import { TextAttributes, type ScrollBoxRenderable } from "@opentui/core";
-import { analyticsPipeline } from "@0/core"
+import { analyticsPipeline } from "@0/core";
 
 import { Cells, textCells } from "./primitives.js";
 import { updateSetting, useSettings } from "./settings-store.js";
 import { SETTING_DEFS, type TuiSettings } from "./settings.js";
 import { SettingsPreview, previewRowCount } from "./settings-preview.js";
-import { useDialogSurface, useSurfaceDimensions } from "./dialog-surface.js";
+import { SurfaceContext, useDialogSurface, useSurfaceDimensions } from "./dialog-surface.js";
 import { operatorIcon, operatorTitle } from "./operator-icons.js";
 import {
   DIALOG_HOST_FOOTER_ROWS,
@@ -102,6 +102,11 @@ export function stepAfter(step: OnboardingStep): OnboardingStep | undefined {
   return idx >= 0 ? ONBOARDING_STEPS[idx + 1]?.key : undefined;
 }
 
+export function stepBefore(step: OnboardingStep): OnboardingStep | undefined {
+  const idx = ONBOARDING_STEPS.findIndex((s) => s.key === step);
+  return idx > 0 ? ONBOARDING_STEPS[idx - 1]?.key : undefined;
+}
+
 /**
  * The setting keys the guided preferences step walks, in order. Deliberately
  * just the two most visible, lowest-risk Display cosmetics — never a Security
@@ -138,21 +143,24 @@ export function recordAnalyticsConsent(level: AnalyticsLevel): void {
 export interface OnboardingFrameInput {
   body: React.ReactNode;
   hint: string;
+  actions: React.ReactNode;
 }
 
 /**
  * How an embedded sub-step (connect/models) reports back to the machine. The
  * host wires the real screen's callbacks to these: a made decision → `onDone`
- * (advance), an explicit skip → `onSkip` (advance without a choice), leaving
- * the console → `onCancel`.
+ * (advance), an explicit skip → `onSkip` (advance without a choice), Back
+ * → `onBack`, and an explicit quit → `onExit`.
  */
 export interface OnboardingSubNav {
+  /** Return to the previous decision without undoing confirmed choices. */
+  onBack: () => void;
   /** The sub-step's decision was made (and already persisted/staged by the host). */
   onDone: () => void;
   /** Skip this step, keeping defaults, and advance. */
   onSkip: () => void;
   /** Leave onboarding entirely, without completing it. */
-  onCancel: () => void;
+  onExit: () => void;
 }
 
 export interface OnboardingScreenProps {
@@ -173,7 +181,9 @@ export interface OnboardingScreenProps {
   /** Mark onboarding completed and transition to the chat screen. */
   onComplete: () => void;
   /** Leave onboarding without marking it done. Does NOT undo any choices. */
-  onCancel: () => void;
+  onDismiss: () => void;
+  /** Explicit application quit, separate from leaving setup. */
+  onExit: () => void;
   interactive: boolean;
 }
 
@@ -237,12 +247,40 @@ const STEP_LINES: Partial<Record<OnboardingStep, (width: number) => StepLine[]>>
 
 const STEP_HINT: Record<OnboardingStep, string> = {
   welcome: "[⏎] begin · [esc] skip onboarding",
-  connect: "connect or [esc] to skip · [⌃C] cancel",
-  models: "select a model or [esc] to skip · [⌃C] cancel",
-  preferences: "[←→] change · [⏎] confirm · [s] skip · [esc] cancel",
-  analytics: "[↑↓] choose · [PgUp/PgDn] read · [⏎] confirm · [s] skip · [esc] cancel",
-  done: "[⏎] start working · [esc] review later",
+  connect: "[esc] back · [⌃N] skip · [⌃C] quit",
+  models: "[esc] back · [⌃N] skip · [⌃C] quit",
+  preferences: "[←→] change · [⏎] confirm · [s] skip · [esc] back",
+  analytics: "[↑↓] choose · [PgUp/PgDn] read · [⏎] confirm · [s] skip · [esc] back",
+  done: "[⏎] start working · [esc] back",
 };
+
+/** Visible mouse controls share exactly the keyboard's transition callbacks. */
+export function OnboardingActions({ onBack, onNext, onSkip, backLabel = "Back", nextLabel = "Next" }: {
+  onBack: () => void;
+  onNext?: () => void;
+  onSkip?: () => void;
+  backLabel?: string;
+  nextLabel?: string;
+}) {
+  const theme = useTheme();
+  return <box height={1} flexShrink={0} flexDirection="row" gap={2}>
+    <text fg={theme.ACCENT} onMouseUp={(event) => { if (event.button === 0) { event.stopPropagation(); onBack(); } }}>[{backLabel}]</text>
+    {onNext ? <text fg={theme.ACCENT} onMouseUp={(event) => { if (event.button === 0) { event.stopPropagation(); onNext(); } }}>[{nextLabel}]</text> : null}
+    {onSkip ? <text fg={theme.MUTED} onMouseUp={(event) => { if (event.button === 0) { event.stopPropagation(); onSkip(); } }}>[Skip]</text> : null}
+  </box>;
+}
+
+/** Budget one extra row for wizard controls around an existing picker. */
+export function OnboardingSubstep({ nav, children }: { nav: OnboardingSubNav; children: React.ReactNode }) {
+  const { width, height } = useSurfaceDimensions();
+  const pickerHeight = Math.max(1, height - 1);
+  return <box flexDirection="column" width="100%" height="100%">
+    <SurfaceContext.Provider value={{ width, height: pickerHeight }}>
+      <box height={pickerHeight} flexShrink={0}>{children}</box>
+    </SurfaceContext.Provider>
+    <OnboardingActions onBack={nav.onBack} onSkip={nav.onSkip} />
+  </box>;
+}
 
 // ---------------------------------------------------------------------------
 // Analytics consent step
@@ -366,7 +404,8 @@ export function OnboardingScreen({
   renderConnect,
   renderModels,
   onComplete,
-  onCancel,
+  onDismiss,
+  onExit,
   interactive,
 }: OnboardingScreenProps) {
   const { width, height } = useSurfaceDimensions();
@@ -381,12 +420,14 @@ export function OnboardingScreen({
   const contentWidth = Math.max(1, width - (inDialog ? 0 : 4));
   const availableRows = Math.max(
     0,
-    height - (inDialog ? DIALOG_HOST_FOOTER_ROWS : shellChromeRows(width)),
+    height - (inDialog ? DIALOG_HOST_FOOTER_ROWS : shellChromeRows(width)) - 1,
   );
   const [stepIndex, setStepIndex] = useState(0);
+  const [prefIndex, setPrefIndex] = useState(0);
   const currentStep = ONBOARDING_STEPS[stepIndex]?.key ?? "done";
 
   const advanceTo = useCallback((next: OnboardingStep) => {
+    if (next === "preferences") setPrefIndex(0);
     const idx = ONBOARDING_STEPS.findIndex((s) => s.key === next);
     if (idx >= 0) setStepIndex(idx);
   }, []);
@@ -399,7 +440,16 @@ export function OnboardingScreen({
   // Preferences step: which key we are on, and which of its choices is
   // highlighted. Nothing is persisted while cycling — only Enter writes — so a
   // skip or cancel leaves the on-disk value untouched.
-  const [prefIndex, setPrefIndex] = useState(0);
+  const goBack = useCallback(() => {
+    if (currentStep === "preferences" && prefIndex > 0) {
+      setPrefIndex(prefIndex - 1);
+      return;
+    }
+    if (currentStep === "analytics") setPrefIndex(ONBOARDING_PREFERENCE_KEYS.length - 1);
+    const previous = stepBefore(currentStep);
+    if (previous) setStepIndex(ONBOARDING_STEPS.findIndex((step) => step.key === previous));
+    else onDismiss();
+  }, [currentStep, prefIndex, onDismiss]);
   const prefKey: PreferenceKey | undefined = ONBOARDING_PREFERENCE_KEYS[prefIndex];
   const prefDef = useMemo(
     () => SETTING_DEFS.find((d) => d.key === prefKey),
@@ -446,6 +496,11 @@ export function OnboardingScreen({
     }
   }, [prefKey, prefChoices, choiceIndex, prefIndex, advanceTo]);
 
+  const skipPreference = useCallback(() => {
+    if (prefIndex + 1 < ONBOARDING_PREFERENCE_KEYS.length) setPrefIndex(prefIndex + 1);
+    else advanceTo("analytics");
+  }, [prefIndex, advanceTo]);
+
   const cycleChoice = useCallback((delta: number) => {
     const n = prefChoices.length;
     if (n === 0) return;
@@ -485,14 +540,15 @@ export function OnboardingScreen({
     // every key. Handling them here too would double-fire.
     if (currentStep === "connect" || currentStep === "models") return;
 
-    if (key.ctrl && key.name === "c") { onCancel(); return; }
-    if (key.name === "escape") { onCancel(); return; }
+    if (key.ctrl && key.name === "c") { onExit(); return; }
+    if (key.name === "escape") { goBack(); return; }
+    if (key.ctrl || key.meta || key.option) return;
 
     if (currentStep === "preferences") {
       if (key.name === "left" || key.name === "h") cycleChoice(-1);
       else if (key.name === "right" || key.name === "l") cycleChoice(1);
       else if (key.name === "return" && !key.shift) commitPreference();
-      else if (key.name === "s") advanceTo("analytics");
+      else if (key.name === "s") skipPreference();
       return;
     }
 
@@ -509,12 +565,13 @@ export function OnboardingScreen({
   });
 
   // The nav an embedded sub-step reports through: a decision or a skip both
-  // move the machine forward; cancel leaves onboarding.
+  // move forward; Back revisits a decision; Quit exits the application.
   const subNav: OnboardingSubNav = useMemo(() => ({
+    onBack: goBack,
     onDone: advancePastCurrent,
     onSkip: advancePastCurrent,
-    onCancel,
-  }), [advancePastCurrent, onCancel]);
+    onExit,
+  }), [advancePastCurrent, goBack, onExit]);
 
   // Embedded pickers render themselves (they carry their own frame + footer);
   // only build the node when interactive so a hidden onboarding never mounts a
@@ -590,7 +647,14 @@ export function OnboardingScreen({
     body = renderProse({ lines, theme, currentStep, contentWidth: cardWidth, textWidth: cardTextWidth, bodyRows });
   }
 
-  return interactive ? (frame({ body: chrome(body), hint }) as React.ReactElement) : null;
+  const actions = <OnboardingActions
+    onBack={goBack}
+    backLabel={currentStep === "welcome" ? "Skip setup" : "Back"}
+    onNext={currentStep === "preferences" ? commitPreference : currentStep === "analytics" ? commitAnalytics : handleEnter}
+    nextLabel={currentStep === "done" ? "Start working" : currentStep === "welcome" ? "Begin" : "Confirm"}
+    onSkip={currentStep === "preferences" ? skipPreference : currentStep === "analytics" ? skipAnalytics : undefined}
+  />;
+  return interactive ? (frame({ body: chrome(body), hint, actions }) as React.ReactElement) : null;
 }
 
 // ---------------------------------------------------------------------------

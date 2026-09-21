@@ -51,7 +51,7 @@ describe("provider Responses selection", () => {
 
   beforeEach(() => {
     originalEnv = process.env;
-    home = mkdtempSync(join(tmpdir(), "0sec-responses-provider-"));
+    home = mkdtempSync(join(tmpdir(), "0-responses-provider-"));
     // This suite asserts single-request WIRE shaping (usage retention, tool
     // non-promotion, terminal-event handling). The transient empty-stream retry
     // added in executeNative would otherwise re-issue the "response stream

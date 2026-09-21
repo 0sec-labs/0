@@ -220,7 +220,7 @@ async function main(): Promise<void> {
     return;
   }
 
-  console.log("0sec JIT skills A/B");
+  console.log("0 JIT skills A/B");
   console.log(`runner: xbow ${xbowArgs.join(" ")}`);
   console.log("");
   console.log(`baseline:   ${baseline.passed}/${baseline.challenges} pass, ${baseline.flags}/${baseline.challenges} flags, ${baseline.totalAttackTurns} turns, ${baseline.totalTokens} tokens, $${baseline.totalEstimatedCostUsd.toFixed(2)}`);

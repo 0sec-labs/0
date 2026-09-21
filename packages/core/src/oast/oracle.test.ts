@@ -50,7 +50,7 @@ describe("matchInteractions", () => {
   it("matches token case-insensitively", () => {
     const hits = matchInteractions({
       token: marker,
-      interactions: [dns(`${marker.toUpperCase()}.OAST.0SEC.AI`)],
+      interactions: [dns(`${marker.toUpperCase()}.OAST.ZERO.AI`)],
     });
     expect(hits).toHaveLength(1);
   });

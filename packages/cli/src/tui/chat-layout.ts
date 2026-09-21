@@ -283,7 +283,7 @@ export interface LedgerRowsInput {
  * transcript is the one region that absorbs pressure. It must therefore
  * know its own budget: a scrollbox whose height collapses below its
  * content still paints that content, which is how the empty state
- * interleaved into `Describe-anrobjective.y0seceenforces...`. Callers use
+ * interleaved into `Describe-anrobjective.y0eenforces...`. Callers use
  * this to drop optional lines instead of overprinting them.
  */
 export function computeLedgerRows({

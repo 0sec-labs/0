@@ -27,7 +27,7 @@ describe("LlmApiRuntime provider detection", () => {
   let fixtureHome: string;
 
   beforeEach(() => {
-    fixtureHome = mkdtempSync(join(tmpdir(), "0sec-provider-detection-"));
+    fixtureHome = mkdtempSync(join(tmpdir(), "0-provider-detection-"));
     process.env.HOME = fixtureHome;
     delete process.env["ZERO_CLOUD_TOKEN"];
     delete process.env["ZERO_CLOUD_HOST"];
@@ -63,7 +63,7 @@ describe("LlmApiRuntime provider detection", () => {
     delete process.env["ZERO_CHATGPT_OAUTH_REFRESH_TOKEN"];
     delete process.env["ZERO_CHATGPT_ACCOUNT_ID"];
     // Provider-selection tests must not inherit the operator's Codex login.
-    process.env["ZERO_CHATGPT_AUTH_FILE"] = "/tmp/0sec-provider-test-no-auth.json";
+    process.env["ZERO_CHATGPT_AUTH_FILE"] = "/tmp/0-provider-test-no-auth.json";
     // Suppress the startup banner so provider-detection tests don't
     // spew log lines or attempt real network probes.
     process.env["ZERO_SKIP_PROVIDER_BANNER"] = "1";
@@ -286,7 +286,7 @@ describe("LlmApiRuntime provider detection", () => {
   });
 
   it("reports Azure config as invalid when only the key is set", () => {
-    process.env.HOME = "/tmp/0sec-no-codex-config";
+    process.env.HOME = "/tmp/0-no-codex-config";
     process.env.AZURE_OPENAI_API_KEY = "azure-key-123";
     const rt = new LlmApiRuntime({ type: "api", timeout: 5000 });
     const diagnostics = rt.getConfigurationDiagnostics();
@@ -1049,7 +1049,7 @@ describe("LlmApiRuntime OpenCode Gemini format", () => {
           content: [{
             type: "tool_result",
             tool_use_id: "upstream-call-1",
-            content: "# 0sec",
+            content: "# 0",
           }],
         },
       ],
@@ -1075,7 +1075,7 @@ describe("LlmApiRuntime OpenCode Gemini format", () => {
             functionResponse: {
               id: "upstream-call-1",
               name: "read_file",
-              response: { name: "read_file", content: "# 0sec" },
+              response: { name: "read_file", content: "# 0" },
             },
           }],
         },
@@ -1455,7 +1455,7 @@ describe.skipIf(!shouldRunAzureLiveTest)("Azure Responses API live integration",
     delete process.env.Z_AI_API_KEY;
     delete process.env["ZERO_CHATGPT_ACCESS_TOKEN"];
     delete process.env["ZERO_CHATGPT_OAUTH_REFRESH_TOKEN"];
-    process.env["ZERO_CHATGPT_AUTH_FILE"] = "/tmp/0sec-azure-live-test-no-auth.json";
+    process.env["ZERO_CHATGPT_AUTH_FILE"] = "/tmp/0-azure-live-test-no-auth.json";
   });
 
   it("completes a tool call and continuation round-trip", async () => {
@@ -2350,7 +2350,7 @@ describe("LlmApiRuntime cross-provider failover (ZERO_LLM_FALLBACK)", () => {
     ]) {
       if (!(k in origEnv)) delete process.env[k];
     }
-    process.env["ZERO_CHATGPT_AUTH_FILE"] = "/tmp/0sec-provider-test-no-auth.json";
+    process.env["ZERO_CHATGPT_AUTH_FILE"] = "/tmp/0-provider-test-no-auth.json";
     process.env["ZERO_SKIP_PROVIDER_BANNER"] = "1";
     __resetFallbackChainForTests();
   });

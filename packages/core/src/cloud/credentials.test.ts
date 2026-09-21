@@ -9,7 +9,7 @@ import {
 } from "./credentials.js";
 
 function makeFakeHome(content: string | null, mode: number = 0o600): string {
-  const home = mkdtempSync(join(tmpdir(), "0sec-cloud-creds-"));
+  const home = mkdtempSync(join(tmpdir(), "0-cloud-creds-"));
   if (content !== null) {
     mkdirSync(join(home, ".0"), { recursive: true, mode: 0o700 });
     const path = join(home, ".0", "cloud.env");

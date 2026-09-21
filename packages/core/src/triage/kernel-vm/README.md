@@ -51,7 +51,7 @@ unprivileged reachability, or root escalation.
 - Debian Bookworm minimal
 - GCC + binutils + libc-dev for reproducer compilation
 - gdb, strace for debugging
-- dedicated `/sbin/0sec-init` boot path that mounts the host 9p share and runs `/mnt/0sec/runner.sh`
+- dedicated `/sbin/0-init` boot path that mounts the host 9p share and runs `/mnt/0/runner.sh`
 - OpenSSH + exported `osec_vm_key` for manual debugging only. The verifier
   itself does not use SSH.
 
@@ -65,15 +65,15 @@ The 0 verifier boots QEMU with the kernel image, disk image, and a 9p host
 share. A compatible guest must:
 
 - boot as x86_64 under `qemu-system-x86_64`
-- mount the 9p share tag `osecshare` at `/mnt/0sec`
-- execute `/mnt/0sec/runner.sh`
+- mount the 9p share tag `osecshare` at `/mnt/0`
+- execute `/mnt/0/runner.sh`
 - provide `/usr/bin/gcc`, libc headers, and binutils
 - allow `dmesg` collection after the reproducer runs
 
 The default kernel command line is:
 
 ```text
-console=ttyS0 root=/dev/vda rw nokaslr panic=-1 init=/sbin/0sec-init
+console=ttyS0 root=/dev/vda rw nokaslr panic=-1 init=/sbin/0-init
 ```
 
 ## Maintainer smoke scripts

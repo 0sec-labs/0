@@ -1,5 +1,5 @@
 /**
- * Command-layer tests for `0sec plugin`.
+ * Command-layer tests for `0 plugin`.
  *
  * The command drives the real core primitives (enablement + registry-client +
  * loader discovery) through its injected {@link CorePort}. Those modules are not
@@ -162,8 +162,8 @@ let spawnSpy: ReturnType<typeof vi.fn<(...args: unknown[]) => unknown>>;
 
 beforeEach(async () => {
   core = await realCorePort();
-  home = mkdtempSync(join(tmpdir(), "0sec-plugincmd-home-"));
-  project = mkdtempSync(join(tmpdir(), "0sec-plugincmd-proj-"));
+  home = mkdtempSync(join(tmpdir(), "0-plugincmd-home-"));
+  project = mkdtempSync(join(tmpdir(), "0-plugincmd-proj-"));
   out = [];
   err = [];
   spawnSpy = vi.fn<(...args: unknown[]) => unknown>();
@@ -210,7 +210,7 @@ describe("install", () => {
     // It says, in as many words, installed-not-enabled and how to enable.
     expect(joined(out)).toMatch(/INSTALLED, NOT ENABLED/);
     expect(joined(out)).toMatch(/No plugin code has run/);
-    expect(joined(out)).toMatch(/0sec plugin enable acme\.recon/);
+    expect(joined(out)).toMatch(/0 plugin enable acme\.recon/);
     expect(joined(out)).toMatch(/Capabilities it will request: network, filesystem-read/);
 
     // Nothing was spawned, and the plugin is NOT enabled by installing.
@@ -262,7 +262,7 @@ describe("enable", () => {
     await install();
     runEnable("acme.recon", deps());
 
-    const other = mkdtempSync(join(tmpdir(), "0sec-plugincmd-proj2-"));
+    const other = mkdtempSync(join(tmpdir(), "0-plugincmd-proj2-"));
     try {
       expect(core.isEnabled(core.readEnablement(other, home), "acme.recon")).toBe(false);
     } finally {

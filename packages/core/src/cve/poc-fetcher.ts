@@ -25,7 +25,7 @@
  */
 
 import { createHash } from "node:crypto";
-import { homeStateDir } from "@0/shared"
+import { homeStateDir } from "@0/shared";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -87,7 +87,7 @@ function defaultCacheDir(): string {
 function buildHeaders(token?: string): Record<string, string> {
   const headers: Record<string, string> = {
     "Accept": "*/*",
-    "User-Agent": "0sec-cve-adapt/0.1",
+    "User-Agent": "0-cve-adapt/0.1",
   };
   const resolved = token ?? process.env.GITHUB_TOKEN?.trim();
   if (resolved) headers["Authorization"] = `Bearer ${resolved}`;

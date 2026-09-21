@@ -17,7 +17,7 @@
  */
 
 import { randomUUID } from "node:crypto";
-import { createJevEvaluator, jevConfigFromEnvironment, type Finding, type JevEvaluator } from "@0/shared"
+import { createJevEvaluator, jevConfigFromEnvironment, type Finding, type JevEvaluator } from "@0/shared";
 import { z } from "zod";
 
 // ── Public Types ──
@@ -150,7 +150,7 @@ export function inferPackage(target: string): string {
 // ── MemoryStore ──
 
 /**
- * Persistent store of triage memories, backed by the 0sec SQLite database.
+ * Persistent store of triage memories, backed by the 0 SQLite database.
  *
  * MemoryStore accepts either a concrete DB path (it will lazily open
  * `@0/db`'s `osecDB` the first time a method is called) or a custom

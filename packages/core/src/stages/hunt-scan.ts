@@ -1,5 +1,5 @@
 /**
- * Hunt scan stage — 0sec's parallel NOVEL-BUG discovery loop, as a first-class
+ * Hunt scan stage — 0's parallel NOVEL-BUG discovery loop, as a first-class
  * engine stage (sibling of runCraftScan / runExploitScan).
  *
  * Benchmarks reproduce KNOWN bugs; this finds UNKNOWN ones. It codifies the
@@ -32,7 +32,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { rmSync } from "node:fs";
 import { randomUUID } from "node:crypto";
-import type { Finding, RuntimeMode, ScanConfig } from "@0/shared"
+import type { Finding, RuntimeMode, ScanConfig } from "@0/shared";
 import { ScanCostLedger } from "../agent/cost-ledger.js";
 import { stampDeploymentContext } from "./deployment-context.js";
 import {
@@ -61,19 +61,19 @@ import {
   type CrossFamilyStatus,
 } from "./hunt-cross-family.js";
 import { scoreGeometry } from "../kernel/geometry-score.js";
-import { osecDB } from "@0/db"
+import { osecDB } from "@0/db";
 import { type AnalysisAgentResult, runAnalysisAgent } from "../agent-runner.js";
 import { reviewAgentPrompt } from "../analysis-prompts.js";
 import type { ScanListener } from "../scanner.js";
 
 // Per-scan throwaway SQLite DB. The finders/skeptics run concurrently and the
-// default DB is a single shared ~/.0/0sec.db — at any real fan-out width
+// default DB is a single shared ~/.0/0.db — at any real fan-out width
 // they contend on its write lock ("SQLite database is locked"), which crashed
 // verify steps mid-sweep (NOT a refute — a crash, silently dropping the gate).
 // Each source-analysis pass gets its own DB so there is zero cross-scan contention.
 let huntDbCounter = 0;
 function freshHuntDb(): string {
-  return join(tmpdir(), `0sec-hunt-${process.pid}-${huntDbCounter++}.db`);
+  return join(tmpdir(), `0-hunt-${process.pid}-${huntDbCounter++}.db`);
 }
 function cleanupHuntDb(path: string): void {
   for (const suffix of ["", "-wal", "-shm"]) {

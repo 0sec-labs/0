@@ -6,7 +6,7 @@ import {
   buildSyzlangSpecContext,
   type KernelFindingMetadata,
 } from "./kernel-prompts.js";
-import type { Finding } from "@0/shared"
+import type { Finding } from "@0/shared";
 import type { NativeRuntime } from "../runtime/types.js";
 
 // Shared fixture: the same fake kernel tree the reachability ranker tests use.

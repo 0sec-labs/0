@@ -193,7 +193,7 @@ async function runDockerSnapshot(
     if (snapshot.root.includes(",")) throw new Error("snapshot path cannot contain a Docker mount separator");
     const stdin = canonicalEvolutionJson(input);
     const image = IMAGE_ID.test(config.image) ? config.image : await resolveEvolutionImage(config.image, dockerBinary);
-    const name = `0sec-evolution-${randomUUID()}`;
+    const name = `0-evolution-${randomUUID()}`;
     const uid = process.getuid();
     const gid = process.getgid();
     const start = performance.now();
@@ -338,7 +338,7 @@ async function runSmolvmSnapshot(
     verifyEvolutionSnapshot(snapshot);
     const execution = await runSmolvm({
       imageArchive: config.imageArchive, imageDigest: config.image, binary,
-      command: ["/bin/sh", "-c", workerScript(config, "/tmp/0sec-workspace")],
+      command: ["/bin/sh", "-c", workerScript(config, "/tmp/0-workspace")],
       stdin: canonicalEvolutionJson(input),
       channel,
       mounts: [{ source: snapshot.root, target: "/snapshot" }],

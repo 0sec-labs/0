@@ -39,7 +39,7 @@ export default defineConfig({
         { tag: "link", attrs: { rel: "preconnect", href: "https://0.security", crossorigin: "anonymous" } },
       ],
       description:
-        "Your multi-model, open-source cybersecurity team. Install 0, connect your models, hack & fix your systems. Research Preview.",
+        "Your multi-model, self-improving open-source cybersecurity team. Install 0, connect your models, hack & fix your systems. Research Preview.",
       logo: {
         dark: "./src/assets/0-wordmark-dark.svg",
         light: "./src/assets/0-wordmark-light.svg",
@@ -50,7 +50,7 @@ export default defineConfig({
         {
           icon: "github",
           label: "GitHub",
-          href: "https://github.com/0sec-labs/0sec",
+          href: "https://github.com/0sec-labs/0",
         },
         {
           icon: "external",
@@ -59,7 +59,7 @@ export default defineConfig({
         },
       ],
       defaultLocale: "root",
-      editLink: { baseUrl: "https://github.com/0sec-labs/0sec/edit/main/docs/" },
+      editLink: { baseUrl: "https://github.com/0sec-labs/0/edit/main/docs/" },
       components: {
         Header: "./src/components/DocsHeader.astro",
         Hero: "./src/components/DocsHero.astro",

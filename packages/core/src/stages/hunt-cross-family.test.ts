@@ -21,7 +21,7 @@
  */
 
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { Finding } from "@0/shared"
+import type { Finding } from "@0/shared";
 import {
   availableRefuterCandidates,
   crossFamilyRefuteEnabled,

@@ -1,6 +1,8 @@
-import { expandHomePath,
-isExistingLocalTargetPath,
-isExplicitLocalTargetPath, } from "@0/core"
+import {
+  expandHomePath,
+  isExistingLocalTargetPath,
+  isExplicitLocalTargetPath,
+} from "@0/core";
 
 export type EngagementKind = "web" | "source" | "package";
 export type PackageEcosystem = "npm" | "pypi" | "cargo" | "oci";

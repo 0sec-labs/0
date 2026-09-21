@@ -20,7 +20,7 @@ function bundle(content: string, description = "") {
   const snapshot = { skillId: "57bde9ba-c509-4dbd-8bc0-43d19e9e7024", revisionId: "04b9002d-6293-4baa-aa43-7e0db7e90e9f", revision: 1,
     name: "Transaction review", description, entrypoint: "SKILL.md", files, source: { type: "markdown" },
     sha256: createHash("sha256").update(JSON.stringify(canonical)).digest("hex") };
-  const manifest = { schema: "0sec-audit-skills-v1", skills: [snapshot] };
+  const manifest = { schema: "0-audit-skills-v1", skills: [snapshot] };
   const save = () => writeFileSync(path, JSON.stringify(manifest));
   save();
   return { path, snapshot, save };

@@ -1,13 +1,15 @@
 import type { Command } from "commander";
 import chalk from "chalk";
-import { buildIntelDossier,
-lookupCve,
-searchAdvisories,
-searchSimilar,
-searchTargetHistory,
-type IntelDossier,
-type IntelTargetHistory,
-type VulnerabilityIntel, } from "@0/core"
+import {
+  buildIntelDossier,
+  lookupCve,
+  searchAdvisories,
+  searchSimilar,
+  searchTargetHistory,
+  type IntelDossier,
+  type IntelTargetHistory,
+  type VulnerabilityIntel,
+} from "@0/core";
 
 interface SearchOptions {
   ecosystem?: string;

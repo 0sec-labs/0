@@ -167,7 +167,7 @@ export const findingSchema = z
   })
   .passthrough();
 
-// ── ReportSummary schema (used by `0sec scan --replay`) ───────────────────
+// ── ReportSummary schema (used by `0 scan --replay`) ───────────────────
 //
 // Mirrors `ReportSummary` in `@0/shared` — a flat object of seven
 // non-negative integer counters. The CLI reads this back from the

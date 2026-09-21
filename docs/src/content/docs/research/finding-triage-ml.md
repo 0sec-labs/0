@@ -141,7 +141,7 @@ Category-specific oracles check SQLi, reflected XSS, SSRF, RCE, path traversal, 
 
 **Implementation:** `packages/core/src/triage/oracles.ts` plus the dispatcher `verifyOracleByCategory(finding, target)`. Oracles bypass the LLM entirely on the happy path; the LLM verify pipeline is the fallback.
 
-<span id="layer-195-multi-modal-agreement-foxguard--0sec--shipped"></span>
+<span id="layer-195-multi-modal-agreement-foxguard--0--shipped"></span>
 ### Layer 1.95: Multi-Modal Agreement (foxguard × 0) — SHIPPED
 
 The optional [foxguard](https://github.com/0sec-labs/foxguard) check adds evidence
@@ -219,7 +219,7 @@ The proposed prosecutor/defender design uses fresh contexts and a judge, inspire
 
 ### Target Performance
 
-> **Measured update, 2026-04-11:** the [21-run ablation](https://github.com/0sec-labs/0sec/issues/72#issuecomment-4229956469) found mode- and slice-dependent effects. See [results](/research/fp-reduction-moat/).
+> **Measured update, 2026-04-11:** the [21-run ablation](https://github.com/0sec-labs/0/issues/72#issuecomment-4229956469) found mode- and slice-dependent effects. See [results](/research/fp-reduction-moat/).
 
 The table below preserves historical design targets drawn from SAST references.
 It contains no measured 0 performance:
@@ -236,7 +236,7 @@ The actual measured effect on 0 (2026-04-11 ablation, gpt-5.4):
 - XBOW black-box @ limit=25: `moat` produced 19 versus 18 flags, 14 versus 27 findings (48% fewer), and $0.53 versus $0.76 per flag.
 - npm-bench (81 packages): TPR was 100% across profiles; `default` and `moat` matched at F1=0.956. FPR rose from 0.11 (`none`) to 0.19 (`default`) in batch 1. Batch-2 variation prevents confident subsystem attribution.
 
-The measured tradeoffs motivate [learned dynamic routing](https://github.com/0sec-labs/0sec/issues/113): preserve recall while selecting useful layers per finding and benchmark slice.
+The measured tradeoffs motivate [learned dynamic routing](https://github.com/0sec-labs/0/issues/113): preserve recall while selecting useful layers per finding and benchmark slice.
 
 ## Related Work
 

@@ -1,4 +1,4 @@
-# 0sec local Linux-tree kernel VM builder.
+# 0 local Linux-tree kernel VM builder.
 #
 # Builds a KASAN/UBSAN kernel from a bind-mounted source tree at /src/linux,
 # then reuses the same rootfs/output contract as Dockerfile.
@@ -54,7 +54,7 @@ RUN chroot /rootfs bash -c '\
     apt-get install -y --no-install-recommends gdb isc-dhcp-client binutils && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/* && \
-    echo "0sec-kernel" > /etc/hostname \
+    echo "0-kernel" > /etc/hostname \
 '
 
 RUN printf '%s\n' \
@@ -65,16 +65,16 @@ RUN printf '%s\n' \
     'mount -t tmpfs tmpfs /run 2>/dev/null || true' \
     'mount -t tmpfs tmpfs /tmp 2>/dev/null || true' \
     'echo "ZERO_INIT_START" > /dev/kmsg 2>/dev/null || true' \
-    'mkdir -p /mnt/0sec' \
-    'if mount -t 9p -o trans=virtio,version=9p2000.L osecshare /mnt/0sec 2>/tmp/0sec-mount.err; then' \
+    'mkdir -p /mnt/0' \
+    'if mount -t 9p -o trans=virtio,version=9p2000.L osecshare /mnt/0 2>/tmp/0-mount.err; then' \
     '  echo "ZERO_INIT_SHARE_MOUNTED" > /dev/kmsg 2>/dev/null || true' \
     'else' \
-    '  err=$(tr "\n" " " </tmp/0sec-mount.err 2>/dev/null || true)' \
+    '  err=$(tr "\n" " " </tmp/0-mount.err 2>/dev/null || true)' \
     '  echo "ZERO_INIT_SHARE_MOUNT_FAILED:${err:-unknown}" > /dev/kmsg 2>/dev/null || true' \
     'fi' \
-    'if [ -f /mnt/0sec/runner.sh ]; then' \
+    'if [ -f /mnt/0/runner.sh ]; then' \
     '  echo "ZERO_INIT_RUNNER_START" > /dev/kmsg 2>/dev/null || true' \
-    '  /bin/sh /mnt/0sec/runner.sh' \
+    '  /bin/sh /mnt/0/runner.sh' \
     '  status=$?' \
     '  echo "ZERO_INIT_RUNNER_EXIT:${status}" > /dev/kmsg 2>/dev/null || true' \
     '  sync' \
@@ -82,8 +82,8 @@ RUN printf '%s\n' \
     'fi' \
     'echo "ZERO_INIT_IDLE" > /dev/kmsg 2>/dev/null || true' \
     'sleep infinity' \
-    > /rootfs/sbin/0sec-init \
-    && chmod 755 /rootfs/sbin/0sec-init
+    > /rootfs/sbin/0-init \
+    && chmod 755 /rootfs/sbin/0-init
 
 RUN truncate -s 512M /rootfs.img \
     && mkfs.ext4 -F -d /rootfs /rootfs.img

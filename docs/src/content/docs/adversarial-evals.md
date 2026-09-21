@@ -102,7 +102,7 @@ redaction and hashed artifacts. A broader adversarial-eval report should also ca
 - whether the failure is specific to agent/tool composition
 - whether it's an authorization, tool-use, or instruction-hijack failure
 
-<span id="relationship-to-0sec-cloud"></span>
+<span id="relationship-to-0-cloud"></span>
 ## Product scope
 
 Use the local harness and your configured model connections for these workflows.

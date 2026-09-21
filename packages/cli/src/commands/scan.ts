@@ -2,11 +2,11 @@ import { readFileSync, existsSync } from "node:fs";
 import type { Command } from "commander";
 import chalk from "chalk";
 import { z } from "zod";
-import type { ScanDepth, OutputFormat, RuntimeMode, ScanMode, AuthConfig } from "@0/shared"
-import { networkScopeRequiredRefusal, targetRequiresScope } from "@0/core"
+import type { ScanDepth, OutputFormat, RuntimeMode, ScanMode, AuthConfig } from "@0/shared";
+import { networkScopeRequiredRefusal, targetRequiresScope } from "@0/core";
 import { renderReplay } from "../formatters/replay.js";
 import { runUnified } from "./run.js";
-import { reportSummarySchema, formatZodError } from "@0/shared"
+import { reportSummarySchema, formatZodError } from "@0/shared";
 
 /**
  * Parse the --auth flag value into an AuthConfig object.
@@ -167,17 +167,17 @@ export function registerScanCommand(program: Command): void {
     .option("-m, --model <model>", "LLM model to use")
     .option("--repo <path>", "Source code path for white-box scanning (read code before attacking)")
     .option("--auth <json>", "Auth credentials as JSON string or path to JSON file (types: bearer, cookie, basic, header)")
-    .option("--scope <path>", "Path to a JSON scope file ({in_scope, out_of_scope} arrays of host / *.domain / cidr rules). Out-of-scope URLs return as ToolResult.error at every fetch site. See 0sec#215.")
-    .option("--allow-scanners", "Disable the generic-scanner suppression gate (0sec#217). When --scope is set, the agent refuses to spawn sqlmap/wpscan/nikto/gobuster/dirb/wfuzz/ffuf/`nmap -sV`/`nmap -A` by default; pass this flag only when the engagement explicitly permits generic-scanner traffic.", false)
-    .option("--require-scope", "Refuse to start unless an engagement scope is configured (0sec#133). The bash egress guards (out-of-scope URL refusal, http_audit path allowlist, generic-scanner suppression, auth-header injection) only run when a ScopePolicy is set; without this flag a scan with no --scope warns loudly and records a `scope_guards_inert` event but still runs. Equivalent to ZERO_REQUIRE_SCOPE=1.", false)
+    .option("--scope <path>", "Path to a JSON scope file ({in_scope, out_of_scope} arrays of host / *.domain / cidr rules). Out-of-scope URLs return as ToolResult.error at every fetch site. See 0#215.")
+    .option("--allow-scanners", "Disable the generic-scanner suppression gate (0#217). When --scope is set, the agent refuses to spawn sqlmap/wpscan/nikto/gobuster/dirb/wfuzz/ffuf/`nmap -sV`/`nmap -A` by default; pass this flag only when the engagement explicitly permits generic-scanner traffic.", false)
+    .option("--require-scope", "Refuse to start unless an engagement scope is configured (0#133). The bash egress guards (out-of-scope URL refusal, http_audit path allowlist, generic-scanner suppression, auth-header injection) only run when a ScopePolicy is set; without this flag a scan with no --scope warns loudly and records a `scope_guards_inert` event but still runs. Equivalent to ZERO_REQUIRE_SCOPE=1.", false)
     .option(
       "--attribution-header <name=value>",
-      "Attribution header to attach to in-scope outbound requests (0sec#216). Repeatable: pass `--attribution-header X-A=1 --attribution-header X-B=2`. Lower precedence than the scope file's `attribution.headers` block and ZERO_ATTRIBUTION_HEADERS env var. NEVER attached to out-of-scope traffic.",
+      "Attribution header to attach to in-scope outbound requests (0#216). Repeatable: pass `--attribution-header X-A=1 --attribution-header X-B=2`. Lower precedence than the scope file's `attribution.headers` block and ZERO_ATTRIBUTION_HEADERS env var. NEVER attached to out-of-scope traffic.",
       (value: string, prev: string[] = []) => [...prev, value],
     )
     .option(
       "--attribution-ua <token>",
-      "Engagement token to embed in the User-Agent on in-scope traffic (0sec#216). Resulting UA: `0sec/<ver> (engagement: <token>)`. Lower precedence than the scope file's `attribution.user_agent_token` and ZERO_ATTRIBUTION_UA_TOKEN env var.",
+      "Engagement token to embed in the User-Agent on in-scope traffic (0#216). Resulting UA: `0/<ver> (engagement: <token>)`. Lower precedence than the scope file's `attribution.user_agent_token` and ZERO_ATTRIBUTION_UA_TOKEN env var.",
     )
     .option("--api-spec <path>", "Path to OpenAPI 3.x / Swagger 2.0 spec file (JSON or YAML) for pre-loaded endpoint knowledge")
     .option("--export <target>", "Export findings to issue tracker (e.g. github:owner/repo)")
@@ -207,17 +207,17 @@ export function registerScanCommand(program: Command): void {
     )
     .option(
       "--dispatch <mode>",
-      "Tool-call protocol for the legacy text agent loop (0sec#232): 'json' (default TOOL_CALL JSON lines), 'xml' (<command>/<flag>/<finding>/<note> tags — survives malformed JSON from cheap OpenRouter / Gemini / DeepSeek models), or 'auto' (xml for cheap providers, json otherwise). No effect on the native API loop. Env override: ZERO_DISPATCH=xml.",
+      "Tool-call protocol for the legacy text agent loop (0#232): 'json' (default TOOL_CALL JSON lines), 'xml' (<command>/<flag>/<finding>/<note> tags — survives malformed JSON from cheap OpenRouter / Gemini / DeepSeek models), or 'auto' (xml for cheap providers, json otherwise). No effect on the native API loop. Env override: ZERO_DISPATCH=xml.",
       "auto",
     )
     .option(
       "--emit <target>",
-      "Emit target. Default unset → existing terminal/json/etc. `pr` → emit each reproduced finding as a GitHub PR with repro + suggested patch (0sec#377). Unverified findings roll up into `hypotheses.md`.",
+      "Emit target. Default unset → existing terminal/json/etc. `pr` → emit each reproduced finding as a GitHub PR with repro + suggested patch (0#377). Unverified findings roll up into `hypotheses.md`.",
     )
     .option("--base <branch>", "Base branch for `--emit pr` (default: main)")
     .option("--dry-run", "For `--emit pr`: print git/gh commands instead of running them. Auto-enabled if `gh auth status` fails.", false)
     .option("--emit-out-dir <path>", "Directory for `--emit pr` rollup files (default: system temp)")
-    .option("--resume <run-id>", "Resume a previous run from its journal on disk (0sec#374). Locates the run's journal, rehydrates agent state, and continues from the last entry.")
+    .option("--resume <run-id>", "Resume a previous run from its journal on disk (0#374). Locates the run's journal, rehydrates agent state, and continues from the last entry.")
     .option("--branch-from <entry-index>", "Branch the journal at the given entry index before resuming (requires --resume). Copies entries 0..N into a new run and resumes from there.")
     .option("--verbose", "Show detailed output", false)
     .option("--replay", "Replay the last scan's results", false)
@@ -292,7 +292,7 @@ export function registerScanCommand(program: Command): void {
 
       // Auto-detect scan mode from the target URL scheme unless the user
       // explicitly passed --mode. Before this default, running
-      //   0sec-cli scan --target https://example.com
+      //   @0/cli scan --target https://example.com
       // silently used the LLM/AI-agent-focused `attackPrompt` (mode=deep)
       // against a plain web application, which gave the attack agent no
       // web-pentest-specific guidance and caused a "bundle paralysis"
@@ -359,7 +359,7 @@ export function registerScanCommand(program: Command): void {
       }
 
       // --require-scope → fail closed when no engagement scope is configured
-      // (0sec#133). Same env-var mechanism as above: the core reads
+      // (0#133). Same env-var mechanism as above: the core reads
       // ZERO_REQUIRE_SCOPE at scan boot and at the bash tool, which is also
       // how the cloud worker (which builds argv from a fixed table) can turn
       // strictness on without an engine release.
@@ -417,7 +417,7 @@ export function registerScanCommand(program: Command): void {
       // Validate --scope flag if provided. We intentionally fail HARD
       // here rather than soft-warning: a coordinated-disclosure scan with
       // a missing or malformed scope file is exactly the configuration
-      // error that should block the scan from starting (see 0sec#215).
+      // error that should block the scan from starting (see 0#215).
       let scopeFile: string | undefined;
       if (opts.scope) {
         scopeFile = String(opts.scope);
@@ -454,7 +454,7 @@ export function registerScanCommand(program: Command): void {
         return;
       }
 
-      // Pre-validate attribution config (0sec#216). Same rationale as
+      // Pre-validate attribution config (0#216). Same rationale as
       // the --scope pre-flight: a malformed ZERO_ATTRIBUTION_HEADERS
       // env var or an invalid scope-file `attribution` block is a config
       // error, and the operator should see it before the scan boots.

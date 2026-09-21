@@ -2,17 +2,19 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
-import { parseManifest,
-withVariantFeatureFlags,
-type BenchIntegration,
-type BenchManifest,
-type BenchEvaluatorAttestation,
-type BenchOracle,
-type BenchOracleInput,
-type BenchOracleOutcome,
-type BenchScanResult,
-type BenchVariant,
-type TargetProvisioner, } from "@0/core"
+import {
+  parseManifest,
+  withVariantFeatureFlags,
+  type BenchIntegration,
+  type BenchManifest,
+  type BenchEvaluatorAttestation,
+  type BenchOracle,
+  type BenchOracleInput,
+  type BenchOracleOutcome,
+  type BenchScanResult,
+  type BenchVariant,
+  type TargetProvisioner,
+} from "@0/core";
 
 import {
   cleanupOwnedTaskDir,
@@ -177,7 +179,7 @@ export function cyberGymResultToBenchScanResult(
     outputTokens: result.outputTokens ?? 0,
     totalTokens: (result.inputTokens ?? 0) + (result.outputTokens ?? 0),
     execution: {
-      harnessId: variant.harnessId ?? "0sec-agentic",
+      harnessId: variant.harnessId ?? "0-agentic",
       model: result.model,
       ...(variant.runtime ? { runtime: variant.runtime } : {}),
     },
@@ -246,7 +248,7 @@ export function createCyberGymBenchIntegration(
         provisioner,
         oracle,
         executionMetadata: {
-          harnessId: variant.harnessId ?? "0sec-agentic",
+          harnessId: variant.harnessId ?? "0-agentic",
           ...(variant.model ? { model: variant.model } : {}),
           ...(variant.runtime ? { runtime: variant.runtime } : {}),
         },

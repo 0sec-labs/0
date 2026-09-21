@@ -1,4 +1,4 @@
-// Passive subdomain enumeration (0sec gap D).
+// Passive subdomain enumeration (0 gap D).
 //
 // Given an apex domain, discover subdomains from Certificate Transparency
 // logs (crt.sh) and confirm which ones actually resolve in DNS. The pattern
@@ -122,7 +122,7 @@ async function defaultFetchJson(url: string, timeoutMs: number): Promise<unknown
     // foxguard: ignore[js/no-ssrf]
     const res = await fetch(url, {
       signal: controller.signal,
-      headers: { Accept: "application/json", "User-Agent": "0sec-recon" },
+      headers: { Accept: "application/json", "User-Agent": "0-recon" },
     });
     if (!res.ok) throw new Error(`crt.sh HTTP ${res.status}`);
     return await res.json();

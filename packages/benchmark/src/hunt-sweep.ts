@@ -22,9 +22,9 @@
 
 import { readFileSync } from "node:fs";
 import { isAbsolute, join } from "node:path";
-import type { ArchetypeSweepPlan, HuntCandidate, HuntVerifier } from "@0/core"
-import { runHuntScan } from "@0/core"
-import type { Finding, RuntimeMode } from "@0/shared"
+import type { ArchetypeSweepPlan, HuntCandidate, HuntVerifier } from "@0/core";
+import { runHuntScan } from "@0/core";
+import type { Finding, RuntimeMode } from "@0/shared";
 import { appendToCorpus } from "./hunt-corpus.js";
 
 // ── File-size guard ─────────────────────────────────────────────────────────
@@ -115,7 +115,7 @@ export interface ArchetypeSweepRunOptions {
    * Why this helps: every archetype plan run through `runHuntScan` without
    * an explicit model falls through to the shared env-priority provider
    * (today: the single ChatGPT/Codex subscription token — see
-   * `0sec/packages/core/src/runtime/llm-api.ts`'s `detectProvider()`
+   * `0/packages/core/src/runtime/llm-api.ts`'s `detectProvider()`
    * env-priority chain). A multi-archetype sweep fans MANY archetype plans'
    * candidate pools through that ONE account/token, which is the measured
    * bench bottleneck (single shared token, ~90% timeouts/429s under

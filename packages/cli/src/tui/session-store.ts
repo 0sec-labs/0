@@ -58,7 +58,7 @@
 import { chmodSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { homeStateDir } from "@0/shared"
+import { homeStateDir } from "@0/shared";
 
 /** Listing entry: everything needed to describe a session without loading it. */
 export interface StoredSessionMeta {
@@ -107,7 +107,7 @@ export interface StoredSession extends StoredSessionMeta {
   messages: unknown[];
 }
 
-/** Subdirectory of the 0sec state dir holding one JSON file per session. */
+/** Subdirectory of the 0 state dir holding one JSON file per session. */
 const SESSIONS_DIRNAME = "console-sessions";
 
 /** Owner-only: nobody else on the machine has business reading a transcript. */

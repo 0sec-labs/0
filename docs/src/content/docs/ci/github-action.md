@@ -41,7 +41,7 @@ execution.
 
 ## Container-based workflow
 
-The `ghcr.io/0sec-labs/0sec` image includes the CLI, Node 24, FoxGuard, pentest
+The `ghcr.io/0sec-labs/0` image includes the CLI, Node 24, FoxGuard, pentest
 and identity tooling. A job container uses shell steps; the image's normal
 `docker run` entrypoint invokes the CLI directly.
 
@@ -49,7 +49,7 @@ This minimal example is **manually dispatched from a trusted workflow/ref**.
 It is not a policy for executing arbitrary contributor code:
 
 ```yaml
-# .github/workflows/0sec.yml
+# .github/workflows/0.yml
 name: "0 security review"
 on:
   workflow_dispatch:
@@ -62,7 +62,7 @@ jobs:
   review:
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    container: ghcr.io/0sec-labs/0sec:latest
+    container: ghcr.io/0sec-labs/0:latest
     steps:
       - uses: actions/checkout@v6
         with:
@@ -75,7 +75,7 @@ jobs:
         if: always() && hashFiles('results.sarif') != ''
         uses: actions/upload-artifact@v7
         with:
-          name: 0sec-results
+          name: 0-results
           path: results.sarif
           retention-days: 14
       - name: Upload SARIF
@@ -122,7 +122,7 @@ installation directory to `PATH`:
 ```yaml
 - name: Install 0
   run: |
-    curl -fsSL https://raw.githubusercontent.com/0sec-labs/0sec/main/install.sh | bash
+    curl -fsSL https://raw.githubusercontent.com/0sec-labs/0/main/install.sh | bash
     echo "$HOME/.0/bin" >> "$GITHUB_PATH"
 - name: Run review
   run: 0 review . --runtime api --cost-ceiling 5 --format sarif > results.sarif
@@ -159,9 +159,9 @@ from the code under review, but does not by itself isolate later tool execution.
 remain in the repository as integration helpers. They are not the active
 self-review workflow or a published composite action.
 
-The wrapper expects `0sec-cli` on `PATH`, Node, `GITHUB_OUTPUT`, and an action
+The wrapper expects `@0/cli` on `PATH`, Node, `GITHUB_OUTPUT`, and an action
 root through `ZERO_ACTION_ROOT` or `GITHUB_ACTION_PATH`. The release installer
-and current container expose `0`/`0sec`, not `0sec-cli`; copying this script into
+and current container expose `0`/`0`, not `@0/cli`; copying this script into
 an ordinary installed-CLI job is therefore not a turnkey integration. Prefer
 the direct commands above unless you deliberately provide its expected runner
 layout.
@@ -181,9 +181,9 @@ layout.
 | `INPUT_FORMAT` | `json` | Select primary output: `json` or `sarif`; both files are generated |
 | `INPUT_SEVERITY_THRESHOLD` | `high` | `critical`, `high`, `medium`, `low`, `info`, `none` |
 | `INPUT_THRESHOLD` | `0` | Allowed count at or above the severity threshold |
-| `INPUT_REPORT_DIR` | `0sec-report` | Output directory |
+| `INPUT_REPORT_DIR` | `0-report` | Output directory |
 
-The wrapper stores `report.json`, `report.sarif` and `0sec.stderr.log`. The
+The wrapper stores `report.json`, `report.sarif` and `0.stderr.log`. The
 renderer writes `report-file`, `json-report-file`, `sarif-report-file`,
 `total-findings`, `qualifying-findings`, `should-fail`, `gate-message` and
 `comment-body` to `GITHUB_OUTPUT`. It does **not** post a PR comment or write the
@@ -309,7 +309,7 @@ GitHub App's deployed repository policy.
 
 ## Known limitations
 
-- The composite action `0sec-labs/0sec/.github/actions/0sec-scan` is not shipped.
+- The composite action `0sec-labs/0/.github/actions/0-scan` is not shipped.
   Proposed action inputs are not a supported public contract.
 - Managed App enrollment and service execution depend on the account and
   deployed backend, not merely a successful browser login.

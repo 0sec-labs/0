@@ -76,7 +76,7 @@ import {
 } from "node:fs";
 import { randomBytes } from "node:crypto";
 import { join, resolve, sep } from "node:path";
-import { homeStateDir } from "@0/shared"
+import { homeStateDir } from "@0/shared";
 
 // ---------------------------------------------------------------------------
 // Bounds and names
@@ -117,14 +117,14 @@ const MAX_SERIALIZE_DEPTH = 64;
 export const SPILLS_DIR_NAME = "spills";
 
 /**
- * Marker prefix for the 0sec-authored status text wrapped around a preview.
+ * Marker prefix for the 0-authored status text wrapped around a preview.
  * Namespaced so a reader (human or model) can tell it from tool output. It is
  * not a cryptographic delimiter — target output can contain this literal
  * string — but tool results are already classified UNTRUSTED downstream, so
  * spoofing it buys an attacker nothing they cannot do by writing "ignore
  * previous instructions" into the same response body.
  */
-export const SPILL_NOTE_PREFIX = "[0sec:spill]";
+export const SPILL_NOTE_PREFIX = "[0:spill]";
 
 /**
  * Tool name the inline locator tells the model to call. The harness must
@@ -202,7 +202,7 @@ function assertScanId(scanId: string): void {
   // legible to the next reader (and to an audit).
   if (typeof scanId !== "string" || !SCAN_ID_PATTERN.test(scanId) || scanId.includes("..")) {
     throw new Error(
-      `Invalid 0sec spill scan id ${JSON.stringify(scanId)}: expected [A-Za-z0-9][A-Za-z0-9._-]{0,127} with no path separators or traversal.`,
+      `Invalid 0 spill scan id ${JSON.stringify(scanId)}: expected [A-Za-z0-9][A-Za-z0-9._-]{0,127} with no path separators or traversal.`,
     );
   }
 }
@@ -238,7 +238,7 @@ const CONTROL_CHARS = /[\u0000-\u0008\u000B-\u001F\u007F-\u009F]/g;
  * This makes the text safe to DISPLAY, not safe to TRUST. A spill holds
  * verbatim output from the target — response bodies, logs, file contents — and
  * that content remains adversarial after this call: it can still argue, still
- * impersonate a 0sec status line, still carry a prompt injection. All this
+ * impersonate a 0 status line, still carry a prompt injection. All this
  * removes is the terminal's own control channel, so rendering a spill cannot
  * move the cursor, repaint or erase the lines around it, retitle the operator's
  * window, or emit a bracketed-paste/response sequence. Trust decisions belong
@@ -385,9 +385,9 @@ function headPreview(text: string, limit: number): string {
  *    line is not mistaken for the end of the output.
  *
  * The preview is passed through {@link stripForDisplay} first: the preview is
- * embedded INSIDE 0sec-authored framing, and raw ANSI in it could repaint or
+ * embedded INSIDE 0-authored framing, and raw ANSI in it could repaint or
  * erase the locator lines around it when the transcript is rendered — that is,
- * the payload could forge or hide 0sec's own status text. The verbatim bytes
+ * the payload could forge or hide 0's own status text. The verbatim bytes
  * remain on disk; only this framed copy is cleaned.
  */
 function buildSpillNotice(args: {
@@ -441,7 +441,7 @@ function buildDegradedNotice(args: {
 
   return [
     `${SPILL_NOTE_PREFIX} THIS TOOL RESULT IS TRUNCATED AND THE REMAINDER WAS LOST. The tool ` +
-      `produced ${total} characters; only the first ${shown} are below. 0sec could not write the ` +
+      `produced ${total} characters; only the first ${shown} are below. 0 could not write the ` +
       `full output to disk (${reason}), so the remaining ${withheld} characters are NOT retrievable. ` +
       `Re-run the tool with a narrower request (a filter, a byte range, fewer paths) instead of ` +
       `assuming what the rest contained.`,

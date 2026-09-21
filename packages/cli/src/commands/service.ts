@@ -1,4 +1,4 @@
-// `0sec service` — managed cloud lifecycle commands for agents.
+// `0 service` — managed cloud lifecycle commands for agents.
 //
 // Capability catalogue:
 //   service start   — enqueue a managed scan on a repository
@@ -16,11 +16,13 @@ import { createInterface } from "node:readline";
 import { setTimeout } from "node:timers/promises";
 import type { Command } from "commander";
 import chalk from "chalk";
-import { CloudClient,
-CloudUnauthorizedError,
-CloudAuthMissingError,
-loadCloudCredentials,
-CloudForbiddenError, } from "@0/core"
+import {
+  CloudClient,
+  CloudUnauthorizedError,
+  CloudAuthMissingError,
+  loadCloudCredentials,
+  CloudForbiddenError,
+} from "@0/core";
 
 // ── Types ──
 
@@ -138,9 +140,9 @@ async function actionStart(opts: StartOptions): Promise<void> {
   } catch (error) {
     if (error instanceof CloudAuthMissingError) {
       if (isJson) {
-        process.stdout.write(JSON.stringify({ error: "not-authenticated", message: "Not authenticated. Run `0sec auth login` first." }) + "\n");
+        process.stdout.write(JSON.stringify({ error: "not-authenticated", message: "Not authenticated. Run `0 auth login` first." }) + "\n");
       } else {
-        process.stderr.write(chalk.red("Not authenticated.") + " Run " + chalk.bold("0sec auth login") + " first, then try again.\n");
+        process.stderr.write(chalk.red("Not authenticated.") + " Run " + chalk.bold("0 auth login") + " first, then try again.\n");
       }
       process.exitCode = 2;
       return;
@@ -208,9 +210,9 @@ async function actionStatus(scanId: string, opts: StatusOptions): Promise<void> 
   } catch (error) {
     if (error instanceof CloudAuthMissingError) {
       if (isJson) {
-        process.stdout.write(JSON.stringify({ error: "not-authenticated", message: "Not authenticated. Run `0sec auth login` first." }) + "\n");
+        process.stdout.write(JSON.stringify({ error: "not-authenticated", message: "Not authenticated. Run `0 auth login` first." }) + "\n");
       } else {
-        process.stderr.write(chalk.red("Not authenticated.") + " Run " + chalk.bold("0sec auth login") + " first.\n");
+        process.stderr.write(chalk.red("Not authenticated.") + " Run " + chalk.bold("0 auth login") + " first.\n");
       }
       process.exitCode = 2;
       return;
@@ -224,9 +226,9 @@ async function actionStatus(scanId: string, opts: StatusOptions): Promise<void> 
   } catch (error) {
     if (error instanceof CloudUnauthorizedError) {
       if (isJson) {
-        process.stdout.write(JSON.stringify({ error: "token-rejected", message: "Cloud token rejected. Run `0sec auth login` again." }) + "\n");
+        process.stdout.write(JSON.stringify({ error: "token-rejected", message: "Cloud token rejected. Run `0 auth login` again." }) + "\n");
       } else {
-        process.stderr.write(chalk.red("Cloud token rejected.") + " Run " + chalk.bold("0sec auth login") + " again.\n");
+        process.stderr.write(chalk.red("Cloud token rejected.") + " Run " + chalk.bold("0 auth login") + " again.\n");
       }
       process.exitCode = 2;
       return;
@@ -268,9 +270,9 @@ async function actionWait(scanId: string, opts: WaitOptions): Promise<void> {
   } catch (error) {
     if (error instanceof CloudAuthMissingError) {
       if (isJson) {
-        process.stdout.write(JSON.stringify({ error: "not-authenticated", message: "Not authenticated. Run `0sec auth login` first." }) + "\n");
+        process.stdout.write(JSON.stringify({ error: "not-authenticated", message: "Not authenticated. Run `0 auth login` first." }) + "\n");
       } else {
-        process.stderr.write(chalk.red("Not authenticated.") + " Run " + chalk.bold("0sec auth login") + " first.\n");
+        process.stderr.write(chalk.red("Not authenticated.") + " Run " + chalk.bold("0 auth login") + " first.\n");
       }
       process.exitCode = 2;
       return;
@@ -347,9 +349,9 @@ async function actionCancel(scanId: string, opts: CancelOptions): Promise<void> 
   } catch (error) {
     if (error instanceof CloudAuthMissingError) {
       if (isJson) {
-        process.stdout.write(JSON.stringify({ error: "not-authenticated", message: "Not authenticated. Run `0sec auth login` first." }) + "\n");
+        process.stdout.write(JSON.stringify({ error: "not-authenticated", message: "Not authenticated. Run `0 auth login` first." }) + "\n");
       } else {
-        process.stderr.write(chalk.red("Not authenticated.") + " Run " + chalk.bold("0sec auth login") + " first.\n");
+        process.stderr.write(chalk.red("Not authenticated.") + " Run " + chalk.bold("0 auth login") + " first.\n");
       }
       process.exitCode = 2;
       return;
@@ -404,9 +406,9 @@ async function actionDisconnect(repoArg: string | undefined, opts: DisconnectOpt
   } catch (error) {
     if (error instanceof CloudAuthMissingError) {
       if (isJson) {
-        process.stdout.write(JSON.stringify({ error: "not-authenticated", message: "Not authenticated. Run `0sec auth login` first." }) + "\n");
+        process.stdout.write(JSON.stringify({ error: "not-authenticated", message: "Not authenticated. Run `0 auth login` first." }) + "\n");
       } else {
-        process.stderr.write(chalk.red("Not authenticated.") + " Run " + chalk.bold("0sec auth login") + " first.\n");
+        process.stderr.write(chalk.red("Not authenticated.") + " Run " + chalk.bold("0 auth login") + " first.\n");
       }
       process.exitCode = 2;
       return;

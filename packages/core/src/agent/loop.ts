@@ -8,9 +8,9 @@ import type {
 import { ToolExecutor, getToolsForRole } from "./tools.js";
 import { WafDetector } from "../scope/waf-detect.js";
 import type { ToolContext } from "./types.js";
-import type { osecDB } from "@0/db"
+import type { osecDB } from "@0/db";
 import type { Runtime } from "../runtime/types.js";
-import type { Finding, TargetInfo } from "@0/shared"
+import type { Finding, TargetInfo } from "@0/shared";
 import {
   resolveDispatchMode,
   parseXmlDispatch,
@@ -31,6 +31,7 @@ import {
   BUDGET_WARNING_SOFT,
   BUDGET_WARNING_HARD,
 } from "./native-loop.js";
+import { estimateCost } from "./cost.js";
 
 export interface AgentLoopOptions {
   config: AgentConfig;
@@ -75,7 +76,7 @@ export async function runAgentLoop(opts: AgentLoopOptions): Promise<AgentState> 
     session: config.session,
     scope: config.scope,
     rateLimiter: config.rateLimiter,
-    // WAF detection + adaptive evasion (0sec#568). Auto-enabled for
+    // WAF detection + adaptive evasion (0#568). Auto-enabled for
     // authorized engagements (scope/enforcement set) unless explicitly
     // disabled with `wafDetector: null`.
     wafDetector:
@@ -98,7 +99,7 @@ export async function runAgentLoop(opts: AgentLoopOptions): Promise<AgentState> 
     tools.some((tool) => tool.name === "list_skills") &&
     tools.some((tool) => tool.name === "load_skill");
   const sessionId = config.sessionId ?? randomUUID();
-  // 0sec#232: pick JSON or XML dispatch protocol. JSON is the legacy
+  // 0#232: pick JSON or XML dispatch protocol. JSON is the legacy
   // path; XML is the cheap-model fallback (DeepSeek / Gemini / OpenRouter
   // routinely emit malformed JSON tool calls under load). The runtime
   // model identifier (when known) feeds the auto-detector.
@@ -134,7 +135,7 @@ export async function runAgentLoop(opts: AgentLoopOptions): Promise<AgentState> 
   // Build the initial user message with tool descriptions
   let initialPrompt: string;
   if (dispatchMode === "xml") {
-    // 0sec#232: XML dispatch ships a deliberately narrower action
+    // 0#232: XML dispatch ships a deliberately narrower action
     // surface (bash / save_finding / done / note). The full tool catalog
     // would just confuse cheap models — BoxPwnr's whole point is that
     // narrowing wins.
@@ -155,7 +156,7 @@ export async function runAgentLoop(opts: AgentLoopOptions): Promise<AgentState> 
       .join("\n\n");
 
     initialPrompt = [
-      `You are a ${config.role} agent for 0sec, an AI red-teaming toolkit.`,
+      `You are a ${config.role} agent for 0, an AI red-teaming toolkit.`,
       `Target: ${config.target}`,
       `Scan ID: ${config.scanId}`,
       "Authorization: The operator has confirmed this target is owned by them or explicitly authorized for this assessment.",
@@ -206,7 +207,12 @@ export async function runAgentLoop(opts: AgentLoopOptions): Promise<AgentState> 
   let lastToolName: string | null = null;
   let lastHeartbeatAt = 0;
 
-  // Two-stage budget warnings (Strix-inspired, 0sec#408). Same
+  // Running token usage for cost-ceiling termination (#S1, mirrors
+  // native-loop.ts). RuntimeResult.usage carries no cached-token field, so
+  // cached stays 0; estimateCost tolerates that.
+  const totalUsage = { inputTokens: 0, outputTokens: 0, cachedInputTokens: 0 };
+
+  // Two-stage budget warnings (Strix-inspired, 0#408). Same
   // closure-state pattern as native-loop.ts so unit tests share the
   // computeBudgetWarningTurns helper.
   const budgetThresholds = computeBudgetWarningTurns(config.maxTurns);
@@ -219,6 +225,17 @@ export async function runAgentLoop(opts: AgentLoopOptions): Promise<AgentState> 
 
   try {
   while (!state.done && state.turnCount < config.maxTurns) {
+    // Budget-bound termination (#S1): before spending another turn, stop if the
+    // running cost estimate has reached the ceiling. `maxTurns` (the while
+    // guard) stays the runaway backstop. Mirrors native-loop.ts:1042.
+    if (
+      config.costCeilingUsd &&
+      estimateCost(totalUsage, config.costModel) >= config.costCeilingUsd
+    ) {
+      state.costCeilingExceeded = true;
+      state.summary = `Agent reached cost ceiling ($${config.costCeilingUsd}) after ${state.turnCount} turns.`;
+      break;
+    }
     state.turnCount++;
 
     if (heartbeatEnabled) {
@@ -227,7 +244,7 @@ export async function runAgentLoop(opts: AgentLoopOptions): Promise<AgentState> 
         lastHeartbeatAt = now;
         const elapsed = ((now - loopStartedAt) / 1000).toFixed(1);
         process.stderr.write(
-          `[0sec:hb] t=${elapsed}s role=${config.role} turn=${state.turnCount}/${config.maxTurns} runtime=${runtime.type} last_tool=${lastToolName ?? "-"}\n`,
+          `[0:hb] t=${elapsed}s role=${config.role} turn=${state.turnCount}/${config.maxTurns} runtime=${runtime.type} last_tool=${lastToolName ?? "-"}\n`,
         );
       }
     }
@@ -282,6 +299,13 @@ export async function runAgentLoop(opts: AgentLoopOptions): Promise<AgentState> 
         persistSession(db, state, config, sessionId, "paused");
       }
       break;
+    }
+
+    // Accumulate this turn's token usage for the cost-ceiling gate at the top
+    // of the next iteration (#S1). RuntimeResult.usage has no cached field.
+    if (result.usage) {
+      totalUsage.inputTokens += result.usage.inputTokens;
+      totalUsage.outputTokens += result.usage.outputTokens;
     }
 
     const assistantContent = result.output;
@@ -458,7 +482,7 @@ export async function runAgentLoop(opts: AgentLoopOptions): Promise<AgentState> 
   state.attackResults = toolCtx.attackResults;
   state.targetInfo = toolCtx.targetInfo;
 
-  if (!state.done) {
+  if (!state.done && !state.costCeilingExceeded) {
     state.summary = `Agent reached max turns (${config.maxTurns}) without completing.`;
   }
 

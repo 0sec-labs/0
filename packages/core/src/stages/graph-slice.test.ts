@@ -1,6 +1,6 @@
 /**
  * graph-slice — the deterministic interprocedural slicer + its seed-diff adapter
- * (`0sec hunt --graph-slice`). Proven here against a SYNTHETIC graphson CPG
+ * (`0 hunt --graph-slice`). Proven here against a SYNTHETIC graphson CPG
  * fixture shaped like the bench af_unix `scm_fp_list` proof
  * (bench:/root/graph-lpe/): a use/dispatch site in one file whose object is
  * ALLOCATED and FREED in cross-function, cross-FILE helpers.

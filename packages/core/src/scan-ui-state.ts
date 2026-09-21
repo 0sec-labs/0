@@ -11,7 +11,7 @@
  * verbose toggle.
  */
 
-/** Caps for memory and display. Tuned for 0sec's per-scan event volume. */
+/** Caps for memory and display. Tuned for 0's per-scan event volume. */
 export const STAGE_ACTION_HISTORY_CAP = 500;
 export const VERBOSE_ACTIONS_RENDER_CAP = 40;
 export const COMPACT_ACTIONS_RENDER_CAP = 3;

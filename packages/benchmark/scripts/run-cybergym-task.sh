@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Generate one official CyberGym task on the host, scope a one-use oracle
-# capability to it, and execute the 0sec agent in the isolated container.
+# capability to it, and execute the 0 agent in the isolated container.
 set -euo pipefail
 
 if (($# < 1)); then

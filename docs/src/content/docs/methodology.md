@@ -57,7 +57,7 @@ all repeated attempts; rows without a positive cost do not enter the cost-per-ru
 denominator. For a new aggregate, sum every attempt's cost from its receipts,
 including failures and all configurations, and disclose missing prices.
 
-<span id="what-0sec-publishes-with-every-number"></span>
+<span id="what-0-publishes-with-every-number"></span>
 ## What to publish with every number
 
 Retain the following alongside any new XBOW claim:
@@ -73,7 +73,7 @@ Retain the following alongside any new XBOW claim:
 The specialized XBOW runner emits `repeatProtocol` and per-cell aggregation fields
 when `--repeat > 1`; those fields alone do not encode all of the provenance above.
 Keep configuration and checkout revisions with the result. The repository's
-[benchmark ledger](https://github.com/0sec-labs/0sec/blob/main/packages/benchmark/results/benchmark-ledger.json)
+[benchmark ledger](https://github.com/0sec-labs/0/blob/main/packages/benchmark/results/benchmark-ledger.json)
 is a dated summary separating retained artifact-backed and historical publication
 lines, not an automatically current score.
 

@@ -154,7 +154,7 @@ def _make_server(cap: _Capture) -> HTTPServer:
             cap.requests.append({
                 "path": self.path,
                 "auth": self.headers.get("Authorization"),
-                "scan_id_header": self.headers.get("X-0sec-Scan-Id"),
+                "scan_id_header": self.headers.get("X-0-Scan-Id"),
                 "body": json.loads(raw) if raw else None,
             })
             if cap.fail_next > 0:

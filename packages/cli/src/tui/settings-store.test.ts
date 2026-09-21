@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { analyticsPipeline } from "@0/core"
+import { analyticsPipeline } from "@0/core";
 
 import { DEFAULT_SETTINGS, loadSettings, type TuiSettings } from "./settings.js";
 import {
@@ -22,7 +22,7 @@ import {
 const tempHomes: string[] = [];
 
 function makeHome(): string {
-  const dir = mkdtempSync(join(tmpdir(), "0sec-settings-store-"));
+  const dir = mkdtempSync(join(tmpdir(), "0-settings-store-"));
   tempHomes.push(dir);
   return dir;
 }
@@ -273,7 +273,7 @@ import {
 import { defaultWriteLayer, getSettingSources } from "./settings-store.js";
 
 function makeProjectDir(): string {
-  const dir = mkdtempSync(join(tmpdir(), "0sec-store-project-"));
+  const dir = mkdtempSync(join(tmpdir(), "0-store-project-"));
   tempHomes.push(dir);
   return dir;
 }

@@ -21,7 +21,7 @@ export function cloudStateDir(home: string = homedir(), env: NodeJS.ProcessEnv =
  */
 export function runStateDir(runId: string, home?: string): string {
   if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(runId)) {
-    throw new Error(`Invalid 0sec run id ${JSON.stringify(runId)}.`);
+    throw new Error(`Invalid 0 run id ${JSON.stringify(runId)}.`);
   }
   return join(homeStateDir(home), "runs", runId);
 }

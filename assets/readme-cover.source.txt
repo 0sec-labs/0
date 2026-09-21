@@ -1,7 +1,7 @@
 Static export of the approved 0.security landing-page hero, not a newly generated illustration.
 
 Website source revision: 0sec-labs/0cloud@51c1726aa8d4d1d41912ce8e26a857671a55d271.
-Source: 0sec-www/src/pages/index.astro, section.oh-hero, using public/open-horizon/horizon-discoveries.webp and the existing website typography.
+Source: 0-www/src/pages/index.astro, section.oh-hero, using public/open-horizon/horizon-discoveries.webp and the existing website typography.
 Headline: Software already builds software. / Now it can secure itself, too.
 Supporting line: We take care of security so you can keep building.
 Export: Chromium, 1440x1000 CSS viewport; element screenshot after fonts and images loaded. The hero's .oh-actions was hidden only in the capture page to avoid nonfunctional buttons in a static image. Website files were not changed.

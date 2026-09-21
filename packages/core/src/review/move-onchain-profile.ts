@@ -1,4 +1,4 @@
-import type { SemgrepFinding } from "@0/shared"
+import type { SemgrepFinding } from "@0/shared";
 import type { FinderLens, VerifyLens } from "../stages/hunt-scan.js";
 
 /**

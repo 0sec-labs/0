@@ -1,9 +1,11 @@
-import type { DesktopCodexAuthStatus,
-DesktopConsoleAutonomyMode,
-DesktopConsoleDecisionResponse,
-DesktopConsoleEvent,
-DesktopConsoleRole,
-DesktopConsoleSession, } from "@0/shared"
+import type {
+  DesktopCodexAuthStatus,
+  DesktopConsoleAutonomyMode,
+  DesktopConsoleDecisionResponse,
+  DesktopConsoleEvent,
+  DesktopConsoleRole,
+  DesktopConsoleSession,
+} from "@0/shared";
 
 /* ── CSRF control token ────────────────────────────────────── */
 
@@ -13,7 +15,7 @@ DesktopConsoleSession, } from "@0/shared"
  * through the same Vite/Express pipeline, include this meta tag.
  */
 function getControlToken(): string | null {
-  const meta = document.querySelector('meta[name="0sec-control-token"]');
+  const meta = document.querySelector('meta[name="0-control-token"]');
   return meta?.getAttribute("content") ?? null;
 }
 
@@ -26,7 +28,7 @@ async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
   };
 
   const token = getControlToken();
-  if (token) headers["X-0sec-Control-Token"] = token;
+  if (token) headers["X-0-Control-Token"] = token;
 
   const response = await fetch(path, { ...init, headers });
 
@@ -45,7 +47,7 @@ async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
   if (!contentType.includes("json")) {
     throw new Error(
       `API returned ${contentType || "non-JSON content"} for ${path}. ` +
-        "Serve through `0sec dashboard`.",
+        "Serve through `0 dashboard`.",
     );
   }
 

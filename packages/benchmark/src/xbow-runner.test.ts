@@ -51,11 +51,11 @@ function mkResult(
 }
 
 describe("XBOW direct-execution guard", () => {
-  it("does not start the benchmark when bundled into the 0sec CLI entrypoint", () => {
+  it("does not start the benchmark when bundled into the 0 CLI entrypoint", () => {
     expect(
       isXbowRunnerEntrypoint(
-        "file:///tmp/0sec.js",
-        "/tmp/0sec.js",
+        "file:///tmp/0.js",
+        "/tmp/0.js",
       ),
     ).toBe(false);
     expect(

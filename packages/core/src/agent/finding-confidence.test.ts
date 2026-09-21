@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import type { PocStep } from "@0/shared"
+import type { PocStep } from "@0/shared";
 import {
   computeFindingConfidence,
   pocStatusFloor,

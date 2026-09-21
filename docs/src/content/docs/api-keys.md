@@ -9,7 +9,7 @@ through 0cloud; it does not move your local tools into a managed sandbox.
 Managed security work has separate authorization, access and billing.
 
 <a id="hosted-inference-draft"></a>
-<a id="0sec-hosted-inference-draft"></a>
+<a id="0-hosted-inference-draft"></a>
 
 ## Hosted inference
 
@@ -95,7 +95,7 @@ explicit backup routes; switching providers changes who receives the request
 and which account pays.
 
 Hosted HTTP 429 permits retry or configured fallback only with
-`x-0sec-retry-safe: 1`, issued for pre-dispatch concurrency rejection.
+`x-0-retry-safe: 1`, issued for pre-dispatch concurrency rejection.
 Provider throttling and unresolved charges are unmarked and aren't replayed.
 
 Plugin evolution's SDK model calls use the parent runtime's accounting when
@@ -319,7 +319,7 @@ is invoking the CLI through the container image:
 - run: |
     docker run --rm -v "$PWD:/work" -w /work \
       -e OPENROUTER_API_KEY \
-      ghcr.io/0sec-labs/0sec:latest review . --runtime api
+      ghcr.io/0sec-labs/0:latest review . --runtime api
   env:
     OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
 ```
@@ -517,7 +517,7 @@ the direct ChatGPT Codex provider instead of a Codex CLI target-tool wrapper;
 the CLI bootstrap can load `~/.codex/auth.json`, or you can explicitly supply
 `ZERO_CHATGPT_ACCESS_TOKEN` / `ZERO_CHATGPT_OAUTH_REFRESH_TOKEN`.
 
-<span id="0sec-doctor--credential-readiness"></span>
+<span id="0-doctor--credential-readiness"></span>
 ## `0 doctor` — credential readiness
 
 Inspect runtime and credential configuration:

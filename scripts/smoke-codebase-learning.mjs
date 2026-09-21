@@ -13,7 +13,7 @@ import { getRates, MODEL_PRICING } from "../packages/shared/dist/index.js";
 maybeLoadCodexAuth();
 delete process.env["ZERO_DISABLE_HUNT_MEMORY"];
 process.env["ZERO_CLOUD_SINK"] = "";
-const temporary = mkdtempSync(join(tmpdir(), "0sec-learning-e2e-"));
+const temporary = mkdtempSync(join(tmpdir(), "0-learning-e2e-"));
 const root = join(temporary, "source");
 mkdirSync(root);
 const cleanup = () => rmSync(temporary, { recursive: true, force: true });

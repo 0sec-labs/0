@@ -13,7 +13,7 @@ import {
   type KernelVerifyAgentInvoker,
 } from "./kernel-verify.js";
 import type { KernelVerifyRunner } from "./kernel-verify-types.js";
-import type { Finding } from "@0/shared"
+import type { Finding } from "@0/shared";
 import type { NativeContentBlock } from "../runtime/types.js";
 import type { ReproducerResult, CrashReport } from "../triage/kernel-oracle.js";
 
@@ -87,7 +87,7 @@ function attemptedOnlyVmRunner() {
     return {
       compiled: true,
       executed: true,
-      output: canary ? `0SEC-CANARY:${canary}:ATTEMPTED:entry` : "ran",
+      output: canary ? `ZERO-CANARY:${canary}:ATTEMPTED:entry` : "ran",
       dmesg: "",
       exitCode: 0,
       timedOut: false,

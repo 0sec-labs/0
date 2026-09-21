@@ -1,4 +1,4 @@
-// `0sec auth` — 0sec-cloud authentication (CLI half of #303).
+// `0 auth` — 0-cloud authentication (CLI half of #303).
 //
 // Subcommands:
 //   - login        opens a browser at <host>/cli-auth?session=… and polls
@@ -8,11 +8,11 @@
 //                  authenticated Cloud account endpoint, reports
 //
 // The browser flow is backed by the 0cloud session-mint endpoint:
-//   - `0sec auth login` opens `<host>/cli-auth?session=…` and polls the
+//   - `0 auth login` opens `<host>/cli-auth?session=…` and polls the
 //     session URL until browser confirmation makes a scoped token ready.
-//   - `0sec auth login --token <value>` remains a manual credential path for
+//   - `0 auth login --token <value>` remains a manual credential path for
 //     self-hosted or recovery use.
-//   - `0sec auth status` verifies the saved token against the same
+//   - `0 auth status` verifies the saved token against the same
 //     authenticated account endpoint used by the Cloud connection screen.
 //
 // DIVERGENCE FROM h1.ts
@@ -21,14 +21,14 @@
 // on the H1 site, so there's no `login` flow there at all — the loader
 // just reads what the operator put in h1.env. Cloud uses Bearer auth
 // with a scoped token minted by the server after a browser-based
-// better-auth flow, so `0sec auth login` is the one extra surface.
+// better-auth flow, so `0 auth login` is the one extra surface.
 //
-// SECURITY: the token is never printed. `0sec auth status` echoes the
+// SECURITY: the token is never printed. `0 auth status` echoes the
 // host on success; on auth failure we surface the status code + path,
 // never the token or the Authorization header.
 
 import { spawn } from "node:child_process";
-import { cloudStateDir, homeStateDir } from "@0/shared"
+import { cloudStateDir, homeStateDir } from "@0/shared";
 import { mkdirSync, writeFileSync, chmodSync, unlinkSync, existsSync } from "node:fs";
 import { homedir, platform } from "node:os";
 import { join } from "node:path";
@@ -37,14 +37,16 @@ import { setTimeout as delay } from "node:timers/promises";
 import type { Command } from "commander";
 import chalk from "chalk";
 import { consolePresentationOutput } from "../presentation/process-output.js";
-import { loadCloudCredentials,
-CloudAuthMissingError,
-CloudClient,
-CloudUnauthorizedError,
-CloudForbiddenError,
-CloudNetworkError,
-CloudError,
-DEFAULT_CLOUD_HOST, } from "@0/core"
+import {
+  loadCloudCredentials,
+  CloudAuthMissingError,
+  CloudClient,
+  CloudUnauthorizedError,
+  CloudForbiddenError,
+  CloudNetworkError,
+  CloudError,
+  DEFAULT_CLOUD_HOST,
+} from "@0/core";
 
 const EXIT_OK = 0;
 const EXIT_USER_ERROR = 1;
@@ -115,18 +117,19 @@ interface StatusOptions {
 export function registerAuthCommand(program: Command): void {
   const auth = program
     .command("auth")
-    .description("0cloud authentication")
+    .description("0-cloud authentication")
+
   // ── 0 auth login ──
   auth
     .command("login")
-    .description("Log in to 0cloud (opens browser; --token to paste directly)")
+    .description("Log in to 0-cloud (opens browser; --token to paste directly)")
     .option("--host <url>", "Cloud host (defaults to ZERO_CLOUD_HOST or production)")
     .option("--token <value>", "Skip the browser flow and persist this token directly")
     .action(async (opts: { host?: string; token?: string }) => {
       await runLogin(opts);
     });
 
-  // ── 0sec auth logout ──
+  // ── 0 auth logout ──
   auth
     .command("logout")
     .description("Delete credentials for the current Cloud profile")
@@ -134,10 +137,10 @@ export function registerAuthCommand(program: Command): void {
       runLogout({});
     });
 
-  // ── 0sec auth status ──
+  // ── 0 auth status ──
   auth
     .command("status")
-    .description("Verify 0cloud credentials and account access")
+    .description("Verify 0-cloud credentials and account access")
     .action(async () => {
       await runStatus({});
     });
@@ -355,7 +358,7 @@ export function runLogout(opts: LogoutOptions): void {
   const cloudCredsPath = join(home, ".0cloud", "credentials.json");
   let deletedAny = false;
 
-  // Delete 0sec credential file
+  // Delete 0 credential file
   try {
     unlinkSync(osecPath);
     deletedAny = true;
@@ -462,7 +465,7 @@ function persistCredentials(host: string, token: string, homeDirOverride?: strin
   mkdirSync(dir, { recursive: true, mode: 0o700 });
   const path = join(dir, "cloud.env");
   const body =
-    `# 0sec-cloud credentials. Managed by \`0sec auth\`.\n` +
+    `# 0-cloud credentials. Managed by \`0 auth\`.\n` +
     `# DO NOT commit this file or share its contents.\n` +
     `ZERO_CLOUD_HOST=${host}\n` +
     `ZERO_CLOUD_TOKEN=${token}\n`;
@@ -482,12 +485,12 @@ function persistCredentials(host: string, token: string, homeDirOverride?: strin
   if (dir !== homeStateDir(homeDirOverride)) return;
 
   // Write 0cloud-compatible credential file for unified auth.
-  // Best-effort: don't fail the 0sec login if this secondary write fails.
+  // Best-effort: don't fail the 0 login if this secondary write fails.
   try {
     const cloudDir = join(home, ".0cloud");
     mkdirSync(cloudDir, { recursive: true });
     const cloudCredsPath = join(cloudDir, "credentials.json");
-    // 0sec only knows the dashboard host (cloud.0.security); the 0cloud
+    // 0 only knows the dashboard host (cloud.0.security); the 0cloud
     // orchestrator API lives under /api on it. `api.0.security` has no DNS
     // (#508), so derive the API base as `${host}/api` for 0cloud's
     // endpoint. orgId stays empty — 0cloud resolves org from its own
@@ -510,7 +513,7 @@ function persistCredentials(host: string, token: string, homeDirOverride?: strin
     writeFileSync(cloudCredsPath, cloudCreds, { mode: 0o600 });
     chmodSync(cloudCredsPath, 0o600);
   } catch {
-    // Silently ignore — the primary 0sec credential write succeeded.
+    // Silently ignore — the primary 0 credential write succeeded.
   }
 }
 
@@ -554,7 +557,7 @@ function extractToken(body: unknown): string | null {
  *
  * JUDGMENT CALL: we avoided the `opener` package even though it's ~30
  * LoC because (a) MIT, (b) zero transitive deps, and (c) we already
- * have a working no-dep implementation in `0sec doctor`-style code
+ * have a working no-dep implementation in `0 doctor`-style code
  * elsewhere. Adding a dep for a 12-line function loses on the
  * dependency-cost calculus.
  */

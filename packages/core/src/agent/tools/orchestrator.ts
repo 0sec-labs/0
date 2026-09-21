@@ -86,7 +86,7 @@ export async function executeStartScan(
 
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
-    "X-0sec-Scan-Id": cfg.scanId,
+    "X-0-Scan-Id": cfg.scanId,
   };
   if (cfg.token) headers["Authorization"] = `Bearer ${cfg.token}`;
   const url = `${cfg.sinkUrl.replace(/\/+$/, "")}/scans`;

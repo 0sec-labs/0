@@ -1,7 +1,7 @@
 /**
  * KCSAN data-race triage (kernelCTF Pipeline #1, issue #1112).
  *
- * Wires a parsed {@link KcsanRace} through 0sec's hunt-engine gate:
+ * Wires a parsed {@link KcsanRace} through 0's hunt-engine gate:
  *
  *   KcsanRace ──> HuntBrief + synthetic Finding
  *                     │
@@ -30,7 +30,7 @@
  * "inconclusive" verdict rather than a false confirm.
  */
 
-import type { Finding, RuntimeMode } from "@0/shared"
+import type { Finding, RuntimeMode } from "@0/shared";
 import {
   composeGate,
   makeSkepticVerifier,

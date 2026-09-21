@@ -49,7 +49,7 @@ beforeEach(async () => {
   ({ sourceReview } = await import("./review.js"));
   // Build a tiny git tree with a crypto/ file and a security fix commit so
   // mineFixCommits (and therefore the auto-anchor step) has something to find.
-  tree = mkdtempSync(join(tmpdir(), "0sec-kernel-seed-"));
+  tree = mkdtempSync(join(tmpdir(), "0-kernel-seed-"));
   // Look enough like a kernel tree for any tree-shape heuristics; the recipes
   // don't require it but it keeps the fixture honest.
   writeFileSync(join(tree, "MAINTAINERS"), "Linux kernel\n");

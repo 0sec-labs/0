@@ -1,5 +1,5 @@
 /**
- * Scope-guard visibility (0sec#133).
+ * Scope-guard visibility (0#133).
  *
  * A family of egress guards in `agent/tools.ts` is nested inside
  * `if (this.ctx.scope) { … }`. `ctx.scope` is `undefined` whenever no
@@ -28,7 +28,7 @@
  *
  * `ZERO_REQUIRE_SCOPE` remains available to make every mode fail closed.
  *
- * @see https://github.com/0sec-labs/0sec/issues/133
+ * @see https://github.com/0sec-labs/0/issues/133
  */
 
 /**
@@ -118,7 +118,7 @@ export function describeScopeGuards(
       `so ${SCOPE_DEPENDENT_BASH_GUARDS.length} bash egress guards are INERT for this run: ` +
       `${SCOPE_DEPENDENT_BASH_GUARDS.join(", ")}. ` +
       "bash commands can reach any host the sandbox can reach. Pass --scope <file> to enable " +
-      "them, or run through `env ZERO_REQUIRE_SCOPE=1 0sec ...` to refuse unscoped runs.",
+      "them, or run through `env ZERO_REQUIRE_SCOPE=1 0 ...` to refuse unscoped runs.",
   };
 }
 

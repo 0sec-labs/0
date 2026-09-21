@@ -27,7 +27,7 @@ check_binary_install() {
     apt-get install -y --no-install-recommends ca-certificates curl
     rm -rf /var/lib/apt/lists/*
 
-    export HOME=/tmp/0sec-home
+    export HOME=/tmp/0-home
     curl -fsSL https://raw.githubusercontent.com/0sec-labs/0/main/install.sh | bash
     export PATH="$HOME/.0/bin:$PATH"
     0 --help >/dev/null

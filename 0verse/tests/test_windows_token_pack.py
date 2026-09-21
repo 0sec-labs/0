@@ -452,7 +452,7 @@ def test_lpac_pack_and_policy_use_strict_additive_schema_versions(tmp_path: Path
 
     manifest["schemaVersion"] = token_pack_module.LPAC_PACK_SCHEMA_VERSION
     parsed = token_pack_module._parse_manifest(_canonical(manifest))
-    assert parsed["schemaVersion"] == "0sec.windows-token-evidence-pack/v2"
+    assert parsed["schemaVersion"] == "0.windows-token-evidence-pack/v2"
     manifest["schemaVersion"] = token_pack_module.PACK_SCHEMA_VERSION
     with pytest.raises(ValueError, match="schema is unsupported"):
         token_pack_module._parse_manifest(_canonical(manifest))
@@ -464,7 +464,7 @@ def test_lpac_pack_and_policy_use_strict_additive_schema_versions(tmp_path: Path
     policy["schemaVersion"] = token_pack_module.LPAC_POLICY_SCHEMA_VERSION
     parsed_policy = token_pack_module._parse_policy(policy)
     assert parsed_policy["schemaVersion"] == (
-        "0sec.windows-token-evidence-acceptance-policy/v2"
+        "0.windows-token-evidence-acceptance-policy/v2"
     )
     policy["schemaVersion"] = token_pack_module.POLICY_SCHEMA_VERSION
     with pytest.raises(ValueError, match="schema is unsupported"):

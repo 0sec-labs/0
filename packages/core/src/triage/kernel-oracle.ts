@@ -10,7 +10,7 @@
  * falls back to static analysis of the reproducer and crash report consistency.
  */
 
-import type { Finding } from "@0/shared"
+import type { Finding } from "@0/shared";
 import { runReproducerInKernelVm } from "./kernel-vm-runner.js";
 
 // ────────────────────────────────────────────────────────────────────
@@ -278,7 +278,7 @@ export async function compileAndRunReproducer(
 /**
  * Run a standalone kernel reproducer without an original crash report to match.
  *
- * This is the Tier 1 path for `0sec ingest --reproducer/--syz`: it answers
+ * This is the Tier 1 path for `0 ingest --reproducer/--syz`: it answers
  * "did this reproducer trigger a recognizable kernel crash under the VM
  * oracle?" rather than "did it match a previously ingested crash signature?"
  */

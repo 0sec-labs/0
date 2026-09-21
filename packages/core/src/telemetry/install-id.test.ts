@@ -8,7 +8,7 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 
 const dirs: string[] = [];
 function tmpHome(): string {
-  const d = mkdtempSync(join(tmpdir(), "0sec-analytics-id-"));
+  const d = mkdtempSync(join(tmpdir(), "0-analytics-id-"));
   dirs.push(d);
   return d;
 }

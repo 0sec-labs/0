@@ -9,8 +9,8 @@
  * this module only decides ordering and presentation.
  */
 
-import { MODEL_PRICING, getRates, modelProvider } from "@0/shared"
-import type { InferenceModel } from "@0/core"
+import { MODEL_PRICING, getRates, modelProvider } from "@0/shared";
+import type { InferenceModel } from "@0/core";
 
 import type { SelectorItem } from "./selector.js";
 import { loadCatalogModels, type CatalogSyncOptions } from "./model-catalog-sync.js";
@@ -141,26 +141,14 @@ export function buildFullModelCatalog(
  */
 export function scopeModelCatalog(
   catalog: CatalogModel[],
-  opts: {
-    showAll?: boolean;
-    filter?: string;
-    currentModel?: string;
-    configuredProviderIds?: readonly string[];
-  } = {},
+  opts: { showAll?: boolean; filter?: string; currentModel?: string } = {},
 ): CatalogModel[] {
   if (opts.showAll || (opts.filter ?? "").trim().length > 0) return catalog;
-  const configured = opts.configuredProviderIds;
-  const visible = configured === undefined
-    ? (model: CatalogModel) => true
-    : (model: CatalogModel) => configured.includes(model.provider) ||
-      (model.provider === "openai" && configured.some((id) => id === "chatgpt-codex" || id === "copilot")) ||
-      (model.provider === "moonshot" && configured.includes("kimi"));
   const current = opts.currentModel;
-  const curated = buildModelCatalog(current).filter(visible);
+  const curated = buildModelCatalog(current);
   if (current && !curated.some((model) => model.id === current)) {
     const row = catalog.find((model) => model.id === current);
-    if (row) curated.push(row);
-    else curated.push({ id: current, provider: modelProvider(current), price: "—" });
+    curated.push(row ?? { id: current, provider: modelProvider(current), price: "—" });
     curated.sort(compareCatalogRows(current));
   }
   return curated;

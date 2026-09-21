@@ -3,7 +3,7 @@
 //   1. Bundled mode (esbuild via scripts/bundle-cli.mjs): the bundler
 //      injects __ZERO_VERSION__ as a global define at build time, so
 //      VERSION ends up as a string literal baked directly into the
-//      published 0sec.js bundle. Zero runtime fs cost.
+//      published 0.js bundle. Zero runtime fs cost.
 //   2. Source / test mode (running tsx, vitest, or any unbundled flow):
 //      __ZERO_VERSION__ is undefined, so we fall back to a one-time
 //      synchronous read of the root package.json relative to this file.

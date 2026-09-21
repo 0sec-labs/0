@@ -14,8 +14,10 @@ import type {
   RankSinkReachabilityResult,
   SinkLocation,
 } from "../kernel/reachability-rank.js";
-import type { VerificationResult,
-ResearchNoveltyReceipt, } from "@0/shared"
+import type {
+  VerificationResult,
+  ResearchNoveltyReceipt,
+} from "@0/shared";
 
 // ── Fixtures ────────────────────────────────────────────────────────────────
 

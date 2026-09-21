@@ -22,8 +22,8 @@
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { homeStateDir } from "@0/shared"
-import { CloudClient, loadCloudCredentials, type InferenceModel } from "@0/core"
+import { homeStateDir } from "@0/shared";
+import { CloudClient, loadCloudCredentials, type InferenceModel } from "@0/core";
 import { OFFLINE_MODEL_CATALOG } from "./model-catalog.offline.js";
 
 /** One normalized catalog entry. Prices are $/1M tokens when known. */

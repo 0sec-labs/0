@@ -1,4 +1,4 @@
-import type { JevAnswer, JevEvaluator, JevUsage } from "@0/shared"
+import type { JevAnswer, JevEvaluator, JevUsage } from "@0/shared";
 
 const BATCH_SIZE = 4;
 const MAX_TEXT_CHARS = 800;

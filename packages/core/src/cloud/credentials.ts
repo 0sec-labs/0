@@ -1,4 +1,4 @@
-// 0sec-cloud credential resolver.
+// 0-cloud credential resolver.
 //
 // Resolution order (first match wins):
 //   1. Environment: ZERO_CLOUD_HOST + ZERO_CLOUD_TOKEN
@@ -21,7 +21,7 @@
 // messages. `CloudAuthMissingError` carries no secret material.
 
 import { readFileSync, statSync } from "node:fs";
-import { cloudStateDir } from "@0/shared"
+import { cloudStateDir } from "@0/shared";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
@@ -85,7 +85,7 @@ export function loadCloudCredentials(opts: LoadCloudCredentialsOptions = {}): Cl
     const code = (err as { code?: string }).code;
     if (code === "ENOENT") {
       throw new CloudAuthMissingError(
-        `0sec-cloud credentials not found. Run \`${env["ZERO_DEV_SOURCE_ROOT"]?.trim() ? "0dev" : "0sec"} auth login\`.`,
+        `0-cloud credentials not found. Run \`${env["ZERO_DEV_SOURCE_ROOT"]?.trim() ? "0dev" : "0"} auth login\`.`,
       );
     }
     throw err;
@@ -97,7 +97,7 @@ export function loadCloudCredentials(opts: LoadCloudCredentialsOptions = {}): Cl
     const mode = st.mode & 0o777;
     if (mode !== 0o600) {
       warn(
-        `[0sec cloud] WARNING: ${path} mode is ${mode.toString(8).padStart(3, "0")} (expected 600). ` +
+        `[0 cloud] WARNING: ${path} mode is ${mode.toString(8).padStart(3, "0")} (expected 600). ` +
           `Run: chmod 600 ${path}`,
       );
     }
@@ -109,7 +109,7 @@ export function loadCloudCredentials(opts: LoadCloudCredentialsOptions = {}): Cl
   const fileTok = parsed["ZERO_CLOUD_TOKEN"]?.trim();
   if (!fileTok) {
     throw new CloudAuthMissingError(
-      `0sec-cloud credentials in ${path} are incomplete: ZERO_CLOUD_TOKEN is required.`,
+      `0-cloud credentials in ${path} are incomplete: ZERO_CLOUD_TOKEN is required.`,
     );
   }
   const fileHost = normaliseHost(parsed["ZERO_CLOUD_HOST"]?.trim() ?? env["ZERO_CLOUD_HOST"]?.trim() ?? DEFAULT_CLOUD_HOST);

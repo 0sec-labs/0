@@ -14,7 +14,7 @@
  *
  * ## What this screen is a view over
  *
- * The hub peer roster (`packages/core/src/hub/registry.ts`): the set of 0sec
+ * The hub peer roster (`packages/core/src/hub/registry.ts`): the set of 0
  * peers — sessions and subagents — working the same project directory. That
  * module is a PURE data model; the filesystem/socket transport that persists
  * and gossips the roster is a later increment and **is not wired yet**. There
@@ -1573,7 +1573,7 @@ export function focusHeaderLines(
     if (record.tool) push(`Tool: ${record.tool}`, "text");
     if (record.note) push(`Note: ${record.note}`, "text");
     // MEASURED telemetry — every line only when the datum was actually reported
-    // (never a zero). No cost/$ line: 0sec has no pricing, so it is not shown.
+    // (never a zero). No cost/$ line: 0 has no pricing, so it is not shown.
     if (telemetry?.model) push(`Model: ${telemetry.model}`, "muted");
     if (typeof telemetry?.inputTokens === "number" || typeof telemetry?.outputTokens === "number") {
       const inTok = formatTokens(telemetry.inputTokens);

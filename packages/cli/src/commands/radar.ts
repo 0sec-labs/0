@@ -1,5 +1,5 @@
 /**
- * `0sec radar` — Continuous "diff radar": score recent commits for silent
+ * `0 radar` — Continuous "diff radar": score recent commits for silent
  * security-fix signals via Jev. Only survivors consume deep review / variant-
  * hunt spend. Jev is advisory only — never removes candidates, never grants
  * authority, never verifies/dismisses a vulnerability.
@@ -13,10 +13,14 @@ import { Command } from "commander";
 import { execFileSync } from "node:child_process";
 import { writeFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { createJevEvaluator,
-jevConfigFromEnvironment, } from "@0/shared"
-import { radarCandidatesToSeedFindings,
-scanRepoCommitsWithJev, } from "@0/core"
+import {
+  createJevEvaluator,
+  jevConfigFromEnvironment,
+} from "@0/shared";
+import {
+  radarCandidatesToSeedFindings,
+  scanRepoCommitsWithJev,
+} from "@0/core";
 
 interface RadarOpts {
   repo?: string;

@@ -13,7 +13,7 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { resolveFeaturePreset, FEATURE_PRESETS } from "@0/core"
+import { resolveFeaturePreset, FEATURE_PRESETS } from "@0/core";
 import { PRESET_TOKENS } from "../scan.js";
 
 describe("CLI preset tokens match core's resolver", () => {

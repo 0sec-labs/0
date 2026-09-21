@@ -12,7 +12,7 @@ import {
 import { mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { DesktopHostCommand } from "@0/shared"
+import type { DesktopHostCommand } from "@0/shared";
 import {
   createDashboardSidecarInvocation,
   findWorkspaceRoot,
@@ -34,7 +34,7 @@ if (!app.isPackaged && developmentDebugPort !== undefined) {
 
 // Keep the existing profile namespace while updating the visible app name.
 // Resolve it before renaming so explicit user-data-dir overrides also survive.
-app.name = "0sec";
+app.name = "0";
 const userDataPath = app.getPath("userData");
 app.name = "0.security";
 app.setPath("userData", userDataPath);

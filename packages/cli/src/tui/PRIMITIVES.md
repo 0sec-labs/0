@@ -31,9 +31,9 @@ exactly how these were produced:
 | Intended | Rendered |
 | --- | --- |
 | `Show available slash commands` | `Showpavailableenslash commands` |
-| `0sec / chat` above `target: none` | `target:cnone` |
+| `0 / chat` above `target: none` | `target:cnone` |
 | `runs` then `12` | `runs12` |
-| `Describe an objective. 0sec enforces…` | `Describe-anrobjective.y0seceenforces...` |
+| `Describe an objective. 0 enforces…` | `Describe-anrobjective.y0eenforces...` |
 
 Note the shape of the corruption: it is not truncation, it is two strings
 alternating character by character. Once you have seen it, every one of these
@@ -115,7 +115,7 @@ The caller states *intent* per column; the component computes the allocation.
   available={contentWidth}
   gap={1}
   columns={[
-    { fixed: 4, text: "0sec", fg: PRIMARY, priority: 2 },
+    { fixed: 4, text: "0", fg: PRIMARY, priority: 2 },
     { flex: 1, text: headerEngagement, fg: MUTED, fit: "middle", priority: 0 },
     { content: modeLabel(mode), max: 10, fg: modeColor, priority: 1 },
   ]}
@@ -193,7 +193,7 @@ like a crash, while an absent box is merely missing information.
 `maxShare` exists because fitting is necessary but not sufficient. A box sized
 purely by "what is left over" grows until the region *above* it is squeezed to
 nothing — and that region then overlaps its own content instead. This is the
-`Describe-anrobjective.y0seceenforces...` defect.
+`Describe-anrobjective.y0eenforces...` defect.
 
 ### The pure layer
 

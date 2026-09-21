@@ -95,7 +95,7 @@ describe("cloud-sink", () => {
     expect(url).toBe("https://api.example.com/scans/scan-123/findings");
     expect(init.method).toBe("POST");
     expect(init.headers["Content-Type"]).toBe("application/json");
-    expect(init.headers["X-0sec-Scan-Id"]).toBe("scan-123");
+    expect(init.headers["X-0-Scan-Id"]).toBe("scan-123");
     expect(init.headers["x-cloud-sink-version"]).toBe("1");
     expect(init.headers["Authorization"]).toBe("Bearer tok-abc");
     // The wire payload is the NORMALIZED finding, not the raw input.
@@ -621,7 +621,7 @@ describe("normalizeFinding", () => {
   });
 });
 
-// ── discovered-asset push (0sec#768 / #761) ──
+// ── discovered-asset push (0#768 / #761) ──
 describe("cloud-sink assets", () => {
   const originalFetch = globalThis.fetch;
   const savedEnv: Record<string, string | undefined> = {};
@@ -760,7 +760,7 @@ describe("cloud-sink assets", () => {
     expect(init.method).toBe("POST");
     expect(init.headers["Authorization"]).toBe("Bearer tok-abc");
     // Org scope is forwarded for the non-scan-id-pathed asset write.
-    expect(init.headers["X-0sec-Org-Id"]).toBe("org_ABCDEFGHIJKLMNOP");
+    expect(init.headers["X-0-Org-Id"]).toBe("org_ABCDEFGHIJKLMNOP");
     expect(JSON.parse(init.body)).toEqual(asset);
   });
 

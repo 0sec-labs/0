@@ -1,5 +1,5 @@
 /**
- * `0sec review --profile` / `--target` validator tests. We register the command on
+ * `0 review --profile` / `--target` validator tests. We register the command on
  * a fresh Commander program, mock `runUnified` so the action never
  * actually runs, then `parseAsync` argv. We just want to assert that
  * the validator accepts the expected workflow selector values and rejects typos.
@@ -26,10 +26,10 @@ async function runCli(argv: string[]): Promise<void> {
   const program = new Command();
   program.exitOverride();
   registerReviewCommand(program);
-  await program.parseAsync(["node", "0sec-cli", ...argv]);
+  await program.parseAsync(["node", "@0/cli", ...argv]);
 }
 
-describe("0sec review --profile validator", () => {
+describe("0 review --profile validator", () => {
   beforeEach(() => {
     runUnifiedMock.mockClear();
     runUnifiedMock.mockResolvedValue(undefined);
@@ -146,7 +146,7 @@ describe("0sec review --profile validator", () => {
     expect(runUnifiedMock).not.toHaveBeenCalled();
   });
 
-  it("threads --emit pr + --base + --dry-run into runUnified (0sec#377)", async () => {
+  it("threads --emit pr + --base + --dry-run into runUnified (0#377)", async () => {
     await runCli([
       "review",
       "./somerepo",
@@ -164,7 +164,7 @@ describe("0sec review --profile validator", () => {
   });
 
   it("loads valid --prior-findings JSON and forwards it unchanged", async () => {
-    const dir = mkdtempSync(join(tmpdir(), "0sec-prior-findings-"));
+    const dir = mkdtempSync(join(tmpdir(), "0-prior-findings-"));
     const input = join(dir, "prior-findings.json");
     const findings = [
       {
@@ -187,7 +187,7 @@ describe("0sec review --profile validator", () => {
   });
 
   it("rejects malformed --prior-findings data before starting a review", async () => {
-    const dir = mkdtempSync(join(tmpdir(), "0sec-prior-findings-"));
+    const dir = mkdtempSync(join(tmpdir(), "0-prior-findings-"));
     const input = join(dir, "prior-findings.json");
     try {
       writeFileSync(input, JSON.stringify([{ title: "missing id and category" }]));

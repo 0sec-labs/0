@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { extractFeatures, FEATURE_NAMES } from "./feature-extractor.js";
-import type { Finding } from "@0/shared"
+import type { Finding } from "@0/shared";
 
 function makeFinding(overrides: Partial<Finding> = {}): Finding {
   return {

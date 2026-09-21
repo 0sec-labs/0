@@ -59,11 +59,11 @@ when running the full terminal UI from source.
 | `--mode <mode>` | Autonomy mode: `standard`, `recon`, `copilot`, `yolo` | `yolo` |
 | `--yolo` | Shortcut for `--mode yolo` | — |
 | `--model <id>` | Override the LLM model ID | provider default |
-| `--max-tool-calls <n>` | Safety cap on tool-call rounds per operator message | `20` |
+| `--max-tool-calls <n>` | Safety cap on tool-call rounds per operator message | `100` |
 | `--allow-scanners` | Expose scanner wrappers (sqlmap, nikto, …) | off |
 | `--finding <id>` | Focus the chat on one persisted finding | (none) |
 | `--finding-intent <intent>` | Finding workflow: `investigate`, `verify`, `draft_fix`, `impact` (requires `--finding`) | `investigate` |
-| `--db-path <path>` | Persistent findings database, also used by history screens | `ZERO_DB_PATH` or `~/.0/0sec.db` |
+| `--db-path <path>` | Persistent findings database, also used by history screens | `ZERO_DB_PATH` or `~/.0/0.db` |
 | `--resume [id]` | Reopen a saved session; omitting id opens a picker | (none) |
 | `--continue` | Reopen the most recent session, no picker | (none) |
 | `--print [prompt]` | One-shot non-interactive; reads from argument or piped stdin | (none) |
@@ -86,13 +86,50 @@ Explicit restrictions and exclusions still apply. This does not change the
 ordinary `scan` command's requirement for a scope file on live targets.
 :::
 
+### Setup and navigation
+
+On first launch, Escape goes back one setup decision, including Density →
+Theme. Within a provider login or search, Escape cancels that local operation
+first. Connect and Models use Ctrl+N to skip; preferences and sharing use `s`.
+Back, Confirm, and Skip also have clickable controls. At Welcome, Escape skips
+setup and opens chat without marking setup complete. Ctrl+C explicitly quits.
+Confirmed settings and credentials remain saved; model choices are applied to
+the current audit when you finish or skip setup. Unconfirmed preference previews
+are discarded when you go back. `/onboard` opens setup again.
+
+Outside setup, Alt+Left and Alt+Right move through console route history.
+Nested popups own input until closed; Escape first closes the current popup or
+edit before returning to the previous screen. Shift+Tab moves backward through
+the engagement launcher's fields.
+
+### Long-running work and context
+
+The interactive console has no cumulative turn-token cap by default, including
+subscription-backed providers. Bare `0`, `0 console`, and resumed sessions
+share the 100-tool-round default; `--max-tool-calls` overrides it explicitly.
+Provider subscription quotas and explicitly configured engine budgets still
+apply independently.
+
+With auto-compaction enabled and a known model window, the console maintains
+context between tool rounds and continues the same task. Summaries retain the
+opening task, latest instruction, and complete recent tool exchanges. Context
+recovery is bounded and reports when it cannot reduce the prompt; a provider
+quota or authentication error is not treated as context overflow.
+
+A “turn token budget” pause identifies a local cumulative budget, not the size
+of the current context. Older builds imposed a 2m-token default. If that pause
+appears unexpectedly, check `0 --version` and `/doctor` for the running
+artifact, then restart after updating; an already-running process retains its
+loaded code. A separate source checkout or generated bundle may be older than
+the installed standalone executable.
+
 ### Review previous work
 
 The console attaches a persistent findings database. `query_findings` can
 search all sessions or a particular scan ID **within that attached database**.
 Use `--db-path` to open a scan's run-local `state.db`; it works independently
 of `--finding`, including with `--print`. The console's default remains the
-local `~/.0/0sec.db` (or `ZERO_DB_PATH`), whereas fresh scan workflows use
+local `~/.0/0.db` (or `ZERO_DB_PATH`), whereas fresh scan workflows use
 run-local databases. Do not assume a global history listing means every run's
 findings are loaded into this chat.
 
@@ -645,7 +682,7 @@ The console has two views into past data:
 | Scope | Current session's conversation turns | Any persisted scan (by scan ID or database) |
 | Content | Operator + model turns, tool calls, outcomes | Event-level turn timeline: stages, tool calls, model output |
 | Access | `/transcript` (Ctrl+O) | `/replay` |
-| Data source | Current in-memory conversation; saved native messages can seed a resumed chat | Scan database (`--db-path` or `~/.0/0sec.db`) |
+| Data source | Current in-memory conversation; saved native messages can seed a resumed chat | Scan database (`--db-path` or `~/.0/0.db`) |
 | Use case | Review what was discussed and returned by tools in this chat | Inspect the events that a scan actually persisted |
 
 The **transcript review** (Ctrl+O) is a scrollable, virtualised rendering of

@@ -2,7 +2,7 @@
 /**
  * The agent-herd overview surface.
  *
- * A roster of every 0sec peer — sessions and subagents — working this project
+ * A roster of every 0 peer — sessions and subagents — working this project
  * directory, grouped by live status, with a detail pane for the selected peer
  * and its recent inbox activity. Modelled on the settings screen: a grouped
  * list on the left, a detail pane on the right, stacked when the terminal is
@@ -32,7 +32,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { sleekScrollbar } from "./scrollbar.js";
 import { useKeyboard, usePaste } from "@opentui/react";
 import { decodePasteBytes, TextAttributes } from "@opentui/core";
-import { eventBus, peekInbox, sendOperatorMessage, type MessagingRuntime } from "@0/core"
+import { eventBus, peekInbox, sendOperatorMessage, type MessagingRuntime } from "@0/core";
 
 import { useTheme, type Theme } from "./theme-context.js";
 import { useSymbols } from "./symbol-context.js";

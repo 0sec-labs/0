@@ -2,7 +2,7 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import { createHash, randomUUID } from "node:crypto";
 import { appendFileSync, closeSync, existsSync, fsyncSync, lstatSync, mkdirSync, openSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { isAbsolute, join } from "node:path";
-import { homeStateDir, VERSION } from "@0/shared"
+import { homeStateDir, VERSION } from "@0/shared";
 import { z } from "zod";
 import { analyticsOptedOut } from "./analytics-level.js";
 import { redactRecordStrings } from "./analytics-pipeline.js";
@@ -338,7 +338,7 @@ export class RunCapture {
     this.captureGap = true;
     this.manifest.quality = this.manifest.quality.filter(value => value !== "complete");
     if (!this.manifest.quality.includes("partial")) this.manifest.quality.push("partial");
-    if (!this.failure) process.stderr.write("[0sec] Run contribution incomplete: private spool write failed; upload withheld.\n");
+    if (!this.failure) process.stderr.write("[0] Run contribution incomplete: private spool write failed; upload withheld.\n");
     this.failure = "spool_io";
   }
   static readTransitions(directory: string): RunTransition[] {
@@ -536,8 +536,8 @@ export function configureRunContributionsFromEnvironment(): void {
   };
   const config = load();
   configuredClient = new RunContributionClient({ policy: config.policy, orgId: config.orgId, spoolDir: config.spoolDir ?? join(homeStateDir(), "run-contributions"), enrollment: () => load().receipt, credentials: () => loadCloudCredentials() });
-  void configuredClient.flush().catch(() => { process.stderr.write("[0sec] Run contribution upload pending: private spool unavailable.\n"); });
+  void configuredClient.flush().catch(() => { process.stderr.write("[0] Run contribution upload pending: private spool unavailable.\n"); });
 }
 export function reportUnsupportedContributionMode(mode: string): void {
-  if (configuredClient?.permission() || currentRunContribution()) process.stderr.write(`[0sec] Run contribution unavailable for ${mode}; no complete native transcript.\n`);
+  if (configuredClient?.permission() || currentRunContribution()) process.stderr.write(`[0] Run contribution unavailable for ${mode}; no complete native transcript.\n`);
 }

@@ -38,7 +38,7 @@ grep -rn --include='*.ts' -E 'process\.(stderr|stdout)\.write|console\.(log|warn
 import { diag } from "../diagnostics/channel.js";   // adjust depth
 
 // before
-process.stderr.write(`[0sec] ${provider} HTTP ${status} — backoff ${delay}ms (retry ${n}/${max})\n`);
+process.stderr.write(`[0] ${provider} HTTP ${status} — backoff ${delay}ms (retry ${n}/${max})\n`);
 
 // after
 diag.warn("retry_backoff", `${provider} HTTP ${status} — backoff ${delay}ms`, {
@@ -53,7 +53,7 @@ Rules:
 - **Detail goes in `fields`, not in the message.** Anything a consumer might
   want to read programmatically — an id, a count, a duration, a status — is a
   field. The message is the one-line human summary.
-- **No `\n`, no ANSI, no `[0sec]` prefix.** The channel adds the prefix and the
+- **No `\n`, no ANSI, no `[0]` prefix.** The channel adds the prefix and the
   newline, and strips escapes. Drop them from the message.
 - **Level.** `error` = the run is degraded or a capability is gone.
   `warn` = something was skipped, retried, or dropped and the run continues.
@@ -61,7 +61,7 @@ Rules:
 - **Keep existing env gates.** `if (process.env["ZERO_DEBUG"])` stays exactly
   where it is; the channel changes the destination, not the policy.
 - Behaviour for non-TUI users is unchanged: with nobody claiming the channel,
-  every level still lands on stderr as `[0sec] <message> (k=v k=v)`.
+  every level still lands on stderr as `[0] <message> (k=v k=v)`.
 
 Injectable-logger sites (`opts.logger ?? ((line) => console.log(line))`) are a
 different fix: leave the injection point alone and change only the *default*

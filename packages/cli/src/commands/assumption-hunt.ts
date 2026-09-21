@@ -1,5 +1,5 @@
 /**
- * `0sec assumption-hunt <source-root>` — the SEEDLESS ASSUMPTION-MINING hunt.
+ * `0 assumption-hunt <source-root>` — the SEEDLESS ASSUMPTION-MINING hunt.
  *
  * The fourth seedless discovery axis (alongside the invariant-model, interproc-
  * refcount, and concurrency-race stages). Unlike those — which ask "is THIS access
@@ -24,7 +24,7 @@
 
 import type { Command } from "commander";
 import { resolve } from "node:path";
-import type { RuntimeMode } from "@0/shared"
+import type { RuntimeMode } from "@0/shared";
 
 interface AssumptionHuntOpts {
   subsystem?: string;

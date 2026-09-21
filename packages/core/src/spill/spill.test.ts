@@ -12,7 +12,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { homeStateDir } from "@0/shared"
+import { homeStateDir } from "@0/shared";
 import {
   DEFAULT_SPILL_RETRIEVAL_TOOL,
   MAX_READ_SPILL_CHARS,
@@ -29,7 +29,7 @@ const SCAN_ID = "scan-abc123";
 let home: string;
 
 beforeEach(() => {
-  home = mkdtempSync(join(tmpdir(), "0sec-spill-"));
+  home = mkdtempSync(join(tmpdir(), "0-spill-"));
 });
 
 afterEach(() => {
@@ -52,7 +52,7 @@ describe("spillDir", () => {
 
   it("rejects traversal and separators in scanId instead of sanitizing them", () => {
     for (const bad of ["..", "../evil", "a/b", "a\\b", ".hidden", "", "a b", "a\tb", "a\u0000b"]) {
-      expect(() => spillDir(bad, home)).toThrow(/Invalid 0sec spill scan id/);
+      expect(() => spillDir(bad, home)).toThrow(/Invalid 0 spill scan id/);
     }
   });
 });

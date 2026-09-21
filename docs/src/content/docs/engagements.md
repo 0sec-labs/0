@@ -194,7 +194,7 @@ result as a clean tenant. AzureHound exports also carry no conditional-access,
 federation, or PIM data — run `0 identity` against a live tenant for those.
 :::
 
-<span id="what-0sec-does-not-do"></span>
+<span id="what-0-does-not-do"></span>
 ## Limitations
 
 - Domain recon starts from supplied domains; it is not an org-name-driven

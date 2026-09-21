@@ -16,7 +16,7 @@ import { randomUUID } from "node:crypto";
 import { appendFileSync, existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { VERSION, homeStateDir } from "@0/shared"
+import { VERSION, homeStateDir } from "@0/shared";
 import { features } from "../agent/features.js";
 import { diag } from "../diagnostics/channel.js";
 import { loadCloudCredentials, CloudAuthMissingError, DEFAULT_CLOUD_HOST } from "../cloud/credentials.js";
@@ -193,7 +193,7 @@ export function __resetAzureRegionCacheForTests(): void {
  * the banner then fires once per importer instead of once per process.
  * Keying on a shared global process-wide Set closes that hole.
  */
-const PROVIDER_BANNER_KEY = Symbol.for("0sec.core.loggedProviderStartup");
+const PROVIDER_BANNER_KEY = Symbol.for("0.core.loggedProviderStartup");
 type GlobalWithBannerGuard = typeof globalThis & { [PROVIDER_BANNER_KEY]?: Set<string> };
 const loggedProviderStartup: Set<string> = ((): Set<string> => {
   const g = globalThis as GlobalWithBannerGuard;
@@ -788,7 +788,7 @@ export function __resetProviderStartupLogForTests(): void {
 const DEFAULT_ANTHROPIC_MODEL = "claude-sonnet-4-6";
 const DEFAULT_OPENROUTER_MODEL = "anthropic/claude-sonnet-4.6";
 const FREE_OPENROUTER_MODEL = "nvidia/nemotron-3-super-120b-a12b:free";
-const DEFAULT_OPENAI_MODEL = "gpt-5.6-terra";
+const DEFAULT_OPENAI_MODEL = "gpt-4o";
 const DEEPSEEK_DEFAULT_BASE_URL = "https://api.deepseek.com";
 const DEEPSEEK_DEFAULT_MODEL = "deepseek-flash";
 /** Alibaba Token Plan serves this exact DeepSeek revision id under the qwen
@@ -871,7 +871,7 @@ function opencodeWireApiForModel(model: string | undefined): WireApi {
 // gpt-*/claude-*/gemini- families); it is STRIPPED off the model id in
 // applyConfiguration before the request, mirroring the opencode-prefix strip.
 const COPILOT_API_BASE = "https://api.githubcopilot.com";
-const COPILOT_DEFAULT_MODEL = "gpt-5.6-terra";
+const COPILOT_DEFAULT_MODEL = "gpt-4o";
 // Static Copilot integration headers required on every inference call. Values
 // track the VS Code Copilot Chat client the endpoint expects.
 //   - Copilot-Vision-Request: "true" is sent ONLY alongside an image part —
@@ -1188,12 +1188,12 @@ const QWEN_DEFAULT_MODEL = "qwen3.8-max";
 // backend on the user's ChatGPT Plus/Pro subscription instead of the
 // public Platform API. Activated when ZERO_CHATGPT_OAUTH_REFRESH_TOKEN
 // is set (the worker-controller plumbs this from ~/.codex/auth.json or
-// the operator can set it directly for `0sec` CLI usage on a host
+// the operator can set it directly for `0` CLI usage on a host
 // that has run `codex login`).
 //
 // The endpoint and OAuth issuer below are the same ones the official
 // Codex CLI uses; we are NOT a different client. Originator header is
-// set to `0sec` so server-side observability can distinguish our
+// set to `0` so server-side observability can distinguish our
 // traffic from raw Codex CLI traffic.
 const CODEX_API_ENDPOINT = "https://chatgpt.com/backend-api/codex/responses";
 const CODEX_OAUTH_ISSUER = "https://auth.openai.com";
@@ -1226,12 +1226,12 @@ export const LOOP_SERVER_COMPACTION_TOKENS = 150_000;
 /**
  * Process-lifetime session id used as the `session_id` header for the
  * chatgpt-codex provider when no scan-specific id is in scope (e.g.
- * the local CLI's `0sec audit foo --runtime api` path without a
+ * the local CLI's `0 audit foo --runtime api` path without a
  * cloud scan context). Per-scan ids are still preferred — this is
  * just the fallback. Randomised once per process to keep concurrent
- * 0sec invocations from sharing a session bucket on OpenAI's side.
+ * 0 invocations from sharing a session bucket on OpenAI's side.
  */
-const PROCESS_SESSION_ID = `0sec-${Math.random().toString(36).slice(2, 10)}-${Date.now().toString(36)}`;
+const PROCESS_SESSION_ID = `0-${Math.random().toString(36).slice(2, 10)}-${Date.now().toString(36)}`;
 
 interface CodexTokenResponse {
   id_token?: string;
@@ -1305,7 +1305,7 @@ function resolveChatGptCodexAuthPath(env: Readonly<NodeJS.ProcessEnv> = process.
  * other field the file carries (e.g. `OPENAI_API_KEY`, unrelated `tokens.*`).
  * OpenAI ROTATES the refresh_token on every refresh, so the on-disk copy becomes
  * single-use-spent the instant we refresh; writing the new one back is what keeps
- * the NEXT `0`/`0sec tui`/`codex` process from replaying an already-used token
+ * the NEXT `0`/`0 tui`/`codex` process from replaying an already-used token
  * and hitting a 401. Mirrors the codex CLI's own auth.json write-back.
  *
  * Atomic (temp-file + rename) and 0600, so a concurrent reader never sees a
@@ -1342,7 +1342,7 @@ function persistChatGptCodexAuthFile(authPath: string, tokens: CodexTokenRespons
   } catch (err) {
     // Non-fatal: the refresh already succeeded for this process.
     process.stderr.write(
-      `[0sec] warning: could not persist rotated Codex refresh token to ${authPath}: ${
+      `[0] warning: could not persist rotated Codex refresh token to ${authPath}: ${
         err instanceof Error ? err.message : String(err)
       }\n`,
     );
@@ -1542,7 +1542,7 @@ async function refreshChatGptCodexAuthState(state: ChatGptCodexAuthState): Promi
             state.refreshToken = tokens.refresh_token;
             // Write the rotation back to ~/.codex/auth.json on the local
             // CLI/TUI path (authFilePath set). Without this, the NEXT
-            // `0`/`0sec tui`/`codex` process re-reads the now-spent token
+            // `0`/`0 tui`/`codex` process re-reads the now-spent token
             // from disk and 401s on its first call — the exact failure the
             // operator hit. The env-forwarded cloud path has authFilePath
             // undefined and is left to the worker-controller.
@@ -1627,7 +1627,7 @@ function resolveGeminiCodeAssistAuthState(env: Readonly<NodeJS.ProcessEnv>): Gem
     throw new Error(
       "Google Gemini Code Assist auth: neither ZERO_GEMINI_ACCESS_TOKEN nor " +
         "ZERO_GEMINI_OAUTH_REFRESH_TOKEN is set. Sign in with your Google " +
-        "account (0sec connect) or forward a fresh access token.",
+        "account (0 connect) or forward a fresh access token.",
     );
   }
   const key = geminiAuthStateKey(tokens.refreshToken ?? "", tokens.accessToken);
@@ -2370,7 +2370,7 @@ function detectProvider(configApiKey: string | undefined, preferredModel: string
       wireApi: "chat_completions",
     };
   }
-  // 0sec Cloud hosted inference. Detected when cloud credentials are present
+  // 0 Cloud hosted inference. Detected when cloud credentials are present
   // and no explicit BYOK provider was configured above. The default model is
   // a placeholder; the first async catalog fetch replaces it at invocation
   // time with the actual first model from the server's catalog.
@@ -2778,8 +2778,8 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
           : catalog.data[0];
         if (!selected) {
           throw new Error(this.model
-            ? `Hosted model "${this.model}" is unavailable. Run \`0sec models\` for available models.`
-            : "No hosted models are available. Run `0sec models` to check service availability.");
+            ? `Hosted model "${this.model}" is unavailable. Run \`0 models\` for available models.`
+            : "No hosted models are available. Run `0 models` to check service availability.");
         }
         this.model = selected.id;
         this.wireApi = selected.wire_api;
@@ -2896,12 +2896,12 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
       // `originator` + `User-Agent` mirror opencode's chat.headers hook
       // (codex.ts:610-614): originator identifies the client to
       // OpenAI's server-side analytics (Codex CLI uses `codex_cli_rs`,
-      // we ship `0sec`), and User-Agent gives them a way to
+      // we ship `0`), and User-Agent gives them a way to
       // distinguish our version + platform in their access logs.
       return {
         "Content-Type": "application/json",
-        originator: "0sec",
-        "User-Agent": `0sec/${VERSION}`,
+        originator: "0",
+        "User-Agent": `0/${VERSION}`,
       };
     }
     if (this.isGeminiCodeAssist) {
@@ -2941,7 +2941,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
       }
       if (this.provider === "openrouter") {
         headers["HTTP-Referer"] = "https://0.security";
-        headers["X-Title"] = "0sec Security Scanner";
+        headers["X-Title"] = "0 Security Scanner";
       }
       return headers;
     }
@@ -2970,7 +2970,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
    * happens.
    *
    * session_id is process-stable (PROCESS_SESSION_ID, randomised
-   * once at module load). A 0sec-cli invocation = one scan = one
+   * once at module load). A @0/cli invocation = one scan = one
    * session, so the process-lifetime constant is the right
    * granularity. If we ever want per-scan ids inside a long-lived
    * controller process, add a setter on the runtime; for now this
@@ -2990,7 +2990,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
     base["Authorization"] = `Bearer ${accessToken}`;
     if (accountId) base["ChatGPT-Account-Id"] = accountId;
     base["session_id"] = PROCESS_SESSION_ID;
-    // SSE accept header — 0sec's existing code uses fetch with raw
+    // SSE accept header — 0's existing code uses fetch with raw
     // body so the AI SDK doesn't set this for us. Codex backend
     // streams via SSE; without an explicit Accept header some
     // intermediate CDN can downgrade to non-streaming + buffer the
@@ -3206,7 +3206,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
   private noKeyError(): string {
     return (
       "No provider credential found. Set one of:\n" +
-      "  env ZERO_CHATGPT_OAUTH_REFRESH_TOKEN=... 0sec <command> (ChatGPT Codex subscription auth)\n" +
+      "  env ZERO_CHATGPT_OAUTH_REFRESH_TOKEN=... 0 <command> (ChatGPT Codex subscription auth)\n" +
       "  export OPENROUTER_API_KEY=sk-or-...   (OpenRouter — many models, one key)\n" +
       "  export DEEPSEEK_API_KEY=...           (DeepSeek — direct Flash 0731 inference)\n" +
       "  export ANTHROPIC_API_KEY=sk-ant-...    (Anthropic — direct Claude access)\n" +
@@ -3218,7 +3218,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
       "  export XAI_API_KEY=...                 (xAI Grok — OpenAI-compatible)\n" +
       "  export OPENCODE_API_KEY=...            (OpenCode Zen — multi-wire gateway)\n" +
       "  export ZERO_COPILOT_GITHUB_TOKEN=...   (GitHub Copilot — device-code OAuth token)\n" +
-      "  Run `0sec login`                     (0sec hosted inference)"
+      "  Run `0 login`                     (0 hosted inference)"
     );
   }
 
@@ -3273,7 +3273,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
         fatalError:
           "Azure OpenAI runtime is selected, but the configuration is incomplete.\n" +
           `Missing: ${missing.join("; ")}\n` +
-          "0sec will not guess Azure defaults because that can silently route to the wrong endpoint or deployment.",
+          "0 will not guess Azure defaults because that can silently route to the wrong endpoint or deployment.",
       };
     }
 
@@ -3402,7 +3402,7 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
         abort?.throwIfCancelled();
         if (this.provider === "hosted") {
           throw new Error(
-            "0sec hosted request outcome is unknown. Automatic replay is disabled; check your inference usage before retrying.",
+            "0 hosted request outcome is unknown. Automatic replay is disabled; check your inference usage before retrying.",
             { cause: error },
           );
         }
@@ -3448,13 +3448,13 @@ export class LlmApiRuntime implements Runtime, NativeRuntime {
       }
       // Provider 429s and unresolved charges can follow billable work. Retry only
       // when the gateway explicitly proves it rejected pre-dispatch admission.
-      if (this.provider === "hosted" && res.status === 429 && res.headers.get("x-0sec-retry-safe") !== "1") {
+      if (this.provider === "hosted" && res.status === 429 && res.headers.get("x-0-retry-safe") !== "1") {
         return res;
       }
       if (this.provider === "hosted" && res.status >= 500) {
         await res.body?.cancel();
         throw new Error(
-          `0sec hosted request returned HTTP ${res.status}; its outcome may be unknown. Automatic replay is disabled; check your inference usage before retrying.`,
+          `0 hosted request returned HTTP ${res.status}; its outcome may be unknown. Automatic replay is disabled; check your inference usage before retrying.`,
         );
       }
 

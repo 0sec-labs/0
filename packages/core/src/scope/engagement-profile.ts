@@ -48,7 +48,7 @@
 // (`--no-waf-evasion` / `ZERO_WAF_EVASION=0`) WITHOUT selecting a profile —
 // that gap was worth closing on its own.
 
-import type { EngagementPostureRecord } from "@0/shared"
+import type { EngagementPostureRecord } from "@0/shared";
 
 /** Supported engagement profiles. */
 export type EngagementProfileName = "standard" | "conservative";

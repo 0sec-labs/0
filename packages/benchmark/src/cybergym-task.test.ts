@@ -21,7 +21,7 @@ describe("run-cybergym-task.sh", () => {
     roots.push(root);
     const bin = join(root, "bin");
     const cybergymRoot = join(root, "cybergym");
-    const osecRoot = join(root, "0sec");
+    const osecRoot = join(root, "0");
     const auth = join(root, "auth.json");
     const pythonCalls = join(root, "python-calls.txt");
     mkdirSync(bin);
@@ -65,7 +65,7 @@ exit 99
     roots.push(root);
     const bin = join(root, "bin");
     const cybergymRoot = join(root, "cybergym");
-    const osecRoot = join(root, "0sec");
+    const osecRoot = join(root, "0");
     const auth = join(root, "auth.json");
     const dockerCalls = join(root, "docker-calls.txt");
     const containerCalls = join(root, "container-calls.txt");

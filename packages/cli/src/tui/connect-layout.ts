@@ -27,7 +27,7 @@
  *
  * ## The cloud row
  *
- * The first row in the list is always the "0sec Cloud" cloud-sign-in row. It
+ * The first row in the list is always the "0 Cloud" cloud-sign-in row. It
  * sits outside the Popular / All provider groups and is always selectable. It
  * launches the hosted browser login flow (hostedBrowserLoginFlow from
  * commands/auth.ts) which opens a browser, polls for session completion, and
@@ -55,7 +55,7 @@
 import { PROVIDER_DEVICE_AUTH } from "./device-auth.js";
 import { PROVIDERS, providerStates, type ProviderState } from "./provider-status.js";
 import type { DialogItem } from "./dialog-select-layout.js";
-import type { UsageAccount } from "@0/core"
+import type { CreditAccount } from "@0/core";
 import { formatBalanceDetail } from "./hosted-balance.js";
 import {
   DIALOG_HOST_FOOTER_ROWS,
@@ -402,7 +402,7 @@ export function connectDialogItems({
           case "verified": {
             const account = hostedVerification.account;
             meta = account && account.state !== "ready"
-              ? `connected · usage ${account.state}`
+              ? `connected · credits ${account.state}`
               : "connected";
             current = true;
             tone = tones?.connected;
@@ -521,7 +521,7 @@ export interface ConnectDetailLine {
  */
 export type HostedVerificationStatus =
   | { readonly kind: "pending" }
-  | { readonly kind: "verified"; readonly account?: UsageAccount | null }
+  | { readonly kind: "verified"; readonly account?: CreditAccount | null }
   | { readonly kind: "rejected" }
   | { readonly kind: "unreachable" };
 
@@ -564,7 +564,7 @@ export function connectDetailLines(
     push("0cloud", "title");
     separate();
     push("Sign in once to use the 0.security-managed model catalog.", "text");
-    push("Included usage and prepaid API balance are checked when used.", "muted");
+    push("Model access and credits are checked when used.", "muted");
     separate();
     if (connected) {
       const v = hostedVerification;

@@ -2,22 +2,26 @@ import type { Command } from "commander";
 import chalk from "chalk";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { ToolExecutor,
-getToolsForRole,
-loadScope,
-extractAttributionFromScopeJson,
-resolveAttribution,
-RateLimiter,
-parseRateLimitFlag,
-resolveEngagementProfile,
-extractEngagementFromScopeJson,
-describeEngagementPosture, } from "@0/core"
-import type { EngagementPosture,
-EngagementProfileInputs,
-HostRateConfig,
-RateLimiterConfig, } from "@0/core"
-import { osecDB, resolveOsecRunStorage } from "@0/db"
-import type { AuthConfig } from "@0/shared"
+import {
+  ToolExecutor,
+  getToolsForRole,
+  loadScope,
+  extractAttributionFromScopeJson,
+  resolveAttribution,
+  RateLimiter,
+  parseRateLimitFlag,
+  resolveEngagementProfile,
+  extractEngagementFromScopeJson,
+  describeEngagementPosture,
+} from "@0/core";
+import type {
+  EngagementPosture,
+  EngagementProfileInputs,
+  HostRateConfig,
+  RateLimiterConfig,
+} from "@0/core";
+import { osecDB, resolveOsecRunStorage } from "@0/db";
+import type { AuthConfig } from "@0/shared";
 import { z } from "zod";
 
 type McpServerOptions = {
@@ -66,11 +70,11 @@ function resolveMcpToolNames(raw: string | undefined): ReadonlySet<string> {
   if (raw === undefined) return MCP_LIVE_TOOL_NAMES;
   const requested = [...new Set(raw.split(",").map((name) => name.trim()).filter(Boolean))];
   if (requested.length === 0) {
-    throw new Error("--tools must name at least one 0sec MCP tool.");
+    throw new Error("--tools must name at least one 0 MCP tool.");
   }
   const unsupported = requested.filter((name) => !MCP_LIVE_TOOL_NAMES.has(name));
   if (unsupported.length > 0) {
-    throw new Error(`--tools contains unsupported 0sec MCP tool(s): ${unsupported.join(", ")}`);
+    throw new Error(`--tools contains unsupported 0 MCP tool(s): ${unsupported.join(", ")}`);
   }
   return new Set(requested);
 }
@@ -200,7 +204,7 @@ function withToolTimeout(
 /**
  * Resolve the engagement hardening posture, or exit 2 on malformed config.
  *
- * Same contract as the `0sec scan` pre-flight: a typo'd
+ * Same contract as the `0 scan` pre-flight: a typo'd
  * `--engagement-profile`, a bad `ZERO_ENGAGEMENT_RATE_RPS`, or a malformed
  * scope-file `engagement` block is an operator error that must surface at boot
  * — not after the server has already served a session at default noise levels.
@@ -294,7 +298,7 @@ export function registerMcpServerCommand(program: Command): void {
       // Engagement hardening posture (`scope/engagement-profile.ts`). Resolved
       // BEFORE the DB is opened, matching the scope-rejection ordering above:
       // a config error must fail without leaving a DB handle behind. Same
-      // scope-file > env > CLI precedence and same exit code as `0sec scan`.
+      // scope-file > env > CLI precedence and same exit code as `0 scan`.
       //
       // `--no-waf-evasion` sets opts.wafEvasion to false; commander leaves it
       // `true` when the flag is absent, which we map back to "unset" so the
@@ -383,7 +387,7 @@ export function registerMcpServerCommand(program: Command): void {
       );
 
       const server = new McpServer(
-        { name: "0sec-mcp", version: "0.1.0" },
+        { name: "0-mcp", version: "0.1.0" },
         { capabilities: { logging: {} } },
       );
 
@@ -423,9 +427,9 @@ export function registerMcpServerCommand(program: Command): void {
 
       try {
         await server.connect(transport);
-        console.error(`0sec MCP server running for ${target} (scan ${scanId})`);
+        console.error(`0 MCP server running for ${target} (scan ${scanId})`);
       } catch (error) {
-        console.error("Fatal error in 0sec MCP server:", error);
+        console.error("Fatal error in 0 MCP server:", error);
         await executor.cleanup();
         db.close();
         process.exit(1);

@@ -1,6 +1,8 @@
-import { appendStageAction,
-normalizeStageAction,
-normalizeStageEndDetail, } from "@0/core"
+import {
+  appendStageAction,
+  normalizeStageAction,
+  normalizeStageEndDetail,
+} from "@0/core";
 import { buildShareUrl } from "../utils.js";
 
 export type SessionMode = "audit" | "review" | "scan";

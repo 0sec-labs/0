@@ -3,7 +3,7 @@
  *
  * This module is the FIRST increment of the hub (see DESIGN.md). It owns the
  * data model for the set of peers that can address one another — concurrently
- * running subagents inside one 0sec session, and separate 0sec sessions working
+ * running subagents inside one 0 session, and separate 0 sessions working
  * the same project directory — and the pure reconciliation logic that keeps that
  * set consistent as peers appear, heartbeat, restart, and go stale.
  *

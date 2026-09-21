@@ -103,7 +103,7 @@ describe("toScopeJson — supported asset types", () => {
 
 describe("toScopeFile — round-trip into ScopePolicy", () => {
   it("writes a JSON that loadScope() parses without error", () => {
-    const dir = mkdtempSync(join(tmpdir(), "0sec-h1-scope-"));
+    const dir = mkdtempSync(join(tmpdir(), "0-h1-scope-"));
     const result = toScopeFile(
       program("flutteruki"),
       [
@@ -140,7 +140,7 @@ describe("toScopeFile — round-trip into ScopePolicy", () => {
   });
 
   it("the on-disk JSON is human-readable (pretty-printed)", () => {
-    const dir = mkdtempSync(join(tmpdir(), "0sec-h1-scope-"));
+    const dir = mkdtempSync(join(tmpdir(), "0-h1-scope-"));
     const result = toScopeFile(program("p"), [scope("URL", "api.example.com")], {
       homeDir: dir,
     });

@@ -46,7 +46,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 BENCH_ROOT = HERE.parent  # packages/benchmark
-# packages/benchmark -> packages -> 0sec -> repo root
+# packages/benchmark -> packages -> 0 -> repo root
 REPO_ROOT = BENCH_ROOT.parent.parent.parent
 
 DEFAULT_MODEL = BENCH_ROOT / "results" / "triage-router-v1.json"

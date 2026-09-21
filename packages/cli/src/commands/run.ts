@@ -5,9 +5,9 @@ import { execFile } from "node:child_process";
 import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import chalk from "chalk";
-import { VERSION } from "@0/shared"
-import type { ScanDepth, OutputFormat, RuntimeMode, ScanMode, AuthConfig, ScanReport, SeedFinding } from "@0/shared"
-import type { CostBreakdownEntry } from "@0/core"
+import { VERSION } from "@0/shared";
+import type { ScanDepth, OutputFormat, RuntimeMode, ScanMode, AuthConfig, ScanReport, SeedFinding } from "@0/shared";
+import type { CostBreakdownEntry } from "@0/core";
 import { formatAuditReport, formatReviewReport, formatReport, generatePdfReport } from "../formatters/index.js";
 import { buildShareUrl, checkRuntimeAvailability, getRuntimeAvailability } from "../utils.js";
 import { formatCrossValidatedLeads, type CrossValidatedLeadsSummary } from "./cross-validated-leads.js";
@@ -76,13 +76,13 @@ export interface RunOptions {
   rateLimit?: string;
   /** Open the operator TUI after the run completes. */
   tui?: boolean;
-  /** Path to a JSON scope file (0sec#215). Threaded into ScanConfig.scopeFile. */
+  /** Path to a JSON scope file (0#215). Threaded into ScanConfig.scopeFile. */
   scopeFile?: string;
-  /** Opt-out for the scanner-binary suppression gate (0sec#217). Threaded into ScanConfig.allowScanners. */
+  /** Opt-out for the scanner-binary suppression gate (0#217). Threaded into ScanConfig.allowScanners. */
   allowScanners?: boolean;
-  /** Repeatable `--attribution-header NAME=VALUE` (0sec#216). */
+  /** Repeatable `--attribution-header NAME=VALUE` (0#216). */
   attributionHeaders?: string[];
-  /** `--attribution-ua <token>` (0sec#216). */
+  /** `--attribution-ua <token>` (0#216). */
   attributionUaToken?: string;
   /**
    * `--engagement-profile <name>` — engagement hardening posture
@@ -107,7 +107,7 @@ export interface RunOptions {
   httpAuditRateLimitRps?: number;
   httpAuditKillAfterSec?: number;
   /**
-   * Tool-call dispatch protocol (0sec#232) — `json`, `xml`, or `auto`.
+   * Tool-call dispatch protocol (0#232) — `json`, `xml`, or `auto`.
    * Threaded into ScanConfig.dispatchMode and consulted only by the
    * legacy text-based agent loop.
    */
@@ -164,7 +164,7 @@ export interface RunOptions {
   /**
    * Pre-computed candidate vulnerable spans, parsed from an external producer
    * (today: GemmaForge, schema `gemmaforge.leads/v1`). Only consumed when
-   * `targetType === "source-code"`. See `0sec#368` for the broader plan to
+   * `targetType === "source-code"`. See `0#368` for the broader plan to
    * inject these into the agent's worklist before static scanner prioritisation runs.
    */
   seedFindings?: SeedFinding[];
@@ -177,7 +177,7 @@ export interface RunOptions {
    */
   npmDynamicDiscovery?: boolean;
   /**
-   * Emit target (0sec#377). Default unset → existing terminal/json/etc.
+   * Emit target (0#377). Default unset → existing terminal/json/etc.
    * `pr` → turn each reproduced finding into a GitHub PR (repro + suggested
    * patch from the fix-template registry). Unverified findings roll up into
    * a single `hypotheses.md`.
@@ -366,7 +366,7 @@ function crossValidatedSeverityColor(severity: string): (text: string) => string
 }
 
 /**
- * Print the cross-validated-leads highlight block (0sec FoxGuard Phase 4).
+ * Print the cross-validated-leads highlight block (0 FoxGuard Phase 4).
  * Purely additive end-of-scan output: a scan with no agreeing leads never
  * reaches here, and this never touches exit codes or the result line.
  */
@@ -387,7 +387,7 @@ async function postFinalResultToCloud(report: unknown): Promise<void> {
   const url = `${config.sinkUrl.replace(/\/+$/, "")}/scans/${encodeURIComponent(config.scanId)}/findings`;
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
-    "X-0sec-Scan-Id": config.scanId,
+    "X-0-Scan-Id": config.scanId,
   };
   if (config.token) headers.Authorization = `Bearer ${config.token}`;
 
@@ -400,23 +400,23 @@ async function postFinalResultToCloud(report: unknown): Promise<void> {
     if (!res.ok) {
       const text = await res.text().catch(() => "");
       process.stderr.write(
-        `[0sec cloud-sink] report POST ${url} returned ${res.status}: ${text.slice(0, 200)}\n`,
+        `[0 cloud-sink] report POST ${url} returned ${res.status}: ${text.slice(0, 200)}\n`,
       );
     }
 
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    process.stderr.write(`[0sec cloud-sink] report POST ${url} failed: ${msg}\n`);
+    process.stderr.write(`[0 cloud-sink] report POST ${url} failed: ${msg}\n`);
   }
 }
 export async function runUnified(opts: RunOptions): Promise<void> {
   const { target, depth, format, runtime, timeout } = opts;
   const core = await loadCoreModule();
 
-  // ── Journal-based resume (0sec#374) ───────────────────────────────
+  // ── Journal-based resume (0#374) ───────────────────────────────
   let effectiveResumeScanId = opts.resumeScanId;
 
-  // ── Journal branching (0sec#250) ─────────────────────────────────
+  // ── Journal branching (0#250) ─────────────────────────────────
   if (opts.branchFromEntry !== undefined) {
     if (!effectiveResumeScanId) {
       console.error(chalk.red("--branch-from requires --resume <run-id>"));
@@ -476,7 +476,7 @@ export async function runUnified(opts: RunOptions): Promise<void> {
   // must not require the Codex CLI binary. Both env vars are valid
   // activations — refresh token is the long-lived OAuth credential the
   // local CLI uses, while access token is what the cloud worker forwards
-  // to sandboxes (see 0sec-cloud PR #324). detectProvider in
+  // to sandboxes (see 0-cloud PR #324). detectProvider in
   // packages/core/src/runtime/llm-api.ts accepts either pair, so the
   // preflight gate must accept either pair too.
   const directCodexProviderConfigured =
@@ -616,7 +616,7 @@ export async function runUnified(opts: RunOptions): Promise<void> {
         const extension = format === "pdf" ? "pdf" : "html";
         const filePath = opts.reportPath
           ? resolve(opts.reportPath)
-          : join(tmpdir(), `0sec-report-${Date.now()}.${extension}`);
+          : join(tmpdir(), `0-report-${Date.now()}.${extension}`);
         if (format === "pdf") {
           await generatePdfReport(toScanReport(reportAny), filePath);
         } else {
@@ -649,7 +649,7 @@ export async function runUnified(opts: RunOptions): Promise<void> {
       console.log("");
       console.log(chalk.gray("  --tui post-scan view is no longer bundled in the npm package."));
       console.log(chalk.gray("  Install the standalone binary for the full OpenTUI experience:"));
-      console.log(chalk.gray("    curl -fsSL https://raw.githubusercontent.com/0sec-labs/0sec/main/install.sh | bash"));
+      console.log(chalk.gray("    curl -fsSL https://raw.githubusercontent.com/0sec-labs/0/main/install.sh | bash"));
       console.log("");
     }
 
@@ -665,7 +665,7 @@ export async function runUnified(opts: RunOptions): Promise<void> {
     const estimatedCostUsd = getEstimatedCost(reportAny);
     const usage = getUsage(reportAny);
 
-    // ── Emit findings as PRs (0sec#377) ──
+    // ── Emit findings as PRs (0#377) ──
     if (opts.emit === "pr") {
       const findings = (report as any).findings ?? [];
       const core = await loadCoreModule();
@@ -677,7 +677,7 @@ export async function runUnified(opts: RunOptions): Promise<void> {
       const repoRoot = opts.targetType === "source-code" && existsSync(target)
         ? resolve(target)
         : process.cwd();
-      const outDir = opts.emitOutDir ?? join(tmpdir(), `0sec-emit-${Date.now()}`);
+      const outDir = opts.emitOutDir ?? join(tmpdir(), `0-emit-${Date.now()}`);
       console.log(chalk.blue(`[emit pr] ${findings.length} finding(s); repo=${repoRoot} base=${opts.emitPrBase ?? "main"}${opts.emitPrDryRun ? " (dry-run)" : ""}`));
       const emitReport = await core.emitFindingsAsPRs(findings, {
         repoRoot,

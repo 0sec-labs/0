@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import type { Command } from "commander";
-import type { Finding } from "@0/shared"
+import type { Finding } from "@0/shared";
 
 function print(value: unknown): void {
   process.stdout.write(JSON.stringify(value, null, 2) + "\n");
@@ -62,7 +62,7 @@ export function registerResearchCommand(program: Command): void {
 
   research
     .command("linux-matrix")
-    .description("Import externally executed vulnerable-vs-patched boot logs; 0sec validates and hashes them but does not execute boots")
+    .description("Import externally executed vulnerable-vs-patched boot logs; 0 validates and hashes them but does not execute boots")
     .requiredOption("--matrix <path>", "Versioned external boot-matrix manifest JSON")
     .requiredOption("--finding <path>", "Existing Finding JSON to bind the proof to")
     .option("--artifact-root <path>", "Research artifact root", ".0-research")

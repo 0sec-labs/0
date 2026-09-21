@@ -132,8 +132,8 @@ describe("default theme", () => {
   });
 
   it("is the fallback", () => {
-    expect(DEFAULT_THEME_NAME).toBe("0sec");
-    expect(getTheme(DEFAULT_THEME_NAME)).toBe(THEMES["0sec"].palette);
+    expect(DEFAULT_THEME_NAME).toBe("0");
+    expect(getTheme(DEFAULT_THEME_NAME)).toBe(THEMES["0"].palette);
   });
 
   it("reproduces severityTone's mapping", () => {
@@ -303,7 +303,7 @@ describe("contrast sweep", () => {
       }),
     );
     expect(worst).toEqual({
-      "0sec": 4.93,
+      "0": 4.93,
       dark: 4.32,
       light: 5.24,
       "high-contrast": 7.75,
@@ -422,7 +422,7 @@ describe("semantic colours survive colour blindness", () => {
       allThemes().map(({ name, palette }) => [name, Number(semanticSeparation(palette).toFixed(3))]),
     );
     expect(achieved).toEqual({
-      "0sec": 1.175,
+      "0": 1.175,
       dark: 1.188,
       light: 1.254,
       "high-contrast": 1.319,
@@ -816,7 +816,7 @@ import {
 
 const themeHomes: string[] = [];
 function makeThemeHome(): string {
-  const dir = mkdtempSync(join(tmpdir(), "0sec-installed-themes-"));
+  const dir = mkdtempSync(join(tmpdir(), "0-installed-themes-"));
   themeHomes.push(dir);
   return dir;
 }
@@ -838,7 +838,7 @@ function seedInstalledTheme(home: string, id: string, palette = GOOD_PALETTE): v
 }
 
 describe("installed theme paths + id safety", () => {
-  it("places themes under the shared 0sec state dir", () => {
+  it("places themes under the shared 0 state dir", () => {
     expect(installedThemesDir("/home/x")).toBe(`/home/x/.0/${INSTALLED_THEMES_DIRNAME}`);
   });
   it("accepts safe ids and rejects traversal / unsafe ones", () => {
@@ -1084,8 +1084,8 @@ describe("syntax / diff sub-palette (additive optional group)", () => {
     expect(degraded.syntaxKeyword).toMatch(/^#[0-9A-F]{6}$/);
   });
 
-  it("gives the 0sec theme a genuinely polychrome code palette (OMP hues, not an orange wash)", () => {
-    const p = THEMES["0sec"].palette;
+  it("gives the 0 theme a genuinely polychrome code palette (OMP hues, not an orange wash)", () => {
+    const p = THEMES["0"].palette;
     const c = resolveSyntaxColors(p);
     // keyword / string / function / type / number must all differ from one
     // another AND from the orange brand PRIMARY — i.e. real syntax colouring,
@@ -1093,7 +1093,7 @@ describe("syntax / diff sub-palette (additive optional group)", () => {
     const hues = [c.keyword, c.string, c.function, c.type, c.number];
     expect(new Set(hues).size).toBe(hues.length);
     for (const h of hues) expect(h).not.toBe(p.PRIMARY);
-    // Every 0sec syntax token clears AA (4.5:1) on the PANEL it renders on.
+    // Every 0 syntax token clears AA (4.5:1) on the PANEL it renders on.
     for (const token of SYNTAX_TOKENS) {
       const hex = (p as Record<string, string>)[token];
       if (!hex) continue;

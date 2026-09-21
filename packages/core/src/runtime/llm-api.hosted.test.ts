@@ -62,7 +62,7 @@ describe("hosted catalog selection", () => {
       ] });
       const request = JSON.parse(String(init?.body));
       if (request.model === "primary" || request.model === "hosted-chat") {
-        return Response.json({ error: { message: "rate limit" } }, { status: 429, headers: { "x-0sec-retry-safe": "1" } });
+        return Response.json({ error: { message: "rate limit" } }, { status: 429, headers: { "x-0-retry-safe": "1" } });
       }
       if (!url.endsWith("/responses") || !Array.isArray(request.input) || request.messages) {
         return Response.json({ error: "wrong model protocol" }, { status: 400 });

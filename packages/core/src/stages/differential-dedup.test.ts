@@ -6,7 +6,7 @@
  */
 
 import { describe, it, expect } from "vitest";
-import type { Finding } from "@0/shared"
+import type { Finding } from "@0/shared";
 import {
   normalizeFrame,
   crashSignatureFromText,

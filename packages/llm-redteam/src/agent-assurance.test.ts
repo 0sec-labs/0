@@ -2,8 +2,10 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { AgentActionEvidenceManifestSchema,
-type AgentActionScenario, } from "@0/shared"
+import {
+  AgentActionEvidenceManifestSchema,
+  type AgentActionScenario,
+} from "@0/shared";
 import {
   agentActionConfigurationChanges,
   httpActionOracle,
@@ -100,7 +102,7 @@ describe("agent action assurance", () => {
     ]);
     expect(requests).toHaveLength(3);
     expect(requests[1]?.body).toMatchObject({
-      protocol_version: "0sec.agent-action-target/v1",
+      protocol_version: "0.agent-action-target/v1",
       run_id: "f9ab241b-1de5-4bb8-b65c-023fba4d35ed",
       mcp: { endpoint: targetConfig().mcpEndpoint },
     });
@@ -161,7 +163,7 @@ describe("agent action assurance", () => {
       runId: "8a8e6c28-a20b-441e-9c29-3d3637dfe9a5",
       canaryToken: "CANARY_bundle",
     });
-    const output = mkdtempSync(join(tmpdir(), "0sec-agent-assurance-"));
+    const output = mkdtempSync(join(tmpdir(), "0-agent-assurance-"));
     roots.push(output);
     const bundle = await writeAgentActionEvidenceBundle(run, output);
     const request = readFileSync(join(output, "artifacts", "request.json"), "utf8");

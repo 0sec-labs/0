@@ -1,20 +1,20 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { Command } from "commander";
-import type { UsageAccount } from "@0/core"
+import type { CreditAccount } from "@0/core";
 import { registerHostedCommand } from "../hosted.js";
 
 const output = vi.hoisted(() => ({ stdout: vi.fn(), stderr: vi.fn() }));
 vi.mock("../../presentation/process-output.js", () => ({ consolePresentationOutput: output }));
 const originalExitCode = process.exitCode;
 
-function account(): UsageAccount {
+function account(): CreditAccount {
   return {
-    schemaVersion: "usage-v2", snapshotAt: "2026-09-18T12:00:00.000Z",
+    schemaVersion: "credits-v1", snapshotAt: "2026-09-18T12:00:00.000Z", policyVersion: "credits-v1",
     scope: { orgId: "fixture-org" }, state: "ready", reason: null,
-    plan: { id: "pro", name: "Pro", monthlyPriceUsd: "39.00" },
-    included: { state: "active", usedPercent: 37.5, resetsAt: "2026-10-18T12:00:00.000Z" },
-    prepaid: { balanceUsd: "123456789.012345678", fallbackEnabled: false },
-    canManageBilling: true,
+    free: { state: "active", claimableCreditNanos: "0", spendableCreditNanos: "1", heldCreditNanos: null, resetAt: null },
+    subscription: { state: "none", priceCents: 1500, periodStart: null, periodEnd: null, windows: [] },
+    prepaid: { spendableCreditNanos: "123456789012345678", heldCreditNanos: "0", settledDeficitCreditNanos: "0", holdShortfallCreditNanos: "0", consentEnabled: false },
+    purchase: { enabled: false, presets: [], customMinCents: 1000, customMaxCents: 100000, stepCents: 100, currency: "usd" },
     admission: { eligible: true, reason: null },
   };
 }
@@ -34,16 +34,16 @@ afterEach(() => {
 
 async function run(args: string[], body: unknown, status = 200): Promise<string> {
   vi.stubGlobal("fetch", async () => Response.json(body, { status }));
-  const command = new Command("0sec");
+  const command = new Command("0");
   registerHostedCommand(command);
-  await command.parseAsync(["node", "0sec", ...args]);
+  await command.parseAsync(["node", "0", ...args]);
   return String(output.stdout.mock.lastCall?.[0] ?? "");
 }
 
-it("shows included percentage and exact prepaid money", async () => {
+it("shows exact credits without rounding a spendable nano to zero", async () => {
   const text = await run(["balance"], account());
-  expect(text).toContain("37.5%");
-  expect(text).toContain("$123456789.012345678");
+  expect(text).toContain("0.000000001 credits");
+  expect(text).toContain("123456789.012345678 credits");
   expect(process.exitCode).toBe(0);
 });
 
@@ -51,7 +51,8 @@ it("keeps JSON amounts as exact wire strings and excludes private extensions", a
   const parsed = JSON.parse(await run(["balance", "--json"], {
     ...account(), supplierCostUsd: "private-cost-value",
   }));
-  expect(parsed.prepaid.balanceUsd).toBe("123456789.012345678");
+  expect(parsed.prepaid.spendableCreditNanos).toBe("123456789012345678");
+  expect(parsed.free.spendableCreditNanos).toBe("1");
   expect(JSON.stringify(parsed)).not.toContain("private-cost-value");
 });
 

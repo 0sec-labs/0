@@ -1,4 +1,4 @@
-name: "0sec: Docker replay"
+name: "0: Docker replay"
 
 # Push events cover trusted repository branches, including feature branches.
 # Do not add pull_request_target checkout/execution: fork code remains subject

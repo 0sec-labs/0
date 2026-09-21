@@ -19,7 +19,7 @@ import {
 import { constants as fsConstants } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
-import type { Finding } from "@0/shared"
+import type { Finding } from "@0/shared";
 import type {
   ResearchCandidate,
   ResearchContext,
@@ -143,7 +143,7 @@ interface ValidatedBundle {
 export type WindowsHyperVCandidate = ResearchCandidate<HyperVCandidatePayload>;
 
 export interface WindowsHyperVImportVerdict {
-  verdictSchema: "0sec.windows-hyperv-import-verdict/v1";
+  verdictSchema: "0.windows-hyperv-import-verdict/v1";
   executionOrigin: "external";
   producer: "0verse";
   schemaVersion: typeof EVIDENCE_SCHEMA;
@@ -388,7 +388,7 @@ function validateWorkerAcceptance(
   const allowedSigners = process.env["ZERO_HYPERV_ACCEPTANCE_ALLOWED_SIGNERS"];
   if (!allowedSigners) throw new Error("ZERO_HYPERV_ACCEPTANCE_ALLOWED_SIGNERS is required");
   const signerFile = regularFile(allowedSigners, "worker acceptance allowed signers");
-  const temporary = mkdtempSync(join(tmpdir(), "0sec-hyperv-signature-"));
+  const temporary = mkdtempSync(join(tmpdir(), "0-hyperv-signature-"));
   try {
     const signaturePath = join(temporary, "acceptance.sig");
     writeFileSync(signaturePath, acceptance.signature_ssh, { encoding: "utf8", flag: "wx" });
@@ -674,7 +674,7 @@ export class WindowsHyperVImportAdapter implements TargetResearchAdapter<
         });
         snapshots.unshift(receiptPath);
         const verdict: WindowsHyperVImportVerdict = {
-          verdictSchema: "0sec.windows-hyperv-import-verdict/v1",
+          verdictSchema: "0.windows-hyperv-import-verdict/v1",
           executionOrigin: "external",
           producer: "0verse",
           schemaVersion: EVIDENCE_SCHEMA,

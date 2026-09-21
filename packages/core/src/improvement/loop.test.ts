@@ -25,7 +25,7 @@ function makeWritable(path: string): void {
 }
 
 beforeEach(() => {
-  root = mkdtempSync(join(tmpdir(), "0sec-feedback-"));
+  root = mkdtempSync(join(tmpdir(), "0-feedback-"));
   const sourceRoot = join(root, "source");
   mkdirSync(join(sourceRoot, "src"), { recursive: true });
   writeFileSync(join(sourceRoot, "src/worker.cjs"), original);

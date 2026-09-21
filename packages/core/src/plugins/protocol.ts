@@ -44,7 +44,7 @@ export const MAX_FRAME_CHARS = 1_048_576;
 export const MAX_RESULT_CHARS = 100_000;
 
 /** Appended when {@link MAX_RESULT_CHARS} clamps a result. */
-export const RESULT_TRUNCATION_MARKER = "\n[0sec-plugin: result truncated]";
+export const RESULT_TRUNCATION_MARKER = "\n[0-plugin: result truncated]";
 
 /** Maximum tools a single `list_tools` response may enumerate. */
 export const MAX_TOOLS_IN_LIST = 64;

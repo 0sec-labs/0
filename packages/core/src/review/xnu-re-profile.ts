@@ -1,4 +1,4 @@
-import type { SemgrepFinding } from "@0/shared"
+import type { SemgrepFinding } from "@0/shared";
 
 /**
  * Prompt for the `xnu-re` review profile: reviewing DECOMPILED Apple kext

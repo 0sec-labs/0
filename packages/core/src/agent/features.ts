@@ -20,12 +20,12 @@
  * The "explicit enablement" noted above now has one documented form, so an
  * A/B run does not depend on reconstructing the flag set by reading source:
  *
- *   env ZERO_FEATURE_PRESET=fp-moat 0sec scan …
- *   0sec scan --features fp-moat …
+ *   env ZERO_FEATURE_PRESET=fp-moat 0 scan …
+ *   0 scan --features fp-moat …
  *
  * The preset's membership lives in `agent/feature-presets.ts` and is pinned by
  * test. Applying it never overwrites a flag that is already set, so
- * `env ZERO_FEATURE_POV_GATE=0 0sec …` alongside the preset gives you a clean
+ * `env ZERO_FEATURE_POV_GATE=0 0 …` alongside the preset gives you a clean
  * single-layer ablation.
  *
  * Enabling layers is only half of a defensible claim; the other half is being
@@ -251,7 +251,7 @@ export const features = {
   },
 
   /**
-   * Live cloud-surface testing (0sec#925). Exposes `cloud_s3_probe` and
+   * Live cloud-surface testing (0#925). Exposes `cloud_s3_probe` and
    * `cloud_validate_credentials` to the attack agent so it can test S3 buckets
    * for public access + orphaned-bucket takeover and safely validate harvested
    * AWS credentials (read-only). All probes are anonymous or read/verify-only —
@@ -391,7 +391,7 @@ export const features = {
    * the scan's slice type (xbow-wb, xbow-bb, npm).
    *
    * Default OFF until the router is validated via A/B testing on xbow-bench
-   * and npm-bench. See 0sec#113 for the design doc.
+   * and npm-bench. See 0#113 for the design doc.
    */
   get learnedRouter(): boolean { return env("ZERO_FEATURE_LEARNED_ROUTER", false); },
 
@@ -400,7 +400,7 @@ export const features = {
    * When enabled, every finding is sent through a `RouterModel` that
    * decides which subset of the 11 triage layers to invoke for that
    * specific finding. v0 ships an explicit-rule router encoded from the
-   * 0sec#72 per-profile ablation; a learned classifier replaces the
+   * 0#72 per-profile ablation; a learned classifier replaces the
    * rules in a follow-up PR without touching the dispatch site.
    *
    * Distinct from `learnedRouter` above: `learnedRouter` is the XGBoost
@@ -410,7 +410,7 @@ export const features = {
    * model has spoken.
    *
    * Default OFF — opt in via ZERO_FEATURE_DYNAMIC_TRIAGE=1. See
-   * 0sec#113 for the design doc and 0sec#67 for the joint paper plan.
+   * 0#113 for the design doc and 0#67 for the joint paper plan.
    */
   get dynamicTriageRouting(): boolean { return env("ZERO_FEATURE_DYNAMIC_TRIAGE", false); },
 
@@ -460,7 +460,7 @@ export const features = {
 
   /**
    * Best-effort target-history preflight for source review. When a local repo
-   * path is known, 0sec infers repository/package/product hints, queries live
+   * path is known, 0 infers repository/package/product hints, queries live
    * prior-vulnerability intel, and injects a compact audit-graph summary into
    * the review prompt before the agent starts.
    *
@@ -484,7 +484,7 @@ export const features = {
    * (a handful of extra messages preserved verbatim in the user
    * compaction-summary block) is small. BoxPwnr-inspired: see
    * `src/boxpwnr/solvers/single_loop_compactation.py` in 0ca/BoxPwnr,
-   * and 0sec#229 for the design discussion.
+   * and 0#229 for the design discussion.
    *
    * Implemented as a getter so the CLI `--features` flag — which sets
    * the env var inside the command action AFTER this module is imported

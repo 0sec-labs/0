@@ -225,7 +225,7 @@ export function sanitizeUntrustedToolResult(raw: string): SanitizeResult {
 
   const neutralized = markers.size > 0;
   const note = neutralized
-    ? `${FRAMING_NOTE} (0sec neutralized injection markers: ${[...markers].sort().join(", ")})`
+    ? `${FRAMING_NOTE} (0 neutralized injection markers: ${[...markers].sort().join(", ")})`
     : FRAMING_NOTE;
 
   const content = `${UNTRUSTED_OPEN} ${note}\n${working}\n${UNTRUSTED_CLOSE}`;

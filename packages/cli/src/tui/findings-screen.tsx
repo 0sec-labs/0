@@ -1,7 +1,7 @@
 /** @jsxImportSource @opentui/react */
 import { useEffect, useMemo, useRef, useState, type SetStateAction } from "react";
 import { useKeyboard } from "@opentui/react";
-import type { Finding, FindingTriageStatus } from "@0/shared"
+import type { Finding, FindingTriageStatus } from "@0/shared";
 import { useTheme } from "./theme-context.js";
 import { useSettings } from "./settings-store.js";
 import { severityToneFor } from "./themes.js";
@@ -53,14 +53,14 @@ import {
 
 // ── Source-fix action (`f` on the Findings screen) ──
 //
-// These mirror the defaults of `0sec fix` (packages/cli/src/commands/fix.ts)
+// These mirror the defaults of `0 fix` (packages/cli/src/commands/fix.ts)
 // so the TUI and the CLI behave identically. `apply` is deliberately absent:
 // the CLI defaults `--apply` to false and applying stays an explicit,
 // separate operator action.
 const FIX_MODEL_TIMEOUT_MS = 600_000;
 const FIX_TEST_TIMEOUT_MS = 300_000;
 const FIX_MAX_ATTEMPTS = 3;
-/** Operator-owned regression command; `0sec fix` requires --test-command. */
+/** Operator-owned regression command; `0 fix` requires --test-command. */
 const FIX_TEST_COMMAND_ENV = "ZERO_FIX_TEST_COMMAND";
 
 // Upper bound on how far a wrapped finding detail may run inside its
@@ -159,7 +159,7 @@ export function FindingsScreen({ options, onExit, shell }: { options: FindingsSc
             limit: options.all ? options.limit : 1000,
           }) as FindingsRow[];
           // The scan's target doubles as the repo the source-fix action runs
-          // in, mirroring the `<repo>` argument of `0sec fix`.
+          // in, mirroring the `<repo>` argument of `0 fix`.
           const targets: Record<string, string> = {};
           for (const scanId of new Set(findings.map((row) => row.scanId))) {
             const scan = db.getScan(scanId);
@@ -283,7 +283,7 @@ export function FindingsScreen({ options, onExit, shell }: { options: FindingsSc
   const fixTestCommand = process.env[FIX_TEST_COMMAND_ENV] ?? "";
   const fixSourceFile = useMemo(() => findingSourcePath(selectedFinding), [selectedFinding]);
   // The finding-level predicate runs first so the operator sees the same
-  // reason `0sec fix` would report first.
+  // reason `0 fix` would report first.
   const fixReadiness = useMemo(() => {
     const findingCheck = fixEligibility(selectedFinding);
     if (!findingCheck.eligible) return findingCheck;
@@ -402,7 +402,7 @@ export function FindingsScreen({ options, onExit, shell }: { options: FindingsSc
   };
 
   /**
-   * Run `runSourceFix` exactly as `0sec fix` does, minus `--apply`. The await
+   * Run `runSourceFix` exactly as `0 fix` does, minus `--apply`. The await
    * chain yields to the event loop, so the renderer keeps painting while the
    * model call and the regression command run.
    */
@@ -426,7 +426,7 @@ export function FindingsScreen({ options, onExit, shell }: { options: FindingsSc
         finding,
         runtime,
         testCommand,
-        // `0sec fix` defaults --apply to false. Applying a validated patch
+        // `0 fix` defaults --apply to false. Applying a validated patch
         // stays an explicit, separate operator action; the TUI never widens
         // that gate.
         apply: false,
@@ -658,7 +658,7 @@ export function FindingsScreen({ options, onExit, shell }: { options: FindingsSc
 
     // Source fix. The candidate patch body and the pre/postcondition
     // predicate arrays stay out for the same reason the legacy pane kept
-    // them out: `0sec fix --output` is the supported way to get them.
+    // them out: `0 fix --output` is the supported way to get them.
     lines.push({ text: "" });
     lines.push({ text: "SOURCE FIX", fg: fixPanelTone });
     push(

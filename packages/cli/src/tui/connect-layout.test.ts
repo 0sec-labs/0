@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { UsageAccount } from "@0/core"
+import type { CreditAccount } from "@0/core";
 
 import {
   RECOMMENDED_IDS,
@@ -27,16 +27,50 @@ import {
 } from "./connect-layout.js";
 import { PROVIDERS, providerStates } from "./provider-status.js";
 
-const cloudAcct: UsageAccount = {
-  schemaVersion: "usage-v2",
+/** Minimal CreditAccount fixture for dialog items tests. */
+const cloudAcct: CreditAccount = {
+  schemaVersion: "credits-v1",
   snapshotAt: "2026-09-18T12:00:00.000Z",
+  policyVersion: "credits-v1",
   scope: { orgId: "test-org" },
-  state: "ready",
+  state: "ready" as const,
   reason: null,
-  plan: { id: "pro", name: "Pro", monthlyPriceUsd: "39.00" },
-  included: { state: "active", usedPercent: 25, resetsAt: "2026-10-01T00:00:00.000Z" },
-  prepaid: { balanceUsd: "0", fallbackEnabled: false },
-  canManageBilling: true,
+  free: {
+    state: "active" as const,
+    claimableCreditNanos: "0",
+    spendableCreditNanos: "90000000000",
+    heldCreditNanos: "10000000000",
+    resetAt: "2026-10-01T00:00:00.000Z",
+  },
+  subscription: {
+    state: "none" as const,
+    priceCents: 1500 as const,
+    periodStart: null,
+    periodEnd: null,
+    windows: [] as Array<{
+      kind: "monthly" | "weekly" | "five_hour";
+      limitCreditNanos: string | null;
+      settledCreditNanos: string | null;
+      heldCreditNanos: string | null;
+      availableCreditNanos: string | null;
+      resetsAt: string;
+    }>,
+  },
+  prepaid: {
+    spendableCreditNanos: "0",
+    heldCreditNanos: "0",
+    settledDeficitCreditNanos: "0",
+    holdShortfallCreditNanos: "0",
+    consentEnabled: false,
+  },
+  purchase: {
+    enabled: true,
+    presets: [{ principalCents: 1000, creditNanos: "1000000000000" }],
+    customMinCents: 1000,
+    customMaxCents: 100000,
+    stepCents: 100 as const,
+    currency: "usd" as const,
+  },
   admission: { eligible: true, reason: null },
 };
 
@@ -184,9 +218,8 @@ describe("buildConnectRows", () => {
     expect(rows[0]?.kind).toBe("cloud");
     const providers = rows.filter((row) => row.kind === "provider");
     expect(providers[0]?.provider.auth).toBe("api-key");
-    const activeProviders = PROVIDERS.filter((provider) => !provider.evaluatorOnly);
-    expect(new Set(providers.map((row) => row.provider.id))).toEqual(new Set(activeProviders.map((provider) => provider.id)));
-    expect(providers.length).toBe(activeProviders.length);
+    expect(new Set(providers.map((row) => row.provider.id))).toEqual(new Set(PROVIDERS.map((provider) => provider.id)));
+    expect(providers.length).toBe(PROVIDERS.length);
     const subscription = providers.filter((row) => row.group.id === "subscription");
     // Every OAuth-preferred provider lands in the subscription group, in the
     // PROVIDERS table order: chatgpt-codex, openrouter, kimi, xai, copilot, google.
@@ -565,15 +598,15 @@ describe("cloud verification in the detail pane", () => {
   });
 
   it("keeps exact customer amounts in the connection detail", () => {
-    const account: UsageAccount = {
+    const account: CreditAccount = {
       ...cloudAcct,
-      prepaid: { ...cloudAcct.prepaid, balanceUsd: "123456789.012345678" },
+      prepaid: { ...cloudAcct.prepaid, spendableCreditNanos: "123456789012345678" },
     };
     const lines = connectDetailLines({
       row, cloudConnected: true, hostedVerification: { kind: "verified", account },
     }, 100);
     const text = lines.map((line) => line.text).join("\n");
-    expect(text).toContain("$123456789.012345678");
-    expect(text).toContain("25%");
+    expect(text).toContain("123456789.012345678 credits");
+    expect(text).toContain("Spendable: 90 credits");
   });
 });

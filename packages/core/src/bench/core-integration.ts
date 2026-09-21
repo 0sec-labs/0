@@ -28,7 +28,7 @@ export function createCoreBenchIntegration(
         provisioner: createDockerWebProvisioner(opts.corpusRoot),
         oracle: new ObjectiveOracle(),
         executionMetadata: {
-          harnessId: variant.harnessId ?? "0sec-agentic",
+          harnessId: variant.harnessId ?? "0-agentic",
           ...(variant.model ? { model: variant.model } : {}),
           ...(variant.runtime ? { runtime: variant.runtime } : {}),
         },

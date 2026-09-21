@@ -1,6 +1,6 @@
 /**
  * Bench oracle — turns a scan's emitted evidence into a per-case verdict
- * (0sec#556).
+ * (0#556).
  *
  * The verdict vocabulary is deliberately identical to the cloud verify
  * runners (`services/worker-controller/src/runners/verify-e2b.ts` →

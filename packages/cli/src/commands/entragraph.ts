@@ -2,11 +2,13 @@ import type { Command } from "commander";
 import chalk from "chalk";
 import { readdir, readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
-import { buildEntraGraphFromAzureHound,
-runEntraPathAnalysis,
-type EntraPathAnalysis,
-type EntraPathFinding,
-type IdentitySeverity, } from "@0/core"
+import {
+  buildEntraGraphFromAzureHound,
+  runEntraPathAnalysis,
+  type EntraPathAnalysis,
+  type EntraPathFinding,
+  type IdentitySeverity,
+} from "@0/core";
 
 const DEFAULT_TIMEOUT_MS = "120000";
 

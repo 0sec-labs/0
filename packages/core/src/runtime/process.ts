@@ -6,7 +6,7 @@ import { writeFileSync } from "node:fs";
 import type { Runtime, RuntimeConfig, RuntimeContext, RuntimeResult, RuntimeType } from "./types.js";
 import { eventBus, isCloudEventSinkActive } from "../events/bus.js";
 
-// Dim the subprocess output so it's visually distinct from 0sec's own output
+// Dim the subprocess output so it's visually distinct from 0's own output
 const dim = (text: string) => `\x1b[2m${text}\x1b[0m`;
 
 function formatToolDetail(input: unknown): string {
@@ -106,7 +106,7 @@ function safeJsonStringify(v: unknown): string {
 function buildClaudeMcpConfig(context: RuntimeContext): string {
   return JSON.stringify({
     mcpServers: {
-      "0sec": {
+      "0": {
         command: process.execPath,
         args: buildOsecMcpCommandArgs(context),
       },
@@ -152,7 +152,7 @@ export class ProcessRuntime implements Runtime {
     // Per-execution observability state for the Codex CLI JSON stream. Tracks
     // the 1-indexed turn number we emit `agent_turn_*` events under, plus the
     // tool-call indices we emit `tool_call_*` events under. Codex's `--json`
-    // stream uses its own `sequence_number` for stream ordering — 0sec's
+    // stream uses its own `sequence_number` for stream ordering — 0's
     // event types use a simpler turn-and-tool-call counter that matches what
     // the api-runtime path emits, so the dashboard's live-trace renderer
     // doesn't need to special-case codex events.
@@ -203,7 +203,7 @@ export class ProcessRuntime implements Runtime {
     };
 
     // Closure over the per-execution counters above. Each codex JSON event
-    // becomes 0..N 0sec cloud-bus events. See the comment above the call
+    // becomes 0..N 0 cloud-bus events. See the comment above the call
     // site in the stdout handler for what this exists for.
     const emitCodexCloudEvents = (event: Record<string, unknown>): void => {
       // Stream dedup — see seenSequenceNumbers definition above.
@@ -472,7 +472,7 @@ export class ProcessRuntime implements Runtime {
                 }
               }
 
-              // ── 0sec cloud-trace bridge (codex only) ──
+              // ── 0 cloud-trace bridge (codex only) ──
               // Codex emits structured turn/tool/reasoning events on its
               // `--json` stream which we'd otherwise discard — translating
               // each one into a `ZERO_EVENT_*` line on our stdout fills
@@ -480,7 +480,7 @@ export class ProcessRuntime implements Runtime {
               // source-analysis workflows.
               //
               // Guarded on `emitScanEvents` so non-codex runtimes and
-              // non-cloud codex usage (e.g. local CLI `0sec scan
+              // non-cloud codex usage (e.g. local CLI `0 scan
               // --runtime codex`) don't pay the bus serialisation cost.
               // `eventBus.emit` is a no-op when the cloud sink is not
               // subscribed (`ZERO_CLOUD_EVENTS` unset) so this is safe
@@ -501,7 +501,7 @@ export class ProcessRuntime implements Runtime {
         // tool approval, kill it with a helpful error instead of looping
         if (/permission|approve|allow.*tool/i.test(stderr) && stderr.length > 500) {
           proc.kill("SIGTERM");
-          stderr += "\n[0sec] Subprocess killed: MCP tools require interactive approval. Use --runtime api instead.";
+          stderr += "\n[0] Subprocess killed: MCP tools require interactive approval. Use --runtime api instead.";
         }
       });
 
@@ -545,7 +545,7 @@ export class ProcessRuntime implements Runtime {
     // OS page-cache on /usr/local/bin/<runtime>, so the first exec pays
     // for the binary load + dynamic linker + the runtime's own startup,
     // which can exceed 5s for an ~80 MB Rust binary. Empirically observed
-    // (2026-05-13 0sec-cloud rollout): same lodash audit dispatched
+    // (2026-05-13 0-cloud rollout): same lodash audit dispatched
     // back-to-back where one sandbox succeeded and the next failed with
     // "Runtime 'codex' not available. Is codex installed?", correlating
     // with sandbox cold/warm state, not codex install state. After this
@@ -611,7 +611,7 @@ export class ProcessRuntime implements Runtime {
         }
         if (this.config.outputSchema) {
           // Codex needs schema as a file — write to temp
-          const schemaPath = join(tmpdir(), `0sec-schema-${Date.now()}.json`);
+          const schemaPath = join(tmpdir(), `0-schema-${Date.now()}.json`);
           writeFileSync(schemaPath, JSON.stringify(this.config.outputSchema));
           args.push("--output-schema", schemaPath);
         }

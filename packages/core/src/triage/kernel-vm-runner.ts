@@ -1,5 +1,5 @@
 import { execFileSync, spawn } from "node:child_process";
-import { homeStateDir } from "@0/shared"
+import { homeStateDir } from "@0/shared";
 import { createHash, randomBytes } from "node:crypto";
 import { homedir, tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -533,7 +533,7 @@ export function loadKernelVmConfigFromEnv(): KernelVmConfig {
  */
 export function buildKernelAppend(kaslr: boolean): string {
   const base = "console=ttyS0 root=/dev/vda rw";
-  const tail = "panic=-1 init=/sbin/0sec-init";
+  const tail = "panic=-1 init=/sbin/0-init";
   return `${base} ${kaslr ? "kaslr" : "nokaslr"} ${tail}`;
 }
 
@@ -551,7 +551,7 @@ export function renderRaceWidenModuleSource(
 ): string {
   const off = `0x${offset.toString(16)}`;
   return [
-    "// 0sec race-widening kprobe: inject mdelay() at the faulting PC to widen",
+    "// 0 race-widening kprobe: inject mdelay() at the faulting PC to widen",
     "// the UAF/race window. Best-effort; harmless if the probe fails to register.",
     "#include <linux/module.h>",
     "#include <linux/kernel.h>",
@@ -575,7 +575,7 @@ export function renderRaceWidenModuleSource(
     "",
     "static int __init widen_init(void) {",
     "    kp.pre_handler = handler_pre;",
-    `    pr_info("0sec-widen: probing ${symbol}+${off} delay=%lums\\n", widen_delay_ms);`,
+    `    pr_info("0-widen: probing ${symbol}+${off} delay=%lums\\n", widen_delay_ms);`,
     "    return register_kprobe(&kp);",
     "}",
     "",
@@ -635,7 +635,7 @@ const RACE_HARNESS_BASE_HEADERS: readonly string[] = [
  *    `maxIters` / `seconds` (both overridable via `ZERO_RACE_RETRIES` /
  *    `ZERO_RACE_SECONDS`) and NEVER dereferences freed memory or aborts —
  *    only the in-kernel KASAN/KCSAN splat (on the serial console) terminates
- *    the run. Prints a `0SEC-RACE` progress marker so the oracle sees liveness.
+ *    the run. Prints a `ZERO-RACE` progress marker so the oracle sees liveness.
  *
  * Pure string builder — no I/O — so it unit-tests offline.
  */
@@ -725,9 +725,9 @@ export function renderRealIpiRaceHarness(spec: RealIpiRaceHarnessSpec): string {
     "    g_stop = 1;",
     "    pthread_join(ta, NULL);",
     "    pthread_join(tb, NULL);",
-    "    if ((iter & 0x3ff) == 0) { printf(\"0SEC-RACE iter=%ld\\n\", iter); fflush(stdout); }",
+    "    if ((iter & 0x3ff) == 0) { printf(\"ZERO-RACE iter=%ld\\n\", iter); fflush(stdout); }",
     "  }",
-    "  printf(\"0SEC-RACE done (budget exhausted, no splat)\\n\");",
+    "  printf(\"ZERO-RACE done (budget exhausted, no splat)\\n\");",
     "  fflush(stdout);",
     "  return 0;",
     "}",
@@ -826,10 +826,10 @@ export function renderInitramfsInitScript(
     "/bin/busybox mount -t sysfs none /sys",
     "/bin/busybox mount -t devtmpfs none /dev 2>/dev/null",
     "/bin/busybox --install -s /bin 2>/dev/null",
-    'echo "=== 0SEC-INITRAMFS weaponize lane up ==="',
+    'echo "=== ZERO-INITRAMFS weaponize lane up ==="',
     "cat /proc/version",
     insmods,
-    'echo "=== 0SEC-INITRAMFS run (env: ' +
+    'echo "=== ZERO-INITRAMFS run (env: ' +
       raceEnvEntries.map(([key]) => key).join(",") +
       ') ==="',
     // CRITICAL: the engine's emitted exploit prints a RECLAIM marker on EVERY
@@ -841,13 +841,13 @@ export function renderInitramfsInitScript(
     // stream either way, and the KASAN splats (kernel printk, a separate path)
     // still interleave live. `timeout` caps a hung flood; busybox `timeout` takes
     // the seconds as a POSITIONAL arg (`timeout SECS PROG`), NOT GNU `-t SECS`.
-    `${exploitCommand} || echo "0SEC-INITRAMFS exploit exit=$?" >> /tmp/run.log`,
-    'echo "=== 0SEC-INITRAMFS exploit output (batched off the UART hot path) ==="',
+    `${exploitCommand} || echo "ZERO-INITRAMFS exploit exit=$?" >> /tmp/run.log`,
+    'echo "=== ZERO-INITRAMFS exploit output (batched off the UART hot path) ==="',
     "cat /tmp/run.log",
-    'echo "=== 0SEC-INITRAMFS post-run ==="',
+    'echo "=== ZERO-INITRAMFS post-run ==="',
     "sync",
-    "cat /tmp/pwned 2>/dev/null && echo 0SEC-INITRAMFS-PWNED-FILE-PRESENT",
-    'echo "=== 0SEC-INITRAMFS done; powering off ==="',
+    "cat /tmp/pwned 2>/dev/null && echo ZERO-INITRAMFS-PWNED-FILE-PRESENT",
+    'echo "=== ZERO-INITRAMFS done; powering off ==="',
     "/bin/busybox poweroff -f",
   ].join("\n");
 }
@@ -1013,8 +1013,8 @@ function renderGuestRunnerScript(config: KernelVmConfig, language: "c" | "syz" |
     return [
       "#!/bin/sh",
       "set -eu",
-      "SHARE_DIR=/mnt/0sec",
-      "WORK_DIR=/tmp/0sec-run",
+      "SHARE_DIR=/mnt/0",
+      "WORK_DIR=/tmp/0-run",
       "mkdir -p \"$WORK_DIR\"",
       "compiled=0",
       "executed=0",
@@ -1083,12 +1083,12 @@ function renderGuestRunnerScript(config: KernelVmConfig, language: "c" | "syz" |
           '  if make -C "$KBUILD_DIR" M="$WORK_DIR" modules >"$SHARE_DIR/widen.log" 2>&1 \\',
           '     && insmod "$WORK_DIR/osec_widen.ko" >>"$SHARE_DIR/widen.log" 2>&1; then',
           "    widened=1",
-          '    printf "%s\\n" "0sec-widen: insmod ok" >> "$SHARE_DIR/widen.log"',
+          '    printf "%s\\n" "0-widen: insmod ok" >> "$SHARE_DIR/widen.log"',
           "  else",
-          '    printf "%s\\n" "0sec-widen: build/insmod failed — running WITHOUT widening" >> "$SHARE_DIR/widen.log"',
+          '    printf "%s\\n" "0-widen: build/insmod failed — running WITHOUT widening" >> "$SHARE_DIR/widen.log"',
           "  fi",
           "else",
-          '  printf "%s\\n" "0sec-widen: no kernel build tree in guest — running WITHOUT widening" > "$SHARE_DIR/widen.log"',
+          '  printf "%s\\n" "0-widen: no kernel build tree in guest — running WITHOUT widening" > "$SHARE_DIR/widen.log"',
           "fi",
           'printf "%s\\n" "$widened" > "$SHARE_DIR/widened.ok"',
         ]
@@ -1103,8 +1103,8 @@ function renderGuestRunnerScript(config: KernelVmConfig, language: "c" | "syz" |
     "# after — so the captured output carries an ordered DROP(uid!=0)→ROOT(uid=0)",
     "# witness the oracle uses to confirm a genuine escalation. We must therefore",
     "# run it directly (as root), NOT via su/sudo to a lower uid.",
-    "SHARE_DIR=/mnt/0sec",
-    "WORK_DIR=/tmp/0sec-run",
+    "SHARE_DIR=/mnt/0",
+    "WORK_DIR=/tmp/0-run",
     "mkdir -p \"$WORK_DIR\"",
     "compiled=0",
     "executed=0",
@@ -1222,7 +1222,7 @@ async function waitForInitramfsVm(
     // run is provably done, without waiting on QEMU's own teardown.
     if (existsSync(serialLogPath)) {
       const tail = readFileSync(serialLogPath, "utf-8").slice(-2000);
-      if (tail.includes("0SEC-INITRAMFS done")) return { poweredOff: true };
+      if (tail.includes("ZERO-INITRAMFS done")) return { poweredOff: true };
     }
     await sleep(1_000);
   }
@@ -1246,9 +1246,9 @@ async function runWeaponizeInitramfs(
   const hostTmpDir = config.artifactDir
     ? (() => {
         mkdirSync(config.artifactDir!, { recursive: true });
-        return mkdtempSync(join(config.artifactDir!, "0sec-initramfs-"));
+        return mkdtempSync(join(config.artifactDir!, "0-initramfs-"));
       })()
-    : mkdtempSync(join(tmpdir(), "0sec-initramfs-"));
+    : mkdtempSync(join(tmpdir(), "0-initramfs-"));
   const serialLogPath = join(hostTmpDir, "serial.log");
   const raceEnv = collectRaceEnv();
 
@@ -1278,7 +1278,7 @@ async function runWeaponizeInitramfs(
     const serial = existsSync(serialLogPath) ? readFileSync(serialLogPath, "utf-8") : "";
     // Execution is proven by the run banner; the exploit always reaches at least
     // its first print once /init runs it.
-    const executed = serial.includes("0SEC-INITRAMFS run");
+    const executed = serial.includes("ZERO-INITRAMFS run");
     const timedOut = !poweredOff;
     // Bug-attribution guards: a run that would be credited must not have loaded
     // an out-of-band module or baked in an unprovenanced kernel address. The
@@ -1336,9 +1336,9 @@ export async function runReproducerInKernelVm(report: CrashReport): Promise<Repr
   const hostTmpDir = config.artifactDir
     ? (() => {
         mkdirSync(config.artifactDir!, { recursive: true });
-        return mkdtempSync(join(config.artifactDir!, "0sec-kvm-"));
+        return mkdtempSync(join(config.artifactDir!, "0-kvm-"));
       })()
-    : mkdtempSync(join(tmpdir(), "0sec-kvm-"));
+    : mkdtempSync(join(tmpdir(), "0-kvm-"));
   const language = report.reproducerLanguage ?? "c";
   const request = report.executionAttestationRequest ?? (() => {
     const release = process.env["ZERO_KERNEL_QEMU_EXPECTED_RELEASE"]?.trim();
@@ -1501,7 +1501,7 @@ export interface VerifyKernelFindingOptions {
   expectedSignature?: string;
   /**
    * Where to persist the captured dmesg log. Defaults to
-   * `<os.tmpdir()>/0sec-verify-<rand>.dmesg`. The file is written even on
+   * `<os.tmpdir()>/0-verify-<rand>.dmesg`. The file is written even on
    * `build_failed` / `run_failed`, with the available context.
    */
   dmesgOutPath?: string;
@@ -1548,7 +1548,7 @@ export function defaultDmesgOutPath(): string {
   // not collide on the same filename (the old `Date.now()` ms stamp could).
   const ns = process.hrtime.bigint().toString();
   const random = Math.random().toString(36).slice(2, 10);
-  return join(tmpdir(), `0sec-verify-${ns}-${random}.dmesg`);
+  return join(tmpdir(), `0-verify-${ns}-${random}.dmesg`);
 }
 
 /**
@@ -1567,7 +1567,7 @@ export function writeProofFileReadOnly(path: string, content: string): void {
 }
 
 /**
- * Tier-1 verification entry point for `0sec ingest --syz / --reproducer`.
+ * Tier-1 verification entry point for `0 ingest --syz / --reproducer`.
  *
  * Builds the requested kernel config (cached), runs the reproducer in QEMU,
  * captures dmesg, and matches it against `expectedSignature` (when set).

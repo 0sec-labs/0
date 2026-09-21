@@ -1,6 +1,6 @@
 // HackerOne hacker-API integration. Read-only.
 //
-// Surface that other packages (CLI, eventually 0sec-cloud) consume.
+// Surface that other packages (CLI, eventually 0-cloud) consume.
 // Tests import implementation files directly.
 
 export {

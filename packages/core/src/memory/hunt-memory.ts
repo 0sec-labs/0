@@ -69,7 +69,7 @@ import {
 } from "node:fs";
 import { createHash, randomUUID } from "node:crypto";
 import { dirname, isAbsolute, join, sep } from "node:path";
-import { homeStateDir } from "@0/shared"
+import { homeStateDir } from "@0/shared";
 
 /** Bumped when the on-disk record shape changes incompatibly. */
 export const HUNT_MEMORY_SCHEMA_VERSION = 1;

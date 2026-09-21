@@ -19,7 +19,7 @@
  *
  *   1. The *content* leaves the engagement boundary.
  *   2. The *connection itself* leaves the engagement boundary. An outbound
- *      request from 0sec lands in the client's egress logs, and some
+ *      request from 0 lands in the client's egress logs, and some
  *      engagement contracts flatly forbid tooling that phones home. That
  *      second harm happens even if the body is empty.
  *
@@ -54,7 +54,7 @@
 import { appendFileSync, mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { homedir } from "node:os";
-import { loadCloudCredentials } from "@0/core"
+import { loadCloudCredentials } from "@0/core";
 
 export interface FeedbackEntry {
   message: string;
@@ -187,7 +187,7 @@ const CLOUD_FEEDBACK_PATH = "/api/cli-feedback";
 
 export interface FeedbackResolveOptions {
   /**
-   * Test seam for the local `0sec auth login` credential store. An explicit
+   * Test seam for the local `0 auth login` credential store. An explicit
    * ZERO_FEEDBACK_URL always wins and never consumes this credential.
    */
   cloudCredentials?: () => { host: string; token: string } | null;
@@ -247,7 +247,7 @@ function resolveFeedbackTarget(
  *
  * `ZERO_OFFLINE` is the pre-existing convention in this repo (see
  * `../utils/update-check.ts`, which uses it to suppress the update ping), so
- * an operator who already sets it to keep 0sec off the network gets the
+ * an operator who already sets it to keep 0 off the network gets the
  * behaviour they asked for without learning a second knob. `ZERO_NO_TELEMETRY`
  * is added as the name people reach for, and `DO_NOT_TRACK` is honoured
  * because it is the cross-tool standard.
@@ -280,7 +280,7 @@ function isOptOutSet(value: string | undefined): boolean {
 
 /**
  * The configured endpoint, or the authenticated dashboard receiver associated
- * with `0sec auth login`. Scheme validation stays in
+ * with `0 auth login`. Scheme validation stays in
  * {@link submissionBlockedReason}, so callers can distinguish absent from
  * refused configuration.
  */

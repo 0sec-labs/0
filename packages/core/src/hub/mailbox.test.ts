@@ -25,7 +25,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, sep } from "node:path";
-import { homeStateDir } from "@0/shared"
+import { homeStateDir } from "@0/shared";
 import {
   BROADCAST_ID,
   HUB_ROOT_NAME,
@@ -52,7 +52,7 @@ let home: string;
 let project: string;
 
 beforeEach(() => {
-  root = mkdtempSync(join(tmpdir(), "0sec-hub-"));
+  root = mkdtempSync(join(tmpdir(), "0-hub-"));
   home = join(root, "home");
   project = join(root, "project");
   mkdirSync(home, { recursive: true });

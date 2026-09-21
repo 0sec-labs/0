@@ -23,7 +23,7 @@ const LIVE = !!process.env["ZERO_LIVE_INTEL_TEST"];
 describe("resolveNovelty — LIVE OSV smoke (#851)", () => {
   let cacheDir: string;
   beforeEach(() => {
-    cacheDir = mkdtempSync(join(tmpdir(), "0sec-novelty-live-"));
+    cacheDir = mkdtempSync(join(tmpdir(), "0-novelty-live-"));
   });
   afterEach(() => {
     rmSync(cacheDir, { recursive: true, force: true });
@@ -79,7 +79,7 @@ describe("resolveNovelty — LIVE OSV smoke (#851)", () => {
     "a clean package with no advisories → novel (genuinely no known issues)",
     async () => {
       const result = await resolveNovelty(
-        "0sec-nonexistent-package-zzz-851",
+        "0-nonexistent-package-zzz-851",
         "npm",
         "latest",
         { cacheDir },
@@ -97,7 +97,7 @@ describe("resolveNovelty — LIVE OSV smoke (#851)", () => {
     "returns a verdict (novel | possibly-known) for a clean nonexistent package without throwing",
     async () => {
       const result = await resolveNovelty(
-        "0sec-nonexistent-package-zzz-851",
+        "0-nonexistent-package-zzz-851",
         "npm",
         "1.0.0",
         { cacheDir },

@@ -1,5 +1,5 @@
 /**
- * `0sec protocol-check` — Tier-1 HTTP spec-vs-implementation conformance
+ * `0 protocol-check` — Tier-1 HTTP spec-vs-implementation conformance
  * differential (issue #972).
  *
  * Reads an authoritative spec excerpt + an implementation source excerpt, asks
@@ -7,14 +7,14 @@
  * the spec, then SENDS each exercise at a real target and lets a deterministic
  * oracle confirm/refute the divergence. Only MUST-level violations backed by a
  * concrete observation are reported as `confirmed` — the conservative FP
- * discipline that mirrors `0sec verify`'s promotion contract.
+ * discipline that mirrors `0 verify`'s promotion contract.
  *
  * This command is GLUE: it builds the unified `NativeRuntime` (via the same
  * codex-login / API path the rest of the CLI uses — NO raw vendor keys) and the
  * live `fetch`-based HTTP sender, then calls `@0/core`
  * `runHttpConformanceCheck`. All the analysis lives in the engine.
  *
- * Exit codes (mirroring `0sec verify` so a dispatcher can branch on the code):
+ * Exit codes (mirroring `0 verify` so a dispatcher can branch on the code):
  *   0 → ran; at least one CONFIRMED divergence
  *   1 → ran; no confirmed divergence
  *   2 → conformance-gen produced no validated model (nothing exercised)
@@ -24,13 +24,15 @@
 import type { Command } from "commander";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { createLiveHttpSender,
-createRuntime,
-LlmApiRuntime,
-runHttpConformanceCheck,
-type ConformanceAttempt,
-type HttpConformanceResult,
-type NativeRuntime, } from "@0/core"
+import {
+  createLiveHttpSender,
+  createRuntime,
+  LlmApiRuntime,
+  runHttpConformanceCheck,
+  type ConformanceAttempt,
+  type HttpConformanceResult,
+  type NativeRuntime,
+} from "@0/core";
 
 interface ProtocolCheckOpts {
   spec?: string;

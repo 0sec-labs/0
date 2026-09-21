@@ -13,7 +13,7 @@ import { EnforcementTracker, PathPolicy } from "../scope/enforcement.js";
 const directories: string[] = [];
 afterEach(() => { vi.unstubAllEnvs(); for (const directory of directories.splice(0)) rmSync(directory, { recursive: true, force: true }); });
 function fixture(fetchImpl?: typeof fetch, maxSpoolBytes = 2 * 1024 * 1024, maxChunkBytes = 32768) {
-  const directory = mkdtempSync(join(tmpdir(), "0sec-contribution-test-"));
+  const directory = mkdtempSync(join(tmpdir(), "0-contribution-test-"));
   directories.push(directory);
   const env: NodeJS.ProcessEnv = { "ZERO_ANALYTICS_LEVEL": "off" };
   let receipt: ContributionReceipt | null = {

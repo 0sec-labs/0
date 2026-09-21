@@ -25,7 +25,7 @@ const backend = process.env["ZERO_EVOLUTION_BACKEND"] ?? "docker";
 assert(["docker", "smolvm"].includes(backend), "ZERO_EVOLUTION_BACKEND must be docker or smolvm");
 const imageArchive = process.env["ZERO_SMOLVM_IMAGE_ARCHIVE"];
 if (backend === "smolvm") assert(imageArchive, "smolvm requires ZERO_SMOLVM_IMAGE_ARCHIVE");
-const root = mkdtempSync(join(tmpdir(), "0sec-source-e2e-"));
+const root = mkdtempSync(join(tmpdir(), "0-source-e2e-"));
 const sourceRoot = join(root, "source");
 const storePath = join(root, "store");
 const cleanup = () => {
@@ -61,14 +61,14 @@ for (const [index, line] of input.file.content.split('\n').entries()) {
     findings.push({title:'Hardcoded credential', severity:'high', line:index+1, analysis:'Literal credential assigned.'});
   }
 }
-console.log(JSON.stringify({schemaVersion:'0sec.finder.output/v1', findings}));
+console.log(JSON.stringify({schemaVersion:'0.finder.output/v1', findings}));
 `;
   writeFileSync(join(sourceRoot, "finder.mjs"), worker);
   const finding = { title: "Hardcoded credential", severity: "high", line: 1, analysis: "Literal credential assigned." };
   const makeCase = (id, lane, content, vulnerable) => ({
     id, lane,
-    input: { schemaVersion: "0sec.finder.input/v1", file: { path: `${id}.js`, content }, lensId: "credentials", challengeHint: "Find literal credentials." },
-    expected: { schemaVersion: "0sec.finder.output/v1", findings: vulnerable ? [finding] : [] },
+    input: { schemaVersion: "0.finder.input/v1", file: { path: `${id}.js`, content }, lensId: "credentials", challengeHint: "Find literal credentials." },
+    expected: { schemaVersion: "0.finder.output/v1", findings: vulnerable ? [finding] : [] },
   });
   const cases = [
     makeCase("dev-secret", "development", 'const secret = "dev-a";', true),

@@ -7,7 +7,7 @@ XBOW is a web-CTF substrate, not a qualification for arbitrary production target
 Public [research and disclosure records](https://0.security/research/) document
 separate investigations with their own evidence and limitations.
 
-<span id="how-0sec-scores-on-xbow-and-the-caveats"></span>
+<span id="how-0-scores-on-xbow-and-the-caveats"></span>
 ## How 0 scores on XBOW, and the caveats
 
 **The 2026-05-06 ledger snapshot records 93 / 95 = 97.9% for gpt-5.4.**

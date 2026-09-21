@@ -1,7 +1,7 @@
 /**
- * Coverage seed for `0sec-cli`'s `mcp-server` command. This is the
+ * Coverage seed for `@0/cli`'s `mcp-server` command. This is the
  * stdio MCP server entry point — the one PR #295 made load-bearing
- * (gated Codex live scans now talk to 0sec tools through here),
+ * (gated Codex live scans now talk to 0 tools through here),
  * and the one verified end-to-end on dev. Prior to this seed it had
  * zero tests, so any regression in scope validation, auth-env parsing,
  * or wiring of tool executor / rate-limiter / attribution would have
@@ -278,7 +278,7 @@ async function runCli(argv: string[]): Promise<unknown> {
   });
   registerMcpServerCommand(program);
   try {
-    await program.parseAsync(["node", "0sec-cli", ...argv]);
+    await program.parseAsync(["node", "@0/cli", ...argv]);
     return undefined;
   } catch (err) {
     // Commander throws on usage error; our action throws on validation
@@ -432,7 +432,7 @@ describe("mcp-server — happy path wiring", () => {
       "http_request,not_a_tool",
     ]);
     expect(result).toBeInstanceOf(Error);
-    expect((result as Error).message).toMatch(/unsupported 0sec MCP tool\(s\): not_a_tool/);
+    expect((result as Error).message).toMatch(/unsupported 0 MCP tool\(s\): not_a_tool/);
     expect(dbCtorCalls).toHaveLength(0);
     expect(toolExecutorCtorCalls).toHaveLength(0);
   });
@@ -445,9 +445,9 @@ describe("mcp-server — happy path wiring", () => {
       "--scan-id",
       "scan-abc",
       "--db-path",
-      "/tmp/0sec-test.db",
+      "/tmp/0-test.db",
     ]);
-    expect(dbCtorCalls).toEqual(["/tmp/0sec-test.db"]);
+    expect(dbCtorCalls).toEqual(["/tmp/0-test.db"]);
     expect(toolExecutorCtorCalls).toHaveLength(1);
     const ctx = toolExecutorCtorCalls[0]!.ctx;
     expect(ctx.target).toBe("https://example.com");
@@ -707,7 +707,7 @@ describe("mcp-server — scope validation ordering", () => {
     const scope: ScopeShim = allowingScope();
     loadScopeMock.mockReturnValueOnce(scope);
     extractAttributionFromScopeJsonMock.mockReturnValueOnce({
-      headers: ["X-HackerOne: 0sec"],
+      headers: ["X-HackerOne: 0"],
     });
     await runCli([
       "mcp-server",
@@ -721,7 +721,7 @@ describe("mcp-server — scope validation ordering", () => {
     expect(extractAttributionFromScopeJsonMock).toHaveBeenCalledWith(scope.raw);
     const resolveArgs = resolveAttributionMock.mock.calls[0]![0];
     expect(resolveArgs.scopeFileBlock).toEqual({
-      headers: ["X-HackerOne: 0sec"],
+      headers: ["X-HackerOne: 0"],
     });
   });
 });
@@ -757,10 +757,10 @@ describe("mcp-server — parseJsonEnv (via attribution headers env)", () => {
   });
 
   it("ZERO_MCP_ATTRIBUTION_UA_TOKEN → forwarded to resolveAttribution.cliUaToken", async () => {
-    process.env["ZERO_MCP_ATTRIBUTION_UA_TOKEN"] = "0sec-mcp/0.1";
+    process.env["ZERO_MCP_ATTRIBUTION_UA_TOKEN"] = "0-mcp/0.1";
     await runCli(baseArgs);
     const resolveArgs = resolveAttributionMock.mock.calls[0]![0];
-    expect(resolveArgs.cliUaToken).toBe("0sec-mcp/0.1");
+    expect(resolveArgs.cliUaToken).toBe("0-mcp/0.1");
   });
 });
 
@@ -976,7 +976,7 @@ describe("mcp-server — engagement hardening profile", () => {
       throw new Error("Unknown engagement profile 'stealth'. Supported: standard, conservative.");
     });
     await runCli([...baseArgs, "--engagement-profile", "stealth"]);
-    expect(tracker.firstCode).toBe(2); // same code `0sec scan` uses
+    expect(tracker.firstCode).toBe(2); // same code `0 scan` uses
     expect(errSpy.mock.calls.map((c: unknown[]) => String(c[0])).join("\n")).toMatch(
       /Unknown engagement profile/,
     );

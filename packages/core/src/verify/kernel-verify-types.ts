@@ -7,7 +7,7 @@
  * dependency.
  */
 
-import type { Finding } from "@0/shared"
+import type { Finding } from "@0/shared";
 
 /**
  * Two-phase trigger phase (AIxCC / Shellphish T3 — sanitizer "loosening").

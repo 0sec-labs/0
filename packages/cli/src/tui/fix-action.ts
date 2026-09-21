@@ -21,10 +21,10 @@
  * Anything that depends on the operator rather than the finding (the repo
  * root and the explicit regression command) is checked by
  * {@link fixInputEligibility} instead, mirroring the `<repo>` argument and
- * the required `--test-command` option of `0sec fix`.
+ * the required `--test-command` option of `0 fix`.
  */
 
-import type { SourceFixResult, SourceFixStatus, SourceFixTestResult } from "@0/core"
+import type { SourceFixResult, SourceFixStatus, SourceFixTestResult } from "@0/core";
 
 export type FixEligibility =
   | { eligible: true }
@@ -90,7 +90,7 @@ export function findingSourcePath(finding: unknown): string | undefined {
  * Decide whether a finding can actually be source-fixed.
  *
  * Reasons are ordered exactly as `runSourceFix` checks them, so the reason
- * shown in the TUI is the one `0sec fix` would report first.
+ * shown in the TUI is the one `0 fix` would report first.
  */
 export function fixEligibility(finding: unknown): FixEligibility {
   const record = asRecord(finding);
@@ -117,7 +117,7 @@ export function fixEligibility(finding: unknown): FixEligibility {
  * Check the operator-supplied half of `runSourceFix`'s contract: the repo
  * to fix in, and the explicit regression command it runs after every
  * candidate patch. Mirrors the `<repo>` argument and required
- * `--test-command` option of `0sec fix`.
+ * `--test-command` option of `0 fix`.
  */
 export function fixInputEligibility(inputs: {
   repoRoot?: string | null;
@@ -187,7 +187,7 @@ export function fixResultLines(result: SourceFixResult): string[] {
     result.patch
       ? result.applied
         ? "patch applied to the working tree"
-        : "patch produced, not applied — re-run `0sec fix --output` to write it out"
+        : "patch produced, not applied — re-run `0 fix --output` to write it out"
       : "no patch produced",
   );
   if (result.rationale) lines.push(`rationale ${result.rationale}`);

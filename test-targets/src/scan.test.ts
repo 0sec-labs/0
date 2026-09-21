@@ -73,7 +73,7 @@ async function mcpFetch(target: string, url: string): Promise<string> {
 }
 
 beforeAll(async () => {
-  testHome = mkdtempSync(join(tmpdir(), "0sec-scan-test-"));
+  testHome = mkdtempSync(join(tmpdir(), "0-scan-test-"));
   process.env.HOME = testHome;
   process.env["ZERO_CLOUD_TOKEN"] = "";
   process.env["ZERO_CLOUD_HOST"] = "";
@@ -90,7 +90,7 @@ beforeAll(async () => {
   process.env["ZERO_CHATGPT_ACCESS_TOKEN"] = "";
   process.env["ZERO_CHATGPT_OAUTH_REFRESH_TOKEN"] = "";
   process.env["ZERO_CHATGPT_ACCOUNT_ID"] = "";
-  process.env["ZERO_CHATGPT_AUTH_FILE"] = join(tmpdir(), "0sec-scan-test-no-codex-auth.json");
+  process.env["ZERO_CHATGPT_AUTH_FILE"] = join(tmpdir(), "0-scan-test-no-codex-auth.json");
 
   const vulnMod = await import("./vulnerable-server.js");
   const safeMod = await import("./safe-server.js");
@@ -316,7 +316,7 @@ describe("Safe server responses", () => {
   });
 });
 
-describe("0sec scan integration", () => {
+describe("0 scan integration", () => {
 
   it("returns a clean report for the safe target", async () => {
     const report = await runScan({

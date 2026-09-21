@@ -11,7 +11,7 @@ import {
 const temporaryDirectories: string[] = [];
 
 function makeFixture(): { root: string; assetDir: string } {
-  const root = mkdtempSync(join(tmpdir(), "0sec-desktop-sidecar-"));
+  const root = mkdtempSync(join(tmpdir(), "0-desktop-sidecar-"));
   temporaryDirectories.push(root);
   const assetDir = join(root, "dashboard");
   mkdirSync(assetDir, { recursive: true });
@@ -87,7 +87,7 @@ describe("desktop sidecar invocation", () => {
     const resourcesPath = join(root, "resources");
     const sidecarDirectory = join(resourcesPath, "sidecars");
     mkdirSync(sidecarDirectory, { recursive: true });
-    const executable = join(sidecarDirectory, "0sec-linux-x64");
+    const executable = join(sidecarDirectory, "0-linux-x64");
     writeFileSync(executable, "", "utf8");
 
     const invocation = createDashboardSidecarInvocation({
@@ -104,9 +104,9 @@ describe("desktop sidecar invocation", () => {
   });
 
   it("maps supported platform artifact names exactly", () => {
-    expect(sidecarResourceFileName("linux", "arm64")).toBe("0sec-linux-arm64");
-    expect(sidecarResourceFileName("darwin", "x64")).toBe("0sec-darwin-x64");
-    expect(sidecarResourceFileName("win32", "x64")).toBe("0sec-windows-x64.exe");
+    expect(sidecarResourceFileName("linux", "arm64")).toBe("0-linux-arm64");
+    expect(sidecarResourceFileName("darwin", "x64")).toBe("0-darwin-x64");
+    expect(sidecarResourceFileName("win32", "x64")).toBe("0-windows-x64.exe");
     expect(() => sidecarResourceFileName("freebsd", "x64")).toThrow(/unsupported desktop platform/i);
   });
 });

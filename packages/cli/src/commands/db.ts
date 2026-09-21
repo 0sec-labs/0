@@ -1,8 +1,8 @@
 import { randomUUID } from "node:crypto";
 import type { Command } from "commander";
 import chalk from "chalk";
-import { osecDB, repairOsecDatabase, resetOsecDatabase } from "@0/db"
-import type { AgentVerdict, Finding, ScanConfig, WorkItemKind, WorkItemStatus } from "@0/shared"
+import { osecDB, repairOsecDatabase, resetOsecDatabase } from "@0/db";
+import type { AgentVerdict, Finding, ScanConfig, WorkItemKind, WorkItemStatus } from "@0/shared";
 
 type DbResetOptions = {
   dbPath?: string;
@@ -646,7 +646,7 @@ export function registerDbCommand(program: Command): void {
           ? seedVerificationWorkbench(db)
           : { scans: 0, families: 0, workers: 0 };
 
-        console.log(chalk.red.bold("  ◆ 0sec") + chalk.gray(" db reset"));
+        console.log(chalk.red.bold("  ◆ 0") + chalk.gray(" db reset"));
         console.log(chalk.gray(`  ${path}`));
         console.log(chalk.gray(`  seed: ${seed}`));
         console.log(chalk.gray(`  scans: ${seeded.scans} · families: ${seeded.families} · workers: ${seeded.workers}`));

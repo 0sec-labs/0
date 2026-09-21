@@ -51,7 +51,7 @@ function git(args: string[], cwd: string) {
 
 /** Repo with 6 files on main (over a cap of 3) and 1 file changed on a branch. */
 function makeRepo(): { dir: string; baseSha: string } {
-  const dir = mkdtempSync(join(tmpdir(), "0sec-cap-"));
+  const dir = mkdtempSync(join(tmpdir(), "0-cap-"));
   // Force the initial branch to `main`: a CI runner whose git defaults
   // to `master` (no init.defaultBranch set) would otherwise make the
   // `git rev-parse main` below fail with "unknown revision".
@@ -110,7 +110,7 @@ describe("runPipeline — oversized-review guard vs diff-aware reviews", () => {
         apiKey: "sk-fake",
         diffBase: baseSha,
         changedOnly: true,
-        dbPath: join(mkdtempSync(join(tmpdir(), "0sec-cap-db-")), "s.db"),
+        dbPath: join(mkdtempSync(join(tmpdir(), "0-cap-db-")), "s.db"),
       });
       expect(report).toBeTruthy();
     },
@@ -125,7 +125,7 @@ describe("runPipeline — oversized-review guard vs diff-aware reviews", () => {
         format: "json",
         runtime: "api",
         apiKey: "sk-fake",
-        dbPath: join(mkdtempSync(join(tmpdir(), "0sec-cap-db-")), "s.db"),
+        dbPath: join(mkdtempSync(join(tmpdir(), "0-cap-db-")), "s.db"),
       }),
     ).rejects.toThrow(/too large/i);
   });

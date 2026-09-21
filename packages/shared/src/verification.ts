@@ -1,5 +1,5 @@
 /**
- * 0sec#193 — VerificationResult schema (zod).
+ * 0#193 — VerificationResult schema (zod).
  *
  * Canonical, machine-checkable shape of the JSON payload the deterministic
  * replay verifier emits after running a finding's PoC. Cloud, the CLI, the

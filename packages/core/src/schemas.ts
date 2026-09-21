@@ -25,7 +25,7 @@
  */
 
 import { z } from "zod";
-import type { LayerVerdict } from "@0/shared"
+import type { LayerVerdict } from "@0/shared";
 
 // ── JSON-RPC envelope (used by mcp.ts) ──────────────────────────────────────
 //

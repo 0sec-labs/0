@@ -17,11 +17,11 @@ import { createEvolvedFinder } from "./evolved-finder.js";
 
 let root: string;
 let config: EvolutionConfig;
-const inputSchema = "0sec.finder.input/v1";
-const outputSchema = "0sec.finder.output/v1";
+const inputSchema = "0.finder.input/v1";
+const outputSchema = "0.finder.output/v1";
 
 beforeEach(async () => {
-  root = mkdtempSync(join(tmpdir(), "0sec-evolved-finder-"));
+  root = mkdtempSync(join(tmpdir(), "0-evolved-finder-"));
   const sourceRoot = join(root, "engine");
   mkdirSync(join(sourceRoot, "src"), { recursive: true });
   mkdirSync(join(root, "target"));

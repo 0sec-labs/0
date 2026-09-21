@@ -12,7 +12,7 @@
  * skipped from further verification.
  */
 
-import type { Finding } from "@0/shared"
+import type { Finding } from "@0/shared";
 
 // ────────────────────────────────────────────────────────────────────
 // Sink name blocklist

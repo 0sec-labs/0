@@ -126,7 +126,7 @@ async function runMemoryList(opts: TriageMemoryListOptions): Promise<void> {
       return;
     }
     console.log("");
-    console.log(chalk.red.bold("  ◆ 0sec") + chalk.gray(` triage memories (${filtered.length})`));
+    console.log(chalk.red.bold("  ◆ 0") + chalk.gray(` triage memories (${filtered.length})`));
     console.log("");
     for (const m of filtered) {
       const scopeLabel =

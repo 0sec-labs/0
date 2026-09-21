@@ -1,14 +1,16 @@
 import { rmSync, readFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import { randomUUID } from "node:crypto";
-import type { AuditConfig,
-AuditReport,
-NpmAuditFinding,
-SemgrepFinding,
-Finding,
-ScanConfig,
-Severity, } from "@0/shared"
-import type { osecDB } from "@0/db"
+import type {
+  AuditConfig,
+  AuditReport,
+  NpmAuditFinding,
+  SemgrepFinding,
+  Finding,
+  ScanConfig,
+  Severity,
+} from "@0/shared";
+import type { osecDB } from "@0/db";
 import type { ScanEvent, ScanListener } from "./scanner.js";
 import { auditAgentPrompt } from "./analysis-prompts.js";
 import { runAnalysisAgent } from "./agent-runner.js";
@@ -838,7 +840,7 @@ export async function runSupplyChainScan(
  * 2. Run static scanner with security rules
  * 3. AI agent analyzes static scanner findings + hunts for additional vulns
  * 4. Generate report with severity and PoC suggestions
- * 5. Persist to 0sec DB
+ * 5. Persist to 0 DB
  */
 export async function packageAudit(
   opts: PackageAuditOptions,

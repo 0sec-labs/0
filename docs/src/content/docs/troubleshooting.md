@@ -24,10 +24,10 @@ Supported release assets (from `.github/workflows/release.yml`):
 
 | Asset | Platform |
 |-------|----------|
-| `0sec-linux-x64` | Linux x86_64 |
-| `0sec-linux-arm64` | Linux ARM64 |
-| `0sec-darwin-arm64` | macOS Apple Silicon |
-| `0sec-windows-x64.exe` | Windows x86_64 (manual download — install.sh supports Linux/macOS only) |
+| `0-linux-x64` | Linux x86_64 |
+| `0-linux-arm64` | Linux ARM64 |
+| `0-darwin-arm64` | macOS Apple Silicon |
+| `0-windows-x64.exe` | Windows x86_64 (manual download — install.sh supports Linux/macOS only) |
 
 Intel macOS is not in this native release matrix. Use a supported source/npm
 runtime or the container rather than renaming an Apple Silicon binary.
@@ -50,13 +50,13 @@ pinned FoxGuard download.
 
 ```bash
 # Install without FoxGuard
-INSTALL_FOXGUARD=0 bash <(curl -fsSL https://raw.githubusercontent.com/0sec-labs/0sec/main/install.sh)
+INSTALL_FOXGUARD=0 bash <(curl -fsSL https://raw.githubusercontent.com/0sec-labs/0/main/install.sh)
 ```
 
-<span id="0sec-command-not-found-after-install"></span>
+<span id="0-command-not-found-after-install"></span>
 ### `0` command not found after install
 
-The binary is installed to `~/.0/bin/0sec` (and symlinked as `~/.0/bin/0`).
+The binary is installed to `~/.0/bin/0` (and symlinked as `~/.0/bin/0`).
 Add it to your `PATH`:
 
 ```bash
@@ -71,25 +71,25 @@ warning with the command to add it.
 
 Windows support is experimental. `install.sh` does not support Windows.
 Download the release asset manually from the
-[releases page](https://github.com/0sec-labs/0sec/releases/latest):
+[releases page](https://github.com/0sec-labs/0/releases/latest):
 
 ```
-0sec-windows-x64.exe
+0-windows-x64.exe
 ```
 
 Replace your current binary in place. Auto-upgrade is tracked separately.
 The Unix alias is not created. In PowerShell, run the actual downloaded file:
 
 ```powershell
-.\0sec-windows-x64.exe --help
+.\0-windows-x64.exe --help
 ```
 
 Download `checksums.txt` from the same release and compare its entry with
-`Get-FileHash .\0sec-windows-x64.exe -Algorithm SHA256` before execution.
+`Get-FileHash .\0-windows-x64.exe -Algorithm SHA256` before execution.
 
 ## Runtime
 
-<span id="0sec-doctor-reports-nodejs-version-as-bad"></span>
+<span id="0-doctor-reports-nodejs-version-as-bad"></span>
 ### `0 doctor` reports Node.js version as bad
 
 Source/npm execution requires **Node.js 24 or newer**.
@@ -109,7 +109,7 @@ from source; Node provides the readline fallback.
 If `pnpm build` succeeds but `0` is missing, that is expected: a source checkout
 does not globally install an alias. Use `node packages/cli/dist/index.js --help`
 or `bun packages/cli/dist/index.js` for the TUI. The published Node package is
-`0sec-cli`; install it with `npm install -g 0sec-cli` if you want global commands.
+`@0/cli`; install it with `npm install -g @0/cli` if you want global commands.
 
 ### No API runtime configured
 
@@ -156,7 +156,7 @@ export AZURE_OPENAI_BASE_URL="https://your-resource.openai.azure.com/openai/v1"
 export AZURE_OPENAI_MODEL="gpt-4o"
 ```
 
-<span id="0sec-doctor-shows-no-cli-runtimes-found"></span>
+<span id="0-doctor-shows-no-cli-runtimes-found"></span>
 ### `0 doctor` shows no CLI runtimes found
 
 CLI runtimes (`claude`, `codex`, `gemini`) are optional. For scan, review and
@@ -407,7 +407,7 @@ current directory or inherit host credentials. Pass both explicitly:
 
 ```bash
 docker run --rm -e ANTHROPIC_API_KEY \
-  -v "$PWD:/work/source:ro" ghcr.io/0sec-labs/0sec:latest \
+  -v "$PWD:/work/source:ro" ghcr.io/0sec-labs/0:latest \
   review /work/source --runtime api --depth quick
 ```
 
@@ -431,7 +431,7 @@ at `/opt/ad-tools`. Their console scripts are symlinked to `/usr/local/bin/`:
 
 ```bash
 # Verify they're available
-docker run --rm --entrypoint bash ghcr.io/0sec-labs/0sec:latest -c 'which secretsdump.py'
+docker run --rm --entrypoint bash ghcr.io/0sec-labs/0:latest -c 'which secretsdump.py'
 ```
 
 The system Python interpreter (`python3`) is deliberately not the venv one, so
@@ -532,7 +532,7 @@ chat-session ID is not a finding ID.
 
 | Gap | Details |
 |-----|---------|
-| **No composite GitHub Action** | The planned `.github/actions/0sec-scan` composite action has not shipped. Use the container image or binary install instead |
+| **No composite GitHub Action** | The planned `.github/actions/0-scan` composite action has not shipped. Use the container image or binary install instead |
 | **Marketplace availability** | The TUI and plugin execution exist; catalog availability depends on the configured registry. Installation and enablement are separate. See [Hackstore](/hackstore/) |
 | **Windows upgrade** | `0 upgrade` does not support Windows. Download release assets manually |
 | **MCP transport** | The MCP server uses stdio transport only. SSE/WebSocket transport is not implemented |

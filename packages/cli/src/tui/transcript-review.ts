@@ -1,5 +1,7 @@
-import type { PresentationTranscriptDocument,
-PresentationTranscriptEntry, } from "@0/shared"
+import type {
+  PresentationTranscriptDocument,
+  PresentationTranscriptEntry,
+} from "@0/shared";
 import {
   renderMarkdown,
   spansToText,
@@ -152,7 +154,7 @@ function compileEntry(
   if (entry.kind === "user" || entry.kind === "assistant") {
     const tone = entry.kind === "user" ? "user" : "assistant";
     document.push({
-      text: `${GUTTER.speaker} ${entry.kind === "user" ? "OPERATOR" : "0SEC"}${repeat}`,
+      text: `${GUTTER.speaker} ${entry.kind === "user" ? "OPERATOR" : "ZERO"}${repeat}`,
       tone,
       turn: entry.turn,
       entryId: entry.id,

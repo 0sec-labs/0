@@ -1,5 +1,5 @@
 import { useEffect, useEffectEvent } from "react";
-import type { DesktopHostCommand } from "@0/shared"
+import type { DesktopHostCommand } from "@0/shared";
 
 const SHORTCUTS: Readonly<Record<string, DesktopHostCommand>> = {
   n: "new-thread",

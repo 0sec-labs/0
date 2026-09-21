@@ -14,7 +14,7 @@ import { getRates, MODEL_PRICING } from "../packages/shared/dist/index.js";
 maybeLoadCodexAuth();
 process.env["ZERO_DISABLE_HUNT_MEMORY"] = "1";
 process.env["ZERO_CLOUD_SINK"] = "";
-const temporary = mkdtempSync(join(tmpdir(), "0sec-citation-e2e-"));
+const temporary = mkdtempSync(join(tmpdir(), "0-citation-e2e-"));
 const root = join(temporary, "source");
 mkdirSync(root);
 const cleanup = () => rmSync(temporary, { recursive: true, force: true });

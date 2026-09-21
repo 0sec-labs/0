@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { homeStateDir } from "@0/shared"
+import { homeStateDir } from "@0/shared";
 import { z } from "zod";
 import {
   ExecutablePluginManager,
@@ -23,7 +23,7 @@ export function createExecutablePlugins(
   }
   return new ExecutablePluginManager({
     root: join(homeStateDir(), "executable-plugins"),
-    image: process.env["ZERO_PLUGIN_IMAGE"] ?? "0sec-toolbox:local",
+    image: process.env["ZERO_PLUGIN_IMAGE"] ?? "0-toolbox:local",
     imageArchive: backend === "smolvm" ? process.env["ZERO_SMOLVM_IMAGE_ARCHIVE"] : undefined,
     ...configuration,
     backend,

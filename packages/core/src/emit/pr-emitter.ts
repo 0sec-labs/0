@@ -1,4 +1,4 @@
-// PR-shaped finding output (0sec#377).
+// PR-shaped finding output (0#377).
 //
 // `emitFindingsAsPRs` turns reproduced findings into one GitHub PR each,
 // containing:
@@ -14,7 +14,7 @@
 // All `git` and `gh` calls go through injectable `GitClient` / `GhClient`
 // interfaces so unit tests can assert on argv without touching disk.
 
-import type { Finding } from "@0/shared"
+import type { Finding } from "@0/shared";
 import {
   FixTemplateRegistry,
   createDefaultFixTemplateRegistry,
@@ -235,7 +235,7 @@ function shortFindingId(finding: Finding): string {
 }
 
 export function buildBranchName(finding: Finding): string {
-  return `0sec/finding-${shortFindingId(finding)}`;
+  return `0/finding-${shortFindingId(finding)}`;
 }
 
 export function buildPrTitle(finding: Finding): string {
@@ -284,7 +284,7 @@ export function buildPrBody(finding: Finding, opts: { fixApplied?: UnifiedDiff; 
     ((finding as unknown as MaybeVerificationResult).verification_result?.status ??
       (finding as unknown as MaybeVerificationResult).verificationResult?.status ??
       "unknown");
-  lines.push(`- **Status:** \`${vrStatus}\` (per 0sec#193)`);
+  lines.push(`- **Status:** \`${vrStatus}\` (per 0#193)`);
   if (finding.evidence?.analysis) {
     lines.push("");
     lines.push(`> ${finding.evidence.analysis.split("\n").slice(0, 4).join("\n> ")}`);
@@ -311,7 +311,7 @@ export function buildPrBody(finding: Finding, opts: { fixApplied?: UnifiedDiff; 
   }
 
   lines.push(`---`);
-  lines.push(`*Emitted by [0sec](https://github.com/0sec-labs/0sec) \`--emit pr\` | Finding ID: \`${finding.id}\`*`);
+  lines.push(`*Emitted by [0](https://github.com/0sec-labs/0) \`--emit pr\` | Finding ID: \`${finding.id}\`*`);
 
   return lines.join("\n");
 }
@@ -354,8 +354,8 @@ export function buildHypothesesMarkdown(findings: Finding[]): string {
   lines.push(`# Unverified hypotheses`);
   lines.push("");
   lines.push(
-    `These findings were produced by 0sec but did NOT reproduce under the`,
-    ` verification step (per 0sec#193). They are collected here for human`,
+    `These findings were produced by 0 but did NOT reproduce under the`,
+    ` verification step (per 0#193). They are collected here for human`,
     ` review rather than emitted as PRs — auto-filing unverified findings is`,
     ` the H1 CoC "AI low-quality" tripwire we explicitly avoid.`,
   );
@@ -393,7 +393,7 @@ export function buildHypothesesMarkdown(findings: Finding[]): string {
  * are aggregated into a single `hypotheses.md` instead.
  *
  * Workflow per reproduced finding:
- *   1. branch `0sec/finding-<short-id>` from `baseBranch`
+ *   1. branch `0/finding-<short-id>` from `baseBranch`
  *   2. commit `.0/findings/<id>/{evidence...,README.md}`
  *   3. if a fix template matches, commit the patch as a second commit
  *   4. `gh pr create` with assembled body
@@ -511,7 +511,7 @@ export async function emitFindingsAsPRs(
     await execGit([
       "commit",
       "-m",
-      `0sec(${finding.category}): add repro for ${shortFindingId(finding)}`,
+      `0(${finding.category}): add repro for ${shortFindingId(finding)}`,
     ]);
 
     // Step 3 — apply fix-template diff (if any) as a second commit.
@@ -530,7 +530,7 @@ export async function emitFindingsAsPRs(
       await execGit([
         "commit",
         "-m",
-        `0sec(${finding.category}): suggested patch — ${fixDiff.summary}`,
+        `0(${finding.category}): suggested patch — ${fixDiff.summary}`,
       ]);
     }
 

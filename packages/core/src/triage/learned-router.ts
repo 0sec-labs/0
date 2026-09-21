@@ -10,13 +10,13 @@
  * recall=0.963. Replaces the v1 model (100 trees, F1=0.944).
  *
  * Feature flag: ZERO_FEATURE_LEARNED_ROUTER (default OFF).
- * See 0sec#113 for the design doc.
+ * See 0#113 for the design doc.
  */
 
 import { readFileSync, existsSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { Finding, TriageLayerName } from "@0/shared"
+import type { Finding, TriageLayerName } from "@0/shared";
 import { extractFeatures, FEATURE_NAMES } from "./feature-extractor.js";
 
 // ────────────────────────────────────────────────────────────────────

@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { Context, type Fiber } from "@deepseek-ai/cordis";
-import type { HarnessControl, HarnessGenerationSpec, HarnessProviderSpec, HarnessSnapshot, HarnessUiEvent, HarnessUiInput, HarnessView } from "@0/shared"
+import type { HarnessControl, HarnessGenerationSpec, HarnessProviderSpec, HarnessSnapshot, HarnessUiEvent, HarnessUiInput, HarnessView } from "@0/shared";
 import { z } from "zod";
 import { ensureEvolutionDirectory, publishEvolutionArtifact, readEvolutionArtifact } from "../improvement/artifacts.js";
 import { canonicalEvolutionJson } from "../improvement/config.js";
@@ -262,7 +262,7 @@ export class LiveHarnessHost {
                 if (!version?.manifest.tools.some(tool => tool.name === toolName)) throw new Error(`Unknown retained executable service: ${provider.id}`);
                 continue;
               }
-              const temporary = await mkdtemp(join(tmpdir(), "0sec-harness-source-"));
+              const temporary = await mkdtemp(join(tmpdir(), "0-harness-source-"));
               try {
                 for (const [path, source] of Object.entries(provider.source.files)) {
                   await mkdir(dirname(join(temporary, path)), { recursive: true, mode: 0o700 });

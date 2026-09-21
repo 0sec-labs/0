@@ -1,5 +1,5 @@
 {
-"name": "@0/core",
+  "name": "@0/core",
   "version": "0.1.0",
   "type": "module",
   "main": "dist/index.js",
@@ -16,10 +16,10 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-"@0/db": "workspace:*",
-"@0/llm-redteam": "workspace:*",
-"@0/shared": "workspace:*",
-"@0/templates": "workspace:*",
+    "@0/db": "workspace:*",
+    "@0/llm-redteam": "workspace:*",
+    "@0/shared": "workspace:*",
+    "@0/templates": "workspace:*",
     "@deepseek-ai/cordis": "4.0.2",
     "@modelcontextprotocol/sdk": "^1.30.0",
     "tree-sitter": "0.21.1",

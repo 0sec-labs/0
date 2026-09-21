@@ -1,7 +1,7 @@
 /**
  * Graph-slice → hunt-pipeline adapter (`--graph-slice`).
  *
- * The THIN bridge that lets the seed-driven `0sec hunt` flow feed the finder a
+ * The THIN bridge that lets the seed-driven `0 hunt` flow feed the finder a
  * real interprocedural reachability SLICE around the seed's fix site instead of
  * (only) flat file text. It is the exact structural sibling of
  * {@link ./invariant-hunt-context.ts} (the `--invariant` adapter): it derives a

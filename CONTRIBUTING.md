@@ -24,11 +24,11 @@ pnpm install --frozen-lockfile
 pnpm build
 ```
 
-The bundled CLI is `dist/0sec.js`:
+The bundled CLI is `dist/0.js`:
 
 ```bash
-node dist/0sec.js --version
-node dist/0sec.js doctor
+node dist/0.js --version
+node dist/0.js doctor
 ```
 
 ## Checks

@@ -1,5 +1,5 @@
 /**
- * 0sec#171 — PoC execution runtime tests.
+ * 0#171 — PoC execution runtime tests.
  *
  * Coverage:
  *   - shell action: exit-zero predicate happy path & failure
@@ -21,7 +21,7 @@
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { EventEmitter } from "node:events";
-import type { Finding, PocStep } from "@0/shared"
+import type { Finding, PocStep } from "@0/shared";
 import {
   executePocSteps,
   setRuntimeDeps,
@@ -322,7 +322,7 @@ describe("executePocSteps — http action", () => {
     expect(report.overallVerdict).toBe("exploit_still_works");
   });
 
-  it("merges persona cookies/headers when X-0sec-Persona is set", async () => {
+  it("merges persona cookies/headers when X-0-Persona is set", async () => {
     const { fetchFn, calls } = makeFakeFetch(() => new Response("", { status: 200 }));
     restore = setRuntimeDeps({ fetch: fetchFn });
     const target: PocExecutionTarget = {
@@ -344,7 +344,7 @@ describe("executePocSteps — http action", () => {
           type: "http",
           method: "POST",
           url: "/api/whatever",
-          headers: { "X-0sec-Persona": "attacker", "Content-Type": "application/json" },
+          headers: { "X-0-Persona": "attacker", "Content-Type": "application/json" },
           body: "{}",
         },
         expect: { type: "http-status", status: 200 },
@@ -356,7 +356,7 @@ describe("executePocSteps — http action", () => {
     expect(sent.Cookie).toBe("session=abc123");
     expect(sent["Content-Type"]).toBe("application/json");
     // Marker header must be stripped from the outgoing request.
-    expect(sent["X-0sec-Persona"]).toBeUndefined();
+    expect(sent["X-0-Persona"]).toBeUndefined();
   });
 
   it("times out via AbortController and reports errored", async () => {

@@ -127,7 +127,7 @@ describe.skipIf(process.platform === "win32")("installer pipeline", () => {
   });
 
   function fakeCurl(script: string): string {
-    fixture = mkdtempSync(join(tmpdir(), "0sec-update-pipeline-"));
+    fixture = mkdtempSync(join(tmpdir(), "0-update-pipeline-"));
     writeFileSync(join(fixture, "curl"), `#!/bin/sh\n${script}\n`, { mode: 0o700 });
     vi.stubEnv("PATH", `${fixture}:/usr/bin:/bin`);
     vi.stubEnv("HOME", fixture);
@@ -155,7 +155,7 @@ INSTALL`);
     const result = await performAutoUpdate({ version: "999.1.2", installDir: destination });
     expect(result.success).toBe(true);
     expect(readFileSync(receipt, "utf8").split("\n")).toEqual([
-      "https://github.com/0sec-labs/0sec/releases/download/v999.1.2", destination, "",
+      "https://github.com/0sec-labs/0/releases/download/v999.1.2", destination, "",
     ]);
   });
 });

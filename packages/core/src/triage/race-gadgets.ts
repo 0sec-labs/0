@@ -601,7 +601,7 @@ export function composeGadgetSetup(gadgets: RaceGadget[]): ComposedGadgets {
     gadgetNames.push(g.name);
   }
   const setupC = [
-    "/* ── 0sec race-widening gadgets (composed) ─────────────────── */",
+    "/* ── 0 race-widening gadgets (composed) ─────────────────── */",
     ...parts,
     "/* ── end race-widening gadgets ───────────────────────────────── */",
   ].join("\n");
@@ -1012,7 +1012,7 @@ export function makeKernelVmRaceProver(base: KernelVmRaceProverBase): RaceProver
   const io: NonNullable<KernelVmRaceProverBase["io"]> = base.io ?? {
     read: (p: string) => readFileSync(p, "utf-8"),
     write: (content: string, bootIndex: number) => {
-      const dir = mkdtempSync(join(tmpdir(), "0sec-race-"));
+      const dir = mkdtempSync(join(tmpdir(), "0-race-"));
       const out = join(dir, `repro-widened-boot${bootIndex}.c`);
       writeFileSync(out, content, "utf-8");
       return out;

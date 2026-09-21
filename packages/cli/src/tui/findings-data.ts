@@ -1,5 +1,5 @@
-import type { Finding } from "@0/shared"
-import type { NativeRuntime, SourceFixResult, SourceFixStatus } from "@0/core"
+import type { Finding } from "@0/shared";
+import type { NativeRuntime, SourceFixResult, SourceFixStatus } from "@0/core";
 import type { getRuntimeAvailability } from "../utils.js";
 import { fitTuiText, fitTuiUrl } from "./text.js";
 
@@ -131,7 +131,7 @@ export function groupFindings(rows: FindingsRow[]): FindingGroup[] {
     .sort((a, b) => b.latest.timestamp - a.latest.timestamp);
 }
 
-/** Overrides the scan target as the repo to fix in; `0sec fix` takes <repo>. */
+/** Overrides the scan target as the repo to fix in; `0 fix` takes <repo>. */
 const FIX_REPO_ENV = "ZERO_FIX_REPO";
 
 export interface FixRunState {

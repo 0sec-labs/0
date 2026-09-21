@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import type { AttackCategory } from "@0/shared"
+import type { AttackCategory } from "@0/shared";
 import { techniquesForCategory, techniquesForEvent } from "./index.js";
 import type { AttackTechnique } from "./index.js";
 

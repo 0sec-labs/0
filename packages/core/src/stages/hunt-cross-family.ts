@@ -47,7 +47,7 @@
  * beside it and are applied by the wiring layer in hunt-scan.ts.
  */
 
-import { modelProvider } from "@0/shared"
+import { modelProvider } from "@0/shared";
 
 /**
  * Default ON (issue #661). This deliberately breaks from

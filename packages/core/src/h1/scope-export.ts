@@ -1,5 +1,5 @@
 // Convert a HackerOne `structured_scopes` payload into the venue-neutral
-// `ScopeJson` shape that `0sec scan --scope <path>` consumes.
+// `ScopeJson` shape that `0 scan --scope <path>` consumes.
 //
 // The consumer schema (see `packages/core/src/scope/scope.ts`) is:
 //
@@ -30,7 +30,7 @@
 // downstream review notices it.
 
 import { mkdirSync, writeFileSync } from "node:fs";
-import { homeStateDir } from "@0/shared"
+import { homeStateDir } from "@0/shared";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { isIP } from "node:net";
@@ -93,7 +93,7 @@ export function toScopeJson(program: H1Program, scopes: H1Scope[]): {
   const json: ScopeJson = {
     in_scope: [...inScope].sort(),
     out_of_scope: [...outOfScope].sort(),
-    // Per 0sec#216: the consumer-side scope file may carry an
+    // Per 0#216: the consumer-side scope file may carry an
     // `attribution` block. We don't synthesise one here — the operator
     // sets that explicitly on the engagement, not the venue. But we
     // leave the field absent so the matcher loads cleanly and the

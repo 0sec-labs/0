@@ -1,9 +1,11 @@
-import type { Finding,
-ResearchEvidenceEnvelope,
-ResearchExecutionContext,
-ResearchNoveltyReceipt,
-ResearchPromotionGrade,
-ResearchReportingPolicy, } from "@0/shared"
+import type {
+  Finding,
+  ResearchEvidenceEnvelope,
+  ResearchExecutionContext,
+  ResearchNoveltyReceipt,
+  ResearchPromotionGrade,
+  ResearchReportingPolicy,
+} from "@0/shared";
 
 export type ResearchStage =
   | "discover"

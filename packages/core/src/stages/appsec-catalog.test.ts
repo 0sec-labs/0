@@ -27,7 +27,7 @@ const originalRegistryPath = process.env[REGISTRY_ENV];
 let isolatedRegistryDirectory: string;
 
 beforeEach(() => {
-  isolatedRegistryDirectory = mkdtempSync(join(tmpdir(), "0sec-appsec-registry-"));
+  isolatedRegistryDirectory = mkdtempSync(join(tmpdir(), "0-appsec-registry-"));
   process.env[REGISTRY_ENV] = join(isolatedRegistryDirectory, "overlay.json");
 });
 

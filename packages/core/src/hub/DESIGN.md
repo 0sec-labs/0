@@ -3,10 +3,10 @@
 Status: design + increment 1 (peer roster) shipped. Everything past increment 1
 is proposed, not built.
 
-The hub lets concurrently running agents — and separate 0sec sessions working the
+The hub lets concurrently running agents — and separate 0 sessions working the
 same project directory — see one another and exchange short messages, in the
 spirit of the Oh My Pi (OMP) hub (`send` / `wait` / `inbox` / `list` / `jobs` /
-`cancel`). This document describes what 0sec has today, the target model, the
+`cancel`). This document describes what 0 has today, the target model, the
 transport trade-offs and recommendation, the security analysis, and a staged
 plan whose first increment is `registry.ts`.
 
@@ -14,7 +14,7 @@ plan whose first increment is `registry.ts`.
 
 ## 1. What exists today
 
-0sec has **no hub and no peer messaging**. The only multi-agent primitive is a
+0 has **no hub and no peer messaging**. The only multi-agent primitive is a
 one-way, single-depth fan-out.
 
 ### `spawnAgent` / `spawnAgents` — `packages/core/src/agent/tools.ts`
@@ -46,7 +46,7 @@ one-way, single-depth fan-out.
   on completion. There is **no mid-flight messaging**, no child→child talk, no
   parent→running-child talk.
 - **In-process only.** Children are async calls inside the parent process. There
-  is **no notion of a second 0sec session**, and nothing is discoverable across
+  is **no notion of a second 0 session**, and nothing is discoverable across
   processes or across a shared directory.
 - **Single depth.** By design (the depth guard). A hub does not need to change
   this to add peer messaging.
@@ -65,7 +65,7 @@ one-way, single-depth fan-out.
   reply back to an agent through them, and they do not cross the process
   boundary.
 
-Net: 0sec has a spawn-and-merge fan-out with lifecycle telemetry. It has none of
+Net: 0 has a spawn-and-merge fan-out with lifecycle telemetry. It has none of
 the hub's roster, addressing, mailboxes, `wait`, or cross-session discovery.
 
 ---
@@ -76,7 +76,7 @@ the hub's roster, addressing, mailboxes, `wait`, or cross-session discovery.
 
 A **roster** is the set of addressable peers. Two kinds (`PeerKind`):
 
-- `session` — a top-level 0sec process. The primary session in a directory is
+- `session` — a top-level 0 process. The primary session in a directory is
   named **`Main`** (matching OMP); additional sessions get suffixed ids
   (`Main-2`, …) via `nextPeerId`.
 - `subagent` — a child spawned by a session; addressed by its task/agent id.
@@ -122,7 +122,7 @@ them into the transport for cross-session visibility.
 
 ### Cross-session discovery
 
-A **second 0sec session in the same directory** discovers the first through a
+A **second 0 session in the same directory** discovers the first through a
 **shared rendezvous keyed by the real, canonical project path**:
 
 1. On startup a session computes its rendezvous key from the resolved project
@@ -191,7 +191,7 @@ Extend the existing `eventBus` into a request/reply channel among agents in ONE
 process.
 
 - **Crash-safety / concurrency:** trivial (single process, single thread).
-- **Fatal limitation:** **cannot satisfy the core requirement** — a second 0sec
+- **Fatal limitation:** **cannot satisfy the core requirement** — a second 0
   session in the same directory. It is a strict subset of the target.
 
 ### Recommendation: **A (filesystem spool), with C as its in-process fast path.**
@@ -215,7 +215,7 @@ when a message must cross the process boundary; the two share one roster.
 
 ## 4. Security analysis
 
-0sec is a security tool operating against authorized targets, often on shared or
+0 is a security tool operating against authorized targets, often on shared or
 multi-user machines. The hub must add coordination **without adding authority**.
 
 1. **A message must never widen scope or approve a tool call.** Messages are

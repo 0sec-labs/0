@@ -23,7 +23,7 @@ import {
   runTier3Validation,
   promoteFindingsWithTier3Result,
 } from "./c-cpp-tier3.js";
-import type { Finding } from "@0/shared"
+import type { Finding } from "@0/shared";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 // __dirname = packages/core/src/review → walk up to repo root.
@@ -34,7 +34,7 @@ const QEMU_E2E = process.env["ZERO_KERNEL_QEMU"] === "1";
 
 describe.skipIf(!QEMU_E2E)("Tier-3 E2E (real QEMU)", () => {
   it("validates the synthetic integer-truncation crash through Tier-2 → Tier-3", async () => {
-    const outDir = await mkdtemp(join(tmpdir(), "0sec-tier3-e2e-"));
+    const outDir = await mkdtemp(join(tmpdir(), "0-tier3-e2e-"));
     try {
       const seeds = await extractCorpus(TARGET, { outputDir: join(outDir, "corpus") });
       const artifact = await buildTier2Harness({

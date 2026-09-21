@@ -26,7 +26,7 @@
  * two independently-drifting ones.
  */
 
-import type { Finding } from "@0/shared"
+import type { Finding } from "@0/shared";
 import { findingTokens, jaccard, loadHuntCorpusRows, memoryTokens, type HuntCorpusRow } from "./hunt-flywheel.js";
 import {
   disprovenHuntClaims,

@@ -3,8 +3,8 @@ import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { InvalidArgumentError } from "commander";
 import type { Command } from "commander";
-import { runSecureProject } from "@0/core"
-import type { SecureEvent, SecureProjectResult } from "@0/core"
+import { runSecureProject } from "@0/core";
+import type { SecureEvent, SecureProjectResult } from "@0/core";
 
 interface SecureOptions {
   testCommand: string;

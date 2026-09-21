@@ -81,7 +81,7 @@ describe("Jev evaluation trust boundaries", () => {
   it("maps classifier groups back to typed kernel answers without treating false confidence as true", async () => {
     const fetchImpl = vi.fn<typeof fetch>().mockImplementation(async (_url, init) => {
       const body = JSON.parse(String(init?.body)) as { labels: string[]; inputs: string[] };
-      expect(init?.headers).toMatchObject({ "User-Agent": "0sec-kernel-prepass/1.0" });
+      expect(init?.headers).toMatchObject({ "User-Agent": "0-kernel-prepass/1.0" });
       if (body.labels[0] === "true") {
         return Response.json({ model: "jev-1.13.0", results: body.inputs.map(() => ({
           label: "false", confidence: 0.88, scores: { true: 0.12, false: 0.88 }, model: "jev-1.13.0",

@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { osecDB } from "@0/db"
+import { osecDB } from "@0/db";
 import { LootLedger } from "./loot.js";
 import {
   PersistentCredentialStore,
@@ -15,8 +15,8 @@ let db: osecDB;
 let store: PersistentCredentialStore;
 
 beforeEach(() => {
-  dir = mkdtempSync(join(tmpdir(), "0sec-credstore-"));
-  db = new osecDB(join(dir, "0sec.db"));
+  dir = mkdtempSync(join(tmpdir(), "0-credstore-"));
+  db = new osecDB(join(dir, "0.db"));
   store = new PersistentCredentialStore(db);
 });
 

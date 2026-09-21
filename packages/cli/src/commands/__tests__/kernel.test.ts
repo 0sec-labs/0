@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Command } from "commander";
-import type { KernelVariantHuntReport } from "@0/core"
+import type { KernelVariantHuntReport } from "@0/core";
 
 const runKernelVariantHuntMock = vi.fn<() => Promise<KernelVariantHuntReport>>();
 const mineSyzbotQueueMock = vi.fn();
@@ -56,10 +56,10 @@ async function runCli(argv: string[]): Promise<void> {
   const program = new Command();
   program.exitOverride();
   registerKernelCommand(program);
-  await program.parseAsync(["node", "0sec-cli", ...argv]);
+  await program.parseAsync(["node", "@0/cli", ...argv]);
 }
 
-describe("0sec kernel variant-hunt", () => {
+describe("0 kernel variant-hunt", () => {
   let logSpy: ReturnType<typeof vi.spyOn>;
   let errorSpy: ReturnType<typeof vi.spyOn>;
   let previousExitCode: string | number | null | undefined;

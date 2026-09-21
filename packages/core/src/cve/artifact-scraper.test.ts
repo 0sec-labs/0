@@ -81,7 +81,7 @@ function buildMockFetch(routes: Record<string, Route>): MockFetchTracker {
 }
 
 function tmpCacheDir(): string {
-  return mkdtempSync(join(tmpdir(), "0sec-cve-cache-"));
+  return mkdtempSync(join(tmpdir(), "0-cve-cache-"));
 }
 
 const NVD_URL_PREFIX = "https://services.nvd.nist.gov/rest/json/cves/2.0";

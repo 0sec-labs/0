@@ -54,7 +54,7 @@ RE_KERNEL_COMMIT = re.compile(
     r"/(?:commit/?\?id=|c/)([0-9a-f]{7,40})"
 )
 
-UA = "0sec-cve-crossref/0.1"
+UA = "0-cve-crossref/0.1"
 CACHE_TTL_HOURS = 168  # 1 week
 
 

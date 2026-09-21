@@ -1,4 +1,4 @@
-import type { ScanContext, StageResult, TargetInfo } from "@0/shared"
+import type { ScanContext, StageResult, TargetInfo } from "@0/shared";
 import type { NativeRuntime, RuntimeType } from "../runtime/types.js";
 import { sendPrompt, extractResponseText, isMcpTarget } from "../http.js";
 import { LlmApiRuntime } from "../runtime/llm-api.js";

@@ -10,7 +10,7 @@ afterEach(() => {
   for (const directory of directories.splice(0)) rmSync(directory, { recursive: true, force: true });
 });
 function directory(): string {
-  const path = mkdtempSync(join(tmpdir(), "0sec-evolution-artifacts-"));
+  const path = mkdtempSync(join(tmpdir(), "0-evolution-artifacts-"));
   directories.push(path);
   return path;
 }

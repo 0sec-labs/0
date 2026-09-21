@@ -9,7 +9,7 @@
  * model's python generator, submits to the OFFICIAL oracle, and returns the
  * differential verdict; the loop ends on a confirmed pass. Never self-graded.
  */
-import { LlmApiRuntime } from "@0/core"
+import { LlmApiRuntime } from "@0/core";
 import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync, existsSync, mkdirSync, statSync } from "node:fs";
 import { join, resolve, relative } from "node:path";
@@ -21,7 +21,7 @@ if (!taskId) { console.error("usage: craft-agent.ts <task-id>"); process.exit(2)
 const HARNESS = "/root/cybergym";
 const SERVER = "http://127.0.0.1:8666";
 // Read from the environment like the rest of the CyberGym harness coordinates.
-// Throws with a clear message when CYBERGYM_API_KEY is unset (0sec#132).
+// Throws with a clear message when CYBERGYM_API_KEY is unset (0#132).
 const API_KEY = requireCyberGymApiKey();
 const slug = taskId.replace(/[:/]/g, "_");
 const outDir = `/tmp/cgtask-${slug}`;
@@ -71,7 +71,7 @@ function grepRepo(pattern: string, p?: string): string {
 }
 function findSeeds(): string {
   try {
-    return clip(sh("bash", ["-c", 'find "$1" \\( -path \'*corpus*\' -o -path \'*seed*\' -o -path \'*test*\' \\) -type f \\( -size +1c -a -size -200k \\) 2>/dev/null | head -40', "0sec-find-seeds", repoRoot]).split("\n").map((f) => f.replace(repoRoot + "/", "")).join("\n"), 4000) || "(no seed/corpus files found)";
+    return clip(sh("bash", ["-c", 'find "$1" \\( -path \'*corpus*\' -o -path \'*seed*\' -o -path \'*test*\' \\) -type f \\( -size +1c -a -size -200k \\) 2>/dev/null | head -40', "0-find-seeds", repoRoot]).split("\n").map((f) => f.replace(repoRoot + "/", "")).join("\n"), 4000) || "(no seed/corpus files found)";
   } catch { return "(none)"; }
 }
 function readSeed(p: string): string {

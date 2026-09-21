@@ -1,7 +1,7 @@
 # 0verse roadmap
 
 > Status: 2026-07-25. Scope frozen under
-> [0sec ADR-066](https://github.com/0sec-labs/0sec/blob/main/docs/DECISIONS.md#adr-066--2026-07-17--0verse-is-an-evidence-producernotary-input-not-a-dispatchable-engine-yet).
+> [0 ADR-066](https://github.com/0sec-labs/0/blob/main/docs/DECISIONS.md#adr-066--2026-07-17--0verse-is-an-evidence-producernotary-input-not-a-dispatchable-engine-yet).
 > Milestone checkboxes record in-tree implementation or proof work; they do not by
 > themselves mean live-proven or operational. Use the canonical
 > [maturity vocabulary](ARCHITECTURE.md#scope-decision-and-maturity-vocabulary).

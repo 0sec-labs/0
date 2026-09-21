@@ -33,7 +33,7 @@
  * Every POST re-checks each record's required tier against the live level.
  */
 
-import { homeStateDir, VERSION } from "@0/shared"
+import { homeStateDir, VERSION } from "@0/shared";
 import { mkdirSync, appendFileSync } from "node:fs";
 import { join } from "node:path";
 import { eventBus, type EventSink, type EventType } from "../events/bus.js";
@@ -627,7 +627,7 @@ class AnalyticsPipeline {
       // A read-only home must not break the tool or hide the stderr outcome.
     }
     try {
-      process.stderr.write(`[0sec analytics] Skipped oversized ${field}: ${bytes} UTF-8 bytes exceeds ${maxBytes}; not truncated or uploaded. Details: ${filename}.\n`);
+      process.stderr.write(`[0 analytics] Skipped oversized ${field}: ${bytes} UTF-8 bytes exceeds ${maxBytes}; not truncated or uploaded. Details: ${filename}.\n`);
     } catch {
       // Telemetry never breaks the caller.
     }
@@ -715,7 +715,7 @@ class AnalyticsPipeline {
             Authorization: `Bearer ${creds.token}`,
             "Content-Type": "application/json",
             Accept: "application/json",
-            "User-Agent": `0sec-cli/${typeof VERSION === "string" ? VERSION : "unknown"}`,
+            "User-Agent": `@0/cli/${typeof VERSION === "string" ? VERSION : "unknown"}`,
           },
           body,
           signal: controller.signal,

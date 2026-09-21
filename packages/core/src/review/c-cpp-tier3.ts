@@ -1,5 +1,5 @@
 /**
- * 0sec Tier-3 QEMU validation for C/C++ harness artifacts.
+ * 0 Tier-3 QEMU validation for C/C++ harness artifacts.
  *
  * Tier-1 (`c-cpp-profile.ts`) wraps a suspect function in a standalone
  * libFuzzer harness. Tier-2 (`c-cpp-tier2.ts`) links that harness
@@ -27,7 +27,7 @@
  * Tier-3 stages everything from `harness_path` + `linked_objects` into
  * a host tmp directory which QEMU mounts via virtfs (see
  * `buildQemuCommand` in `triage/kernel-vm-runner.ts`). The guest
- * runner script copies the staged sources into `/tmp/0sec-tier3-run`,
+ * runner script copies the staged sources into `/tmp/0-tier3-run`,
  * runs `compile_command`, then `run_command`, and writes the resulting
  * stderr/stdout + dmesg back into the shared dir for the host to
  * parse.
@@ -44,7 +44,7 @@ import { spawn } from "node:child_process";
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync, readFileSync, existsSync, copyFileSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
-import type { Finding } from "@0/shared"
+import type { Finding } from "@0/shared";
 import {
   buildQemuCommand,
   loadKernelVmConfigFromEnv,
@@ -119,8 +119,8 @@ export interface Tier3ValidationOptions {
 }
 
 const DEFAULT_WALL_CLOCK_MS = 5 * 60 * 1000;
-const SHARED_DIR_PREFIX = "0sec-tier3-";
-const GUEST_WORK_DIR = "/tmp/0sec-tier3-run";
+const SHARED_DIR_PREFIX = "0-tier3-";
+const GUEST_WORK_DIR = "/tmp/0-tier3-run";
 
 /**
  * Run a Tier-3 QEMU validation against a Tier-2 artifact.
@@ -395,7 +395,7 @@ function candidateFindingCategories(verdict: SanitizerVerdict): Set<Finding["cat
 }
 
 function appendSanitizerEvidence(existing: string, verdict: SanitizerVerdict): string {
-  const line = `[0sec tier-3] sanitizer=${verdict.sanitizer} kind=${verdict.kind} at ${verdict.sourceFile ?? "?"}:${verdict.sourceLine ?? "?"}`;
+  const line = `[0 tier-3] sanitizer=${verdict.sanitizer} kind=${verdict.kind} at ${verdict.sourceFile ?? "?"}:${verdict.sourceLine ?? "?"}`;
   if (!existing) return line;
   return `${existing}\n${line}`;
 }
@@ -403,7 +403,7 @@ function appendSanitizerEvidence(existing: string, verdict: SanitizerVerdict): s
 /**
  * Rewrite a Tier-2 compile_command so it runs against the staged
  * sources inside the guest. Tier-2's command uses absolute host paths
- * (`/Users/.../src/api.c`); the guest only sees `/mnt/0sec/src/api.c`
+ * (`/Users/.../src/api.c`); the guest only sees `/mnt/0/src/api.c`
  * via the shared dir. We replace the absolute basenames and swap the
  * harness binary path to the guest work dir.
  *
@@ -459,7 +459,7 @@ function renderGuestScript(args: {
   return [
     "#!/bin/sh",
     "set -eu",
-    "SHARE_DIR=/mnt/0sec",
+    "SHARE_DIR=/mnt/0",
     `WORK_DIR=${GUEST_WORK_DIR}`,
     'mkdir -p "$WORK_DIR"',
     'cp -r "$SHARE_DIR/src" "$WORK_DIR/src" 2>/dev/null || true',

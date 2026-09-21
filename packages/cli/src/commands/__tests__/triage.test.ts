@@ -1,5 +1,5 @@
 /**
- * Coverage seed for `0sec-cli`'s `triage` command — the Semgrep-style
+ * Coverage seed for `@0/cli`'s `triage` command — the Semgrep-style
  * false-positive memory surface. Operators run this to (a) hand-craft an
  * FP memory from an existing finding, (b) list and filter memories,
  * (c) remove a stale one, and (d) `mark-fp` a finding which both flips
@@ -258,7 +258,7 @@ async function runCli(argv: string[]): Promise<unknown> {
   });
   registerTriageCommand(program);
   try {
-    await program.parseAsync(["node", "0sec-cli", ...argv]);
+    await program.parseAsync(["node", "@0/cli", ...argv]);
     return undefined;
   } catch (err) {
     return err;

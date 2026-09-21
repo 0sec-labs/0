@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { DEFAULT_ALLOW_MODEL_SELF_EXTENSION } from "@0/shared"
+import { DEFAULT_ALLOW_MODEL_SELF_EXTENSION } from "@0/shared";
 
 /**
  * Model-authored self-extension: a session-scoped, additive-only registry.
@@ -16,7 +16,7 @@ import { DEFAULT_ALLOW_MODEL_SELF_EXTENSION } from "@0/shared"
  * without calling `next()` short-circuits the chain — so one model-written
  * plugin can silently disable the ENTIRE authorization pipeline. Their own
  * README concedes the toolset is "not a security boundary… treat it like bash
- * access." 0sec's guard layer is deny-only, and that single type-level fact is
+ * access." 0's guard layer is deny-only, and that single type-level fact is
  * what lets us accept model-authored contributions without inheriting that
  * property.
  *

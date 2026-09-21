@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
-import { VERSION } from "@0/shared"
+import { VERSION } from "@0/shared";
 
 const here = dirname(fileURLToPath(import.meta.url));
 // packages/core/src/ -> packages/core -> packages -> repo root

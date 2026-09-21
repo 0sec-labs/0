@@ -1,21 +1,21 @@
-// `0sec cve` — CVE workflows.
+// `0 cve` — CVE workflows.
 //
 // Two subcommands live on the same parent command, one per slice of
 // issue #272 v0:
 //
-//   - `0sec cve find <cve-id>`  — issue #272 v0 part 1. Operator-facing
+//   - `0 cve find <cve-id>`  — issue #272 v0 part 1. Operator-facing
 //     half of the artifact scraper. Queries a curated set of public
 //     catalogues (NVD, GHSA, OSV, distro trackers, GitHub search),
 //     merges the results, and emits either machine-readable JSON or a
 //     pretty table.
 //
-//   - `0sec cve adapt <cve-id>` — issue #272 v0 part 2. Wraps the
+//   - `0 cve adapt <cve-id>` — issue #272 v0 part 2. Wraps the
 //     core `adaptAndVerify` pipeline so an operator can run the
 //     discover → confirm → port → reproduce loop end-to-end against a
 //     target kernel tree without writing TypeScript.
 //
 // The two subcommands share nothing at runtime today; they're grouped
-// under the same parent so the user-facing surface (`0sec cve …`)
+// under the same parent so the user-facing surface (`0 cve …`)
 // stays coherent.
 //
 // Exit codes:
@@ -37,14 +37,18 @@ import type { Command } from "commander";
 import chalk from "chalk";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { findCveArtifacts,
-normaliseCveId,
-adaptAndVerify, } from "@0/core"
-import type { ScrapedCveArtifacts,
-AdaptationResult,
-AdaptationStatus,
-CveArtifactProvider,
-CveArtifacts, } from "@0/core"
+import {
+  findCveArtifacts,
+  normaliseCveId,
+  adaptAndVerify,
+} from "@0/core";
+import type {
+  ScrapedCveArtifacts,
+  AdaptationResult,
+  AdaptationStatus,
+  CveArtifactProvider,
+  CveArtifacts,
+} from "@0/core";
 
 // ── `cve find` (scraper) ────────────────────────────────────────────
 

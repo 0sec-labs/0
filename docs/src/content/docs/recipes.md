@@ -269,7 +269,7 @@ export GITHUB_TOKEN="ghp_..."
   --export github:myorg/security-findings
 ```
 
-Issues use literal `0sec`, `severity:critical` (and other severity values),
+Issues use literal `0`, `severity:critical` (and other severity values),
 and `category:xss` (and other categories) labels. Existing open issues with the
 same generated title are skipped. Issue creation does not reproduce a finding.
 

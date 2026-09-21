@@ -1,8 +1,8 @@
 /**
- * Pure formatter for the core's `cross_validated_leads` bus event (0sec
+ * Pure formatter for the core's `cross_validated_leads` bus event (0
  * FoxGuard cross-validation, Phase 4). The event is emitted once per scan when
  * the multi-modal agreement layer ran and at least one finding reached
- * `both_fire` — i.e. both the 0sec agent AND the foxguard pattern scanner
+ * `both_fire` — i.e. both the 0 agent AND the foxguard pattern scanner
  * fired on the same file. See `CrossValidatedLeadsPayload` in
  * `@0/core` (`packages/core/src/events/bus.ts`).
  *
@@ -12,7 +12,7 @@
  * Keeping it pure lets it be unit-tested without stdout/TTY plumbing and keeps
  * the fail-soft parsing in one place (a bad payload must never crash a scan).
  */
-import { severityRank } from "@0/shared"
+import { severityRank } from "@0/shared";
 
 /** Default number of leads to print before collapsing the tail into "+N more". */
 export const CROSS_VALIDATED_LEADS_CAP = 8;

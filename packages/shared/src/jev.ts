@@ -240,7 +240,7 @@ function createClassifierDevEvaluator(config: Extract<JevConfig, { provider: "cl
         await Promise.all([...groups.values()].map(async (group) => {
           const response = await fetchImpl("https://classifier.dev", {
             method: "POST", signal, redirect: "error",
-            headers: { "Content-Type": "application/json", "User-Agent": "0sec-kernel-prepass/1.0" },
+            headers: { "Content-Type": "application/json", "User-Agent": "0-kernel-prepass/1.0" },
             body: JSON.stringify({
               labels: group.labels,
               inputs: group.items.map((item) => item.input),

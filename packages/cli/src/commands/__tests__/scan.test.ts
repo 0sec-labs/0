@@ -1,5 +1,5 @@
 /**
- * Coverage seed for `0sec-cli`'s `scan` command. We register the
+ * Coverage seed for `@0/cli`'s `scan` command. We register the
  * subcommand on a fresh Commander program, mock the heavy collaborators
  * (`runUnified` from `./run.js`, plus the `@0/core` scope/
  * attribution helpers), and assert on (a) invalid-input exit codes, and
@@ -20,7 +20,7 @@ import { Command } from "commander";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { ScanReport } from "@0/shared"
+import type { ScanReport } from "@0/shared";
 
 // ── Module-level mocks ──────────────────────────────────────────────────────
 
@@ -93,7 +93,7 @@ async function runCli(argv: string[]): Promise<void> {
   }
 
   try {
-    await program.parseAsync(["node", "0sec", ...effectiveArgv]);
+    await program.parseAsync(["node", "0", ...effectiveArgv]);
   } catch {
     // commander.exitOverride() throws CommanderError on usage errors,
     // and our process.exit mock throws on hard exits. Both are expected.
@@ -126,7 +126,7 @@ beforeEach(() => {
   exitSpy = makeExitMock(tracker);
   errSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
   logSpy = vi.spyOn(console, "log").mockImplementation(() => undefined);
-  tmpRoot = mkdtempSync(join(tmpdir(), "0sec-scan-test-"));
+  tmpRoot = mkdtempSync(join(tmpdir(), "0-scan-test-"));
   defaultScopePath = join(tmpRoot, "scope.json");
   writeFileSync(defaultScopePath, "{}");
 });
@@ -147,7 +147,7 @@ describe("scan — happy path option-threading", () => {
     expect(opts.targetType).toBe("url");
     expect(opts.runtime).toBe("auto");
     expect(opts.depth).toBe("default");
-    // 0sec#... http(s) → mode "web" by default
+    // 0#... http(s) → mode "web" by default
     expect(opts.mode).toBe("web");
     expect(opts.format).toBe("terminal");
     expect(opts.timeout).toBe(30000);
@@ -486,7 +486,7 @@ describe("scan — --features and --no-decoy-detection toggle env vars", () => {
   });
 });
 
-describe("scan — --emit pr (0sec#377)", () => {
+describe("scan — --emit pr (0#377)", () => {
   it("threads --emit pr + --base + --dry-run into runUnified", async () => {
     await runCli([
       "scan",
@@ -526,7 +526,7 @@ describe("scan — required --target", () => {
   });
 });
 
-describe("scan — --resume (0sec#374)", () => {
+describe("scan — --resume (0#374)", () => {
   it("threads --resume into runUnified as resumeScanId", async () => {
     await runCli([
       "scan",

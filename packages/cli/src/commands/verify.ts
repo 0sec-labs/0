@@ -1,9 +1,9 @@
 /**
- * 0sec#194 — `0sec verify` command.
+ * 0#194 — `0 verify` command.
  *
  * Wraps `executePocSteps` (the deterministic-replay runtime introduced in
- * 0sec#171, see `packages/core/src/disclose/poc-runtime.ts`) behind a
- * single CLI surface so cloud's worker-controller (0sec-cloud#193) can
+ * 0#171, see `packages/core/src/disclose/poc-runtime.ts`) behind a
+ * single CLI surface so cloud's worker-controller (0-cloud#193) can
  * shell out to the OSS engine instead of re-implementing replay logic
  * in-process.
  *
@@ -24,32 +24,38 @@ import { processPresentationOutput } from "../presentation/process-output.js";
 import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { executePocSteps,
-runCliPathTraversalReplayFixture,
-runDeterministicReplay,
-LocalShellRunner,
-DockerRunner,
-QemuRunner,
-loadScope,
-evidenceKindForFinding,
-oracleForCategory,
-createReproductionBundle,
-runReproductionBundle,
-type PocExecutionReport,
-type PocExecutionTarget,
-type PocStepResult,
-type VerifyEvidenceKind, } from "@0/core"
-import type { EvidenceArtifact,
-Finding,
-PocStep,
-VerificationAssertion,
-VerificationCommand,
-VerificationResult as SharedVerificationResult,
-VerificationStatus as SharedVerificationStatus, } from "@0/shared"
-import { VERSION,
-VerificationResultSchema, } from "@0/shared"
+import {
+  executePocSteps,
+  runCliPathTraversalReplayFixture,
+  runDeterministicReplay,
+  LocalShellRunner,
+  DockerRunner,
+  QemuRunner,
+  loadScope,
+  evidenceKindForFinding,
+  oracleForCategory,
+  createReproductionBundle,
+  runReproductionBundle,
+  type PocExecutionReport,
+  type PocExecutionTarget,
+  type PocStepResult,
+  type VerifyEvidenceKind,
+} from "@0/core";
+import type {
+  EvidenceArtifact,
+  Finding,
+  PocStep,
+  VerificationAssertion,
+  VerificationCommand,
+  VerificationResult as SharedVerificationResult,
+  VerificationStatus as SharedVerificationStatus,
+} from "@0/shared";
+import {
+  VERSION,
+  VerificationResultSchema,
+} from "@0/shared";
 import { z } from "zod";
-import { findingSchema, formatZodError } from "@0/shared"
+import { findingSchema, formatZodError } from "@0/shared";
 
 // ── Public output schema ────────────────────────────────────────────────────
 
@@ -91,7 +97,7 @@ export function statusFromVerdict(
   }
 }
 
-/** Map `VerificationStatus` → process exit code per 0sec#194. */
+/** Map `VerificationStatus` → process exit code per 0#194. */
 export function exitCodeForStatus(status: VerificationStatus): number {
   switch (status) {
     case "reproduced":
@@ -231,7 +237,7 @@ function assertionForStep(
 
 /**
  * Whether a token-matched OAST out-of-band callback proved this finding
- * (0sec#659 / #1278). The deterministic replay this command runs cannot
+ * (0#659 / #1278). The deterministic replay this command runs cannot
  * re-fire an out-of-band callback — its `expect` predicates only see the
  * in-band request/response — so an OAST proof is scan-time PoV provenance
  * carried on the finding. We recognise it two ways:
@@ -257,7 +263,7 @@ export function findingOastConfirmed(finding: Finding): boolean {
 
 /**
  * Derive the additive evidence-provenance fields for a {@link VerificationResult}
- * from the finding (0sec#659 / #1278). Shared by every result builder so the
+ * from the finding (0#659 / #1278). Shared by every result builder so the
  * signal is stamped identically regardless of replay outcome.
  *
  * Contract, tuned to the 0cloud consumer (its verify writeback + #1302's
@@ -490,15 +496,15 @@ interface VerifyOpts {
   artifactDir?: string;
   format?: string;
   output?: string;
-  // ── kernel-finding mode (0sec#271 Tier 2) ──
+  // ── kernel-finding mode (0#271 Tier 2) ──
   kernelFinding?: string;
   kernelTree?: string;
   kernelConfig?: string;
   attempts?: string;
   wallClock?: string;
-  /** 0sec#193 runner selection. */
+  /** 0#193 runner selection. */
   runner?: string;
-  /** 0sec#193 run directory for the deterministic-replay runner. */
+  /** 0#193 run directory for the deterministic-replay runner. */
   out?: string;
   /** Engagement scope required for networked Docker HTTP replay. */
   scope?: string;
@@ -673,7 +679,7 @@ export async function runKernelFindingVerify(opts: {
  * execution completes (or errors out).
  */
 function allocateIsolatedWorkspace(): { cwd: string; cleanup: () => void } {
-  const cwd = mkdtempSync(join(tmpdir(), "0sec-verify-"));
+  const cwd = mkdtempSync(join(tmpdir(), "0-verify-"));
   return {
     cwd,
     cleanup: () => {
@@ -955,7 +961,7 @@ async function verifyAction(opts: VerifyOpts, positionalFinding?: string): Promi
     if (process.env["ZERO_KERNEL_VERIFY"] !== "1") {
       throw new Error(
         "--kernel-finding requires ZERO_KERNEL_VERIFY=1 (CI cost gate, #271). " +
-          "Run the command through `env ZERO_KERNEL_VERIFY=1 0sec ...` to opt in.",
+          "Run the command through `env ZERO_KERNEL_VERIFY=1 0 ...` to opt in.",
       );
     }
     if (!opts.kernelTree) {
@@ -1006,7 +1012,7 @@ async function verifyAction(opts: VerifyOpts, positionalFinding?: string): Promi
     const findingPath = positionalFinding ?? opts.finding;
     if (!findingPath) {
       throw new Error(
-        "missing finding path. Usage: 0sec verify <finding.json> [--runner local|docker|qemu]",
+        "missing finding path. Usage: 0 verify <finding.json> [--runner local|docker|qemu]",
       );
     }
     const runner = parseRunnerKind(opts.runner);
@@ -1116,7 +1122,7 @@ export function registerVerifyCommand(program: Command): void {
     )
     .argument(
       "[finding]",
-      "Path to a finding.json (0sec#193 deterministic-replay path). Equivalent to --finding when --runner is supplied.",
+      "Path to a finding.json (0#193 deterministic-replay path). Equivalent to --finding when --runner is supplied.",
     )
     .option(
       "--runner <kind>",
@@ -1138,7 +1144,7 @@ export function registerVerifyCommand(program: Command): void {
     )
     .option(
       "--out <dir>",
-      "0sec#193 run directory (artifacts go under <out>/artifacts/). Defaults to a fresh tmpdir.",
+      "0#193 run directory (artifacts go under <out>/artifacts/). Defaults to a fresh tmpdir.",
     )
     .option("--finding <path>", "Path to a finding.json.")
     .option(
@@ -1182,7 +1188,7 @@ export function registerVerifyCommand(program: Command): void {
       "--output <path>",
       "Write the verification_result JSON to this path instead of stdout.",
     )
-    // ── Kernel-finding (Tier 2, 0sec#271) ──
+    // ── Kernel-finding (Tier 2, 0#271) ──
     .option(
       "--kernel-finding <path>",
       "Path to a kernel-review finding.json. Runs the Tier 2 agent loop to " +

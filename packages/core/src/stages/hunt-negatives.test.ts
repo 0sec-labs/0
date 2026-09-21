@@ -22,7 +22,7 @@ import { rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
-import type { Finding } from "@0/shared"
+import type { Finding } from "@0/shared";
 import {
   huntNegativesEnabled,
   loadKnownNegatives,
@@ -87,7 +87,7 @@ describe("huntNegativesEnabled", () => {
 describe("loadKnownNegatives / loadKnownNegativesFromEnv — bounded and inert by default", () => {
   /** A corpus of `n` refuted rows, in the JSONL shape `loadHuntCorpusRows` reads. */
   function writeCorpus(n: number, opts: { reasonChars?: number } = {}): string {
-    const path = join(tmpdir(), `0sec-negatives-test-${process.pid}-${Math.random().toString(36).slice(2)}.jsonl`);
+    const path = join(tmpdir(), `0-negatives-test-${process.pid}-${Math.random().toString(36).slice(2)}.jsonl`);
     const lines: string[] = [];
     for (let i = 0; i < n; i++) {
       lines.push(
@@ -137,7 +137,7 @@ describe("loadKnownNegatives / loadKnownNegativesFromEnv — bounded and inert b
     try {
       process.env.HUNT_CORPUS_PATH = path;
       expect(loadKnownNegativesFromEnv()).toHaveLength(3);
-      process.env.HUNT_CORPUS_PATH = join(tmpdir(), "0sec-does-not-exist.jsonl");
+      process.env.HUNT_CORPUS_PATH = join(tmpdir(), "0-does-not-exist.jsonl");
       expect(loadKnownNegativesFromEnv()).toEqual([]);
     } finally {
       rmSync(path, { force: true });

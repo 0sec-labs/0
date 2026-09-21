@@ -31,8 +31,8 @@
 import React, { useMemo, useState } from "react";
 import { useKeyboard } from "@opentui/react";
 import { TextAttributes } from "@opentui/core";
-import type { Finding } from "@0/shared"
-import { renderPlatformReport, renderCvssSection, redactSensitiveHeaders } from "@0/core"
+import type { Finding } from "@0/shared";
+import { renderPlatformReport, renderCvssSection, redactSensitiveHeaders } from "@0/core";
 
 import { useTheme, type Theme } from "./theme-context.js";
 import { useSymbols, type SymbolTable } from "./symbol-context.js";

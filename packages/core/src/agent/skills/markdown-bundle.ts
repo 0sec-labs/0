@@ -43,7 +43,7 @@ interface AuditSkillFile {
 
 // ── Validation constants ──
 
-const SCHEMA_TAG = "0sec-audit-skills-v1";
+const SCHEMA_TAG = "0-audit-skills-v1";
 const MAX_SKILLS = 8;
 const MAX_FILES_PER_SKILL = 64;
 const MAX_BYTES_PER_FILE = 131_072; // 128 KiB

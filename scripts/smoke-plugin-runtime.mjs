@@ -9,7 +9,7 @@ if (!entry) throw new Error("Usage: node scripts/smoke-plugin-runtime.mjs <CLI J
 const cli = realpathSync(resolve(entry));
 const command = cli.endsWith(".js") ? process.execPath : cli;
 const prefix = cli.endsWith(".js") ? [cli] : [];
-const root = mkdtempSync(join(tmpdir(), "0sec-plugin-runtime-"));
+const root = mkdtempSync(join(tmpdir(), "0-plugin-runtime-"));
 const home = join(root, "home");
 const project = join(root, "project");
 const emptyPath = join(root, "no-executables");

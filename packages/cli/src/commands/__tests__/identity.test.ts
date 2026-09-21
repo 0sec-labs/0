@@ -31,7 +31,7 @@ async function runCli(argv: string[]): Promise<void> {
   const program = new Command();
   program.exitOverride();
   registerIdentityCommand(program);
-  await program.parseAsync(["node", "0sec-cli", ...argv]);
+  await program.parseAsync(["node", "@0/cli", ...argv]);
 }
 
 function result(overrides: Record<string, unknown> = {}) {
@@ -84,7 +84,7 @@ function result(overrides: Record<string, unknown> = {}) {
   };
 }
 
-describe("0sec identity", () => {
+describe("0 identity", () => {
   let io: ReturnType<typeof captureIO>;
   let dir: string;
   const originalToken = process.env[TOKEN_ENV];

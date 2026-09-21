@@ -25,7 +25,7 @@
  *     disclosure path works unchanged. No parallel finding type.
  */
 
-import type { AttackCategory, Severity } from "@0/shared"
+import type { AttackCategory, Severity } from "@0/shared";
 
 /** A package under evaluation, plus registry-derived guard metadata. */
 export interface PackageRef {
@@ -132,7 +132,7 @@ export interface DedupVerdict {
  * detector benefits.
  */
 export interface DedupHints {
-  /** Package names 0sec has already reported for this detector's class. */
+  /** Package names 0 has already reported for this detector's class. */
   priorReports?: string[];
   /**
    * name → advisory reference: packages whose vulnerable code is identical to a
@@ -177,6 +177,6 @@ export interface Detector<C extends DetectorCandidate = DetectorCandidate> {
    * runtime consequence.
    */
   confirm(candidate: C, probe: PackageProbe): DetectorConfirmation | Promise<DetectorConfirmation>;
-  /** Dedup knowledge specific to this class (fork-twins, prior 0sec reports). */
+  /** Dedup knowledge specific to this class (fork-twins, prior 0 reports). */
   dedupHints?: DedupHints;
 }

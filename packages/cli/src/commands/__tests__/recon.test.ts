@@ -28,12 +28,12 @@ async function runCli(argv: string[]): Promise<void> {
   const program = new Command();
   program.exitOverride();
   registerReconCommand(program);
-  await program.parseAsync(["node", "0sec-cli", ...argv]);
+  await program.parseAsync(["node", "@0/cli", ...argv]);
 }
 
 const EMPTY_RESULT = { domain: "https://example.com", generatedAt: "t", assets: [], summary: { total: 0, byKind: {} }, warnings: [] };
 
-describe("0sec recon --active", () => {
+describe("0 recon --active", () => {
   let io: ReturnType<typeof captureIO>;
   let dir: string;
 

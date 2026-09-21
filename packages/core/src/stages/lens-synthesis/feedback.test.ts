@@ -23,7 +23,7 @@ import {
 import type { CaptureObservationInput } from "./feedback.js";
 
 function tmpStore(): string {
-  const dir = resolve(tmpdir(), `0sec-feedback-test-${randomBytes(4).toString("hex")}`);
+  const dir = resolve(tmpdir(), `0-feedback-test-${randomBytes(4).toString("hex")}`);
   mkdirSync(dir, { recursive: true, mode: 0o700 });
   return resolve(dir, "observations.json");
 }

@@ -62,12 +62,12 @@ describe("executable self-extension boundary", () => {
   });
 
   it("does not turn model-supplied trust into host execution", async () => {
-    const root = mkdtempSync(join(tmpdir(), "0sec-harness-trust-boundary-"));
+    const root = mkdtempSync(join(tmpdir(), "0-harness-trust-boundary-"));
     const marker = join(root, "host-code-ran");
     const ctx = context();
     const manager = new ExecutablePluginManager({
       registry: ctx.selfExtension!, root: join(root, "executable"),
-      backend: "docker", image: "0sec-toolbox:qualification",
+      backend: "docker", image: "0-toolbox:qualification",
     });
     const harness = new LiveHarnessHost({
       executablePlugins: manager, root: join(root, "harness"),

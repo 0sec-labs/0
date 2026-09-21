@@ -2,8 +2,8 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 
-import { claimForProcessing, markProcessed, releaseClaim, releaseStaleClaims, type LensSynthesisResult } from "@0/core"
-import { homeStateDir } from "@0/shared"
+import { claimForProcessing, markProcessed, releaseClaim, releaseStaleClaims, type LensSynthesisResult } from "@0/core";
+import { homeStateDir } from "@0/shared";
 
 import { runLensSynthesisInput, watchLensSynthCommand } from "../commands/lens-synth.js";
 import type {

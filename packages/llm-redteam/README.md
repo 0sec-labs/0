@@ -125,7 +125,7 @@ envelope to the customer adapter:
 
 ```json
 {
-  "protocol_version": "0sec.agent-action-target/v1",
+  "protocol_version": "0.agent-action-target/v1",
   "run_id": "<uuid>",
   "canary_token": "<synthetic marker>",
   "scenario": { "...": "scenario fields" },

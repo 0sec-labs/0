@@ -1,5 +1,5 @@
 /**
- * Coverage seed for `0sec-cli`'s `orchestrate` command — the autonomous
+ * Coverage seed for `@0/cli`'s `orchestrate` command — the autonomous
  * worker that pulls runnable WorkItems from the case graph, claims them,
  * dispatches the right agent loop (attack / verify / triage / family-aware),
  * and reconciles outcomes back into the DB. This file is the entry point
@@ -16,7 +16,7 @@
  * The chatty FakeOsecDB records every method invocation in a shared
  * `dbState.calls` log so we can assert on the call *sequence* the action
  * walks (claim → reopen → log_event → execute → upsertWorkItem(done) →
- * completeScan), which is the actual contract 0sec-cloud's worker-
+ * completeScan), which is the actual contract 0-cloud's worker-
  * controller depends on. Per-test we mutate `dbState.workItems`,
  * `dbState.cases`, `dbState.scans`, and `dbState.findings` to plant
  * runnable / dependent / blocked fixtures.
@@ -90,7 +90,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Command } from "commander";
-import type { WorkItemRecord, WorkerRecord } from "@0/shared"
+import type { WorkItemRecord, WorkerRecord } from "@0/shared";
 
 // ── Module-level mocks ──────────────────────────────────────────────────────
 //
@@ -272,7 +272,9 @@ vi.mock("@0/core", () => ({
   getToolsForRole: getToolsForRoleMock,
 }));
 
-const { registerOrchestrateCommand, recoverStaleWorkers } = await import("../orchestrate.js");
+const { registerOrchestrateCommand, recoverStaleWorkers } = await import(
+  "../orchestrate.js"
+);
 
 // The action registers SIGINT/SIGTERM handlers via process.once on every
 // invocation. Across ~16 tests that adds up; raise the listener ceiling
@@ -290,7 +292,7 @@ async function runCli(argv: string[]): Promise<unknown> {
   });
   registerOrchestrateCommand(program);
   try {
-    await program.parseAsync(["node", "0sec-cli", ...argv]);
+    await program.parseAsync(["node", "@0/cli", ...argv]);
     return undefined;
   } catch (err) {
     return err;

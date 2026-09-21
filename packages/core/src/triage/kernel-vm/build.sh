@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build KASAN-enabled kernel + rootfs for 0sec kernel crash validator
+# Build KASAN-enabled kernel + rootfs for 0 kernel crash validator
 #
 # Usage: ./build.sh [output-dir]
 #
@@ -12,7 +12,7 @@
 #   env ZERO_KERNEL_QEMU=1 \
 #     ZERO_KERNEL_QEMU_KERNEL=/path/to/bzImage \
 #     ZERO_KERNEL_QEMU_DISK=/path/to/rootfs.img \
-#     0sec ingest --verify <crash-reports-dir>
+#     0 ingest --verify <crash-reports-dir>
 #
 # NOTE: We use `docker buildx build` (not classic `docker build`) because the
 # Dockerfile pins individual stages with `FROM --platform=linux/amd64`. The
@@ -36,7 +36,7 @@ KERNEL_MAKE_JOBS="$(printenv ZERO_KERNEL_VM_MAKE_JOBS 2>/dev/null || true)"
 
 mkdir -p "${OUT_DIR}"
 
-echo "Building 0sec kernel VM image..."
+echo "Building 0 kernel VM image..."
 echo "  Dockerfile: ${SCRIPT_DIR}/Dockerfile"
 echo "  Output dir: ${OUT_DIR}"
 echo ""
@@ -47,7 +47,7 @@ docker buildx build \
   --load \
   --platform linux/amd64 \
   --build-arg "KERNEL_MAKE_JOBS=${KERNEL_MAKE_JOBS}" \
-  -t 0sec-kernel-builder \
+  -t 0-kernel-builder \
   -f "${SCRIPT_DIR}/Dockerfile" \
   "${SCRIPT_DIR}"
 
@@ -56,14 +56,14 @@ docker run --rm \
   -e HOST_UID="$(id -u)" \
   -e HOST_GID="$(id -g)" \
   -v "${OUT_DIR}:/out" \
-  0sec-kernel-builder
+  0-kernel-builder
 
 echo ""
 echo "Done. Kernel VM artifacts:"
 ls -lh "${OUT_DIR}"/bzImage "${OUT_DIR}"/rootfs.img "${OUT_DIR}"/kernel.config "${OUT_DIR}"/osec_vm_key "${OUT_DIR}"/osec_vm_key.pub 2>/dev/null
 
 echo ""
-echo "To use with 0sec:"
+echo "To use with 0:"
 echo "  env ZERO_KERNEL_QEMU=1 ZERO_KERNEL_QEMU_KERNEL=${OUT_DIR}/bzImage \\"
 echo "    ZERO_KERNEL_QEMU_DISK=${OUT_DIR}/rootfs.img \\"
-echo "    0sec ingest --verify <crash-reports-dir>"
+echo "    0 ingest --verify <crash-reports-dir>"

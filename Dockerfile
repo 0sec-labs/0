@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.7
 #
-# 0sec — pre-built distribution image
+# 0 — pre-built distribution image
 #
 # Multi-stage build:
 #   stage 1 (builder):    node:24 + pnpm, builds the bundled CLI in /app/dist
@@ -12,7 +12,7 @@
 #
 # Usage:
 #   docker run --rm -e AZURE_OPENAI_API_KEY=$KEY \
-#     ghcr.io/0sec-labs/0sec:latest scan --target https://example.com --scope /work/scope.json
+#     ghcr.io/0sec-labs/0:latest scan --target https://example.com --scope /work/scope.json
 # Build args:
 #   INSTALL_SECLISTS=1     include SecLists wordlists (~1GB extra, off by default)
 #   AZUREHOUND_VERSION=vX  pin the AzureHound release (checksum-verified, see below)
@@ -178,14 +178,13 @@ WORKDIR /app
 # Copy the bundled CLI + its production node_modules from the builder
 COPY --from=builder /app/dist /app/dist
 
-# Make the bundled CLI globally invocable as `0sec` (and `0` for short).
-RUN ln -s /app/dist/0sec.js /usr/local/bin/0sec \
-    && ln -s /app/dist/0sec.js /usr/local/bin/0 \
-    && chmod +x /app/dist/0sec.js
+# Make the bundled CLI globally invocable as `0`.
+RUN ln -s /app/dist/0.js /usr/local/bin/0 \
+    && chmod +x /app/dist/0.js
 
 # App code remains root-owned; only the workspace is writable by the worker.
 USER ubuntu
 WORKDIR /work
 
-ENTRYPOINT ["node", "/app/dist/0sec.js"]
+ENTRYPOINT ["node", "/app/dist/0.js"]
 CMD ["--help"]

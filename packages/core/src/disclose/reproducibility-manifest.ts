@@ -8,7 +8,7 @@
  * `redactPii` from the existing disclosure pipeline so the same secret
  * and PII sweep covers the manifest.
  *
- * Designed to be surfaced for HUMAN INSPECTION via `0sec disclose review`
+ * Designed to be surfaced for HUMAN INSPECTION via `0 disclose review`
  * BEFORE any disclosure artifact is drafted. The manifest itself never sends
  * or publishes anything.
  *
@@ -23,7 +23,7 @@
 import { createHash } from "node:crypto";
 import { redactSensitiveHeaders } from "./template.js";
 import { redactPii } from "./writeup.js";
-import type { Finding, VerificationResult } from "@0/shared"
+import type { Finding, VerificationResult } from "@0/shared";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -55,7 +55,7 @@ export interface ReproducibilityManifest {
   targetIdentifier: string;
 
   /**
-   * Tool / 0sec version manifest was assembled under.
+   * Tool / 0 version manifest was assembled under.
    * Falls back to `"unknown"` when the version is not embedded at build time.
    */
   toolVersion: string;

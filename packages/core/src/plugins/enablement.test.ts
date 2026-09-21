@@ -45,8 +45,8 @@ let home: string;
 let project: string;
 
 beforeEach(() => {
-  home = mkdtempSync(join(tmpdir(), "0sec-enable-home-"));
-  project = mkdtempSync(join(tmpdir(), "0sec-enable-proj-"));
+  home = mkdtempSync(join(tmpdir(), "0-enable-home-"));
+  project = mkdtempSync(join(tmpdir(), "0-enable-proj-"));
 });
 afterEach(() => {
   rmSync(home, { recursive: true, force: true });
@@ -234,7 +234,7 @@ describe("fs layer", () => {
   });
 
   it("writeEnablement writes a distinct file per project realpath", () => {
-    const other = mkdtempSync(join(tmpdir(), "0sec-enable-proj2-"));
+    const other = mkdtempSync(join(tmpdir(), "0-enable-proj2-"));
     try {
       expect(enablementFilePath(project, home)).not.toBe(enablementFilePath(other, home));
     } finally {

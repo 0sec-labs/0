@@ -49,7 +49,7 @@ function printHelp() {
 Options:
   --corpus <path>   Corpus JSON path. Default: ${DEFAULT_CORPUS}
   --out-dir <path>  Result artifact directory. Default: ${DEFAULT_OUT_DIR}
-  --cli <path>      Built 0sec CLI entrypoint. Default: ${DEFAULT_CLI}
+  --cli <path>      Built 0 CLI entrypoint. Default: ${DEFAULT_CLI}
   --limit <n>       Run at most n cases from the corpus.
   --dry-run         Validate corpus and write skipped case summaries without QEMU.
 `);
@@ -173,7 +173,7 @@ function extractJsonArray(raw) {
   }
 
   const detail = lastError instanceof Error ? ` Last parse error: ${lastError.message}.` : "";
-  throw new Error(`0sec ingest output did not contain a parseable JSON array.${detail} Raw output: ${raw.slice(0, 1000)}`);
+  throw new Error(`0 ingest output did not contain a parseable JSON array.${detail} Raw output: ${raw.slice(0, 1000)}`);
 }
 
 function classifyResults(results) {
@@ -284,7 +284,7 @@ async function runCase(testCase, args, rootDir) {
     await writeFile(rawPath, `${ingest.stdout}${ingest.stderr ? `\n--- stderr ---\n${ingest.stderr}` : ""}`, "utf8");
 
     if (ingest.code !== 0) {
-      throw new Error(`0sec ingest exited ${ingest.code}`);
+      throw new Error(`0 ingest exited ${ingest.code}`);
     }
 
     const results = extractJsonArray(ingest.stdout);

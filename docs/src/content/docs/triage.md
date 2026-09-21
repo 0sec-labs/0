@@ -9,7 +9,7 @@ depend on feature settings, source availability, category, runtime and routing.
 Some make network requests or model calls. A gate's `accepted` label is not a
 universal reproduction or disclosure verdict.
 
-> **2026-04-11 ablation results.** The stack strictly beats the no-triage baseline on XBOW black-box, is a Pareto tradeoff on white-box (2 flags at limit=50 for 63% fewer findings), and is a no-op on npm-bench. Layer 11 (EGATS) is the one broken layer and is opt-in only ([0sec#116](https://github.com/0sec-labs/0sec/issues/116)). Numbers: [FP Reduction Moat](/research/fp-reduction-moat/); narrative: [2026-04-11 ablation](/research/2026-04-11-ablation/).
+> **2026-04-11 ablation results.** The stack strictly beats the no-triage baseline on XBOW black-box, is a Pareto tradeoff on white-box (2 flags at limit=50 for 63% fewer findings), and is a no-op on npm-bench. Layer 11 (EGATS) is the one broken layer and is opt-in only ([0#116](https://github.com/0sec-labs/0/issues/116)). Numbers: [FP Reduction Moat](/research/fp-reduction-moat/); narrative: [2026-04-11 ablation](/research/2026-04-11-ablation/).
 
 :::caution[Manual triage command availability]
 The pipeline below is separate from the manual `0 triage` command.
@@ -100,7 +100,7 @@ guard. This is not an exhaustive interprocedural proof of reachability.
 
 Today it's a zero-dependency grep/pattern pass and deliberately conservative: when it can't make a confident call it returns `reachable: true` with low confidence so later stages still run. A tree-sitter interprocedural upgrade is planned.
 
-<span id="5-multi-modal-agreement-foxguard--0sec"></span>
+<span id="5-multi-modal-agreement-foxguard--0"></span>
 ## 5. Multi-modal agreement (foxguard × 0)
 
 `triage/multi-modal.ts` — `ZERO_FEATURE_MULTIMODAL=1`. When both source and the [foxguard](https://github.com/0sec-labs/foxguard) binary are present, 0 runs foxguard on the same code and cross-checks each finding against its SARIF:
@@ -197,7 +197,7 @@ finder and verifier use different model families.
 It expands an explicit hypothesis tree and uses observed evidence to score
 branches. It is not a downstream verification stage or part of `fp-moat`.
 The historical ablation found a regression on its hard-challenge slice
-([0sec#116](https://github.com/0sec-labs/0sec/issues/116)); it is not a universal
+([0#116](https://github.com/0sec-labs/0/issues/116)); it is not a universal
 performance recommendation.
 
 ## Configuration cheat-sheet

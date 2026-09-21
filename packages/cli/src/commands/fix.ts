@@ -1,14 +1,16 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import type { Command } from "commander";
-import type { Finding } from "@0/shared"
-import { createRuntime,
-runSourceFix,
-type NativeRuntime,
-type RuntimeType,
-type SourceFixResult, } from "@0/core"
+import type { Finding } from "@0/shared";
+import {
+  createRuntime,
+  runSourceFix,
+  type NativeRuntime,
+  type RuntimeType,
+  type SourceFixResult,
+} from "@0/core";
 import { z } from "zod";
-import { findingSchema, formatZodError } from "@0/shared"
+import { findingSchema, formatZodError } from "@0/shared";
 import { loadFindingFocus } from "../finding-focus.js";
 
 type FixRuntimeType = Extract<RuntimeType, "api">;
@@ -143,7 +145,7 @@ export function registerFixCommand(program: Command): void {
     .option("--finding <path>", "Path to an external finding JSON with verificationSpec")
     .option("--finding-id <id>", "Persisted finding ID (full ID or unique prefix)")
     .option("--db-path <path>", "Database containing --finding-id")
-    .option("--verification-result <path>", "Optional verification_result JSON from `0sec verify`; required when the finding does not already carry one")
+    .option("--verification-result <path>", "Optional verification_result JSON from `0 verify`; required when the finding does not already carry one")
     .requiredOption("--test-command <command>", "Explicit regression command to run in the isolated candidate worktree")
     .option("--runtime <runtime>", "Fix runtime: auto or api", "auto")
     .option("-m, --model <model>", "Model identifier for the selected runtime")

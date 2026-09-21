@@ -7,7 +7,7 @@
  * This is the sibling of `codex-device-auth.ts`, but it is a different KIND of
  * thing. `codex-device-auth.ts` is a SUBPROCESS orchestrator: it spawns
  * `codex login --device-auth` and scrapes its stdout, because Codex owns the
- * ChatGPT protocol and 0sec must not reimplement it. This module, by contrast,
+ * ChatGPT protocol and 0 must not reimplement it. This module, by contrast,
  * speaks the protocols itself. The device-code path POSTs the device-code
  * endpoint, opens the browser, and polls the token endpoint. The pkce-loopback
  * path generates a code_verifier/code_challenge, stands up a `node:http`
@@ -38,7 +38,7 @@ import { createServer } from "node:http";
 import { arch, hostname, platform, release, version as osVersion } from "node:os";
 import { join } from "node:path";
 
-import { homeStateDir } from "@0/shared"
+import { homeStateDir } from "@0/shared";
 
 import { defaultOpenBrowser } from "../commands/auth.js";
 import {
@@ -298,7 +298,7 @@ const defaultServerFactory: LoopbackServerFactory = async ({ onRedirect }) => {
     const error = requestUrl.searchParams.get("error") ?? undefined;
     res.statusCode = 200;
     res.setHeader("Content-Type", "text/html; charset=utf-8");
-    res.end("<!doctype html><meta charset=utf-8><title>0sec</title><body>Sign-in complete — you can close this tab and return to 0sec.</body>");
+    res.end("<!doctype html><meta charset=utf-8><title>0</title><body>Sign-in complete — you can close this tab and return to 0.</body>");
     // Only the first redirect matters; ignore stray probes after it.
     if (delivered) return;
     delivered = true;
@@ -719,7 +719,7 @@ export function startDeviceAuth(
  * The version reported to Kimi in the `X-Msh-Version`/User-Agent fingerprint.
  * oh-my-pi sends its own package version here; the value is informational to
  * Kimi's server (the load-bearing fields are `X-Msh-Platform` and the stable
- * `X-Msh-Device-Id`), so it tracks the 0sec CLI version and is safe to bump.
+ * `X-Msh-Device-Id`), so it tracks the 0 CLI version and is safe to bump.
  */
 const KIMI_CLIENT_VERSION = "0.16.3";
 const KIMI_DEVICE_ID_FILENAME = "kimi-device-id";

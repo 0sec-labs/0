@@ -17,7 +17,7 @@
  * whole pass in try/catch so a post-process error can never fail the scan.
  */
 
-import type { Finding, JevEvaluator } from "@0/shared"
+import type { Finding, JevEvaluator } from "@0/shared";
 import type { NativeRuntime } from "../runtime/types.js";
 import { semanticDedupe, rankIncremental, type DedupeItem } from "../triage/index.js";
 

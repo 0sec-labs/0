@@ -261,7 +261,7 @@ export class ExecutablePluginManager {
     if (before && before.versions.length >= MAX_VERSIONS) throw new Error("Executable version retention limit reached; no retained version was discarded");
     if (evolution && (before?.activeVersionId !== evolution.previous.versionId || before.evolutionEpoch !== evolution.epoch)) throw new Error("Executable active version changed during evolution");
     const image = evolution?.previous.image ?? await this.image();
-    const temporary = await mkdtemp(join(await realpath(tmpdir()), "0sec-executable-"));
+    const temporary = await mkdtemp(join(await realpath(tmpdir()), "0-executable-"));
     let snapshot: PluginVersionRecord["snapshot"];
     try {
       for (const name of names) {

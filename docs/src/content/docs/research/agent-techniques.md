@@ -167,7 +167,7 @@ it when `config.egats` is enabled. Do not use the historical
 ### External Working Memory — implemented, opt-in
 
 The native loop substitutes `{{EXTERNAL_MEMORY_PATH}}` with a scan-specific
-`/tmp/0sec-state-<scan-id>.json`, rather than a shared `/tmp/plan.json`.
+`/tmp/0-state-<scan-id>.json`, rather than a shared `/tmp/plan.json`.
 `ZERO_FEATURE_EXTERNAL_MEMORY=1` enables the external-memory path; it defaults
 off. This is distinct from structured plan/loot state and durable journal data.
 An agent-authored file is working context, not trusted evidence.

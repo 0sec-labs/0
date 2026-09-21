@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { Finding } from "@0/shared"
-import type { FinderLens, VerifyLens } from "@0/core"
+import type { Finding } from "@0/shared";
+import type { FinderLens, VerifyLens } from "@0/core";
 
 // ── Pure helpers (no @0/core load needed) ───────────────────────────────
 import {
@@ -792,7 +792,7 @@ describe("runDeepReview — seedless lens-driven review", () => {
     const { mkdtempSync, mkdirSync, rmSync, symlinkSync } = await import("node:fs");
     const { tmpdir } = await import("node:os");
     const { join } = await import("node:path");
-    const root = mkdtempSync(join(tmpdir(), "0sec-review-subsystem-"));
+    const root = mkdtempSync(join(tmpdir(), "0-review-subsystem-"));
     try {
       const target = join(root, "target");
       const outside = join(root, "outside");

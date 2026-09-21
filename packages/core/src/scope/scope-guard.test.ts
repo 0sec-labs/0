@@ -1,5 +1,5 @@
 /**
- * Unit tests for the scope-guard visibility vocabulary (0sec#133).
+ * Unit tests for the scope-guard visibility vocabulary (0#133).
  *
  * These pin the *contract* the two call sites depend on:
  *   - the inert-guard list is non-empty and names the bash guards, so the
@@ -19,7 +19,7 @@ import {
   SCOPE_GUARDS_INERT_EVENT,
 } from "./scope-guard.js";
 
-describe("describeScopeGuards (0sec#133)", () => {
+describe("describeScopeGuards (0#133)", () => {
   it("reports the guards as active when a scope is configured, with nothing inert", () => {
     const status = describeScopeGuards(true, {});
     expect(status.active).toBe(true);

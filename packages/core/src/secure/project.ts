@@ -54,7 +54,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { join, isAbsolute, resolve } from "node:path";
 import { randomUUID, createHash } from "node:crypto";
-import type { Finding, ScanDepth, TokenUsageForPricing } from "@0/shared"
+import type { Finding, ScanDepth, TokenUsageForPricing } from "@0/shared";
 import type { PipelineOptions } from "../unified-pipeline.js";
 import { runPipeline } from "../unified-pipeline.js";
 import { recallRepairLearnings, recordRepairLearning } from "./project-memory.js";
@@ -461,7 +461,7 @@ async function publishRepairPatches(
       }
     }
 
-    const branch = `0sec/repair/${safeFindingDir(finding.id)}`;
+    const branch = `0/repair/${safeFindingDir(finding.id)}`;
 
     // Dedup: check for existing open PR with this head branch.
     try {
@@ -496,7 +496,7 @@ async function publishRepairPatches(
         "git",
         [
           "commit", "-m",
-          `fix: ${finding.title}\n\nAutomated repair by 0sec secure lifecycle.`,
+          `fix: ${finding.title}\n\nAutomated repair by 0 secure lifecycle.`,
           "--no-verify",
         ],
         { cwd: checkoutPath, timeout: 15_000, stdio: "pipe" },
@@ -514,7 +514,7 @@ async function publishRepairPatches(
           "--title", `fix: ${finding.title}`,
           "--body",
           [
-            "Automated security repair by 0sec secure lifecycle.",
+            "Automated security repair by 0 secure lifecycle.",
             "",
             `Finding: ${finding.id}`,
             `Severity: ${finding.severity}`,
@@ -525,7 +525,7 @@ async function publishRepairPatches(
             // Machine-readable attribution marker: the cloud learning loop parses
             // this from PR webhooks to link merged/closed/edited outcomes back to
             // the exact run, finding, and verified patch.
-            `<!-- 0sec:repair ${JSON.stringify({ runId, findingId: finding.id, patchSha256: repair.patchSha256 ?? null, baseRevision: revision })} -->`,
+            `<!-- 0:repair ${JSON.stringify({ runId, findingId: finding.id, patchSha256: repair.patchSha256 ?? null, baseRevision: revision })} -->`,
           ].join("\n"),
           "--repo", repoSlash,
         ],

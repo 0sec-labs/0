@@ -57,7 +57,7 @@ function defaultSpawnCodexDeviceAuth(
 
 /**
  * Run Codex's official device-auth flow without ever asking the operator to
- * paste a ChatGPT API key or OAuth token into 0sec. The Codex CLI owns the
+ * paste a ChatGPT API key or OAuth token into 0. The Codex CLI owns the
  * browser/device protocol and writes ~/.codex/auth.json; on success we reload
  * that file explicitly, replacing only this process's stale Codex tokens.
  */

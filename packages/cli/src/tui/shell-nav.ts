@@ -1,4 +1,4 @@
-import type { Finding } from "@0/shared"
+import type { Finding } from "@0/shared";
 import type { ChatScreenOptions } from "./chat-screen.js";
 
 export interface ShellNav {

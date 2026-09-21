@@ -2,8 +2,8 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { osecDB } from "@0/db"
-import type { NativeRuntime, NativeRuntimeResult } from "@0/core"
+import { osecDB } from "@0/db";
+import type { NativeRuntime, NativeRuntimeResult } from "@0/core";
 import { createLocalConsoleSession } from "./console-session.js";
 import { createConversationHistory } from "./conversation-history.js";
 import { saveSession } from "./tui/session-store.js";
@@ -26,7 +26,7 @@ function toolRuntime(name: string, input: Record<string, unknown>): NativeRuntim
 
 const directories: string[] = [];
 function databasePath(): string {
-  const directory = mkdtempSync(join(tmpdir(), "0sec-console-history-"));
+  const directory = mkdtempSync(join(tmpdir(), "0-console-history-"));
   directories.push(directory);
   return join(directory, "findings.db");
 }

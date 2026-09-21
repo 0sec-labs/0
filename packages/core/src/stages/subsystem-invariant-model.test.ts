@@ -19,7 +19,7 @@ import { mkdtempSync, readFileSync, writeFileSync, mkdirSync, symlinkSync } from
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { Finding } from "@0/shared"
+import type { Finding } from "@0/shared";
 
 // LLM boundary — used only by buildInvariantModel.
 const executeNativeMock = vi.fn();

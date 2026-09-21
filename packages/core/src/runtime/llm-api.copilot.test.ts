@@ -31,7 +31,7 @@ describe("GitHub Copilot provider wire", () => {
     delete process.env["ZERO_CHATGPT_ACCESS_TOKEN"];
     delete process.env["ZERO_CHATGPT_OAUTH_REFRESH_TOKEN"];
     delete process.env.COPILOT_BASE_URL;
-    process.env["ZERO_CHATGPT_AUTH_FILE"] = "/tmp/0sec-copilot-test-no-auth.json";
+    process.env["ZERO_CHATGPT_AUTH_FILE"] = "/tmp/0-copilot-test-no-auth.json";
     process.env["ZERO_SKIP_PROVIDER_BANNER"] = "1";
     process.env["ZERO_COPILOT_GITHUB_TOKEN"] = "gho_copilot_token";
   });
@@ -112,10 +112,10 @@ describe("GitHub Copilot provider wire", () => {
     expect(result.content).toContainEqual({ type: "text", text: "copilot ok" });
   });
 
-  it("detects copilot from ZERO_COPILOT_GITHUB_TOKEN alone with the gpt-5.6-terra default", () => {
+  it("detects copilot from ZERO_COPILOT_GITHUB_TOKEN alone with the gpt-4o default", () => {
     const rt = new LlmApiRuntime({ type: "api", timeout: 5000 });
     expect((rt as any).provider).toBe("copilot");
-    expect((rt as any).model).toBe("gpt-5.6-terra");
+    expect((rt as any).model).toBe("gpt-4o");
     expect((rt as any).apiKey).toBe("gho_copilot_token");
   });
 

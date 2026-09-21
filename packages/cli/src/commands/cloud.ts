@@ -1,15 +1,17 @@
 import type { Command } from "commander";
 import chalk from "chalk";
 import { consolePresentationOutput } from "../presentation/process-output.js";
-import { probeS3Bucket,
-classifyTakeover,
-bucketInScope,
-validateAwsCredentials,
-features,
-ScopePolicy,
-type BucketProbeResult,
-type TakeoverVerdict,
-type CredentialValidationResult, } from "@0/core"
+import {
+  probeS3Bucket,
+  classifyTakeover,
+  bucketInScope,
+  validateAwsCredentials,
+  features,
+  ScopePolicy,
+  type BucketProbeResult,
+  type TakeoverVerdict,
+  type CredentialValidationResult,
+} from "@0/core";
 
 interface S3ProbeOptions {
   scope?: string;

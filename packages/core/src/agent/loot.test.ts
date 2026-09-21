@@ -259,7 +259,7 @@ describe("getToolsForRole loot gating", () => {
   });
 });
 
-// ── Full-loop chaining acceptance (0sec#567) ──────────────────────────────
+// ── Full-loop chaining acceptance (0#567) ──────────────────────────────
 //
 // Deterministic stand-in for the issue's acceptance fixture: step 1 leaks a
 // credential, step 2 needs it. We script the agent (mock runtime) to (1) save a

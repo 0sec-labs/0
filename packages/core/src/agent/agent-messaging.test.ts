@@ -471,7 +471,7 @@ describe("child send_message / check_messages (real mailbox)", () => {
   let project: string;
 
   beforeEach(() => {
-    root = mkdtempSync(join(tmpdir(), "0sec-agent-msg-"));
+    root = mkdtempSync(join(tmpdir(), "0-agent-msg-"));
     home = join(root, "home");
     project = join(root, "project");
     mkdirSync(home, { recursive: true });
@@ -862,7 +862,7 @@ describe("fan-out sibling messaging end-to-end (real mailbox)", () => {
   const B_ID = `${SIBLING_PREFIX}childB`;
 
   beforeEach(() => {
-    root = mkdtempSync(join(tmpdir(), "0sec-fanout-"));
+    root = mkdtempSync(join(tmpdir(), "0-fanout-"));
     home = join(root, "home");
     project = join(root, "project");
     mkdirSync(home, { recursive: true });
@@ -966,7 +966,7 @@ describe("sendOperatorMessage (operator → child steering, real mailbox)", () =
   const TS = 1_700_000_000_500;
 
   beforeEach(() => {
-    root = mkdtempSync(join(tmpdir(), "0sec-operator-steer-"));
+    root = mkdtempSync(join(tmpdir(), "0-operator-steer-"));
     home = join(root, "home");
     project = join(root, "project");
     mkdirSync(home, { recursive: true });

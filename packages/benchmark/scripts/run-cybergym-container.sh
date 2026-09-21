@@ -7,7 +7,7 @@ set -euo pipefail
 : "${CYBERGYM_ROOT:=/srv/cybergym}"
 : "${CYBERGYM_NETWORK:=cybergym-internal}"
 OSEC_CYBERGYM_IMAGE="$(printenv ZERO_CYBERGYM_IMAGE 2>/dev/null || true)"
-: "${OSEC_CYBERGYM_IMAGE:=0sec-cybergym-agent:local}"
+: "${OSEC_CYBERGYM_IMAGE:=0-cybergym-agent:local}"
 : "${CYBERGYM_AUTH_FILE:=${HOME}/.codex/auth.json}"
 : "${CYBERGYM_AUTH_METHOD:=chatgpt-oauth}"
 : "${CYBERGYM_MODEL_PROVIDER:=}"

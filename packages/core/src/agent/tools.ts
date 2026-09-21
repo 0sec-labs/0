@@ -4,16 +4,18 @@ import { readFileSync, statSync, existsSync, writeFileSync } from "node:fs";
 import { spawnSync, spawn } from "node:child_process";
 import { isAbsolute, resolve, join } from "node:path";
 
-import type { Finding,
-AttackResult,
-PocStep,
-TargetInfo,
-VerificationSpec,
-VerificationCodePredicate,
-VerificationBehavior,
-VerificationBehaviorStep,
-NamedIdentity, } from "@0/shared"
-import { resolveIdentities, compareRoles, DEFAULT_AUTONOMY_MODE, createJevEvaluator, jevConfigFromEnvironment, type JevEvaluator } from "@0/shared"
+import type {
+  Finding,
+  AttackResult,
+  PocStep,
+  TargetInfo,
+  VerificationSpec,
+  VerificationCodePredicate,
+  VerificationBehavior,
+  VerificationBehaviorStep,
+  NamedIdentity,
+} from "@0/shared";
+import { resolveIdentities, compareRoles, DEFAULT_AUTONOMY_MODE, createJevEvaluator, jevConfigFromEnvironment, type JevEvaluator } from "@0/shared";
 import type { ToolDefinition, ToolCall, ToolResult, ToolResultMeta, ToolContext, AgentRole } from "./types.js";
 import type {
   OperatorQuestion,
@@ -87,7 +89,7 @@ import {
   classifyPromptLayerImpact,
   type PromptLayerAsset,
 } from "./playbooks.js";
-import type { osecDB } from "@0/db"
+import type { osecDB } from "@0/db";
 import { features as featureFlags } from "./features.js";
 import { PtySessionManager } from "./pty-session.js";
 import { sanitizedEnv } from "./sanitized-env.js";
@@ -195,7 +197,6 @@ import {
   executeAssembleAdvisory,
   executeCveLookup,
 } from "./tools/security-engines.js";
-import { executeJevPrepass } from "./tools/jev-prepass.js";
 import {
   executeVariantHunt,
   executeAssumptionHunt,
@@ -216,7 +217,7 @@ import { buildEvalCommand, parseEvalArgs, type EvalLanguage } from "./tools/eval
 import { executeOverseScan, validateOverseArgs } from "./tools/0verse.js";
 
 
-// ── Tool registry (0sec#611) ──
+// ── Tool registry (0#611) ──
 // The per-tool ToolDefinition objects now live in per-domain modules under
 // ./tools/ and are assembled — in canonical order — by the ./tools/index.ts
 // barrel. They are re-exported here so every existing importer of
@@ -254,7 +255,7 @@ export {
 import { executeStartScan } from "./tools/orchestrator.js";
 import { executeProxy, type ProxyHost } from "./tools/proxy.js";
 
-// Tool-name → handler-method-name routing table (0sec#614), assembled from
+// Tool-name → handler-method-name routing table (0#614), assembled from
 // per-domain `*Dispatch` maps. `ToolExecutor._dispatch` resolves the handler
 // off the instance by this name, replacing the hand-written switch so adding a
 // tool no longer edits a shared dispatch chokepoint.
@@ -346,7 +347,7 @@ export function selfExtensionRegistryOf(ctx: ToolContext): SelfExtensionRegistry
 
 /**
  * Normalize a recon target/origin/URL into the host used as the
- * `discovered_assets.ecosystem` value (0sec#768). recon emits `domain` as an
+ * `discovered_assets.ecosystem` value (0#768). recon emits `domain` as an
  * `https://host` origin; this strips the scheme/path down to the bare host so
  * every asset from one target shares a stable ecosystem key. Falls back to the
  * trimmed input when it isn't URL-parseable.
@@ -369,7 +370,7 @@ function reconEcosystem(target: string | undefined): string {
 // the canonical case being `python3 -c 'requests.post(…)'`, where `requests`
 // has no default timeout and a hung remote can wedge the agent indefinitely.
 //
-// See https://github.com/0sec-labs/0sec/issues/181
+// See https://github.com/0sec-labs/0/issues/181
 
 const DEFAULT_BASH_WALLCLOCK_MS = 120_000;
 const BASH_GRACE_MS = 2_000;
@@ -723,7 +724,7 @@ export function splitOnTopLevelPipes(command: string): string[] {
   return out;
 }
 
-// ── Auth injection in shell commands (0sec#282) ──────────────────
+// ── Auth injection in shell commands (0#282) ──────────────────
 //
 // Surfaced by the 2026-05-07 control-flow audit: `http_request`/`crawl`/
 // `submit_form` inject auth headers automatically, but `shellExec` only
@@ -1076,7 +1077,7 @@ function tokenizeCommand(command: string): string[] {
   return tokens;
 }
 
-// ── Dependency-audit lockfile detection (0sec#tool-reliability) ──────────────
+// ── Dependency-audit lockfile detection (0#tool-reliability) ──────────────
 //
 // `npm audit` requires a package-lock.json and ENOLOCKs ("requires an existing
 // lockfile") on a pnpm/yarn repo. We detect the package manager from the
@@ -1447,7 +1448,7 @@ function validateTargetUrl(
   }
   const effectiveScope = publicNetwork ? publicNetwork.scope : scope;
 
-  // Cross-origin / scope authorization (0sec#215, cross-origin-in-scope fix).
+  // Cross-origin / scope authorization (0#215, cross-origin-in-scope fix).
   //
   // The same-origin rail is the correct default for a *scopeless* console:
   // with no operator-approved scope, never wander off the single named
@@ -1494,7 +1495,7 @@ function validateTargetUrl(
   return candidateUrl;
 }
 
-// ── PoC step graph helpers (0sec#170) ──
+// ── PoC step graph helpers (0#170) ──
 
 const POC_STEP_KINDS: ReadonlySet<string> = new Set([
   "setup",
@@ -1550,7 +1551,7 @@ function validatePocStep(raw: unknown): PocStep | null {
   return step;
 }
 
-// ── Verification spec helpers (0sec#193) ──
+// ── Verification spec helpers (0#193) ──
 //
 // Mirrors the PoC-step parser pattern above: tolerate already-parsed objects
 // AND JSON strings, validate strictly, and return null on anything malformed
@@ -1745,7 +1746,7 @@ export function parsePocStepsArg(raw: unknown): PocStep[] | null {
   return out.length > 0 ? out : null;
 }
 
-// ── Evidence-paths parsing & validation-failure response (0sec#409) ──
+// ── Evidence-paths parsing & validation-failure response (0#409) ──
 
 /**
  * Coerce the `evidence_paths` tool arg into the `FindingDraft.evidence`
@@ -1904,7 +1905,7 @@ export function evaluateDoneCoverageGate(input: CoverageGateInput, env: NodeJS.P
   return { pass: false, reason: parts.join(" ") };
 }
 
-// ── Access-control probe helpers (0sec#564) ──
+// ── Access-control probe helpers (0#564) ──
 
 /** A principal the access-control probe can issue requests as. */
 interface ProbePrincipal {
@@ -3040,7 +3041,7 @@ export class ToolExecutor {
   private _childRuntimeFactory: NativeRuntime["forkForSubagent"];
 
   /**
-   * Tool-health recorder (0sec#tool-reliability). Uses the shared tracker on
+   * Tool-health recorder (0#tool-reliability). Uses the shared tracker on
    * the ToolContext when the caller wired one (so the run summary sees the same
    * events), else a private per-executor tracker so recording is always safe.
    * Either way, new distinct events fan out on the event bus as `tool_health`.
@@ -3251,7 +3252,7 @@ export class ToolExecutor {
   }
 
   /**
-   * Outbound auth headers for the CURRENTLY ACTIVE identity (0sec#564).
+   * Outbound auth headers for the CURRENTLY ACTIVE identity (0#564).
    *
    * When a stateful `SessionEngine` is wired into the context, this returns the
    * active identity's static credential merged with any cookies its jar has
@@ -3271,7 +3272,7 @@ export class ToolExecutor {
 
   /**
    * Capture `Set-Cookie` from a response into the active identity's jar and
-   * run the 401/403 re-auth handler (0sec#564). No-op without a session.
+   * run the 401/403 re-auth handler (0#564). No-op without a session.
    */
   private captureActiveCookies(res: Response, url = this.ctx.target): void {
     if (!this.usesTargetIdentity(url)) return;
@@ -3763,11 +3764,11 @@ export class ToolExecutor {
         // above (same-origin + scope + private-IP/localhost block + http_audit
         // path allowlist), re-validated for the baseline AND every evasion
         // variant before egress. Fetching the in-scope authorized target is
-        // intended 0sec behaviour.
+        // intended 0 behaviour.
         // foxguard:ignore
         const res = await this.fetchTarget(safeUrl, fetchInit);
         if (this.ctx.rateLimiter) this.ctx.rateLimiter.noteResponse(safeUrl, res);
-        // Persist session state (0sec#564): capture Set-Cookie for the active
+        // Persist session state (0#564): capture Set-Cookie for the active
         // identity. No-op when no SessionEngine is wired. Runs for the baseline
         // AND every evasion variant so session cookies stay current.
         this.captureActiveCookies(res, safeUrl);
@@ -3782,7 +3783,7 @@ export class ToolExecutor {
     const first = await sendHttp(baseParts);
     let chosen = first;
 
-    // ── WAF detection + adaptive evasion (0sec#568) ──
+    // ── WAF detection + adaptive evasion (0#568) ──
     // Passive fingerprinting is cheap and ALWAYS runs, so a WAF block is
     // reported as such instead of being mistaken for "not vulnerable" (the
     // silent-false-negative gap). When a block is detected AND a WafDetector
@@ -3948,7 +3949,7 @@ export class ToolExecutor {
 
   /**
    * Bridge recon output into the orchestrator's `discovered_assets` inventory
-   * (0sec#768 / #761). Maps each `ReconAsset` to the `POST /assets` wire
+   * (0#768 / #761). Maps each `ReconAsset` to the `POST /assets` wire
    * shape and pushes it through the SAME authenticated cloud-sink client the
    * findings use (same bearer token + org resolution). No-ops when the sink is
    * unconfigured (local-only runs). Fire-and-forget and NON-FATAL: a push
@@ -4120,7 +4121,7 @@ export class ToolExecutor {
       } catch { continue; }
       if (parsed.hostname !== originHost) continue;
 
-      // Scope enforcement (0sec#215). Same-origin already restricts the
+      // Scope enforcement (0#215). Same-origin already restricts the
       // crawl to one host, but if that host is out of scope we still must
       // refuse — operators sometimes scan dev.example.com against a scope
       // that only allows prod.example.com.
@@ -4148,13 +4149,13 @@ export class ToolExecutor {
 
       try {
         const crawlAuthHeaders = this.activeAuthHeaders(normalizedUrl);
-        // Attribution-header injection (0sec#216). Crawler hits every
+        // Attribution-header injection (0#216). Crawler hits every
         // discovered link, so this is the highest-volume fetch site —
         // attribution here is what most defenders will see in their logs.
-        // The default `0sec-crawler/1.0` UA is replaced with the
+        // The default `0-crawler/1.0` UA is replaced with the
         // engagement-tagged UA inside applyAttribution when configured.
         //
-        // Manual redirect handling (0sec#238). `redirect: "manual"` and
+        // Manual redirect handling (0#238). `redirect: "manual"` and
         // a per-hop scope+origin check below stop attribution headers
         // from leaking to a 3xx target on a different host. Each Location
         // is validated BEFORE the next fetch, so the next request only
@@ -4166,7 +4167,7 @@ export class ToolExecutor {
               method: "GET",
               signal: controller.signal,
               redirect: "manual",
-              headers: { "User-Agent": "0sec-crawler/1.0", ...this.activeAuthHeaders(urlForAttribution) },
+              headers: { "User-Agent": "0-crawler/1.0", ...this.activeAuthHeaders(urlForAttribution) },
             },
             this.usesTargetIdentity(urlForAttribution) ? this.ctx.attribution : undefined,
             crawlScope,
@@ -4194,12 +4195,12 @@ export class ToolExecutor {
           // js/no-ssrf FP: `currentUrl` is the validated crawl seed (or a
           // same-origin, in-scope redirect target re-validated each hop below);
           // cross-origin / out-of-scope / private-IP hops are refused. Crawling
-          // the in-scope target is intended 0sec behaviour.
+          // the in-scope target is intended 0 behaviour.
           // foxguard:ignore
           res = await this.fetchTarget(currentUrl, buildCrawlInit(currentUrl));
           if (this.ctx.rateLimiter) this.ctx.rateLimiter.noteResponse(currentUrl, res);
           // Capture cookies on every hop so authenticated crawls persist
-          // session state across pages (0sec#564).
+          // session state across pages (0#564).
           this.captureActiveCookies(res, currentUrl);
 
           if (res.status < 300 || res.status >= 400) break;
@@ -4377,7 +4378,7 @@ export class ToolExecutor {
     const timer = setTimeout(() => controller.abort(), 10_000);
 
     try {
-      // Attribution-header injection (0sec#216). submit_form is one
+      // Attribution-header injection (0#216). submit_form is one
       // of the noisier fetch sites in pen-test contexts (login attempts,
       // CSRF probes), so attribution here is critical for deconfliction.
       const submitInit = applyAttribution(fetchUrl, fetchOpts, this.usesTargetIdentity(fetchUrl) ? this.ctx.attribution : undefined, this.ctx.scope)!;
@@ -4385,12 +4386,12 @@ export class ToolExecutor {
       if (this.ctx.rateLimiter) await this.ctx.rateLimiter.acquire(fetchUrl);
       // js/no-ssrf FP: `fetchUrl` derives from validateTargetUrl() above
       // (same-origin + scope + private-IP/localhost block). Submitting forms to
-      // the in-scope target is intended 0sec behaviour.
+      // the in-scope target is intended 0 behaviour.
       // foxguard:ignore
       const res = await this.fetchTarget(fetchUrl, submitInit);
       if (this.ctx.rateLimiter) this.ctx.rateLimiter.noteResponse(fetchUrl, res);
       // Capture the session cookie a login form sets, so the very next
-      // request is authenticated without manual `curl -c/-b` jars (0sec#564).
+      // request is authenticated without manual `curl -c/-b` jars (0#564).
       this.captureActiveCookies(res, fetchUrl);
       clearTimeout(timer);
       const text = await res.text();
@@ -4422,7 +4423,7 @@ export class ToolExecutor {
     }
   }
 
-  // ── Access-control probe (0sec#564) ──
+  // ── Access-control probe (0#564) ──
 
   /**
    * Resolve the principals this probe can act as. Prefers the live
@@ -5450,7 +5451,7 @@ export class ToolExecutor {
    * #925 — test S3 buckets for public access + orphaned-bucket takeover.
    * Anonymous, read-only: GET / and GET /?acl per bucket. NoSuchBucket (404)
    * is classified as takeover-able (the BCG orphaned-integration finding) but
-   * the bucket is never re-created — 0sec only flags it. Returns per-bucket
+   * the bucket is never re-created — 0 only flags it. Returns per-bucket
    * verdicts + pre-drafted findings for public buckets and takeover-able refs.
    *
    * SCOPE-GATED, deny-by-default (#924 parity): probing a target org's bucket
@@ -5674,7 +5675,7 @@ export class ToolExecutor {
       }
     }
 
-    // Programmatic scope pre-flight (0sec#215). The bash subprocess can
+    // Programmatic scope pre-flight (0#215). The bash subprocess can
     // reach out to anywhere — we don't have an egress proxy yet (issue
     // is acknowledged in the DoD), so the best we can do is grep the
     // command for obvious URLs and refuse if any are out of scope. This
@@ -5707,7 +5708,7 @@ export class ToolExecutor {
         }
       }
 
-      // Generic-scanner-traffic suppression (0sec#217). When scope is
+      // Generic-scanner-traffic suppression (0#217). When scope is
       // loaded the engagement is presumed to be a coordinated-disclosure
       // run, and most venue policies explicitly forbid the named
       // generic scanners (sqlmap/nikto/gobuster/…) because they
@@ -5727,7 +5728,7 @@ export class ToolExecutor {
         }
       }
     } else {
-      // ── No engagement scope: make the inert guards VISIBLE (0sec#133) ──
+      // ── No engagement scope: make the inert guards VISIBLE (0#133) ──
       // Everything above is nested in `if (this.ctx.scope)`, and `ctx.scope`
       // is undefined on every local run without `--scope` and on every cloud
       // scan mode except http_audit (the dispatcher emits no `--scope`). The
@@ -5785,7 +5786,7 @@ export class ToolExecutor {
       }
     }
 
-    // ── Close the bash rate-limiter bypass (0sec#568) ──
+    // ── Close the bash rate-limiter bypass (0#568) ──
     // The bash subprocess shells out to curl/wget/python-http, which bypass
     // node's `fetch` and therefore the per-host RateLimiter (#214) that the
     // http_request / crawl / submit_form tools pace against. Without an egress
@@ -5810,7 +5811,7 @@ export class ToolExecutor {
       }
     }
 
-    // Deterministic auth-header injection (0sec#282). When `authConfig`
+    // Deterministic auth-header injection (0#282). When `authConfig`
     // is set, rewrite curl/wget invocations whose URL is in scope and
     // which don't already carry explicit auth, so the env-var
     // indirection (`$AUTH_CURL_FLAG` / `$AUTH_HEADER:$AUTH_VALUE`) lands
@@ -6013,7 +6014,7 @@ export class ToolExecutor {
    * `_browserHost` and passing the scope-pinned interceptor + attribution
    * UA/headers. The method name is unchanged so dispatch (`browser ->
    * browserAction`) is untouched. Scope gating (pre-`goto` + post-redirect
-   * re-check, 0sec#218) lives inside `executeBrowser`, and a missing backend
+   * re-check, 0#218) lives inside `executeBrowser`, and a missing backend
    * degrades to a clear install hint there rather than throwing here.
    */
   private async browserAction(args: Record<string, unknown>): Promise<ToolResult> {
@@ -6024,7 +6025,7 @@ export class ToolExecutor {
     const attribution = this.ctx.publicNetwork ? undefined : this.ctx.attribution;
     const userAgent = attribution?.userAgentToken
       ? formatUserAgent(attribution.userAgentToken)
-      : "0sec-browser/1.0";
+      : "0-browser/1.0";
     const extraHeaders =
       attribution && Object.keys(attribution.headers).length > 0 ? attribution.headers : undefined;
     if (this._browserJev === undefined) {
@@ -6221,7 +6222,7 @@ export class ToolExecutor {
       eventBus.emit("subagent_lifecycle", { ...base,
       status: "running" as const, });
 
-      // 0sec#218 review: propagate scope + auth to the spawned loop so
+      // 0#218 review: propagate scope + auth to the spawned loop so
       // the sub-agent's bash/http_request gates use the same policy as
       // the parent. Without this, a parent scan locked to in-scope hosts
       // could spawn a child that hits arbitrary URLs via bash/curl.
@@ -6257,7 +6258,6 @@ export class ToolExecutor {
           costCeilingUsd: this.ctx.costCeilingUsd,
           costModel: rt.resolvedModel?.() ?? this.ctx.costModel,
           scopePath: this.ctx.scopePath,
-          jevRuntime: this.ctx.jevRuntime,
           autonomyMode: this.ctx.autonomyMode,
           publicNetwork: this.ctx.publicNetwork,
           allowScanners: this.ctx.allowScanners,
@@ -6409,7 +6409,6 @@ export class ToolExecutor {
         costCeilingUsd: this.ctx.costCeilingUsd,
         costModel: rt.resolvedModel?.() ?? this.ctx.costModel,
         scopePath: this.ctx.scopePath,
-        jevRuntime: this.ctx.jevRuntime,
         autonomyMode: this.ctx.autonomyMode,
         publicNetwork: this.ctx.publicNetwork,
         allowScanners: this.ctx.allowScanners,
@@ -6903,7 +6902,7 @@ export class ToolExecutor {
   }
 
   private async saveFinding(args: Record<string, unknown>): Promise<ToolResult> {
-    // 0sec#283 — refuse empty-PoC findings upstream. Disclose already
+    // 0#283 — refuse empty-PoC findings upstream. Disclose already
     // refuses empty PoCs at render time (`disclose/template.ts` EmptyPocError),
     // but accepting them here silently inflates mid-scan telemetry and burns
     // turns on findings that will be `_dropped/`'d at disclose time. Pull the
@@ -6933,7 +6932,7 @@ export class ToolExecutor {
       };
     }
 
-    // 0sec#409 — structural validation at the report-creation boundary.
+    // 0#409 — structural validation at the report-creation boundary.
     // CVE/CWE/CVSS shape + evidence-path traversal/symlink-escape guards.
     // Failures return as a structured `validation_failed` tool result so the
     // agent can self-correct on the same turn (same UX as flag-validator at
@@ -7125,7 +7124,7 @@ export class ToolExecutor {
       ]);
     }
 
-    // 0sec#170 — optional structured PoC step graph. The agent passes
+    // 0#170 — optional structured PoC step graph. The agent passes
     // `poc_steps` as a JSON-encoded string (LLM tool call wire format). We
     // tolerate already-parsed arrays too. Anything malformed is silently
     // dropped so a bad payload never blocks the finding from being saved.
@@ -7133,7 +7132,7 @@ export class ToolExecutor {
     if (pocSteps && pocSteps.length > 0) {
       finding.pocSteps = pocSteps;
     } else {
-      // 0sec#179 — fall back to a prose-derived heuristic graph when the
+      // 0#179 — fall back to a prose-derived heuristic graph when the
       // agent didn't supply one explicitly. The heuristic is conservative:
       // it returns undefined whenever it can't extract ≥ 2 steps cleanly,
       // and we leave `pocSteps` undefined in that case (downstream consumers
@@ -7146,7 +7145,7 @@ export class ToolExecutor {
       if (inferred && inferred.length >= 2) finding.pocSteps = inferred;
     }
 
-    // 0sec#193 — optional machine-executable verification spec. Same
+    // 0#193 — optional machine-executable verification spec. Same
     // wire-shape tolerance as poc_steps (object OR JSON string OR garbage).
     // When parseable, attach to the finding so cloud's canary watcher can
     // later evaluate it via `evaluateVerificationSpec`. Findings without a
@@ -7156,12 +7155,12 @@ export class ToolExecutor {
       finding.verificationSpec = verificationSpec;
     }
 
-    // 0sec#409 — propagate the validated CVE / CWE / CVSS values to the
+    // 0#409 — propagate the validated CVE / CWE / CVSS values to the
     // Finding. The fields are already shape-checked above, so we attach as-is
     // (no auto-uppercase / canonicalisation — the agent submitted clean
     // values or we'd have returned validation_failed already). `Finding`
     // doesn't carry a top-level `cve` / `cwe` field today (the schema work
-    // is tracked separately under 0sec#382), so we attach to the closest
+    // is tracked separately under 0#382), so we attach to the closest
     // existing slots: `cvssVector` / `cvssScore` for CVSS, and stash CVE /
     // CWE on the evidence.analysis prefix as a structured tag the disclose
     // renderer can pluck later. When the Finding schema grows first-class
@@ -7222,7 +7221,7 @@ export class ToolExecutor {
       args.evidence_analysis = finding.evidence.analysis ?? "";
     }
 
-    // 0sec#281 — dedup against in-memory ctx.findings before append.
+    // 0#281 — dedup against in-memory ctx.findings before append.
     // Surfaced by the 2026-05-07 control-flow audit (§H3 "prompt doing what
     // code should do"). The agent prompt already asks the model to query
     // existing findings before saving, but nothing enforces it; the same
@@ -7268,7 +7267,7 @@ export class ToolExecutor {
       this.db.saveFinding(this.ctx.scanId, finding);
     }
 
-    // 0sec#567 — harvest reusable footholds (credentials/tokens/cookies/…)
+    // 0#567 — harvest reusable footholds (credentials/tokens/cookies/…)
     // out of this finding's evidence into the loot ledger so the agent can
     // chain them into follow-up requests via `use_loot`. No-op when the loot
     // feature is off (ctx.loot undefined). Best-effort: a harvest failure must
@@ -7283,7 +7282,7 @@ export class ToolExecutor {
   }
 
   /**
-   * `use_loot` (0sec#567) — return previously captured footholds so the agent
+   * `use_loot` (0#567) — return previously captured footholds so the agent
    * can replay a leaked credential / token / cookie / endpoint / hash / path in
    * a follow-up request. Read-only and TRUSTED (we construct the output). When
    * the loot feature is off (no ledger), returns an empty, explanatory result
@@ -7383,7 +7382,7 @@ export class ToolExecutor {
   }
 
   /**
-   * `oast_register` (0sec#659) — mint a unique out-of-band interaction handle
+   * `oast_register` (0#659) — mint a unique out-of-band interaction handle
    * from the hosted collaborator. Returns a unique subdomain + correlation
    * token + ready-to-inject payload URLs. When no collaborator is configured
    * (feature off or ZERO_OAST_URL unset), returns a graceful, explanatory
@@ -7425,7 +7424,7 @@ export class ToolExecutor {
   }
 
   /**
-   * `oast_poll` (0sec#659) — poll the collaborator for a handle and run the
+   * `oast_poll` (0#659) — poll the collaborator for a handle and run the
    * OAST oracle (correlation-token matching) to return a confirmed/inconclusive
    * verdict. A confirmed callback is added to the loot ledger so the interaction
    * host can be chained. Trusted output (we construct it).
@@ -7618,7 +7617,7 @@ export class ToolExecutor {
   }
 
   /**
-   * apply_patch — 0sec#230. Structured DSL for reliable file edits.
+   * apply_patch — 0#230. Structured DSL for reliable file edits.
    * Refuses to run without a scopePath (same gate as read_file/run_command);
    * paths are resolved through `resolveScopedPath` so patches cannot escape
    * the audit directory. The actual parsing and apply logic lives in
@@ -7879,7 +7878,7 @@ export class ToolExecutor {
     const timeout = (args.timeout as number) ?? 30_000;
     const cwd = resolveScopedPath(this.ctx.scopePath, requestedCwd ?? ".");
 
-    // Dependency-audit lockfile reconciliation (0sec#tool-reliability): an
+    // Dependency-audit lockfile reconciliation (0#tool-reliability): an
     // `npm audit` on a pnpm/yarn repo ENOLOCKs. Detect the real package
     // manager from the lockfile and either redirect to the matching audit or
     // skip non-fatally when no lockfile exists.
@@ -8224,7 +8223,7 @@ export class ToolExecutor {
       if (this.ctx.rateLimiter) await this.ctx.rateLimiter.acquire(url);
       const execution = this._executionContext.getStore();
       const res = await fetchScoped(url, {
-        headers: { "User-Agent": "0sec/1.0" },
+        headers: { "User-Agent": "0/1.0" },
         signal: execution?.signal ? AbortSignal.any([controller.signal, execution.signal]) : controller.signal,
         redirect: "follow",
       }, {
@@ -8294,7 +8293,7 @@ export class ToolExecutor {
     }
   }
 
-  // 0sec#1284 — intel handler bodies extracted to ./tools/intel.ts as free
+  // 0#1284 — intel handler bodies extracted to ./tools/intel.ts as free
   // functions; these stay as thin delegates so tools/dispatch.test.ts keeps
   // resolving each tool name to a real ToolExecutor method.
   private intelTool(args: Record<string, unknown>): Promise<ToolResult> {
@@ -8303,7 +8302,7 @@ export class ToolExecutor {
 
   // ── Offline / read-only security engines (dev-live-engine-recovery) ──
   // Thin delegates to the free-function handlers in tools/security-engines.ts,
-  // mirroring the intelTool → executeIntel shape (0sec#1284).
+  // mirroring the intelTool → executeIntel shape (0#1284).
   private adAttackPathsTool(args: Record<string, unknown>): Promise<ToolResult> {
     return executeAdAttackPaths(this.ctx, args);
   }
@@ -8322,10 +8321,6 @@ export class ToolExecutor {
 
   private cveLookupTool(args: Record<string, unknown>): Promise<ToolResult> {
     return executeCveLookup(this.ctx, args);
-  }
-
-  private jevPrepassTool(args: Record<string, unknown>): Promise<ToolResult> {
-    return executeJevPrepass(this.ctx, args);
   }
 
   // ── Phase-2 offensive / active security engines (dev-live-engine-recovery) ──
@@ -8423,13 +8418,13 @@ export class ToolExecutor {
     const base = validateTargetUrl(this.ctx.target, this.ctx.target, this.ctx.scope, undefined, this.ctx.publicNetwork);
 
     // Build an auth-aware fetch wrapper that reuses the active identity's
-    // credentials + captured session cookies (0sec#564).
+    // credentials + captured session cookies (0#564).
     const authHeaders = this.activeAuthHeaders();
     const scope = this.ctx.scope;
     const rateLimiter = this.ctx.rateLimiter;
     const attribution = this.ctx.attribution;
     const wrappedFetch: FetchLike = async (url, init) => {
-      // Scope check (0sec#215). runWpFingerprint walks the WP plugin
+      // Scope check (0#215). runWpFingerprint walks the WP plugin
       // namespace by appending paths to `target`; under same-origin that
       // can't escape the host, but if the host itself is out-of-scope —
       // e.g. operator passed --scope without including the WP target —
@@ -8444,7 +8439,7 @@ export class ToolExecutor {
         ...authHeaders,
         ...(init?.headers ?? {}),
       };
-      // Attribution-header injection (0sec#216). wp_fingerprint runs
+      // Attribution-header injection (0#216). wp_fingerprint runs
       // dozens of plugin probes in a tight loop, so attribution on
       // every probe is what tells defenders this is engagement traffic
       // rather than a botnet pulling /wp-content/plugins/* paths.
@@ -8514,7 +8509,7 @@ export class ToolExecutor {
     }
   }
 
-  // ── Engagement-gated structured scanner wrappers (0sec#555) ──
+  // ── Engagement-gated structured scanner wrappers (0#555) ──
   //
   // Shared glue for run_sqlmap / run_nmap / run_ffuf / run_nuclei. Each public
   // method validates the target against scope, acquires a rate-limit token,
@@ -8526,7 +8521,7 @@ export class ToolExecutor {
 
   /**
    * Common preflight for every scanner wrapper — the authorized-engagement
-   * profile gate (0sec#926). Delegates the allow/deny decision to the pure
+   * profile gate (0#926). Delegates the allow/deny decision to the pure
    * `scannerEngagementGate`, which enforces, in order:
    *   - ctx.allowScanners must be true (defense-in-depth; the tool is also
    *     absent from the tool set otherwise — see getToolsForRole);
@@ -9354,14 +9349,14 @@ export function getToolsForRole(role: string, opts?: { hasScope?: boolean; webMo
   const wpTools = featureFlags.wpFingerprint ? ["wp_fingerprint"] : [];
   const mongoTools = featureFlags.mongoObjectIdForge ? ["mongo_objectid"] : [];
   const skillTools = featureFlags.jitSkills ? ["list_skills", "load_skill"] : [];
-  // 0sec#567 — loot retrieval tool, only when the ledger feature is on.
+  // 0#567 — loot retrieval tool, only when the ledger feature is on.
   const lootTools = featureFlags.lootLedger ? ["use_loot"] : [];
   // Typed TODO ledger — the `plan` tool, only when the feature is on.
   const planTools = featureFlags.agentPlan ? ["plan"] : [];
-  // 0sec#555: scanner wrappers only when the engagement explicitly permits
-  // generic-scanner traffic. Default-off preserves 0sec#217 stealth.
+  // 0#555: scanner wrappers only when the engagement explicitly permits
+  // generic-scanner traffic. Default-off preserves 0#217 stealth.
   const scannerTools = opts?.allowScanners ? [...SCANNER_TOOL_NAMES] : [];
-  // 0sec#925: live cloud-surface tools (S3 public/takeover + read-only cred
+  // 0#925: live cloud-surface tools (S3 public/takeover + read-only cred
   // validation), gated behind the cloud-surface feature flag (default on).
   const cloudTools = featureFlags.cloudSurface ? [...CLOUD_TOOL_NAMES] : [];
   // #978 — agent fan-out (start_scan), opt-in (default off). Server enforces
@@ -9433,10 +9428,10 @@ export function getToolsForRole(role: string, opts?: { hasScope?: boolean; webMo
     && (featureFlags.agentPlan || name !== "plan")
     // Scanner wrappers stay out of the audit/review "everything" set too,
     // unless the engagement opted in. Without this they'd leak into
-    // allEnabledTools regardless of allowScanners (regression of 0sec#217).
+    // allEnabledTools regardless of allowScanners (regression of 0#217).
     && (opts?.allowScanners || !SCANNER_TOOL_NAMES.includes(name))
     // Cloud-surface tools follow the same gating: out of the audit/review
-    // "everything" set when the feature flag is off (0sec#925).
+    // "everything" set when the feature flag is off (0#925).
     && (featureFlags.cloudSurface || !CLOUD_TOOL_NAMES.includes(name))
     // #978 — fan-out (start_scan) likewise stays out unless agentFanout is on.
     && (featureFlags.agentFanout || !ORCHESTRATOR_TOOL_NAMES.includes(name))

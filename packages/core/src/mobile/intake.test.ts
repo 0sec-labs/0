@@ -8,7 +8,7 @@ import { runMobileStaticIntake } from "./intake.js";
 
 describe("runMobileStaticIntake — Android", () => {
   it("extracts Android metadata and classifies endpoints with scope", () => {
-    const root = mkdtempSync(join(tmpdir(), "0sec-mobile-android-"));
+    const root = mkdtempSync(join(tmpdir(), "0-mobile-android-"));
     writeFileSync(
       join(root, "AndroidManifest.xml"),
       `
@@ -93,7 +93,7 @@ describe("runMobileStaticIntake — Android", () => {
 
 describe("runMobileStaticIntake — iOS", () => {
   it("extracts Info.plist metadata, URL schemes, associated domains, and hosts", () => {
-    const root = mkdtempSync(join(tmpdir(), "0sec-mobile-ios-"));
+    const root = mkdtempSync(join(tmpdir(), "0-mobile-ios-"));
     writeFileSync(
       join(root, "Info.plist"),
       `

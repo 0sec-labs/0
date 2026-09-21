@@ -21,7 +21,7 @@ import {
 const tempHomes: string[] = [];
 
 function makeHome(): string {
-  const dir = mkdtempSync(join(tmpdir(), "0sec-tui-settings-"));
+  const dir = mkdtempSync(join(tmpdir(), "0-tui-settings-"));
   tempHomes.push(dir);
   return dir;
 }
@@ -34,7 +34,7 @@ afterEach(() => {
 });
 
 describe("settingsFilePath", () => {
-  it("places the file inside the shared 0sec state directory", () => {
+  it("places the file inside the shared 0 state directory", () => {
     expect(settingsFilePath("/home/someone")).toBe("/home/someone/.0/tui-settings.json");
   });
 
@@ -684,7 +684,7 @@ import {
 } from "./themes.js";
 
 function makeProjectDir(): string {
-  const dir = mkdtempSync2(join(tmpdir(), "0sec-project-"));
+  const dir = mkdtempSync2(join(tmpdir(), "0-project-"));
   tempHomes.push(dir);
   return dir;
 }

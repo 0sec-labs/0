@@ -22,7 +22,7 @@ async function runDoctor(): Promise<string> {
   try {
     const program = new Command();
     registerDoctorCommand(program);
-    await program.parseAsync(["node", "0sec", "doctor"]);
+    await program.parseAsync(["node", "0", "doctor"]);
     return lines.join("\n");
   } finally {
     log.mockRestore();

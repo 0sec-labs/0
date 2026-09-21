@@ -171,7 +171,7 @@ describe("generateArchetypeCandidates + planArchetypeSweep (real grep over a tem
   let dir: string;
 
   beforeEach(() => {
-    dir = mkdtempSync(join(tmpdir(), "0sec-archetype-test-"));
+    dir = mkdtempSync(join(tmpdir(), "0-archetype-test-"));
     writeFileSync(
       join(dir, "netlink_hit.c"),
       "int parse(struct nlattr *a) { u32 v = nla_get_u32(a); return v; }\n",
@@ -345,7 +345,7 @@ describe("generateArchetypeCandidates + planArchetypeSweep on the FreeBSD pack (
   let dir: string;
 
   beforeEach(() => {
-    dir = mkdtempSync(join(tmpdir(), "0sec-freebsd-archetype-test-"));
+    dir = mkdtempSync(join(tmpdir(), "0-freebsd-archetype-test-"));
     writeFileSync(
       join(dir, "uninit_leak.c"),
       "int copyout_ucontext(ucontext_t *uc) { return copyout(uc, 0, sizeof(*uc)); }\n",
@@ -493,7 +493,7 @@ describe("generateArchetypeCandidates + planArchetypeSweep on the Chromium pack 
   let dir: string;
 
   beforeEach(() => {
-    dir = mkdtempSync(join(tmpdir(), "0sec-chromium-archetype-test-"));
+    dir = mkdtempSync(join(tmpdir(), "0-chromium-archetype-test-"));
     writeFileSync(
       join(dir, "oilpan_hit.cc"),
       "class Foo : public GarbageCollected<Foo> { public: void Trace(Visitor* v) const { v->Trace(member_); } private: Member<Bar> member_; };\n",

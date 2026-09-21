@@ -31,7 +31,7 @@
  * ever emitting a line wider than that budget.
  */
 
-import type { Finding, Severity } from "@0/shared"
+import type { Finding, Severity } from "@0/shared";
 
 import { computeKvSplit } from "./pane-layout.js";
 import { shellChromeRows, wrapCells } from "./settings-layout.js";

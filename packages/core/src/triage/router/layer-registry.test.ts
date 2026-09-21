@@ -59,7 +59,7 @@ describe("LAYER_REGISTRY", () => {
     }
   });
 
-  it("contains the canonical layers referenced in 0sec#112's LayerVerdict union", () => {
+  it("contains the canonical layers referenced in 0#112's LayerVerdict union", () => {
     const expected = [
       "holding_it_wrong",
       "evidence_gate",

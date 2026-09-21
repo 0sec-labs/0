@@ -55,7 +55,7 @@ export async function evaluateEvolutionCandidate(
   const attempts: EvolutionEvaluation["attempts"] = { baseline: [], candidate: [] };
   let spent = 0;
   const evaluatorIdentity = {
-    protocol: "0sec-evolution-exact-json-v1",
+    protocol: "0-evolution-exact-json-v1",
     configDigest,
     implementation: [
       evaluateEvolutionCandidate.toString(), score.toString(), wilson95.toString(),

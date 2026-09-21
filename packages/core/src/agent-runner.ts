@@ -1,4 +1,4 @@
-import type { Finding } from "@0/shared"
+import type { Finding } from "@0/shared";
 import type { ScanListener } from "./scanner.js";
 import { createRuntime } from "./runtime/index.js";
 import type { RuntimeType } from "./runtime/index.js";
@@ -287,7 +287,7 @@ export async function runAnalysisAgent(opts: AnalysisAgentOptions): Promise<Anal
   }
 
   if (process.env.CI || process.env["ZERO_DEBUG"]) {
-    process.stderr.write(`[0sec] agent-runner: type=${runtimeType}, available=[${[...available].join(",")}], directCodex=${useDirectChatGptCodex}\n`);
+    process.stderr.write(`[0] agent-runner: type=${runtimeType}, available=[${[...available].join(",")}], directCodex=${useDirectChatGptCodex}\n`);
   }
 
   // ── Branch 1: CLI runtime fast path (claude/codex/etc.) ──
@@ -465,7 +465,7 @@ export async function runAnalysisAgent(opts: AnalysisAgentOptions): Promise<Anal
     // Check if runtime supports native tool_use (multi-turn agentic loop)
     const supportsNative = typeof (apiRuntime as NativeRuntime).executeNative === "function";
     if (process.env.CI || process.env["ZERO_DEBUG"]) {
-      process.stderr.write(`[0sec] API runtime: native=${supportsNative}, model=${config.model ?? "default"}\n`);
+      process.stderr.write(`[0] API runtime: native=${supportsNative}, model=${config.model ?? "default"}\n`);
     }
 
     if (supportsNative) {

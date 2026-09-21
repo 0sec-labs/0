@@ -1,6 +1,6 @@
 # Skill self-improvement loop (`/refine`)
 
-A dry-run-first `/refine` flywheel for 0sec's JIT methodology **skills** — the
+A dry-run-first `/refine` flywheel for 0's JIT methodology **skills** — the
 skill-side sibling of `active_learning_loop.py` (which does the same for the
 triage router). It scores each skill by the **verified** outcomes of the
 findings produced while it was active, flags under-performers as refinement
@@ -91,7 +91,7 @@ the artifact against the evolution registry:
 | `--evolution-artifact <relative-path>` | Relative path of the artifact within the version's immutable snapshot (e.g. `agent/skills/vulnerabilities/sqli-advanced.yaml` for skills) |
 
 If `--promote` is passed without these, the script exits with code 3 and an
-actionable error directing the user to the `0sec evolve` workflow.
+actionable error directing the user to the `0 evolve` workflow.
 
 The authorization uses `artifact-bridge.mjs` (sibling to `check_skill.mjs`):
 

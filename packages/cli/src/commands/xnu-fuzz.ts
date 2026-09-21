@@ -1,6 +1,6 @@
 /**
- * `0sec xnu-fuzz` — the IOKit user-client fuzzer mode (dynamic sibling to the
- * static `xnu-re` review profile). Design: docs/0sec-iokit-fuzzer.md.
+ * `0 xnu-fuzz` — the IOKit user-client fuzzer mode (dynamic sibling to the
+ * static `xnu-re` review profile). Design: docs/0-iokit-fuzzer.md.
  *
  * Subcommands (the buildable MVP loop — model + generate locally; the VM run
  * lane is built but must run on a beefier Apple-Silicon Mac, see harness):
@@ -14,13 +14,15 @@
 
 import type { Command } from "commander";
 import { readFileSync, writeFileSync } from "node:fs";
-import { enumerateTargetModelFromKext,
-generateInputsForSelector,
-makeRng,
-selectorModelToLine,
-type TargetModel,
-type UserClientModel,
-planSingleShardRun, } from "@0/core"
+import {
+  enumerateTargetModelFromKext,
+  generateInputsForSelector,
+  makeRng,
+  selectorModelToLine,
+  type TargetModel,
+  type UserClientModel,
+  planSingleShardRun,
+} from "@0/core";
 
 interface EnumerateOpts {
   kext: string;

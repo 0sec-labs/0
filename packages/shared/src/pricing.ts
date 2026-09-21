@@ -181,7 +181,7 @@ export function getRates(model?: string): ModelRates {
   const aliasKey = azureDeploymentPriceKey(key);
   const rates = MODEL_PRICING[key] ?? (aliasKey ? MODEL_PRICING[aliasKey] : undefined);
   if (!rates) {
-    if (model) console.warn(`[0sec] Unknown model for cost estimation: ${model}`);
+    if (model) console.warn(`[0] Unknown model for cost estimation: ${model}`);
     return MODEL_PRICING.default;
   }
   return rates;
