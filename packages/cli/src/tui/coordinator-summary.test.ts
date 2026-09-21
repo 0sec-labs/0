@@ -67,7 +67,7 @@ describe("buildCoordinatorSummary", () => {
     const noPlan = buildCoordinatorSummary();
     expect(noPlan.state).toBe("planning");
     expect(noPlan.lines[1]).toContain("count is not known");
-    expect(noPlan.lines[2]).toContain("plan is not available");
+    expect(noPlan.lines[2]).toContain("No main-task plan is available yet.");
 
     const noChild = buildCoordinatorSummary({ rootPlan: plan(), rootScanId: "root" });
     expect(noChild.hasDirectChildren).toBe(false);

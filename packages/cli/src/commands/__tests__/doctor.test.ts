@@ -57,7 +57,7 @@ describe("doctor Node prerequisites", () => {
       Object.defineProperty(process.versions, "node", { ...nodeDescriptor, value: version });
       Object.defineProperty(process, "version", { ...versionDescriptor, value: `v${version}` });
       const output = await runDoctor();
-      const nodeStatus = output.split("\n").find((line) => line.includes("Node.js"));
+      const nodeStatus = output.split("\n").find((line) => line.trimStart().startsWith("Node.js"));
       expect(nodeStatus).toMatch(new RegExp(`Node\\.js\\s+${status}\\s+v${version.replaceAll(".", "\\.")}`));
       expect(output).toContain("CLI version   v0.17.0 [beta]");
       expect(output).toContain(`Runtime       Node.js v${version}`);
