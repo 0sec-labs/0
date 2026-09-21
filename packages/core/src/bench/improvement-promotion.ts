@@ -51,6 +51,7 @@ export interface ImprovementPromotionCheck {
     | "held_out_lift"
     | "negative_control_precision"
     | "cost_discipline";
+  passed: boolean;
   detail: string;
 }
 

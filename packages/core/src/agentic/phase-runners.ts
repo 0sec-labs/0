@@ -35,6 +35,7 @@ import { verify } from "../triage/structured-verify.js";
 import { getCloudSinkConfig, postFinding } from "../cloud-sink.js";
 import { splitCost } from "../agent/cost.js";
 import { EnforcementTracker } from "../scope/enforcement.js";
+import type { ScanCostLedger } from "../agent/cost-ledger.js";
 
 // ── Shared state type for agent outputs ──
 
@@ -82,6 +83,7 @@ export async function runNativeDiscovery(
   emit: ScanListener,
   apiSpecPromptText?: string,
   getPendingUserMessages?: () => string[],
+  costLedger?: ScanCostLedger,
 ): Promise<AgentOutput> {
   // http_audit reuses the web-pentest prompts + tools wholesale; the only
   // additions are the env-driven scope/path/rate/kill enforcement layered on
@@ -123,6 +125,7 @@ export async function runNativeDiscovery(
       engagement: resolveEngagementForConfig(config),
       costCeilingUsd: config.costCeilingUsd,
       costModel: config.model,
+      costLedger,
     },
     runtime,
     db,
@@ -176,6 +179,7 @@ export async function runNativeAttack(
   challengeHint?: string,
   apiSpecPromptText?: string,
   getPendingUserMessages?: () => string[],
+  costLedger?: ScanCostLedger,
 ): Promise<AgentOutput> {
   // http_audit reuses the web-pentest prompts + tools wholesale; the only
   // additions are the env-driven scope/path/rate/kill enforcement layered on
@@ -358,6 +362,7 @@ export async function runNativeAttack(
       engagement: resolveEngagementForConfig(config),
       costCeilingUsd: config.costCeilingUsd,
       costModel: config.model,
+      costLedger,
     },
     runtime,
     db,
@@ -430,11 +435,12 @@ export async function runNativeAttack(
         scope: resolveScopeForConfig(config),
         rateLimiter: getOrCreateRateLimiter(config),
         enforcement: resolveEnforcementForConfig(config),
-      allowScanners: config.allowScanners,
-      attribution: buildAttributionForConfig(config),
-      engagement: resolveEngagementForConfig(config),
+        allowScanners: config.allowScanners,
+        attribution: buildAttributionForConfig(config),
+        engagement: resolveEngagementForConfig(config),
         costCeilingUsd: config.costCeilingUsd,
         costModel: config.model,
+        costLedger,
       },
       runtime,
       db,
@@ -660,6 +666,7 @@ export async function runNativeVerify(
   scanId: string,
   findings: Finding[],
   emit: ScanListener,
+  costLedger?: ScanCostLedger,
 ): Promise<void> {
   // Per-finding verify loop (#285). One agent session per finding so each
   // gets its own turn budget — N findings → N runtime calls, never a shared
@@ -691,6 +698,7 @@ export async function runNativeVerify(
         engagement: resolveEngagementForConfig(config),
         costCeilingUsd: config.costCeilingUsd,
         costModel: config.model,
+        costLedger,
       },
       runtime,
       db,

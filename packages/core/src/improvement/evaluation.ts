@@ -2,6 +2,7 @@ import { evaluateImprovementPromotion } from "../bench/improvement-promotion.js"
 import type { ResearchScoreSnapshot } from "../bench/improvement.js";
 import { wilson95 } from "../bench/scorecard.js";
 import { canonicalEvolutionJson, parseEvolutionConfig } from "./config.js";
+import { evolutionDigest, verifyEvolutionSnapshot } from "./registry.js";
 import {
   campaignPromotionAllowed, createEvolutionComparisonIdentity, createOrLoadEvolutionCampaign,
   reserveHoldoutExposure,

@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it, afterEach } from "vitest";
@@ -30,7 +30,7 @@ const cases = [
 ];
 
 function freshRoot(): string {
-  const root = mkdtempSync(join(tmpdir(), "0sec-evolution-safety-"));
+  const root = mkdtempSync(join(realpathSync(tmpdir()), "0sec-evolution-safety-"));
   roots.push(root);
   return root;
 }

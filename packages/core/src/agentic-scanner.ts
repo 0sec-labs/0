@@ -37,7 +37,7 @@ import type { RuntimeMode, PipelineEvent } from "@0sec/shared";
 import { createScanMemoryStore } from "./triage/memories.js";
 import { features } from "./agent/features.js";
 import { diag } from "./diagnostics/channel.js";
-import type { ScanEvent, ScanListener } from "./scanner.js";
+import type { ScanListener } from "./scanner.js";
 import type { NativeRuntime, NativeMessage, NativeContentBlock } from "./runtime/types.js";
 import type { ToolCall } from "./agent/types.js";
 import { isMcpTarget } from "./http.js";
@@ -262,6 +262,20 @@ function normalizeScanConfig(config: ScanConfig): ScanConfig {
     config = { ...config, target: `https://${config.target.trim()}` };
   }
   return config;
+}
+async function runtimeForTask(
+  runtime: NativeRuntime,
+  config: ScanConfig,
+  task: ScanTask,
+): Promise<NativeRuntime> {
+  const model = config.taskRoutes?.[task];
+  if (!model) return runtime;
+  if (!runtime.forkForSubagent) {
+    throw new Error(
+      `Approved route for task "${task}" cannot be enforced by runtime "${config.runtime ?? "auto"}"; no fallback was selected.`,
+    );
+  }
+  return runtime.forkForSubagent(config.timeout ?? 120_000, { role: task, model });
 }
 
 /** Classify an admitted target. Redirects require separate scope admission. */
@@ -1498,6 +1512,7 @@ let config = normalizeScanConfig(opts.config);
             opts.challengeHint,
             apiSpecPromptText,
             getPendingUserMessages,
+            scanCostLedger,
           )
         : await runLegacyAttack(
             legacyRuntime,
@@ -3167,6 +3182,7 @@ let config = normalizeScanConfig(opts.config);
           scanId,
           consensusFiltered,
           emit,
+          scanCostLedger,
         );
       } else {
         await runLegacyVerify(legacyRuntime, db, config, scanId, consensusFiltered, emit, effectiveDbPath);
@@ -3351,5 +3367,4 @@ let config = normalizeScanConfig(opts.config);
     db.close();
   }
 }
-
 
