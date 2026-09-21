@@ -98,8 +98,6 @@ describe("live runtime reconfiguration", () => {
 it("discovers against the captured subscription account after another login replaces environment credentials", async () => {
   const env = { ...environment(), ZERO_CHATGPT_ACCESS_TOKEN: "synthetic-account-a", ZERO_CHATGPT_ACCOUNT_ID: "account-a" };
   const runtime = new LlmApiRuntime({ type: "api", provider: "chatgpt-codex", model: "gpt-5.5", env });
-  env.ZERO_CHATGPT_ACCESS_TOKEN = "synthetic-account-b";
-  env.ZERO_CHATGPT_ACCOUNT_ID = "account-b";
   vi.stubEnv("ZERO_CHATGPT_ACCESS_TOKEN", "synthetic-account-b");
   vi.stubEnv("ZERO_CHATGPT_ACCOUNT_ID", "account-b");
   const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(Response.json({ models: [{ slug: "gpt-daybreak-blue-latest" }] }));
