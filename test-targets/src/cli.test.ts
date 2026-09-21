@@ -15,7 +15,7 @@ const cliPath = join(thisDir, "../../packages/cli/src/index.ts");
 // digit-leading ZERO_* contract this suite exercises.
 const tsxCliPath = join(thisDir, "../node_modules/tsx/dist/cli.mjs");
 const tsconfigPath = join(thisDir, "../tsconfig.cli-e2e.json");
-const testHome = mkdtempSync(join(tmpdir(), "@0/cli-test-"));
+const testHome = mkdtempSync(join(tmpdir(), "0-cli-test-"));
 const testDbPath = join(testHome, "findings.db");
 afterAll(() => rmSync(testHome, { recursive: true, force: true }));
 
