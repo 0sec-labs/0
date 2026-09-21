@@ -175,6 +175,10 @@ import {
   reduceActiveSubagents,
   summaryInputFromMessage,
 } from "./subagent-card.js";
+import {
+  buildCoordinatorSummary,
+  COORDINATOR_SUMMARY_ROWS,
+} from "./coordinator-summary.js";
 import { onTuiOutputLine } from "./output-guard.js";
 import {
   COMPOSER_QUEUE_LIMIT,
@@ -5595,19 +5599,34 @@ export function ChatScreen({
     ? Math.min(5, Math.max(0, sidebarContentRows - 8)) : 0;
   const railRecords = Object.values(herdAgents);
   const runFindings = runFindingsFromEntries(entries);
-  // Header rows: AGENTS(1), FINDINGS(1 + separator), and the hide control(1).
+  // Header rows: the coordinator overview (when the six-row slot fits),
+  // AGENTS(1), FINDINGS(1 + separator), and the hide control(1).
   // Vertical padding was deducted above. Empty sections consume only their
   // actual placeholder rows, leaving that space available for the live plan.
   const rightSectionRows = Math.max(0, sidebarContentRows - 4 - cloudHintRows);
+  // The overview owns a fixed six-row slot. If the rail cannot spare all six,
+  // omit it rather than letting Yoga shrink its lines into the transcript.
+  const coordinatorSummary = useMemo(
+    () => buildCoordinatorSummary({
+      rootPlan: todos,
+      directChildren: Object.values(activeSubagents),
+      rootScanId: session?.scanId,
+      objective,
+    }),
+    [activeSubagents, objective, session?.scanId, todos],
+  );
+  const coordinatorSummaryRows =
+    rightSectionRows >= COORDINATOR_SUMMARY_ROWS ? COORDINATOR_SUMMARY_ROWS : 0;
+  const rightRowsAfterOverview = rightSectionRows - coordinatorSummaryRows;
   const hasPlan = Boolean(todos?.todos.length);
-  const planMinimum = hasPlan ? Math.min(3, rightSectionRows) : 0;
-  const rightBodyRows = rightSectionRows - planMinimum;
+  const planMinimum = hasPlan ? Math.min(3, rightRowsAfterOverview) : 0;
+  const rightBodyRows = rightRowsAfterOverview - planMinimum;
   const agentRowsNeeded = railRecords.length ? railRecords.length * AGENT_SIDEBAR_ROWS : 2;
   const findingRowsNeeded = Math.max(1, runFindings.length * 2);
   const findingsShare = Math.min(findingRowsNeeded, Math.floor(rightBodyRows * 0.4));
   const agentsBudget = Math.min(agentRowsNeeded, Math.max(0, rightBodyRows - findingsShare));
   const rightFindingsBudget = Math.min(findingRowsNeeded, Math.max(0, rightBodyRows - agentsBudget));
-  const rightPlanBudget = hasPlan ? rightSectionRows - agentsBudget - rightFindingsBudget : 0;
+  const rightPlanBudget = hasPlan ? rightRowsAfterOverview - agentsBudget - rightFindingsBudget : 0;
   const railMaxAgents = Math.floor(agentsBudget / AGENT_SIDEBAR_ROWS);
   const railCapacity =
     railRecords.length > railMaxAgents
@@ -5618,6 +5637,15 @@ export function ChatScreen({
   // FINDINGS rendering (wrapping to ≤2 lines, budget, "+N more") now lives in
   // the FindingsSidebar component; it owns its 1-row header, so it is handed the
   // item budget PLUS that header row.
+  const coordinatorSummaryNode = coordinatorSummaryRows > 0 ? (
+    <box width={rightInner} height={COORDINATOR_SUMMARY_ROWS} flexShrink={0} minWidth={0} flexDirection="column">
+      {coordinatorSummary.lines.map((line, index) => (
+        <text key={`coordinator-summary-${index}`} height={1} wrapMode="none" truncate fg={index === 0 ? TEXT : MUTED}>
+          {fitTuiText(line, rightInner)}
+        </text>
+      ))}
+    </box>
+  ) : null;
   const rightSidebarNode = sidebars.rightVisible ? (
     <box
       flexDirection="row"
@@ -5629,6 +5657,7 @@ export function ChatScreen({
     >
       <box width={1} flexShrink={0} alignSelf="stretch" backgroundColor={BORDER} />
       <box flexDirection="column" flexGrow={1} alignSelf="stretch" minHeight={0} minWidth={0} paddingX={1} paddingY={1} backgroundColor={PANEL}>
+        {coordinatorSummaryNode}
         <box width={rightInner} flexShrink={0} minWidth={0}>
           <text fg={MUTED}>{buildSidebarSectionHeader("AGENTS", railRecords.length, rightInner)}</text>
         </box>
