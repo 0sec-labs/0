@@ -39,6 +39,11 @@ import type { ScanReport } from "@0sec/shared";
 const agenticScanMock = vi.fn();
 const runPipelineMock = vi.fn();
 const createRuntimeMock = vi.fn();
+const ScanCostLedgerMock = class {
+  totalCostUsd() {
+    return 0;
+  }
+};
 const loadAppsecFinderLensesMock = vi.fn(() => []);
 let eventBusListener:
   | { emit: (type: string, payload: unknown) => void }
@@ -56,6 +61,7 @@ vi.mock("@0sec/core", () => ({
   agenticScan: agenticScanMock,
   runPipeline: runPipelineMock,
   createRuntime: createRuntimeMock,
+  ScanCostLedger: ScanCostLedgerMock,
   eventBus: eventBusMock,
   loadAppsecFinderLenses: loadAppsecFinderLensesMock,
 }));
@@ -911,4 +917,40 @@ describe("runUnified — resume / branch (0sec#374)", () => {
     expect(runPipelineMock.mock.calls[0]![0].resumeScanId).toBe("scan-def-456");
   });
 
+});
+
+describe("runUnified — shared multi-run plans", () => {
+  it("runs each planned attempt with one shared ledger and reports completion", async () => {
+    agenticScanMock.mockReset();
+    eventBusListener = null;
+    agenticScanMock.mockResolvedValue(cleanReport());
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => undefined);
+
+    await runUnified({
+      target: "https://example.com",
+      targetType: "url",
+      depth: "default",
+      format: "json",
+      runtime: "auto",
+      timeout: 60_000,
+      verbose: false,
+      plan: {
+        goal: "unknown-vulnerabilities",
+        depth: "default",
+        runCount: 2,
+        executionMode: "sequential",
+        timeCapMs: 60_000,
+        costCapUsd: 5,
+      },
+    });
+
+    expect(agenticScanMock).toHaveBeenCalledTimes(2);
+    const first = agenticScanMock.mock.calls[0]![0];
+    const second = agenticScanMock.mock.calls[1]![0];
+    expect(first.config.plan.runCount).toBe(1);
+    expect(second.config.plan.runCount).toBe(1);
+    expect(first.config.costLedger).toBe(second.config.costLedger);
+    expect(logSpy).toHaveBeenCalledWith(expect.stringContaining("\"completedRuns\":2"));
+    logSpy.mockRestore();
+  });
 });

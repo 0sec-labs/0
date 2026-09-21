@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import React, { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { CliRenderEvents, createCliRenderer, type CliRenderer } from "@opentui/core";
 import { AppContext, createRoot, useKeyboard } from "@opentui/react";
-import { type Finding } from "@0sec/shared";
+import { type Finding, type ScanPlan } from "@0sec/shared";
 import { resolveEngagement } from "../engagement-plan.js";
 import { getRuntimeAvailability } from "../utils.js";
 import { buildFindingChatPrompt, loadFindingFocus } from "../finding-focus.js";
@@ -99,6 +99,7 @@ export interface HomeSelection {
   target?: string;
   runtime?: LaunchRuntime;
   depth?: LaunchDepth;
+  plan?: ScanPlan;
 }
 
 type ConsoleRoute = (
@@ -963,12 +964,24 @@ function ConsoleApp({
       const resolution = resolveEngagement(target);
       if (!resolution.ok) return;
       const plan = resolution.plan;
+      const selectedPlan = selection.plan ?? {
+        goal: plan.kind === "package"
+          ? "known-vulnerabilities"
+          : plan.kind === "web"
+            ? "misconfigurations"
+            : "unknown-vulnerabilities",
+        depth: selection.depth ?? "deep",
+        runCount: 1,
+        executionMode: "sequential",
+        timeCapMs: plan.kind === "web" ? 30_000 : 600_000,
+        costCapUsd: 5,
+      } satisfies ScanPlan;
       const mode: SessionMode = plan.kind === "package"
         ? "audit"
         : plan.kind === "source"
           ? "review"
           : "scan";
-      const depth = selection.depth ?? "deep";
+      const depth = selectedPlan.depth;
       const runtime = selection.runtime ?? "auto";
       const availability = await getRuntimeAvailability();
       if (exitRequested.current) return;
@@ -1020,7 +1033,8 @@ function ConsoleApp({
           depth,
           format: "terminal",
           runtime,
-          timeout: plan.kind === "web" ? 30000 : 600000,
+          plan: selectedPlan,
+          timeout: selectedPlan.timeCapMs,
           verbose: false,
           sessionUiFactory: async () => ({
             onEvent: (event) => {

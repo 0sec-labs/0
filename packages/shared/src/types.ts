@@ -30,6 +30,18 @@ export interface ScanPlan {
   timeCapMs: number;
   costCapUsd: number;
 }
+/**
+ * Structural seam for sharing one scan-wide cost ledger across planned runs.
+ * The concrete implementation lives in @0sec/core; shared types must not
+ * import the core package.
+ */
+export interface ScanCostLedgerLike {
+  add(
+    usage: { inputTokens: number; outputTokens: number; cachedInputTokens?: number },
+    model?: string,
+  ): void;
+  totalCostUsd(): number;
+}
 
 export const SCAN_TASKS = [
   "discovery",
@@ -153,6 +165,8 @@ export interface ScanConfig {
   mode?: ScanMode;
   /** Explicit pre-launch limits and execution intent. Omitted keeps legacy one-run behavior. */
   plan?: ScanPlan;
+  /** Shared ledger for a multi-run plan; omitted creates one for this run. */
+  costLedger?: ScanCostLedgerLike;
   /** Approved model id per task; validated by the selected runtime before use. */
   taskRoutes?: ScanTaskRouteMap;
   repoPath?: string;

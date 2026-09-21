@@ -21,7 +21,7 @@ import type {
   ScanPlan,
   ScanTaskRouteMap,
 } from "@0sec/shared";
-import type { CostBreakdownEntry } from "@0sec/core";
+import type { CostBreakdownEntry, ScanCostLedger } from "@0sec/core";
 import { formatAuditReport, formatReviewReport, formatReport, generatePdfReport } from "../formatters/index.js";
 import { buildShareUrl, checkRuntimeAvailability, getRuntimeAvailability } from "../utils.js";
 import { formatCrossValidatedLeads, type CrossValidatedLeadsSummary } from "./cross-validated-leads.js";
@@ -75,6 +75,12 @@ export interface RunOptions {
   plan?: ScanPlan;
   /** Explicit approved model id per task; never silently substituted. */
   taskRoutes?: ScanTaskRouteMap;
+  /** Shared ledger used by the internal multi-run scheduler. */
+  costLedger?: ScanCostLedger;
+  /** Internal scheduler controls; ordinary CLI callers leave these unset. */
+  scheduledRun?: boolean;
+  suppressOutput?: boolean;
+  suppressUi?: boolean;
   /** Source review execution strategy. The primary control plane uses
    * `lenses`, which is the validated self-evolving source-review path.
    */
@@ -431,7 +437,129 @@ async function postFinalResultToCloud(report: unknown): Promise<void> {
     process.stderr.write(`[0sec cloud-sink] report POST ${url} failed: ${msg}\n`);
   }
 }
+interface ScheduledRunResult {
+  report: unknown;
+  exitCode: number;
+}
+
+function aggregateScheduledReports(
+  results: ScheduledRunResult[],
+  plan: ScanPlan,
+): Record<string, unknown> {
+  const reports = results.map((result) => result.report as Record<string, any>);
+  const first = reports[0] ?? {};
+  const findings = reports.flatMap((report, runIndex) =>
+    Array.isArray(report.findings)
+      ? report.findings.map((finding: Record<string, unknown>) => ({
+          ...finding,
+          runIndex: runIndex + 1,
+        }))
+      : [],
+  );
+  const summaries = reports.map((report) => report.summary as Record<string, number> | undefined);
+  const summaryKeys = ["totalAttacks", "totalFindings", "critical", "high", "medium", "low", "info"] as const;
+  const summary = Object.fromEntries(
+    summaryKeys.map((key) => [
+      key,
+      summaries.reduce((total, current) => total + (current?.[key] ?? 0), 0),
+    ]),
+  );
+  return {
+    ...first,
+    findings,
+    summary,
+    warnings: reports.flatMap((report) => Array.isArray(report.warnings) ? report.warnings : []),
+    plan,
+    plannedRuns: plan.runCount,
+    completedRuns: results.length,
+    durationMs: reports.reduce((total, report) => total + (report.durationMs ?? 0), 0),
+  };
+}
+
+async function runPlanned(opts: RunOptions): Promise<void> {
+  const plan = opts.plan;
+  if (!plan || plan.runCount <= 1) {
+    await runUnifiedSingle(opts);
+    return;
+  }
+  const core = await loadCoreModule();
+  const ledger = opts.costLedger ?? new core.ScanCostLedger();
+  const startedAt = Date.now();
+  const results: ScheduledRunResult[] = [];
+  const runOne = async (runIndex: number): Promise<ScheduledRunResult> => {
+    const remainingMs = Math.max(1, plan.timeCapMs - (Date.now() - startedAt));
+    if (ledger.totalCostUsd() >= plan.costCapUsd) {
+      throw new Error(`Scan plan stopped before run ${runIndex}: shared cost cap reached.`);
+    }
+    const runPlan: ScanPlan = {
+      ...plan,
+      runCount: 1,
+      timeCapMs: Math.min(plan.timeCapMs, remainingMs),
+    };
+    if (!opts.suppressOutput) {
+      console.log(chalk.gray(`[plan] starting run ${runIndex}/${plan.runCount} · ${plan.executionMode}`));
+    }
+    return (await runUnifiedSingle({
+      ...opts,
+      plan: runPlan,
+      costLedger: ledger,
+      scheduledRun: true,
+      suppressOutput: true,
+      suppressUi: true,
+      timeout: runPlan.timeCapMs,
+    })) as ScheduledRunResult;
+  };
+
+  if (plan.executionMode === "parallel") {
+    const settled = await Promise.allSettled(
+      Array.from({ length: plan.runCount }, (_, index) => runOne(index + 1)),
+    );
+    for (const result of settled) {
+      if (result.status === "fulfilled") results.push(result.value);
+      else if (!opts.suppressOutput) console.error(chalk.yellow(`[plan] run stopped: ${String(result.reason)}`));
+    }
+  } else {
+    for (let index = 1; index <= plan.runCount; index++) {
+      try {
+        results.push(await runOne(index));
+      } catch (error) {
+        if (!opts.suppressOutput) console.error(chalk.yellow(`[plan] run stopped: ${error instanceof Error ? error.message : String(error)}`));
+        break;
+      }
+      if (Date.now() - startedAt >= plan.timeCapMs || ledger.totalCostUsd() >= plan.costCapUsd) break;
+    }
+  }
+  if (results.length === 0) {
+    throw new Error("Scan plan completed no runs within its shared limits.");
+  }
+  const aggregate = aggregateScheduledReports(results, plan);
+  if (!opts.suppressOutput) {
+    if (opts.format === "json") {
+      console.log(JSON.stringify(aggregate));
+    } else {
+      console.log(chalk.cyan(`[plan] completed ${results.length}/${plan.runCount} run(s); shared cost $${ledger.totalCostUsd().toFixed(4)} / $${plan.costCapUsd.toFixed(2)}`));
+      console.log(chalk.gray(`       findings: ${(aggregate.summary as Record<string, number>).totalFindings} · time cap: ${formatDuration(plan.timeCapMs)}`));
+    }
+  }
+  if (!process.stdout.isTTY && results.some((result) => result.exitCode !== 0)) {
+    process.exit(Math.max(...results.map((result) => result.exitCode)));
+  }
+}
+
+function formatDuration(ms: number): string {
+  if (ms < 60_000) return `${Math.round(ms / 1_000)}s`;
+  return `${Math.round(ms / 60_000)}m`;
+}
+
 export async function runUnified(opts: RunOptions): Promise<void> {
+  if (opts.plan && opts.plan.runCount > 1 && !opts.scheduledRun) {
+    await runPlanned(opts);
+    return;
+  }
+  await runUnifiedSingle(opts);
+}
+
+async function runUnifiedSingle(opts: RunOptions): Promise<ScheduledRunResult | undefined> {
   if (opts.plan) {
     validateScanPlan(opts.plan);
     if (opts.taskRoutes) validateScanTaskRoutes(opts.taskRoutes);
@@ -451,6 +579,7 @@ export async function runUnified(opts: RunOptions): Promise<void> {
   if (opts.branchFromEntry !== undefined) {
     if (!effectiveResumeScanId) {
       console.error(chalk.red("--branch-from requires --resume <run-id>"));
+      if (opts.scheduledRun) throw new Error("A scheduled scan requires --resume with --branch-from.");
       process.exit(2);
     }
     const { branchJournal } = await import("@0sec/core");
@@ -499,6 +628,7 @@ export async function runUnified(opts: RunOptions): Promise<void> {
   const validRuntimes = ["api", "claude", "codex", "gemini", "ollama", "auto"];
   if (!validRuntimes.includes(runtime)) {
     console.error(chalk.red(`Unknown runtime '${runtime}'. Valid: ${validRuntimes.join(", ")}`));
+    if (opts.scheduledRun) throw new Error(`Unknown runtime '${runtime}'. Valid: ${validRuntimes.join(", ")}`);
     process.exit(2);
   }
 
@@ -519,6 +649,7 @@ export async function runUnified(opts: RunOptions): Promise<void> {
     const available = await rt.isAvailable();
     if (!available) {
       console.error(chalk.red(`Runtime '${runtime}' not available. Is ${runtime} installed?`));
+      if (opts.scheduledRun) throw new Error(`Runtime '${runtime}' not available. Is ${runtime} installed?`);
       process.exit(2);
     }
   }
@@ -530,7 +661,7 @@ export async function runUnified(opts: RunOptions): Promise<void> {
   let eventHandler: (event: any) => void = () => {};
   let getPendingUserMessages: (() => string[]) | undefined;
 
-  if (format === "terminal" && process.stdout.isTTY && process.stdin.isTTY) {
+  if (format === "terminal" && process.stdout.isTTY && process.stdin.isTTY && !opts.suppressUi) {
     const mode = opts.targetType === "npm-package" || opts.targetType === "pypi-package" || opts.targetType === "cargo-package" || opts.targetType === "oci-image" ? "audit"
       : opts.targetType === "source-code" ? "review"
       : "scan";
@@ -580,6 +711,7 @@ export async function runUnified(opts: RunOptions): Promise<void> {
           apiKey: opts.apiKey,
           model: opts.model,
           ...(opts.plan ? { plan: opts.plan } : {}),
+          ...(opts.costLedger ? { costLedger: opts.costLedger } : {}),
           ...(opts.taskRoutes ? { taskRoutes: opts.taskRoutes } : {}),
           repoPath: opts.repoPath,
           auth: opts.auth,
@@ -624,10 +756,10 @@ export async function runUnified(opts: RunOptions): Promise<void> {
         packageVersion: opts.packageVersion,
         costCeilingUsd: effectiveCostCeilingUsd,
         ...(opts.plan ? { plan: opts.plan } : {}),
+        ...(opts.costLedger ? { costLedger: opts.costLedger } : {}),
         ...(opts.taskRoutes ? { taskRoutes: opts.taskRoutes } : {}),
         reviewProfile: opts.reviewProfile,
         reviewPackageEcosystem: opts.reviewPackageEcosystem,
-        subsystem: opts.subsystem,
         hypothesis: opts.hypothesis,
         conversation: opts.conversation,
         seedFindings: opts.seedFindings,
@@ -646,7 +778,7 @@ export async function runUnified(opts: RunOptions): Promise<void> {
     if (inkUI) {
       inkUI.setReport(report as any);
       await inkUI.waitForExit();
-    } else {
+    } else if (!opts.suppressOutput) {
       if (format === "html" || format === "pdf") {
         const extension = format === "pdf" ? "pdf" : "html";
         const filePath = opts.reportPath
@@ -688,10 +820,10 @@ export async function runUnified(opts: RunOptions): Promise<void> {
       console.log("");
     }
 
-    if (crossValidatedLeads) {
+    if (!opts.suppressOutput && crossValidatedLeads) {
       printCrossValidatedLeads(crossValidatedLeads);
     }
-    if (scanCompletedCost) {
+    if (!opts.suppressOutput && scanCompletedCost) {
       printCostSummary(scanCompletedCost);
     }
     unsubscribeCost();
@@ -701,7 +833,7 @@ export async function runUnified(opts: RunOptions): Promise<void> {
     const usage = getUsage(reportAny);
 
     // ── Emit findings as PRs (0sec#377) ──
-    if (opts.emit === "pr") {
+    if (opts.emit === "pr" && !opts.scheduledRun) {
       const findings = (report as any).findings ?? [];
       const core = await loadCoreModule();
       // PRs are opened against the repo we just reviewed when the target is
@@ -737,6 +869,7 @@ export async function runUnified(opts: RunOptions): Promise<void> {
         console.error(
           chalk.red(`Invalid --export format: '${opts.exportTarget}'. Expected: github:owner/repo`),
         );
+        if (opts.scheduledRun) throw new Error("Invalid --export target.");
         process.exit(2);
       }
       const repo = match[1];
@@ -767,16 +900,18 @@ export async function runUnified(opts: RunOptions): Promise<void> {
     // (CI, schedulers, cloud watchers) can distinguish a clean budget abort
     // from a normal completion or failure.
     if (canonicalReport.costCeilingExceeded && exitCode === 0) {
-      console.error(
-        chalk.yellow(
-          `Scan aborted: cost ceiling exceeded. ${canonicalReport.summary.totalFindings} partial finding(s) preserved.`,
-        ),
-      );
+      if (!opts.suppressOutput) {
+        console.error(
+          chalk.yellow(
+            `Scan aborted: cost ceiling exceeded. ${canonicalReport.summary.totalFindings} partial finding(s) preserved.`,
+          ),
+        );
+      }
       exitCode = 4;
     }
 
     if (reportAny.researchFailed && exitCode === 0) {
-      console.error(chalk.red("Review completed with partial static results because AI analysis failed."));
+      if (!opts.suppressOutput) console.error(chalk.red("Review completed with partial static results because AI analysis failed."));
       exitCode = 2;
     }
 
@@ -784,31 +919,34 @@ export async function runUnified(opts: RunOptions): Promise<void> {
       exitCode = 1;
     }
 
-    emitResultLine({
-      ok: exitCode === 0,
-      exitCode,
-      exit_reason:
-        exitCode === 4
-          ? "cost_ceiling_exceeded"
-          : exitCode === 2
-            ? "error"
-            : exitCode === 1
-              ? "findings"
-              : "completed",
-      target,
-      targetType: getTargetType(reportAny, opts),
-      runtime,
-      format,
-      cost_usd: estimatedCostUsd,
-      token_input: usage?.inputTokens,
-      token_output: usage?.outputTokens,
-      finding_count: canonicalReport.summary.totalFindings,
-      estimatedCostUsd,
-      usage,
-      summary: canonicalReport.summary,
-    });
+    if (!opts.suppressOutput) {
+      emitResultLine({
+        ok: exitCode === 0,
+        exitCode,
+        exit_reason:
+          exitCode === 4
+            ? "cost_ceiling_exceeded"
+            : exitCode === 2
+              ? "error"
+              : exitCode === 1
+                ? "findings"
+                : "completed",
+        target,
+        targetType: getTargetType(reportAny, opts),
+        runtime,
+        format,
+        cost_usd: estimatedCostUsd,
+        token_input: usage?.inputTokens,
+        token_output: usage?.outputTokens,
+        finding_count: canonicalReport.summary.totalFindings,
+        estimatedCostUsd,
+        usage,
+        summary: canonicalReport.summary,
+      });
+    }
 
-    if (exitCode !== 0 && !inkUI) process.exit(exitCode);
+    if (opts.scheduledRun) return { report, exitCode };
+    if (!opts.scheduledRun && exitCode !== 0 && !inkUI) process.exit(exitCode);
   } catch (err) {
     // Always release the cost-bus subscription so a long-lived
     // process (test runner, future REPL) doesn't leak sinks across
@@ -824,17 +962,20 @@ export async function runUnified(opts: RunOptions): Promise<void> {
       await inkUI.waitForExit();
       return;
     }
-    console.error(chalk.red(message));
-    emitResultLine({
-      ok: false,
-      exitCode: 2,
-      exit_reason: "error",
-      target,
-      targetType: opts.targetType,
-      runtime,
-      format,
-      error: message,
-    });
+    if (!opts.suppressOutput) console.error(chalk.red(message));
+    if (!opts.suppressOutput) {
+      emitResultLine({
+        ok: false,
+        exitCode: 2,
+        exit_reason: "error",
+        target,
+        targetType: opts.targetType,
+        runtime,
+        format,
+        error: message,
+      });
+    }
+    if (opts.scheduledRun) throw err;
     process.exit(2);
   }
 }

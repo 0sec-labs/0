@@ -1,4 +1,4 @@
-import type { Finding } from "@0sec/shared";
+import type { Finding, ScanCostLedgerLike } from "@0sec/shared";
 import type { ScanListener } from "./scanner.js";
 import { createRuntime } from "./runtime/index.js";
 import type { RuntimeType } from "./runtime/index.js";
@@ -27,7 +27,7 @@ export interface AnalysisAgentOptions {
   target: string;
   scanId: string;
   sessionId?: string;
-  config: { runtime?: string; timeout?: number; depth?: string; apiKey?: string; model?: string; costCeilingUsd?: number; costLedger?: import("./agent/cost-ledger.js").ScanCostLedger };
+  config: { runtime?: string; timeout?: number; depth?: string; apiKey?: string; model?: string; costCeilingUsd?: number; costLedger?: ScanCostLedgerLike };
   db: any;
   emit: ScanListener;
   /** Prompt sent to CLI runtimes (compact, includes ---FINDING--- format instructions) */
@@ -492,7 +492,7 @@ export async function runAnalysisAgent(opts: AnalysisAgentOptions): Promise<Anal
           sessionId,
           costCeilingUsd: config.costCeilingUsd,
           costModel: config.model,
-          costLedger: config.costLedger,
+          costLedger: config.costLedger as import("./agent/cost-ledger.js").ScanCostLedger | undefined,
         },
         runtime: apiRuntime as NativeRuntime,
         db,

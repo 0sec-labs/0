@@ -622,10 +622,12 @@ export async function agenticScan(opts: AgenticScanOptions): Promise<ScanReport>
     }
     return runCraftScanStage(opts.config, opts.craftTarget, opts.craft, emit);
   }
-let config = normalizeScanConfig(opts.config);
+  let config = normalizeScanConfig(opts.config);
   if (config.plan) validateScanPlan(config.plan);
   if (config.taskRoutes) validateScanTaskRoutes(config.taskRoutes);
-  const scanCostLedger = new ScanCostLedger();
+  const scanCostLedger = config.costLedger
+    ? config.costLedger as ScanCostLedger
+    : new ScanCostLedger();
 
   // Programmatic scope ingestion (0sec#215). Load once at the top and
   // pass the parsed `ScopePolicy` to every agent config below. The CLI

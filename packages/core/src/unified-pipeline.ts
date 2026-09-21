@@ -142,6 +142,8 @@ export interface PipelineOptions {
   mode?: ScanMode;
   /** Optional bounded guided plan. */
   plan?: ScanPlan;
+  /** Shared ledger for a multi-run plan. */
+  costLedger?: ScanCostLedger;
   /** Operator-approved model id per task. */
   taskRoutes?: ScanTaskRouteMap;
   resumeScanId?: string;
@@ -1302,7 +1304,7 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineReport
   // not each session (previously every session got the full ceiling, so a
   // $3-capped 0review scan could really spend research($3) + N×verify($3);
   // prod review scans landed at $4.99 / $6.36).
-  const costLedger = new ScanCostLedger();
+  const costLedger = opts.costLedger ?? new ScanCostLedger();
   // Engine-resolved model id, stamped on scan_completed and used for pricing.
   // Assigned once the API runtime is probed below; stays undefined when
   // nothing resolved a model (for example, a CLI runtime with no model pick).
@@ -1505,6 +1507,7 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineReport
     runtime: opts.runtime ?? "api",
     mode: opts.mode ?? "deep",
     ...(opts.plan ? { plan: opts.plan } : {}),
+    costLedger,
     ...(opts.taskRoutes ? { taskRoutes: opts.taskRoutes } : {}),
     // Thread the resolved package identity through to the publishability /
     // novelty gate (issue #851). Without this the gate defaulted ecosystem to
